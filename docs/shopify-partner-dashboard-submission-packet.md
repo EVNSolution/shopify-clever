@@ -223,6 +223,12 @@ Reviewer assets to attach or prepare:
 
 Before pressing final Submit:
 
+0. Run the repository submission readiness verifier:
+
+```bash
+npm run check:shopify-submission
+```
+
 1. Confirm `shopify.app.toml` active version is `compliance-20260514-0d05a46` or newer.
 2. Run the Shopify App Store review page automated checks.
 3. Open the embedded app in Shopify Admin and interact with Orders, Routes, Drivers, and Settings so automated checks can observe App Bridge/session-token behavior.

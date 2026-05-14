@@ -10,6 +10,7 @@
     "test:delivery-api": "npm --prefix apps/delivery-api run test",
     "test": "npm run test:shopify-app && npm run test:delivery-api",
     "deploy:compose": "docker compose -f infra/compose/docker-compose.prod.yml up -d --build",
-    "check:public-urls": "node scripts/check-public-url-hosts.mjs"
+    "check:public-urls": "node scripts/check-public-url-hosts.mjs",
+    "check:shopify-submission": "node scripts/check-shopify-submission-readiness.mjs"
   }
 }

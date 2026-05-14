@@ -25,6 +25,7 @@ npm run build
 npm run typecheck
 npm test
 npm run check:public-urls
+npm run check:shopify-submission
 ```
 
 Compose validation with placeholder env files:
