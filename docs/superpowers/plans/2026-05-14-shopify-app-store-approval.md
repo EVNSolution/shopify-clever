@@ -261,3 +261,56 @@ Latest production submission target after Task 7:
 - Shopify app version: `compliance-20260514-0d05a46`, released to users, version ID `gid://shopify/Version/963177807873`
 - EC2 production bundle rebuilt and restarted for both `delivery-api` and `shopify-app`.
 - Production smoke: admin `/auth/login` `200`, App Bridge CDN/meta present, delivery `/healthz` `200`, `/readyz` `200`, invalid webhook HMAC `401`.
+
+### Task 8: Lock final production evidence and dashboard handoff trace
+
+**Files:**
+- Modify: `docs/shopify-app-store-approval-report.md`
+- Modify: `docs/shopify-app-store-completion-audit.md`
+- Modify: `docs/shopify-partner-dashboard-submission-packet.md`
+- Create: `docs/shopify-dashboard-submission-evidence-template.md`
+- Modify: `scripts/check-shopify-submission-readiness.mjs`
+- Update: EVNSolution/shopify-clever#6 and EVNSolution/clever-change-control#211
+
+- [x] **Step 1: Add a non-secret dashboard completion evidence template**
+
+`docs/shopify-dashboard-submission-evidence-template.md` now defines the exact evidence that the authorized Partner Dashboard account holder must paste into EVNSolution/shopify-clever#6 and EVNSolution/clever-change-control#211 before either issue can be closed. The template covers protected customer data, privacy policy, listing copy, pricing, media, contact/reviewer information, automated checks, and final Submit for Review evidence.
+
+- [x] **Step 2: Deploy and record the latest production web bundle**
+
+Latest production web bundle evidence:
+
+- Deployed bundle commit: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
+- Production `.release-sha`: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
+- Main CI for deployed bundle: https://github.com/EVNSolution/shopify-clever/actions/runs/25856119836
+- Manual production workflow: https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483
+  - Validate job passed.
+  - GitHub-hosted deploy job failed at EC2 SSH reachability because the runner IP was not allowed by the EC2 security group.
+  - The same commit was deployed with the approved local AWS/SSH fallback.
+  - Temporary SSH ingress `106.101.131.120/32` was revoked after deploy.
+- Production smoke passed: delivery `/healthz` 200, delivery `/readyz` 200, admin `/auth/login` 200 with App Bridge CDN/API-key meta, and fake compliance webhook HMAC 401.
+
+- [x] **Step 3: Make the readiness verifier enforce current production handoff evidence**
+
+`scripts/check-shopify-submission-readiness.mjs` now verifies that the handoff docs reference the current production bundle commit, readiness CI, production workflow, target issue, change-control issue, change id, and current readiness check count.
+
+Current verifier evidence:
+
+- Latest target main: `0b37a6dcd2644e7a6c66d3d002659489891db776`
+- PR #11 CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25856619121
+- Main CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25856695136
+- `npm run check:shopify-submission`: `shopify-submission-readiness-ok`, `91` checks
+- `shopify app config validate --json --path apps/shopify-app`: `valid=true`, `issues=[]`
+
+- [x] **Step 4: Synchronize three-repository trace evidence**
+
+Change-control PR EVNSolution/clever-change-control#213 updated `releases/prod/shopify-clever-2026-05-14-app-store-handoff.md` with target PR #10/#11, target main `0b37a6dcd2644e7a6c66d3d002659489891db776`, deployed bundle `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`, CI evidence, production workflow evidence, and the `91`-check readiness result.
+
+Issue bodies are also current:
+
+- EVNSolution/shopify-clever#6 records the latest production bundle, readiness/evidence commit, CI, production workflow, dashboard evidence template, and remaining dashboard checklist.
+- EVNSolution/clever-change-control#211 records the same target evidence and remaining approval checklist.
+
+## Final completion decision
+
+Repository-executable approval work, production web-bundle release work, Shopify app version release work, documentation, readiness verification, and three-repository trace updates are complete. The overall Shopify App Store approval objective is still **not complete** until an authorized Partner Dashboard account holder completes the remaining protected customer data request, privacy policy URL publication, media/contact/pricing entries, automated checks, and final **Submit for Review** action, then posts the completed evidence template back to EVNSolution/shopify-clever#6 and EVNSolution/clever-change-control#211.
