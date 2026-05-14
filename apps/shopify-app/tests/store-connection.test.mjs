@@ -38,11 +38,18 @@ const appIndexRouteSource = readFileSync(
   "utf8",
 );
 
-test("auth fallback rejects missing shop context instead of looping to the app shell", () => {
+test("auth fallback explains missing shop context without a 400 error page", () => {
   assert.doesNotMatch(authLoginRouteSource, /redirect\("\/app\/orders"\)/);
-  assert.match(authLoginRouteSource, /throw new Response/);
-  assert.match(authLoginRouteSource, /status:\s*400/);
-  assert.match(authLoginRouteSource, /Open this app from Shopify Admin/);
+  assert.doesNotMatch(authLoginRouteSource, /throw new Response/);
+  assert.doesNotMatch(authLoginRouteSource, /status:\s*400/);
+  assert.match(authLoginRouteSource, /missingShopContext/);
+  assert.match(authLoginRouteSource, /shopifyOfficialUrl/);
+  assert.match(authLoginRouteSource, /shopifyAdminUrl/);
+  assert.match(authLoginRouteSource, /https:\/\/www\.shopify\.com\//);
+  assert.match(authLoginRouteSource, /https:\/\/admin\.shopify\.com\//);
+  assert.doesNotMatch(authLoginRouteSource, /admin\.shopify\.com\/store/);
+  assert.doesNotMatch(authLoginRouteSource, /clever-store-test-ij1v0anx/);
+  assert.match(authLoginRouteSource, /Go to Shopify official site/);
 });
 
 test("app shell can render nav before Shopify document auth context exists", () => {
