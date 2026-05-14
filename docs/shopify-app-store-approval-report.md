@@ -153,13 +153,14 @@ The following groups were skipped because the repo does not contain the triggeri
 
 These items cannot be completed safely from the local repository and require an authorized Partner Dashboard account holder:
 
+- Use `docs/shopify-partner-dashboard-submission-packet.md` as the copy/paste source for the fields below.
 - [ ] Select/confirm public app distribution method.
 - [ ] Request protected customer data access for the exact order/customer fields used by delivery planning:
   - [ ] protected customer data
   - [ ] name
   - [ ] address
-  - [ ] email
   - [ ] phone
+  - [ ] do not request email for the current release unless the app starts querying email; current Shopify order queries do not request it.
 - [ ] Provide justification: local-delivery route planning, driver dispatch, address geocoding, recipient contact, and route-stop sequencing.
 - [ ] Add privacy policy URL to App Store listing.
 - [ ] Confirm privacy policy covers Shopify API data, merchant-entered driver phone data, delivery route data, retention period, data storage region, data rights contact, and support contact.

@@ -33,6 +33,7 @@
 - `apps/shopify-app/shopify.app.toml` — app config subscription for `customers/data_request`, `customers/redact`, and `shop/redact`.
 - `apps/shopify-app/tests/store-connection.test.mjs` — regression tests for no manual store login, App Bridge bootstrap, and compliance webhook configuration.
 - `docs/shopify-app-store-approval-report.md` — approval process, self-review result, manual dashboard checklist, and validation evidence.
+- `docs/shopify-partner-dashboard-submission-packet.md` — Partner Dashboard copy/paste packet for protected customer data, privacy policy draft inputs, listing copy, and reviewer instructions.
 
 ---
 
@@ -199,3 +200,21 @@ Completed evidence:
 ## Completion gate
 
 Task 5 is complete for the repository, web-hosted production bundle, and Shopify app version release. Do not submit to Shopify App Store review until the Partner Dashboard manual checklist in `docs/shopify-app-store-approval-report.md` is completed by an authorized account holder.
+
+### Task 6: Prepare Partner Dashboard submission packet
+
+**Files:**
+- Create: `docs/shopify-partner-dashboard-submission-packet.md`
+- Modify: `docs/shopify-app-store-approval-report.md`
+
+- [x] **Step 1: Convert manual dashboard tasks into paste-ready copy**
+
+The packet now includes public distribution notes, protected customer data request text, privacy policy draft inputs, factual listing copy, pricing guidance, reviewer testing instructions, and automated-check runbook.
+
+- [x] **Step 2: Minimize protected customer data fields**
+
+The packet requests protected customer data plus `name`, `address`, and `phone` only. It explicitly excludes `email` for the current release because the active Shopify GraphQL order queries do not request email.
+
+- [x] **Step 3: Keep irreversible dashboard submission outside the repository lane**
+
+The packet identifies the fields that still require an authorized Partner Dashboard account holder: protected-data form submission, privacy policy URL publication, app icon/contact/pricing fields, screencast upload, automated checks, and final Submit for Review.
