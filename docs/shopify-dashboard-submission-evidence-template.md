@@ -18,10 +18,13 @@ Partner Dashboard app id/name: [VALUE]
 Target repo issue: EVNSolution/shopify-clever#6
 Change-control issue: EVNSolution/clever-change-control#211
 Change id: chg-20260514-001
-Runtime release commit: 0d05a46295e499ffeb22d057b6b7e2ca789262de
-Readiness commit: f27a614f70fd1e371d8a0ee155d2d53ea58b8602
+Shopify app version release commit: 0d05a46295e499ffeb22d057b6b7e2ca789262de
+Production web bundle commit: b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01
+Production readiness evidence commit: b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01
 Active Shopify app version: compliance-20260514-0d05a46
 Active Shopify version ID: gid://shopify/Version/963177807873
+Production readiness CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25856119836
+Production workflow evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483
 ```
 
 ## Final repository verification
@@ -37,7 +40,7 @@ shopify app versions list --json
 Expected evidence:
 
 ```text
-check:shopify-submission result: shopify-submission-readiness-ok, 66 checks
+check:shopify-submission result: shopify-submission-readiness-ok, 91 checks
 shopify app config validate result: valid=true, issues=[]
 active Shopify app version: compliance-20260514-0d05a46 or newer
 ```
