@@ -27,7 +27,7 @@ const ROUTE_DETAIL_STOPS_SOURCE_ID = "route-detail-stops";
 const ROUTE_DETAIL_STOP_POINTER_LAYER_ID = "route-detail-stop-pointers";
 const ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID = "route-detail-stop-pointer-labels";
 const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-stop-points";
-const ROUTE_STOP_POINT_MARKER_MIN_ZOOM = 14;
+const ROUTE_STOP_POINT_MARKER_MIN_ZOOM = 10;
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 
 const routesDetailPageStyle = {
@@ -51,22 +51,23 @@ const routeDetailPageNavStyle = {
 };
 
 const routeDetailTitleRowStyle = {
-  alignItems: "center",
+  alignItems: "flex-start",
   display: "flex",
-  flexWrap: "nowrap",
+  flexWrap: "wrap",
   gap: "12px",
   justifyContent: "space-between",
-  overflowX: "auto",
-  overflowY: "hidden",
+  overflowX: "visible",
+  overflowY: "visible",
   width: "100%",
 };
 
 const routeDetailTitleIdentityStyle = {
   alignItems: "center",
   display: "flex",
-  flex: "0 0 auto",
+  flex: "1 1 260px",
   flexWrap: "nowrap",
   gap: "8px",
+  maxWidth: "100%",
   minWidth: 0,
 };
 
@@ -76,6 +77,8 @@ const routesDetailTitleStyle = {
   fontSize: "20px",
   fontWeight: "600",
   lineHeight: "28px",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
@@ -222,9 +225,10 @@ const routesDetailCardStyle = {
 
 const routeDetailHeaderInfoWrapStyle = {
   display: "flex",
-  flex: "1 1 auto",
+  flex: "1 1 520px",
   justifyContent: "flex-end",
-  minWidth: "520px",
+  minWidth: "min(520px, 100%)",
+  width: "100%",
 };
 
 const routeDetailMapFrameStyle = {
@@ -244,11 +248,12 @@ const routeDetailHeaderInfoCardStyle = {
   gap: "18px",
   maxWidth: "780px",
   minHeight: "44px",
+  minWidth: 0,
   overflowX: "auto",
   padding: "6px 0 6px 14px",
   textAlign: "left",
   whiteSpace: "nowrap",
-  width: "min(780px, 100%)",
+  width: "100%",
 };
 
 const routeDetailMapCanvasStyle = {
@@ -1155,6 +1160,21 @@ function buildRouteDetailStopsFeatureCollection(routeStops, routeStopPoints) {
   };
 }
 
+function ensureRouteDetailStopLayerOrder(map) {
+  if (typeof map.moveLayer !== "function") return;
+
+  for (const layerId of [
+    ROUTE_DETAIL_ROUTE_LAYER_ID,
+    ROUTE_DETAIL_STOP_POINT_LAYER_ID,
+    ROUTE_DETAIL_STOP_POINTER_LAYER_ID,
+    ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID,
+  ]) {
+    if (map.getLayer?.(layerId)) {
+      map.moveLayer(layerId);
+    }
+  }
+}
+
 function syncRouteDetailStopLayers(map, routeStops, routeStopPoints) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
@@ -1192,8 +1212,11 @@ function syncRouteDetailStopLayers(map, routeStops, routeStopPoints) {
       filter: ["==", ["get", "featureType"], "routeStop"],
       layout: {
         "text-allow-overlap": true,
+        "text-anchor": "center",
         "text-field": ["get", "label"],
         "text-ignore-placement": true,
+        "text-justify": "center",
+        "text-offset": [0, -0.08],
         "text-size": 10,
       },
       paint: {
@@ -1218,6 +1241,7 @@ function syncRouteDetailStopLayers(map, routeStops, routeStopPoints) {
     });
   }
 
+  ensureRouteDetailStopLayerOrder(map);
   return true;
 }
 

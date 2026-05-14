@@ -552,6 +552,80 @@ test("assigns route plan drivers through the delivery Admin API", async () => {
   assert.deepEqual(result.errors, []);
 });
 
+test("returns an actionable error when the delivery API driver endpoint is missing", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+
+  try {
+    const result = await assignDeliveryRoutePlanDriver(
+      new Request("https://app.example/app/routes/route-1"),
+      "route 1",
+      { driverId: "driver-pending-id" },
+      {
+        fetch: async () =>
+          Response.json(
+            {
+              data: null,
+              error: { code: "NOT_FOUND", message: "Not Found" },
+            },
+            { status: 404 },
+          ),
+        sessionToken: "client-session-token",
+      },
+    );
+
+    assert.equal(result.routePlan, null);
+    assert.equal(result.errors[0].code, "DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND");
+    assert.equal(result.errors[0].status, 404);
+    assert.match(result.errors[0].message, /배송원 저장 API를 찾지 못했습니다/);
+    assert.match(
+      result.errors[0].message,
+      /https:\/\/delivery\.example\/admin\/route-plans\/route%201\/driver/,
+    );
+    assert.match(result.errors[0].message, /CLEVER_DELIVERY_API_URL/);
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.CLEVER_DELIVERY_API_URL;
+    } else {
+      process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    }
+  }
+});
+
+test("preserves route plan not found errors from the delivery API driver endpoint", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+
+  try {
+    const result = await assignDeliveryRoutePlanDriver(
+      new Request("https://app.example/app/routes/route-1"),
+      "route 1",
+      { driverId: "driver-pending-id" },
+      {
+        fetch: async () =>
+          Response.json(
+            {
+              data: null,
+              error: { code: "NOT_FOUND", message: "Route plan not found" },
+            },
+            { status: 404 },
+          ),
+        sessionToken: "client-session-token",
+      },
+    );
+
+    assert.equal(result.routePlan, null);
+    assert.equal(result.errors[0].code, "NOT_FOUND");
+    assert.equal(result.errors[0].message, "Route plan not found");
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.CLEVER_DELIVERY_API_URL;
+    } else {
+      process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    }
+  }
+});
+
 test("returns an actionable error when a delivery API call has no session token", async () => {
   let called = false;
   const result = await fetchDeliveryRoutePlans(

@@ -7,6 +7,8 @@ const DEFAULT_DELIVERY_API_GET_CACHE_TTL_MS = 15_000;
 const MAX_DELIVERY_API_GET_CACHE_ENTRIES = 100;
 export const DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE = "DELIVERY_SESSION_TOKEN_MISSING";
 export const DELIVERY_API_ERROR_CODE = "DELIVERY_API_ERROR";
+export const DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND_ERROR_CODE =
+  "DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND";
 export const DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_PLAN_ID_MISSING";
 export { buildRouteScopeFromOrders } from "./route-scope.js";
 
@@ -360,7 +362,7 @@ async function executeDeliveryApiRequest({
   if (!response.ok || payload?.error) {
     return {
       data: payload?.data ?? null,
-      errors: [normalizeDeliveryApiError(payload?.error, response.status, path)],
+      errors: [normalizeDeliveryApiError(payload?.error, response.status, path, url)],
     };
   }
 
@@ -486,7 +488,17 @@ async function readJsonResponse(response) {
   }
 }
 
-function normalizeDeliveryApiError(error, status, path) {
+function normalizeDeliveryApiError(error, status, path, url) {
+  if (isMissingRouteDriverEndpointError(error, status, path)) {
+    return {
+      code: DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND_ERROR_CODE,
+      message:
+        `배송원 저장 API를 찾지 못했습니다. 현재 Shopify app dev가 ${url} 를 호출 중입니다. ` +
+        "delivery-api를 최신 커밋으로 재시작하거나 CLEVER_DELIVERY_API_URL을 최신 delivery server로 지정해주세요.",
+      status,
+    };
+  }
+
   if (typeof error === "string") {
     return {
       code: DELIVERY_API_ERROR_CODE,
@@ -500,6 +512,14 @@ function normalizeDeliveryApiError(error, status, path) {
     message: error?.message ?? getDeliveryApiFailureMessage(path),
     status,
   };
+}
+
+function isMissingRouteDriverEndpointError(error, status, path) {
+  if (status !== 404) return false;
+  if (!/^\/admin\/route-plans\/[^/]+\/driver$/u.test(path)) return false;
+
+  const errorMessage = typeof error === "string" ? error : error?.message;
+  return errorMessage === "Not Found" || /^Route [A-Z]+:[^ ]+ not found$/u.test(errorMessage ?? "");
 }
 
 function mapDepartureLocationToDepot(departureLocation) {

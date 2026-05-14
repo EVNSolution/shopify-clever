@@ -291,26 +291,38 @@ test("Route detail summarizes delivery with the actual date label", () => {
   assert.doesNotMatch(routeDetailSource, /renderSummaryItem\("Delivery day", routeDetail\.deliveryDay\)/);
 });
 
-test("Route detail keeps summary and driver controls on the title row without taking map space", () => {
-  assert.match(routeDetailSource, /const routeDetailTitleRowStyle = \{/);
-  assert.match(routeDetailSource, /justifyContent: "space-between"/);
-  assert.match(routeDetailSource, /flexWrap: "nowrap"/);
-  assert.match(routeDetailSource, /overflowX: "auto"/);
-  assert.match(routeDetailSource, /const routeDetailTitleIdentityStyle = \{/);
-  assert.match(routeDetailSource, /const routeDetailHeaderInfoWrapStyle = \{/);
-  assert.match(routeDetailSource, /flex: "1 1 auto"/);
-  assert.match(routeDetailSource, /justifyContent: "flex-end"/);
-  assert.match(routeDetailSource, /minWidth: "520px"/);
-  assert.match(routeDetailSource, /const routeDetailHeaderInfoCardStyle = \{/);
+test("Route detail keeps summary and driver controls with the title without letting the title side-scroll", () => {
+  const titleRowBlock = routeDetailSource.match(/const routeDetailTitleRowStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const titleIdentityBlock = routeDetailSource.match(/const routeDetailTitleIdentityStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const titleBlock = routeDetailSource.match(/const routesDetailTitleStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const infoWrapBlock = routeDetailSource.match(/const routeDetailHeaderInfoWrapStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const infoCardBlock = routeDetailSource.match(/const routeDetailHeaderInfoCardStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+
+  assert.match(titleRowBlock, /justifyContent: "space-between"/);
+  assert.match(titleRowBlock, /alignItems: "flex-start"/);
+  assert.match(titleRowBlock, /flexWrap: "wrap"/);
+  assert.match(titleRowBlock, /overflowX: "visible"/);
+  assert.match(titleRowBlock, /overflowY: "visible"/);
+  assert.doesNotMatch(titleRowBlock, /overflowX: "auto"/);
+  assert.match(titleIdentityBlock, /flex: "1 1 260px"/);
+  assert.match(titleIdentityBlock, /maxWidth: "100%"/);
+  assert.match(titleBlock, /overflow: "hidden"/);
+  assert.match(titleBlock, /textOverflow: "ellipsis"/);
+  assert.match(infoWrapBlock, /flex: "1 1 520px"/);
+  assert.match(infoWrapBlock, /justifyContent: "flex-end"/);
+  assert.match(infoWrapBlock, /minWidth: "min\(520px, 100%\)"/);
+  assert.match(infoWrapBlock, /width: "100%"/);
   assert.match(routeDetailSource, /alignItems: "center"/);
   assert.match(routeDetailSource, /background: "#ffffff"/);
   assert.match(routeDetailSource, /borderRadius: "12px"/);
-  assert.match(routeDetailSource, /display: "flex"/);
-  assert.match(routeDetailSource, /flexWrap: "nowrap"/);
-  assert.match(routeDetailSource, /maxWidth: "780px"/);
-  assert.match(routeDetailSource, /minHeight: "44px"/);
-  assert.match(routeDetailSource, /padding: "6px 0 6px 14px"/);
-  assert.match(routeDetailSource, /textAlign: "left"/);
+  assert.match(infoCardBlock, /display: "flex"/);
+  assert.match(infoCardBlock, /flexWrap: "nowrap"/);
+  assert.match(infoCardBlock, /maxWidth: "780px"/);
+  assert.match(infoCardBlock, /minHeight: "44px"/);
+  assert.match(infoCardBlock, /minWidth: 0/);
+  assert.match(infoCardBlock, /padding: "6px 0 6px 14px"/);
+  assert.match(infoCardBlock, /textAlign: "left"/);
+  assert.match(infoCardBlock, /width: "100%"/);
   assert.match(
     routeDetailSource,
     /<div style=\{routeDetailTitleRowStyle\}>[\s\S]*<div style=\{routeDetailTitleIdentityStyle\}>[\s\S]*<div style=\{routeDetailHeaderInfoWrapStyle\}>[\s\S]*<div style=\{routeDetailHeaderInfoCardStyle\}>/,
@@ -437,6 +449,9 @@ test("Route detail places only small stop pointers and the departure marker on t
   assert.match(routeDetailSource, /"circle-radius": 9/);
   assert.match(routeDetailSource, /map\.addLayer\(\{\s+id: ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID,\s+type: "symbol"/);
   assert.match(routeDetailSource, /"text-field": \["get", "label"\]/);
+  assert.match(routeDetailSource, /"text-anchor": "center"/);
+  assert.match(routeDetailSource, /"text-justify": "center"/);
+  assert.match(routeDetailSource, /"text-offset": \[0, -0\.08\]/);
   assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_POINTER_LAYER_ID, handleStopPointerDoubleClick\)/);
   assert.match(routeDetailSource, /event\.preventDefault\?\.\(\)/);
   assert.match(routeDetailSource, /event\.originalEvent\?\.stopPropagation\?\.\(\)/);
@@ -536,7 +551,7 @@ test("Route detail renders every stop as a small black numbered pointer without 
 });
 
 test("Route detail renders OSRM snapped stop points as small blue map points at close zoom", () => {
-  assert.match(routeDetailSource, /const ROUTE_STOP_POINT_MARKER_MIN_ZOOM = 14/);
+  assert.match(routeDetailSource, /const ROUTE_STOP_POINT_MARKER_MIN_ZOOM = 10/);
   assert.match(routeDetailSource, /const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1/);
   assert.match(routeDetailSource, /function buildRouteStopPointMarker\(stop, routeStopPoint\) \{/);
   assert.match(routeDetailSource, /const snappedCoordinates = normalizeLngLatPair\(routeStopPoint\?\.snappedCoordinates\)/);
@@ -551,6 +566,20 @@ test("Route detail renders OSRM snapped stop points as small blue map points at 
   assert.match(routeDetailSource, /"circle-radius": 6/);
   assert.match(routeDetailSource, /"circle-stroke-width": 2/);
   assert.doesNotMatch(routeDetailSource, /function shouldRenderRouteStopPoints|createRouteStopPointElement|route-snapped-stop-point|zoomend/);
+});
+
+test("Route detail keeps delivery stop and snapped point layers above the route line", () => {
+  assert.match(routeDetailSource, /function ensureRouteDetailStopLayerOrder\(map\) \{/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_ROUTE_LAYER_ID/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_STOP_POINTER_LAYER_ID/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID/);
+  assert.match(routeDetailSource, /typeof map\.moveLayer !== "function"/);
+  assert.match(routeDetailSource, /map\.moveLayer\(layerId\)/);
+  assert.match(
+    routeDetailSource,
+    /ensureRouteDetailStopLayerOrder\(map\);\s+return true;/,
+  );
 });
 
 test("Route detail map has compact refresh and automatic recovery controls", () => {
