@@ -311,6 +311,16 @@ Issue bodies are also current:
 - EVNSolution/shopify-clever#6 records the latest production bundle, readiness/evidence commit, CI, production workflow, dashboard evidence template, and remaining dashboard checklist.
 - EVNSolution/clever-change-control#211 records the same target evidence and remaining approval checklist.
 
+- [x] **Step 5: Add detailed Shopify AI self-review evidence**
+
+`docs/shopify-ai-self-review-detail.md` records the live Shopify AI self-review local-codebase source as 100 requirements across 16 groups. The current local audit maps 31 evaluated requirements to 27 likely passing, 0 likely failing, and 4 dashboard-dependent needs-review items; 69 category-specific requirements across 10 groups are explicitly skipped because the app does not include those extension/product categories.
+
+Current verifier evidence:
+
+- `npm run check:shopify-submission`: `shopify-submission-readiness-ok`, `104` checks
+- The verifier now requires the self-review source URL, evaluated/skipped counts, the billing needs-review item, the donation skipped group, and both tracking issues.
+- Remaining needs-review items are dashboard-only: factual final listing/media, pricing/free-plan or Shopify Billing/App Pricing setup, paid plan-change behavior if applicable, and final evidence on EVNSolution/shopify-clever#6 plus EVNSolution/clever-change-control#211.
+
 ## Final completion decision
 
 Repository-executable approval work, production web-bundle release work, Shopify app version release work, documentation, readiness verification, and three-repository trace updates are complete. The overall Shopify App Store approval objective is still **not complete** until an authorized Partner Dashboard account holder completes the remaining protected customer data request, privacy policy URL publication, media/contact/pricing entries, automated checks, and final **Submit for Review** action, then posts the completed evidence template back to EVNSolution/shopify-clever#6 and EVNSolution/clever-change-control#211.
