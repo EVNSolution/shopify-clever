@@ -779,12 +779,20 @@ test("Orders map renders planned markers above overlapping unplanned markers", (
   assert.doesNotMatch(ordersPageSource, /sortedLocatedOrders/);
 });
 
-test("Orders map pin layer uses compact icon sizes", () => {
+test("Orders map keeps planned pins the same size and centers the planned number", () => {
   assert.match(ordersPageSource, /const ORDER_PIN_PIXEL_RATIO = 2/);
   assert.match(ordersPageSource, /const width = \(options\.width \?\? 40\) \* pixelRatio/);
   assert.match(ordersPageSource, /const height = \(options\.height \?\? 52\) \* pixelRatio/);
-  assert.match(ordersPageSource, /"icon-size": \[\s+"case",\s+\[">", \["to-number", \["get", "plannedIndex"\]\], 0\],\s+0\.74,\s+0\.62,\s+\]/);
+  assert.match(ordersPageSource, /const ORDER_PIN_ICON_SIZE = 0\.62/);
+  assert.match(ordersPageSource, /const ORDER_PIN_LABEL_OFFSET = \[0, -1\.92\]/);
+  assert.match(ordersPageSource, /"icon-size": ORDER_PIN_ICON_SIZE/);
+  assert.doesNotMatch(ordersPageSource, /"icon-size": \[\s+"case"/);
+  assert.match(ordersPageSource, /"text-offset": ORDER_PIN_LABEL_OFFSET/);
   assert.match(ordersPageSource, /"text-size": 11/);
+
+  const plannedMarkerBlock = globalCssSource.match(/\.order-map-marker--planned \{[\s\S]*?\n\}/)?.[0] ?? "";
+  assert.match(plannedMarkerBlock, /--marker-color: #e11900/);
+  assert.doesNotMatch(plannedMarkerBlock, /--marker-height|--marker-width|--marker-label-size|--marker-label-top|font-size/);
 });
 
 test("Orders table headers sort rows by ascending and descending values", () => {

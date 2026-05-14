@@ -108,14 +108,7 @@ s-badge {
 }
 
 .order-map-marker--planned {
-  --marker-border-width: 3.4px;
   --marker-color: #e11900;
-  --marker-height: 36px;
-  --marker-label-size: 24px;
-  --marker-label-top: 3px;
-  --marker-shadow: drop-shadow(0 0 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 2px 4px rgba(225, 25, 0, 0.45)) drop-shadow(0 10px 22px rgba(0, 0, 0, 0.46));
-  --marker-width: 28px;
-  font-size: 11px;
 }
 
 .route-stop-overlap-pointer {

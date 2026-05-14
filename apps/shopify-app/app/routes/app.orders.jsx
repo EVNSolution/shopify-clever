@@ -45,6 +45,8 @@ const ORDERS_MAP_ORDER_LAYER_ID = "orders-map-order-pins";
 const ORDER_PIN_IMAGE_ID = "orders-map-pin";
 const ORDER_PIN_PLANNED_IMAGE_ID = "orders-map-pin-planned";
 const ORDER_PIN_PIXEL_RATIO = 2;
+const ORDER_PIN_ICON_SIZE = 0.62;
+const ORDER_PIN_LABEL_OFFSET = [0, -1.92];
 const ORDER_PIN_PATH =
   "M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z";
 const PERF_ENDPOINT = "/perf";
@@ -747,8 +749,6 @@ function ensureOrdersMapPinImages(map) {
     {
       id: ORDER_PIN_PLANNED_IMAGE_ID,
       imageData: createOrderPinImageData("#e11900", {
-        borderWidth: 3.4,
-        shadowBlur: 5,
         shadowColor: "rgba(225, 25, 0, 0.4)",
       }),
     },
@@ -822,17 +822,12 @@ function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
         "icon-anchor": "bottom",
         "icon-ignore-placement": true,
         "icon-image": ["get", "pinImage"],
-        "icon-size": [
-          "case",
-          [">", ["to-number", ["get", "plannedIndex"]], 0],
-          0.74,
-          0.62,
-        ],
+        "icon-size": ORDER_PIN_ICON_SIZE,
         "symbol-sort-key": ["get", "sortKey"],
         "text-allow-overlap": true,
         "text-field": ["get", "plannedLabel"],
         "text-ignore-placement": true,
-        "text-offset": [0, -1.55],
+        "text-offset": ORDER_PIN_LABEL_OFFSET,
         "text-size": 11,
       },
       paint: {
