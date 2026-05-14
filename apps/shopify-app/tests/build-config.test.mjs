@@ -28,6 +28,23 @@ test("build config treats MapLibre as an intentional lazy map chunk", () => {
   assert.match(viteConfigSource, /MapLibre/);
 });
 
+test("dev config pre-optimizes route hydration dependencies", () => {
+  [
+    "@shopify/shopify-app-react-router/adapters/node",
+    "@shopify/shopify-app-react-router/react",
+    "@shopify/shopify-app-react-router/server",
+    "@shopify/shopify-app-session-storage-prisma",
+    "@prisma/client",
+    "maplibre-gl",
+    "pmtiles",
+  ].forEach((dependencyName) => {
+    assert.match(
+      viteConfigSource,
+      new RegExp(`include:\\s*\\[[^\\]]*"${dependencyName}"`, "s"),
+    );
+  });
+});
+
 test("MapLibre maps avoid symbol fade delays", () => {
   assert.match(ordersPageSource, /fadeDuration:\s*0/);
   assert.match(routeDetailPageSource, /fadeDuration:\s*0/);
