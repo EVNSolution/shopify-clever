@@ -551,6 +551,103 @@ describe('Admin route plan routes', () => {
     }
   });
 
+  test('assigns a route plan driver for the token shop', async () => {
+    const { dependencies } = createDependencyHarness();
+    const assignRoutePlanDriver = vi.fn(() =>
+      Promise.resolve({
+        routePlan: {
+          ...routePlanSummary,
+          driver: {
+            authStatus: 'INVITE_PENDING',
+            authSubject: null,
+            createdAt: '2026-05-07T12:30:00.000Z',
+            displayName: 'Mina Driver',
+            id: 'driver-id',
+            lastSeenAt: null,
+            phone: '+14165550000',
+            recentEventsCount: 0,
+            status: 'PENDING',
+            updatedAt: '2026-05-07T12:30:00.000Z'
+          },
+          driverId: 'driver-id'
+        },
+        routeGeometry: null,
+        routeStopPoints: routePlanStopPoints(),
+        stops: [
+          routePlanStop({ orderName: '#1035', sequence: 1 }),
+          routePlanStop({ orderName: '#1036', sequence: 2 })
+        ]
+      })
+    );
+    (
+      dependencies.routePlanService as unknown as {
+        assignRoutePlanDriver: typeof assignRoutePlanDriver;
+      }
+    ).assignRoutePlanDriver = assignRoutePlanDriver;
+    const app = await buildApp({ adminRoutePlans: dependencies });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'PATCH',
+        payload: { driverId: 'driver-id' },
+        url: '/admin/route-plans/route-plan-id/driver'
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({
+        data: {
+          routePlan: {
+            driver: {
+              displayName: 'Mina Driver',
+              id: 'driver-id',
+              phone: '+14165550000'
+            },
+            driverId: 'driver-id',
+            id: 'route-plan-id'
+          }
+        },
+        error: null
+      });
+      expect(assignRoutePlanDriver).toHaveBeenCalledWith({
+        payload: { driverId: 'driver-id' },
+        routePlanId: 'route-plan-id',
+        shopDomain: 'example.myshopify.com'
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('rejects invalid route plan driver payloads before saving', async () => {
+    const { dependencies } = createDependencyHarness();
+    const assignRoutePlanDriver = vi.fn();
+    (
+      dependencies.routePlanService as unknown as {
+        assignRoutePlanDriver: typeof assignRoutePlanDriver;
+      }
+    ).assignRoutePlanDriver = assignRoutePlanDriver;
+    const app = await buildApp({ adminRoutePlans: dependencies });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'PATCH',
+        payload: { driverId: 42 },
+        url: '/admin/route-plans/route-plan-id/driver'
+      });
+
+      expect(response.statusCode).toBe(400);
+      expect(response.json()).toEqual({
+        data: null,
+        error: { code: 'BAD_REQUEST', message: 'Invalid route driver assignment payload' }
+      });
+      expect(assignRoutePlanDriver).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
   test('rejects adding a stop already assigned to another route plan', async () => {
     const { dependencies, updateRoutePlanStops } = createDependencyHarness();
     updateRoutePlanStops.mockRejectedValueOnce(new RoutePlanOrderAlreadyPlannedError());
@@ -607,6 +704,9 @@ describe('Admin route plan routes', () => {
 });
 
 function createDependencyHarness(): {
+  assignRoutePlanDriver: ReturnType<
+    typeof vi.fn<AdminRoutePlanDependencies['routePlanService']['assignRoutePlanDriver']>
+  >;
   createRoutePlan: ReturnType<
     typeof vi.fn<AdminRoutePlanDependencies['routePlanService']['createRoutePlan']>
   >;
@@ -630,6 +730,19 @@ function createDependencyHarness(): {
   }));
   const createRoutePlan = vi.fn<AdminRoutePlanDependencies['routePlanService']['createRoutePlan']>(
     () => Promise.resolve(routePlanSummary)
+  );
+  const assignRoutePlanDriver = vi.fn<
+    AdminRoutePlanDependencies['routePlanService']['assignRoutePlanDriver']
+  >(() =>
+    Promise.resolve({
+      routePlan: routePlanSummary,
+      routeGeometry: null,
+      routeStopPoints: routePlanStopPoints(),
+      stops: [
+        routePlanStop({ orderName: '#1035', sequence: 1 }),
+        routePlanStop({ orderName: '#1036', sequence: 2 })
+      ]
+    })
   );
   const listRoutePlans = vi.fn<AdminRoutePlanDependencies['routePlanService']['listRoutePlans']>(
     () => Promise.resolve([routePlanSummary])
@@ -665,9 +778,11 @@ function createDependencyHarness(): {
   );
 
   return {
+    assignRoutePlanDriver,
     createRoutePlan,
     dependencies: {
       routePlanService: {
+        assignRoutePlanDriver,
         createRoutePlan,
         deleteRoutePlan,
         getRoutePlanDetail,

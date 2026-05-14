@@ -393,8 +393,14 @@ test("Route detail does not let route-line style readiness block marker renderin
   assert.match(routeDetailSource, /catch \{\s+return false;\s+\}/);
   assert.match(routeDetailSource, /if \(!isRouteDetailMapStyleReady\(map\)\) return false/);
   assert.match(routeDetailSource, /return true/);
-  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometry\)/);
-  assert.match(routeDetailSource, /syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteStopPoints\)/);
+  assert.match(
+    routeDetailSource,
+    /const syncRouteDetailMapLayers = \(\) => \{\s+syncRouteDetailRouteLine\(map, savedRouteGeometry\);\s+return syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteStopPoints\);\s+\}/,
+  );
+  assert.doesNotMatch(
+    routeDetailSource,
+    /syncRouteDetailRouteLine\(map, savedRouteGeometry\)\s+&&\s+syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteStopPoints\)/,
+  );
   assert.doesNotMatch(routeDetailSource, /if \(!didSyncRouteLine\) return|return;\s+if \(departureLocation\?\.hasCoordinates\)/);
   assert.match(routeDetailSource, /const handleRouteDetailStyleData = \(\) => \{/);
   assert.match(routeDetailSource, /if \(!syncRouteDetailMapLayers\(\)\) return;\s+map\.off\("styledata", handleRouteDetailStyleData\);\s+bindRouteStopPointerHandlers\(\);/);
@@ -410,7 +416,11 @@ test("Route detail keeps marker coordinates validated and ordered for MapLibre",
   assert.match(routeDetailSource, /const depotCoordinates = normalizeLngLat\(\s+routePlan\?\.depot\?\.latitude,\s+routePlan\?\.depot\?\.longitude,\s+\)/);
   assert.match(routeDetailSource, /const currentCoordinates =/);
   assert.match(routeDetailSource, /const coordinates = depotCoordinates \?\? currentCoordinates/);
-  assert.match(routeDetailSource, /const coordinates = normalizeLngLat\(\s+stop\.coordinates\?\.latitude,\s+stop\.coordinates\?\.longitude,\s+\)/);
+  assert.match(routeDetailSource, /function normalizeRouteStopCoordinates\(stop\) \{/);
+  assert.match(routeDetailSource, /Array\.isArray\(stop\?\.coordinates\)/);
+  assert.match(routeDetailSource, /stop\?\.latitude \?\? stop\?\.coordinates\?\.latitude/);
+  assert.match(routeDetailSource, /stop\?\.longitude \?\? stop\?\.coordinates\?\.longitude/);
+  assert.match(routeDetailSource, /const coordinates = normalizeRouteStopCoordinates\(stop\)/);
   assert.match(routeDetailSource, /hasCoordinates: coordinates != null/);
 });
 
@@ -434,9 +444,38 @@ test("Route detail places only small stop pointers and the departure marker on t
   assert.doesNotMatch(routeDetailSource, /const pointerElement = createRouteStopPointerElement\(stop\)/);
   assert.doesNotMatch(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "center"/);
   assert.match(routeDetailSource, /\.setLngLat\(departureLocation\.coordinates\)/);
-  assert.match(routeDetailSource, /coordinates: stop\.coordinates/);
+  assert.match(routeDetailSource, /const markerCoordinates = getRouteStopPointerCoordinates\(stop, findRouteStopPoint\(stop, routeStopPoints\)\)/);
+  assert.match(routeDetailSource, /coordinates: markerCoordinates/);
   assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, maplibregl, routeMapLocations\)/);
   assert.doesNotMatch(routeDetailSource, /createRouteStopMarkerElement|createRouteStopPopupElement|order-map-marker--planned|new maplibregl\.Popup|setPopup/);
+});
+
+test("Route detail falls back to route stop point coordinates before dropping stop markers", () => {
+  assert.match(routeDetailSource, /function getRouteStopPointerCoordinates\(stop, routeStopPoint\) \{/);
+  assert.match(routeDetailSource, /if \(stop\.hasCoordinates\) return stop\.coordinates/);
+  assert.match(routeDetailSource, /normalizeLngLatPair\(routeStopPoint\?\.inputCoordinates\)/);
+  assert.match(routeDetailSource, /normalizeLngLatPair\(routeStopPoint\?\.snappedCoordinates\)/);
+  assert.match(routeDetailSource, /\.map\(\(stop\) => \{\s+const markerCoordinates = getRouteStopPointerCoordinates\(stop, findRouteStopPoint\(stop, routeStopPoints\)\);\s+if \(!markerCoordinates\) return null;/);
+  assert.match(routeDetailSource, /\.filter\(Boolean\)/);
+});
+
+test("Route detail button styles avoid React border shorthand collisions", () => {
+  const driverSaveButtonBlock = routeDetailSource.match(/const routeDetailDriverSaveButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const driverDisabledButtonBlock = routeDetailSource.match(/const routeDetailDriverDisabledSaveButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const sequenceActionButtonBlock = routeDetailSource.match(/const routeStopSequenceActionButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+  const sequencePrimaryButtonBlock = routeDetailSource.match(/const routeStopSequencePrimaryButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
+
+  assert.doesNotMatch(driverSaveButtonBlock, /\bborder:\s*["']/);
+  assert.match(driverSaveButtonBlock, /borderColor:\s*"#303030"/);
+  assert.match(driverSaveButtonBlock, /borderStyle:\s*"solid"/);
+  assert.match(driverSaveButtonBlock, /borderWidth:\s*"1px"/);
+  assert.match(driverDisabledButtonBlock, /borderColor:\s*"#d6d6d6"/);
+
+  assert.doesNotMatch(sequenceActionButtonBlock, /\bborder:\s*["']/);
+  assert.match(sequenceActionButtonBlock, /borderColor:\s*"#c9c9c9"/);
+  assert.match(sequenceActionButtonBlock, /borderStyle:\s*"solid"/);
+  assert.match(sequenceActionButtonBlock, /borderWidth:\s*"1px"/);
+  assert.match(sequencePrimaryButtonBlock, /borderColor:\s*"#303030"/);
 });
 
 test("Route detail can zoom a stop marker to its OSRM snapped stop point", () => {
@@ -538,8 +577,8 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
 
 
 test("Route detail marker rendering does not call MapLibre resize from map event handlers", () => {
-  assert.match(routeDetailSource, /const syncRouteDetailMapLayers = \(\) => \(/);
-  const layerSyncStart = routeDetailSource.indexOf("const syncRouteDetailMapLayers = () => (");
+  assert.match(routeDetailSource, /const syncRouteDetailMapLayers = \(\) => \{/);
+  const layerSyncStart = routeDetailSource.indexOf("const syncRouteDetailMapLayers = () => {");
   const layerSyncEnd = routeDetailSource.indexOf("const syncSucceeded = syncRouteDetailMapLayers();", layerSyncStart);
   const layerSyncBody = routeDetailSource.slice(layerSyncStart, layerSyncEnd);
 

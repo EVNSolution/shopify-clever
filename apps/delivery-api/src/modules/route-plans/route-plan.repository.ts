@@ -1,6 +1,7 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 import {
+  RoutePlanDriverAssignInvalidError,
   RoutePlanOrderAlreadyPlannedError,
   RoutePlanStopUpdateInvalidError
 } from './route-plan.types.js';
@@ -8,8 +9,10 @@ import type {
   RoutePlanDepotInput,
   RoutePlanDetail,
   RoutePlanDetailStop,
+  RoutePlanDriverSummary,
   RoutePlanOrderAttributeInput,
   RoutePlanOrderInput,
+  UpdateRoutePlanDriverInput,
   UpdateRoutePlanStopsInput,
   RoutePlanShippingAddressInput,
   RoutePlanRouteScopeInput,
@@ -22,7 +25,7 @@ const OPTIMIZER_VERSION = 'manual-sequence-mvp';
 
 type RoutePlanPrismaClient = Pick<
   PrismaClient,
-  '$transaction' | 'deliveryStop' | 'order' | 'routePlan' | 'routePlanStop' | 'shop'
+  '$transaction' | 'deliveryStop' | 'driver' | 'order' | 'routePlan' | 'routePlanStop' | 'shop'
 >;
 
 type RoutePlanRecord = {
@@ -31,12 +34,26 @@ type RoutePlanRecord = {
   deliveryDate?: Date | null;
   depotLatitude: unknown;
   depotLongitude: unknown;
+  driver?: RoutePlanDriverRecord | null;
+  driverId?: string | null;
   id: string;
   metrics: unknown;
   name: string;
   planDate: Date;
   routeStops?: RoutePlanStopRecord[];
   status: string;
+  updatedAt: Date;
+};
+
+type RoutePlanDriverRecord = {
+  _count?: { driverEvents?: number };
+  authSubject: string | null;
+  createdAt: Date;
+  displayName: string;
+  id: string;
+  lastSeenAt: Date | null;
+  phone: string | null;
+  status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   updatedAt: Date;
 };
 
@@ -79,6 +96,61 @@ type OrderRecord = {
 
 export class PrismaRoutePlanRepository implements RoutePlanRepository {
   constructor(private readonly prisma: RoutePlanPrismaClient) {}
+
+  async assignRoutePlanDriver(input: UpdateRoutePlanDriverInput): Promise<RoutePlanDetail | null> {
+    const shopDomain = normalizeShopDomain(input.shopDomain);
+    const driverId = input.payload.driverId;
+
+    const assigned = await this.prisma.$transaction(async (tx) => {
+      const shop = await tx.shop.findUnique({
+        select: { id: true },
+        where: { shopDomain }
+      });
+      if (shop === null) {
+        return false;
+      }
+
+      const routePlan = await tx.routePlan.findFirst({
+        select: { id: true },
+        where: {
+          id: input.routePlanId,
+          shopId: shop.id
+        }
+      });
+      if (routePlan === null) {
+        return false;
+      }
+
+      if (driverId !== null) {
+        const driver = await tx.driver.findFirst({
+          select: { id: true },
+          where: {
+            id: driverId,
+            shopId: shop.id
+          }
+        });
+        if (driver === null) {
+          throw new RoutePlanDriverAssignInvalidError('Route driver must belong to the current shop.');
+        }
+      }
+
+      await tx.routePlan.update({
+        data: { driverId },
+        where: { id: routePlan.id }
+      });
+
+      return true;
+    });
+
+    if (!assigned) {
+      return null;
+    }
+
+    return this.findRoutePlanDetail({
+      routePlanId: input.routePlanId,
+      shopDomain: input.shopDomain
+    });
+  }
 
   async createRoutePlanDraft(input: {
     createdBy: string;
@@ -552,21 +624,17 @@ function createMetricsFromOrders(
   };
 }
 
-function routePlanInclude(): {
-  routeStops: {
-    include: {
-      deliveryStop: {
-        include: {
-          order: true;
-        };
-      };
-    };
-    orderBy: {
-      sequence: 'asc';
-    };
-  };
-} {
+function routePlanInclude() {
   return {
+    driver: {
+      include: {
+        _count: {
+          select: {
+            driverEvents: true
+          }
+        }
+      }
+    },
     routeStops: {
       include: {
         deliveryStop: {
@@ -579,7 +647,7 @@ function routePlanInclude(): {
         sequence: 'asc'
       }
     }
-  };
+  } satisfies Prisma.RoutePlanInclude;
 }
 
 function toOrderWrite(input: RoutePlanOrderInput): {
@@ -676,6 +744,8 @@ function toRoutePlanSummary(routePlan: RoutePlanRecord, inputOrders?: RoutePlanO
       latitude: decimalNumber(routePlan.depotLatitude),
       longitude: decimalNumber(routePlan.depotLongitude)
     },
+    driver: toRoutePlanDriverSummary(routePlan.driver ?? null),
+    driverId: routePlan.driverId ?? routePlan.driver?.id ?? null,
     id: routePlan.id,
     missingCoordinates: metrics.missingCoordinates,
     name: routePlan.name,
@@ -683,6 +753,26 @@ function toRoutePlanSummary(routePlan: RoutePlanRecord, inputOrders?: RoutePlanO
     status: routePlan.status,
     stopsCount: metrics.stopsCount,
     updatedAt: routePlan.updatedAt.toISOString()
+  };
+}
+
+function toRoutePlanDriverSummary(driver: RoutePlanDriverRecord | null): RoutePlanDriverSummary | null {
+  if (driver === null) {
+    return null;
+  }
+
+  const isInvitePending = driver.authSubject === null;
+  return {
+    authStatus: isInvitePending ? 'INVITE_PENDING' : 'APP_LINKED',
+    authSubject: isInvitePending ? null : 'present',
+    createdAt: driver.createdAt.toISOString(),
+    displayName: driver.displayName,
+    id: driver.id,
+    lastSeenAt: driver.lastSeenAt?.toISOString() ?? null,
+    phone: driver.phone,
+    recentEventsCount: driver._count?.driverEvents ?? 0,
+    status: isInvitePending ? 'PENDING' : driver.status,
+    updatedAt: driver.updatedAt.toISOString()
   };
 }
 

@@ -77,12 +77,27 @@ export type RoutePlanSummary = {
     latitude: number | null;
     longitude: number | null;
   };
+  driver?: RoutePlanDriverSummary | null;
+  driverId?: string | null;
   id: string;
   missingCoordinates: number;
   name: string;
   planDate: string;
   status: string;
   stopsCount: number;
+  updatedAt: string;
+};
+
+export type RoutePlanDriverSummary = {
+  authStatus: 'APP_LINKED' | 'INVITE_PENDING';
+  authSubject: 'present' | null;
+  createdAt: string;
+  displayName: string;
+  id: string;
+  lastSeenAt: string | null;
+  phone: string | null;
+  recentEventsCount: number;
+  status: 'ACTIVE' | 'INACTIVE' | 'PENDING' | 'SUSPENDED';
   updatedAt: string;
 };
 
@@ -141,6 +156,16 @@ export type UpdateRoutePlanStopsInput = {
   payload: UpdateRoutePlanStopsPayload;
 };
 
+export type UpdateRoutePlanDriverPayload = {
+  driverId: string | null;
+};
+
+export type UpdateRoutePlanDriverInput = {
+  routePlanId: string;
+  shopDomain: string;
+  payload: UpdateRoutePlanDriverPayload;
+};
+
 export type RoutePlanDetail = {
   routePlan: RoutePlanSummary;
   routeGeometry: RoutePlanRouteGeometry | null;
@@ -149,6 +174,7 @@ export type RoutePlanDetail = {
 };
 
 export type RoutePlanService = {
+  assignRoutePlanDriver(input: UpdateRoutePlanDriverInput): Promise<RoutePlanDetail | null>;
   createRoutePlan(input: CreateRoutePlanInput): Promise<RoutePlanSummary>;
   deleteRoutePlan(input: { routePlanId: string; shopDomain: string }): Promise<{
     routePlanId: string;
@@ -178,5 +204,14 @@ export class RoutePlanStopUpdateInvalidError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'RoutePlanStopUpdateInvalidError';
+  }
+}
+
+export class RoutePlanDriverAssignInvalidError extends Error {
+  readonly code = 'ROUTE_DRIVER_ASSIGN_INVALID';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'RoutePlanDriverAssignInvalidError';
   }
 }
