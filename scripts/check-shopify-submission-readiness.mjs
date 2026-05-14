@@ -87,6 +87,25 @@ requireFile("docs/shopify-app-store-listing-draft.md", "standalone App Store lis
 const listingDraft = read("docs/shopify-app-store-listing-draft.md");
 ok("listing draft uses clever app name", /```text\nclever\n```/.test(listingDraft), "docs/shopify-app-store-listing-draft.md");
 ok("listing draft includes factual route-planning subtitle", /Plan local delivery routes from Shopify orders/.test(listingDraft), "docs/shopify-app-store-listing-draft.md");
+
+requireFile("docs/shopify-dashboard-submission-evidence-template.md", "dashboard submission evidence template exists");
+const dashboardEvidenceTemplate = read("docs/shopify-dashboard-submission-evidence-template.md");
+for (const phrase of [
+  "Protected customer data request evidence",
+  "Privacy policy publication evidence",
+  "Listing copy evidence",
+  "Pricing evidence",
+  "Media evidence",
+  "Contact and reviewer evidence",
+  "Automated checks evidence",
+  "Final Submit for Review evidence",
+  "EVNSolution/shopify-clever#6",
+  "EVNSolution/clever-change-control#211",
+  "chg-20260514-001"
+]) {
+  ok(`dashboard evidence template includes ${phrase}`, dashboardEvidenceTemplate.includes(phrase), "docs/shopify-dashboard-submission-evidence-template.md");
+}
+
 const listingCopyBlocks = [...listingDraft.matchAll(/```text\n([\s\S]*?)```/g)]
   .map((match) => match[1])
   .join("\n");
