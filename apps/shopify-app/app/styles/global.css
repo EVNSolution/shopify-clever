@@ -1,0 +1,493 @@
+:root {
+  --app-font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --p-font-family-sans: var(--app-font-family);
+}
+
+html,
+body {
+  font-family: var(--app-font-family);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: var(--app-font-family);
+}
+
+s-page,
+s-section,
+s-paragraph,
+s-link,
+s-button,
+s-table,
+s-stack,
+s-box,
+s-badge {
+  font-family: var(--app-font-family);
+}
+
+.order-number-button {
+  background-color: transparent;
+  border-radius: 8px;
+  color: inherit;
+  transition: background-color 120ms ease;
+}
+
+.order-number-button:hover {
+  background-color: rgba(0, 0, 0, 0.06);
+}
+
+.order-number-button:focus-visible {
+  background-color: rgba(0, 0, 0, 0.06);
+  outline: 2px solid rgba(0, 0, 0, 0.22);
+  outline-offset: 2px;
+}
+
+.route-plan-address-button {
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+
+.order-map-marker {
+  --marker-border-width: 3.2px;
+  --marker-color: #006fbb;
+  --marker-height: 30px;
+  --marker-label-size: 20px;
+  --marker-label-top: 2px;
+  --marker-shadow: drop-shadow(0 0 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 2px 3px rgba(0, 111, 187, 0.42)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.42));
+  --marker-width: 23px;
+  appearance: none;
+  background-color: transparent;
+  border: 0;
+  color: #ffffff;
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  height: var(--marker-height);
+  line-height: 1;
+  padding: 0;
+  position: relative;
+  width: var(--marker-width);
+}
+
+.order-map-marker__svg {
+  display: block;
+  height: 100%;
+  overflow: visible;
+  width: 100%;
+}
+
+.order-map-marker__shape {
+  fill: var(--marker-color);
+  filter: var(--marker-shadow);
+  paint-order: stroke fill;
+  stroke: #ffffff;
+  stroke-linejoin: round;
+  stroke-width: var(--marker-border-width);
+}
+
+.order-map-marker:is(:hover, :focus-visible) .order-map-marker__shape {
+  filter: var(--marker-active-shadow, var(--marker-shadow));
+}
+
+.order-map-marker__label {
+  align-items: center;
+  display: flex;
+  height: var(--marker-label-size);
+  justify-content: center;
+  left: 50%;
+  position: absolute;
+  top: var(--marker-label-top);
+  transform: translateX(-50%);
+  width: var(--marker-label-size);
+  z-index: 1;
+}
+
+.order-map-marker--planned {
+  --marker-border-width: 3.4px;
+  --marker-color: #e11900;
+  --marker-height: 36px;
+  --marker-label-size: 24px;
+  --marker-label-top: 3px;
+  --marker-shadow: drop-shadow(0 0 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 2px 4px rgba(225, 25, 0, 0.45)) drop-shadow(0 10px 22px rgba(0, 0, 0, 0.46));
+  --marker-width: 28px;
+  font-size: 11px;
+}
+
+.route-stop-overlap-pointer {
+  align-items: center;
+  appearance: none;
+  background: #303030;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(48, 48, 48, 0.18);
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 700;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+  width: 18px;
+}
+
+.route-stop-overlap-pointer:is(:hover, :focus-visible) {
+  background: #000000;
+  outline: 2px solid rgba(0, 0, 0, 0.22);
+  outline-offset: 2px;
+}
+
+.route-stop-overlap-pointer__label {
+  transform: translateY(-0.5px);
+}
+
+.route-snapped-stop-point {
+  background: #1473e6;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-sizing: border-box;
+  box-shadow: 0 0 0 1px rgba(20, 115, 230, 0.24), 0 2px 4px rgba(20, 115, 230, 0.34);
+  display: block;
+  height: 11px;
+  pointer-events: none;
+  position: relative;
+  width: 11px;
+}
+
+.departure-map-marker {
+  appearance: none;
+  background-color: transparent;
+  border: 0;
+  color: #ffffff;
+  cursor: pointer;
+  display: block;
+  height: 38px;
+  line-height: 1;
+  padding: 0;
+  position: relative;
+  width: 30px;
+}
+
+.departure-map-marker__pin {
+  align-items: center;
+  background: #008060;
+  border: 2px solid #ffffff;
+  border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
+  box-sizing: border-box;
+  display: flex;
+  height: 30px;
+  justify-content: center;
+  left: 50%;
+  min-width: 30px;
+  padding: 0;
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  width: 30px;
+}
+
+.departure-map-marker__pin::after {
+  background: #008060;
+  border-bottom: 2px solid #ffffff;
+  border-right: 2px solid #ffffff;
+  bottom: -5px;
+  box-sizing: border-box;
+  content: "";
+  height: 11px;
+  left: 50%;
+  position: absolute;
+  transform: translateX(-50%) rotate(45deg);
+  width: 11px;
+  z-index: 0;
+}
+
+.departure-map-marker__icon {
+  display: block;
+  fill: currentColor;
+  height: 15px;
+  pointer-events: none;
+  position: relative;
+  width: 15px;
+  z-index: 1;
+}
+
+.order-marker-popup {
+  display: grid;
+  gap: 6px;
+  min-width: 180px;
+}
+
+.order-marker-popup__title {
+  color: #303030;
+  font-size: 13px;
+}
+
+.order-marker-popup__address {
+  color: #616161;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.order-marker-popup__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.order-marker-popup__meta-tab {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 999px;
+  color: #303030;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  padding: 3px 8px;
+}
+
+.order-marker-popup__action {
+  background: #303030;
+  border: 1px solid #303030;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  font-size: 12px;
+  font-weight: 650;
+  margin-top: 2px;
+  min-height: 28px;
+  padding: 4px 10px;
+}
+
+.order-marker-popup__action:disabled {
+  background: #f1f1f1;
+  border-color: #d6d6d6;
+  color: #8a8a8a;
+  cursor: not-allowed;
+}
+
+.maplibregl-popup {
+  z-index: 5000;
+}
+
+.route-table-row {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.route-table-row:hover {
+  background-color: rgba(0, 0, 0, 0.04);
+}
+
+.route-table-row:focus-visible {
+  background-color: rgba(0, 0, 0, 0.04);
+  outline: 2px solid rgba(0, 0, 0, 0.22);
+  outline-offset: -2px;
+}
+
+.page-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.page-grid--two {
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.55fr);
+}
+
+.page-grid--three {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.page-grid--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.value-list > div:first-child {
+  border-top: 0 !important;
+  padding-top: 0 !important;
+}
+
+.page-section ul,
+.page-section ol {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.page-section li {
+  color: #303030;
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 4px 0;
+}
+
+.analytics-kpi-grid,
+.resource-tab-list,
+.settings-section-links {
+  display: grid;
+  gap: 8px;
+}
+
+.analytics-kpi-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.resource-tab-list,
+.settings-section-links {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.analytics-kpi-card,
+.resource-tab-list a,
+.settings-section-links a,
+.linked-table a {
+  background: #f7f7f7;
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  color: #303030;
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 10px 12px;
+  text-decoration: none;
+}
+
+.analytics-kpi-card:hover,
+.resource-tab-list a:hover,
+.settings-section-links a:hover,
+.linked-table a:hover {
+  background: #f1f1f1;
+}
+
+.analytics-kpi-card span,
+.linked-table span {
+  color: #616161;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.analytics-kpi-card strong,
+.linked-table strong {
+  color: #303030;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.linked-table {
+  display: grid;
+  gap: 8px;
+}
+
+.week-scope-switcher {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0;
+}
+
+.week-scope-switcher a {
+  border: 1px solid #c9c9c9;
+  border-radius: 999px;
+  color: #303030;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 7px 11px;
+  text-decoration: none;
+}
+
+.week-scope-switcher a:hover {
+  border-color: #8a8a8a;
+}
+
+.week-scope-switcher a[aria-current="page"] {
+  background: #303030;
+  border-color: #303030;
+  color: #ffffff;
+}
+
+.operations-table-wrap {
+  overflow-x: auto;
+}
+
+.operations-table {
+  border-collapse: collapse;
+  color: #303030;
+  font-size: 13px;
+  min-width: 760px;
+  width: 100%;
+}
+
+.operations-table th,
+.operations-table td {
+  border-bottom: 1px solid #e3e3e3;
+  padding: 9px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.operations-table th {
+  background: #f7f7f7;
+  color: #616161;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.operations-table tr:last-child td {
+  border-bottom: 0;
+}
+
+.operations-table a {
+  color: #005bd3;
+  text-decoration: none;
+}
+
+.operations-table a:hover {
+  text-decoration: underline;
+}
+
+.operation-status {
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.2;
+  padding: 4px 8px;
+  white-space: nowrap;
+}
+
+.operation-status--complete {
+  background: #e5f5ec;
+  color: #0b6b3a;
+}
+
+.operation-status--progress {
+  background: #eaf4ff;
+  color: #174a7c;
+}
+
+.operation-status--blocked {
+  background: #fff1b8;
+  color: #4f3f00;
+}
+
+.operation-status--idle {
+  background: #f1f1f1;
+  color: #616161;
+}
+
+@media (max-width: 860px) {
+  .page-grid--two,
+  .page-grid--three,
+  .analytics-kpi-grid,
+  .resource-tab-list,
+  .settings-section-links {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

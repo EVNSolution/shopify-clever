@@ -1,0 +1,90 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import {
+  inferDeliveryDateForOrder,
+  formatDeliveryScopeLabel,
+  inferDeliveryDateFromLineItems,
+  inferDeliveryDateFromOrderCycle,
+} from "./delivery-labels.js";
+
+test("formats delivery labels with the actual date and weekday", () => {
+  assert.equal(
+    formatDeliveryScopeLabel({ deliveryDate: "2026-05-08" }),
+    "Fri 05/08",
+  );
+});
+
+test("formats explicit route time windows only when provided", () => {
+  assert.equal(
+    formatDeliveryScopeLabel({
+      deliveryDate: "2026-05-08",
+      timeWindowEnd: "21:00",
+      timeWindowStart: "17:00",
+    }),
+    "Fri 05/08 · 5–9pm",
+  );
+});
+
+test("does not fall back to a bare weekday without a date", () => {
+  assert.equal(
+    formatDeliveryScopeLabel({ fallbackDeliveryDay: "Friday" }),
+    undefined,
+  );
+});
+
+test("infers the concrete delivery date from a Shopify line item range and delivery day", () => {
+  assert.equal(
+    inferDeliveryDateFromLineItems({
+      deliveryDay: "Friday",
+      lineItems: {
+        nodes: [
+          {
+            title: "토마토노 밀키트 세트 5/7-5/9",
+          },
+        ],
+      },
+      orderCreatedAt: "2026-05-01T15:30:00.000Z",
+    }),
+    "2026-05-08",
+  );
+});
+
+
+test("infers delivery dates from the Tomatono Tuesday-to-Monday order cycle", () => {
+  assert.equal(
+    inferDeliveryDateFromOrderCycle({
+      deliveryDay: "Friday",
+      orderCreatedAt: "2026-05-01T15:30:00.000Z",
+    }),
+    "2026-05-08",
+  );
+
+  assert.equal(
+    inferDeliveryDateFromOrderCycle({
+      deliveryDay: "Thursday",
+      orderCreatedAt: "2026-05-04T23:30:00.000Z",
+    }),
+    "2026-05-07",
+  );
+
+  assert.equal(
+    inferDeliveryDateFromOrderCycle({
+      deliveryDay: "Saturday",
+      orderCreatedAt: "2026-05-05T15:30:00.000Z",
+    }),
+    "2026-05-16",
+  );
+});
+
+test("uses the order cycle when Shopify line items do not include a date range", () => {
+  assert.equal(
+    inferDeliveryDateForOrder({
+      deliveryDay: "Friday",
+      lineItems: {
+        nodes: [{ title: "Tomatono weekly menu" }],
+      },
+      orderCreatedAt: "2026-05-01T15:30:00.000Z",
+    }),
+    "2026-05-08",
+  );
+});

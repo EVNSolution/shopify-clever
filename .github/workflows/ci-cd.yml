@@ -1,0 +1,153 @@
+name: CI/CD
+
+# Private GitHub Free strategy:
+# - keep CI automatic and lightweight because private GitHub-hosted runs consume the
+#   org monthly Actions quota.
+# - keep production deploy manual because deployment environments/protection rules
+#   are not available for private repos on the current Free org plan.
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/ci-cd.yml"
+      - "apps/**"
+      - "infra/**"
+      - "package.json"
+      - "scripts/**"
+  push:
+    branches:
+      - main
+    paths:
+      - ".github/workflows/ci-cd.yml"
+      - "apps/**"
+      - "infra/**"
+      - "package.json"
+      - "scripts/**"
+  workflow_dispatch:
+    inputs:
+      deploy_production:
+        description: "Deploy the current main branch to the production EC2 host"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: shopify-clever-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    name: Build, test, and compose config
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            apps/shopify-app/package-lock.json
+            apps/delivery-api/package-lock.json
+
+      - name: Install app dependencies
+        run: npm run setup
+
+      - name: Build apps
+        run: npm run build
+
+      - name: Typecheck apps
+        run: npm run typecheck
+
+      - name: Test apps
+        run: npm test
+
+      - name: Check public URL hostnames
+        run: npm run check:public-urls
+
+      - name: Prepare non-secret compose env files
+        run: |
+          cp infra/env/shopify-app.env.example infra/env/shopify-app.env
+          cp infra/env/delivery-api.env.example infra/env/delivery-api.env
+
+      - name: Validate compose file
+        run: docker compose -f infra/compose/docker-compose.prod.yml config --quiet
+
+  deploy:
+    name: Deploy to EC2
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_production == true && github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: shopify-clever-production
+      cancel-in-progress: false
+
+    env:
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate deployment configuration
+        run: |
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "$DEPLOY_PATH"
+          test -n "$EC2_SSH_KEY"
+
+      - name: Configure SSH
+        run: |
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+
+      - name: Sync source to EC2
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'node_modules/' \
+            --exclude 'build/' \
+            --exclude 'dist/' \
+            --exclude '.react-router/' \
+            --exclude '.shopify/' \
+            --exclude '.omx/' \
+            --exclude 'infra/env/*.env' \
+            --exclude 'data/' \
+            --exclude '.DS_Store' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/"
+
+      - name: Build and restart services on EC2
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
+            set -euo pipefail
+            cd '$DEPLOY_PATH'
+            test -f infra/env/shopify-app.env
+            test -f infra/env/delivery-api.env
+            mkdir -p data/shopify
+            touch data/shopify/dev.sqlite
+            chmod 600 infra/env/*.env data/shopify/dev.sqlite
+            docker compose -f infra/compose/docker-compose.prod.yml config --quiet
+            docker compose -f infra/compose/docker-compose.prod.yml build
+            docker compose -f infra/compose/docker-compose.prod.yml up -d
+            docker compose -f infra/compose/docker-compose.prod.yml ps
+          "
+
+      - name: Smoke test public endpoints
+        run: |
+          curl -fsS https://clever-delivery.3-39-216-177.sslip.io/healthz
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://clever-delivery.3-39-216-177.sslip.io/readyz)" = "200"
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://clever-admin.3-39-216-177.sslip.io/auth/login)" = "400"

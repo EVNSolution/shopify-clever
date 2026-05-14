@@ -1,0 +1,9 @@
+clever-admin.3-39-216-177.sslip.io {
+  encode zstd gzip
+  reverse_proxy shopify-app:3000
+}
+
+clever-delivery.3-39-216-177.sslip.io {
+  encode zstd gzip
+  reverse_proxy delivery-api:3000
+}
