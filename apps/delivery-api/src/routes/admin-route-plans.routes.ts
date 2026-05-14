@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 
 import {
+  RoutePlanDriverAssignInvalidError,
   RoutePlanOrderAlreadyPlannedError,
   RoutePlanStopUpdateInvalidError
 } from '../modules/route-plans/route-plan.types.js';
@@ -11,6 +12,7 @@ import type {
   RoutePlanRouteScopeInput,
   RoutePlanService,
   RoutePlanShippingAddressInput,
+  UpdateRoutePlanDriverPayload,
   UpdateRoutePlanStopsPayload
 } from '../modules/route-plans/route-plan.types.js';
 
@@ -107,6 +109,44 @@ export function registerAdminRoutePlanRoutes(
         data: detail,
         error: null
       });
+    }
+  );
+
+  app.patch<{ Body: unknown; Params: { routePlanId: string } }>(
+    '/admin/route-plans/:routePlanId/driver',
+    async (request, reply) => {
+      const authenticated = authenticate(request.headers.authorization, dependencies);
+      if (authenticated.status === 'unauthorized') {
+        return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
+      }
+
+      let payload: UpdateRoutePlanDriverPayload;
+      try {
+        payload = readUpdateRoutePlanDriverPayload(request.body);
+      } catch {
+        return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid route driver assignment payload'));
+      }
+
+      try {
+        const detail = await dependencies.routePlanService.assignRoutePlanDriver({
+          payload,
+          routePlanId: request.params.routePlanId,
+          shopDomain: authenticated.shopDomain
+        });
+        if (detail === null) {
+          return reply.code(404).send(errorResponse('NOT_FOUND', 'Route plan not found'));
+        }
+
+        return reply.code(200).send({
+          data: detail,
+          error: null
+        });
+      } catch (error) {
+        if (error instanceof RoutePlanDriverAssignInvalidError) {
+          return reply.code(400).send(errorResponse(error.code, error.message));
+        }
+        throw error;
+      }
     }
   );
 
@@ -249,6 +289,13 @@ function readUpdateRoutePlanStopsPayload(value: unknown): UpdateRoutePlanStopsPa
         shopifyOrderGid: requireNonEmptyString(stop.shopifyOrderGid)
       };
     })
+  };
+}
+
+function readUpdateRoutePlanDriverPayload(value: unknown): UpdateRoutePlanDriverPayload {
+  const object = requireObject(value);
+  return {
+    driverId: readNullableString(object.driverId)
   };
 }
 

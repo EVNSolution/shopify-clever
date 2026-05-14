@@ -2,6 +2,7 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { PrismaRoutePlanRepository } from '../src/modules/route-plans/route-plan.repository.js';
 import {
+  RoutePlanDriverAssignInvalidError,
   RoutePlanOrderAlreadyPlannedError,
   RoutePlanStopUpdateInvalidError
 } from '../src/modules/route-plans/route-plan.types.js';
@@ -175,6 +176,56 @@ describe('PrismaRoutePlanRepository', () => {
       | undefined;
     expect(updateArg?.where).toEqual({ id: 'route-plan-id' });
     expect(updateArg?.data.metrics.stopsCount).toBe(2);
+  });
+
+  test('assigns a route driver within the current shop scope', async () => {
+    const { prisma } = createPrismaHarness();
+    const repository = new PrismaRoutePlanRepository(
+      prisma as unknown as ConstructorParameters<typeof PrismaRoutePlanRepository>[0]
+    );
+
+    const result = await repository.assignRoutePlanDriver({
+      routePlanId: 'route-plan-id',
+      shopDomain: 'example.myshopify.com',
+      payload: { driverId: 'driver-id' }
+    });
+
+    expect(result?.routePlan.id).toBe('route-plan-id');
+    expect(prisma.driver.findFirst).toHaveBeenCalledWith({
+      select: { id: true },
+      where: {
+        id: 'driver-id',
+        shopId: 'shop-id'
+      }
+    });
+    expect(prisma.routePlan.update).toHaveBeenCalledWith({
+      data: { driverId: 'driver-id' },
+      where: { id: 'route-plan-id' }
+    });
+  });
+
+  test('rejects assigning a driver from another shop before updating the route', async () => {
+    const { prisma } = createPrismaHarness({ driverForAssignment: null });
+    const repository = new PrismaRoutePlanRepository(
+      prisma as unknown as ConstructorParameters<typeof PrismaRoutePlanRepository>[0]
+    );
+
+    await expect(
+      repository.assignRoutePlanDriver({
+        routePlanId: 'route-plan-id',
+        shopDomain: 'example.myshopify.com',
+        payload: { driverId: 'other-shop-driver-id' }
+      })
+    ).rejects.toBeInstanceOf(RoutePlanDriverAssignInvalidError);
+
+    expect(prisma.driver.findFirst).toHaveBeenCalledWith({
+      select: { id: true },
+      where: {
+        id: 'other-shop-driver-id',
+        shopId: 'shop-id'
+      }
+    });
+    expect(prisma.routePlan.update).not.toHaveBeenCalled();
   });
 
   test('rejects duplicate stop update payload orders before changing route stops', async () => {
@@ -372,6 +423,7 @@ describe('PrismaRoutePlanRepository', () => {
 
 function createPrismaHarness(input: {
   deliveryStopForId?: { id: string } | null;
+  driverForAssignment?: { id: string } | null;
   existingRoutePlanStops?: Array<{ deliveryStopId: string }>;
   orderDeliveryDate?: string;
   orders?: Array<Record<string, unknown>>;
@@ -382,6 +434,9 @@ function createPrismaHarness(input: {
     deliveryStop: {
       findFirst: ReturnType<typeof vi.fn>;
       upsert: ReturnType<typeof vi.fn>;
+    };
+    driver: {
+      findFirst: ReturnType<typeof vi.fn>;
     };
     order: {
       findMany: ReturnType<typeof vi.fn>;
@@ -422,6 +477,9 @@ function createPrismaHarness(input: {
         .mockResolvedValueOnce({ id: 'stop-1' })
         .mockResolvedValueOnce({ id: 'stop-2' })
         .mockResolvedValue({ id: 'stop-3' })
+    },
+    driver: {
+      findFirst: vi.fn(() => Promise.resolve(input.driverForAssignment === undefined ? { id: 'driver-id' } : input.driverForAssignment))
     },
     order: {
       findMany: vi.fn(() => Promise.resolve(input.orders ?? [

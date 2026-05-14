@@ -145,8 +145,10 @@ const routeDetailDriverSelectStyle = {
 
 const routeDetailDriverSaveButtonStyle = {
   background: "#303030",
-  border: "1px solid #303030",
+  borderColor: "#303030",
   borderRadius: "8px",
+  borderStyle: "solid",
+  borderWidth: "1px",
   color: "#ffffff",
   cursor: "pointer",
   fontFamily: "inherit",
@@ -398,8 +400,10 @@ const routeStopDragHandleStyle = {
 
 const routeStopSequenceActionButtonStyle = {
   background: "#ffffff",
-  border: "1px solid #c9c9c9",
+  borderColor: "#c9c9c9",
   borderRadius: "8px",
+  borderStyle: "solid",
+  borderWidth: "1px",
   color: "#303030",
   cursor: "pointer",
   fontFamily: "inherit",
@@ -682,12 +686,20 @@ function buildDepartureLocation(routePlan, currentDepartureLocation) {
   };
 }
 
+function normalizeRouteStopCoordinates(stop) {
+  if (Array.isArray(stop?.coordinates)) {
+    return normalizeLngLat(stop.coordinates[1], stop.coordinates[0]);
+  }
+
+  return normalizeLngLat(
+    stop?.latitude ?? stop?.coordinates?.latitude,
+    stop?.longitude ?? stop?.coordinates?.longitude,
+  );
+}
+
 function buildRouteStops(stops) {
   return resequenceRouteStops(stops.map((stop, index) => {
-    const coordinates = normalizeLngLat(
-      stop.coordinates?.latitude,
-      stop.coordinates?.longitude,
-    );
+    const coordinates = normalizeRouteStopCoordinates(stop);
     const sequence = numberOrUndefined(stop.sequence);
     const stopNumber = Number.isInteger(sequence) && sequence > 0
       ? sequence
@@ -1054,6 +1066,15 @@ function findRouteStopPoint(stop, routeStopPoints) {
   )) ?? null;
 }
 
+function getRouteStopPointerCoordinates(stop, routeStopPoint) {
+  if (stop.hasCoordinates) return stop.coordinates;
+
+  return (
+    normalizeLngLatPair(routeStopPoint?.inputCoordinates) ??
+    normalizeLngLatPair(routeStopPoint?.snappedCoordinates)
+  );
+}
+
 function buildRouteStopPointFitLocations(stop, routeStopPoint) {
   const locations = stop.hasCoordinates ? [{ coordinates: stop.coordinates }] : [];
   const snappedCoordinates = normalizeLngLatPair(routeStopPoint?.snappedCoordinates);
@@ -1087,21 +1108,26 @@ function buildRouteStopPointMarker(stop, routeStopPoint) {
 
 function buildRouteDetailStopsFeatureCollection(routeStops, routeStopPoints) {
   const pointerFeatures = routeStops
-    .filter((stop) => stop.hasCoordinates)
-    .map((stop) => ({
-      type: "Feature",
-      geometry: {
-        type: "Point",
-        coordinates: stop.coordinates,
-      },
-      properties: {
-        featureType: "routeStop",
-        label: String(stop.stop),
-        orderName: stop.order,
-        sequence: stop.stop,
-        stopId: stop.id,
-      },
-    }));
+    .map((stop) => {
+      const markerCoordinates = getRouteStopPointerCoordinates(stop, findRouteStopPoint(stop, routeStopPoints));
+      if (!markerCoordinates) return null;
+
+      return {
+        type: "Feature",
+        geometry: {
+          type: "Point",
+          coordinates: markerCoordinates,
+        },
+        properties: {
+          featureType: "routeStop",
+          label: String(stop.stop),
+          orderName: stop.order,
+          sequence: stop.stop,
+          stopId: stop.id,
+        },
+      };
+    })
+    .filter(Boolean);
   const snappedPointFeatures = routeStops
     .map((stop) => {
       const marker = buildRouteStopPointMarker(stop, findRouteStopPoint(stop, routeStopPoints));
@@ -1675,10 +1701,10 @@ export default function RouteDetailPage() {
     const map = mapRef.current;
     const maplibregl = mapLibraryRef.current;
 
-    const syncRouteDetailMapLayers = () => (
-      syncRouteDetailRouteLine(map, savedRouteGeometry) &&
-      syncRouteDetailStopLayers(map, orderedRouteStops, savedRouteStopPoints)
-    );
+    const syncRouteDetailMapLayers = () => {
+      syncRouteDetailRouteLine(map, savedRouteGeometry);
+      return syncRouteDetailStopLayers(map, orderedRouteStops, savedRouteStopPoints);
+    };
 
     const handleStopPointerDoubleClick = (event) => {
       event.preventDefault?.();
