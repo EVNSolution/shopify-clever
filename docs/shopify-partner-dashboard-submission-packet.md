@@ -12,9 +12,9 @@ This packet is the copy/paste working document for the authorized Partner Dashbo
 - Active Shopify app version: `compliance-20260514-0d05a46`
 - Version ID: `gid://shopify/Version/963177807873`
 - Runtime source commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
-- Latest readiness commit: `71b2194582e98865f39715144fea4a83e3fbd836`
+- Latest readiness commit: `f27a614f70fd1e371d8a0ee155d2d53ea58b8602`
 - Runtime CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
-- Latest readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25855038387
+- Latest readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25855617729
 - Target tracking issue: EVNSolution/shopify-clever#6
 - Change-control issue: EVNSolution/clever-change-control#211 (`chg-20260514-001`)
 
