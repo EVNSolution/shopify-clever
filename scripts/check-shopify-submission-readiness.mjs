@@ -83,6 +83,26 @@ match("docs/shopify-privacy-policy-draft.md", /Do not publish this draft until e
 match("docs/shopify-privacy-policy-draft.md", /\[LEGAL COMPANY NAME\]/, "privacy draft keeps legal company placeholder explicit");
 match("docs/shopify-privacy-policy-draft.md", /\[SUPPORT EMAIL\]/, "privacy draft keeps support email placeholder explicit");
 
+
+requireFile("docs/shopify-ai-self-review-detail.md", "detailed Shopify AI self-review exists");
+const aiSelfReviewDetail = read("docs/shopify-ai-self-review-detail.md");
+for (const phrase of [
+  "https://shopify.dev/docs/apps/launch/app-store-review/app-store-ai-self-review-requirements",
+  "100 local-codebase requirements",
+  "Likely passing | 27",
+  "Likely failing | 0",
+  "Needs review | 4",
+  "Groups skipped | 10",
+  "Evaluated requirement count: **31**",
+  "Skipped requirement count: **69**",
+  "1.2.1 Use Shopify App Pricing or the Shopify Billing API",
+  "5.10 Donation",
+  "EVNSolution/shopify-clever#6",
+  "EVNSolution/clever-change-control#211"
+]) {
+  ok(`detailed AI self-review includes ${phrase}`, aiSelfReviewDetail.includes(phrase), "docs/shopify-ai-self-review-detail.md");
+}
+
 requireFile("docs/shopify-app-store-listing-draft.md", "standalone App Store listing draft exists");
 const listingDraft = read("docs/shopify-app-store-listing-draft.md");
 ok("listing draft uses clever app name", /```text\nclever\n```/.test(listingDraft), "docs/shopify-app-store-listing-draft.md");
@@ -130,7 +150,7 @@ const currentCi = "25852472566";
 const currentProductionBundleCommit = "b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01";
 const currentReadinessCi = "25856119836";
 const currentProductionWorkflow = "25856190483";
-const currentReadinessCheckCount = "91";
+const currentReadinessCheckCount = "104";
 const targetTrackingIssue = "EVNSolution/shopify-clever#6";
 const changeControlIssue = "EVNSolution/clever-change-control#211";
 const changeId = "chg-20260514-001";

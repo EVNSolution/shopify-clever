@@ -40,7 +40,7 @@ shopify app versions list --json
 Expected evidence:
 
 ```text
-check:shopify-submission result: shopify-submission-readiness-ok, 91 checks
+check:shopify-submission result: shopify-submission-readiness-ok, 104 checks
 shopify app config validate result: valid=true, issues=[]
 active Shopify app version: compliance-20260514-0d05a46 or newer
 ```
