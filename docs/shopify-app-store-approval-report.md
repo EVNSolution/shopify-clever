@@ -130,9 +130,9 @@ curl -fsSL https://shopify.dev/docs/apps/launch/app-store-review/app-store-ai-se
 
 ⚠️ **Protected customer data access**
 
-**Why this needs attention:** The app reads order/customer delivery data, including name/address/phone/email fields in order and delivery-stop flows. Public apps require Partner Dashboard access requests for protected customer data and protected customer fields.
+**Why this needs attention:** The app reads order/customer delivery data, including recipient name, shipping address, and phone fields in order and delivery-stop flows. Public apps require Partner Dashboard access requests for protected customer data and protected customer fields.
 
-**What was detected:** `read_orders` is required for route planning, and synced order data includes `email`, `phone`, shipping address fields, and recipient names. Request Level 2 protected customer data access for the minimum fields actually needed.
+**What was detected:** `read_orders` is required for route planning, and synced order data includes `phone`, shipping address fields, and recipient names. Current Shopify order queries do not request email or customer profile objects; request Level 2 protected customer data access only for the minimum fields actually needed.
 
 ⚠️ **Privacy policy and data-rights operating process**
 
@@ -220,7 +220,7 @@ Outcome:
 - Shopify app tests: `151` passed.
 - Delivery API tests: `216` passed.
 - `npm run build`, `npm run check:public-urls`, and `npm run typecheck` completed successfully.
-- `npm run check:shopify-submission` returned `shopify-submission-readiness-ok` with `45` checks at latest readiness commit `da6b73b70b39005d3cc5e404210f88b513c01ec4`.
+- `npm run check:shopify-submission` returned `shopify-submission-readiness-ok` with `57` checks at latest readiness commit `71b2194582e98865f39715144fea4a83e3fbd836`.
 
 ## Production release evidence
 
