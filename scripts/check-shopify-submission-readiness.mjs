@@ -147,8 +147,8 @@ for (const pattern of unsupportedListingClaimPatterns) {
 const currentVersion = "compliance-20260514-0d05a46";
 const currentVersionId = "gid://shopify/Version/963177807873";
 const currentCi = "25852472566";
-const currentProductionBundleCommit = "b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01";
-const currentReadinessCi = "25856119836";
+const currentProductionBundleCommit = "16223b062079af5632b80d1bf08abd5bf775f0be";
+const currentReadinessCi = "25857865303";
 const currentProductionWorkflow = "25856190483";
 const currentReadinessCheckCount = "104";
 const targetTrackingIssue = "EVNSolution/shopify-clever#6";
