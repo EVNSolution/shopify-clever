@@ -118,7 +118,7 @@ Required business/legal confirmations before publishing:
 
 ## 4. App listing copy draft
 
-Use factual, conservative wording. Avoid performance guarantees, unsupported automation claims, or comparisons to other apps.
+Use `docs/shopify-app-store-listing-draft.md` as the standalone paste-ready copy source. Use factual, conservative wording. Avoid performance guarantees, unsupported automation claims, or comparisons to other apps.
 
 ### App name
 
