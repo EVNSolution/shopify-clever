@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Outlet, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams } from "react-router";
+import { Outlet, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { authenticate } from "../shopify.server";
@@ -730,3 +731,11 @@ export default function RoutesPage() {
     </main>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

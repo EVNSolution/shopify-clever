@@ -321,7 +321,7 @@ test("Orders order-number button shows a subtle rounded hover state", () => {
 
 test("Orders page persists scoped planned orders through the delivery route-plan action", () => {
   assert.match(ordersPageSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useSearchParams \} from "react-router"/);
+  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams \} from "react-router"/);
   assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*createDeliveryRoutePlan[\s\S]*\} from "\.\.\/features\/delivery\/route-plans\.server"/);
   assert.match(ordersPageSource, /import \{ buildRouteScopeFromOrders \} from "\.\.\/features\/delivery\/route-scope"/);
   assert.match(ordersPageSource, /export const action = async \(\{ request \}\) => \{/);
@@ -799,7 +799,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
 });
 
 test("Orders page filters table rows by area, delivery date, and ordered date without search", () => {
-  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useSearchParams \} from "react-router"/);
+  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams \} from "react-router"/);
   assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*hasActiveOrderFilters[\s\S]*isOrderRouteCreated[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "\.\.\/features\/orders\/order-filters"/);
   assert.match(ordersPageSource, /const \[searchParams, setSearchParams\] = useSearchParams\(\)/);
   assert.match(ordersPageSource, /const orderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);

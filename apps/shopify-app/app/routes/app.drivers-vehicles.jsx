@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { createPendingDeliveryDriver, fetchDeliveryDrivers } from "../features/delivery/drivers.server";
 import {
   formatInvitePhoneInput,
@@ -766,3 +767,11 @@ export default function DriversVehiclesPage() {
     </PageShell>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

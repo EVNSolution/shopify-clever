@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { useFetcher, useLoaderData, useNavigate } from "react-router";
+import { useFetcher, useLoaderData, useNavigate, useRouteError } from "react-router";
+import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { fetchDeliveryDrivers } from "../features/delivery/drivers.server";
 import { fetchDeliveryOrders } from "../features/delivery/orders.server";
@@ -2031,3 +2032,11 @@ export default function RouteDetailPage() {
     </main>
   );
 }
+
+export function ErrorBoundary() {
+  return boundary.error(useRouteError());
+}
+
+export const headers = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};

@@ -177,7 +177,7 @@ test("Routes table selection column uses checkboxes and a single delete action",
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
   assert.match(routesPageSource, /function createRouteDetailHref\(routeId\) \{/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
@@ -247,7 +247,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeStopPoints = \[],\s+stops = \[],\s+sameDateOrders = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
@@ -633,7 +633,7 @@ test("Route detail save submits the ordered stop payload through the route plan 
 });
 
 test("Route detail page provides page navigation back to the route list", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = "\/app\/routes"/);
   assert.match(routeDetailSource, /onClick=\{\(\) => navigate\(routesListHref\)\}/);

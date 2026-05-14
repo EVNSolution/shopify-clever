@@ -11,7 +11,7 @@ const settingsPageSource = readFileSync(
 
 test("Settings tab reads the Shopify departure location", () => {
   assert.match(settingsPageSource, /import \{ useCallback, useEffect, useRef, useState \} from "react"/);
-  assert.match(settingsPageSource, /import \{ useActionData, useFetcher, useLoaderData, useRevalidator, useSubmit \} from "react-router"/);
+  assert.match(settingsPageSource, /import \{ useActionData, useFetcher, useLoaderData, useRouteError, useRevalidator, useSubmit \} from "react-router"/);
   assert.match(settingsPageSource, /import \{ SUPPORTED_LANGUAGES, translate \} from "\.\.\/i18n\/i18n"/);
   assert.match(settingsPageSource, /fetchShopifyAppPreferences/);
   assert.match(settingsPageSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
@@ -101,7 +101,7 @@ test("Settings tab lets operators preview geocoding and adjust the pin on a map"
 });
 
 test("Settings save keeps a manually adjusted map pin instead of reverting to geocode", () => {
-  assert.match(settingsPageSource, /import \{ useActionData, useFetcher, useLoaderData, useRevalidator, useSubmit \} from "react-router"/);
+  assert.match(settingsPageSource, /import \{ useActionData, useFetcher, useLoaderData, useRouteError, useRevalidator, useSubmit \} from "react-router"/);
   assert.match(settingsPageSource, /const submitSettings = useSubmit\(\)/);
   assert.match(settingsPageSource, /const currentMapCoordinateRef = useRef/);
   assert.match(settingsPageSource, /currentMapCoordinateRef\.current = coordinate/);
