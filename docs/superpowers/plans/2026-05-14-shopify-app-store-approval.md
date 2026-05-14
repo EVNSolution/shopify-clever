@@ -280,14 +280,14 @@ Latest production submission target after Task 7:
 
 Latest production web bundle evidence:
 
-- Deployed bundle commit: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
-- Production `.release-sha`: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
-- Main CI for deployed bundle: https://github.com/EVNSolution/shopify-clever/actions/runs/25856119836
+- Deployed bundle commit: `16223b062079af5632b80d1bf08abd5bf775f0be`
+- Production `.release-sha`: `16223b062079af5632b80d1bf08abd5bf775f0be`
+- Latest readiness main CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25857865303
 - Manual production workflow: https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483
   - Validate job passed.
   - GitHub-hosted deploy job failed at EC2 SSH reachability because the runner IP was not allowed by the EC2 security group.
-  - The same commit was deployed with the approved local AWS/SSH fallback.
-  - Temporary SSH ingress `106.101.131.120/32` was revoked after deploy.
+  - The earlier workflow commit was deployed with the approved local AWS/SSH fallback.
+  - A later local AWS/SSH fallback refresh deployed `16223b062079af5632b80d1bf08abd5bf775f0be`; temporary SSH ingress `1.231.151.99/32` was revoked after deploy.
 - Production smoke passed: delivery `/healthz` 200, delivery `/readyz` 200, admin `/auth/login` 200 with App Bridge CDN/API-key meta, and fake compliance webhook HMAC 401.
 
 - [x] **Step 3: Make the readiness verifier enforce current production handoff evidence**
@@ -304,7 +304,7 @@ Current verifier evidence:
 
 - [x] **Step 4: Synchronize three-repository trace evidence**
 
-Change-control PR EVNSolution/clever-change-control#213 updated `releases/prod/shopify-clever-2026-05-14-app-store-handoff.md` with target PR #10/#11, production-release evidence docs commit `0b37a6dcd2644e7a6c66d3d002659489891db776`, deployed bundle `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`, CI evidence, production workflow evidence, and the `91`-check readiness result. EVNSolution/shopify-clever#12 then added this final plan evidence and updated EVNSolution/shopify-clever#6 plus EVNSolution/clever-change-control#211 to point at the final target evidence commit.
+Change-control PR EVNSolution/clever-change-control#213 updated `releases/prod/shopify-clever-2026-05-14-app-store-handoff.md` with target PR #10/#11, production-release evidence docs commit `0b37a6dcd2644e7a6c66d3d002659489891db776`, deployed bundle `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`, CI evidence, production workflow evidence, and the then-current `91`-check readiness result; later AI self-review evidence raised the verifier to `104` checks. EVNSolution/shopify-clever#12 then added this final plan evidence and updated EVNSolution/shopify-clever#6 plus EVNSolution/clever-change-control#211 to point at the final target evidence commit.
 
 Issue bodies are also current:
 
@@ -318,6 +318,8 @@ Issue bodies are also current:
 Current verifier evidence:
 
 - `npm run check:shopify-submission`: `shopify-submission-readiness-ok`, `104` checks
+- PR #14 CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25857796867
+- Main CI after PR #14 merge: https://github.com/EVNSolution/shopify-clever/actions/runs/25857865303
 - The verifier now requires the self-review source URL, evaluated/skipped counts, the billing needs-review item, the donation skipped group, and both tracking issues.
 - Remaining needs-review items are dashboard-only: factual final listing/media, pricing/free-plan or Shopify Billing/App Pricing setup, paid plan-change behavior if applicable, and final evidence on EVNSolution/shopify-clever#6 plus EVNSolution/clever-change-control#211.
 
