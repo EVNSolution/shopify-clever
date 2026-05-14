@@ -170,6 +170,7 @@ These items cannot be completed safely from the local repository and require an 
 
 - Use `docs/shopify-partner-dashboard-submission-packet.md` as the copy/paste source for the fields below.
 - [ ] Select/confirm public app distribution method.
+- Use `docs/shopify-protected-customer-data-field-map.md` as the code-backed protected-data field inventory.
 - [ ] Request protected customer data access for the exact order/customer fields used by delivery planning:
   - [ ] protected customer data
   - [ ] name

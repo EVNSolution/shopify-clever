@@ -41,6 +41,8 @@ Dashboard action:
 
 Dashboard action:
 
+Use `docs/shopify-protected-customer-data-field-map.md` as the code-backed field map for this request.
+
 - Select that the app requires protected customer data.
 - Request **Level 2** protected customer data because delivery routing uses protected order shipping fields.
 - Request only these fields for the current released app:

@@ -52,6 +52,19 @@ ok("Shopify app is embedded", /embedded = true/.test(appConfig));
 ok("Shopify compliance webhooks configured", /compliance_topics = \["customers\/data_request", "customers\/redact", "shop\/redact"\]/.test(appConfig));
 ok("Shopify scopes remain minimal", /scopes = "read_orders,read_locations"/.test(appConfig));
 
+requireFile("docs/shopify-protected-customer-data-field-map.md", "protected customer data field map exists");
+match("docs/shopify-protected-customer-data-field-map.md", /Do \*\*not\*\* request customer email/, "protected data map excludes email for current release");
+match("docs/shopify-protected-customer-data-field-map.md", /read_orders,read_locations/, "protected data map records minimal scopes");
+
+const embeddedOrdersQuerySource = read("apps/shopify-app/app/features/orders/shopify-orders.server.js");
+ok("embedded Shopify order query does not request email", !/\bemail\b/.test(embeddedOrdersQuerySource), "apps/shopify-app/app/features/orders/shopify-orders.server.js");
+ok("embedded Shopify order query does not request customer object", !/customer\s*\{/.test(embeddedOrdersQuerySource), "apps/shopify-app/app/features/orders/shopify-orders.server.js");
+const deliveryOrdersQuerySource = read("apps/delivery-api/src/modules/shopify/order-sync.query.ts");
+ok("delivery Shopify order sync query does not request email", !/\bemail\b/.test(deliveryOrdersQuerySource), "apps/delivery-api/src/modules/shopify/order-sync.query.ts");
+ok("delivery Shopify order sync query does not request customer object", !/customer\s*\{/.test(deliveryOrdersQuerySource), "apps/delivery-api/src/modules/shopify/order-sync.query.ts");
+ok("Shopify app config does not request read_customers", !/read_customers/.test(appConfig), "apps/shopify-app/shopify.app.toml");
+ok("Shopify app config does not request read_all_orders", !/read_all_orders/.test(appConfig), "apps/shopify-app/shopify.app.toml");
+
 match("apps/shopify-app/app/routes/webhooks.compliance.jsx", /authenticate\.webhook\(requestForAuth\)/, "compliance route authenticates Shopify webhook clone");
 match("apps/shopify-app/app/routes/webhooks.compliance.jsx", /forwardComplianceWebhookToDeliveryApi\(request, rawBody\)/, "compliance route forwards raw body to delivery API");
 match("apps/delivery-api/src/modules/shopify/webhook-event.repository.ts", /customers\/redact/, "delivery repository handles customers/redact");
