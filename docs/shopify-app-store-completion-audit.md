@@ -34,6 +34,7 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 | Shopify app version release | Shopify CLI released `compliance-20260514-0d05a46` to users; version ID `gid://shopify/Version/963177807873`. | Done |
 | Production smoke | Admin `/auth/login` returned `200` with App Bridge CDN/API key meta; delivery `/healthz` and `/readyz` returned `200`; invalid webhook HMAC returned `401`. | Done |
 | Partner Dashboard submission packet | `docs/shopify-partner-dashboard-submission-packet.md` contains copy/paste fields, privacy-policy draft inputs, protected-data justification, factual listing copy, prepared icon path, reviewer instructions, and automated-check runbook. | Done |
+| App Store listing copy draft | `docs/shopify-app-store-listing-draft.md` contains paste-ready factual copy, pricing wording guidance, and unsupported-claims guardrails. | Done |
 | Privacy policy publication draft | `docs/shopify-privacy-policy-draft.md` contains the standalone draft and unresolved business/legal placeholders that must be replaced before publication. | Repo prepared; legal/business values still manual |
 | App icon asset preparation | `docs/shopify-app-store-assets/clever-app-icon-1200.png` is a 1200 × 1200 PNG generated from `clever-app-icon.svg`; `sips` verified dimensions. | Done |
 | Screenshot/screencast capture plan | `docs/shopify-app-store-assets/screenshot-and-screencast-shotlist.md` defines six 1600 × 900 screenshot targets, alt text, screencast storyboard, and privacy guardrails. | Done |

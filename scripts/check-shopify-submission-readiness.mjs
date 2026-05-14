@@ -83,6 +83,28 @@ match("docs/shopify-privacy-policy-draft.md", /Do not publish this draft until e
 match("docs/shopify-privacy-policy-draft.md", /\[LEGAL COMPANY NAME\]/, "privacy draft keeps legal company placeholder explicit");
 match("docs/shopify-privacy-policy-draft.md", /\[SUPPORT EMAIL\]/, "privacy draft keeps support email placeholder explicit");
 
+requireFile("docs/shopify-app-store-listing-draft.md", "standalone App Store listing draft exists");
+const listingDraft = read("docs/shopify-app-store-listing-draft.md");
+ok("listing draft uses clever app name", /```text\nclever\n```/.test(listingDraft), "docs/shopify-app-store-listing-draft.md");
+ok("listing draft includes factual route-planning subtitle", /Plan local delivery routes from Shopify orders/.test(listingDraft), "docs/shopify-app-store-listing-draft.md");
+const listingCopyBlocks = [...listingDraft.matchAll(/```text\n([\s\S]*?)```/g)]
+  .map((match) => match[1])
+  .join("\n");
+const unsupportedListingClaimPatterns = [
+  /guaranteed?/i,
+  /#\s*1/i,
+  /best[-\s]in[-\s]class/i,
+  /official\s+Shopify/i,
+  /Shopify\s+official/i,
+  /endorsed\s+by\s+Shopify/i,
+  /certified\s+by\s+Shopify/i,
+  /increase\s+revenue/i,
+  /save\s+money/i
+];
+for (const pattern of unsupportedListingClaimPatterns) {
+  ok(`listing copy avoids unsupported claim ${pattern}`, !pattern.test(listingCopyBlocks), "docs/shopify-app-store-listing-draft.md");
+}
+
 const currentVersion = "compliance-20260514-0d05a46";
 const currentVersionId = "gid://shopify/Version/963177807873";
 const currentCi = "25852472566";
