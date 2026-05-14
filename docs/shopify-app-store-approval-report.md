@@ -221,6 +221,7 @@ Outcome:
 - Delivery API tests: `216` passed.
 - `npm run build`, `npm run check:public-urls`, and `npm run typecheck` completed successfully.
 - `npm run check:shopify-submission` returned `shopify-submission-readiness-ok` with `57` checks at latest readiness commit `71b2194582e98865f39715144fea4a83e3fbd836`.
+- Remaining Partner Dashboard submission blockers are tracked in EVNSolution/shopify-clever#6 and EVNSolution/clever-change-control#211 (`chg-20260514-001`).
 
 ## Production release evidence
 

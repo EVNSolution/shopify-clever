@@ -52,6 +52,8 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 - Repository readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25855038387
 - Admin URL: `https://clever-admin.3-39-216-177.sslip.io`
 - Delivery API URL: `https://clever-delivery.3-39-216-177.sslip.io`
+- Target tracking issue: EVNSolution/shopify-clever#6
+- Change-control issue: EVNSolution/clever-change-control#211 (`chg-20260514-001`)
 
 ## Remaining blockers
 
