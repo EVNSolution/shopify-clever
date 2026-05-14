@@ -220,7 +220,7 @@ Outcome:
 - Shopify app tests: `151` passed.
 - Delivery API tests: `216` passed.
 - `npm run build`, `npm run check:public-urls`, and `npm run typecheck` completed successfully.
-- `npm run check:shopify-submission` returned `shopify-submission-readiness-ok` with `36` checks at latest readiness commit `fb9a6ddaf7dbd16741dbdac6735a1ba2d9635b2c`.
+- `npm run check:shopify-submission` returned `shopify-submission-readiness-ok` with `45` checks at latest readiness commit `da6b73b70b39005d3cc5e404210f88b513c01ec4`.
 
 ## Production release evidence
 
