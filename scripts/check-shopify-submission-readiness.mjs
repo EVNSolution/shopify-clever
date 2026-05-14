@@ -65,6 +65,11 @@ requireFile("docs/shopify-app-store-assets/screenshot-and-screencast-shotlist.md
 match("docs/shopify-app-store-assets/screenshot-and-screencast-shotlist.md", /1600 × 900 px/, "shotlist records screenshot dimensions");
 match("docs/shopify-app-store-assets/screenshot-and-screencast-shotlist.md", /Privacy guardrails/, "shotlist records privacy guardrails");
 
+requireFile("docs/shopify-privacy-policy-draft.md", "standalone privacy policy draft exists");
+match("docs/shopify-privacy-policy-draft.md", /Do not publish this draft until every bracketed placeholder is replaced/, "privacy draft has publication warning");
+match("docs/shopify-privacy-policy-draft.md", /\[LEGAL COMPANY NAME\]/, "privacy draft keeps legal company placeholder explicit");
+match("docs/shopify-privacy-policy-draft.md", /\[SUPPORT EMAIL\]/, "privacy draft keeps support email placeholder explicit");
+
 const currentVersion = "compliance-20260514-0d05a46";
 const currentVersionId = "gid://shopify/Version/963177807873";
 const currentCi = "25852472566";

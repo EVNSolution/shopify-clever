@@ -62,7 +62,7 @@ The requested fields are the minimum required to provide route planning, driver 
 
 ## 3. Privacy policy draft inputs
 
-Use this as the basis for a published privacy policy page. Replace bracketed placeholders before publication.
+Use `docs/shopify-privacy-policy-draft.md` as the standalone publication draft. The same text is copied below for dashboard/legal review convenience. Replace bracketed placeholders before publication.
 
 ```text
 Privacy Policy for Clever
