@@ -152,40 +152,50 @@ Manual checklist includes privacy policy URL, protected customer data access req
 **Files:**
 - All changed files from Tasks 1-4.
 
-- [ ] **Step 1: Run full repository validation**
+- [x] **Step 1: Run full repository validation**
 
 ```bash
 npm --prefix apps/shopify-app run lint && npm run test:shopify-app && npm run build && npm run check:public-urls && npm run typecheck && npm test
 ```
 
-- [ ] **Step 2: Commit using Lore protocol**
+- [x] **Step 2: Commit using Lore protocol**
 
 Use a commit message describing why the app-store approval gates were added.
 
-- [ ] **Step 3: Push to `main` and wait for GitHub CI**
+- [x] **Step 3: Push to `main` and wait for GitHub CI**
 
 ```bash
 git push origin main
 gh run list --branch main --limit 1 --json databaseId,headSha,status,conclusion,url
 ```
 
-- [ ] **Step 4: Deploy web app bundle to EC2**
+- [x] **Step 4: Deploy web app bundle to EC2**
 
 Use the established AWS EC2 Instance Connect + rsync + Docker Compose deployment lane.
 
-- [ ] **Step 5: Release Shopify app version**
+- [x] **Step 5: Release Shopify app version**
 
 ```bash
 cd apps/shopify-app
 npm run deploy -- --allow-updates --version <version> --message <message> --source-control-url <commit-url> --no-color
 ```
 
-- [ ] **Step 6: Production smoke checks**
+- [x] **Step 6: Production smoke checks**
 
 Verify admin auth fallback, delivery health/ready, deployed root HTML containing App Bridge CDN/meta, and deployed TOML release version in Shopify CLI output.
+
+Completed evidence:
+
+- Commit: `174cfccd49f75487c96b7866fb49c0842c6a0303`
+- GitHub CI/CD: success at https://github.com/EVNSolution/shopify-clever/actions/runs/25851300153
+- Shopify app version: `approval-20260514-174cfcc`, active, version ID `gid://shopify/Version/963140550657`
+- Production admin smoke: `https://clever-admin.3-39-216-177.sslip.io/auth/login` returned `200` and includes the App Bridge CDN script plus `shopify-api-key` meta tag.
+- Production delivery smoke:
+  - `https://clever-delivery.3-39-216-177.sslip.io/healthz` returned `{"service":"clever-delivery-server","status":"ok"}`
+  - `https://clever-delivery.3-39-216-177.sslip.io/readyz` returned `{"checks":{"http":true},"service":"clever-delivery-server","status":"ready"}`
 
 ---
 
 ## Completion gate
 
-Do not submit to Shopify App Store review until all Task 5 steps pass and the Partner Dashboard manual checklist in `docs/shopify-app-store-approval-report.md` is completed by an authorized account holder.
+Task 5 is complete for the repository, web-hosted production bundle, and Shopify app version release. Do not submit to Shopify App Store review until the Partner Dashboard manual checklist in `docs/shopify-app-store-approval-report.md` is completed by an authorized account holder.
