@@ -108,10 +108,19 @@ jobs:
 
       - name: Configure SSH
         run: |
+          set -euo pipefail
           mkdir -p ~/.ssh
           install -m 600 /dev/null ~/.ssh/deploy_key
           printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          touch ~/.ssh/known_hosts
+          for attempt in 1 2 3; do
+            if ssh-keyscan -4 -T 20 -H "$EC2_HOST" >> ~/.ssh/known_hosts; then
+              exit 0
+            fi
+            sleep "$((attempt * 5))"
+          done
+          echo "::error::Unable to reach SSH host $EC2_HOST:22 from the GitHub runner. Check the EC2 security group, NACL, and host firewall allow GitHub-hosted runner traffic."
+          exit 1
 
       - name: Sync source to EC2
         run: |
