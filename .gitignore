@@ -1,20 +1,92 @@
+# Dependencies
 node_modules/
 **/node_modules/
+
+# Build, framework, and generated outputs
 build/
 **/build/
 dist/
 **/dist/
 .react-router/
+**/.react-router/
+.cache/
+**/.cache/
+.vite/
+**/.vite/
+*.tsbuildinfo
+
+# Shopify / mobile / local platform state
 .shopify/
+**/.shopify/
 .expo/
+**/.expo/
+data/
+
+# Local agent, editor, and tool metadata
 .omx/
+**/.omx/
+.cursor/
+**/.cursor/
+.gemini/
+**/.gemini/
+.claude/
+**/.claude/
+.mcp.json
+**/.mcp.json
+.playwright-cli/
+**/.playwright-cli/
+.worktrees/
+**/.worktrees/
+.vscode/
+**/.vscode/
+.idea/
+**/.idea/
+
+# Environment and secrets
 .env
+.env.*
 *.env
 !*.env.example
 infra/env/*.env
 !infra/env/*.env.example
-.DS_Store
-data/
+.envrc
+*.local
+
+# Runtime data, databases, and logs
 *.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 .coverage/
 coverage/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.sql
+*.sql.gz
+tmp/
+temp/
+
+# Private verification/deployment evidence
+evidence/
+release-evidence/
+smoke-evidence/
+docs/evidence/
+docs/release-evidence/
+docs/smoke-evidence/
+release-evidence-manifest-*.md
+docs/release-evidence-manifest-*.md
+
+# Local certificates and key material
+*.pem
+*.key
+*.crt
+*.p12
+*.p8
+
+# OS noise
+.DS_Store
+**/.DS_Store
+Thumbs.db

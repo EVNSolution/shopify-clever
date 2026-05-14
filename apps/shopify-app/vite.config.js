@@ -57,6 +57,19 @@ export default defineConfig({
     chunkSizeWarningLimit: 1200,
   },
   optimizeDeps: {
-    include: ["@shopify/app-bridge-react"],
+    include: [
+      "@shopify/app-bridge-react",
+      // Route modules include server-only Shopify/Prisma imports for loaders
+      // and lazy-load MapLibre/PMTiles on the client. Pre-optimize the first
+      // dependencies Vite discovers during hydration so it does not rewrite
+      // optimized dependency hashes inside the Shopify Admin iframe.
+      "@shopify/shopify-app-react-router/adapters/node",
+      "@shopify/shopify-app-react-router/react",
+      "@shopify/shopify-app-react-router/server",
+      "@shopify/shopify-app-session-storage-prisma",
+      "@prisma/client",
+      "maplibre-gl",
+      "pmtiles",
+    ],
   },
 });
