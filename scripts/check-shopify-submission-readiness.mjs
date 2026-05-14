@@ -108,6 +108,9 @@ for (const pattern of unsupportedListingClaimPatterns) {
 const currentVersion = "compliance-20260514-0d05a46";
 const currentVersionId = "gid://shopify/Version/963177807873";
 const currentCi = "25852472566";
+const targetTrackingIssue = "EVNSolution/shopify-clever#6";
+const changeControlIssue = "EVNSolution/clever-change-control#211";
+const changeId = "chg-20260514-001";
 for (const path of [
   "docs/shopify-app-store-approval-report.md",
   "docs/shopify-partner-dashboard-submission-packet.md",
@@ -116,6 +119,9 @@ for (const path of [
   const source = read(path);
   ok(`${basename(path)} references current Shopify version`, source.includes(currentVersion), path);
   ok(`${basename(path)} references current version ID or CI`, source.includes(currentVersionId) || source.includes(currentCi), path);
+  ok(`${basename(path)} references target tracking issue`, source.includes(targetTrackingIssue), path);
+  ok(`${basename(path)} references change-control issue`, source.includes(changeControlIssue), path);
+  ok(`${basename(path)} references change id`, source.includes(changeId), path);
 }
 
 const staleNeedles = ["approval-20260514-174cfcc", "963140550657"];
