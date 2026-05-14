@@ -208,29 +208,31 @@ Outcome:
 
 - `shopify app config validate --json` returned `{ "valid": true, "issues": [] }`.
 - Shopify app tests: `151` passed.
-- Delivery API tests: `213` passed.
+- Delivery API tests: `216` passed.
 - `npm run build`, `npm run check:public-urls`, and `npm run typecheck` completed successfully.
 
 ## Production release evidence
 
-- Git commit: `174cfccd49f75487c96b7866fb49c0842c6a0303`
-- GitHub CI/CD: success — https://github.com/EVNSolution/shopify-clever/actions/runs/25851300153
+- Git commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- GitHub CI/CD: success — https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
 - Web app deployment: EC2 production bundle rebuilt and restarted with Docker Compose.
-- Shopify app version: `approval-20260514-174cfcc`
+- Shopify app version: `compliance-20260514-0d05a46`
   - Status: `active`
-  - Version ID: `gid://shopify/Version/963140550657`
-  - Message: `Prepare Shopify App Store approval gates 174cfcc`
+  - Version ID: `gid://shopify/Version/963177807873`
+  - Message: `Automate compliance redaction handling 0d05a46`
 - Production smoke:
   - `https://clever-admin.3-39-216-177.sslip.io/auth/login` returned `200`.
   - The production admin HTML includes `https://cdn.shopify.com/shopifycloud/app-bridge.js`.
   - The production admin HTML includes `name="shopify-api-key"`.
   - `https://clever-delivery.3-39-216-177.sslip.io/healthz` returned `{"service":"clever-delivery-server","status":"ok"}`.
   - `https://clever-delivery.3-39-216-177.sslip.io/readyz` returned `{"checks":{"http":true},"service":"clever-delivery-server","status":"ready"}`.
+  - Invalid delivery webhook HMAC smoke returned `401` with `Invalid Shopify webhook HMAC`.
 
-## Release notes to include in next Shopify app version
+## Release notes included in current Shopify app version
 
 - Added server-rendered App Bridge CDN bootstrap and API-key meta tag for embedded app automated checks.
-- Added mandatory Shopify privacy compliance webhook subscription and authenticated route.
+- Added mandatory Shopify privacy compliance webhook subscriptions and authenticated forwarding into the delivery API.
+- Added delivery-side HMAC re-validation, minimized compliance event storage, `customers/redact` order deletion, and `shop/redact` shop-scoped cascading deletion.
 - Installed Shopify AI Toolkit skills and recorded self-review plan/report.
 
 ## Current submission status

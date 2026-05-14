@@ -189,13 +189,14 @@ Verify admin auth fallback, delivery health/ready, deployed root HTML containing
 
 Completed evidence:
 
-- Commit: `174cfccd49f75487c96b7866fb49c0842c6a0303`
-- GitHub CI/CD: success at https://github.com/EVNSolution/shopify-clever/actions/runs/25851300153
-- Shopify app version: `approval-20260514-174cfcc`, active, version ID `gid://shopify/Version/963140550657`
+- Commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- GitHub CI/CD: success at https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
+- Shopify app version: `compliance-20260514-0d05a46`, active, version ID `gid://shopify/Version/963177807873`
 - Production admin smoke: `https://clever-admin.3-39-216-177.sslip.io/auth/login` returned `200` and includes the App Bridge CDN script plus `shopify-api-key` meta tag.
 - Production delivery smoke:
   - `https://clever-delivery.3-39-216-177.sslip.io/healthz` returned `{"service":"clever-delivery-server","status":"ok"}`
   - `https://clever-delivery.3-39-216-177.sslip.io/readyz` returned `{"checks":{"http":true},"service":"clever-delivery-server","status":"ready"}`
+  - Invalid delivery webhook HMAC smoke returned `401` with `Invalid Shopify webhook HMAC`.
 
 ---
 
@@ -250,3 +251,13 @@ cd apps/delivery-api && npx vitest run tests/shopify-webhook.routes.test.ts test
 cd apps/delivery-api && npm run lint && npm run typecheck
 cd apps/shopify-app && node --test tests/store-connection.test.mjs && npm run lint && npm run typecheck
 ```
+
+- [x] **Step 5: Release compliance redaction bundle**
+
+Latest production submission target after Task 7:
+
+- Commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- GitHub CI/CD: success at https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
+- Shopify app version: `compliance-20260514-0d05a46`, released to users, version ID `gid://shopify/Version/963177807873`
+- EC2 production bundle rebuilt and restarted for both `delivery-api` and `shopify-app`.
+- Production smoke: admin `/auth/login` `200`, App Bridge CDN/meta present, delivery `/healthz` `200`, `/readyz` `200`, invalid webhook HMAC `401`.

@@ -9,10 +9,10 @@ This packet is the copy/paste working document for the authorized Partner Dashbo
 - App: `clever`
 - Production admin URL: `https://clever-admin.3-39-216-177.sslip.io`
 - Production delivery API URL: `https://clever-delivery.3-39-216-177.sslip.io`
-- Active Shopify app version: `approval-20260514-174cfcc`
-- Version ID: `gid://shopify/Version/963140550657`
-- Source commit: `174cfccd49f75487c96b7866fb49c0842c6a0303`
-- CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25851300153
+- Active Shopify app version: `compliance-20260514-0d05a46`
+- Version ID: `gid://shopify/Version/963177807873`
+- Source commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
 
 ## Source requirements checked
 
@@ -189,7 +189,7 @@ Production URLs:
 - Delivery API health: https://clever-delivery.3-39-216-177.sslip.io/healthz
 
 Current released version:
-- approval-20260514-174cfcc
+- compliance-20260514-0d05a46
 ```
 
 Reviewer assets to attach or prepare:
@@ -202,7 +202,7 @@ Reviewer assets to attach or prepare:
 
 Before pressing final Submit:
 
-1. Confirm `shopify.app.toml` active version is `approval-20260514-174cfcc` or newer.
+1. Confirm `shopify.app.toml` active version is `compliance-20260514-0d05a46` or newer.
 2. Run the Shopify App Store review page automated checks.
 3. Open the embedded app in Shopify Admin and interact with Orders, Routes, Drivers, and Settings so automated checks can observe App Bridge/session-token behavior.
 4. Confirm the app does not show browser console errors in the tested production flow.
