@@ -68,6 +68,11 @@ Evidence:
   - `customers/redact`
   - `shop/redact`
 - `apps/shopify-app/app/routes/webhooks.compliance.jsx` acknowledges those topics only after `authenticate.webhook(request)` verifies the Shopify webhook.
+- The verified compliance webhook raw body and Shopify HMAC headers are forwarded to `delivery-api` at `/shopify/webhooks`, where the delivery server independently verifies the HMAC before recording or processing the event.
+- `apps/delivery-api/src/modules/shopify/webhook-event.repository.ts` now minimizes stored compliance payloads and performs delivery-data redaction:
+  - `customers/data_request` stores only sanitized request identifiers for manual fulfillment; customer email/phone from the webhook payload are not persisted.
+  - `customers/redact` deletes matching locally stored Shopify orders by legacy order ID and stores a sanitized `PROCESSED` receipt.
+  - `shop/redact` deletes the shop row in the delivery database, cascading shop-scoped orders, stops, routes, drivers, vehicles, webhook events, driver events, consent records, and proof-media metadata.
 - `shopify app config validate --json` returned:
 
 ```json
@@ -81,6 +86,7 @@ Why this matters:
 
 - Shopify requires every App Store app to subscribe to mandatory compliance webhooks before publishing.
 - Shopify requires compliance webhook endpoints to handle JSON POSTs and reject invalid HMACs.
+- Shopify requires a 200-series acknowledgement and completion of compliance actions within the required window; the code now handles the repository-owned redaction portion automatically, while data-request export/contact still requires the operational process in the Partner Dashboard packet.
 
 ## Shopify AI self-review result
 

@@ -103,9 +103,12 @@ test("compliance webhook route verifies Shopify webhooks before acknowledging pr
   assert.equal(existsSync(complianceWebhookRoutePath), true);
   const complianceWebhookRouteSource = readFileSync(complianceWebhookRoutePath, "utf8");
 
-  assert.match(complianceWebhookRouteSource, /authenticate\.webhook\(request\)/);
+  assert.match(complianceWebhookRouteSource, /request\.clone\(\)/);
+  assert.match(complianceWebhookRouteSource, /authenticate\.webhook\(requestForAuth\)/);
   assert.match(complianceWebhookRouteSource, /customers\/data_request/);
   assert.match(complianceWebhookRouteSource, /customers\/redact/);
   assert.match(complianceWebhookRouteSource, /shop\/redact/);
-  assert.doesNotMatch(complianceWebhookRouteSource, /payload\)/);
+  assert.match(complianceWebhookRouteSource, /forwardComplianceWebhookToDeliveryApi\(request, rawBody\)/);
+  assert.match(complianceWebhookRouteSource, /\/shopify\/webhooks/);
+  assert.match(complianceWebhookRouteSource, /x-shopify-hmac-sha256/);
 });

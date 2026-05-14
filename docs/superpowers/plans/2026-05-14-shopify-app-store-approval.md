@@ -32,6 +32,8 @@
 - `apps/shopify-app/app/routes/webhooks.compliance.jsx` — mandatory privacy compliance webhook endpoint using Shopify webhook authentication.
 - `apps/shopify-app/shopify.app.toml` — app config subscription for `customers/data_request`, `customers/redact`, and `shop/redact`.
 - `apps/shopify-app/tests/store-connection.test.mjs` — regression tests for no manual store login, App Bridge bootstrap, and compliance webhook configuration.
+- `apps/delivery-api/src/modules/shopify/webhook-event.repository.ts` — delivery-side compliance webhook payload minimization and redaction processing.
+- `apps/delivery-api/tests/webhook-event.repository.test.ts` — regression tests for sanitized compliance payload storage and delivery-data redaction.
 - `docs/shopify-app-store-approval-report.md` — approval process, self-review result, manual dashboard checklist, and validation evidence.
 - `docs/shopify-partner-dashboard-submission-packet.md` — Partner Dashboard copy/paste packet for protected customer data, privacy policy draft inputs, listing copy, and reviewer instructions.
 
@@ -218,3 +220,33 @@ The packet requests protected customer data plus `name`, `address`, and `phone` 
 - [x] **Step 3: Keep irreversible dashboard submission outside the repository lane**
 
 The packet identifies the fields that still require an authorized Partner Dashboard account holder: protected-data form submission, privacy policy URL publication, app icon/contact/pricing fields, screencast upload, automated checks, and final Submit for Review.
+
+### Task 7: Add repository-owned compliance redaction handling
+
+**Files:**
+- Modify: `apps/shopify-app/app/routes/webhooks.compliance.jsx`
+- Modify: `apps/shopify-app/tests/store-connection.test.mjs`
+- Modify: `apps/delivery-api/src/modules/shopify/webhook-event.repository.ts`
+- Create: `apps/delivery-api/tests/webhook-event.repository.test.ts`
+- Modify: `docs/shopify-app-store-approval-report.md`
+- Modify: `docs/shopify-partner-dashboard-submission-packet.md`
+
+- [x] **Step 1: Forward verified compliance webhooks to delivery-api**
+
+`webhooks.compliance.jsx` now clones the incoming request, authenticates it with `authenticate.webhook(requestForAuth)`, and forwards the original raw body plus Shopify HMAC headers to `/shopify/webhooks` on the delivery API. The delivery API independently validates the forwarded Shopify HMAC before recording or processing the event.
+
+- [x] **Step 2: Minimize stored compliance payloads**
+
+The delivery webhook repository stores sanitized `customers/data_request` and `customers/redact` payloads, retaining request/order/customer IDs but omitting customer email and phone from the stored webhook event payload.
+
+- [x] **Step 3: Process repository-owned redaction**
+
+`customers/redact` deletes matching locally stored Shopify orders by legacy order ID and stores a sanitized `PROCESSED` receipt. `shop/redact` deletes the shop row, cascading shop-scoped delivery data through existing Prisma relations.
+
+- [x] **Step 4: Verify targeted privacy tests**
+
+```bash
+cd apps/delivery-api && npx vitest run tests/shopify-webhook.routes.test.ts tests/webhook-event.repository.test.ts
+cd apps/delivery-api && npm run lint && npm run typecheck
+cd apps/shopify-app && node --test tests/store-connection.test.mjs && npm run lint && npm run typecheck
+```

@@ -96,6 +96,8 @@ We retain order, route, driver, and operational records only as long as needed t
 Customer data rights and deletion
 Shopify may send customer data access or deletion requests to Clever through Shopify compliance webhooks. We verify those webhooks and will complete required access or deletion actions within Shopify's required timeframe unless we are legally required to retain the data.
 
+In the current production implementation, verified `customers/redact` webhooks delete matching locally stored Shopify order records by Shopify legacy order ID, and verified `shop/redact` webhooks delete the shop row in the delivery database, cascading shop-scoped delivery data. Verified `customers/data_request` webhooks are stored with a minimized payload for manual export/response to the store owner; the stored compliance payload omits customer email and phone from the webhook payload.
+
 Security
 We use HTTPS for the production app, Shopify OAuth/session-token authentication, Shopify webhook HMAC verification, database access controls, and least-privilege Shopify API scopes. Access to protected customer data is limited to personnel and systems that need it to operate or support the app.
 
@@ -211,6 +213,10 @@ Before pressing final Submit:
    - `customers/data_request`
    - `customers/redact`
    - `shop/redact`
+7. Confirm delivery API webhook processing is active:
+   - Shopify admin app forwards verified compliance webhooks to `https://clever-delivery.3-39-216-177.sslip.io/shopify/webhooks`.
+   - Delivery API re-validates the Shopify HMAC and sanitizes compliance payload storage.
+   - `customers/redact` and `shop/redact` perform repository-owned delivery-data deletion.
 
 ## 7. Items that remain impossible to complete from the repository alone
 
