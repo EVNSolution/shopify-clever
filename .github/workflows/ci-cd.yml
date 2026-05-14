@@ -71,6 +71,9 @@ jobs:
       - name: Check public URL hostnames
         run: npm run check:public-urls
 
+      - name: Check Shopify submission readiness
+        run: npm run check:shopify-submission
+
       - name: Prepare non-secret compose env files
         run: |
           cp infra/env/shopify-app.env.example infra/env/shopify-app.env
@@ -159,4 +162,7 @@ jobs:
         run: |
           curl -fsS https://clever-delivery.3-39-216-177.sslip.io/healthz
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://clever-delivery.3-39-216-177.sslip.io/readyz)" = "200"
-          test "$(curl -sS -o /dev/null -w '%{http_code}' https://clever-admin.3-39-216-177.sslip.io/auth/login)" = "400"
+          admin_body="$(mktemp)"
+          test "$(curl -sS -L -o "$admin_body" -w '%{http_code}' https://clever-admin.3-39-216-177.sslip.io/auth/login)" = "200"
+          grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$admin_body"
+          grep -q 'name="shopify-api-key"' "$admin_body"

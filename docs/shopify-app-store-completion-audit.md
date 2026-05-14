@@ -35,6 +35,7 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 | App icon asset preparation | `docs/shopify-app-store-assets/clever-app-icon-1200.png` is a 1200 × 1200 PNG generated from `clever-app-icon.svg`; `sips` verified dimensions. | Done |
 | Screenshot/screencast capture plan | `docs/shopify-app-store-assets/screenshot-and-screencast-shotlist.md` defines six 1600 × 900 screenshot targets, alt text, screencast storyboard, and privacy guardrails. | Done |
 | Submission readiness verifier | `scripts/check-shopify-submission-readiness.mjs` and `npm run check:shopify-submission` verify Shopify AI Toolkit files, App Bridge bootstrap, compliance webhooks, current release docs, App Store icon dimensions, shotlist, and explicit Partner Dashboard blockers. | Done |
+| CI/CD deployment smoke alignment | `.github/workflows/ci-cd.yml` runs `npm run check:shopify-submission` in validation and expects production `/auth/login` to return `200` with App Bridge CDN/API-key meta instead of the removed 400 fallback. | Done |
 | App Store review final submission | Requires an authorized Partner Dashboard account holder, business/legal inputs, and externally visible final submission. | Blocked outside repository lane |
 
 ## Current release to submit after dashboard-only fields are complete
