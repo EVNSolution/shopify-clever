@@ -11,8 +11,10 @@ This packet is the copy/paste working document for the authorized Partner Dashbo
 - Production delivery API URL: `https://clever-delivery.3-39-216-177.sslip.io`
 - Active Shopify app version: `compliance-20260514-0d05a46`
 - Version ID: `gid://shopify/Version/963177807873`
-- Source commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
-- CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
+- Runtime source commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- Latest readiness commit: `71b2194582e98865f39715144fea4a83e3fbd836`
+- Runtime CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
+- Latest readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25855038387
 
 ## Source requirements checked
 
