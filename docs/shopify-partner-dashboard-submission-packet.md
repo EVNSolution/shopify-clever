@@ -15,6 +15,8 @@ This packet is the copy/paste working document for the authorized Partner Dashbo
 - Latest readiness commit: `71b2194582e98865f39715144fea4a83e3fbd836`
 - Runtime CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
 - Latest readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25855038387
+- Target tracking issue: EVNSolution/shopify-clever#6
+- Change-control issue: EVNSolution/clever-change-control#211 (`chg-20260514-001`)
 
 ## Source requirements checked
 
