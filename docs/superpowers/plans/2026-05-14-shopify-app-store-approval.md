@@ -296,15 +296,15 @@ Latest production web bundle evidence:
 
 Current verifier evidence:
 
-- Latest target main: `0b37a6dcd2644e7a6c66d3d002659489891db776`
+- Production-release evidence docs commit: `0b37a6dcd2644e7a6c66d3d002659489891db776` (EVNSolution/shopify-clever#11)
 - PR #11 CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25856619121
-- Main CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25856695136
+- Main CI for production-release evidence docs: https://github.com/EVNSolution/shopify-clever/actions/runs/25856695136
 - `npm run check:shopify-submission`: `shopify-submission-readiness-ok`, `91` checks
 - `shopify app config validate --json --path apps/shopify-app`: `valid=true`, `issues=[]`
 
 - [x] **Step 4: Synchronize three-repository trace evidence**
 
-Change-control PR EVNSolution/clever-change-control#213 updated `releases/prod/shopify-clever-2026-05-14-app-store-handoff.md` with target PR #10/#11, target main `0b37a6dcd2644e7a6c66d3d002659489891db776`, deployed bundle `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`, CI evidence, production workflow evidence, and the `91`-check readiness result.
+Change-control PR EVNSolution/clever-change-control#213 updated `releases/prod/shopify-clever-2026-05-14-app-store-handoff.md` with target PR #10/#11, production-release evidence docs commit `0b37a6dcd2644e7a6c66d3d002659489891db776`, deployed bundle `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`, CI evidence, production workflow evidence, and the `91`-check readiness result. EVNSolution/shopify-clever#12 then added this final plan evidence and updated EVNSolution/shopify-clever#6 plus EVNSolution/clever-change-control#211 to point at the final target evidence commit.
 
 Issue bodies are also current:
 
