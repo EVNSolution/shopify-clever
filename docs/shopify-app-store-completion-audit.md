@@ -53,7 +53,7 @@ These are not safely completable from the repository or CLI alone:
 
 1. Submit protected customer data and protected field requests in Partner Dashboard.
 2. Publish and enter the final privacy policy URL after legal/business confirmation.
-3. Upload the prepared app icon plus final listing screenshots/screencast assets.
+3. Upload the prepared app icon plus final listing screenshots and screencast assets using the prepared shotlist.
 4. Enter final support, API, emergency, and review contact details.
 5. Select final pricing/free-plan configuration in Partner Dashboard.
 6. Run Shopify App Store review page automated checks from the authorized dashboard session.

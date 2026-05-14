@@ -252,6 +252,6 @@ npm run check:shopify-submission
 - [ ] Upload prepared app icon from `docs/shopify-app-store-assets/clever-app-icon-1200.png`.
 - [ ] Final support/API/emergency contact fields.
 - [ ] Pricing selection in Partner Dashboard.
-- [ ] Screencast upload.
+- [ ] Final listing screenshots and screencast upload using `docs/shopify-app-store-assets/screenshot-and-screencast-shotlist.md`.
 - [ ] App Store review page automated checks.
 - [ ] Final Submit for Review.
