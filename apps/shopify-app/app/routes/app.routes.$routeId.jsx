@@ -23,11 +23,6 @@ const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
 const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
-const ROUTE_DETAIL_STOPS_SOURCE_ID = "route-detail-stops";
-const ROUTE_DETAIL_STOP_POINTER_LAYER_ID = "route-detail-stop-pointers";
-const ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID = "route-detail-stop-pointer-labels";
-const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-stop-points";
-const ROUTE_STOP_POINT_MARKER_MIN_ZOOM = 10;
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 
 const routesDetailPageStyle = {
@@ -1111,145 +1106,6 @@ function buildRouteStopPointMarker(stop, routeStopPoint) {
   };
 }
 
-function buildRouteDetailStopsFeatureCollection(routeStops, routeStopPoints) {
-  const pointerFeatures = routeStops
-    .map((stop) => {
-      const markerCoordinates = getRouteStopPointerCoordinates(stop, findRouteStopPoint(stop, routeStopPoints));
-      if (!markerCoordinates) return null;
-
-      return {
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: markerCoordinates,
-        },
-        properties: {
-          featureType: "routeStop",
-          label: String(stop.stop),
-          orderName: stop.order,
-          sequence: stop.stop,
-          stopId: stop.id,
-        },
-      };
-    })
-    .filter(Boolean);
-  const snappedPointFeatures = routeStops
-    .map((stop) => {
-      const marker = buildRouteStopPointMarker(stop, findRouteStopPoint(stop, routeStopPoints));
-      if (!marker) return null;
-
-      return {
-        type: "Feature",
-        geometry: {
-          type: "Point",
-          coordinates: marker.coordinates,
-        },
-        properties: {
-          featureType: "snappedStopPoint",
-          orderName: stop.order,
-          sequence: stop.stop,
-          stopId: stop.id,
-        },
-      };
-    })
-    .filter(Boolean);
-
-  return {
-    type: "FeatureCollection",
-    features: [...pointerFeatures, ...snappedPointFeatures],
-  };
-}
-
-function ensureRouteDetailStopLayerOrder(map) {
-  if (typeof map.moveLayer !== "function") return;
-
-  for (const layerId of [
-    ROUTE_DETAIL_ROUTE_LAYER_ID,
-    ROUTE_DETAIL_STOP_POINT_LAYER_ID,
-    ROUTE_DETAIL_STOP_POINTER_LAYER_ID,
-    ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID,
-  ]) {
-    if (map.getLayer?.(layerId)) {
-      map.moveLayer(layerId);
-    }
-  }
-}
-
-function syncRouteDetailStopLayers(map, routeStops, routeStopPoints) {
-  if (!isRouteDetailMapStyleReady(map)) return false;
-
-  const featureCollection = buildRouteDetailStopsFeatureCollection(routeStops, routeStopPoints);
-  const existingSource = map.getSource?.(ROUTE_DETAIL_STOPS_SOURCE_ID);
-  if (existingSource?.setData) {
-    existingSource.setData(featureCollection);
-  } else {
-    map.addSource(ROUTE_DETAIL_STOPS_SOURCE_ID, {
-      type: "geojson",
-      data: featureCollection,
-    });
-  }
-
-  if (!map.getLayer?.(ROUTE_DETAIL_STOP_POINTER_LAYER_ID)) {
-    map.addLayer({
-      id: ROUTE_DETAIL_STOP_POINTER_LAYER_ID,
-      type: "circle",
-      source: ROUTE_DETAIL_STOPS_SOURCE_ID,
-      filter: ["==", ["get", "featureType"], "routeStop"],
-      paint: {
-        "circle-color": "#303030",
-        "circle-radius": 9,
-        "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 2,
-      },
-    });
-  }
-
-  if (!map.getLayer?.(ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID)) {
-    map.addLayer({
-      id: ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID,
-      type: "symbol",
-      source: ROUTE_DETAIL_STOPS_SOURCE_ID,
-      filter: ["==", ["get", "featureType"], "routeStop"],
-      layout: {
-        "text-allow-overlap": true,
-        "text-anchor": "center",
-        "text-field": ["get", "label"],
-        "text-ignore-placement": true,
-        "text-justify": "center",
-        "text-offset": [0, -0.08],
-        "text-size": 10,
-      },
-      paint: {
-        "text-color": "#ffffff",
-      },
-    });
-  }
-
-  if (!map.getLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID)) {
-    map.addLayer({
-      id: ROUTE_DETAIL_STOP_POINT_LAYER_ID,
-      type: "circle",
-      source: ROUTE_DETAIL_STOPS_SOURCE_ID,
-      filter: ["==", ["get", "featureType"], "snappedStopPoint"],
-      minzoom: ROUTE_STOP_POINT_MARKER_MIN_ZOOM,
-      paint: {
-        "circle-color": "#1473e6",
-        "circle-radius": 6,
-        "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 2,
-      },
-    });
-  }
-
-  ensureRouteDetailStopLayerOrder(map);
-  return true;
-}
-
-function getRouteStopIdFromMapFeature(feature) {
-  const stopId = feature?.properties?.stopId;
-  return typeof stopId === "string" && stopId.length > 0 ? stopId : null;
-}
-
 function fitRouteStopAndSnappedPoint(map, maplibregl, stop, routeStopPoint) {
   if (!map || !maplibregl) return;
 
@@ -1289,6 +1145,88 @@ function createRouteStartMarkerElement(departureLocation) {
   markerElement.append(markerPinElement);
 
   return markerElement;
+}
+
+function createRouteStopMarkerElement(stop) {
+  const markerElement = document.createElement("button");
+  const labelElement = document.createElement("span");
+
+  markerElement.type = "button";
+  markerElement.className = "route-detail-stop-marker";
+  markerElement.style.zIndex = "3200";
+  markerElement.setAttribute("aria-label", `Stop ${stop.stop}: ${stop.order}`);
+  labelElement.className = "route-detail-stop-marker__label";
+  labelElement.textContent = String(stop.stop);
+  markerElement.append(labelElement);
+
+  return markerElement;
+}
+
+function createRouteStopPointMarkerElement() {
+  const markerElement = document.createElement("span");
+
+  markerElement.className = "route-detail-snapped-stop-point";
+  markerElement.style.zIndex = "3100";
+  markerElement.setAttribute("aria-hidden", "true");
+
+  return markerElement;
+}
+
+function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeStops, routeStopPoints) {
+  const markers = [];
+
+  if (departureLocation?.hasCoordinates) {
+    const startMarker = new maplibregl.Marker({
+      anchor: "bottom",
+      element: createRouteStartMarkerElement(departureLocation),
+    })
+      .setLngLat(departureLocation.coordinates)
+      .addTo(map);
+
+    markers.push(startMarker);
+  }
+
+  for (const stop of routeStops) {
+    const routeStopPoint = findRouteStopPoint(stop, routeStopPoints);
+    const markerCoordinates = getRouteStopPointerCoordinates(stop, routeStopPoint);
+    if (!markerCoordinates) continue;
+
+    const handleStopMarkerDoubleClick = (event) => {
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      fitRouteStopAndSnappedPoint(
+        map,
+        maplibregl,
+        stop,
+        routeStopPoint,
+      );
+    };
+    const markerElement = createRouteStopMarkerElement(stop);
+    markerElement.addEventListener("dblclick", handleStopMarkerDoubleClick);
+
+    const stopMarker = new maplibregl.Marker({
+      anchor: "center",
+      element: markerElement,
+    })
+      .setLngLat(markerCoordinates)
+      .addTo(map);
+
+    markers.push(stopMarker);
+
+    const stopPointMarker = buildRouteStopPointMarker(stop, routeStopPoint);
+    if (!stopPointMarker) continue;
+
+    const snappedStopPointMarker = new maplibregl.Marker({
+      anchor: "center",
+      element: createRouteStopPointMarkerElement(),
+    })
+      .setLngLat(stopPointMarker.coordinates)
+      .addTo(map);
+
+    markers.push(snappedStopPointMarker);
+  }
+
+  return markers;
 }
 
 function renderRouteHeaderMetric(label, value) {
@@ -1725,88 +1663,27 @@ export default function RouteDetailPage() {
     const map = mapRef.current;
     const maplibregl = mapLibraryRef.current;
 
-    const syncRouteDetailMapLayers = () => {
+    const syncRouteDetailMap = () => {
       syncRouteDetailRouteLine(map, savedRouteGeometry);
-      return syncRouteDetailStopLayers(map, orderedRouteStops, savedRouteStopPoints);
-    };
-
-    const handleStopPointerDoubleClick = (event) => {
-      event.preventDefault?.();
-      event.originalEvent?.preventDefault?.();
-      event.originalEvent?.stopPropagation?.();
-      const stopId = getRouteStopIdFromMapFeature(event.features?.[0]);
-      if (!stopId) return;
-
-      const stop = orderedRouteStops.find((routeStop) => routeStop.id === stopId);
-      if (!stop) return;
-
-      fitRouteStopAndSnappedPoint(
+      const routeDetailMarkers = createRouteDetailMapMarkers(
         map,
         maplibregl,
-        stop,
-        findRouteStopPoint(stop, savedRouteStopPoints),
+        departureLocation,
+        orderedRouteStops,
+        savedRouteStopPoints,
       );
-    };
-    const handleStopPointerMouseEnter = () => {
-      map.getCanvas().style.cursor = "pointer";
-    };
-    const handleStopPointerMouseLeave = () => {
-      map.getCanvas().style.cursor = "";
-    };
-
-    let routeStopPointerHandlersBound = false;
-    const bindRouteStopPointerHandlers = () => {
-      if (routeStopPointerHandlersBound) return;
-
-      map.on("dblclick", ROUTE_DETAIL_STOP_POINTER_LAYER_ID, handleStopPointerDoubleClick);
-      map.on("mouseenter", ROUTE_DETAIL_STOP_POINTER_LAYER_ID, handleStopPointerMouseEnter);
-      map.on("mouseleave", ROUTE_DETAIL_STOP_POINTER_LAYER_ID, handleStopPointerMouseLeave);
-      routeStopPointerHandlersBound = true;
-    };
-    const unbindRouteStopPointerHandlers = () => {
-      if (!routeStopPointerHandlersBound) return;
-
-      map.off("dblclick", ROUTE_DETAIL_STOP_POINTER_LAYER_ID, handleStopPointerDoubleClick);
-      map.off("mouseenter", ROUTE_DETAIL_STOP_POINTER_LAYER_ID, handleStopPointerMouseEnter);
-      map.off("mouseleave", ROUTE_DETAIL_STOP_POINTER_LAYER_ID, handleStopPointerMouseLeave);
-      routeStopPointerHandlersBound = false;
+      markersRef.current.forEach((marker) => marker.remove());
+      markersRef.current = routeDetailMarkers;
     };
     const handleRouteDetailStyleData = () => {
-      if (!syncRouteDetailMapLayers()) return;
-
-      map.off("styledata", handleRouteDetailStyleData);
-      bindRouteStopPointerHandlers();
+      syncRouteDetailRouteLine(map, savedRouteGeometry);
     };
 
-    const syncSucceeded = syncRouteDetailMapLayers();
-
-    const renderDepartureMarker = () => {
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
-
-      if (departureLocation?.hasCoordinates) {
-        const startMarker = new maplibregl.Marker({
-          anchor: "bottom",
-          element: createRouteStartMarkerElement(departureLocation),
-        })
-          .setLngLat(departureLocation.coordinates)
-          .addTo(map);
-
-        markersRef.current.push(startMarker);
-      }
-    };
-
-    renderDepartureMarker();
-
-    if (!syncSucceeded) {
-      map.on("styledata", handleRouteDetailStyleData);
-    } else {
-      bindRouteStopPointerHandlers();
-    }
+    syncRouteDetailMap();
+    map.on("styledata", handleRouteDetailStyleData);
 
     return () => {
       map.off("styledata", handleRouteDetailStyleData);
-      unbindRouteStopPointerHandlers();
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };

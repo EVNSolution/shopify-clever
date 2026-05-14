@@ -67,12 +67,13 @@ test("orders map renders order pins through a MapLibre source layer", () => {
   assert.doesNotMatch(ordersPageSource, /const marker = new maplibregl\.Marker/);
 });
 
-test("route detail map renders route stops through MapLibre source layers", () => {
-  assert.match(routeDetailPageSource, /ROUTE_DETAIL_STOPS_SOURCE_ID/);
-  assert.match(routeDetailPageSource, /ROUTE_DETAIL_STOP_POINTER_LAYER_ID/);
-  assert.match(routeDetailPageSource, /ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
-  assert.match(routeDetailPageSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID/);
-  assert.match(routeDetailPageSource, /map\.on\("dblclick",\s*ROUTE_DETAIL_STOP_POINTER_LAYER_ID/);
-  assert.doesNotMatch(routeDetailPageSource, /const pointerMarker = new maplibregl\.Marker/);
-  assert.doesNotMatch(routeDetailPageSource, /const stopPointMarker = new maplibregl\.Marker/);
+test("route detail map renders route stops as stable DOM overlay markers", () => {
+  assert.match(routeDetailPageSource, /function createRouteDetailMapMarkers\(map, maplibregl, departureLocation, routeStops, routeStopPoints\) \{/);
+  assert.match(routeDetailPageSource, /function createRouteStopMarkerElement\(stop\) \{/);
+  assert.match(routeDetailPageSource, /function createRouteStopPointMarkerElement\(\) \{/);
+  assert.match(routeDetailPageSource, /const stopMarker = new maplibregl\.Marker/);
+  assert.match(routeDetailPageSource, /const snappedStopPointMarker = new maplibregl\.Marker/);
+  assert.match(routeDetailPageSource, /markerElement\.addEventListener\("dblclick", handleStopMarkerDoubleClick\)/);
+  assert.doesNotMatch(routeDetailPageSource, /ROUTE_DETAIL_STOPS_SOURCE_ID|ROUTE_DETAIL_STOP_POINTER_LAYER_ID|ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
+  assert.doesNotMatch(routeDetailPageSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID|map\.on\("dblclick",\s*ROUTE_DETAIL_STOP_POINTER_LAYER_ID/);
 });
