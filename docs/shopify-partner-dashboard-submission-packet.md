@@ -251,7 +251,11 @@ npm run check:shopify-submission
    - Delivery API re-validates the Shopify HMAC and sanitizes compliance payload storage.
    - `customers/redact` and `shop/redact` perform repository-owned delivery-data deletion.
 
-## 8. Items that remain impossible to complete from the repository alone
+## 8. Dashboard evidence capture
+
+Use `docs/shopify-dashboard-submission-evidence-template.md` when the authorized Partner Dashboard account holder completes the remaining manual steps. Paste the completed evidence into EVNSolution/shopify-clever#6 and link it from EVNSolution/clever-change-control#211 before closing either issue.
+
+## 9. Items that remain impossible to complete from the repository alone
 
 - [ ] Protected customer data form submission in Partner Dashboard.
 - [ ] Published privacy policy URL.
