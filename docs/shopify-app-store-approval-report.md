@@ -157,6 +157,15 @@ The following groups were skipped because the repo does not contain the triggeri
 
 ## Partner Dashboard manual checklist
 
+### App Store icon asset
+
+Prepared for Partner Dashboard upload:
+
+- `docs/shopify-app-store-assets/clever-app-icon-1200.png`
+- PNG, 1200 × 1200 px
+- SHA-256: `03032d4e7acf29f1a238dfe1f2c4d7416a6a859ea550dc8a022dac4024b4b43e`
+
+
 These items cannot be completed safely from the local repository and require an authorized Partner Dashboard account holder:
 
 - Use `docs/shopify-partner-dashboard-submission-packet.md` as the copy/paste source for the fields below.
@@ -170,7 +179,7 @@ These items cannot be completed safely from the local repository and require an 
 - [ ] Provide justification: local-delivery route planning, driver dispatch, address geocoding, recipient contact, and route-stop sequencing.
 - [ ] Add privacy policy URL to App Store listing.
 - [ ] Confirm privacy policy covers Shopify API data, merchant-entered driver phone data, delivery route data, retention period, data storage region, data rights contact, and support contact.
-- [ ] Upload/confirm app icon and make app name consistent between Developer Dashboard and listing.
+- [ ] Upload prepared app icon from `docs/shopify-app-store-assets/clever-app-icon-1200.png` and make app name consistent between Developer Dashboard and listing.
 - [ ] Complete listing copy with factual feature claims only.
 - [ ] Configure pricing as free, or implement/configure Shopify Billing/App Pricing before listing a paid plan.
 - [ ] Add API contact details and review contact email; allowlist `app-submissions@shopify.com` and `noreply@shopify.com`.

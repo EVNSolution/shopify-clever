@@ -31,7 +31,8 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 | Web-hosted app deployment | EC2 production bundle rebuilt/restarted for both `delivery-api` and `shopify-app`; remote `RELEASE_COMMIT` recorded `0d05a46295e499ffeb22d057b6b7e2ca789262de`. | Done |
 | Shopify app version release | Shopify CLI released `compliance-20260514-0d05a46` to users; version ID `gid://shopify/Version/963177807873`. | Done |
 | Production smoke | Admin `/auth/login` returned `200` with App Bridge CDN/API key meta; delivery `/healthz` and `/readyz` returned `200`; invalid webhook HMAC returned `401`. | Done |
-| Partner Dashboard submission packet | `docs/shopify-partner-dashboard-submission-packet.md` contains copy/paste fields, privacy-policy draft inputs, protected-data justification, factual listing copy, reviewer instructions, and automated-check runbook. | Done |
+| Partner Dashboard submission packet | `docs/shopify-partner-dashboard-submission-packet.md` contains copy/paste fields, privacy-policy draft inputs, protected-data justification, factual listing copy, prepared icon path, reviewer instructions, and automated-check runbook. | Done |
+| App icon asset preparation | `docs/shopify-app-store-assets/clever-app-icon-1200.png` is a 1200 × 1200 PNG generated from `clever-app-icon.svg`; `sips` verified dimensions. | Done |
 | App Store review final submission | Requires an authorized Partner Dashboard account holder, business/legal inputs, and externally visible final submission. | Blocked outside repository lane |
 
 ## Current release to submit after dashboard-only fields are complete
@@ -49,7 +50,7 @@ These are not safely completable from the repository or CLI alone:
 
 1. Submit protected customer data and protected field requests in Partner Dashboard.
 2. Publish and enter the final privacy policy URL after legal/business confirmation.
-3. Upload app icon and listing screenshots/screencast assets.
+3. Upload the prepared app icon plus final listing screenshots/screencast assets.
 4. Enter final support, API, emergency, and review contact details.
 5. Select final pricing/free-plan configuration in Partner Dashboard.
 6. Run Shopify App Store review page automated checks from the authorized dashboard session.

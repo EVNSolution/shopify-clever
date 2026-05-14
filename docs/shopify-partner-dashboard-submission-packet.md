@@ -165,7 +165,24 @@ driver dispatch
 Use a free plan for the current release unless Shopify Billing/App Pricing is configured before submission. Do not describe paid pricing until billing is implemented through Shopify-approved billing/pricing flows.
 ```
 
-## 5. Reviewer testing instructions
+## 5. Prepared App Store assets
+
+### App icon
+
+Upload this prepared icon in Partner Dashboard:
+
+```text
+docs/shopify-app-store-assets/clever-app-icon-1200.png
+```
+
+Verification:
+
+- Format: PNG
+- Size: 1200 × 1200 px
+- SHA-256: `03032d4e7acf29f1a238dfe1f2c4d7416a6a859ea550dc8a022dac4024b4b43e`
+- Source SVG: `docs/shopify-app-store-assets/clever-app-icon.svg`
+
+## 6. Reviewer testing instructions
 
 Paste-ready reviewer notes:
 
@@ -198,7 +215,7 @@ Reviewer assets to attach or prepare:
 - [ ] Test store with representative orders containing delivery dates/areas and shipping coordinates or geocodable shipping addresses.
 - [ ] If required, temporary reviewer credentials/instructions that do not expose private production merchant data.
 
-## 6. Automated checks runbook
+## 7. Automated checks runbook
 
 Before pressing final Submit:
 
@@ -218,11 +235,11 @@ Before pressing final Submit:
    - Delivery API re-validates the Shopify HMAC and sanitizes compliance payload storage.
    - `customers/redact` and `shop/redact` perform repository-owned delivery-data deletion.
 
-## 7. Items that remain impossible to complete from the repository alone
+## 8. Items that remain impossible to complete from the repository alone
 
 - [ ] Protected customer data form submission in Partner Dashboard.
 - [ ] Published privacy policy URL.
-- [ ] App icon upload.
+- [ ] Upload prepared app icon from `docs/shopify-app-store-assets/clever-app-icon-1200.png`.
 - [ ] Final support/API/emergency contact fields.
 - [ ] Pricing selection in Partner Dashboard.
 - [ ] Screencast upload.
