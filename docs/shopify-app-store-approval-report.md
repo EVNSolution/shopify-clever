@@ -220,14 +220,20 @@ Outcome:
 - Shopify app tests: `151` passed.
 - Delivery API tests: `216` passed.
 - `npm run build`, `npm run check:public-urls`, and `npm run typecheck` completed successfully.
-- `npm run check:shopify-submission` returned `shopify-submission-readiness-ok` with `66` checks at latest readiness commit `f27a614f70fd1e371d8a0ee155d2d53ea58b8602`.
+- `npm run check:shopify-submission` returned `shopify-submission-readiness-ok` with 91 checks after adding the production-release evidence guardrails for deployed bundle commit `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`.
 - Remaining Partner Dashboard submission blockers are tracked in EVNSolution/shopify-clever#6 and EVNSolution/clever-change-control#211 (`chg-20260514-001`).
 
 ## Production release evidence
 
-- Git commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
-- GitHub CI/CD: success — https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
-- Web app deployment: EC2 production bundle rebuilt and restarted with Docker Compose.
+- Shopify app version release commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- Production web bundle commit: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
+- Runtime release CI/CD: success — https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
+- Latest main CI/CD validation: success — https://github.com/EVNSolution/shopify-clever/actions/runs/25856119836
+- Manual production workflow: https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483
+  - Validate job passed.
+  - GitHub-hosted deploy job failed at EC2 SSH reachability because the runner IP was not allowed by the security group.
+  - The same main commit was deployed with the approved local AWS/SSH fallback; temporary SSH ingress `106.101.131.120/32` was revoked after deploy.
+- Web app deployment: EC2 production bundle rebuilt and restarted with Docker Compose; remote `.release-sha` recorded `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`.
 - Shopify app version: `compliance-20260514-0d05a46`
   - Status: `active`
   - Version ID: `gid://shopify/Version/963177807873`

@@ -11,10 +11,12 @@ This packet is the copy/paste working document for the authorized Partner Dashbo
 - Production delivery API URL: `https://clever-delivery.3-39-216-177.sslip.io`
 - Active Shopify app version: `compliance-20260514-0d05a46`
 - Version ID: `gid://shopify/Version/963177807873`
-- Runtime source commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
-- Latest readiness commit: `f27a614f70fd1e371d8a0ee155d2d53ea58b8602`
+- Shopify app version release commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- Production web bundle commit: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
+- Production readiness evidence commit: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
 - Runtime CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
-- Latest readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25855617729
+- Production readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25856119836
+- Production workflow evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483
 - Target tracking issue: EVNSolution/shopify-clever#6
 - Change-control issue: EVNSolution/clever-change-control#211 (`chg-20260514-001`)
 

@@ -29,8 +29,8 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 | Protected customer data field map | `docs/shopify-protected-customer-data-field-map.md` maps active Shopify GraphQL fields to Partner Dashboard protected-data categories and records explicit exclusions. | Done |
 | Full local validation | `shopify app config validate --json`; `npm --prefix apps/shopify-app run lint`; `npm run test:shopify-app`; `npm run build`; `npm run check:public-urls`; `npm run typecheck`; `npm test` all passed before runtime release. | Done |
 | GitHub CI validation | CI success for runtime release commit `0d05a46295e499ffeb22d057b6b7e2ca789262de`: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566 | Done |
-| Repository readiness CI validation | CI success for latest readiness/documentation commit `f27a614f70fd1e371d8a0ee155d2d53ea58b8602`: https://github.com/EVNSolution/shopify-clever/actions/runs/25855617729 | Done |
-| Web-hosted app deployment | EC2 production bundle rebuilt/restarted for both `delivery-api` and `shopify-app`; remote `RELEASE_COMMIT` recorded `0d05a46295e499ffeb22d057b6b7e2ca789262de`. | Done |
+| Production-readiness CI validation | CI success for deployed production bundle commit `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`: https://github.com/EVNSolution/shopify-clever/actions/runs/25856119836 | Done |
+| Web-hosted app deployment | EC2 production bundle rebuilt/restarted for both `delivery-api` and `shopify-app`; remote `.release-sha` recorded `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`. Manual workflow validation passed at https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483; deploy job failed only at GitHub runner SSH reachability, so the approved local AWS/SSH fallback completed the deploy and revoked temporary SSH ingress `106.101.131.120/32`. | Done |
 | Shopify app version release | Shopify CLI released `compliance-20260514-0d05a46` to users; version ID `gid://shopify/Version/963177807873`. | Done |
 | Production smoke | Admin `/auth/login` returned `200` with App Bridge CDN/API key meta; delivery `/healthz` and `/readyz` returned `200`; invalid webhook HMAC returned `401`. | Done |
 | Partner Dashboard submission packet | `docs/shopify-partner-dashboard-submission-packet.md` contains copy/paste fields, privacy-policy draft inputs, protected-data justification, factual listing copy, prepared icon path, reviewer instructions, and automated-check runbook. | Done |
@@ -45,12 +45,14 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 
 ## Current release to submit after dashboard-only fields are complete
 
-- Runtime release commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
-- Latest repository readiness commit: `f27a614f70fd1e371d8a0ee155d2d53ea58b8602`
+- Shopify app version release commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
+- Production web bundle commit: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
+- Production readiness evidence commit: `b64fa2c8ebcf0bf5cb6e9eebc04450e557fa9d01`
 - Shopify app version: `compliance-20260514-0d05a46`
 - Version ID: `gid://shopify/Version/963177807873`
 - Runtime CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25852472566
-- Repository readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25855617729
+- Production readiness CI evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25856119836
+- Production workflow evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483
 - Admin URL: `https://clever-admin.3-39-216-177.sslip.io`
 - Delivery API URL: `https://clever-delivery.3-39-216-177.sslip.io`
 - Target tracking issue: EVNSolution/shopify-clever#6
