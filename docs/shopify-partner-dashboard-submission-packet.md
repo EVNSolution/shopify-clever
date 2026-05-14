@@ -182,6 +182,10 @@ Verification:
 - SHA-256: `03032d4e7acf29f1a238dfe1f2c4d7416a6a859ea550dc8a022dac4024b4b43e`
 - Source SVG: `docs/shopify-app-store-assets/clever-app-icon.svg`
 
+### Screenshot and screencast shotlist
+
+Use `docs/shopify-app-store-assets/screenshot-and-screencast-shotlist.md` to capture final 1600 × 900 listing screenshots and the 60–120 second reviewer screencast from a development/test store.
+
 ## 6. Reviewer testing instructions
 
 Paste-ready reviewer notes:
