@@ -12,6 +12,7 @@ import { registerAdminDriversRoutes, type AdminDriversDependencies } from './rou
 import { registerAdminOrdersRoutes, type AdminOrdersDependencies } from './routes/admin-orders.routes.js';
 import { registerApiDocsRoutes } from './routes/api-docs.routes.js';
 import { registerDriverEventRoutes, type DriverApiDependencies } from './routes/driver-events.routes.js';
+import { registerDriverAuthRoutes, type DriverAuthDependencies } from './routes/driver-auth.routes.js';
 import { registerJsonBodyParser } from './routes/json-body-parser.js';
 import { registerHealthRoutes } from './routes/health.routes.js';
 import { registerShopifyAuthRoutes, type ShopifyAuthDependencies } from './routes/shopify-auth.routes.js';
@@ -26,6 +27,7 @@ type BuildAppOptions = {
   adminRoutePlans?: AdminRoutePlanDependencies;
   corsOrigin?: false | string;
   driverApi?: DriverApiDependencies;
+  driverAuth?: DriverAuthDependencies;
   logger?: FastifyServerOptions['logger'];
   shopifyAuth?: ShopifyAuthDependencies;
   shopifyWebhook?: ShopifyWebhookDependencies;
@@ -62,6 +64,10 @@ export async function buildApp(options: BuildAppOptions = {}): Promise<FastifyIn
 
   if (options.driverApi !== undefined) {
     registerDriverEventRoutes(app, options.driverApi);
+  }
+
+  if (options.driverAuth !== undefined) {
+    registerDriverAuthRoutes(app, options.driverAuth);
   }
 
   if (options.shopifyAuth !== undefined) {

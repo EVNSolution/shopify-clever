@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import type { PrismaClient } from '@prisma/client';
 
 import type {
@@ -8,12 +9,16 @@ import type {
 
 type AdminDriverPrismaClient = Pick<PrismaClient, 'driver' | 'shop'>;
 
+const INVITE_CODE_TTL_HOURS = 24;
+
 type DriverRecord = {
   _count?: { driverEvents?: number };
   authSubject: string | null;
   createdAt: Date;
   displayName: string;
   id: string;
+  inviteCode: string | null;
+  inviteCodeExpiresAt: Date | null;
   lastSeenAt: Date | null;
   phone: string | null;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
@@ -34,6 +39,9 @@ export class PrismaAdminDriverRepository {
     });
     const displayName = normalizeDisplayName(input.displayName) ?? input.phone;
 
+    const inviteCode = generateInviteCode();
+    const inviteCodeExpiresAt = new Date(Date.now() + INVITE_CODE_TTL_HOURS * 60 * 60 * 1000);
+
     const existing = await this.prisma.driver.findFirst({
       include: driverInclude,
       where: { phone: input.phone, shopId: shop.id }
@@ -41,11 +49,11 @@ export class PrismaAdminDriverRepository {
 
     if (existing !== null) {
       const driver = await this.prisma.driver.update({
-        data: { displayName, phone: input.phone },
+        data: { displayName, phone: input.phone, inviteCode, inviteCodeExpiresAt },
         include: driverInclude,
         where: { id: existing.id }
       });
-      return toAdminDriverRow(driver);
+      return toAdminDriverRow(driver as DriverRecord);
     }
 
     const driver = await this.prisma.driver.create({
@@ -54,12 +62,14 @@ export class PrismaAdminDriverRepository {
         displayName,
         phone: input.phone,
         shopId: shop.id,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        inviteCode,
+        inviteCodeExpiresAt
       },
       include: driverInclude
     });
 
-    return toAdminDriverRow(driver);
+    return toAdminDriverRow(driver as DriverRecord);
   }
 
   async listDrivers(input: ListAdminDriversInput): Promise<AdminDriverRow[]> {
@@ -80,6 +90,28 @@ export class PrismaAdminDriverRepository {
 
     return drivers.map((driver) => toAdminDriverRow(driver as DriverRecord));
   }
+
+  async regenerateInviteCode(input: { driverId: string; shopDomain: string }): Promise<AdminDriverRow> {
+    const shopDomain = normalizeShopDomain(input.shopDomain);
+    const shop = await this.prisma.shop.findUnique({
+      select: { id: true },
+      where: { shopDomain }
+    });
+    if (shop === null) {
+      throw new Error('Shop not found');
+    }
+
+    const inviteCode = generateInviteCode();
+    const inviteCodeExpiresAt = new Date(Date.now() + INVITE_CODE_TTL_HOURS * 60 * 60 * 1000);
+
+    const driver = await this.prisma.driver.update({
+      data: { inviteCode, inviteCodeExpiresAt },
+      include: driverInclude,
+      where: { id: input.driverId, shopId: shop.id }
+    });
+
+    return toAdminDriverRow(driver as DriverRecord);
+  }
 }
 
 function toAdminDriverRow(driver: DriverRecord): AdminDriverRow {
@@ -90,6 +122,8 @@ function toAdminDriverRow(driver: DriverRecord): AdminDriverRow {
     createdAt: driver.createdAt.toISOString(),
     displayName: driver.displayName,
     id: driver.id,
+    inviteCode: driver.inviteCode,
+    inviteCodeExpiresAt: driver.inviteCodeExpiresAt?.toISOString() ?? null,
     lastSeenAt: driver.lastSeenAt?.toISOString() ?? null,
     phone: driver.phone,
     recentEventsCount: driver._count?.driverEvents ?? 0,
@@ -117,4 +151,8 @@ function normalizeShopDomain(value: string): string {
   }
 
   return withoutProtocol;
+}
+
+function generateInviteCode(): string {
+  return randomBytes(3).toString('hex').toUpperCase();
 }

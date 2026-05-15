@@ -14,7 +14,9 @@ const pendingDriver: AdminDriverRow = {
   phone: '+821089216198',
   recentEventsCount: 0,
   status: 'PENDING',
-  updatedAt: '2026-05-11T02:00:00.000Z'
+  updatedAt: '2026-05-11T02:00:00.000Z',
+  inviteCode: 'ABCDEF',
+  inviteCodeExpiresAt: '2026-05-12T02:00:00.000Z'
 };
 
 const linkedDriver: AdminDriverRow = {
@@ -27,7 +29,9 @@ const linkedDriver: AdminDriverRow = {
   phone: '+14165550108',
   recentEventsCount: 4,
   status: 'ACTIVE',
-  updatedAt: '2026-05-11T01:59:00.000Z'
+  updatedAt: '2026-05-11T01:59:00.000Z',
+  inviteCode: null,
+  inviteCodeExpiresAt: null
 };
 
 describe('Admin drivers routes', () => {
@@ -127,6 +131,7 @@ function createDependencyHarness(): {
   createPendingDriver: ReturnType<typeof vi.fn<AdminDriversDependencies['adminDriverService']['createPendingDriver']>>;
   dependencies: AdminDriversDependencies;
   listDrivers: ReturnType<typeof vi.fn<AdminDriversDependencies['adminDriverService']['listDrivers']>>;
+  regenerateInviteCode: ReturnType<typeof vi.fn<AdminDriversDependencies['adminDriverService']['regenerateInviteCode']>>;
 } {
   const verify = vi.fn(() => ({
     shopDomain: 'example.myshopify.com',
@@ -138,17 +143,22 @@ function createDependencyHarness(): {
   const listDrivers = vi.fn<AdminDriversDependencies['adminDriverService']['listDrivers']>(() =>
     Promise.resolve([linkedDriver, pendingDriver])
   );
+  const regenerateInviteCode = vi.fn<AdminDriversDependencies['adminDriverService']['regenerateInviteCode']>(() =>
+    Promise.resolve(pendingDriver)
+  );
 
   return {
     createPendingDriver,
     dependencies: {
       adminDriverService: {
         createPendingDriver,
-        listDrivers
+        listDrivers,
+        regenerateInviteCode
       },
       sessionTokenVerifier: { verify }
     },
-    listDrivers
+    listDrivers,
+    regenerateInviteCode
   };
 }
 

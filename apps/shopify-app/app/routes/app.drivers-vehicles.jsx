@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { createPendingDeliveryDriver, fetchDeliveryDrivers } from "../features/delivery/drivers.server";
+import { createPendingDeliveryDriver, fetchDeliveryDrivers, regenerateDeliveryDriverInviteCode } from "../features/delivery/drivers.server";
 import {
   formatInvitePhoneInput,
   formatSavedDriverPhone,
@@ -434,6 +434,8 @@ function mapDeliveryDriverToRow(driver) {
     phone,
     status: invitePending ? "Pending" : formatDriverStatus(driver.status),
     authStatus: invitePending ? "Invite pending" : appLinked ? "App linked" : "Not linked",
+    inviteCode: driver.inviteCode,
+    inviteCodeExpiresAt: driver.inviteCodeExpiresAt,
     assignedRoute: { href: `/app/routes?driverId=${encodeURIComponent(driverId)}`, label: "Unassigned" },
     lastSeenAt: formatDriverTimestamp(driver.lastSeenAt ?? driver.createdAt) ?? "Pending invite",
     recentEvents: formatRecentEvents(driver.recentEventsCount),
@@ -491,6 +493,12 @@ export const action = async ({ request }) => {
   await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formText(formData.get("_intent"));
+
+  if (intent === "regenerateInviteCode") {
+    const driverId = formText(formData.get("driverId"));
+    if (!driverId) return { driver: null, errors: [{ message: "배송원 ID가 필요합니다." }] };
+    return regenerateDeliveryDriverInviteCode(request, driverId, { sessionToken: formText(formData.get("shopifySessionToken")) });
+  }
 
   if (intent !== "inviteDriver") {
     return { driver: null, errors: [{ message: "지원하지 않는 driver 작업입니다." }] };
@@ -585,18 +593,21 @@ export default function DriversVehiclesPage() {
     }
   };
 
-  const copyDownloadLink = async () => {
+  const copyInviteMessage = async () => {
     const downloadLink = getDriverDownloadLink(DRIVER_DOWNLOAD_LINK);
+    const code = driverInviteFetcher.data?.driver?.inviteCode;
+    const message = code ? `배송원 앱 다운로드 링크: ${downloadLink}\n확인코드: ${code}` : downloadLink;
+
     if (!navigator.clipboard?.writeText) {
-      setCopyStatus(downloadLink);
+      setCopyStatus("클립보드 복사 실패. 아래 내용을 직접 복사하세요:\n" + message);
       return;
     }
 
     try {
-      await navigator.clipboard.writeText(downloadLink);
-      setCopyStatus("Download link copied.");
+      await navigator.clipboard.writeText(message);
+      setCopyStatus("초대 메시지가 복사되었습니다.");
     } catch {
-      setCopyStatus(downloadLink);
+      setCopyStatus("클립보드 복사 실패. 아래 내용을 직접 복사하세요:\n" + message);
     }
   };
 
@@ -615,6 +626,15 @@ export default function DriversVehiclesPage() {
     setPendingDownloadLink("");
     setCopyStatus("Pending driver saved.");
   }, [driverInviteFetcher.data, driverInviteFetcher.state, pendingDownloadLink]);
+
+  const regenerateInviteCode = async (driverId) => {
+    const sessionToken = await shopify.idToken();
+    const formData = new FormData();
+    formData.set("_intent", "regenerateInviteCode");
+    formData.set("driverId", driverId);
+    formData.set("shopifySessionToken", sessionToken);
+    driverInviteFetcher.submit(formData, { method: "post" });
+  };
 
   return (
     <PageShell title={null}>
@@ -671,7 +691,21 @@ export default function DriversVehiclesPage() {
                   </td>
                   <td style={tableCellStyle}>{driver.phone}</td>
                   <td style={tableCellStyle}><span style={statusPillStyle}>{driver.status}</span></td>
-                  <td style={tableCellStyle}>{driver.authStatus}</td>
+                  <td style={tableCellStyle}>
+                    {driver.authStatus}
+                    {driver.status === "Pending" && driver.inviteCode && (
+                      <div style={{ marginTop: "4px", fontSize: "12px", color: "#616161" }}>
+                        코드: <strong>{driver.inviteCode}</strong>
+                        <button 
+                          type="button" 
+                          style={{ marginLeft: "6px", background: "none", border: "none", color: "#174a7c", cursor: "pointer", padding: 0 }}
+                          onClick={() => regenerateInviteCode(driver.id)}
+                        >
+                          재생성
+                        </button>
+                      </div>
+                    )}
+                  </td>
                   <td style={tableCellStyle}>
                     <a href={driver.assignedRoute.href} style={routeLinkStyle}>{driver.assignedRoute.label}</a>
                   </td>
@@ -758,7 +792,7 @@ export default function DriversVehiclesPage() {
             <div style={modalFooterStyle}>
               <button type="button" style={secondaryButtonStyle} onClick={() => setInviteOpen(false)}>Cancel</button>
               <button type="button" style={primaryButtonStyle} onClick={savePendingDriver}>Save</button>
-              <button type="button" style={secondaryButtonStyle} onClick={copyDownloadLink}>Copy download link</button>
+              <button type="button" style={secondaryButtonStyle} onClick={copyInviteMessage} disabled={!driverInviteFetcher.data?.driver}>Copy invite message</button>
             </div>
           </div>
         </div>

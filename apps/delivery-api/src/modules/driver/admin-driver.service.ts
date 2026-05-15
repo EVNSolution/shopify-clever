@@ -2,12 +2,14 @@ import type {
   AdminDriverRow,
   CreatePendingDriverInput,
   CreatePendingDriverRecordInput,
-  ListAdminDriversInput
+  ListAdminDriversInput,
+  RegenerateInviteCodeInput
 } from './admin-driver.types.js';
 
 export type AdminDriverRepository = {
   createPendingDriver(input: CreatePendingDriverRecordInput): Promise<AdminDriverRow>;
   listDrivers(input: ListAdminDriversInput): Promise<AdminDriverRow[]>;
+  regenerateInviteCode(input: RegenerateInviteCodeInput): Promise<AdminDriverRow>;
 };
 
 export class AdminDriverService {
@@ -26,5 +28,9 @@ export class AdminDriverService {
 
   listDrivers(input: ListAdminDriversInput): Promise<AdminDriverRow[]> {
     return this.repository.listDrivers(input);
+  }
+
+  regenerateInviteCode(input: RegenerateInviteCodeInput): Promise<AdminDriverRow> {
+    return this.repository.regenerateInviteCode(input);
   }
 }

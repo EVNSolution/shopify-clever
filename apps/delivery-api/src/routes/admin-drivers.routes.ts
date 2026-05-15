@@ -52,6 +52,24 @@ export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: A
 
     return reply.code(200).send({ data: { drivers }, error: null });
   });
+
+  app.post<{ Params: { id: string } }>('/admin/drivers/:id/regenerate-invite-code', async (request, reply) => {
+    const authenticated = authenticate(request.headers.authorization, dependencies);
+    if (authenticated.status === 'unauthorized') {
+      return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
+    }
+
+    try {
+      const driver = await dependencies.adminDriverService.regenerateInviteCode({
+        driverId: request.params.id,
+        shopDomain: authenticated.shopDomain
+      });
+
+      return reply.code(200).send({ data: { driver }, error: null });
+    } catch (error) {
+      return reply.code(404).send(errorResponse('NOT_FOUND', 'Driver not found or cannot regenerate'));
+    }
+  });
 }
 
 type DriverInvitePayload = Pick<CreatePendingDriverInput, 'displayName' | 'inviteLink' | 'phone' | 'source'>;

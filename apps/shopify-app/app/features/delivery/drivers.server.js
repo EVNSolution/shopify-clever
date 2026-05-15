@@ -29,6 +29,19 @@ export async function fetchDeliveryDrivers(request, options = {}) {
   };
 }
 
+export async function regenerateDeliveryDriverInviteCode(request, driverId, options = {}) {
+  const result = await deliveryApiRequest(request, `/admin/drivers/${driverId}/regenerate-invite-code`, {
+    fetch: options.fetch,
+    method: "POST",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    driver: result.data?.driver ?? null,
+    errors: result.errors,
+  };
+}
+
 function buildPendingDriverPayload(payload) {
   return {
     source: DELIVERY_DRIVER_INVITE_SOURCE,

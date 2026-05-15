@@ -275,6 +275,8 @@ model Driver {
   displayName      String                @db.Text
   phone            String?               @db.Text
   status           DriverStatus          @default(ACTIVE)
+  inviteCode       String?               @db.Text
+  inviteCodeExpiresAt DateTime?          @db.Timestamptz(6)
   authSubject      String?               @unique @db.Text
   lastSeenAt       DateTime?             @db.Timestamptz(6)
   createdAt        DateTime              @default(now()) @db.Timestamptz(6)
@@ -285,6 +287,7 @@ model Driver {
   consentRecords   DriverConsentRecord[]
   driverProofMedia DriverProofMedia[]
 
+  @@unique([shopId, inviteCode])
   @@index([shopId, status])
   @@map("drivers")
 }

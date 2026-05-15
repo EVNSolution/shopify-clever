@@ -7,6 +7,8 @@ export type AdminDriverRow = {
   createdAt: string;
   displayName: string;
   id: string;
+  inviteCode: string | null;
+  inviteCodeExpiresAt: string | null;
   lastSeenAt: string | null;
   phone: string | null;
   recentEventsCount: number;
@@ -33,7 +35,13 @@ export type ListAdminDriversInput = {
   shopDomain: string;
 };
 
+export type RegenerateInviteCodeInput = {
+  driverId: string;
+  shopDomain: string;
+};
+
 export type AdminDriverServiceContract = {
   createPendingDriver(input: CreatePendingDriverInput): Promise<AdminDriverRow>;
   listDrivers(input: ListAdminDriversInput): Promise<AdminDriverRow[]>;
+  regenerateInviteCode(input: RegenerateInviteCodeInput): Promise<AdminDriverRow>;
 };
