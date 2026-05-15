@@ -120,39 +120,25 @@ The MVP host can be deployed from GitHub Actions after the EC2 host has a checke
 - TLS reverse proxy config: `/srv/clever-delivery-server/Caddyfile` (not committed; copy from `Caddyfile.example`)
 - compose files: `docker-compose.yml` + `docker-compose.prod.yml`
 
-Required GitHub repository variables:
+Required GitHub repository secrets:
 
 ```text
 EC2_HOST=3.39.216.177
 EC2_USER=ubuntu
-DEPLOY_PATH=/srv/clever-delivery-server
-AWS_REGION=ap-northeast-2
-EC2_SECURITY_GROUP_ID=<security group that controls EC2 SSH ingress>
-AWS_ROLE_TO_ASSUME=<GitHub OIDC deploy role ARN>
-```
-
-Required GitHub repository secrets:
-
-```text
+EC2_APP_DIR=/srv/clever-delivery-server
 EC2_SSH_KEY=<private key for the EC2 key pair>
 ```
 
 Deployment behavior:
 
-1. Manual `workflow_dispatch` deploys only from `main` when `deploy_production=true`.
-2. The GitHub-hosted runner resolves its current public IPv4 address.
-3. The workflow opens a temporary `/32` TCP/22 ingress rule on `EC2_SECURITY_GROUP_ID`.
-4. GitHub Actions connects to the EC2 host over SSH, rsyncs the source, and runs Docker Compose in `DEPLOY_PATH`.
-5. The workflow smoke-tests the public API and admin endpoints.
-6. The workflow revokes the exact security-group rule it created with `if: always()`.
+1. GitHub Actions connects to the EC2 host over SSH.
+2. `scripts/deploy-ec2.sh` initializes or updates a git checkout in `EC2_APP_DIR`.
+3. The script preserves `.env` and `Caddyfile` as host-managed runtime files.
+4. Docker Compose rebuilds the API image and restarts the API/PostgreSQL/Caddy stack.
+5. Prisma applies the current schema with `prisma db push --skip-generate`.
+6. The script verifies local `/healthz` and `/readyz` before completing.
 
-The GitHub OIDC role used by the workflow should be least-privilege and limited
-to `ec2:AuthorizeSecurityGroupIngress` and
-`ec2:RevokeSecurityGroupIngress` for the single deployment security group. Its
-trust policy should limit `sub` to
-`repo:EVNSolution/shopify-clever:ref:refs/heads/main`. Do not leave TCP/22 open
-to broad GitHub IP ranges or `0.0.0.0/0`; the production deploy path is designed
-for one runner IP `/32` at a time.
+The workflow runs automatically after changes merge to `dev`, and can also be run manually with `workflow_dispatch` for a selected ref.
 
 ### Proof-media S3-compatible storage
 
@@ -211,23 +197,18 @@ The command removes expired proof-media bytes through the configured storage bac
 For runtime request inspection without direct SSH, use the **Inspect EC2
 Runtime** workflow. See `docs/deployment/log-inspection.md`.
 
-### Self-hosted runner alternative
+### Self-hosted runner note
 
-If the project returns to a host-local self-hosted runner, use a repository
-self-hosted runner named `clever-delivery-server-mvp` with labels:
+The MVP host currently uses a repository self-hosted runner named `clever-delivery-server-mvp` with labels:
 
 ```text
 self-hosted, Linux, X64, clever-delivery-server, mvp-ec2
 ```
 
-That mode avoids opening SSH to GitHub-hosted runner IPs. The workflow would run
-on the EC2 host itself and execute `scripts/deploy-ec2.sh` locally. The only
-required GitHub secret for that mode is:
+This avoids opening SSH to GitHub-hosted runner IP ranges. The workflow runs on the EC2 host itself and executes `scripts/deploy-ec2.sh` locally. The only required GitHub secret for this mode is:
 
 ```text
 EC2_APP_DIR=/srv/clever-delivery-server
 ```
 
-The SSH-based workflow is the current production path; the self-hosted runner
-note is retained as an alternative when public runner IP exposure is not
-acceptable.
+The older SSH secrets (`EC2_HOST`, `EC2_USER`, `EC2_SSH_KEY`) can remain for break-glass/manual recovery but are not used by the current workflow.
