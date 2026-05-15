@@ -17,7 +17,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
     expect(prisma.routePlan.findUnique).toHaveBeenCalledWith({
       select: {
         constraints: true,
-        driver: { select: { id: true, phone: true, status: true } },
+        driver: { select: { authSubject: true, id: true, phone: true, status: true } },
         id: true,
         name: true,
         planDate: true,
@@ -78,14 +78,14 @@ describe('PrismaDriverRouteAccessRepository', () => {
       orderBy: [{ planDate: 'asc' }, { name: 'asc' }],
       select: {
         constraints: true,
-        driver: { select: { id: true, phone: true, status: true } },
+        driver: { select: { authSubject: true, id: true, phone: true, status: true } },
         id: true,
         name: true,
         planDate: true,
         shop: { select: { shopDomain: true } }
       },
       where: {
-        driver: { is: { phone: '+14165550123', status: 'ACTIVE' } },
+        driver: { is: { authSubject: { not: null }, phone: '+14165550123', status: 'ACTIVE' } },
         status: { in: ['ASSIGNED', 'IN_PROGRESS', 'OPTIMIZED'] }
       }
     });
@@ -124,6 +124,26 @@ describe('PrismaDriverRouteAccessRepository', () => {
     expect(JSON.stringify(result)).not.toContain('address1');
   });
 
+  test('does not issue route access for active drivers that have not verified an invite code', async () => {
+    const { prisma } = createPrismaHarness({
+      phoneRoutePlans: [
+        routePlanRecord({
+          authSubject: null,
+          id: '22222222-2222-4222-8222-222222222222'
+        })
+      ],
+      phoneDrivers: [{ authSubject: null, status: 'ACTIVE' }]
+    });
+    const repository = new PrismaDriverRouteAccessRepository(prisma as never);
+
+    const result = await repository.lookupRouteAccess({
+      phoneE164: '+14165550123',
+      routeContext: null
+    });
+
+    expect(result).toEqual({ status: 'NOT_FOUND' });
+  });
+
   test('allows a registered active driver phone even when no active routes are assigned', async () => {
     const { prisma } = createPrismaHarness({
       phoneDrivers: [{ status: 'ACTIVE' }],
@@ -137,7 +157,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
     });
 
     expect(prisma.driver.findMany).toHaveBeenCalledWith({
-      select: { status: true },
+      select: { authSubject: true, status: true },
       where: { phone: '+14165550123' }
     });
     expect(result).toEqual({
@@ -196,7 +216,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
       orderBy: [{ planDate: 'asc' }, { name: 'asc' }],
       select: {
         constraints: true,
-        driver: { select: { id: true, phone: true, status: true } },
+        driver: { select: { authSubject: true, id: true, phone: true, status: true } },
         id: true,
         name: true,
         planDate: true,
@@ -205,7 +225,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
       take: 3,
       where: {
         constraints: { path: ['routeScope', 'routeScopeKey'], equals: 'toronto-shared-route-scope' },
-        driver: { is: { phone: '+14165550123', status: 'ACTIVE' } }
+        driver: { is: { authSubject: { not: null }, phone: '+14165550123', status: 'ACTIVE' } }
       }
     });
     expect(result).toEqual({
@@ -274,7 +294,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
 function createPrismaHarness(
   overrides: {
     driverStatus?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
-    phoneDrivers?: Array<{ status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' }>;
+    phoneDrivers?: Array<{ authSubject?: string | null; status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED' }>;
     routePlan?: ReturnType<typeof routePlanRecord> | null;
     sharedRoutePlans?: ReturnType<typeof routePlanRecord>[];
     phoneRoutePlans?: ReturnType<typeof routePlanRecord>[];
@@ -315,6 +335,7 @@ function createPrismaHarness(
 
 function routePlanRecord(
   overrides: {
+    authSubject?: string | null;
     driverStatus?: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
     id?: string;
     name?: string;
@@ -334,6 +355,7 @@ function routePlanRecord(
       timezone: 'America/Toronto'
     },
     driver: {
+      authSubject: overrides.authSubject === undefined ? 'driver-auth-subject' : overrides.authSubject,
       id: 'driver-id',
       phone: '+14165550123',
       status: overrides.driverStatus ?? 'ACTIVE'

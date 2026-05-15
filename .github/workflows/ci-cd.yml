@@ -32,6 +32,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 concurrency:
   group: shopify-clever-${{ github.ref }}
@@ -97,6 +98,9 @@ jobs:
       EC2_USER: ${{ vars.EC2_USER }}
       DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
       EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      EC2_SECURITY_GROUP_ID: ${{ vars.EC2_SECURITY_GROUP_ID }}
+      AWS_ROLE_TO_ASSUME: ${{ vars.AWS_ROLE_TO_ASSUME }}
 
     steps:
       - name: Checkout
@@ -108,6 +112,54 @@ jobs:
           test -n "$EC2_USER"
           test -n "$DEPLOY_PATH"
           test -n "$EC2_SSH_KEY"
+          test -n "$AWS_REGION"
+          test -n "$EC2_SECURITY_GROUP_ID"
+          test -n "$AWS_ROLE_TO_ASSUME"
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ vars.AWS_REGION }}
+
+      - name: Resolve runner public IPv4
+        run: |
+          set -euo pipefail
+          runner_ip="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
+          if ! printf '%s' "$runner_ip" | grep -Eq '^[0-9]{1,3}(\.[0-9]{1,3}){3}$'; then
+            echo "::error::Unable to resolve GitHub runner public IPv4: $runner_ip"
+            exit 1
+          fi
+          echo "RUNNER_SSH_CIDR=${runner_ip}/32" >> "$GITHUB_ENV"
+          echo "GitHub runner SSH CIDR: ${runner_ip}/32" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Authorize temporary SSH ingress
+        run: |
+          set -euo pipefail
+          echo "Authorizing SSH from ${RUNNER_SSH_CIDR} to ${EC2_SECURITY_GROUP_ID}"
+          set +e
+          output="$(aws ec2 authorize-security-group-ingress \
+            --region "$AWS_REGION" \
+            --group-id "$EC2_SECURITY_GROUP_ID" \
+            --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${RUNNER_SSH_CIDR},Description=GitHub Actions production deploy ${GITHUB_RUN_ID}}]" \
+            --query 'SecurityGroupRules[0].SecurityGroupRuleId' \
+            --output text 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            if printf '%s' "$output" | grep -q 'InvalidPermission.Duplicate'; then
+              echo "SSH ingress already exists for ${RUNNER_SSH_CIDR}; leaving it unchanged."
+              exit 0
+            fi
+            printf '%s\n' "$output"
+            exit "$status"
+          fi
+          if [ -z "$output" ] || [ "$output" = "None" ]; then
+            echo "::error::AWS did not return a security group rule id for temporary SSH ingress."
+            exit 1
+          fi
+          echo "RUNNER_SSH_RULE_ID=$output" >> "$GITHUB_ENV"
+          echo "Temporary SSH security group rule: $output" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Configure SSH
         run: |
@@ -166,3 +218,28 @@ jobs:
           test "$(curl -sS -L -o "$admin_body" -w '%{http_code}' https://clever-admin.3-39-216-177.sslip.io/auth/login)" = "200"
           grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$admin_body"
           grep -q 'name="shopify-api-key"' "$admin_body"
+
+      - name: Revoke temporary SSH ingress
+        if: ${{ always() }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RUNNER_SSH_RULE_ID:-}" ] || [ -z "${AWS_REGION:-}" ]; then
+            echo "No workflow-created SSH ingress rule id found; skipping revoke."
+            exit 0
+          fi
+          echo "Revoking temporary SSH security group rule ${RUNNER_SSH_RULE_ID}"
+          set +e
+          output="$(aws ec2 revoke-security-group-ingress \
+            --region "$AWS_REGION" \
+            --group-id "$EC2_SECURITY_GROUP_ID" \
+            --security-group-rule-ids "$RUNNER_SSH_RULE_ID" 2>&1)"
+          status=$?
+          set -e
+          if [ "$status" -ne 0 ]; then
+            if printf '%s' "$output" | grep -Eq 'InvalidPermission.NotFound|InvalidSecurityGroupRuleId.NotFound'; then
+              echo "Temporary SSH ingress rule was already absent."
+            else
+              printf '%s\n' "$output"
+              exit "$status"
+            fi
+          fi

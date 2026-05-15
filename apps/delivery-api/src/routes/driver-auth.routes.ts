@@ -11,12 +11,20 @@ export function registerDriverAuthRoutes(app: FastifyInstance, dependencies: Dri
   app.post<{ Body: { phone: string; inviteCode: string } }>('/driver/auth/verify-invite', async (request, reply) => {
     const { phone, inviteCode } = request.body;
 
-    if (typeof phone !== 'string' || typeof inviteCode !== 'string') {
+    if (typeof phone !== 'string' || !/^\+[1-9]\d{7,14}$/u.test(phone.trim()) || typeof inviteCode !== 'string') {
       return reply.code(400).send({ data: null, error: { code: 'BAD_REQUEST', message: 'phone and inviteCode are required' } });
     }
 
+    const normalizedInviteCode = inviteCode.trim().toUpperCase();
+    if (!/^[0-9A-F]{6}$/u.test(normalizedInviteCode)) {
+      return reply.code(400).send({ data: null, error: { code: 'BAD_REQUEST', message: 'inviteCode must be a 6-character hexadecimal code' } });
+    }
+
     try {
-      const sessionInfo = await dependencies.driverAuthRepository.verifyInvite({ phone, inviteCode });
+      const sessionInfo = await dependencies.driverAuthRepository.verifyInvite({
+        phone: phone.trim(),
+        inviteCode: normalizedInviteCode
+      });
       
       const tokenResult = signDriverToken(
         {

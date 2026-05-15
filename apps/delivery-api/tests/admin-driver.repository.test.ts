@@ -2,6 +2,10 @@ import { describe, expect, test, vi } from 'vitest';
 
 import { PrismaAdminDriverRepository } from '../src/modules/driver/admin-driver.repository.js';
 
+const anyDateMatcher: unknown = expect.any(Date);
+const anyStringMatcher: unknown = expect.any(String);
+const sixHexCodeMatcher: unknown = expect.stringMatching(/^[0-9A-F]{6}$/u);
+
 describe('PrismaAdminDriverRepository', () => {
   test('upserts the shop and creates a pending invite driver', async () => {
     const { prisma } = createPrismaHarness({ existingDriver: null });
@@ -22,6 +26,8 @@ describe('PrismaAdminDriverRepository', () => {
       data: {
         authSubject: null,
         displayName: '+821089216198',
+        inviteCode: sixHexCodeMatcher,
+        inviteCodeExpiresAt: anyDateMatcher,
         phone: '+821089216198',
         shopId: 'shop-id',
         status: 'ACTIVE'
@@ -33,6 +39,8 @@ describe('PrismaAdminDriverRepository', () => {
         authStatus: 'INVITE_PENDING',
         authSubject: null,
         displayName: '+821089216198',
+        inviteCode: anyStringMatcher,
+        inviteCodeExpiresAt: anyStringMatcher,
         phone: '+821089216198',
         recentEventsCount: 0,
         status: 'PENDING'
@@ -54,13 +62,47 @@ describe('PrismaAdminDriverRepository', () => {
 
     expect(prisma.driver.create).not.toHaveBeenCalled();
     expect(prisma.driver.update).toHaveBeenCalledWith({
-      data: { displayName: 'Minji Kim', phone: '+821089216198' },
+      data: {
+        displayName: 'Minji Kim',
+        inviteCode: sixHexCodeMatcher,
+        inviteCodeExpiresAt: anyDateMatcher,
+        phone: '+821089216198'
+      },
       include: { _count: { select: { driverEvents: true } } },
       where: { id: 'existing-driver-id' }
     });
     expect(driver.id).toBe('existing-driver-id');
     expect(driver.displayName).toBe('Minji Kim');
     expect(driver.authStatus).toBe('INVITE_PENDING');
+  });
+
+  test('regenerates an invite code only for the authenticated shop driver', async () => {
+    const regeneratedDriver = driverRecord({ id: 'driver-id', inviteCode: 'ABC123' });
+    const { prisma } = createPrismaHarness({ updatedDriver: regeneratedDriver });
+    const repository = new PrismaAdminDriverRepository(prisma as never);
+
+    const driver = await repository.regenerateInviteCode({
+      driverId: 'driver-id',
+      shopDomain: 'example.myshopify.com'
+    });
+
+    expect(prisma.shop.findUnique).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { shopDomain: 'example.myshopify.com' }
+    });
+    expect(prisma.driver.update).toHaveBeenCalledWith({
+      data: {
+        inviteCode: sixHexCodeMatcher,
+        inviteCodeExpiresAt: anyDateMatcher
+      },
+      include: { _count: { select: { driverEvents: true } } },
+      where: { id: 'driver-id', shopId: 'shop-id' }
+    });
+    expect(driver).toEqual(expect.objectContaining({
+      id: 'driver-id',
+      inviteCode: 'ABC123',
+      inviteCodeExpiresAt: '2026-05-12T02:00:00.000Z'
+    }));
   });
 
   test('lists only drivers for the requested shop and masks linked auth subjects', async () => {
@@ -160,6 +202,8 @@ function driverRecord(overrides: Partial<{
   lastSeenAt: Date | null;
   phone: string | null;
   recentEventsCount: number;
+  inviteCode: string | null;
+  inviteCodeExpiresAt: Date | null;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
   updatedAt: Date;
 }> = {}): {
@@ -168,6 +212,8 @@ function driverRecord(overrides: Partial<{
   createdAt: Date;
   displayName: string;
   id: string;
+  inviteCode: string | null;
+  inviteCodeExpiresAt: Date | null;
   lastSeenAt: Date | null;
   phone: string | null;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
@@ -179,6 +225,8 @@ function driverRecord(overrides: Partial<{
     createdAt: overrides.createdAt ?? new Date('2026-05-11T02:00:00.000Z'),
     displayName: overrides.displayName ?? '+821089216198',
     id: overrides.id ?? 'driver-id',
+    inviteCode: overrides.inviteCode ?? 'ABCDEF',
+    inviteCodeExpiresAt: overrides.inviteCodeExpiresAt ?? new Date('2026-05-12T02:00:00.000Z'),
     lastSeenAt: overrides.lastSeenAt ?? null,
     phone: overrides.phone ?? '+821089216198',
     status: overrides.status ?? 'ACTIVE',

@@ -66,7 +66,7 @@ export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: A
       });
 
       return reply.code(200).send({ data: { driver }, error: null });
-    } catch (error) {
+    } catch {
       return reply.code(404).send(errorResponse('NOT_FOUND', 'Driver not found or cannot regenerate'));
     }
   });

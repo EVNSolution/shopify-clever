@@ -14,6 +14,7 @@ type DriverRouteAccessPrismaClient = Pick<PrismaClient, 'driver' | 'routePlan'>;
 type DriverRoutePlanRecord = {
   constraints: unknown;
   driver: {
+    authSubject: string | null;
     id: string;
     phone: string | null;
     status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
@@ -28,7 +29,7 @@ type DriverRoutePlanRecord = {
 
 const routePlanSelect = {
   constraints: true,
-  driver: { select: { id: true, phone: true, status: true } },
+  driver: { select: { authSubject: true, id: true, phone: true, status: true } },
   id: true,
   name: true,
   planDate: true,
@@ -67,7 +68,7 @@ export class PrismaDriverRouteAccessRepository implements DriverRouteAccessServi
       orderBy: [{ planDate: 'asc' }, { name: 'asc' }],
       select: routePlanSelect,
       where: {
-        driver: { is: { phone: phoneE164, status: 'ACTIVE' } },
+        driver: { is: { authSubject: { not: null }, phone: phoneE164, status: 'ACTIVE' } },
         status: { in: ['ASSIGNED', 'IN_PROGRESS', 'OPTIMIZED'] }
       }
     });
@@ -85,14 +86,14 @@ export class PrismaDriverRouteAccessRepository implements DriverRouteAccessServi
     }
 
     const drivers = await this.prisma.driver.findMany({
-      select: { status: true },
+      select: { authSubject: true, status: true },
       where: { phone: phoneE164 }
     });
     if (drivers.length === 0) {
       return { status: 'NOT_FOUND' };
     }
 
-    if (drivers.some((driver) => driver.status === 'ACTIVE')) {
+    if (drivers.some((driver) => driver.status === 'ACTIVE' && driver.authSubject !== null)) {
       return {
         status: 'ROUTES_FOUND',
         routes: []
@@ -101,6 +102,10 @@ export class PrismaDriverRouteAccessRepository implements DriverRouteAccessServi
 
     if (drivers.some((driver) => driver.status === 'SUSPENDED')) {
       return { status: 'BLOCKED' };
+    }
+
+    if (drivers.some((driver) => driver.status === 'ACTIVE')) {
+      return { status: 'NOT_FOUND' };
     }
 
     return {
@@ -119,7 +124,7 @@ export class PrismaDriverRouteAccessRepository implements DriverRouteAccessServi
       take: 3,
       where: {
         constraints: { path: ['routeScope', 'routeScopeKey'], equals: input.routeContext },
-        driver: { is: { phone: input.phoneE164, status: 'ACTIVE' } }
+        driver: { is: { authSubject: { not: null }, phone: input.phoneE164, status: 'ACTIVE' } }
       }
     });
 
@@ -158,6 +163,10 @@ function mapRoutePlan(
 
   if (routePlan.driver.status === 'SUSPENDED') {
     return { status: 'BLOCKED' };
+  }
+
+  if (routePlan.driver.authSubject === null) {
+    return { status: 'NOT_FOUND' };
   }
 
   return {

@@ -53,7 +53,7 @@ export class PrismaAdminDriverRepository {
         include: driverInclude,
         where: { id: existing.id }
       });
-      return toAdminDriverRow(driver as DriverRecord);
+      return toAdminDriverRow(driver);
     }
 
     const driver = await this.prisma.driver.create({
@@ -69,7 +69,7 @@ export class PrismaAdminDriverRepository {
       include: driverInclude
     });
 
-    return toAdminDriverRow(driver as DriverRecord);
+    return toAdminDriverRow(driver);
   }
 
   async listDrivers(input: ListAdminDriversInput): Promise<AdminDriverRow[]> {
@@ -88,7 +88,7 @@ export class PrismaAdminDriverRepository {
       where: { shopId: shop.id }
     });
 
-    return drivers.map((driver) => toAdminDriverRow(driver as DriverRecord));
+    return drivers.map((driver) => toAdminDriverRow(driver));
   }
 
   async regenerateInviteCode(input: { driverId: string; shopDomain: string }): Promise<AdminDriverRow> {
@@ -110,7 +110,7 @@ export class PrismaAdminDriverRepository {
       where: { id: input.driverId, shopId: shop.id }
     });
 
-    return toAdminDriverRow(driver as DriverRecord);
+    return toAdminDriverRow(driver);
   }
 }
 

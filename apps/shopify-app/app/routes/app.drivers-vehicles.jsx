@@ -395,6 +395,19 @@ const modalHelpStyle = {
   margin: 0,
 };
 
+const inviteMessagePreviewStyle = {
+  background: "#f6f6f7",
+  border: "1px solid #d6d6d6",
+  borderRadius: "8px",
+  color: "#303030",
+  fontFamily: "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace",
+  fontSize: "12px",
+  lineHeight: 1.5,
+  margin: "8px 0 0",
+  padding: "10px",
+  whiteSpace: "pre-wrap",
+};
+
 const modalFooterStyle = {
   alignItems: "center",
   borderTop: "1px solid #e3e3e3",
@@ -468,6 +481,11 @@ function formatDriverTimestamp(value) {
 function formatRecentEvents(value) {
   if (typeof value !== "number" || value <= 0) return "No events";
   return value === 1 ? "1 event" : `${value} events`;
+}
+
+function buildDriverInviteMessage({ downloadLink, inviteCode }) {
+  const code = textOrFallback(inviteCode, "저장 후 인증코드가 여기에 표시됩니다.");
+  return `배송원 앱 다운로드 링크: ${downloadLink}\n인증코드: ${code}`;
 }
 
 function mergeDriverRows(baseRows, submittedRow) {
@@ -554,6 +572,12 @@ export default function DriversVehiclesPage() {
   }, [allDrivers, searchText]);
 
   const selectedCountryCode = countryDialCodeOptions.find((option) => option.id === selectedCountryCodeId) ?? countryDialCodeOptions[0];
+  const currentInviteDriver = driverInviteFetcher.data?.driver ?? null;
+  const currentInviteCode = currentInviteDriver?.inviteCode;
+  const inviteMessagePreview = buildDriverInviteMessage({
+    downloadLink: getDriverDownloadLink(DRIVER_DOWNLOAD_LINK),
+    inviteCode: currentInviteCode,
+  });
 
   const openInviteModal = () => {
     setInviteOpen(true);
@@ -594,9 +618,29 @@ export default function DriversVehiclesPage() {
   };
 
   const copyInviteMessage = async () => {
-    const downloadLink = getDriverDownloadLink(DRIVER_DOWNLOAD_LINK);
-    const code = driverInviteFetcher.data?.driver?.inviteCode;
-    const message = code ? `배송원 앱 다운로드 링크: ${downloadLink}\n확인코드: ${code}` : downloadLink;
+    if (!currentInviteCode) {
+      setCopyStatus("배송원을 저장하거나 인증코드를 생성한 뒤 초대 메시지를 복사하세요.");
+      return;
+    }
+
+    if (!navigator.clipboard?.writeText) {
+      setCopyStatus("클립보드 복사 실패. 아래 내용을 직접 복사하세요:\n" + inviteMessagePreview);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(inviteMessagePreview);
+      setCopyStatus("초대 메시지가 복사되었습니다.");
+    } catch {
+      setCopyStatus("클립보드 복사 실패. 아래 내용을 직접 복사하세요:\n" + inviteMessagePreview);
+    }
+  };
+
+  const copyDriverInviteMessage = async (inviteCode) => {
+    const message = buildDriverInviteMessage({
+      downloadLink: getDriverDownloadLink(DRIVER_DOWNLOAD_LINK),
+      inviteCode,
+    });
 
     if (!navigator.clipboard?.writeText) {
       setCopyStatus("클립보드 복사 실패. 아래 내용을 직접 복사하세요:\n" + message);
@@ -693,7 +737,7 @@ export default function DriversVehiclesPage() {
                   <td style={tableCellStyle}><span style={statusPillStyle}>{driver.status}</span></td>
                   <td style={tableCellStyle}>
                     {driver.authStatus}
-                    {driver.status === "Pending" && driver.inviteCode && (
+                    {driver.inviteCode ? (
                       <div style={{ marginTop: "4px", fontSize: "12px", color: "#616161" }}>
                         코드: <strong>{driver.inviteCode}</strong>
                         <button 
@@ -702,6 +746,23 @@ export default function DriversVehiclesPage() {
                           onClick={() => regenerateInviteCode(driver.id)}
                         >
                           재생성
+                        </button>
+                        <button
+                          type="button"
+                          style={{ marginLeft: "6px", background: "none", border: "none", color: "#174a7c", cursor: "pointer", padding: 0 }}
+                          onClick={() => copyDriverInviteMessage(driver.inviteCode)}
+                        >
+                          복사
+                        </button>
+                      </div>
+                    ) : (
+                      <div style={{ marginTop: "4px" }}>
+                        <button
+                          type="button"
+                          style={{ ...secondaryButtonStyle, minHeight: "28px", padding: "3px 8px" }}
+                          onClick={() => regenerateInviteCode(driver.id)}
+                        >
+                          인증코드 생성
                         </button>
                       </div>
                     )}
@@ -787,12 +848,16 @@ export default function DriversVehiclesPage() {
               <p style={modalHelpStyle}>
                 We will keep the invite keyed by phone number. For MVP, copy the driver app download link and send it manually.
               </p>
+              <div>
+                <p style={modalHelpStyle}>Invite message preview</p>
+                <pre style={inviteMessagePreviewStyle}>{inviteMessagePreview}</pre>
+              </div>
               {copyStatus ? <p style={modalHelpStyle} role="status">{copyStatus}</p> : null}
             </div>
             <div style={modalFooterStyle}>
               <button type="button" style={secondaryButtonStyle} onClick={() => setInviteOpen(false)}>Cancel</button>
               <button type="button" style={primaryButtonStyle} onClick={savePendingDriver}>Save</button>
-              <button type="button" style={secondaryButtonStyle} onClick={copyInviteMessage} disabled={!driverInviteFetcher.data?.driver}>Copy invite message</button>
+              <button type="button" style={secondaryButtonStyle} onClick={copyInviteMessage} disabled={!currentInviteCode}>Copy invite message</button>
             </div>
           </div>
         </div>
