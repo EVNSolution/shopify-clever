@@ -111,9 +111,19 @@ Required GitHub repository variables for deployment:
 - `EC2_USER`
 - `DEPLOY_PATH`
 
+Optional variables for temporary GitHub-hosted runner SSH ingress during custom deploy:
+
+- `EC2_SSH_SECURITY_GROUP_ID`
+- `AWS_REGION` — defaults to `ap-northeast-2` if omitted
+
 Required GitHub repository secret:
 
 - `EC2_SSH_KEY`
+
+Optional secrets for temporary GitHub-hosted runner SSH ingress during custom deploy:
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
 
 Additional GitHub repository secrets for the `clever-route` custom runtime, when managing custom secrets through Actions instead of the existing EC2-only env file:
 

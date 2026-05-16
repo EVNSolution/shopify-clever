@@ -39,6 +39,13 @@ Existing deployment secrets/vars are still required:
 - Secret: `EC2_SSH_KEY`
 - Vars: `EC2_HOST`, `EC2_USER`, `DEPLOY_PATH`
 
+Optional SSH-ingress automation for GitHub-hosted runners:
+
+- Secrets: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
+- Vars: `EC2_SSH_SECURITY_GROUP_ID`, optional `AWS_REGION`
+
+When these optional values are present, the custom deploy job authorizes only the current runner public IP as `/32` for TCP/22 and revokes that ingress rule at the end of the job. If they are absent, the workflow expects SSH ingress to already be reachable.
+
 The deploy job writes custom runtime secrets to this untracked EC2 file when all custom GitHub Actions secrets are present:
 
 ```text
