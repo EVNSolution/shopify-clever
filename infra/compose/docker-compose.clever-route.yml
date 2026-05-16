@@ -1,0 +1,95 @@
+name: shopify-clever-route
+
+services:
+  shopify-app-clever-route:
+    build:
+      context: ../../apps/shopify-app
+      dockerfile: Dockerfile
+    image: shopify-clever-route-shopify-app:local
+    env_file:
+      - ../env/shopify-app-clever-route.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY_2:?Set SHOPIFY_API_KEY_2 in the EC2/GitHub secret env file}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET_2:?Set SHOPIFY_API_SECRET_2 in the EC2/GitHub secret env file}
+      SHOPIFY_APP_DISTRIBUTION: single_merchant
+      SHOPIFY_APP_URL: https://clever-test-admin.3-39-216-177.sslip.io
+      CLEVER_DELIVERY_API_URL: http://delivery-api-clever-route:3000
+    restart: unless-stopped
+    volumes:
+      - /srv/shopify-clever-test/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
+    networks:
+      - shared-caddy
+
+  delivery-api-clever-route:
+    build:
+      context: ../../apps/delivery-api
+      dockerfile: Dockerfile
+    image: shopify-clever-route-delivery-api:local
+    depends_on:
+      postgres-clever-route:
+        condition: service_healthy
+      delivery-api-migrate-clever-route:
+        condition: service_completed_successfully
+    env_file:
+      - ../env/delivery-api-clever-route.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      DATABASE_URL: postgresql://clever:${POSTGRES_PASSWORD_2:?Set POSTGRES_PASSWORD_2 in the EC2/GitHub secret env file}@postgres-clever-route:5432/clever_delivery_test
+      SHOPIFY_API_VERSION: 2026-04
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY_2:?Set SHOPIFY_API_KEY_2 in the EC2/GitHub secret env file}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET_2:?Set SHOPIFY_API_SECRET_2 in the EC2/GitHub secret env file}
+      SHOPIFY_APP_URL: https://clever-test-admin.3-39-216-177.sslip.io
+      SHOPIFY_WEBHOOK_SECRET: ${SHOPIFY_API_SECRET_2:?Set SHOPIFY_API_SECRET_2 in the EC2/GitHub secret env file}
+      SHOPIFY_TOKEN_ENCRYPTION_KEY: ${SHOPIFY_TOKEN_ENCRYPTION_KEY_2:?Set SHOPIFY_TOKEN_ENCRYPTION_KEY_2 in the EC2/GitHub secret env file}
+      JWT_SECRET: ${JWT_SECRET_2:?Set JWT_SECRET_2 in the EC2/GitHub secret env file}
+      DRIVER_PROOF_MEDIA_STORAGE_BACKEND: local
+      DRIVER_PROOF_MEDIA_STORAGE_DIR: /app/var/driver-proof-media
+    restart: unless-stopped
+    volumes:
+      - /srv/shopify-clever-test/data/delivery-proof-media:/app/var/driver-proof-media
+    networks:
+      - shared-caddy
+      - clever-route-internal
+
+  delivery-api-migrate-clever-route:
+    build:
+      context: ../../apps/delivery-api
+      dockerfile: Dockerfile
+      target: build
+    image: shopify-clever-route-delivery-api-migrate:local
+    depends_on:
+      postgres-clever-route:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://clever:${POSTGRES_PASSWORD_2:?Set POSTGRES_PASSWORD_2 in the EC2/GitHub secret env file}@postgres-clever-route:5432/clever_delivery_test
+    command: ["npm", "exec", "--", "prisma", "db", "push", "--skip-generate"]
+    restart: "no"
+    networks:
+      - clever-route-internal
+
+  postgres-clever-route:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_DB: clever_delivery_test
+      POSTGRES_USER: clever
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD_2:?Set POSTGRES_PASSWORD_2 in the EC2/GitHub secret env file}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U clever -d clever_delivery_test"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - /srv/shopify-clever-test/data/postgres:/var/lib/postgresql/data
+      - /srv/shopify-clever-test/data/postgres-backups:/backups
+    networks:
+      - clever-route-internal
+
+networks:
+  shared-caddy:
+    external: true
+    name: ${SHARED_CADDY_NETWORK:-compose_default}
+  clever-route-internal:

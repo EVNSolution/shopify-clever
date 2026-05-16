@@ -49,6 +49,8 @@ data/
 !*.env.example
 infra/env/*.env
 !infra/env/*.env.example
+infra/compose/.env*
+infra/compose/*.env
 .envrc
 *.local
 
