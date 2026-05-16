@@ -9,13 +9,21 @@ Monorepo for the Clever Shopify embedded admin app and delivery API.
 
 The apps stay as separate runtime roots. The root package only orchestrates app-level installs, builds, tests, and deployment checks so each Prisma app keeps an independent generated client.
 
-## Public endpoints
+## Public and custom endpoints
+
+Public/App Store runtime:
 
 - App URL: `https://clever-admin.3-39-216-177.sslip.io`
 - Redirect URL: `https://clever-admin.3-39-216-177.sslip.io/auth/callback`
 - Delivery API: `https://clever-delivery.3-39-216-177.sslip.io`
 
-The public app URL hostname must not contain `shopify` or `example`.
+Custom `clever-route` runtime on the same EC2/EIP:
+
+- App URL: `https://clever-test-admin.3-39-216-177.sslip.io`
+- Redirect URL: `https://clever-test-admin.3-39-216-177.sslip.io/auth/callback`
+- Delivery API: `https://clever-test-delivery.3-39-216-177.sslip.io`
+
+Public URL hostnames must not contain `shopify` or `example`.
 
 ## Local commands
 
@@ -34,7 +42,36 @@ Compose validation with placeholder env files:
 cp infra/env/shopify-app.env.example infra/env/shopify-app.env
 cp infra/env/delivery-api.env.example infra/env/delivery-api.env
 docker compose -f infra/compose/docker-compose.prod.yml config --quiet
+rm -f infra/env/shopify-app.env infra/env/delivery-api.env
+
+cp infra/env/shopify-app-clever-route.env.example infra/env/shopify-app-clever-route.env
+cp infra/env/delivery-api-clever-route.env.example infra/env/delivery-api-clever-route.env
+cat >/tmp/shopify-clever-route-compose.env <<'ENV'
+SHOPIFY_API_KEY_2=dummy
+SHOPIFY_API_SECRET_2=dummy
+POSTGRES_PASSWORD_2=dummy
+SHOPIFY_TOKEN_ENCRYPTION_KEY_2=dummy
+JWT_SECRET_2=dummy
+SHARED_CADDY_NETWORK=compose_default
+ENV
+docker compose --env-file /tmp/shopify-clever-route-compose.env \
+  -f infra/compose/docker-compose.clever-route.yml config --quiet
+rm -f infra/env/shopify-app-clever-route.env infra/env/delivery-api-clever-route.env /tmp/shopify-clever-route-compose.env
 ```
+
+## Runtime identities
+
+The monorepo contains two Shopify app config files:
+
+- `apps/shopify-app/shopify.app.toml` — public/App Store app.
+- `apps/shopify-app/shopify.app.clever-route.toml` — custom distribution app for operating-store testing before public approval.
+
+The runtime distribution is selected with `SHOPIFY_APP_DISTRIBUTION`:
+
+- `app_store` for the public runtime.
+- `single_merchant` for the `clever-route` custom runtime.
+
+The Shopify Custom distribution store domain is not a repo setting. Enter it later in the Shopify Dev Dashboard when generating the install link.
 
 ## GitHub Actions strategy for the private repo
 
@@ -46,6 +83,8 @@ so the workflow is intentionally split:
   public URL hostname guard, and Compose config validation.
 - Production deploy is manual only: run the `CI/CD` workflow on `main` with
   `deploy_production=true`.
+- Custom `clever-route` deploy is also manual only: run the same workflow on
+  `main` with `deploy_clever_route=true`.
 - The workflow does not use a GitHub deployment environment because private
   repository environments/protection rules are not available on the current Free
   org plan.
@@ -54,10 +93,12 @@ so the workflow is intentionally split:
 
 ## Production deployment
 
-Production runs on the existing delivery EC2 instance at `/srv/shopify-clever` behind Caddy:
+Production and custom runtimes run on the existing delivery EC2 instance at `/srv/shopify-clever` behind Caddy:
 
 - `clever-admin.3-39-216-177.sslip.io` → `shopify-app:3000`
 - `clever-delivery.3-39-216-177.sslip.io` → `delivery-api:3000`
+- `clever-test-admin.3-39-216-177.sslip.io` → `shopify-app-clever-route:3000`
+- `clever-test-delivery.3-39-216-177.sslip.io` → `delivery-api-clever-route:3000`
 
 Runtime env files are intentionally not committed:
 
@@ -74,8 +115,18 @@ Required GitHub repository secret:
 
 - `EC2_SSH_KEY`
 
-Manual CD validates both apps, syncs source to EC2, rebuilds/restarts Compose on
-the host, and smoke-tests the public endpoints.
+Additional GitHub repository secrets for the `clever-route` custom runtime:
+
+- `SHOPIFY_API_KEY_2`
+- `SHOPIFY_API_SECRET_2`
+- `POSTGRES_PASSWORD_2`
+- `SHOPIFY_TOKEN_ENCRYPTION_KEY_2`
+- `JWT_SECRET_2`
+
+Manual CD validates both apps, syncs source to EC2, rebuilds/restarts the selected Compose runtime on
+the host, and smoke-tests the selected public or custom endpoints.
+
+More details: `docs/deployment/clever-route-one-server-runtime-2026-05-16.md`.
 
 ## Deployment evidence
 

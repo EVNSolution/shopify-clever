@@ -3,8 +3,8 @@ name: CI/CD
 # Private GitHub Free strategy:
 # - keep CI automatic and lightweight because private GitHub-hosted runs consume the
 #   org monthly Actions quota.
-# - keep production deploy manual because deployment environments/protection rules
-#   are not available for private repos on the current Free org plan.
+# - keep production/custom deploys manual because deployment environments/protection
+#   rules are not available for private repos on the current Free org plan.
 on:
   pull_request:
     paths:
@@ -25,7 +25,12 @@ on:
   workflow_dispatch:
     inputs:
       deploy_production:
-        description: "Deploy the current main branch to the production EC2 host"
+        description: "Deploy the current main branch to the production EC2 runtime"
+        required: true
+        default: false
+        type: boolean
+      deploy_clever_route:
+        description: "Deploy the current main branch to the clever-route custom EC2 runtime"
         required: true
         default: false
         type: boolean
@@ -78,18 +83,33 @@ jobs:
         run: |
           cp infra/env/shopify-app.env.example infra/env/shopify-app.env
           cp infra/env/delivery-api.env.example infra/env/delivery-api.env
+          cp infra/env/shopify-app-clever-route.env.example infra/env/shopify-app-clever-route.env
+          cp infra/env/delivery-api-clever-route.env.example infra/env/delivery-api-clever-route.env
 
-      - name: Validate compose file
+      - name: Validate production compose file
         run: docker compose -f infra/compose/docker-compose.prod.yml config --quiet
 
-  deploy:
-    name: Deploy to EC2
+      - name: Validate clever-route compose file
+        run: |
+          cat >/tmp/shopify-clever-route-compose.env <<'ENV'
+          SHOPIFY_API_KEY_2=dummy
+          SHOPIFY_API_SECRET_2=dummy
+          POSTGRES_PASSWORD_2=dummy
+          SHOPIFY_TOKEN_ENCRYPTION_KEY_2=dummy
+          JWT_SECRET_2=dummy
+          SHARED_CADDY_NETWORK=compose_default
+          ENV
+          docker compose --env-file /tmp/shopify-clever-route-compose.env \
+            -f infra/compose/docker-compose.clever-route.yml config --quiet
+
+  deploy-production:
+    name: Deploy production runtime to EC2
     needs: validate
     runs-on: ubuntu-latest
     timeout-minutes: 30
     if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_production == true && github.ref == 'refs/heads/main' }}
     concurrency:
-      group: shopify-clever-production
+      group: shopify-clever-ec2-deploy
       cancel-in-progress: false
 
     env:
@@ -137,12 +157,14 @@ jobs:
             --exclude '.shopify/' \
             --exclude '.omx/' \
             --exclude 'infra/env/*.env' \
+            --exclude 'infra/compose/.env*' \
+            --exclude 'infra/compose/*.env' \
             --exclude 'data/' \
             --exclude '.DS_Store' \
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
             ./ "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/"
 
-      - name: Build and restart services on EC2
+      - name: Build and restart production services on EC2
         run: |
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
             set -euo pipefail
@@ -158,11 +180,138 @@ jobs:
             docker compose -f infra/compose/docker-compose.prod.yml ps
           "
 
-      - name: Smoke test public endpoints
+      - name: Smoke test production endpoints
         run: |
           curl -fsS https://clever-delivery.3-39-216-177.sslip.io/healthz
           test "$(curl -sS -o /dev/null -w '%{http_code}' https://clever-delivery.3-39-216-177.sslip.io/readyz)" = "200"
           admin_body="$(mktemp)"
           test "$(curl -sS -L -o "$admin_body" -w '%{http_code}' https://clever-admin.3-39-216-177.sslip.io/auth/login)" = "200"
+          grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$admin_body"
+          grep -q 'name="shopify-api-key"' "$admin_body"
+
+  deploy-clever-route:
+    name: Deploy clever-route custom runtime to EC2
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_clever_route == true && github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: shopify-clever-ec2-deploy
+      cancel-in-progress: false
+
+    env:
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      SHOPIFY_API_KEY_2: ${{ secrets.SHOPIFY_API_KEY_2 }}
+      SHOPIFY_API_SECRET_2: ${{ secrets.SHOPIFY_API_SECRET_2 }}
+      POSTGRES_PASSWORD_2: ${{ secrets.POSTGRES_PASSWORD_2 }}
+      SHOPIFY_TOKEN_ENCRYPTION_KEY_2: ${{ secrets.SHOPIFY_TOKEN_ENCRYPTION_KEY_2 }}
+      JWT_SECRET_2: ${{ secrets.JWT_SECRET_2 }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Validate clever-route deployment configuration
+        run: |
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "$DEPLOY_PATH"
+          test -n "$EC2_SSH_KEY"
+          test -n "$SHOPIFY_API_KEY_2"
+          test -n "$SHOPIFY_API_SECRET_2"
+          test -n "$POSTGRES_PASSWORD_2"
+          test -n "$SHOPIFY_TOKEN_ENCRYPTION_KEY_2"
+          test -n "$JWT_SECRET_2"
+
+      - name: Configure SSH
+        run: |
+          set -euo pipefail
+          mkdir -p ~/.ssh
+          install -m 600 /dev/null ~/.ssh/deploy_key
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
+          touch ~/.ssh/known_hosts
+          for attempt in 1 2 3; do
+            if ssh-keyscan -4 -T 20 -H "$EC2_HOST" >> ~/.ssh/known_hosts; then
+              exit 0
+            fi
+            sleep "$((attempt * 5))"
+          done
+          echo "::error::Unable to reach SSH host $EC2_HOST:22 from the GitHub runner. Check the EC2 security group, NACL, and host firewall allow GitHub-hosted runner traffic."
+          exit 1
+
+      - name: Sync source to EC2
+        run: |
+          rsync -az --delete \
+            --exclude '.git/' \
+            --exclude '.github/' \
+            --exclude 'node_modules/' \
+            --exclude 'build/' \
+            --exclude 'dist/' \
+            --exclude '.react-router/' \
+            --exclude '.shopify/' \
+            --exclude '.omx/' \
+            --exclude 'infra/env/*.env' \
+            --exclude 'infra/compose/.env*' \
+            --exclude 'infra/compose/*.env' \
+            --exclude 'data/' \
+            --exclude '.DS_Store' \
+            -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+            ./ "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/"
+
+      - name: Upload clever-route secret env to EC2
+        run: |
+          set -euo pipefail
+          install -m 600 /dev/null /tmp/shopify-clever-route.env
+          {
+            printf 'SHOPIFY_API_KEY_2=%s\n' "$SHOPIFY_API_KEY_2"
+            printf 'SHOPIFY_API_SECRET_2=%s\n' "$SHOPIFY_API_SECRET_2"
+            printf 'POSTGRES_PASSWORD_2=%s\n' "$POSTGRES_PASSWORD_2"
+            printf 'SHOPIFY_TOKEN_ENCRYPTION_KEY_2=%s\n' "$SHOPIFY_TOKEN_ENCRYPTION_KEY_2"
+            printf 'JWT_SECRET_2=%s\n' "$JWT_SECRET_2"
+            printf 'SHARED_CADDY_NETWORK=compose_default\n'
+          } > /tmp/shopify-clever-route.env
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+            /tmp/shopify-clever-route.env \
+            "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/infra/compose/.env.clever-route.tmp"
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
+            set -euo pipefail
+            cd '$DEPLOY_PATH'
+            chmod 600 infra/compose/.env.clever-route.tmp
+            mv infra/compose/.env.clever-route.tmp infra/compose/.env.clever-route
+          "
+          rm -f /tmp/shopify-clever-route.env
+
+      - name: Build and restart clever-route services on EC2
+        run: |
+          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
+            set -euo pipefail
+            cd '$DEPLOY_PATH'
+            test -f infra/env/shopify-app-clever-route.env || cp infra/env/shopify-app-clever-route.env.example infra/env/shopify-app-clever-route.env
+            test -f infra/env/delivery-api-clever-route.env || cp infra/env/delivery-api-clever-route.env.example infra/env/delivery-api-clever-route.env
+            mkdir -p \
+              /srv/shopify-clever-test/data/shopify \
+              /srv/shopify-clever-test/data/postgres \
+              /srv/shopify-clever-test/data/postgres-backups \
+              /srv/shopify-clever-test/data/delivery-proof-media
+            touch /srv/shopify-clever-test/data/shopify/dev.sqlite
+            chmod 600 infra/env/*clever-route.env infra/compose/.env.clever-route /srv/shopify-clever-test/data/shopify/dev.sqlite
+            docker compose --env-file infra/compose/.env.clever-route -f infra/compose/docker-compose.clever-route.yml config --quiet
+            docker compose --env-file infra/compose/.env.clever-route -f infra/compose/docker-compose.clever-route.yml build
+            docker compose --env-file infra/compose/.env.clever-route -f infra/compose/docker-compose.clever-route.yml up -d postgres-clever-route
+            docker compose --env-file infra/compose/.env.clever-route -f infra/compose/docker-compose.clever-route.yml up --force-recreate delivery-api-migrate-clever-route
+            docker compose --env-file infra/compose/.env.clever-route -f infra/compose/docker-compose.clever-route.yml up -d shopify-app-clever-route delivery-api-clever-route
+            docker compose -f infra/compose/docker-compose.prod.yml up -d --force-recreate --no-deps caddy
+            docker compose --env-file infra/compose/.env.clever-route -f infra/compose/docker-compose.clever-route.yml ps
+          "
+
+      - name: Smoke test clever-route endpoints
+        run: |
+          curl -fsS https://clever-test-delivery.3-39-216-177.sslip.io/healthz
+          test "$(curl -sS -o /dev/null -w '%{http_code}' https://clever-test-delivery.3-39-216-177.sslip.io/readyz)" = "200"
+          admin_body="$(mktemp)"
+          test "$(curl -sS -L -o "$admin_body" -w '%{http_code}' https://clever-test-admin.3-39-216-177.sslip.io/auth/login)" = "200"
           grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$admin_body"
           grep -q 'name="shopify-api-key"' "$admin_body"
