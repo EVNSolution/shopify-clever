@@ -115,13 +115,15 @@ Required GitHub repository secret:
 
 - `EC2_SSH_KEY`
 
-Additional GitHub repository secrets for the `clever-route` custom runtime:
+Additional GitHub repository secrets for the `clever-route` custom runtime, when managing custom secrets through Actions instead of the existing EC2-only env file:
 
 - `SHOPIFY_API_KEY_2`
 - `SHOPIFY_API_SECRET_2`
 - `POSTGRES_PASSWORD_2`
 - `SHOPIFY_TOKEN_ENCRYPTION_KEY_2`
 - `JWT_SECRET_2`
+
+If these custom secrets are absent, the custom deploy preserves/reuses `/srv/shopify-clever/infra/compose/.env.clever-route` or migrates the legacy `/srv/shopify-clever-test/infra/compose/.env` file on EC2.
 
 Manual CD validates both apps, syncs source to EC2, rebuilds/restarts the selected Compose runtime on
 the host, and smoke-tests the selected public or custom endpoints.

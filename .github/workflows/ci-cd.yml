@@ -220,11 +220,6 @@ jobs:
           test -n "$EC2_USER"
           test -n "$DEPLOY_PATH"
           test -n "$EC2_SSH_KEY"
-          test -n "$SHOPIFY_API_KEY_2"
-          test -n "$SHOPIFY_API_SECRET_2"
-          test -n "$POSTGRES_PASSWORD_2"
-          test -n "$SHOPIFY_TOKEN_ENCRYPTION_KEY_2"
-          test -n "$JWT_SECRET_2"
 
       - name: Configure SSH
         run: |
@@ -261,28 +256,48 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
             ./ "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/"
 
-      - name: Upload clever-route secret env to EC2
+      - name: Prepare clever-route secret env on EC2
         run: |
           set -euo pipefail
-          install -m 600 /dev/null /tmp/shopify-clever-route.env
-          {
-            printf 'SHOPIFY_API_KEY_2=%s\n' "$SHOPIFY_API_KEY_2"
-            printf 'SHOPIFY_API_SECRET_2=%s\n' "$SHOPIFY_API_SECRET_2"
-            printf 'POSTGRES_PASSWORD_2=%s\n' "$POSTGRES_PASSWORD_2"
-            printf 'SHOPIFY_TOKEN_ENCRYPTION_KEY_2=%s\n' "$SHOPIFY_TOKEN_ENCRYPTION_KEY_2"
-            printf 'JWT_SECRET_2=%s\n' "$JWT_SECRET_2"
-            printf 'SHARED_CADDY_NETWORK=compose_default\n'
-          } > /tmp/shopify-clever-route.env
-          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
-            /tmp/shopify-clever-route.env \
-            "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/infra/compose/.env.clever-route.tmp"
-          ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
-            set -euo pipefail
-            cd '$DEPLOY_PATH'
-            chmod 600 infra/compose/.env.clever-route.tmp
-            mv infra/compose/.env.clever-route.tmp infra/compose/.env.clever-route
-          "
-          rm -f /tmp/shopify-clever-route.env
+          if [ -n "$SHOPIFY_API_KEY_2" ] \
+            && [ -n "$SHOPIFY_API_SECRET_2" ] \
+            && [ -n "$POSTGRES_PASSWORD_2" ] \
+            && [ -n "$SHOPIFY_TOKEN_ENCRYPTION_KEY_2" ] \
+            && [ -n "$JWT_SECRET_2" ]; then
+            install -m 600 /dev/null /tmp/shopify-clever-route.env
+            {
+              printf 'SHOPIFY_API_KEY_2=%s\n' "$SHOPIFY_API_KEY_2"
+              printf 'SHOPIFY_API_SECRET_2=%s\n' "$SHOPIFY_API_SECRET_2"
+              printf 'POSTGRES_PASSWORD_2=%s\n' "$POSTGRES_PASSWORD_2"
+              printf 'SHOPIFY_TOKEN_ENCRYPTION_KEY_2=%s\n' "$SHOPIFY_TOKEN_ENCRYPTION_KEY_2"
+              printf 'JWT_SECRET_2=%s\n' "$JWT_SECRET_2"
+              printf 'SHARED_CADDY_NETWORK=compose_default\n'
+            } > /tmp/shopify-clever-route.env
+            scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+              /tmp/shopify-clever-route.env \
+              "$EC2_USER@$EC2_HOST:$DEPLOY_PATH/infra/compose/.env.clever-route.tmp"
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
+              set -euo pipefail
+              cd '$DEPLOY_PATH'
+              chmod 600 infra/compose/.env.clever-route.tmp
+              mv infra/compose/.env.clever-route.tmp infra/compose/.env.clever-route
+            "
+            rm -f /tmp/shopify-clever-route.env
+          else
+            ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
+              set -euo pipefail
+              cd '$DEPLOY_PATH'
+              if [ -f infra/compose/.env.clever-route ]; then
+                chmod 600 infra/compose/.env.clever-route
+              elif [ -f /srv/shopify-clever-test/infra/compose/.env ]; then
+                cp /srv/shopify-clever-test/infra/compose/.env infra/compose/.env.clever-route
+                chmod 600 infra/compose/.env.clever-route
+              else
+                echo '::error::Missing clever-route secrets. Add GitHub Actions secrets or provision infra/compose/.env.clever-route on EC2.'
+                exit 1
+              fi
+            "
+          fi
 
       - name: Build and restart clever-route services on EC2
         run: |

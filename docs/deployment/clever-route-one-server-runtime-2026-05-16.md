@@ -39,11 +39,27 @@ Existing deployment secrets/vars are still required:
 - Secret: `EC2_SSH_KEY`
 - Vars: `EC2_HOST`, `EC2_USER`, `DEPLOY_PATH`
 
-The deploy job writes the custom runtime secrets to this untracked EC2 file:
+The deploy job writes custom runtime secrets to this untracked EC2 file when all custom GitHub Actions secrets are present:
 
 ```text
 /srv/shopify-clever/infra/compose/.env.clever-route
 ```
+
+If the custom GitHub Actions secrets are not present, the deploy job preserves/reuses the EC2-only file above. For the existing pre-merge test deployment, it can also migrate the legacy file:
+
+```text
+/srv/shopify-clever-test/infra/compose/.env
+```
+
+This fallback keeps the existing server-side secret values out of git and out of workflow logs.
+
+## Secret source order
+
+1. Complete custom GitHub Actions secrets, if present.
+2. Existing EC2-only `/srv/shopify-clever/infra/compose/.env.clever-route`.
+3. Legacy EC2-only `/srv/shopify-clever-test/infra/compose/.env` from the initial custom test deployment.
+
+The workflow fails before restart if none of these sources exists.
 
 ## Manual deploy inputs
 
