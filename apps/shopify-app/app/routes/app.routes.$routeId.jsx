@@ -34,98 +34,81 @@ const routesDetailContentStyle = {
   gap: "12px",
 };
 
-const routesDetailHeaderStyle = {
+const routeOverviewHeaderStyle = {
+  background: "linear-gradient(180deg, #ffffff 0%, #fafafa 100%)",
+  border: "1px solid #e3e3e3",
+  borderRadius: "16px",
+  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.045)",
   display: "grid",
-  gap: "4px",
+  gap: "14px",
+  padding: "16px",
 };
 
-const routeDetailPageNavStyle = {
+const routeOverviewTopBarStyle = {
   alignItems: "center",
   display: "flex",
-  justifyContent: "flex-start",
+  justifyContent: "space-between",
 };
 
-const routeDetailTitleRowStyle = {
-  alignItems: "flex-start",
+const routeOverviewTitleBlockStyle = {
+  display: "grid",
+  gap: "6px",
+  minWidth: 0,
+};
+
+const routeOverviewTitleLineStyle = {
+  alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "12px",
-  justifyContent: "space-between",
-  overflowX: "visible",
-  overflowY: "visible",
-  width: "100%",
-};
-
-const routeDetailTitleIdentityStyle = {
-  alignItems: "center",
-  display: "flex",
-  flex: "1 1 260px",
-  flexWrap: "nowrap",
-  gap: "8px",
-  maxWidth: "100%",
+  gap: "10px",
   minWidth: 0,
 };
 
 const routesDetailTitleStyle = {
   margin: 0,
   fontFamily: "inherit",
-  fontSize: "20px",
-  fontWeight: "600",
-  lineHeight: "28px",
+  fontSize: "24px",
+  fontWeight: "700",
+  lineHeight: "32px",
   overflow: "hidden",
   textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const routeDetailSummaryMetricsStyle = {
-  alignItems: "center",
-  display: "flex",
-  flex: "0 0 auto",
-  flexWrap: "nowrap",
-  gap: "12px",
-  justifyContent: "flex-start",
-  minWidth: 0,
   whiteSpace: "nowrap",
 };
 
 const routeDetailTitleMetricStyle = {
+  background: "#ffffff",
+  border: "1px solid #ebebeb",
+  borderRadius: "10px",
   display: "grid",
-  gap: "1px",
-  maxWidth: "220px",
-  minWidth: "72px",
+  gap: "2px",
+  maxWidth: "100%",
+  minWidth: 0,
+  padding: "8px 10px",
   textAlign: "left",
 };
 
 const routeDetailTitleMetricLabelStyle = {
-  color: "#616161",
-  fontSize: "11px",
-  fontWeight: 550,
-  lineHeight: 1.2,
+  color: "#707070",
+  fontSize: "12px",
+  fontWeight: 600,
+  lineHeight: 1.1,
 };
 
 const routeDetailTitleMetricValueStyle = {
-  color: "#303030",
-  fontSize: "13px",
-  fontWeight: 650,
-  lineHeight: 1.25,
+  color: "#1f1f1f",
+  fontSize: "14px",
+  fontWeight: 700,
+  lineHeight: 1.2,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-};
-
-const routeDetailDriverControlStyle = {
-  alignItems: "center",
-  display: "flex",
-  flex: "0 0 auto",
-  flexWrap: "nowrap",
-  gap: "8px",
-  justifyContent: "flex-start",
 };
 
 const routeDetailDriverLabelStyle = {
   color: "#616161",
   fontSize: "12px",
   fontWeight: 650,
+  lineHeight: 1.15,
   whiteSpace: "nowrap",
 };
 
@@ -136,14 +119,15 @@ const routeDetailDriverSelectStyle = {
   color: "#303030",
   fontFamily: "inherit",
   fontSize: "13px",
-  minHeight: "30px",
-  minWidth: "220px",
-  padding: "4px 9px",
+  minHeight: "28px",
+  minWidth: 0,
+  padding: "3px 8px",
+  width: "100%",
 };
 
 const routeDetailDriverSaveButtonStyle = {
-  background: "#303030",
-  borderColor: "#303030",
+  background: "#4f2bd9",
+  borderColor: "#4f2bd9",
   borderRadius: "8px",
   borderStyle: "solid",
   borderWidth: "1px",
@@ -153,8 +137,8 @@ const routeDetailDriverSaveButtonStyle = {
   fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1.2,
-  minHeight: "30px",
-  padding: "4px 10px",
+  minHeight: "28px",
+  padding: "3px 10px",
   whiteSpace: "nowrap",
 };
 
@@ -166,9 +150,20 @@ const routeDetailDriverDisabledSaveButtonStyle = {
   cursor: "not-allowed",
 };
 
+const routeOverviewDriverPanelStyle = {
+  background: "#f7f7f7",
+  border: "1px solid #e5e5e5",
+  borderRadius: "12px",
+  display: "grid",
+  gap: "6px",
+  minWidth: 0,
+  padding: "8px 10px",
+  textAlign: "left",
+};
+
 const routesDetailDescriptionStyle = {
   margin: 0,
-  color: "#616161",
+  color: "#6b7280",
   fontSize: "13px",
   lineHeight: "20px",
 };
@@ -186,12 +181,9 @@ const routeStatusBadgeStyle = {
 
 const routeDetailBackButtonStyle = {
   alignItems: "center",
-  background: "#ffffff",
-  borderColor: "#c9c9c9",
-  borderRadius: "8px",
-  borderStyle: "solid",
-  borderWidth: "1px",
-  color: "#303030",
+  background: "transparent",
+  border: 0,
+  color: "#4b5563",
   cursor: "pointer",
   display: "inline-flex",
   flex: "0 0 auto",
@@ -199,8 +191,8 @@ const routeDetailBackButtonStyle = {
   fontWeight: 650,
   gap: "6px",
   lineHeight: 1.2,
-  minHeight: "30px",
-  padding: "5px 10px 5px 8px",
+  minHeight: "26px",
+  padding: 0,
 };
 
 const routeDetailBackIconStyle = {
@@ -218,37 +210,10 @@ const routesDetailCardStyle = {
   overflow: "hidden",
 };
 
-const routeDetailHeaderInfoWrapStyle = {
-  display: "flex",
-  flex: "1 1 520px",
-  justifyContent: "flex-end",
-  minWidth: "min(520px, 100%)",
-  width: "100%",
-};
-
 const routeDetailMapFrameStyle = {
   height: "440px",
   overflow: "hidden",
   position: "relative",
-};
-
-const routeDetailHeaderInfoCardStyle = {
-  alignItems: "center",
-  background: "#ffffff",
-  border: "1px solid #d6d6d6",
-  borderRadius: "12px",
-  boxShadow: "0 4px 12px rgba(0, 0, 0, 0.06)",
-  display: "flex",
-  flexWrap: "nowrap",
-  gap: "18px",
-  maxWidth: "780px",
-  minHeight: "44px",
-  minWidth: 0,
-  overflowX: "auto",
-  padding: "6px 0 6px 14px",
-  textAlign: "left",
-  whiteSpace: "nowrap",
-  width: "100%",
 };
 
 const routeDetailMapCanvasStyle = {
@@ -1316,6 +1281,9 @@ export default function RouteDetailPage() {
     [drivers, effectiveRoutePlan?.driver],
   );
   const routeDriverId = getRouteDriverId(effectiveRoutePlan);
+  const routeDriverSummary = routeDriverId
+    ? routeDriverOptions.find((driverOption) => driverOption.id === routeDriverId)?.label ?? "Assigned"
+    : "Unassigned";
   const [selectedRouteDriverId, setSelectedRouteDriverId] = useState(routeDriverId);
   const routeStops = useMemo(() => buildRouteStops(stops), [stops]);
   const [isEditingRouteSequence, setIsEditingRouteSequence] = useState(false);
@@ -1708,71 +1676,78 @@ export default function RouteDetailPage() {
   return (
     <main style={routesDetailPageStyle}>
       <div style={routesDetailContentStyle}>
-        <div style={routeDetailPageNavStyle}>
-          <button
-            aria-label="Back to routes list"
-            onClick={() => navigate(routesListHref)}
-            style={routeDetailBackButtonStyle}
-            type="button"
-          >
-            <span aria-hidden="true" style={routeDetailBackIconStyle}>
-              <svg fill="none" viewBox="0 0 20 20">
-                <path
-                  d="M12.5 4.5 7 10l5.5 5.5"
-                  stroke="currentColor"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="1.8"
-                />
-              </svg>
-            </span>
-            <span>Back to routes</span>
-          </button>
-        </div>
-        <header className="tab-layout-header" style={routesDetailHeaderStyle}>
-          <div style={routeDetailTitleRowStyle}>
-            <div style={routeDetailTitleIdentityStyle}>
-              <h1 style={routesDetailTitleStyle}>{routeDetail.route}</h1>
-              <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
+        <header className="route-overview-header" style={routeOverviewHeaderStyle}>
+          <div style={routeOverviewTopBarStyle}>
+            <button
+              aria-label="Back to routes list"
+              onClick={() => navigate(routesListHref)}
+              style={routeDetailBackButtonStyle}
+              type="button"
+            >
+              <span aria-hidden="true" style={routeDetailBackIconStyle}>
+                <svg fill="none" viewBox="0 0 20 20">
+                  <path
+                    d="M12.5 4.5 7 10l5.5 5.5"
+                    stroke="currentColor"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth="1.8"
+                  />
+                </svg>
+              </span>
+              <span>Back to routes</span>
+            </button>
+          </div>
+
+          <div className="route-overview-main">
+            <div style={routeOverviewTitleBlockStyle}>
+              <div style={routeOverviewTitleLineStyle}>
+                <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetail.route}</h1>
+                <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
+              </div>
+              <p style={routesDetailDescriptionStyle}>Review and assign a driver before publishing this route.</p>
             </div>
-            <div style={routeDetailHeaderInfoWrapStyle}>
-              <div style={routeDetailHeaderInfoCardStyle}>
-                <div aria-label="Route summary" style={routeDetailSummaryMetricsStyle}>
-                  {renderRouteHeaderMetric("Orders", routeDetail.orders)}
-                  {renderRouteHeaderMetric("Delivery area", routeDetail.deliveryArea)}
-                  {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
-                </div>
-                <div aria-label="Route driver" style={routeDetailDriverControlStyle}>
-                  <label htmlFor="route-driver-select" style={routeDetailDriverLabelStyle}>Driver</label>
-                  <select
-                    disabled={isSavingRouteDriver}
-                    id="route-driver-select"
-                    onChange={(event) => setSelectedRouteDriverId(event.target.value)}
-                    style={routeDetailDriverSelectStyle}
-                    value={selectedRouteDriverId}
-                  >
-                    <option value="">No driver</option>
-                    {routeDriverOptions.map((driverOption) => (
-                      <option key={driverOption.id} value={driverOption.id}>
-                        {driverOption.label}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    disabled={isSavingRouteDriver || selectedRouteDriverId === routeDriverId}
-                    onClick={saveRouteDriver}
-                    style={
-                      isSavingRouteDriver || selectedRouteDriverId === routeDriverId
-                        ? routeDetailDriverDisabledSaveButtonStyle
-                        : routeDetailDriverSaveButtonStyle
-                    }
-                    type="button"
-                  >
-                    {isSavingRouteDriver ? "Saving…" : "Save driver"}
-                  </button>
-                </div>
+            <div
+              aria-label="Route driver assignment"
+              style={routeOverviewDriverPanelStyle}
+            >
+              <label htmlFor="route-driver-select" style={routeDetailDriverLabelStyle}>Driver assignment</label>
+              <div className="route-overview-driver-control">
+                <select
+                  disabled={isSavingRouteDriver}
+                  id="route-driver-select"
+                  onChange={(event) => setSelectedRouteDriverId(event.target.value)}
+                  style={routeDetailDriverSelectStyle}
+                  value={selectedRouteDriverId}
+                >
+                  <option value="">No driver</option>
+                  {routeDriverOptions.map((driverOption) => (
+                    <option key={driverOption.id} value={driverOption.id}>
+                      {driverOption.label}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  disabled={isSavingRouteDriver || selectedRouteDriverId === routeDriverId}
+                  onClick={saveRouteDriver}
+                  style={
+                    isSavingRouteDriver || selectedRouteDriverId === routeDriverId
+                      ? routeDetailDriverDisabledSaveButtonStyle
+                      : routeDetailDriverSaveButtonStyle
+                  }
+                  type="button"
+                >
+                  {isSavingRouteDriver ? "Saving…" : "Save driver"}
+                </button>
               </div>
             </div>
+          </div>
+
+          <div aria-label="Route summary" className="route-overview-summary">
+            {renderRouteHeaderMetric("Orders", routeDetail.orders)}
+            {renderRouteHeaderMetric("Delivery area", routeDetail.deliveryArea)}
+            {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
+            {renderRouteHeaderMetric("Driver", routeDriverSummary)}
           </div>
         </header>
 
