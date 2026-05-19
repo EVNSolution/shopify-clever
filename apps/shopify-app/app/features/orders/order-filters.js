@@ -62,10 +62,10 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
     return false;
   }
 
+  const deliveryDateFilter = normalizeDateOnlyValue(normalizedFilters.deliveryDate);
   if (
-    normalizedFilters.deliveryDate &&
-    normalizeComparableText(order?.deliveryDate) !==
-      normalizeComparableText(normalizedFilters.deliveryDate)
+    deliveryDateFilter &&
+    getOrderDeliveryDateValue(order) !== deliveryDateFilter
   ) {
     return false;
   }

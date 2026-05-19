@@ -56,6 +56,14 @@ const ORDER_PIN_PATH =
   "M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z";
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
+const ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR =
+  "배송일이 있는 주문만 route plan에 추가할 수 있습니다.";
+const ROUTE_PLAN_DELIVERY_DATE_MISMATCH_ERROR =
+  "같은 배송일 주문만 route plan에 추가할 수 있습니다.";
+const ROUTE_PLAN_DELIVERY_DATE_PARTIAL_ADD_ERROR =
+  "같은 배송일 주문만 route plan에 추가했습니다.";
+const ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR =
+  "선택된 주문과 같은 배송일만 표시합니다. 선택 또는 plan을 비우면 날짜 필터를 해제할 수 있습니다.";
 const SHOP_TIME_ZONE_QUERY = `#graphql
   query CleverShopTimeZone {
     shop {
@@ -697,6 +705,26 @@ function getFirstErrorMessage(errors) {
     : null;
 
   return firstError?.message ?? null;
+}
+
+function getFirstOrderDeliveryDateByIds(orderIds, orderById) {
+  if (!Array.isArray(orderIds) || !(orderById instanceof Map)) return "";
+
+  for (const orderId of orderIds) {
+    const deliveryDate = getOrderDeliveryDateValue(orderById.get(orderId));
+    if (deliveryDate) return deliveryDate;
+  }
+
+  return "";
+}
+
+function getOrdersForDeliveryDate(orders, deliveryDate) {
+  const normalizedDeliveryDate = getOrderDeliveryDateValue({ deliveryDate });
+  if (!normalizedDeliveryDate) return [];
+
+  return (Array.isArray(orders) ? orders : []).filter(
+    (order) => getOrderDeliveryDateValue(order) === normalizedDeliveryDate,
+  );
 }
 
 function getVisibleDeliveryOrderLoaderErrors(errors) {
@@ -1393,6 +1421,11 @@ export default function OrdersPage() {
     });
   }, [filteredOrders, sortConfig, orderFilterReferenceDate]);
 
+  const displayOrderById = useMemo(
+    () => new Map(displayOrders.map((order) => [order.id, order])),
+    [displayOrders],
+  );
+
   const checkedOrderIdSet = useMemo(
     () => new Set(checkedOrderIds),
     [checkedOrderIds],
@@ -1416,16 +1449,26 @@ export default function OrdersPage() {
     [tableOrders, orderFilterReferenceDate],
   );
 
-  const displayOrderById = useMemo(
-    () => new Map(displayOrders.map((order) => [order.id, order])),
-    [displayOrders],
-  );
-
   const plannedOrders = useMemo(() => {
     return plannedOrderIds
       .map((orderId) => displayOrderById.get(orderId))
       .filter(Boolean);
   }, [displayOrderById, plannedOrderIds]);
+
+  const checkedDeliveryDateLock = useMemo(
+    () => getFirstOrderDeliveryDateByIds(checkedOrderIds, displayOrderById),
+    [checkedOrderIds, displayOrderById],
+  );
+  const plannedDeliveryDateLock = useMemo(
+    () => getOrderDeliveryDateValue(plannedOrders[0]),
+    [plannedOrders],
+  );
+  const routePlanDeliveryDateLock =
+    plannedDeliveryDateLock || checkedDeliveryDateLock;
+  const filteredDeliveryDateLock = useMemo(
+    () => getOrderDeliveryDateValue({ deliveryDate: orderFilters.deliveryDate }),
+    [orderFilters.deliveryDate],
+  );
 
   const readyPlannedOrders = useMemo(() => plannedOrders.filter(isOrderReadyToPlan), [plannedOrders]);
   const plannedRouteScope = useMemo(() => buildRouteScopeFromOrders(plannedOrders), [plannedOrders]);
@@ -1506,6 +1549,32 @@ export default function OrdersPage() {
     });
   }, [displayOrders, filteredOrders, orderFilterReferenceDate]);
 
+  useEffect(() => {
+    if (
+      !routePlanDeliveryDateLock ||
+      filteredDeliveryDateLock === routePlanDeliveryDateLock
+    ) {
+      return;
+    }
+
+    setSearchParams(
+      updateOrderFilterSearchParams(searchParams, {
+        ...orderFilters,
+        deliveryDate: routePlanDeliveryDateLock,
+      }),
+      {
+        preventScrollReset: true,
+        replace: true,
+      },
+    );
+  }, [
+    orderFilters,
+    filteredDeliveryDateLock,
+    routePlanDeliveryDateLock,
+    searchParams,
+    setSearchParams,
+  ]);
+
   const selectedOrder =
     displayOrders.find((order) => order.id === selectedOrderId) ?? filteredOrders[0];
 
@@ -1541,10 +1610,71 @@ export default function OrdersPage() {
     return sortConfig.direction === "ascending" ? " ▲" : " ▼";
   };
 
+  const applyDeliveryDateFilterLock = useCallback((deliveryDate) => {
+    const normalizedDeliveryDate = getOrderDeliveryDateValue({ deliveryDate });
+
+    if (
+      !normalizedDeliveryDate ||
+      filteredDeliveryDateLock === normalizedDeliveryDate
+    ) {
+      return;
+    }
+
+    setSearchParams(
+      updateOrderFilterSearchParams(searchParams, {
+        ...orderFilters,
+        deliveryDate: normalizedDeliveryDate,
+      }),
+      {
+        preventScrollReset: true,
+        replace: true,
+      },
+    );
+  }, [filteredDeliveryDateLock, orderFilters, searchParams, setSearchParams]);
+
+  const applyOrderDeliveryDateSelectionLock = useCallback((order) => {
+    const orderDeliveryDate = getOrderDeliveryDateValue(order);
+
+    if (!orderDeliveryDate) {
+      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR);
+      return null;
+    }
+
+    const currentDeliveryDateLock =
+      routePlanDeliveryDateLock || filteredDeliveryDateLock;
+
+    if (
+      currentDeliveryDateLock &&
+      orderDeliveryDate !== currentDeliveryDateLock
+    ) {
+      applyDeliveryDateFilterLock(currentDeliveryDateLock);
+      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_MISMATCH_ERROR);
+      return null;
+    }
+
+    applyDeliveryDateFilterLock(orderDeliveryDate);
+    return orderDeliveryDate;
+  }, [
+    applyDeliveryDateFilterLock,
+    filteredDeliveryDateLock,
+    routePlanDeliveryDateLock,
+  ]);
+
   const handleOrderFilterChange = (filterKey, filterValue) => {
+    const nextFilterValue =
+      filterKey === "deliveryDate" &&
+      routePlanDeliveryDateLock &&
+      filterValue !== routePlanDeliveryDateLock
+        ? routePlanDeliveryDateLock
+        : filterValue;
+
+    if (filterKey === "deliveryDate" && filterValue !== nextFilterValue) {
+      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR);
+    }
+
     const nextFilters = {
       ...orderFilters,
-      [filterKey]: filterValue,
+      [filterKey]: nextFilterValue,
     };
 
     setSearchParams(
@@ -1557,10 +1687,14 @@ export default function OrdersPage() {
   };
 
   const handleClearOrderFilters = () => {
+    if (routePlanDeliveryDateLock) {
+      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR);
+    }
+
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, {
         deliveryArea: "",
-        deliveryDate: "",
+        deliveryDate: routePlanDeliveryDateLock,
         orderedDate: "",
         planned: "",
       }),
@@ -1649,26 +1783,54 @@ export default function OrdersPage() {
   }, [isMapReady]);
 
   const toggleOrderCheck = (orderId) => {
+    const order = displayOrderById.get(orderId);
+    const isAlreadyChecked = checkedOrderIdSet.has(orderId);
+
+    if (!isAlreadyChecked && !applyOrderDeliveryDateSelectionLock(order)) {
+      return;
+    }
+
     setCheckedOrderIds((currentOrderIds) =>
-      currentOrderIds.includes(orderId)
+      isAlreadyChecked
         ? currentOrderIds.filter((selectedOrderId) => selectedOrderId !== orderId)
         : [...currentOrderIds, orderId],
     );
   };
 
   const toggleAllVisibleOrderChecks = () => {
-    setCheckedOrderIds((currentOrderIds) => {
-      if (allVisibleOrdersChecked) {
-        const visibleOrderIds = new Set(selectableTableOrders.map((order) => order.id));
-        return currentOrderIds.filter((orderId) => !visibleOrderIds.has(orderId));
+    if (!allVisibleOrdersChecked) {
+      const targetDeliveryDate =
+        routePlanDeliveryDateLock ||
+        filteredDeliveryDateLock ||
+        getOrderDeliveryDateValue(selectableTableOrders[0]);
+      const sameDateSelectableOrders = getOrdersForDeliveryDate(
+        selectableTableOrders,
+        targetDeliveryDate,
+      );
+
+      if (sameDateSelectableOrders.length === 0) {
+        setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR);
+        return;
       }
 
-      return Array.from(
-        new Set([
-          ...currentOrderIds,
-          ...selectableTableOrders.map((order) => order.id),
-        ]),
+      if (!routePlanDeliveryDateLock) {
+        applyDeliveryDateFilterLock(targetDeliveryDate);
+      }
+
+      setCheckedOrderIds((currentOrderIds) =>
+        Array.from(
+          new Set([
+            ...currentOrderIds,
+            ...sameDateSelectableOrders.map((order) => order.id),
+          ]),
+        ),
       );
+      return;
+    }
+
+    setCheckedOrderIds((currentOrderIds) => {
+      const visibleOrderIds = new Set(selectableTableOrders.map((order) => order.id));
+      return currentOrderIds.filter((orderId) => !visibleOrderIds.has(orderId));
     });
   };
 
@@ -1691,6 +1853,10 @@ export default function OrdersPage() {
       return;
     }
 
+    if (!applyOrderDeliveryDateSelectionLock(order)) {
+      return;
+    }
+
     if (!order?.routeScopeKey || order.routeScopeKey !== targetRouteScopeKey) {
       setCreateRouteClientError("같은 배송일/세션 주문만 route plan에 추가할 수 있습니다.");
       return;
@@ -1706,7 +1872,12 @@ export default function OrdersPage() {
     );
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
-  }, [displayOrderById, orderFilterReferenceDate, plannedRouteScope]);
+  }, [
+    applyOrderDeliveryDateSelectionLock,
+    displayOrderById,
+    orderFilterReferenceDate,
+    plannedRouteScope,
+  ]);
 
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
@@ -1722,15 +1893,31 @@ export default function OrdersPage() {
       return;
     }
 
-    const targetRouteScopeKey = plannedRouteScope?.routeScopeKey ?? selectedOrders.find((order) => order.routeScopeKey)?.routeScopeKey;
-    const scopedSelectedOrders = selectedOrders.filter((order) => order.routeScopeKey === targetRouteScopeKey);
+    const targetDeliveryDate =
+      routePlanDeliveryDateLock || getOrderDeliveryDateValue(selectedOrders[0]);
+    const sameDateSelectedOrders = getOrdersForDeliveryDate(
+      selectedOrders,
+      targetDeliveryDate,
+    );
+
+    if (!targetDeliveryDate || sameDateSelectedOrders.length === 0) {
+      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR);
+      return;
+    }
+
+    applyDeliveryDateFilterLock(targetDeliveryDate);
+
+    const targetRouteScopeKey = plannedRouteScope?.routeScopeKey ?? sameDateSelectedOrders.find((order) => order.routeScopeKey)?.routeScopeKey;
+    const scopedSelectedOrders = sameDateSelectedOrders.filter((order) => order.routeScopeKey === targetRouteScopeKey);
 
     if (!targetRouteScopeKey || scopedSelectedOrders.length === 0) {
       setCreateRouteClientError("같은 배송일/세션 주문만 route plan에 추가할 수 있습니다.");
       return;
     }
 
-    if (scopedSelectedOrders.length !== selectedOrders.length) {
+    if (sameDateSelectedOrders.length !== selectedOrders.length) {
+      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_PARTIAL_ADD_ERROR);
+    } else if (scopedSelectedOrders.length !== sameDateSelectedOrders.length) {
       setCreateRouteClientError("같은 배송일/세션 주문만 route plan에 추가했습니다.");
     } else {
       setCreateRouteClientError(null);
