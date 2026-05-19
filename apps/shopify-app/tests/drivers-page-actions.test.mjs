@@ -28,7 +28,10 @@ test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
 
 test("Drivers table uses compact support columns and separates joined date", () => {
   assert.match(source, /<col style=\{\{ width: "40px" \}\} \/>/);
+  assert.match(source, /<col style=\{\{ width: "14\.4%" \}\} \/>/);
+  assert.doesNotMatch(source, /<col style=\{\{ width: "18%" \}\} \/>/);
   assert.match(source, /<col style=\{\{ width: "96px" \}\} \/>/);
+  assert.match(source, /<col style=\{\{ width: "154px" \}\} \/>/);
   assert.match(source, /<col style=\{\{ width: "110px" \}\} \/>/);
   assert.match(source, /<th style=\{tableHeaderCellStyle\}>Joined<\/th>/);
   assert.match(source, /<td style=\{tableCellStyle\}>\{driver\.joinedAt\}<\/td>/);
@@ -70,6 +73,11 @@ test("Drivers tab separates operational status from app access state", () => {
   assert.match(source, /재로그인/);
   assert.match(source, /canShowDriverInviteActions\(driver\) \? \(/);
   assert.match(source, /driver\.inviteCode \? \(/);
+  assert.match(source, /inviteCodeRemaining: formatInviteCodeRemaining\(driver\.inviteCodeExpiresAt\)/);
+  assert.match(source, /function formatInviteCodeRemaining\(value\)/);
+  assert.match(source, /남은 시간 \$\{driver\.inviteCodeRemaining\}/);
+  assert.match(source, /<span style=\{inviteCodeValueStyle\}>코드 \{driver\.inviteCode\}<\/span>/);
+  assert.match(source, /<span style=\{inviteCodeRemainingStyle\}>\{driver\.inviteCodeRemaining\}<\/span>/);
   assert.match(source, /style=\{compactInviteButtonStyle\}/);
   assert.match(source, /인증코드 생성/);
   assert.match(source, /재생성/);
