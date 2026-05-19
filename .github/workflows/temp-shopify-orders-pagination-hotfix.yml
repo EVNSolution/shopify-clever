@@ -80,9 +80,9 @@ jobs:
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
             set -euo pipefail
             cd '$DEPLOY_PATH'
-            ts=$(date -u +%Y%m%dT%H%M%SZ)
-            cp apps/shopify-app/app/features/orders/shopify-orders.server.js /tmp/shopify-orders.server.js.before-$ts
-            cp apps/shopify-app/app/features/delivery/delivery-labels.js /tmp/delivery-labels.js.before-$ts
+            ts=\$(date -u +%Y%m%dT%H%M%SZ)
+            cp apps/shopify-app/app/features/orders/shopify-orders.server.js /tmp/shopify-orders.server.js.before-\$ts
+            cp apps/shopify-app/app/features/delivery/delivery-labels.js /tmp/delivery-labels.js.before-\$ts
             install -m 644 /tmp/shopify-orders.server.js apps/shopify-app/app/features/orders/shopify-orders.server.js
             install -m 644 /tmp/delivery-labels.js apps/shopify-app/app/features/delivery/delivery-labels.js
             grep -q 'SHOPIFY_ORDERS_MAX_PAGES' apps/shopify-app/app/features/orders/shopify-orders.server.js
