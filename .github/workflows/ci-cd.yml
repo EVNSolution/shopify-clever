@@ -217,12 +217,33 @@ jobs:
 
       - name: Smoke test production endpoints
         run: |
-          curl -fsS https://clever-delivery.3-39-216-177.sslip.io/healthz
-          test "$(curl -sS -o /dev/null -w '%{http_code}' https://clever-delivery.3-39-216-177.sslip.io/readyz)" = "200"
+          set -euo pipefail
+          for attempt in {1..12}; do
+            if curl -fsS https://clever-delivery.3-39-216-177.sslip.io/healthz \
+              && test "$(curl -sS -o /tmp/clever-readyz-body -w '%{http_code}' https://clever-delivery.3-39-216-177.sslip.io/readyz)" = "200"; then
+              break
+            fi
+            if [ "$attempt" = "12" ]; then
+              echo "::error::Production delivery-api did not become ready after deploy."
+              cat /tmp/clever-readyz-body 2>/dev/null || true
+              exit 1
+            fi
+            sleep 5
+          done
           admin_body="$(mktemp)"
-          test "$(curl -sS -L -o "$admin_body" -w '%{http_code}' https://clever-admin.3-39-216-177.sslip.io/auth/login)" = "200"
-          grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$admin_body"
-          grep -q 'name="shopify-api-key"' "$admin_body"
+          for attempt in {1..12}; do
+            if test "$(curl -sS -L -o "$admin_body" -w '%{http_code}' https://clever-admin.3-39-216-177.sslip.io/auth/login)" = "200" \
+              && grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$admin_body" \
+              && grep -q 'name="shopify-api-key"' "$admin_body"; then
+              break
+            fi
+            if [ "$attempt" = "12" ]; then
+              echo "::error::Production Shopify app did not pass login smoke after deploy."
+              sed -n '1,80p' "$admin_body" || true
+              exit 1
+            fi
+            sleep 5
+          done
 
       - name: Revoke temporary runner SSH ingress
         if: ${{ always() && steps.production_ssh_ingress.outputs.runner_cidr != '' && steps.production_ssh_ingress.outputs.authorized == 'true' }}
