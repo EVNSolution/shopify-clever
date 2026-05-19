@@ -38,6 +38,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      delivery-api-migrate:
+        condition: service_completed_successfully
     env_file:
       - ../env/delivery-api.env
     environment:
@@ -45,6 +47,20 @@ services:
       PORT: 3000
       SHOPIFY_APP_URL: https://clever-admin.3-39-216-177.sslip.io
     restart: unless-stopped
+
+  delivery-api-migrate:
+    build:
+      context: ../../apps/delivery-api
+      dockerfile: Dockerfile
+      target: build
+    image: shopify-clever-delivery-api-migrate:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ../env/delivery-api.env
+    command: ["npm", "exec", "--", "prisma", "db", "push", "--skip-generate"]
+    restart: "no"
 
   postgres:
     image: postgres:17-bookworm

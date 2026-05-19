@@ -5,6 +5,7 @@ import test from "node:test";
 
 const root = process.cwd();
 const viteConfigSource = readFileSync(join(root, "vite.config.js"), "utf8");
+const tsConfig = JSON.parse(readFileSync(join(root, "tsconfig.json"), "utf8"));
 const ordersPageSource = readFileSync(
   join(root, "app/routes/app.orders.jsx"),
   "utf8",
@@ -76,4 +77,9 @@ test("route detail map renders route stops as stable DOM overlay markers", () =>
   assert.match(routeDetailPageSource, /markerElement\.addEventListener\("dblclick", handleStopMarkerDoubleClick\)/);
   assert.doesNotMatch(routeDetailPageSource, /ROUTE_DETAIL_STOPS_SOURCE_ID|ROUTE_DETAIL_STOP_POINTER_LAYER_ID|ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
   assert.doesNotMatch(routeDetailPageSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID|map\.on\("dblclick",\s*ROUTE_DETAIL_STOP_POINTER_LAYER_ID/);
+});
+
+test("TypeScript config avoids deprecated baseUrl", () => {
+  assert.equal(Object.hasOwn(tsConfig.compilerOptions, "baseUrl"), false);
+  assert.equal(Object.hasOwn(tsConfig.compilerOptions, "ignoreDeprecations"), false);
 });

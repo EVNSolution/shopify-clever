@@ -11,8 +11,9 @@ const pageShellRouteFiles = [
   "app/routes/app.settings.jsx",
 ];
 
-test("Shopify app name is fixed to clever", () => {
-  assert.match(appConfigSource, /^name = "clever"$/m);
+test("Shopify production app name uses CLEVER with the clever-route fallback handle", () => {
+  assert.match(appConfigSource, /^name = "CLEVER"$/m);
+  assert.match(appConfigSource, /^handle = "clever-route"$/m);
 });
 
 test("sidebar pages use tab titles instead of duplicating the app name", () => {

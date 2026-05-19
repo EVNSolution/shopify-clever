@@ -17,7 +17,7 @@ Public/App Store runtime:
 - Redirect URL: `https://clever-admin.3-39-216-177.sslip.io/auth/callback`
 - Delivery API: `https://clever-delivery.3-39-216-177.sslip.io`
 
-Custom `clever-route` runtime on the same EC2/EIP:
+Custom/dev `clever-route` runtime on the same EC2/EIP:
 
 - App URL: `https://clever-test-admin.3-39-216-177.sslip.io`
 - Redirect URL: `https://clever-test-admin.3-39-216-177.sslip.io/auth/callback`
@@ -61,15 +61,25 @@ rm -f infra/env/shopify-app-clever-route.env infra/env/delivery-api-clever-route
 
 ## Runtime identities
 
+See [`NAMING.md`](NAMING.md) for the canonical distinction between brand/display name, Shopify handle, Admin path, and hosted app URLs.
+
 The monorepo contains two Shopify app config files:
 
-- `apps/shopify-app/shopify.app.toml` — public/App Store app.
-- `apps/shopify-app/shopify.app.clever-route.toml` — custom distribution app for operating-store testing before public approval.
+- `apps/shopify-app/shopify.app.toml` — production/public app config (`CLEVER`, handle `clever-route`).
+- `apps/shopify-app/shopify.app.dev.toml` — dev/custom-store app config (`CleverRoute Dev`, handle `clever-route-dev`).
+
+Use explicit Shopify CLI config selection:
+
+- `npm --prefix apps/shopify-app run dev` → `shopify app dev -c dev`
+- `npm --prefix apps/shopify-app run deploy:prod` → production config
+- `npm --prefix apps/shopify-app run deploy:dev` → dev/custom config
+
+Do not run Shopify Dashboard mutations, `shopify app deploy`, `shopify app config link/use`, or `shopify app dev --reset` against a live app without an explicit release decision. The production handle `clever` was rejected by Shopify as non-unique on 2026-05-18, so production uses fallback `CLEVER` / `clever-route`. The dev app is moved to `clever-route-dev` first to keep the fallback handle clear.
 
 The runtime distribution is selected with `SHOPIFY_APP_DISTRIBUTION`:
 
 - `app_store` for the public runtime.
-- `single_merchant` for the `clever-route` custom runtime.
+- `single_merchant` for the `clever-route` custom/dev runtime.
 
 The Shopify Custom distribution store domain is not a repo setting. Enter it later in the Shopify Dev Dashboard when generating the install link.
 
@@ -83,7 +93,7 @@ so the workflow is intentionally split:
   public URL hostname guard, and Compose config validation.
 - Production deploy is manual only: run the `CI/CD` workflow on `main` with
   `deploy_production=true`.
-- Custom `clever-route` deploy is also manual only: run the same workflow on
+- Custom/dev `clever-route` deploy is also manual only: run the same workflow on
   `main` with `deploy_clever_route=true`.
 - The workflow does not use a GitHub deployment environment because private
   repository environments/protection rules are not available on the current Free

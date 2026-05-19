@@ -1,13 +1,14 @@
-# Shopify app configuration for the clever-route custom distribution app.
-# This file is safe to commit: it contains the custom app client ID, not the API secret.
+# Shopify app configuration for the dev/custom-store app.
+# This file is safe to commit: it contains the dev app client ID, not the API secret.
 
 client_id = "9be6895e1de376bf056787803e863a4d"
-name = "clever-route"
+name = "CleverRoute Dev"
+handle = "clever-route-dev"
 application_url = "https://clever-test-admin.3-39-216-177.sslip.io"
 embedded = true
 
 [access_scopes]
-# Keep custom-store testing to the same minimum read-only scopes as the public app.
+# Keep dev/custom-store testing to the same minimum read-only scopes as the public app.
 scopes = "read_orders,read_locations"
 
 [webhooks]

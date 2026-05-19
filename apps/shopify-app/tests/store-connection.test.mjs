@@ -15,7 +15,24 @@ test("root entry does not render a manual store login form", () => {
 });
 
 test("root entry sends merchants into the embedded app shell", () => {
-  assert.match(rootRouteSource, /redirect\(`\/app\$\{url\.search\}`\)/);
+  assert.match(rootRouteSource, /redirect\(`\/app\/orders\$\{url\.search\}`\)/);
+  assert.doesNotMatch(rootRouteSource, /redirect\(`\/app\$\{url\.search\}`\)/);
+  assert.match(rootRouteSource, /logAppEntryRedirect\(request, "\/", "\/app\/orders"\)/);
+});
+
+test("entry redirects preserve query strings and log only context presence", () => {
+  assert.match(rootRouteSource, /new URL\(request\.url\)/);
+  assert.match(appIndexRouteSource, /new URL\(request\.url\)/);
+  assert.match(rootRouteSource, /\$\{url\.search\}/);
+  assert.match(appIndexRouteSource, /\$\{url\.search\}/);
+  assert.match(rootRouteSource, /hasShop: url\.searchParams\.has\("shop"\)/);
+  assert.match(rootRouteSource, /hasHost: url\.searchParams\.has\("host"\)/);
+  assert.match(appIndexRouteSource, /hasShop: url\.searchParams\.has\("shop"\)/);
+  assert.match(appIndexRouteSource, /hasHost: url\.searchParams\.has\("host"\)/);
+  assert.doesNotMatch(rootRouteSource, /searchParams\.get\("host"\)/);
+  assert.doesNotMatch(appIndexRouteSource, /searchParams\.get\("host"\)/);
+  assert.doesNotMatch(rootRouteSource, /token|sessionToken|accessToken/i);
+  assert.doesNotMatch(appIndexRouteSource, /token|sessionToken|accessToken/i);
 });
 
 const authLoginRouteSource = readFileSync(
@@ -42,6 +59,11 @@ test("auth fallback explains missing shop context without a 400 error page", () 
   assert.doesNotMatch(authLoginRouteSource, /redirect\("\/app\/orders"\)/);
   assert.doesNotMatch(authLoginRouteSource, /throw new Response/);
   assert.doesNotMatch(authLoginRouteSource, /status:\s*400/);
+  assert.match(authLoginRouteSource, /PageShell/);
+  assert.match(authLoginRouteSource, /PageSection/);
+  assert.match(authLoginRouteSource, /PageNote/);
+  assert.match(authLoginRouteSource, /StatusPill/);
+  assert.doesNotMatch(authLoginRouteSource, /<s-page|<s-section|<s-paragraph/);
   assert.match(authLoginRouteSource, /missingShopContext/);
   assert.match(authLoginRouteSource, /shopifyOfficialUrl/);
   assert.match(authLoginRouteSource, /shopifyAdminUrl/);
@@ -66,6 +88,7 @@ test("app index redirect does not require auth before the sidebar shell renders"
     appIndexRouteSource,
     /redirect\(`\/app\/orders\$\{url\.search\}`\)/,
   );
+  assert.match(appIndexRouteSource, /logAppEntryRedirect\(request, "\/app", "\/app\/orders"\)/);
 });
 
 const rootDocumentSource = readFileSync(
