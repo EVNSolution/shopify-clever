@@ -73,14 +73,11 @@ test("Drivers tab separates operational status from app access state", () => {
   assert.match(source, /재로그인/);
   assert.match(source, /canShowDriverInviteActions\(driver\) \? \(/);
   assert.match(source, /driver\.inviteCode \? \(/);
-  assert.match(source, /inviteCodeRemaining: formatInviteCodeRemaining\(driver\.inviteCodeExpiresAt\)/);
-  assert.match(source, /function formatInviteCodeRemaining\(value\)/);
-  assert.match(source, /남은 시간 \$\{driver\.inviteCodeRemaining\}/);
   assert.match(source, /<span style=\{inviteCodeValueStyle\}>코드 \{driver\.inviteCode\}<\/span>/);
-  assert.match(source, /<span style=\{inviteCodeRemainingStyle\}>\{driver\.inviteCodeRemaining\}<\/span>/);
+  assert.doesNotMatch(source, /inviteCodeRemaining|formatInviteCodeRemaining|inviteCodeRemainingStyle|남은 시간/);
+  assert.doesNotMatch(source, /copyDriverInviteMessage/);
   assert.match(source, /style=\{compactInviteButtonStyle\}/);
   assert.match(source, /인증코드 생성/);
   assert.match(source, /재생성/);
-  assert.match(source, /복사/);
   assert.doesNotMatch(source, /marginTop: "4px"/);
 });

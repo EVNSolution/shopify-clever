@@ -303,9 +303,6 @@ const appAccessInlineButtonStyle = {
 
 const inviteCodeInlineStyle = {
   alignItems: "center",
-  background: "#f6f6f7",
-  border: "1px solid #e3e3e3",
-  borderRadius: "999px",
   color: "#303030",
   display: "inline-flex",
   flex: "1 1 auto",
@@ -316,22 +313,11 @@ const inviteCodeInlineStyle = {
   maxWidth: "100%",
   minWidth: 0,
   overflow: "hidden",
-  padding: "2px 6px",
   whiteSpace: "nowrap",
 };
 
 const inviteCodeValueStyle = {
   flex: "0 0 auto",
-};
-
-const inviteCodeRemainingStyle = {
-  color: "#616161",
-  flex: "0 1 auto",
-  fontWeight: 600,
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
 const compactInviteButtonStyle = {
@@ -569,7 +555,6 @@ function mapDeliveryDriverToRow(driver) {
     isAppLinked: appLinked,
     inviteCode: driver.inviteCode,
     inviteCodeExpiresAt: driver.inviteCodeExpiresAt,
-    inviteCodeRemaining: formatInviteCodeRemaining(driver.inviteCodeExpiresAt),
     assignedRoute: { label: "Unassigned" },
     joinedAt: formatDriverTimestamp(driver.createdAt) ?? "—",
     lastSeenAt: formatDriverTimestamp(driver.lastSeenAt) ?? null,
@@ -603,26 +588,6 @@ function formatDriverTimestamp(value) {
   if (Number.isNaN(date.getTime())) return String(value);
 
   return date.toISOString().slice(0, 10);
-}
-
-function formatInviteCodeRemaining(value) {
-  if (!value) return "만료시간 없음";
-  const expiresAt = new Date(value);
-  const expiresAtMs = expiresAt.getTime();
-  if (Number.isNaN(expiresAtMs)) return "만료시간 확인";
-
-  const remainingMinutes = Math.ceil((expiresAtMs - Date.now()) / 60000);
-  if (remainingMinutes <= 0) return "만료됨";
-  if (remainingMinutes < 60) return `${remainingMinutes}분`;
-
-  const remainingHours = Math.floor(remainingMinutes / 60);
-  const extraMinutes = remainingMinutes % 60;
-  if (remainingHours < 24) {
-    return extraMinutes > 0 ? `${remainingHours}시간 ${extraMinutes}분` : `${remainingHours}시간`;
-  }
-
-  const remainingDays = Math.ceil(remainingHours / 24);
-  return `${remainingDays}일`;
 }
 
 function formatRecentEvents(value) {
@@ -843,25 +808,6 @@ export default function DriversVehiclesPage() {
     }
   };
 
-  const copyDriverInviteMessage = async (inviteCode) => {
-    const message = buildDriverInviteMessage({
-      downloadLink: getDriverDownloadLink(DRIVER_DOWNLOAD_LINK),
-      inviteCode,
-    });
-
-    if (!navigator.clipboard?.writeText) {
-      setCopyStatus("클립보드 복사 실패. 아래 내용을 직접 복사하세요:\n" + message);
-      return;
-    }
-
-    try {
-      await navigator.clipboard.writeText(message);
-      setCopyStatus("초대 메시지가 복사되었습니다.");
-    } catch {
-      setCopyStatus("클립보드 복사 실패. 아래 내용을 직접 복사하세요:\n" + message);
-    }
-  };
-
   useEffect(() => {
     if (!pendingDownloadLink || driverInviteFetcher.state !== "idle" || !driverInviteFetcher.data) return;
 
@@ -1026,13 +972,8 @@ export default function DriversVehiclesPage() {
                     <span style={appAccessInlineStyle}>
                       {canShowDriverInviteActions(driver) && driver.inviteCode ? (
                         <>
-                          <span
-                            style={inviteCodeInlineStyle}
-                            title={`코드 ${driver.inviteCode} · 남은 시간 ${driver.inviteCodeRemaining}`}
-                          >
+                          <span style={inviteCodeInlineStyle}>
                             <span style={inviteCodeValueStyle}>코드 {driver.inviteCode}</span>
-                            <span aria-hidden="true">·</span>
-                            <span style={inviteCodeRemainingStyle}>{driver.inviteCodeRemaining}</span>
                           </span>
                           <button
                             type="button"
@@ -1040,13 +981,6 @@ export default function DriversVehiclesPage() {
                             onClick={() => regenerateInviteCode(driver.id)}
                           >
                             재생성
-                          </button>
-                          <button
-                            type="button"
-                            style={appAccessInlineButtonStyle}
-                            onClick={() => copyDriverInviteMessage(driver.inviteCode)}
-                          >
-                            복사
                           </button>
                         </>
                       ) : (
