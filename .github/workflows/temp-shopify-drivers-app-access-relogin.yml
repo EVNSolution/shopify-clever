@@ -15,11 +15,15 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     env:
-      AWS_REGION: ${{ vars.AWS_REGION || secrets.AWS_REGION || 'ap-northeast-2' }}
-      EC2_HOST: ${{ vars.EC2_HOST || secrets.EC2_HOST }}
-      EC2_USER: ${{ vars.EC2_USER || secrets.EC2_USER }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH || secrets.DEPLOY_PATH }}
-      EC2_SSH_SECURITY_GROUP_ID: ${{ vars.EC2_SSH_SECURITY_GROUP_ID || secrets.EC2_SSH_SECURITY_GROUP_ID }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      EC2_SSH_SECURITY_GROUP_ID: ${{ vars.EC2_SSH_SECURITY_GROUP_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
     steps:
       - name: Checkout patched source
         uses: actions/checkout@v4
@@ -27,15 +31,18 @@ jobs:
           ref: ${{ inputs.source_ref }}
           path: source
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
+      - name: Validate required deploy env
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "$EC2_HOST"
+          test -n "$EC2_USER"
+          test -n "$DEPLOY_PATH"
+          test -n "$EC2_SSH_KEY"
 
       - name: Authorize runner SSH ingress
         id: ingress
+        if: ${{ env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && env.EC2_SSH_SECURITY_GROUP_ID != '' }}
         shell: bash
         run: |
           set -euo pipefail
@@ -50,9 +57,9 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p ~/.ssh
-          printf '%s\n' "${{ secrets.EC2_SSH_KEY }}" > ~/.ssh/deploy_key
+          printf '%s\n' "$EC2_SSH_KEY" > ~/.ssh/deploy_key
           chmod 600 ~/.ssh/deploy_key
-          ssh-keyscan -H "$EC2_HOST" >> ~/.ssh/known_hosts
+          ssh-keyscan -4 -T 20 -H "$EC2_HOST" >> ~/.ssh/known_hosts
 
       - name: Copy patched Drivers route and restart Shopify app
         shell: bash
@@ -75,7 +82,7 @@ jobs:
           docker compose -f infra/compose/docker-compose.prod.yml up -d shopify-app
           docker compose -f infra/compose/docker-compose.prod.yml ps shopify-app
           rm -f /tmp/app.drivers-vehicles.jsx
-REMOTE
+          REMOTE
 
       - name: Smoke check Shopify app auth entry
         shell: bash
