@@ -265,20 +265,24 @@ const checkboxCellStyle = {
 
 const appAccessCellStyle = {
   ...tableCellStyle,
+  overflow: "hidden",
   whiteSpace: "nowrap",
   wordBreak: "normal",
 };
 
 const appAccessInlineStyle = {
   alignItems: "center",
-  display: "inline-flex",
-  gap: "6px",
+  display: "flex",
+  gap: "5px",
   maxWidth: "100%",
   minWidth: 0,
+  overflow: "hidden",
   whiteSpace: "nowrap",
 };
 
 const appAccessStatusTextStyle = {
+  flex: "0 1 auto",
+  minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -289,6 +293,7 @@ const appAccessInlineButtonStyle = {
   border: 0,
   color: "#174a7c",
   cursor: "pointer",
+  flex: "0 0 auto",
   fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1.2,
@@ -298,11 +303,34 @@ const appAccessInlineButtonStyle = {
 
 const inviteCodeInlineStyle = {
   alignItems: "center",
-  color: "#616161",
+  background: "#f6f6f7",
+  border: "1px solid #e3e3e3",
+  borderRadius: "999px",
+  color: "#303030",
   display: "inline-flex",
+  flex: "1 1 auto",
   fontSize: "12px",
-  gap: "6px",
+  fontWeight: 650,
+  gap: "4px",
+  lineHeight: 1.2,
+  maxWidth: "100%",
   minWidth: 0,
+  overflow: "hidden",
+  padding: "2px 6px",
+  whiteSpace: "nowrap",
+};
+
+const inviteCodeValueStyle = {
+  flex: "0 0 auto",
+};
+
+const inviteCodeRemainingStyle = {
+  color: "#616161",
+  flex: "0 1 auto",
+  fontWeight: 600,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
@@ -541,6 +569,7 @@ function mapDeliveryDriverToRow(driver) {
     isAppLinked: appLinked,
     inviteCode: driver.inviteCode,
     inviteCodeExpiresAt: driver.inviteCodeExpiresAt,
+    inviteCodeRemaining: formatInviteCodeRemaining(driver.inviteCodeExpiresAt),
     assignedRoute: { label: "Unassigned" },
     joinedAt: formatDriverTimestamp(driver.createdAt) ?? "—",
     lastSeenAt: formatDriverTimestamp(driver.lastSeenAt) ?? null,
@@ -574,6 +603,26 @@ function formatDriverTimestamp(value) {
   if (Number.isNaN(date.getTime())) return String(value);
 
   return date.toISOString().slice(0, 10);
+}
+
+function formatInviteCodeRemaining(value) {
+  if (!value) return "만료시간 없음";
+  const expiresAt = new Date(value);
+  const expiresAtMs = expiresAt.getTime();
+  if (Number.isNaN(expiresAtMs)) return "만료시간 확인";
+
+  const remainingMinutes = Math.ceil((expiresAtMs - Date.now()) / 60000);
+  if (remainingMinutes <= 0) return "만료됨";
+  if (remainingMinutes < 60) return `${remainingMinutes}분`;
+
+  const remainingHours = Math.floor(remainingMinutes / 60);
+  const extraMinutes = remainingMinutes % 60;
+  if (remainingHours < 24) {
+    return extraMinutes > 0 ? `${remainingHours}시간 ${extraMinutes}분` : `${remainingHours}시간`;
+  }
+
+  const remainingDays = Math.ceil(remainingHours / 24);
+  return `${remainingDays}일`;
 }
 
 function formatRecentEvents(value) {
@@ -929,10 +978,10 @@ export default function DriversVehiclesPage() {
           <table aria-label="Driver list" style={tableStyle}>
             <colgroup>
               <col style={{ width: "40px" }} />
-              <col style={{ width: "18%" }} />
+              <col style={{ width: "14.4%" }} />
               <col style={{ width: "150px" }} />
               <col style={{ width: "96px" }} />
-              <col style={{ width: "110px" }} />
+              <col style={{ width: "154px" }} />
               <col style={{ width: "110px" }} />
               <col style={{ width: "110px" }} />
               <col style={{ width: "110px" }} />
@@ -975,47 +1024,54 @@ export default function DriversVehiclesPage() {
                   <td style={tableCellStyle}><span style={statusPillStyle}>{driver.status}</span></td>
                   <td style={appAccessCellStyle}>
                     <span style={appAccessInlineStyle}>
-                      <span style={appAccessStatusTextStyle}>{driver.authStatus}</span>
-                      {canShowDriverReloginAction(driver) ? (
-                        <button
-                          type="button"
-                          style={appAccessInlineButtonStyle}
-                          onClick={() => regenerateInviteCode(driver.id)}
-                        >
-                          재로그인
-                        </button>
-                      ) : null}
-                      {canShowDriverInviteActions(driver) ? (
-                        driver.inviteCode ? (
-                          <>
-                            <span style={inviteCodeInlineStyle}>
-                              코드: <strong>{driver.inviteCode}</strong>
-                            </span>
+                      {canShowDriverInviteActions(driver) && driver.inviteCode ? (
+                        <>
+                          <span
+                            style={inviteCodeInlineStyle}
+                            title={`코드 ${driver.inviteCode} · 남은 시간 ${driver.inviteCodeRemaining}`}
+                          >
+                            <span style={inviteCodeValueStyle}>코드 {driver.inviteCode}</span>
+                            <span aria-hidden="true">·</span>
+                            <span style={inviteCodeRemainingStyle}>{driver.inviteCodeRemaining}</span>
+                          </span>
+                          <button
+                            type="button"
+                            style={appAccessInlineButtonStyle}
+                            onClick={() => regenerateInviteCode(driver.id)}
+                          >
+                            재생성
+                          </button>
+                          <button
+                            type="button"
+                            style={appAccessInlineButtonStyle}
+                            onClick={() => copyDriverInviteMessage(driver.inviteCode)}
+                          >
+                            복사
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <span style={appAccessStatusTextStyle}>{driver.authStatus}</span>
+                          {canShowDriverReloginAction(driver) ? (
                             <button
                               type="button"
                               style={appAccessInlineButtonStyle}
                               onClick={() => regenerateInviteCode(driver.id)}
                             >
-                              재생성
+                              재로그인
                             </button>
+                          ) : null}
+                          {canShowDriverInviteActions(driver) ? (
                             <button
                               type="button"
-                              style={appAccessInlineButtonStyle}
-                              onClick={() => copyDriverInviteMessage(driver.inviteCode)}
+                              style={compactInviteButtonStyle}
+                              onClick={() => regenerateInviteCode(driver.id)}
                             >
-                              복사
+                              인증코드 생성
                             </button>
-                          </>
-                        ) : (
-                          <button
-                            type="button"
-                            style={compactInviteButtonStyle}
-                            onClick={() => regenerateInviteCode(driver.id)}
-                          >
-                            인증코드 생성
-                          </button>
-                        )
-                      ) : null}
+                          ) : null}
+                        </>
+                      )}
                     </span>
                   </td>
                   <td style={tableCellStyle}>{driver.joinedAt}</td>
