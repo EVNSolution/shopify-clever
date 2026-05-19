@@ -35,7 +35,7 @@ export type DriverAssignedRouteResult =
         name: string;
         shopDomain: string;
         stops: DriverAssignedRouteStop[];
-        timezone: string | null;
+        timezone: string;
       };
     };
 

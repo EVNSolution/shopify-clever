@@ -14,7 +14,7 @@ describe('PrismaDriverAuthRepository', () => {
       displayName: '  Minji Kim  ',
       inviteCode: 'ABC123',
       phone: '+14165550123'
-    } as never);
+    });
 
     expect(prisma.driver.findFirst).toHaveBeenCalledWith({
       include: { shop: { select: { shopDomain: true } } },

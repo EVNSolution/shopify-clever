@@ -103,30 +103,36 @@ enum RetentionJobRunStatus {
   FAILED
 }
 
+enum DriverAccountDeletionRequestStatus {
+  REQUESTED
+}
+
 model Shop {
-  id                          String                @id @default(uuid()) @db.Uuid
-  shopDomain                  String                @db.Text
-  shopifyShopGid              String?               @db.Text
-  apiVersion                  String                @default("2026-04") @db.Text
-  adminAccessTokenCiphertext  String?               @db.Text
-  adminAccessTokenExpiresAt   DateTime?             @db.Timestamptz(6)
-  adminRefreshTokenCiphertext String?               @db.Text
-  adminRefreshTokenExpiresAt  DateTime?             @db.Timestamptz(6)
-  tokenScopes                 String[]              @default([])
-  tokenIssuedAt               DateTime?             @db.Timestamptz(6)
-  installedAt                 DateTime              @default(now()) @db.Timestamptz(6)
-  uninstalledAt               DateTime?             @db.Timestamptz(6)
-  createdAt                   DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt                   DateTime              @updatedAt @db.Timestamptz(6)
-  webhookEvents               ShopifyWebhookEvent[]
-  orders                      Order[]
-  deliveryStops               DeliveryStop[]
-  routePlans                  RoutePlan[]
-  drivers                     Driver[]
-  vehicles                    Vehicle[]
-  driverEvents                DriverEvent[]
-  driverConsentRecords        DriverConsentRecord[]
-  driverProofMedia            DriverProofMedia[]
+  id                            String                         @id @default(uuid()) @db.Uuid
+  shopDomain                    String                         @db.Text
+  shopifyShopGid                String?                        @db.Text
+  apiVersion                    String                         @default("2026-04") @db.Text
+  adminAccessTokenCiphertext    String?                        @db.Text
+  adminAccessTokenExpiresAt     DateTime?                      @db.Timestamptz(6)
+  adminRefreshTokenCiphertext   String?                        @db.Text
+  adminRefreshTokenExpiresAt    DateTime?                      @db.Timestamptz(6)
+  tokenScopes                   String[]                       @default([])
+  tokenIssuedAt                 DateTime?                      @db.Timestamptz(6)
+  installedAt                   DateTime                       @default(now()) @db.Timestamptz(6)
+  uninstalledAt                 DateTime?                      @db.Timestamptz(6)
+  createdAt                     DateTime                       @default(now()) @db.Timestamptz(6)
+  updatedAt                     DateTime                       @updatedAt @db.Timestamptz(6)
+  webhookEvents                 ShopifyWebhookEvent[]
+  orders                        Order[]
+  deliveryStops                 DeliveryStop[]
+  routePlans                    RoutePlan[]
+  drivers                       Driver[]
+  vehicles                      Vehicle[]
+  driverEvents                  DriverEvent[]
+  driverConsentRecords          DriverConsentRecord[]
+  driverProofMedia              DriverProofMedia[]
+  driverRouteFeedback           DriverRouteFeedback[]
+  driverAccountDeletionRequests DriverAccountDeletionRequest[]
 
   @@unique([shopDomain])
   @@unique([shopifyShopGid])
@@ -223,27 +229,28 @@ model DeliveryStop {
 }
 
 model RoutePlan {
-  id               String             @id @default(uuid()) @db.Uuid
-  shopId           String             @db.Uuid
-  shop             Shop               @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  name             String             @db.Text
-  planDate         DateTime           @db.Date
-  status           RoutePlanStatus    @default(DRAFT)
-  driverId         String?            @db.Uuid
-  driver           Driver?            @relation(fields: [driverId], references: [id], onDelete: SetNull)
-  vehicleId        String?            @db.Uuid
-  vehicle          Vehicle?           @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
-  depotLatitude    Decimal?           @db.Decimal(10, 7)
-  depotLongitude   Decimal?           @db.Decimal(10, 7)
-  optimizerVersion String             @db.Text
-  constraints      Json
-  metrics          Json
-  createdBy        String?            @db.Text
-  createdAt        DateTime           @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime           @updatedAt @db.Timestamptz(6)
-  routeStops       RoutePlanStop[]
-  driverEvents     DriverEvent[]
-  driverProofMedia DriverProofMedia[]
+  id                  String                @id @default(uuid()) @db.Uuid
+  shopId              String                @db.Uuid
+  shop                Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  name                String                @db.Text
+  planDate            DateTime              @db.Date
+  status              RoutePlanStatus       @default(DRAFT)
+  driverId            String?               @db.Uuid
+  driver              Driver?               @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  vehicleId           String?               @db.Uuid
+  vehicle             Vehicle?              @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+  depotLatitude       Decimal?              @db.Decimal(10, 7)
+  depotLongitude      Decimal?              @db.Decimal(10, 7)
+  optimizerVersion    String                @db.Text
+  constraints         Json
+  metrics             Json
+  createdBy           String?               @db.Text
+  createdAt           DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime              @updatedAt @db.Timestamptz(6)
+  routeStops          RoutePlanStop[]
+  driverEvents        DriverEvent[]
+  driverProofMedia    DriverProofMedia[]
+  driverRouteFeedback DriverRouteFeedback[]
 
   @@index([shopId, planDate, status])
   @@index([shopId, driverId, status])
@@ -269,25 +276,27 @@ model RoutePlanStop {
 }
 
 model Driver {
-  id                  String                @id @default(uuid()) @db.Uuid
-  shopId              String                @db.Uuid
-  shop                Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  displayName         String                @db.Text
-  phone               String?               @db.Text
-  status              DriverStatus          @default(ACTIVE)
-  inviteCode          String?               @db.Text
-  inviteCodeExpiresAt DateTime?             @db.Timestamptz(6)
-  authSubject         String?               @unique @db.Text
-  tokenVersion        Int                   @default(0)
-  tokensInvalidatedAt DateTime?             @db.Timestamptz(6)
-  lastSeenAt          DateTime?             @db.Timestamptz(6)
-  createdAt           DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt           DateTime              @updatedAt @db.Timestamptz(6)
-  sessions            DriverSession[]
-  routePlans          RoutePlan[]
-  driverEvents        DriverEvent[]
-  consentRecords      DriverConsentRecord[]
-  driverProofMedia    DriverProofMedia[]
+  id                      String                         @id @default(uuid()) @db.Uuid
+  shopId                  String                         @db.Uuid
+  shop                    Shop                           @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  displayName             String                         @db.Text
+  phone                   String?                        @db.Text
+  status                  DriverStatus                   @default(ACTIVE)
+  inviteCode              String?                        @db.Text
+  inviteCodeExpiresAt     DateTime?                      @db.Timestamptz(6)
+  authSubject             String?                        @unique @db.Text
+  tokenVersion            Int                            @default(0)
+  tokensInvalidatedAt     DateTime?                      @db.Timestamptz(6)
+  lastSeenAt              DateTime?                      @db.Timestamptz(6)
+  createdAt               DateTime                       @default(now()) @db.Timestamptz(6)
+  updatedAt               DateTime                       @updatedAt @db.Timestamptz(6)
+  sessions                DriverSession[]
+  routePlans              RoutePlan[]
+  driverEvents            DriverEvent[]
+  consentRecords          DriverConsentRecord[]
+  driverProofMedia        DriverProofMedia[]
+  driverRouteFeedback     DriverRouteFeedback[]
+  accountDeletionRequests DriverAccountDeletionRequest[]
 
   @@unique([shopId, inviteCode])
   @@index([shopId, status])
@@ -354,6 +363,43 @@ model DriverProofMedia {
   @@index([shopId, routePlanId, deliveryStopId, uploadedAt])
   @@index([driverId, uploadedAt])
   @@map("driver_proof_media")
+}
+
+model DriverRouteFeedback {
+  id          String    @id @default(uuid()) @db.Uuid
+  shopId      String    @db.Uuid
+  shop        Shop      @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  driverId    String    @db.Uuid
+  driver      Driver    @relation(fields: [driverId], references: [id], onDelete: Cascade)
+  routePlanId String    @db.Uuid
+  routePlan   RoutePlan @relation(fields: [routePlanId], references: [id], onDelete: Cascade)
+  reviewNote  String    @db.Text
+  submittedAt DateTime  @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @db.Timestamptz(6)
+
+  @@index([shopId, routePlanId, submittedAt])
+  @@index([driverId, submittedAt])
+  @@map("driver_route_feedback")
+}
+
+model DriverAccountDeletionRequest {
+  id                String                             @id @default(uuid()) @db.Uuid
+  shopId            String?                            @db.Uuid
+  shop              Shop?                              @relation(fields: [shopId], references: [id], onDelete: SetNull)
+  driverId          String?                            @db.Uuid
+  driver            Driver?                            @relation(fields: [driverId], references: [id], onDelete: SetNull)
+  shopDomain        String                             @db.Text
+  driverDisplayName String?                            @db.Text
+  driverPhone       String?                            @db.Text
+  status            DriverAccountDeletionRequestStatus @default(REQUESTED)
+  reason            String?                            @db.Text
+  requestedAt       DateTime                           @db.Timestamptz(6)
+  createdAt         DateTime                           @default(now()) @db.Timestamptz(6)
+
+  @@index([shopDomain, requestedAt])
+  @@index([driverId, requestedAt])
+  @@map("driver_account_deletion_requests")
 }
 
 model RetentionJobRun {
