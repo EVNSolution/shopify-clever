@@ -23,8 +23,13 @@ import {
   filterOrders,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
+  getOrderDeliveryDateValue,
+  getOrderDeliveryExceptionState,
   hasActiveOrderFilters,
+  isOrderDeliveryComplete,
   isOrderRouteCreated,
+  isOrderRouteAssigned,
+  isOrderRoutePlanningLocked,
   updateOrderFilterSearchParams,
 } from "../features/orders/order-filters";
 import { fetchShopifyOrders } from "../features/orders/shopify-orders.server";
@@ -51,6 +56,14 @@ const ORDER_PIN_PATH =
   "M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z";
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
+const SHOP_TIME_ZONE_QUERY = `#graphql
+  query CleverShopTimeZone {
+    shop {
+      ianaTimezone
+      timezoneAbbreviation
+    }
+  }
+`;
 
 const mapFrameStyle = {
   position: "relative",
@@ -275,6 +288,22 @@ const disabledPlanButtonStyle = {
   cursor: "not-allowed",
 };
 
+const orderFilterButtonStyle = {
+  ...removeFromPlanButtonStyle,
+  cursor: "pointer",
+};
+
+const activeOrderFilterButtonStyle = {
+  ...orderFilterButtonStyle,
+  background: "#303030",
+  borderColor: "#303030",
+  color: "#ffffff",
+};
+
+const disabledOrderFilterButtonStyle = {
+  ...disabledPlanButtonStyle,
+};
+
 const routePlanDetailStyle = {
   background: "#f7f7f7",
   borderRadius: "8px",
@@ -418,6 +447,24 @@ const routeCreatedTabStyle = {
   color: "#006c48",
 };
 
+const deliveryCompleteTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(0, 128, 96, 0.12)",
+  color: "#006c48",
+};
+
+const deliveryOverdueAssignedTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(180, 83, 9, 0.14)",
+  color: "#8a4b00",
+};
+
+const deliveryOverdueUnassignedTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(209, 24, 24, 0.12)",
+  color: "#b42318",
+};
+
 const orderNumberButtonStyle = {
   alignItems: "center",
   border: 0,
@@ -443,9 +490,67 @@ const SORTABLE_ORDER_COLUMNS = [
   { key: "address", label: "Address" },
   { key: "deliveryArea", label: "Area" },
   { key: "deliveryLabel", label: "Delivery" },
-  { key: "planningStatus", label: "Plan stage" },
+  { key: "planningStatus", label: "Delivery state" },
   { key: "hasCoordinates", label: "Coordinates" },
 ];
+
+function textOrUndefined(value) {
+  if (value == null) return undefined;
+
+  const text = String(value).trim();
+
+  return text.length > 0 ? text : undefined;
+}
+
+async function fetchShopifyShopTimeZone(admin) {
+  try {
+    const response = await admin.graphql(SHOP_TIME_ZONE_QUERY);
+    const payload = await response.json();
+    const shop = payload?.data?.shop;
+
+    return {
+      ianaTimezone: textOrUndefined(shop?.ianaTimezone),
+      timezoneAbbreviation: textOrUndefined(shop?.timezoneAbbreviation),
+    };
+  } catch {
+    return {
+      ianaTimezone: undefined,
+      timezoneAbbreviation: undefined,
+    };
+  }
+}
+
+function getLocalDateForTimeZone(date, timeZone) {
+  if (!timeZone) return undefined;
+
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone,
+      year: "numeric",
+    }).formatToParts(date);
+    const partMap = Object.fromEntries(
+      parts
+        .filter((part) => part.type !== "literal")
+        .map((part) => [part.type, part.value]),
+    );
+
+    if (!partMap.year || !partMap.month || !partMap.day) return undefined;
+
+    return `${partMap.year}-${partMap.month}-${partMap.day}`;
+  } catch {
+    return undefined;
+  }
+}
+
+function getShopLocalDate(shopTimeZoneData, date = new Date()) {
+  return (
+    getLocalDateForTimeZone(date, shopTimeZoneData?.ianaTimezone) ??
+    getLocalDateForTimeZone(date, "UTC") ??
+    date.toISOString().slice(0, 10)
+  );
+}
 
 function scheduleIdleTask(callback) {
   if (window.requestIdleCallback) {
@@ -541,13 +646,17 @@ function emitPerformanceMetric(metric) {
   }).catch(() => {});
 }
 
-function getOrderSortValue(order, columnKey) {
+function getOrderSortValue(order, columnKey, referenceDate) {
   if (columnKey === "hasCoordinates") {
     return order.hasCoordinates ? "Yes" : "No";
   }
 
   if (columnKey === "planningStatus") {
-    return isOrderRouteCreated(order) ? "Planned" : "Unplanned";
+    return formatOrderDeliveryState(order, referenceDate);
+  }
+
+  if (columnKey === "deliveryLabel") {
+    return getOrderDeliveryDateValue(order) || order.deliveryLabel || "";
   }
 
   return order[columnKey] ?? "";
@@ -600,8 +709,27 @@ function formatDeliveryValue(value) {
   return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
 
-function formatPlanningStatus(order) {
-  return isOrderRouteCreated(order) ? "Planned" : "Unplanned";
+function formatOrderDeliveryState(order, referenceDate) {
+  const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
+
+  if (exceptionState === "overdue_assigned") return "Assigned · overdue";
+  if (exceptionState === "overdue_unassigned") return "Past due";
+  if (isOrderDeliveryComplete(order)) return "Delivered";
+  if (isOrderRouteAssigned(order)) return "Assigned · undelivered";
+  if (isOrderRouteCreated(order)) return "Planned";
+
+  return "Unplanned";
+}
+
+function getOrderDeliveryStateTabStyle(order, referenceDate) {
+  const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
+
+  if (exceptionState === "overdue_assigned") return deliveryOverdueAssignedTabStyle;
+  if (exceptionState === "overdue_unassigned") return deliveryOverdueUnassignedTabStyle;
+  if (isOrderDeliveryComplete(order)) return deliveryCompleteTabStyle;
+  if (isOrderRouteCreated(order)) return routeCreatedTabStyle;
+
+  return deliveryInfoTabStyle;
 }
 
 function formatOrderDeliveryLabel(order) {
@@ -657,13 +785,15 @@ function createDepartureMarkerElement(departureLocation) {
   return markerElement;
 }
 
-function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
+function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan, referenceDate) {
   const popupElement = document.createElement("div");
   const popupTitleElement = document.createElement("strong");
   const popupAddressElement = document.createElement("div");
   const popupMetaElement = document.createElement("div");
   const popupActionButton = document.createElement("button");
   const deliveryMetaValues = [order.deliveryArea, formatOrderDeliveryLabel(order)].filter(Boolean);
+  const routePlanningLocked = isOrderRoutePlanningLocked(order, referenceDate);
+  const routePlanningUnavailable = routePlanningLocked || !isOrderReadyToPlan(order);
 
   popupElement.className = "order-marker-popup";
   popupTitleElement.className = "order-marker-popup__title";
@@ -679,11 +809,19 @@ function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
   }
   popupActionButton.type = "button";
   popupActionButton.className = "order-marker-popup__action";
-  popupActionButton.textContent = plannedIndex > 0 ? "Added to plan" : "Add to plan";
-  popupActionButton.disabled = plannedIndex > 0;
+  popupActionButton.textContent =
+    plannedIndex > 0
+      ? "Added to plan"
+      : routePlanningLocked
+        ? formatOrderDeliveryState(order, referenceDate)
+        : routePlanningUnavailable
+          ? "Needs review"
+          : "Add to plan";
+  popupActionButton.disabled = plannedIndex > 0 || routePlanningUnavailable;
   popupActionButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
+    if (routePlanningUnavailable) return;
     onAddToPlan(order.id);
   });
 
@@ -943,10 +1081,12 @@ export const action = async ({ request }) => {
     return { errors: [{ message: "Route plan에 추가된 주문이 없습니다." }] };
   }
 
-  const [orderData, departureLocationData] = await Promise.all([
+  const [orderData, departureLocationData, shopTimeZoneData] = await Promise.all([
     fetchShopifyOrders(admin),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
+    fetchShopifyShopTimeZone(admin),
   ]);
+  const shopLocalDate = getShopLocalDate(shopTimeZoneData);
   const plannedOrderIdSet = new Set(plannedOrderIds);
   const plannedShopifyOrders = orderData.orders.filter((order) =>
     plannedOrderIdSet.has(order.id),
@@ -995,6 +1135,22 @@ export const action = async ({ request }) => {
         {
           message:
             `이미 계획 이후 단계인 주문이 포함되어 route를 만들지 않았습니다: ${formatOrderNames(alreadyPlannedOrders)}. Orders의 기본 Unplanned view에서 아직 계획되지 않은 주문만 선택해주세요.`,
+        },
+      ],
+    };
+  }
+
+  const expiredDeliveryDateOrders = plannedOrders.filter((order) =>
+    !isOrderRouteCreated(order) &&
+    isOrderRoutePlanningLocked(order, shopLocalDate),
+  );
+
+  if (expiredDeliveryDateOrders.length > 0) {
+    return {
+      errors: [
+        {
+          message:
+            `Delivery 날짜가 지난 주문은 새 route plan에 추가하지 않았습니다: ${formatOrderNames(expiredDeliveryDateOrders)}. All view에서는 상태 확인만 하고, route 생성은 오늘 이후 주문으로 진행해주세요.`,
         },
       ],
     };
@@ -1063,6 +1219,12 @@ export const loader = async ({ request }) => {
   }));
 
   const serverOrdersStartedAt = getSafePerformanceNow();
+  const shopTimeZoneStartedAt = getSafePerformanceNow();
+  const shopTimeZoneDataPromise = fetchShopifyShopTimeZone(admin).then((shopTimeZoneData) => ({
+    data: shopTimeZoneData,
+    durationMs: roundPerfDuration(getSafePerformanceNow() - shopTimeZoneStartedAt),
+  }));
+
   const serverOrderDataPromise = fetchDeliveryOrders(
     request,
     {},
@@ -1086,14 +1248,22 @@ export const loader = async ({ request }) => {
     }),
   );
 
-  const [orderDataResult, departureLocationDataResult, serverOrderDataResult] = await Promise.all([
+  const [
+    orderDataResult,
+    departureLocationDataResult,
+    serverOrderDataResult,
+    shopTimeZoneDataResult,
+  ] = await Promise.all([
     orderDataPromise,
     departureLocationDataPromise,
     serverOrderDataPromise,
+    shopTimeZoneDataPromise,
   ]);
   const orderData = orderDataResult.data;
   const departureLocationData = departureLocationDataResult.data;
   const serverOrderData = serverOrderDataResult.data;
+  const shopTimeZoneData = shopTimeZoneDataResult.data;
+  const shopLocalDate = getShopLocalDate(shopTimeZoneData);
   const serverOrderRows = mapCanonicalOrdersToOrderRows(serverOrderData.orders);
   const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows(
     orderData.orders,
@@ -1108,12 +1278,15 @@ export const loader = async ({ request }) => {
       ...getVisibleDeliveryOrderLoaderErrors(serverOrderData.errors),
     ],
     departureLocation: departureLocationData.departureLocation,
+    shopLocalDate,
+    shopTimeZone: shopTimeZoneData.ianaTimezone ?? null,
     perf: {
       loader: {
         totalMs: roundPerfDuration(getSafePerformanceNow() - loaderStartedAt),
         shopifyOrdersMs: orderDataResult.durationMs,
         departureLocationMs: departureLocationDataResult.durationMs,
         serverOrdersMs: serverOrderDataResult.durationMs,
+        shopTimeZoneMs: shopTimeZoneDataResult.durationMs,
       },
     },
   };
@@ -1125,7 +1298,7 @@ export default function OrdersPage() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, errors, departureLocation, perf } = useLoaderData();
+  const { orders, errors, departureLocation, perf, shopLocalDate } = useLoaderData();
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
     [orders],
@@ -1139,13 +1312,27 @@ export default function OrdersPage() {
     () => getOrderFiltersFromSearchParams(searchParams),
     [searchParams],
   );
+  const orderFilterReferenceDate = useMemo(
+    () => shopLocalDate ?? new Date(),
+    [shopLocalDate],
+  );
+  const orderFilterOptionOrders = useMemo(
+    () => filterOrders(displayOrders, {
+      planned: orderFilters.planned,
+      referenceDate: orderFilterReferenceDate,
+    }),
+    [displayOrders, orderFilters.planned, orderFilterReferenceDate],
+  );
   const orderFilterOptions = useMemo(
-    () => getOrderFilterOptions(displayOrders),
-    [displayOrders],
+    () => getOrderFilterOptions(orderFilterOptionOrders),
+    [orderFilterOptionOrders],
   );
   const filteredOrders = useMemo(
-    () => filterOrders(displayOrders, orderFilters),
-    [displayOrders, orderFilters],
+    () => filterOrders(displayOrders, {
+      ...orderFilters,
+      referenceDate: orderFilterReferenceDate,
+    }),
+    [displayOrders, orderFilters, orderFilterReferenceDate],
   );
   const activeOrderFilters = useMemo(
     () => hasActiveOrderFilters(orderFilters),
@@ -1198,13 +1385,13 @@ export default function OrdersPage() {
 
     return [...filteredOrders].sort((leftOrder, rightOrder) => {
       const comparison = compareOrderSortValues(
-        getOrderSortValue(leftOrder, sortConfig.key),
-        getOrderSortValue(rightOrder, sortConfig.key),
+        getOrderSortValue(leftOrder, sortConfig.key, orderFilterReferenceDate),
+        getOrderSortValue(rightOrder, sortConfig.key, orderFilterReferenceDate),
       );
 
       return sortConfig.direction === "ascending" ? comparison : -comparison;
     });
-  }, [filteredOrders, sortConfig]);
+  }, [filteredOrders, sortConfig, orderFilterReferenceDate]);
 
   const checkedOrderIdSet = useMemo(
     () => new Set(checkedOrderIds),
@@ -1221,8 +1408,12 @@ export default function OrdersPage() {
     [plannedOrderIdSet, sortedOrders],
   );
   const selectableTableOrders = useMemo(
-    () => tableOrders.filter((order) => !isOrderRouteCreated(order)),
-    [tableOrders],
+    () => tableOrders.filter(
+      (order) =>
+        isOrderReadyToPlan(order) &&
+        !isOrderRoutePlanningLocked(order, orderFilterReferenceDate),
+    ),
+    [tableOrders, orderFilterReferenceDate],
   );
 
   const displayOrderById = useMemo(
@@ -1290,7 +1481,7 @@ export default function OrdersPage() {
     const displayOrderIds = new Set(displayOrders.map((order) => order.id));
     const routeCandidateOrderIds = new Set(
       filteredOrders
-        .filter((order) => !isOrderRouteCreated(order))
+        .filter((order) => !isOrderRoutePlanningLocked(order, orderFilterReferenceDate))
         .map((order) => order.id),
     );
 
@@ -1313,7 +1504,7 @@ export default function OrdersPage() {
         ? currentOrderIds
         : nextOrderIds;
     });
-  }, [displayOrders, filteredOrders]);
+  }, [displayOrders, filteredOrders, orderFilterReferenceDate]);
 
   const selectedOrder =
     displayOrders.find((order) => order.id === selectedOrderId) ?? filteredOrders[0];
@@ -1490,6 +1681,16 @@ export default function OrdersPage() {
       return;
     }
 
+    if (isOrderRoutePlanningLocked(order, orderFilterReferenceDate)) {
+      setCreateRouteClientError("Delivery 날짜가 지난 주문은 새 route plan에 추가할 수 없습니다.");
+      return;
+    }
+
+    if (!isOrderReadyToPlan(order)) {
+      setCreateRouteClientError("ready 상태 주문만 route plan에 추가할 수 있습니다.");
+      return;
+    }
+
     if (!order?.routeScopeKey || order.routeScopeKey !== targetRouteScopeKey) {
       setCreateRouteClientError("같은 배송일/세션 주문만 route plan에 추가할 수 있습니다.");
       return;
@@ -1505,7 +1706,7 @@ export default function OrdersPage() {
     );
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
-  }, [displayOrderById, plannedRouteScope]);
+  }, [displayOrderById, orderFilterReferenceDate, plannedRouteScope]);
 
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
@@ -1513,7 +1714,14 @@ export default function OrdersPage() {
     const selectedOrders = checkedOrderIds
       .map((orderId) => displayOrderById.get(orderId))
       .filter(Boolean)
-      .filter((order) => !isOrderRouteCreated(order));
+      .filter((order) => !isOrderRoutePlanningLocked(order, orderFilterReferenceDate))
+      .filter((order) => isOrderReadyToPlan(order));
+
+    if (selectedOrders.length === 0) {
+      setCreateRouteClientError("ready 상태 주문만 route plan에 추가할 수 있습니다.");
+      return;
+    }
+
     const targetRouteScopeKey = plannedRouteScope?.routeScopeKey ?? selectedOrders.find((order) => order.routeScopeKey)?.routeScopeKey;
     const scopedSelectedOrders = selectedOrders.filter((order) => order.routeScopeKey === targetRouteScopeKey);
 
@@ -1556,6 +1764,11 @@ export default function OrdersPage() {
 
     if (readyPlannedOrders.length === 0) {
       setCreateRouteClientError("Route plan에는 ready 상태의 주문만 보낼 수 있습니다.");
+      return;
+    }
+
+    if (plannedOrders.some((order) => isOrderRoutePlanningLocked(order, orderFilterReferenceDate))) {
+      setCreateRouteClientError("이미 route가 있거나 Delivery 날짜가 지난 주문은 route plan을 생성할 수 없습니다.");
       return;
     }
 
@@ -1813,7 +2026,12 @@ export default function OrdersPage() {
       new maplibregl.Popup({ offset: 24 })
         .setLngLat(order.coordinates)
         .setDOMContent(
-          createOrderMarkerPopupElement(order, plannedIndex, handleAddOrderToPlan),
+          createOrderMarkerPopupElement(
+            order,
+            plannedIndex,
+            handleAddOrderToPlan,
+            orderFilterReferenceDate,
+          ),
         )
         .addTo(map);
 
@@ -1855,6 +2073,7 @@ export default function OrdersPage() {
     handleSelectOrder,
     isMapReady,
     locatedOrders,
+    orderFilterReferenceDate,
     plannedOrderIds,
   ]);
 
@@ -2105,14 +2324,20 @@ export default function OrdersPage() {
             <button
               type="button"
               aria-pressed={allOrdersShown}
-              style={allOrdersShown ? removeFromPlanButtonStyle : disabledPlanButtonStyle}
+              title={
+                allOrdersShown
+                  ? "Showing all orders, including past and planned orders"
+                  : "Include past and planned orders"
+              }
+              style={allOrdersShown ? activeOrderFilterButtonStyle : orderFilterButtonStyle}
               onClick={handleToggleAllOrders}
             >
               All
             </button>
             <button
               type="button"
-              style={activeOrderFilters ? removeFromPlanButtonStyle : disabledPlanButtonStyle}
+              title="Return to the current unplanned view"
+              style={activeOrderFilters ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
               disabled={!activeOrderFilters}
               onClick={handleClearOrderFilters}
             >Clear filters</button>
@@ -2178,7 +2403,7 @@ export default function OrdersPage() {
               </thead>
               <tbody>
                 {tableOrders.map((order) => {
-                  const routeCreated = isOrderRouteCreated(order);
+                  const routePlanningLocked = isOrderRoutePlanningLocked(order, orderFilterReferenceDate);
 
                   return (
                     <tr key={order.id}>
@@ -2186,8 +2411,8 @@ export default function OrdersPage() {
                         <input
                           type="checkbox"
                           aria-label={`Select ${order.name} for plan`}
-                          checked={!routeCreated && checkedOrderIdSet.has(order.id)}
-                          disabled={routeCreated}
+                          checked={!routePlanningLocked && checkedOrderIdSet.has(order.id)}
+                          disabled={routePlanningLocked}
                           onChange={() => toggleOrderCheck(order.id)}
                         />
                       </td>
@@ -2220,8 +2445,8 @@ export default function OrdersPage() {
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <span style={routeCreated ? routeCreatedTabStyle : deliveryInfoTabStyle}>
-                          {formatPlanningStatus(order)}
+                        <span style={getOrderDeliveryStateTabStyle(order, orderFilterReferenceDate)}>
+                          {formatOrderDeliveryState(order, orderFilterReferenceDate)}
                         </span>
                       </td>
                       <td style={tableCellStyle}>

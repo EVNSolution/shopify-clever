@@ -533,6 +533,27 @@ describe('Admin orders routes', () => {
     }
   });
 
+  test('accepts full-week delivery weekday filters', async () => {
+    const { dependencies, listCanonicalOrders } = createDependencyHarness();
+    const app = await buildApp({ adminOrders: dependencies });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'GET',
+        url: '/admin/orders?deliveryWeekday=MONDAY'
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(listCanonicalOrders).toHaveBeenCalledWith({
+        filters: { deliveryWeekday: 'MONDAY' },
+        shopDomain: 'example.myshopify.com'
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   test('rejects invalid delivery date and delivery session filters', async () => {
     const { dependencies, listCanonicalOrders } = createDependencyHarness();
     const app = await buildApp({ adminOrders: dependencies });

@@ -447,7 +447,15 @@ function readShippingAddress(
 }
 
 function readDeliveryWeekday(value: unknown): DeliveryWeekday | null {
-  return value === 'THURSDAY' || value === 'FRIDAY' || value === 'SATURDAY' ? value : null;
+  return value === 'SUNDAY' ||
+    value === 'MONDAY' ||
+    value === 'TUESDAY' ||
+    value === 'WEDNESDAY' ||
+    value === 'THURSDAY' ||
+    value === 'FRIDAY' ||
+    value === 'SATURDAY'
+    ? value
+    : null;
 }
 
 function readServiceType(value: unknown): DeliveryServiceType | null {
@@ -460,7 +468,12 @@ function readDeliverySession(value: unknown): CanonicalOrderRow['deliverySession
 }
 
 function readDeliveryDateSource(value: unknown): CanonicalOrderRow['deliveryDateSource'] {
-  return value === 'LINE_ITEM_DATE_RANGE' || value === 'ORDER_DATE_CYCLE_RULE' || value === 'MISSING' ? value : null;
+  return value === 'EXPLICIT_ATTRIBUTE' ||
+    value === 'LINE_ITEM_DATE_RANGE' ||
+    value === 'ORDER_DATE_CYCLE_RULE' ||
+    value === 'MISSING'
+    ? value
+    : null;
 }
 
 function parseDateOnly(value: string | null): Date | null {

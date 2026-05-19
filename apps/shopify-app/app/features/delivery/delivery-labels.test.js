@@ -88,3 +88,16 @@ test("uses the order cycle when Shopify line items do not include a date range",
     "2026-05-08",
   );
 });
+
+test("uses an explicit delivery date before weekday/range inference", () => {
+  assert.equal(
+    inferDeliveryDateForOrder({
+      deliveryDate: "2026-05-18",
+      lineItems: {
+        nodes: [{ title: "Tomatono 2026.05.18-05.31" }],
+      },
+      orderCreatedAt: null,
+    }),
+    "2026-05-18",
+  );
+});

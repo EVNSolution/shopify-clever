@@ -276,7 +276,7 @@ paths:
         - name: deliveryWeekday
           in: query
           schema:
-            enum: [THURSDAY, FRIDAY, SATURDAY]
+            enum: [SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY]
             type: string
         - name: serviceType
           in: query

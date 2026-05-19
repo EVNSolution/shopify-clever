@@ -2,10 +2,15 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   filterOrders,
+  getOrderDeliveryExceptionState,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
   hasActiveOrderFilters,
+  isOrderDeliveryComplete,
+  isOrderDeliveryDatePast,
+  isOrderRouteAssigned,
   isOrderRouteCreated,
+  isOrderRoutePlanningLocked,
   updateOrderFilterSearchParams,
 } from "./order-filters.js";
 
@@ -90,14 +95,20 @@ test("defaults the query-backed Orders view to un-routed while All is explicit",
   });
 
   assert.deepEqual(
-    filterOrders(orders, defaultFilters).map((order) => order.id),
+    filterOrders(orders, {
+      ...defaultFilters,
+      referenceDate: "2026-05-14",
+    }).map((order) => order.id),
     ["order-1", "order-3"],
   );
 
   assert.equal(hasActiveOrderFilters(defaultFilters), false);
 
   assert.deepEqual(
-    filterOrders(orders, { planned: "false" }).map((order) => order.id),
+    filterOrders(orders, {
+      planned: "false",
+      referenceDate: "2026-05-14",
+    }).map((order) => order.id),
     ["order-1", "order-3"],
   );
 
@@ -144,13 +155,97 @@ test("treats route-assigned and later-stage orders as planned-stage orders", () 
   assert.equal(isOrderRouteCreated(stagedOrders[4]), true);
 
   assert.deepEqual(
-    filterOrders(stagedOrders, { planned: "false" }).map((order) => order.id),
+    filterOrders(stagedOrders, {
+      planned: "false",
+      referenceDate: "2026-05-14",
+    }).map((order) => order.id),
     ["order-1", "order-3"],
   );
 
   assert.deepEqual(
     filterOrders(stagedOrders, { planned: "all" }).map((order) => order.id),
     ["order-1", "order-2", "order-3", "order-4", "order-5"],
+  );
+});
+
+test("defaults Orders to current unplanned delivery dates and hides past due orders", () => {
+  const datedOrders = [
+    {
+      id: "past-unassigned",
+      deliveryDate: "2026-05-14",
+      planningStatus: "UNPLANNED",
+    },
+    {
+      id: "today-unassigned",
+      deliveryDate: "2026-05-18",
+      planningStatus: "UNPLANNED",
+    },
+    {
+      id: "future-unassigned",
+      deliveryDate: "2026-05-19",
+      planningStatus: "UNPLANNED",
+    },
+    {
+      id: "past-assigned",
+      deliveryDate: "2026-05-14",
+      routeStatus: "ASSIGNED",
+    },
+  ];
+
+  assert.deepEqual(
+    filterOrders(datedOrders, {
+      planned: "false",
+      referenceDate: "2026-05-18",
+    }).map((order) => order.id),
+    ["today-unassigned", "future-unassigned"],
+  );
+
+  assert.deepEqual(
+    filterOrders(datedOrders, {
+      planned: "all",
+      referenceDate: "2026-05-18",
+    }).map((order) => order.id),
+    ["past-unassigned", "today-unassigned", "future-unassigned", "past-assigned"],
+  );
+});
+
+test("classifies combined delivery-date and route-assignment states", () => {
+  const pastUnassignedOrder = {
+    deliveryDate: "2026-05-14",
+    planningStatus: "UNPLANNED",
+  };
+  const pastAssignedOrder = {
+    deliveryDate: "2026-05-14",
+    routeStatus: "ASSIGNED",
+  };
+  const completedPastOrder = {
+    deliveryDate: "2026-05-14",
+    status: "FULFILLED",
+  };
+  const futureUnassignedOrder = {
+    deliveryDate: "2026-05-20",
+    planningStatus: "UNPLANNED",
+  };
+
+  assert.equal(isOrderDeliveryDatePast(pastUnassignedOrder, "2026-05-18"), true);
+  assert.equal(isOrderRouteAssigned(pastAssignedOrder), true);
+  assert.equal(isOrderRoutePlanningLocked(pastUnassignedOrder, "2026-05-18"), true);
+  assert.equal(isOrderDeliveryComplete(completedPastOrder), true);
+  assert.equal(
+    getOrderDeliveryExceptionState(pastUnassignedOrder, "2026-05-18"),
+    "overdue_unassigned",
+  );
+  assert.equal(
+    getOrderDeliveryExceptionState(pastAssignedOrder, "2026-05-18"),
+    "overdue_assigned",
+  );
+  assert.equal(
+    getOrderDeliveryExceptionState(completedPastOrder, "2026-05-18"),
+    "none",
+  );
+  assert.equal(
+    getOrderDeliveryExceptionState(futureUnassignedOrder, "2026-05-18"),
+    "none",
   );
 });
 
