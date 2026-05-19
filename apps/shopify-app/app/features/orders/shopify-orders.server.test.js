@@ -11,7 +11,9 @@ import {
 } from "./shopify-orders.server.js";
 
 test("orders query reads Shopify orders without requiring customer scope", () => {
-  assert.match(SHOPIFY_ORDERS_QUERY, /orders\(first: 50, sortKey: CREATED_AT, reverse: true\)/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /query TomatonoRouteOrders\(\$first: Int!, \$after: String\)/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /orders\(first: \$first, after: \$after, sortKey: CREATED_AT, reverse: true\)/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /pageInfo\s*\{[\s\S]*hasNextPage[\s\S]*endCursor[\s\S]*\}/);
   assert.match(SHOPIFY_ORDERS_QUERY, /shippingAddress\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /legacyResourceId/);
   assert.doesNotMatch(SHOPIFY_ORDERS_QUERY, /\bemail\b/);
@@ -32,6 +34,49 @@ test("orders query reads Shopify orders without requiring customer scope", () =>
   assert.match(SHOPIFY_ORDERS_QUERY, /provinceCode/);
   assert.match(SHOPIFY_ORDERS_QUERY, /longitude/);
   assert.equal(SHOPIFY_ORDERS_QUERY.includes("customer {"), false);
+});
+
+
+test("fetchShopifyOrders paginates beyond Shopify's first 50 orders", async () => {
+  const calls = [];
+  const makeEdge = (index) => ({
+    node: {
+      id: `gid://shopify/Order/${index}`,
+      name: `#${String(index).padStart(4, "0")}`,
+      shippingAddress: { address1: `${index} Tomato Rd`, name: `Customer ${index}` },
+    },
+  });
+  const admin = {
+    graphql: async (_query, options) => {
+      calls.push(options?.variables ?? {});
+      const page = calls.length;
+      const start = page === 1 ? 1 : 51;
+      const count = page === 1 ? 50 : 29;
+
+      return {
+        json: async () => ({
+          data: {
+            orders: {
+              edges: Array.from({ length: count }, (_, offset) => makeEdge(start + offset)),
+              pageInfo: {
+                endCursor: page === 1 ? "cursor-50" : "cursor-79",
+                hasNextPage: page === 1,
+              },
+            },
+          },
+        }),
+      };
+    },
+  };
+
+  const result = await fetchShopifyOrders(admin);
+
+  assert.equal(result.orders.length, 79);
+  assert.deepEqual(calls, [
+    { after: null, first: 50 },
+    { after: "cursor-50", first: 50 },
+  ]);
+  assert.equal(result.orders.at(-1).name, "#0079");
 });
 
 test("maps Shopify orders into map-ready rows", () => {
@@ -305,6 +350,88 @@ test("maps raw Shopify orders to dated delivery labels without treating route-ti
   assert.equal(row.routeScopeKey, "2026-05-08|DELIVERY||");
   assert.equal(row.timeWindowStart, undefined);
   assert.equal(row.timeWindowEnd, undefined);
+});
+
+test("maps tomatono_delivery_date attributes without falling back to Date pending", () => {
+  const [row] = mapShopifyOrdersResponse({
+    data: {
+      orders: {
+        edges: [
+          {
+            node: {
+              id: "gid://shopify/Order/1006",
+              name: "#1006",
+              createdAt: "2026-05-18T15:30:00.000Z",
+              customAttributes: [
+                { key: "Delivery Area", value: "Thornhill" },
+                { key: "Delivery Day", value: "Monday" },
+                { key: "tomatono_delivery_date", value: "2026-05-18" },
+              ],
+              lineItems: {
+                nodes: [{ title: "Tomatono daily order" }],
+              },
+              shippingAddress: {
+                name: "Park Jiin",
+                address1: "7755 Bayview Ave",
+                city: "Thornhill",
+                province: "ON",
+                countryCodeV2: "CA",
+                latitude: 43.8196,
+                longitude: -79.4004,
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(row.deliveryDate, "2026-05-18");
+  assert.equal(row.deliveryLabel, "Mon 05/18");
+  assert.equal(row.routeScopeKey, "2026-05-18|DELIVERY||");
+  assert.equal(row.planningGroupKey, "2026-05-18|DELIVERY|||Thornhill");
+});
+
+
+test("maps explicit Delivery Date attributes without falling back to Date pending", () => {
+  const [row] = mapShopifyOrdersResponse({
+    data: {
+      orders: {
+        edges: [
+          {
+            node: {
+              id: "gid://shopify/Order/1005",
+              name: "#1005",
+              createdAt: "2026-05-18T15:30:00.000Z",
+              customAttributes: [
+                { key: "Delivery Area", value: "North York" },
+                { key: "Delivery Date", value: "2026-05-18" },
+              ],
+              lineItems: {
+                nodes: [{ title: "Tomatono daily order" }],
+              },
+              shippingAddress: {
+                name: "Park Jiin",
+                address1: "5100 Yonge St",
+                city: "North York",
+                province: "ON",
+                countryCodeV2: "CA",
+                latitude: 43.7685,
+                longitude: -79.4137,
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(row.deliveryDate, "2026-05-18");
+  assert.equal(row.deliveryLabel, "Mon 05/18");
+  assert.equal(row.deliverySession, "DAY");
+  assert.equal(row.serviceType, "DELIVERY");
+  assert.equal(row.routeScopeKey, "2026-05-18|DELIVERY||");
+  assert.equal(row.planningGroupKey, "2026-05-18|DELIVERY|||North York");
 });
 
 test("returns an actionable empty state when Shopify orders scope is missing", async () => {

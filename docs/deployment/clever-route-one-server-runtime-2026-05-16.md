@@ -4,8 +4,10 @@ Date: 2026-05-16
 
 This repo now manages two Shopify app runtimes from one monorepo and one EC2/EIP:
 
-- Public/App Store runtime: `clever`
-- Custom distribution runtime: `clever-route`
+- Public/App Store runtime: `CLEVER` (`clever-route`)
+- Custom/dev distribution runtime: `CleverRoute Dev` (`clever-route-dev`)
+
+The EC2 compose/service names still use `clever-route` for the custom/dev runtime infrastructure. That runtime name is historical infrastructure naming; it is no longer the Shopify app handle.
 
 The store domain required by Shopify Custom distribution is intentionally not stored in this repo. It is entered later in the Shopify Dev Dashboard when generating the install link.
 
@@ -13,9 +15,10 @@ The store domain required by Shopify Custom distribution is intentionally not st
 
 Both runtimes share source code but must not share runtime identity or data:
 
-| Area | Public runtime | clever-route custom runtime |
+| Area | Public runtime | clever-route custom/dev runtime |
 | --- | --- | --- |
-| Shopify config | `apps/shopify-app/shopify.app.toml` | `apps/shopify-app/shopify.app.clever-route.toml` |
+| Shopify config | `apps/shopify-app/shopify.app.toml` | `apps/shopify-app/shopify.app.dev.toml` |
+| Shopify app identity | `CLEVER` / `clever-route` | `CleverRoute Dev` / `clever-route-dev` |
 | Distribution | `app_store` | `single_merchant` |
 | Compose file | `infra/compose/docker-compose.prod.yml` | `infra/compose/docker-compose.clever-route.yml` |
 | Admin host | `clever-admin.3-39-216-177.sslip.io` | `clever-test-admin.3-39-216-177.sslip.io` |
@@ -77,6 +80,19 @@ The `CI/CD` workflow has two independent manual inputs:
 
 Both deploy paths run after the same validate job. The custom deploy recreates only the custom compose services and the shared Caddy edge.
 
+## Shopify app config and handle release gate
+
+Local development must use the dev app config:
+
+```bash
+cd apps/shopify-app
+npm run dev
+```
+
+This runs `shopify app dev -c dev`.
+
+Shopify rejected `handle = "clever"` as non-unique on 2026-05-18, so the active production fallback identity is `CLEVER` / `clever-route`. Keep the dev/custom app on `CleverRoute Dev` / `clever-route-dev` so the production fallback handle stays clear. Do not run `shopify app deploy`, `shopify app dev --reset`, `shopify app config link`, or `shopify app config use` against live apps without an explicit release decision.
+
 ## Local validation
 
 ```bash
@@ -110,7 +126,7 @@ rm -f infra/env/shopify-app-clever-route.env infra/env/delivery-api-clever-route
 
 After the operating store domain is known:
 
-1. Open the `clever-route` app in the Shopify Dev Dashboard.
+1. Open the `CleverRoute Dev` app in the Shopify Dev Dashboard.
 2. Select/confirm Custom distribution.
 3. Enter the target store domain (`*.myshopify.com` or `admin.shopify.com/store/...`).
 4. Save Protected customer data access for Protected customer data, Name, Address, and Phone.

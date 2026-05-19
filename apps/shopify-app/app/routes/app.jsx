@@ -93,7 +93,13 @@ export default function App() {
         <PrefetchPageLinks page={intentPrefetchPage} />
       ) : null}
       <s-app-nav>
-        <s-link href="/" rel="home">
+        <s-link
+          href="/app/orders"
+          rel="home"
+          onClick={(event) => handleNavClick(event, "/app/orders")}
+          onMouseEnter={() => prefetchNavPage("/app/orders")}
+          onFocus={() => prefetchNavPage("/app/orders")}
+        >
           {translate(language, "nav.home")}
         </s-link>
         {APP_NAV_ITEMS.map((item) => (

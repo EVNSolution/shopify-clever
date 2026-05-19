@@ -107,6 +107,32 @@ describe('Admin drivers routes', () => {
     }
   });
 
+  test('returns a clear schema-drift error when driver creation storage is not migrated', async () => {
+    const { createPendingDriver, dependencies } = createDependencyHarness();
+    createPendingDriver.mockRejectedValueOnce(Object.assign(new Error('missing column'), { code: 'P2022' }));
+    const app = await buildApp({ adminDrivers: dependencies });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'POST',
+        payload: driverInvitePayload(),
+        url: '/admin/drivers'
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        data: null,
+        error: {
+          code: 'DRIVER_SCHEMA_NOT_READY',
+          message: 'Delivery driver storage schema is not up to date. Run the delivery API schema push and retry.'
+        }
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
   test('lists drivers for the authenticated shop', async () => {
     const { dependencies, listDrivers } = createDependencyHarness();
     const app = await buildApp({ adminDrivers: dependencies });
@@ -125,10 +151,94 @@ describe('Admin drivers routes', () => {
       await app.close();
     }
   });
+
+  test('returns a clear schema-drift error when driver listing storage is not migrated', async () => {
+    const { dependencies, listDrivers } = createDependencyHarness();
+    listDrivers.mockRejectedValueOnce(Object.assign(new Error('missing column'), { code: 'P2022' }));
+    const app = await buildApp({ adminDrivers: dependencies });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'GET',
+        url: '/admin/drivers'
+      });
+
+      expect(response.statusCode).toBe(500);
+      expect(response.json()).toEqual({
+        data: null,
+        error: {
+          code: 'DRIVER_SCHEMA_NOT_READY',
+          message: 'Delivery driver storage schema is not up to date. Run the delivery API schema push and retry.'
+        }
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('deletes a driver for the authenticated shop', async () => {
+    const { deleteDriver, dependencies } = createDependencyHarness();
+    const app = await buildApp({ adminDrivers: dependencies });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'DELETE',
+        url: '/admin/drivers/driver-id'
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toEqual({ data: { driverId: 'driver-id' }, error: null });
+      expect(deleteDriver).toHaveBeenCalledWith({
+        driverId: 'driver-id',
+        shopDomain: 'example.myshopify.com'
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('logs driver deletion failures with driver and shop context', async () => {
+    const { deleteDriver, dependencies } = createDependencyHarness();
+    deleteDriver.mockRejectedValueOnce(new Error('missing driver'));
+    const logLines: string[] = [];
+    const app = await buildApp({
+      adminDrivers: dependencies,
+      logger: {
+        level: 'error',
+        stream: { write: (line: string) => logLines.push(line) }
+      }
+    });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'DELETE',
+        url: '/admin/drivers/missing-driver-id'
+      });
+
+      expect(response.statusCode).toBe(404);
+      expect(response.json()).toEqual({
+        data: null,
+        error: { code: 'NOT_FOUND', message: 'Driver not found' }
+      });
+      expect(
+        logLines.some((line) =>
+          line.includes('admin driver deletion failed') &&
+          line.includes('missing-driver-id') &&
+          line.includes('example.myshopify.com')
+        )
+      ).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
 });
 
 function createDependencyHarness(): {
   createPendingDriver: ReturnType<typeof vi.fn<AdminDriversDependencies['adminDriverService']['createPendingDriver']>>;
+  deleteDriver: ReturnType<typeof vi.fn<AdminDriversDependencies['adminDriverService']['deleteDriver']>>;
   dependencies: AdminDriversDependencies;
   listDrivers: ReturnType<typeof vi.fn<AdminDriversDependencies['adminDriverService']['listDrivers']>>;
   regenerateInviteCode: ReturnType<typeof vi.fn<AdminDriversDependencies['adminDriverService']['regenerateInviteCode']>>;
@@ -143,6 +253,9 @@ function createDependencyHarness(): {
   const listDrivers = vi.fn<AdminDriversDependencies['adminDriverService']['listDrivers']>(() =>
     Promise.resolve([linkedDriver, pendingDriver])
   );
+  const deleteDriver = vi.fn<AdminDriversDependencies['adminDriverService']['deleteDriver']>((input) =>
+    Promise.resolve(input.driverId)
+  );
   const regenerateInviteCode = vi.fn<AdminDriversDependencies['adminDriverService']['regenerateInviteCode']>(() =>
     Promise.resolve(pendingDriver)
   );
@@ -152,11 +265,13 @@ function createDependencyHarness(): {
     dependencies: {
       adminDriverService: {
         createPendingDriver,
+        deleteDriver,
         listDrivers,
         regenerateInviteCode
       },
       sessionTokenVerifier: { verify }
     },
+    deleteDriver,
     listDrivers,
     regenerateInviteCode
   };

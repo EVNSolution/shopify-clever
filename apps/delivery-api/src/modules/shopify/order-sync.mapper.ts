@@ -55,7 +55,7 @@ type ShopifyShippingAddress = {
   zip: string | null;
 };
 
-export type DeliveryWeekday = 'THURSDAY' | 'FRIDAY' | 'SATURDAY';
+export type DeliveryWeekday = 'SUNDAY' | 'MONDAY' | 'TUESDAY' | 'WEDNESDAY' | 'THURSDAY' | 'FRIDAY' | 'SATURDAY';
 export type DeliveryServiceType = 'DELIVERY' | 'EVENING_DELIVERY' | 'PICKUP';
 export type CanonicalOrderReadiness = 'READY_TO_PLAN' | 'NEEDS_REVIEW' | 'SKIPPED';
 export type PlanningStatus = 'UNPLANNED' | 'PLANNED';
@@ -171,6 +171,7 @@ export function mapShopifyOrderNodeToDeliveryInputs(
 ): SyncedOrderWithDeliveryStopInput {
   const attributes = normalizeAttributes(node.customAttributes ?? []);
   const deliveryArea = readAttribute(attributes, 'Delivery Area');
+  const deliveryDateRaw = readDeliveryDateAttribute(attributes);
   const deliveryDayRaw = readAttribute(attributes, 'Delivery Day');
   const pickupDay = readAttribute(attributes, 'Pickup Day');
   const pickup = pickupDay !== null;
@@ -179,6 +180,7 @@ export function mapShopifyOrderNodeToDeliveryInputs(
   const scope = calculateDeliveryScope({
     createdAt: node.createdAt ?? null,
     deliveryArea,
+    deliveryDateRaw,
     deliveryDayRaw,
     lineItems,
     pickupDayRaw: pickupDay,
@@ -248,6 +250,7 @@ export function mapShopifyOrderNodeToDeliveryInputs(
         deliveryArea,
         deliveryBatchEndDate: scope.deliveryBatchEndDate,
         deliveryBatchStartDate: scope.deliveryBatchStartDate,
+        deliveryDateRaw,
         deliveryDate: scope.deliveryDate,
         deliveryDateSource: scope.deliveryDateSource,
         deliveryDayRaw: canonicalDayRaw,
@@ -323,11 +326,11 @@ function buildReviewReasons(input: {
   const reasons: string[] = [];
   if (!input.hasShippingAddress) reasons.push('missing_address');
   if (input.deliveryArea === null) reasons.push('missing_delivery_area');
-  if (input.deliveryDayRaw === null) reasons.push('missing_delivery_day');
+  if (input.deliveryDayRaw === null && input.deliveryDate === null) reasons.push('missing_delivery_day');
   if (input.deliveryDayRaw !== null && (input.deliveryWeekday === null || input.serviceType === null)) {
     reasons.push('delivery_day_parse_failed');
   }
-  if (input.orderCreatedAt === null) reasons.push('missing_order_date');
+  if (input.orderCreatedAt === null && input.deliveryDateSource !== 'EXPLICIT_ATTRIBUTE') reasons.push('missing_order_date');
   if (input.deliveryDate === null) {
     reasons.push(input.deliveryDateSource === 'MISSING' ? 'missing_delivery_date' : 'delivery_date_parse_failed');
   }
@@ -374,6 +377,15 @@ function normalizeAttributes(value: ShopifyOrderAttribute[]): ShopifyOrderAttrib
 
 function readAttribute(attributes: ShopifyOrderAttribute[], key: string): string | null {
   return attributes.find((attribute) => attribute.key.toLowerCase() === key.toLowerCase())?.value ?? null;
+}
+
+function readDeliveryDateAttribute(attributes: ShopifyOrderAttribute[]): string | null {
+  return (
+    readAttribute(attributes, 'Delivery Date') ??
+    readAttribute(attributes, 'deliveryDate') ??
+    readAttribute(attributes, 'delivery_date') ??
+    readAttribute(attributes, 'tomatono_delivery_date')
+  );
 }
 
 function normalizeOptionalString(value: string | null | undefined): string | null {

@@ -26,6 +26,7 @@ describe('loadDriverApiDependencies', () => {
     });
 
     expect(dependencies?.proofMediaService).toBeDefined();
+    expect(dependencies?.driverTokenAccessRepository).toBeDefined();
   });
 
   test('wires S3 proof media storage when explicitly configured', () => {

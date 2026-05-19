@@ -4,6 +4,7 @@ import type { PrismaClient } from '@prisma/client';
 export type DriverAuthPrismaClient = Pick<PrismaClient, 'driver' | 'driverSession'>;
 
 export type VerifyInviteInput = {
+  displayName?: string | null;
   phone: string;
   inviteCode: string;
 };
@@ -13,6 +14,7 @@ export type DriverSessionInfo = {
   shopDomain: string;
   refreshToken: string;
   expiresAt: Date;
+  tokenVersion: number;
 };
 
 export class PrismaDriverAuthRepository {
@@ -35,14 +37,17 @@ export class PrismaDriverAuthRepository {
       throw new Error('Invalid or expired invite code');
     }
 
-    // Clear the invite code since it's used, and update authSubject if null
+    // Clear the invite code since it's used, update authSubject if null,
+    // and persist the registration name supplied by the driver app.
     const authSubject = driver.authSubject ?? `driver-${driver.id}`;
+    const displayName = normalizeDisplayName(input.displayName);
     await this.prisma.driver.update({
       where: { id: driver.id },
       data: {
         inviteCode: null,
         inviteCodeExpiresAt: null,
-        authSubject
+        authSubject,
+        ...(displayName === null ? {} : { displayName })
       }
     });
 
@@ -62,7 +67,17 @@ export class PrismaDriverAuthRepository {
       driverId: driver.id,
       shopDomain: driver.shop.shopDomain,
       refreshToken,
-      expiresAt
+      expiresAt,
+      tokenVersion: driver.tokenVersion
     };
   }
+}
+
+function normalizeDisplayName(displayName: string | null | undefined): string | null {
+  if (typeof displayName !== 'string') {
+    return null;
+  }
+
+  const normalizedDisplayName = displayName.trim();
+  return normalizedDisplayName.length === 0 ? null : normalizedDisplayName;
 }

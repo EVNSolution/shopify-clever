@@ -519,6 +519,66 @@ s-badge {
   color: #616161;
 }
 
+.route-overview-header,
+.route-overview-main,
+.route-overview-driver-control,
+.route-overview-summary,
+.route-detail-title {
+  box-sizing: border-box;
+  min-width: 0;
+}
+
+.route-overview-main {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
+}
+
+.route-overview-driver-control {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.route-overview-summary {
+  border-top: 1px solid #ebebeb;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  padding-top: 12px;
+}
+
+@media (max-width: 900px) {
+  .route-overview-main {
+    grid-template-columns: 1fr;
+  }
+
+  .route-overview-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 600px) {
+  .route-detail-title {
+    overflow-wrap: anywhere;
+    white-space: normal !important;
+  }
+
+  .route-overview-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .route-overview-driver-control {
+    grid-template-columns: 1fr;
+  }
+
+  .route-overview-driver-control button {
+    width: 100%;
+  }
+}
+
 @media (max-width: 860px) {
   .page-grid--two,
   .page-grid--three,

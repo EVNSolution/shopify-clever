@@ -3,7 +3,7 @@ import path from 'node:path';
 
 const targets = [
   'apps/shopify-app/shopify.app.toml',
-  'apps/shopify-app/shopify.app.clever-route.toml',
+  'apps/shopify-app/shopify.app.dev.toml',
   'infra/caddy/Caddyfile',
   'infra/compose/docker-compose.prod.yml',
   'infra/compose/docker-compose.clever-route.yml',

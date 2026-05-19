@@ -1,11 +1,12 @@
 import type { DeliveryServiceType, DeliveryWeekday, ShopifyOrderLineItem } from './order-sync.mapper.js';
 
 export type DeliverySession = 'DAY' | 'EVENING' | 'PICKUP';
-export type DeliveryDateSource = 'LINE_ITEM_DATE_RANGE' | 'ORDER_DATE_CYCLE_RULE' | 'MISSING';
+export type DeliveryDateSource = 'EXPLICIT_ATTRIBUTE' | 'LINE_ITEM_DATE_RANGE' | 'ORDER_DATE_CYCLE_RULE' | 'MISSING';
 
 export type DeliveryScopeInput = {
   createdAt: string | null;
   deliveryArea?: string | null;
+  deliveryDateRaw?: string | null;
   deliveryDayRaw: string | null;
   lineItems: ShopifyOrderLineItem[];
   pickupDayRaw: string | null;
@@ -49,18 +50,25 @@ export function calculateDeliveryScope(input: DeliveryScopeInput): DeliveryScope
   const orderCreatedAt = input.createdAt ?? input.processedAt;
   const timezone = input.shopTimezone ?? DEFAULT_TIMEZONE;
   const orderDateLocal = orderCreatedAt === null ? null : toLocalDate(orderCreatedAt, timezone);
+  const explicitDeliveryDate = parseExplicitDeliveryDate(input.deliveryDateRaw ?? null, orderDateLocal);
   const lineItemRange = findLineItemDateRange(input.lineItems, orderDateLocal);
   const fallbackRange = lineItemRange ?? (orderDateLocal === null ? null : calculateCycleRange(orderDateLocal));
+  const deliveryWeekday = service.deliveryWeekday ?? weekdayFromDate(explicitDeliveryDate);
+  const serviceType = service.serviceType ?? (explicitDeliveryDate === null ? null : 'DELIVERY');
+  const deliverySession = service.deliverySession ?? (explicitDeliveryDate === null ? null : 'DAY');
   const deliveryDate =
-    fallbackRange === null || service.deliveryWeekday === null
+    explicitDeliveryDate ??
+    (fallbackRange === null || deliveryWeekday === null
       ? null
-      : findDateForWeekday(fallbackRange, service.deliveryWeekday);
+      : findDateForWeekday(fallbackRange, deliveryWeekday));
   const deliveryDateSource: DeliveryDateSource =
-    deliveryDate === null ? 'MISSING' : lineItemRange === null ? 'ORDER_DATE_CYCLE_RULE' : 'LINE_ITEM_DATE_RANGE';
+    explicitDeliveryDate !== null
+      ? 'EXPLICIT_ATTRIBUTE'
+      : deliveryDate === null ? 'MISSING' : lineItemRange === null ? 'ORDER_DATE_CYCLE_RULE' : 'LINE_ITEM_DATE_RANGE';
   const routeScopeKey =
-    deliveryDate === null || service.serviceType === null
+    deliveryDate === null || serviceType === null
       ? null
-      : [deliveryDate, service.serviceType, service.timeWindowStart ?? '', service.timeWindowEnd ?? ''].join('|');
+      : [deliveryDate, serviceType, service.timeWindowStart ?? '', service.timeWindowEnd ?? ''].join('|');
   const deliveryArea = normalizeOptional(input.deliveryArea);
 
   return {
@@ -68,13 +76,13 @@ export function calculateDeliveryScope(input: DeliveryScopeInput): DeliveryScope
     deliveryBatchStartDate: fallbackRange?.startDate ?? null,
     deliveryDate,
     deliveryDateSource,
-    deliverySession: service.deliverySession,
-    deliveryWeekday: service.deliveryWeekday,
+    deliverySession,
+    deliveryWeekday,
     orderCreatedAt,
     orderDateLocal,
     planningGroupKey: routeScopeKey === null ? null : deliveryArea === null ? routeScopeKey : `${routeScopeKey}|${deliveryArea}`,
     routeScopeKey,
-    serviceType: service.serviceType,
+    serviceType,
     timeWindowEnd: service.timeWindowEnd,
     timeWindowStart: service.timeWindowStart
   };
@@ -111,6 +119,10 @@ function parseService(value: string | null, pickup: boolean): ParsedService {
 }
 
 function parseWeekday(value: string | null): DeliveryWeekday | null {
+  if (value === 'sunday') return 'SUNDAY';
+  if (value === 'monday') return 'MONDAY';
+  if (value === 'tuesday') return 'TUESDAY';
+  if (value === 'wednesday') return 'WEDNESDAY';
   if (value === 'thursday') return 'THURSDAY';
   if (value === 'friday') return 'FRIDAY';
   if (value === 'saturday') return 'SATURDAY';
@@ -166,6 +178,23 @@ function parseDateRange(value: string, orderDateLocal: string | null): DateRange
   return null;
 }
 
+function parseExplicitDeliveryDate(value: string | null, orderDateLocal: string | null): string | null {
+  const normalizedValue = normalizeOptional(value);
+  if (normalizedValue === null) return null;
+
+  const iso = /\b(20\d{2})[.\-/](\d{1,2})[.\-/](\d{1,2})\b/u.exec(normalizedValue);
+  if (iso !== null) {
+    const [, year, month, day] = iso;
+    if (year && month && day) return formatValidYmd(Number(year), Number(month), Number(day));
+  }
+
+  const short = /\b(\d{1,2})[.\-/](\d{1,2})\b/u.exec(normalizedValue);
+  if (short === null || orderDateLocal === null) return null;
+
+  const [, month, day] = short;
+  return month && day ? formatValidYmd(Number(orderDateLocal.slice(0, 4)), Number(month), Number(day)) : null;
+}
+
 function calculateCycleRange(orderDateLocal: string): DateRange {
   const orderDate = parseYmd(orderDateLocal);
   const day = orderDate.getUTCDay();
@@ -179,13 +208,42 @@ function calculateCycleRange(orderDateLocal: string): DateRange {
 }
 
 function findDateForWeekday(range: DateRange, weekday: DeliveryWeekday): string | null {
-  const target = weekday === 'THURSDAY' ? 4 : weekday === 'FRIDAY' ? 5 : 6;
+  const target = weekdayIndex(weekday);
   let cursor = parseYmd(range.startDate);
   const end = parseYmd(range.endDate);
   while (cursor.getTime() <= end.getTime()) {
     if (cursor.getUTCDay() === target) return formatDate(cursor);
     cursor = addDays(cursor, 1);
   }
+  return null;
+}
+
+function weekdayFromDate(value: string | null): DeliveryWeekday | null {
+  if (value === null) return null;
+  const date = parseYmd(value);
+  if (Number.isNaN(date.getTime())) return null;
+
+  return weekdayFromIndex(date.getUTCDay());
+}
+
+function weekdayIndex(weekday: DeliveryWeekday): number {
+  if (weekday === 'SUNDAY') return 0;
+  if (weekday === 'MONDAY') return 1;
+  if (weekday === 'TUESDAY') return 2;
+  if (weekday === 'WEDNESDAY') return 3;
+  if (weekday === 'THURSDAY') return 4;
+  if (weekday === 'FRIDAY') return 5;
+  return 6;
+}
+
+function weekdayFromIndex(index: number): DeliveryWeekday | null {
+  if (index === 0) return 'SUNDAY';
+  if (index === 1) return 'MONDAY';
+  if (index === 2) return 'TUESDAY';
+  if (index === 3) return 'WEDNESDAY';
+  if (index === 4) return 'THURSDAY';
+  if (index === 5) return 'FRIDAY';
+  if (index === 6) return 'SATURDAY';
   return null;
 }
 
@@ -226,4 +284,20 @@ function formatDate(value: Date): string {
 
 function formatYmd(year: number, month: number, day: number): string {
   return `${year.toString().padStart(4, '0')}-${month.toString().padStart(2, '0')}-${day.toString().padStart(2, '0')}`;
+}
+
+function formatValidYmd(year: number, month: number, day: number): string | null {
+  if (![year, month, day].every(Number.isInteger)) return null;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return null;
+  }
+
+  return formatDate(date);
 }

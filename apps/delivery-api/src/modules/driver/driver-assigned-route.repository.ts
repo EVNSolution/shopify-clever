@@ -5,6 +5,7 @@ import type {
   DriverAssignedRouteResult,
   DriverAssignedRouteStop
 } from './driver-assigned-route.types.js';
+import { coerceIanaTimezone } from './driver-route-timezone.js';
 
 type DriverAssignedRoutePrismaClient = Pick<PrismaClient, 'driver' | 'routePlan' | 'shop'>;
 
@@ -136,10 +137,10 @@ function toAssignedRouteStop(routeStop: AssignedRoutePlanStopRecord): DriverAssi
   };
 }
 
-function readTimezone(value: unknown): string | null {
+function readTimezone(value: unknown): string {
   const constraints = objectOrNull(value);
   const routeScope = objectOrNull(constraints?.routeScope);
-  return readString(constraints?.timezone) ?? readString(routeScope?.timezone);
+  return coerceIanaTimezone(readString(constraints?.timezone) ?? readString(routeScope?.timezone));
 }
 
 function objectOrNull(value: unknown): Record<string, unknown> | null {

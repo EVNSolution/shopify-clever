@@ -3,9 +3,12 @@ import {
   inferDeliveryDateForOrder,
 } from "../delivery/delivery-labels.js";
 
+const SHOPIFY_ORDERS_PAGE_SIZE = 50;
+const SHOPIFY_ORDERS_MAX_PAGES = 20;
+
 export const SHOPIFY_ORDERS_QUERY = `#graphql
-  query TomatonoRouteOrders {
-    orders(first: 50, sortKey: CREATED_AT, reverse: true) {
+  query TomatonoRouteOrders($first: Int!, $after: String) {
+    orders(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
       edges {
         node {
           id
@@ -52,6 +55,10 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
             longitude
           }
         }
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
       }
     }
   }
@@ -108,12 +115,32 @@ export async function fetchShopifyOrders(admin, options = {}) {
 
 async function loadShopifyOrders(admin) {
   try {
-    const response = await admin.graphql(SHOPIFY_ORDERS_QUERY);
-    const payload = await response.json();
+    const orders = [];
+    const errors = [];
+    let after = null;
+
+    for (let page = 0; page < SHOPIFY_ORDERS_MAX_PAGES; page += 1) {
+      const response = await admin.graphql(SHOPIFY_ORDERS_QUERY, {
+        variables: {
+          after,
+          first: SHOPIFY_ORDERS_PAGE_SIZE,
+        },
+      });
+      const payload = await response.json();
+      orders.push(...mapShopifyOrdersResponse(payload));
+      errors.push(...normalizeGraphqlErrors(payload.errors));
+
+      const pageInfo = payload?.data?.orders?.pageInfo;
+      if (pageInfo?.hasNextPage !== true) break;
+
+      const nextCursor = textOrUndefined(pageInfo.endCursor);
+      if (!nextCursor || nextCursor === after) break;
+      after = nextCursor;
+    }
 
     return {
-      orders: mapShopifyOrdersResponse(payload),
-      errors: normalizeGraphqlErrors(payload.errors),
+      orders,
+      errors,
     };
   } catch (error) {
     if (isOrderScopeAccessError(error)) {
@@ -193,7 +220,9 @@ function mapOrderNode(order) {
   const shippingAddress = order.shippingAddress ?? {};
   const attributes = getAttributeMap(order.customAttributes);
   const deliveryDay = textOrUndefined(attributes["Delivery Day"]);
+  const deliveryDateRaw = getDeliveryDateAttribute(attributes);
   const deliveryDate = inferDeliveryDateForOrder({
+    deliveryDate: deliveryDateRaw,
     deliveryDay,
     lineItems: order.lineItems,
     orderCreatedAt: order.createdAt ?? order.processedAt,
@@ -350,6 +379,16 @@ function getAttributeMap(customAttributes) {
       attribute.key,
       attribute.value,
     ]),
+  );
+}
+
+function getDeliveryDateAttribute(attributes) {
+  return (
+    textOrUndefined(attributes["Delivery Date"]) ??
+    textOrUndefined(attributes["Delivery date"]) ??
+    textOrUndefined(attributes.deliveryDate) ??
+    textOrUndefined(attributes.delivery_date) ??
+    textOrUndefined(attributes.tomatono_delivery_date)
   );
 }
 

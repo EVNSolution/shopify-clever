@@ -4,23 +4,30 @@ import { calculateDeliveryScope } from '../src/modules/shopify/order-delivery-sc
 
 describe('calculateDeliveryScope', () => {
   test.each([
-    ['Thursday', 'THURSDAY', '2026-05-07', 'DAY', 'DELIVERY'],
-    ['Friday', 'FRIDAY', '2026-05-08', 'DAY', 'DELIVERY'],
-    ['Saturday', 'SATURDAY', '2026-05-09', 'DAY', 'DELIVERY']
-  ] as const)('uses line item range for %s delivery scope', (deliveryDayRaw, weekday, deliveryDate, session, serviceType) => {
+    ['Monday', 'MONDAY', '2026-05-18', '2026-05-18', '2026-05-31', 'DAY', 'DELIVERY'],
+    ['Tuesday', 'TUESDAY', '2026-05-19', '2026-05-18', '2026-05-31', 'DAY', 'DELIVERY'],
+    ['Wednesday', 'WEDNESDAY', '2026-05-20', '2026-05-18', '2026-05-31', 'DAY', 'DELIVERY'],
+    ['Thursday', 'THURSDAY', '2026-05-07', '2026-05-07', '2026-05-09', 'DAY', 'DELIVERY'],
+    ['Friday', 'FRIDAY', '2026-05-08', '2026-05-07', '2026-05-09', 'DAY', 'DELIVERY'],
+    ['Saturday', 'SATURDAY', '2026-05-09', '2026-05-07', '2026-05-09', 'DAY', 'DELIVERY'],
+    ['Sunday', 'SUNDAY', '2026-05-24', '2026-05-18', '2026-05-31', 'DAY', 'DELIVERY']
+  ] as const)('uses line item range for %s delivery scope', (deliveryDayRaw, weekday, deliveryDate, batchStartDate, batchEndDate, session, serviceType) => {
+    const lineItemTitle = deliveryDayRaw === 'Thursday' || deliveryDayRaw === 'Friday' || deliveryDayRaw === 'Saturday'
+      ? 'Tomatono menu 5/7-5/9'
+      : 'Tomatono daily menu 2026.05.18-05.31';
     const scope = calculateDeliveryScope({
       createdAt: '2026-05-05T14:00:00Z',
       deliveryArea: 'Thornhill',
       deliveryDayRaw,
-      lineItems: [{ title: 'Tomatono menu 5/7-5/9' }],
+      lineItems: [{ title: lineItemTitle }],
       pickupDayRaw: null,
       processedAt: null
     });
 
     expect(scope).toEqual(
       expect.objectContaining({
-        deliveryBatchEndDate: '2026-05-09',
-        deliveryBatchStartDate: '2026-05-07',
+        deliveryBatchEndDate: batchEndDate,
+        deliveryBatchStartDate: batchStartDate,
         deliveryDate,
         deliveryDateSource: 'LINE_ITEM_DATE_RANGE',
         deliverySession: session,

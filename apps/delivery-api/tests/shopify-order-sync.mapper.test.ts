@@ -376,3 +376,103 @@ test('requires delivery date and route scope for readiness', () => {
   expect(mapped.order.readiness).toBe('NEEDS_REVIEW');
   expect(mapped.order.reviewReasons).toEqual(['missing_order_date', 'missing_delivery_date', 'missing_route_scope']);
 });
+
+test('uses explicit Delivery Date attributes as ready route scope input', () => {
+  const mapped = mapShopifyOrderNodeToDeliveryInputs({
+    cancelledAt: null,
+    createdAt: null,
+    currentTotalPriceSet: null,
+    customAttributes: [
+      { key: 'Delivery Area', value: 'North York' },
+      { key: 'Delivery Date', value: '2026-05-18' }
+    ],
+    displayFinancialStatus: null,
+    displayFulfillmentStatus: null,
+    email: null,
+    id: 'gid://shopify/Order/902',
+    legacyResourceId: '902',
+    lineItems: null,
+    name: '#1902',
+    phone: null,
+    processedAt: null,
+    shippingAddress: {
+      address1: '5100 Yonge St',
+      address2: null,
+      city: 'North York',
+      countryCodeV2: 'CA',
+      latitude: 43.7685,
+      longitude: -79.4137,
+      name: 'Customer',
+      phone: null,
+      province: 'ON',
+      provinceCode: 'ON',
+      zip: 'M2N 5V7'
+    },
+    updatedAt: '2026-05-18T15:00:00Z'
+  });
+
+  expect(mapped.deliveryStop).toEqual(expect.objectContaining({ deliveryDate: '2026-05-18' }));
+  expect(mapped.order).toEqual(
+    expect.objectContaining({
+      deliveryDate: '2026-05-18',
+      deliveryDateSource: 'EXPLICIT_ATTRIBUTE',
+      deliveryWeekday: 'MONDAY',
+      readiness: 'READY_TO_PLAN',
+      reviewReasons: [],
+      routeScopeKey: '2026-05-18|DELIVERY||',
+      serviceType: 'DELIVERY'
+    })
+  );
+});
+
+
+test('uses tomatono_delivery_date attributes as ready route scope input', () => {
+  const mapped = mapShopifyOrderNodeToDeliveryInputs({
+    cancelledAt: null,
+    createdAt: null,
+    currentTotalPriceSet: null,
+    customAttributes: [
+      { key: 'Delivery Area', value: 'Thornhill' },
+      { key: 'Delivery Day', value: 'Monday' },
+      { key: 'tomatono_delivery_date', value: '2026-05-18' }
+    ],
+    displayFinancialStatus: null,
+    displayFulfillmentStatus: null,
+    email: null,
+    id: 'gid://shopify/Order/903',
+    legacyResourceId: '903',
+    lineItems: null,
+    name: '#1903',
+    phone: null,
+    processedAt: null,
+    shippingAddress: {
+      address1: '7755 Bayview Ave',
+      address2: null,
+      city: 'Thornhill',
+      countryCodeV2: 'CA',
+      latitude: 43.8196,
+      longitude: -79.4004,
+      name: 'Customer',
+      phone: null,
+      province: 'ON',
+      provinceCode: 'ON',
+      zip: 'L3T 4P1'
+    },
+    updatedAt: '2026-05-18T15:00:00Z'
+  });
+
+  expect(mapped.deliveryStop).toEqual(expect.objectContaining({ deliveryDate: '2026-05-18' }));
+  expect(mapped.order).toEqual(
+    expect.objectContaining({
+      deliveryDate: '2026-05-18',
+      deliveryDateSource: 'EXPLICIT_ATTRIBUTE',
+      deliveryWeekday: 'MONDAY',
+      readiness: 'READY_TO_PLAN',
+      reviewReasons: [],
+      routeScopeKey: '2026-05-18|DELIVERY||',
+      planningGroupKey: '2026-05-18|DELIVERY|||Thornhill',
+      serviceType: 'DELIVERY'
+    })
+  );
+  expect(mapped.order.rawPayload).toEqual(expect.objectContaining({ deliveryDateRaw: '2026-05-18' }));
+});

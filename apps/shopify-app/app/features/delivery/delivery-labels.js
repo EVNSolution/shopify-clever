@@ -29,11 +29,13 @@ export function formatDeliveryScopeLabel({
 }
 
 export function inferDeliveryDateForOrder({
+  deliveryDate,
   deliveryDay,
   lineItems,
   orderCreatedAt,
 } = {}) {
   return (
+    normalizeExplicitDeliveryDate(deliveryDate, orderCreatedAt) ??
     inferDeliveryDateFromLineItems({
       deliveryDay,
       lineItems,
@@ -44,6 +46,22 @@ export function inferDeliveryDateForOrder({
       orderCreatedAt,
     })
   );
+}
+
+export function normalizeExplicitDeliveryDate(value, orderCreatedAt) {
+  const text = textOrUndefined(value);
+  if (!text) return undefined;
+
+  const isoMatch = text.match(/\b(20\d{2})[./-](\d{1,2})[./-](\d{1,2})\b/);
+  if (isoMatch) {
+    return formatYmdDateParts(isoMatch[1], isoMatch[2], isoMatch[3]);
+  }
+
+  const shortMatch = text.match(/\b(\d{1,2})[./-](\d{1,2})\b/);
+  if (!shortMatch) return undefined;
+
+  const defaultYear = getDefaultYear(orderCreatedAt);
+  return formatYmdDateParts(defaultYear, shortMatch[1], shortMatch[2]);
 }
 
 export function inferDeliveryDateFromLineItems({
@@ -213,6 +231,25 @@ function formatDateOnly(value) {
 
   const date = new Date(text);
   if (Number.isNaN(date.getTime())) return undefined;
+
+  return date.toISOString().slice(0, 10);
+}
+
+function formatYmdDateParts(yearValue, monthValue, dayValue) {
+  const year = Number(yearValue);
+  const month = Number(monthValue);
+  const day = Number(dayValue);
+  if (![year, month, day].every(Number.isInteger)) return undefined;
+
+  const date = new Date(Date.UTC(year, month - 1, day));
+  if (
+    Number.isNaN(date.getTime()) ||
+    date.getUTCFullYear() !== year ||
+    date.getUTCMonth() !== month - 1 ||
+    date.getUTCDate() !== day
+  ) {
+    return undefined;
+  }
 
   return date.toISOString().slice(0, 10);
 }

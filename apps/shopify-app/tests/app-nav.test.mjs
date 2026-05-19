@@ -17,9 +17,10 @@ const expectedVisibleNavItems = [
 test("Shopify app nav keeps app home separate from visible sidebar sections", () => {
   assert.match(
     appRouteSource,
-    /<s-link\s+href="\/"\s+rel="home">\s*\{translate\(language, "nav\.home"\)\}\s*<\/s-link>/,
-    "expected a hidden root home link so Shopify can attach the app-name sidebar row",
+    /<s-link\s+href="\/app\/orders"\s+rel="home"[\s\S]*?>\s*\{translate\(language, "nav\.home"\)\}\s*<\/s-link>/,
+    "expected the app-name home row to land directly on Orders instead of the root redirect path",
   );
+  assert.doesNotMatch(appRouteSource, /<s-link\s+href="\/"\s+rel="home"/);
 });
 
 test("Shopify app nav renders the requested sidebar sections in order", () => {

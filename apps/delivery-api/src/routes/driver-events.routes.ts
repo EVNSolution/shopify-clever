@@ -1,7 +1,12 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { MultipartFile, MultipartValue } from '@fastify/multipart';
 
-import { signDriverToken, verifyDriverToken } from '../modules/driver/driver-token-verifier.js';
+import {
+  signDriverToken,
+  verifyDriverToken,
+  type VerifiedDriverToken
+} from '../modules/driver/driver-token-verifier.js';
+import type { DriverTokenAccessRepositoryContract } from '../modules/driver/driver-token-access.repository.js';
 import type { DriverAssignedRouteServiceContract } from '../modules/driver/driver-assigned-route.types.js';
 import type {
   DriverConsentRecordInput,
@@ -24,6 +29,12 @@ import type {
   DriverProofMediaSource,
   StoreDriverProofMediaInput
 } from '../modules/driver/driver-proof-media.types.js';
+import {
+  DriverRouteHistoryCursorError,
+  DriverSelfServiceScopeError,
+  type DriverRouteHistoryStatus,
+  type DriverSelfServiceContract
+} from '../modules/driver/driver-self-service.types.js';
 
 export type DriverApiDependencies = {
   driverAssignedRouteService?: DriverAssignedRouteServiceContract;
@@ -42,6 +53,8 @@ export type DriverApiDependencies = {
       shopDomain: string;
     }): Promise<{ duplicate: boolean; eventId: string }>;
   };
+  driverSelfService?: DriverSelfServiceContract;
+  driverTokenAccessRepository?: DriverTokenAccessRepositoryContract;
   jwtSecret: string;
   proofMediaService?: DriverProofMediaServiceContract;
   now?: () => Date;
@@ -55,6 +68,35 @@ type DriverRouteAccessRequestBody = {
 
 type DriverAssignedRouteQuery = {
   routeContext?: unknown;
+};
+
+type DriverRoutesHistoryQuery = {
+  cursor?: unknown;
+  from?: unknown;
+  status?: unknown;
+  to?: unknown;
+};
+
+type DriverRouteFeedbackParams = {
+  routePlanId?: unknown;
+};
+
+type DriverRouteFeedbackBody = {
+  reviewNote?: unknown;
+  submittedAt?: unknown;
+};
+
+type DriverProfileUpdateBody = {
+  displayName?: unknown;
+};
+
+type DriverAccountDeletionRequestBody = {
+  confirmation?: unknown;
+  reason?: unknown;
+};
+
+type DriverEarningsQuery = {
+  period?: unknown;
 };
 
 type DriverConsentRequestBody = {
@@ -78,6 +120,10 @@ type DriverEventRequestBody = {
 type DriverProofMediaAccessParams = {
   mediaId?: unknown;
 };
+
+type DriverAuthenticationResult =
+  | { status: 'authenticated'; context: VerifiedDriverToken }
+  | { status: 'invalid' | 'missing' };
 
 const DRIVER_EVENT_TYPES = new Set([
   'ROUTE_STARTED',
@@ -125,21 +171,13 @@ export function registerDriverEventRoutes(
   const driverAssignedRouteService = dependencies.driverAssignedRouteService;
   if (driverAssignedRouteService !== undefined) {
     app.get<{ Querystring: DriverAssignedRouteQuery }>('/driver/assigned-route', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let routeContext: string | null;
       try {
@@ -161,24 +199,222 @@ export function registerDriverEventRoutes(
     });
   }
 
+  const driverSelfService = dependencies.driverSelfService;
+  if (driverSelfService !== undefined) {
+    app.get<{ Querystring: DriverRoutesHistoryQuery }>('/driver/routes', async (request, reply) => {
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
+      }
+      const driverContext = authentication.context;
+
+      let query: ReturnType<typeof readDriverRoutesHistoryQuery>;
+      try {
+        query = readDriverRoutesHistoryQuery(request.query);
+      } catch {
+        return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid driver route history query'));
+      }
+
+      try {
+        const result = await driverSelfService.listDriverRoutes({
+          ...query,
+          driverId: driverContext.driverId,
+          shopDomain: driverContext.shopDomain
+        });
+
+        return reply.code(200).send({ data: result, error: null });
+      } catch (error) {
+        if (error instanceof DriverSelfServiceScopeError) {
+          return reply.code(403).send(errorResponse('FORBIDDEN', 'Driver route history scope rejected'));
+        }
+        if (error instanceof DriverRouteHistoryCursorError) {
+          return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid driver route history query'));
+        }
+
+        throw error;
+      }
+    });
+
+    app.post<{ Body: DriverRouteFeedbackBody; Params: DriverRouteFeedbackParams }>(
+      '/driver/routes/:routePlanId/feedback',
+      async (request, reply) => {
+        const authentication = await authenticateDriverRequest(request, dependencies);
+        if (authentication.status !== 'authenticated') {
+          return reply
+            .code(401)
+            .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
+        }
+        const driverContext = authentication.context;
+
+        let feedbackInput: ReturnType<typeof readDriverRouteFeedbackRequest>;
+        try {
+          feedbackInput = readDriverRouteFeedbackRequest(
+            request.params.routePlanId,
+            request.body,
+            dependencies.now?.() ?? new Date()
+          );
+        } catch {
+          return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid driver route feedback payload'));
+        }
+
+        try {
+          const result = await driverSelfService.submitRouteFeedback({
+            ...feedbackInput,
+            driverId: driverContext.driverId,
+            shopDomain: driverContext.shopDomain
+          });
+
+          return reply.code(201).send({ data: result, error: null });
+        } catch (error) {
+          if (error instanceof DriverSelfServiceScopeError) {
+            return reply.code(403).send(errorResponse('FORBIDDEN', 'Route feedback scope rejected'));
+          }
+
+          throw error;
+        }
+      }
+    );
+
+    app.get('/driver/profile', async (request, reply) => {
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
+      }
+      const driverContext = authentication.context;
+
+      try {
+        const result = await driverSelfService.getDriverProfile({
+          driverId: driverContext.driverId,
+          shopDomain: driverContext.shopDomain
+        });
+
+        return reply.code(200).send({ data: result, error: null });
+      } catch (error) {
+        if (error instanceof DriverSelfServiceScopeError) {
+          return reply.code(403).send(errorResponse('FORBIDDEN', 'Driver profile scope rejected'));
+        }
+
+        throw error;
+      }
+    });
+
+    app.patch<{ Body: DriverProfileUpdateBody }>('/driver/profile', async (request, reply) => {
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
+      }
+      const driverContext = authentication.context;
+
+      let updateInput: ReturnType<typeof readDriverProfileUpdateBody>;
+      try {
+        updateInput = readDriverProfileUpdateBody(request.body);
+      } catch {
+        return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid driver profile payload'));
+      }
+
+      try {
+        const result = await driverSelfService.updateDriverProfile({
+          ...updateInput,
+          driverId: driverContext.driverId,
+          shopDomain: driverContext.shopDomain
+        });
+
+        return reply.code(200).send({ data: result, error: null });
+      } catch (error) {
+        if (error instanceof DriverSelfServiceScopeError) {
+          return reply.code(403).send(errorResponse('FORBIDDEN', 'Driver profile scope rejected'));
+        }
+
+        throw error;
+      }
+    });
+
+    app.post<{ Body: DriverAccountDeletionRequestBody }>(
+      '/driver/account-deletion-requests',
+      async (request, reply) => {
+        const authentication = await authenticateDriverRequest(request, dependencies);
+        if (authentication.status !== 'authenticated') {
+          return reply
+            .code(401)
+            .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
+        }
+        const driverContext = authentication.context;
+
+        let deletionInput: ReturnType<typeof readDriverAccountDeletionRequestBody>;
+        try {
+          deletionInput = readDriverAccountDeletionRequestBody(request.body, dependencies.now?.() ?? new Date());
+        } catch {
+          return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid account deletion request payload'));
+        }
+
+        try {
+          const result = await driverSelfService.requestAccountDeletion({
+            ...deletionInput,
+            driverId: driverContext.driverId,
+            shopDomain: driverContext.shopDomain
+          });
+
+          return reply.code(202).send({ data: result, error: null });
+        } catch (error) {
+          if (error instanceof DriverSelfServiceScopeError) {
+            return reply.code(403).send(errorResponse('FORBIDDEN', 'Account deletion request scope rejected'));
+          }
+
+          throw error;
+        }
+      }
+    );
+
+    app.get<{ Querystring: DriverEarningsQuery }>('/driver/earnings', async (request, reply) => {
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
+      }
+      const driverContext = authentication.context;
+
+      let period: string;
+      try {
+        period = readDriverEarningsPeriod(request.query.period, dependencies.now?.() ?? new Date());
+      } catch {
+        return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid driver earnings query'));
+      }
+
+      try {
+        const result = await driverSelfService.getDriverEarnings({
+          driverId: driverContext.driverId,
+          period,
+          shopDomain: driverContext.shopDomain
+        });
+
+        return reply.code(200).send({ data: result, error: null });
+      } catch (error) {
+        if (error instanceof DriverSelfServiceScopeError) {
+          return reply.code(403).send(errorResponse('FORBIDDEN', 'Driver earnings scope rejected'));
+        }
+
+        throw error;
+      }
+    });
+  }
+
   const driverConsentService = dependencies.driverConsentService;
   if (driverConsentService !== undefined) {
     app.post<{ Body: DriverConsentRequestBody }>('/driver/consents', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let consentInput: Omit<RecordDriverConsentsInput, 'driverId' | 'shopDomain'>;
       try {
@@ -204,21 +440,13 @@ export function registerDriverEventRoutes(
   const proofMediaService = dependencies.proofMediaService;
   if (proofMediaService !== undefined) {
     app.get<{ Params: DriverProofMediaAccessParams }>('/driver/proof-media/:mediaId/access', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let mediaId: string;
       try {
@@ -253,21 +481,13 @@ export function registerDriverEventRoutes(
     });
 
     app.post('/driver/proof-media', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let uploadInput: Omit<StoreDriverProofMediaInput, 'driverId' | 'shopDomain'>;
       try {
@@ -303,21 +523,13 @@ export function registerDriverEventRoutes(
   }
 
   app.post<{ Body: DriverEventRequestBody }>('/driver/events', async (request, reply) => {
-    const token = extractBearerToken(request.headers.authorization);
-    if (token === null) {
-      return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+    const authentication = await authenticateDriverRequest(request, dependencies);
+    if (authentication.status !== 'authenticated') {
+      return reply
+        .code(401)
+        .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
     }
-
-    let driverContext: { driverId: string; shopDomain: string };
-    try {
-      const now = dependencies.now?.();
-      driverContext = verifyDriverToken(
-        token,
-        now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-      );
-    } catch {
-      return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-    }
+    const driverContext = authentication.context;
 
     let eventInput: ReturnType<typeof readDriverEventBody>;
     try {
@@ -343,6 +555,44 @@ export function registerDriverEventRoutes(
   });
 }
 
+async function authenticateDriverRequest(
+  request: FastifyRequest,
+  dependencies: DriverApiDependencies
+): Promise<DriverAuthenticationResult> {
+  const token = extractBearerToken(request.headers.authorization);
+  if (token === null) {
+    return { status: 'missing' };
+  }
+
+  let driverContext: VerifiedDriverToken;
+  try {
+    const now = dependencies.now?.();
+    driverContext = verifyDriverToken(
+      token,
+      now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
+    );
+  } catch {
+    return { status: 'invalid' };
+  }
+
+  const tokenAccessRepository = dependencies.driverTokenAccessRepository;
+  if (tokenAccessRepository !== undefined) {
+    const isActive = await tokenAccessRepository.isDriverAccessTokenActive({
+      driverId: driverContext.driverId,
+      shopDomain: driverContext.shopDomain,
+      tokenVersion: driverContext.tokenVersion
+    });
+    if (!isActive) {
+      return { status: 'invalid' };
+    }
+  }
+
+  return { status: 'authenticated', context: driverContext };
+}
+
+function driverAuthenticationMessage(status: DriverAuthenticationResult['status']): string {
+  return status === 'missing' ? 'Missing driver bearer token' : 'Invalid driver bearer token';
+}
 
 function buildDriverRouteAccessResponse(
   result: DriverRouteAccessLookupResult,
@@ -372,7 +622,8 @@ function buildInvitedDriverRouteAccessResponse(
       driverId: result.driverContext.driverId,
       expiresInSeconds: DRIVER_ACCESS_TOKEN_TTL_SECONDS,
       shopDomain: result.driverContext.shopDomain,
-      subject: `driver:${result.driverContext.driverId}`
+      subject: `driver:${result.driverContext.driverId}`,
+      tokenVersion: result.driverContext.tokenVersion
     },
     now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
   );
@@ -382,6 +633,17 @@ function buildInvitedDriverRouteAccessResponse(
     driverAccess: {
       accessToken: token.token,
       expiresAt: token.expiresAt,
+      // Compatibility note: these scopes are app-facing capability metadata.
+      // Authorization remains the signed driver/shop/tokenVersion token so existing driver-app tokens keep working.
+      scopes: [
+        'route:assigned:read',
+        'route:history:read',
+        'route:feedback:write',
+        'profile:read',
+        'profile:update',
+        'account_deletion:request',
+        'earnings:read'
+      ],
       tokenType: token.tokenType,
       ttlSeconds: DRIVER_ACCESS_TOKEN_TTL_SECONDS,
       use: 'consent_and_assigned_route'
@@ -400,6 +662,86 @@ function readDriverRouteAccessBody(body: DriverRouteAccessRequestBody): DriverRo
   }
 
   return { phoneE164, routeContext };
+}
+
+function readDriverRoutesHistoryQuery(query: DriverRoutesHistoryQuery): {
+  cursor: string | null;
+  from: Date | null;
+  status: DriverRouteHistoryStatus | null;
+  to: Date | null;
+} {
+  const from = readOptionalDateOnly(query.from);
+  const to = readOptionalDateOnly(query.to);
+  if (from !== null && to !== null && from.getTime() > to.getTime()) {
+    throw new Error('Route history date range is invalid');
+  }
+
+  return {
+    cursor: readOptionalString(query.cursor),
+    from,
+    status: readOptionalDriverRouteHistoryStatus(query.status),
+    to
+  };
+}
+
+function readDriverRouteFeedbackRequest(
+  routePlanId: unknown,
+  body: DriverRouteFeedbackBody,
+  fallbackSubmittedAt: Date
+): {
+  reviewNote: string;
+  routePlanId: string;
+  submittedAt: Date;
+} {
+  const reviewNote = readBoundedText(body.reviewNote, { maxLength: 1_000, minLength: 1 });
+  return {
+    reviewNote,
+    routePlanId: readRequiredString(routePlanId),
+    submittedAt: readOptionalDate(body.submittedAt) ?? fallbackSubmittedAt
+  };
+}
+
+function readDriverProfileUpdateBody(body: DriverProfileUpdateBody): { displayName: string } {
+  assertOnlyKeys(body, new Set(['displayName']));
+  return {
+    displayName: readBoundedText(body.displayName, { maxLength: 80, minLength: 1 })
+  };
+}
+
+function readDriverAccountDeletionRequestBody(
+  body: DriverAccountDeletionRequestBody,
+  fallbackRequestedAt: Date
+): {
+  reason: string | null;
+  requestedAt: Date;
+} {
+  assertOnlyKeys(body, new Set(['confirmation', 'reason']));
+  if (body.confirmation !== 'DELETE') {
+    throw new Error('Explicit DELETE confirmation is required');
+  }
+
+  return {
+    reason: readOptionalBoundedText(body.reason, { maxLength: 500 }),
+    requestedAt: fallbackRequestedAt
+  };
+}
+
+function readDriverEarningsPeriod(value: unknown, now: Date): string {
+  if (value === undefined || value === null) {
+    return now.toISOString().slice(0, 7);
+  }
+
+  const period = readRequiredString(value);
+  if (!/^\d{4}-\d{2}$/u.test(period)) {
+    throw new Error('Invalid earnings period');
+  }
+
+  const month = Number(period.slice(5, 7));
+  if (month < 1 || month > 12) {
+    throw new Error('Invalid earnings period');
+  }
+
+  return period;
 }
 
 function readDriverConsentBody(
@@ -641,6 +983,73 @@ function readOptionalDate(value: unknown): Date | null {
   }
 
   return readRequiredDate(value);
+}
+
+function readOptionalDateOnly(value: unknown): Date | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const raw = readRequiredString(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/u.test(raw)) {
+    throw new Error('Invalid date-only value');
+  }
+  const date = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== raw) {
+    throw new Error('Invalid date-only value');
+  }
+
+  return date;
+}
+
+function readOptionalDriverRouteHistoryStatus(value: unknown): DriverRouteHistoryStatus | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const status = readRequiredString(value);
+  if (status === 'pending' || status === 'active' || status === 'completed') {
+    return status;
+  }
+
+  throw new Error('Invalid route history status');
+}
+
+function readBoundedText(
+  value: unknown,
+  bounds: { maxLength: number; minLength: number }
+): string {
+  const text = readRequiredString(value);
+  if (text.length < bounds.minLength || text.length > bounds.maxLength) {
+    throw new Error('Text is outside bounds');
+  }
+
+  return text;
+}
+
+function readOptionalBoundedText(value: unknown, bounds: { maxLength: number }): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+
+  const text = readRequiredString(value);
+  if (text.length > bounds.maxLength) {
+    throw new Error('Text is outside bounds');
+  }
+
+  return text;
+}
+
+function assertOnlyKeys(value: unknown, allowedKeys: Set<string>): void {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    throw new Error('Payload must be an object');
+  }
+
+  for (const key of Object.keys(value)) {
+    if (!allowedKeys.has(key)) {
+      throw new Error(`Unexpected key: ${key}`);
+    }
+  }
 }
 
 function errorResponse(code: string, message: string): { data: null; error: { code: string; message: string } } {

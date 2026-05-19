@@ -560,7 +560,15 @@ function readFilters(query: Record<string, string | string[] | undefined>): List
   }
   const deliveryWeekday = readSingleQuery(query.deliveryWeekday);
   if (deliveryWeekday !== null) {
-    if (deliveryWeekday !== 'THURSDAY' && deliveryWeekday !== 'FRIDAY' && deliveryWeekday !== 'SATURDAY') {
+    if (
+      deliveryWeekday !== 'SUNDAY' &&
+      deliveryWeekday !== 'MONDAY' &&
+      deliveryWeekday !== 'TUESDAY' &&
+      deliveryWeekday !== 'WEDNESDAY' &&
+      deliveryWeekday !== 'THURSDAY' &&
+      deliveryWeekday !== 'FRIDAY' &&
+      deliveryWeekday !== 'SATURDAY'
+    ) {
       throw new Error('invalid deliveryWeekday');
     }
     filters.deliveryWeekday = deliveryWeekday;

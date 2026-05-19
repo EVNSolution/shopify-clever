@@ -93,11 +93,13 @@ test("Routes has the only hidden detail route and keeps the route table as the m
   assert.match(routesSource, /<table style=\{singleRouteTableStyle\}>/);
   assert.match(routesSource, /createRouteDetailHref\(routeId\)/);
 
-  assert.match(detailSource, /routeDetailHeaderInfoCardStyle/);
+  assert.match(detailSource, /route-overview-header/);
+  assert.match(detailSource, /route-overview-summary/);
+  assert.match(detailSource, /aria-label="Route driver assignment"/);
   assert.match(detailSource, /Route stop location map/);
   assert.match(detailSource, /routeStops\.map\(\(stop\) =>/);
   assert.doesNotMatch(detailSource, /Route operations|routeDetailOperationsGridStyle|routeDetailOperationsCardStyle/);
-  assert.doesNotMatch(detailSource, /driver assignment|vehicle assignment|stop detail drawer|dispatch checklist|driver event timeline/i);
+  assert.doesNotMatch(detailSource, /vehicle assignment|stop detail drawer|dispatch checklist|driver event timeline/i);
   assert.doesNotMatch(detailSource, /routes\/:routeId\/stops|assignments\/:assignmentId|events\/:eventId/);
 });
 
@@ -159,7 +161,8 @@ test("Drivers is a single operational driver list without vehicle or assignment 
     assert.match(source, new RegExp(label));
   }
   assert.doesNotMatch(source, />Create driver</);
-  assert.match(source, /\/app\/routes\//);
+  assert.match(source, /assignedRouteTextStyle/);
+  assert.doesNotMatch(source, /driver\.assignedRoute\.href|<a href=\{driver\.assignedRoute\.href\}/);
   assert.match(source, /role="dialog"/);
   assert.match(source, /aria-label="Invite driver"/);
   assert.match(source, /aria-label="Select country dial code"/);
@@ -189,6 +192,8 @@ test("Drivers is a single operational driver list without vehicle or assignment 
   assert.match(source, /Invite message preview/);
   assert.match(source, /<pre style=\{inviteMessagePreviewStyle\}>/);
   assert.match(source, /인증코드 생성/);
+  assert.match(source, /재로그인/);
+  assert.match(source, /canShowDriverReloginAction\(driver\)/);
   assert.match(source, /onClick=\{\(\) => regenerateInviteCode\(driver\.id\)\}/);
   assert.doesNotMatch(source, /driver\.status === "Pending" && driver\.inviteCode/);
   assert.doesNotMatch(source, /Copy download link<\/button>.*disabled=\{driverInviteFetcher\.state !== "idle"\}/);

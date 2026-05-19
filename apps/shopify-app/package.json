@@ -2,12 +2,12 @@
   "name": "clever",
   "private": true,
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "build": "react-router build",
-    "dev": "shopify app dev",
-    "config:link": "shopify app config link",
+    "dev": "shopify app dev -c dev",
+    "config:link": "echo \"Use npm run config:link:prod or npm run config:link:dev\" && exit 1",
     "generate": "shopify app generate",
-    "deploy": "shopify app deploy",
-    "config:use": "shopify app config use",
+    "deploy": "npm run deploy:prod",
     "env": "shopify app env",
     "start": "react-router-serve ./build/server/index.js",
     "docker-start": "npm run setup && npm run start",
@@ -18,7 +18,15 @@
     "graphql-codegen": "graphql-codegen",
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
-    "perf:orders": "node scripts/perf-orders.mjs"
+    "perf:orders": "node scripts/perf-orders.mjs",
+    "config:validate:prod": "shopify app config validate -c shopify.app.toml",
+    "config:validate:dev": "shopify app config validate -c dev",
+    "deploy:prod": "shopify app deploy -c shopify.app.toml",
+    "deploy:dev": "shopify app deploy -c dev",
+    "config:use:dev": "shopify app config use dev",
+    "config:use:prod": "shopify app config use shopify.app.toml",
+    "config:link:prod": "shopify app config link -c shopify.app.toml",
+    "config:link:dev": "shopify app config link -c dev"
   },
   "type": "module",
   "engines": {

@@ -25,12 +25,19 @@ shopify app init --template=https://github.com/Shopify/shopify-app-template-reac
 ### Local Development
 
 ```shell
-shopify app dev
+npm run dev
 ```
 
 Press P to open the URL to your app. Once you click install, you can start development.
 
 Local development is powered by [the Shopify CLI](https://shopify.dev/docs/apps/tools/cli). It logs into your account, connects to an app, provides environment variables, updates remote config, creates a tunnel and provides commands to generate extensions.
+
+This repo intentionally separates production and dev Shopify app configs:
+
+- `shopify.app.toml` — production/public app (`CLEVER`, handle `clever-route`).
+- `shopify.app.dev.toml` — dev/custom-store app (`CleverRoute Dev`, handle `clever-route-dev`).
+
+`npm run dev` runs `shopify app dev -c dev` so routine development does not attach to the production app config. Use `npm run deploy:prod` or `npm run deploy:dev` only after an explicit release decision.
 
 ### Authenticating and querying data
 
@@ -154,7 +161,7 @@ This only applies if your app is embedded, which it will be by default.
 
 If you are registering webhooks in the `afterAuth` hook, using `shopify.registerWebhooks`, you may find that your subscriptions aren't being updated.
 
-Instead of using the `afterAuth` hook declare app-specific webhooks in the `shopify.app.toml` file. This approach is easier since Shopify will automatically sync changes every time you run `deploy` (e.g: `npm run deploy`). Please read these guides to understand more:
+Instead of using the `afterAuth` hook declare app-specific webhooks in the `shopify.app.toml` file. This approach is easier since Shopify will automatically sync changes every time you run an explicit deploy command (for production: `npm run deploy:prod`). Please read these guides to understand more:
 
 1. [app-specific vs shop-specific webhooks](https://shopify.dev/docs/apps/build/webhooks/subscribe#app-specific-subscriptions)
 2. [Create a subscription tutorial](https://shopify.dev/docs/apps/build/webhooks/subscribe/get-started?deliveryMethod=https)

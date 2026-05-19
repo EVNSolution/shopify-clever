@@ -21,8 +21,10 @@ describe('verifyDriverToken', () => {
     expect(result.expiresAt).toBe('2026-05-07T06:25:00.000Z');
     expect(verifyDriverToken(result.token, { now, secret })).toEqual({
       driverId: 'driver-id',
+      issuedAt: new Date('2026-05-07T06:10:00.000Z'),
       shopDomain: 'example.myshopify.com',
-      subject: 'driver:driver-id'
+      subject: 'driver:driver-id',
+      tokenVersion: 0
     });
   });
 
@@ -33,13 +35,16 @@ describe('verifyDriverToken', () => {
       exp: Math.floor(now.getTime() / 1000) + 60,
       iat: Math.floor(now.getTime() / 1000),
       shopDomain: 'example.myshopify.com',
-      sub: 'driver-auth-subject'
+      sub: 'driver-auth-subject',
+      tokenVersion: 3
     });
 
     expect(verifyDriverToken(token, { now, secret })).toEqual({
       driverId: 'driver-id',
+      issuedAt: new Date('2026-05-07T06:10:00.000Z'),
       shopDomain: 'example.myshopify.com',
-      subject: 'driver-auth-subject'
+      subject: 'driver-auth-subject',
+      tokenVersion: 3
     });
   });
 

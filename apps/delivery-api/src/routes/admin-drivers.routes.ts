@@ -28,16 +28,21 @@ export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: A
       return reply.code(400).send(errorResponse('BAD_REQUEST', 'Invalid driver payload'));
     }
 
-    const driver = await dependencies.adminDriverService.createPendingDriver({
-      createdBy: authenticated.subject,
-      displayName: payload.displayName,
-      inviteLink: payload.inviteLink,
-      phone: payload.phone,
-      shopDomain: authenticated.shopDomain,
-      source: payload.source
-    });
+    try {
+      const driver = await dependencies.adminDriverService.createPendingDriver({
+        createdBy: authenticated.subject,
+        displayName: payload.displayName,
+        inviteLink: payload.inviteLink,
+        phone: payload.phone,
+        shopDomain: authenticated.shopDomain,
+        source: payload.source
+      });
 
-    return reply.code(201).send({ data: { driver }, error: null });
+      return reply.code(201).send({ data: { driver }, error: null });
+    } catch (error) {
+      request.log.error({ err: error }, 'admin driver creation failed');
+      return reply.code(500).send(adminDriverStorageErrorResponse(error));
+    }
   });
 
   app.get('/admin/drivers', async (request, reply) => {
@@ -46,11 +51,42 @@ export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: A
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
 
-    const drivers = await dependencies.adminDriverService.listDrivers({
-      shopDomain: authenticated.shopDomain
-    });
+    try {
+      const drivers = await dependencies.adminDriverService.listDrivers({
+        shopDomain: authenticated.shopDomain
+      });
 
-    return reply.code(200).send({ data: { drivers }, error: null });
+      return reply.code(200).send({ data: { drivers }, error: null });
+    } catch (error) {
+      request.log.error({ err: error }, 'admin driver listing failed');
+      return reply.code(500).send(adminDriverStorageErrorResponse(error));
+    }
+  });
+
+  app.delete<{ Params: { id: string } }>('/admin/drivers/:id', async (request, reply) => {
+    const authenticated = authenticate(request.headers.authorization, dependencies);
+    if (authenticated.status === 'unauthorized') {
+      return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
+    }
+
+    try {
+      const driverId = await dependencies.adminDriverService.deleteDriver({
+        driverId: request.params.id,
+        shopDomain: authenticated.shopDomain
+      });
+
+      return reply.code(200).send({ data: { driverId }, error: null });
+    } catch (error) {
+      request.log.error(
+        {
+          driverId: request.params.id,
+          err: error,
+          shopDomain: authenticated.shopDomain
+        },
+        'admin driver deletion failed'
+      );
+      return reply.code(404).send(errorResponse('NOT_FOUND', 'Driver not found'));
+    }
   });
 
   app.post<{ Params: { id: string } }>('/admin/drivers/:id/regenerate-invite-code', async (request, reply) => {
@@ -127,6 +163,21 @@ function extractBearerToken(authorization: string | undefined): string | null {
 
 function errorResponse(code: string, message: string): ErrorResponse {
   return { data: null, error: { code, message } };
+}
+
+function adminDriverStorageErrorResponse(error: unknown): ErrorResponse {
+  if (isPrismaSchemaDriftError(error)) {
+    return errorResponse(
+      'DRIVER_SCHEMA_NOT_READY',
+      'Delivery driver storage schema is not up to date. Run the delivery API schema push and retry.'
+    );
+  }
+
+  return errorResponse('DRIVER_STORAGE_ERROR', 'Delivery driver storage is temporarily unavailable.');
+}
+
+function isPrismaSchemaDriftError(error: unknown): boolean {
+  return typeof error === 'object' && error !== null && 'code' in error && error.code === 'P2022';
 }
 
 function requireObject(value: unknown): Record<string, unknown> {

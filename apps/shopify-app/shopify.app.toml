@@ -1,7 +1,8 @@
 # Shopify app configuration
 
 client_id = "6994f8bd771cebdac03a800f20e1de86"
-name = "clever"
+name = "CLEVER"
+handle = "clever-route"
 application_url = "https://clever-admin.3-39-216-177.sslip.io"
 embedded = true
 
@@ -29,4 +30,4 @@ api_version = "2026-07"
 redirect_urls = [ "https://clever-admin.3-39-216-177.sslip.io/auth/callback" ]
 
 [build]
-automatically_update_urls_on_dev = true
+automatically_update_urls_on_dev = false

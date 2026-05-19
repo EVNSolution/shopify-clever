@@ -276,7 +276,7 @@ paths:
         - name: deliveryWeekday
           in: query
           schema:
-            enum: [THURSDAY, FRIDAY, SATURDAY]
+            enum: [SUNDAY, MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY]
             type: string
         - name: serviceType
           in: query
@@ -528,6 +528,186 @@ paths:
           $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /driver/routes:
+    get:
+      tags: [Driver Mobile]
+      summary: List route-history summaries for the bearer-token driver
+      operationId: listDriverRoutes
+      x-source-file: src/routes/driver-events.routes.ts
+      security:
+        - DriverAccessToken: []
+      parameters:
+        - name: from
+          in: query
+          required: false
+          schema:
+            format: date
+            type: string
+        - name: to
+          in: query
+          required: false
+          schema:
+            format: date
+            type: string
+        - name: status
+          in: query
+          required: false
+          schema:
+            enum: [pending, active, completed]
+            type: string
+        - name: cursor
+          in: query
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Token-scoped route summary list. Actionable stop/proof details remain on `/driver/assigned-route`.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverRoutesHistoryEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /driver/routes/{routePlanId}/feedback:
+    post:
+      tags: [Driver Mobile]
+      summary: Record a route-level driver review note
+      operationId: submitDriverRouteFeedback
+      x-source-file: src/routes/driver-events.routes.ts
+      security:
+        - DriverAccessToken: []
+      parameters:
+        - $ref: '#/components/parameters/RoutePlanId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverRouteFeedbackRequest'
+      responses:
+        '201':
+          description: Driver route feedback was accepted and persisted.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverRouteFeedbackEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /driver/profile:
+    get:
+      tags: [Driver Mobile]
+      summary: Read the bearer-token driver's self profile
+      operationId: getDriverProfile
+      x-source-file: src/routes/driver-events.routes.ts
+      security:
+        - DriverAccessToken: []
+      responses:
+        '200':
+          description: Token-scoped driver profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverProfileEnvelope'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    patch:
+      tags: [Driver Mobile]
+      summary: Update the bearer-token driver's display name only
+      operationId: updateDriverProfile
+      x-source-file: src/routes/driver-events.routes.ts
+      security:
+        - DriverAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverProfileUpdateRequest'
+      responses:
+        '200':
+          description: Updated token-scoped driver profile.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverProfileEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /driver/account-deletion-requests:
+    post:
+      tags: [Driver Mobile]
+      summary: Request account deletion without deleting operational records
+      operationId: requestDriverAccountDeletion
+      x-source-file: src/routes/driver-events.routes.ts
+      description: >-
+        First-pass compliance-safe receive path. This creates an audit request only;
+        it does not delete, anonymize, revoke tokens, remove proof media, or alter route assignments.
+      security:
+        - DriverAccessToken: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DriverAccountDeletionRequest'
+      responses:
+        '202':
+          description: Deletion request was accepted for later policy handling.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverAccountDeletionEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+  /driver/earnings:
+    get:
+      tags: [Driver Mobile]
+      summary: Read conservative earnings readiness for the bearer-token driver
+      operationId: getDriverEarnings
+      x-source-file: src/routes/driver-events.routes.ts
+      description: >-
+        Returns completed scoped work counts with zero monetary values until payout/rate rules are approved.
+      security:
+        - DriverAccessToken: []
+      parameters:
+        - name: period
+          in: query
+          required: false
+          schema:
+            pattern: '^\d{4}-\d{2}$'
+            type: string
+          example: 2026-05
+      responses:
+        '200':
+          description: Scoped earnings readiness response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DriverEarningsEnvelope'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
   /driver/consents:
     post:
       tags: [Driver Mobile]
@@ -1458,6 +1638,14 @@ components:
           example: 900
         use:
           const: consent_and_assigned_route
+        scopes:
+          type: array
+          description: >-
+            Additive app-facing capability metadata. Existing app clients may ignore this field.
+            Server authorization for these endpoints still uses the signed driver/shop/tokenVersion
+            bearer token, not scope claims.
+          items:
+            type: string
     DriverCompanyGuidance:
       type: object
       required: [companyDisplayName, deliveryDate, driverInstructions, operatorSupportContact, pickupGuidance, routeName, shopDomain, timezone]
@@ -1583,6 +1771,197 @@ components:
               type: number
             longitude:
               type: number
+    DriverRoutesHistoryEnvelope:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          type: object
+          required: [routes, pageInfo]
+          properties:
+            routes:
+              type: array
+              items:
+                $ref: '#/components/schemas/DriverRouteHistoryItem'
+            pageInfo:
+              type: object
+              required: [hasNextPage, endCursor]
+              properties:
+                hasNextPage:
+                  type: boolean
+                endCursor:
+                  type:
+                    - string
+                    - 'null'
+        error:
+          type: 'null'
+    DriverRouteHistoryItem:
+      type: object
+      required: [routePlanId, shopDomain, companyDisplayName, name, deliveryDate, timezone, status, stopCount, completedStopCount, failedStopCount, completedAt]
+      properties:
+        routePlanId:
+          type: string
+        shopDomain:
+          type: string
+        companyDisplayName:
+          type: string
+        name:
+          type: string
+        deliveryDate:
+          format: date
+          type: string
+        timezone:
+          type: string
+          description: Valid IANA timezone. Server falls back to UTC rather than device-local time when route config is missing.
+        status:
+          enum: [pending, active, completed]
+          type: string
+        stopCount:
+          type: integer
+          minimum: 0
+        completedStopCount:
+          type: integer
+          minimum: 0
+        failedStopCount:
+          type: integer
+          minimum: 0
+        completedAt:
+          format: date-time
+          type:
+            - string
+            - 'null'
+    DriverRouteFeedbackRequest:
+      type: object
+      required: [reviewNote]
+      properties:
+        reviewNote:
+          type: string
+          minLength: 1
+          maxLength: 1000
+        submittedAt:
+          format: date-time
+          type: string
+      additionalProperties: false
+    DriverRouteFeedbackEnvelope:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          type: object
+          required: [feedbackId, routePlanId, reviewNote, submittedAt]
+          properties:
+            feedbackId:
+              type: string
+            routePlanId:
+              type: string
+            reviewNote:
+              type: string
+            submittedAt:
+              format: date-time
+              type: string
+        error:
+          type: 'null'
+    DriverProfileEnvelope:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          type: object
+          required: [driver]
+          properties:
+            driver:
+              $ref: '#/components/schemas/DriverSelfProfile'
+        error:
+          type: 'null'
+    DriverSelfProfile:
+      type: object
+      required: [id, displayName, phone, status]
+      properties:
+        id:
+          type: string
+        displayName:
+          type: string
+        phone:
+          type:
+            - string
+            - 'null'
+        status:
+          enum: [ACTIVE, INACTIVE, SUSPENDED]
+          type: string
+    DriverProfileUpdateRequest:
+      type: object
+      required: [displayName]
+      properties:
+        displayName:
+          type: string
+          minLength: 1
+          maxLength: 80
+      additionalProperties: false
+    DriverAccountDeletionRequest:
+      type: object
+      required: [confirmation]
+      properties:
+        confirmation:
+          const: DELETE
+        reason:
+          type:
+            - string
+            - 'null'
+          maxLength: 500
+      additionalProperties: false
+    DriverAccountDeletionEnvelope:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          type: object
+          required: [requestId, status]
+          properties:
+            requestId:
+              type: string
+            status:
+              const: REQUESTED
+        error:
+          type: 'null'
+    DriverEarningsEnvelope:
+      type: object
+      required: [data, error]
+      properties:
+        data:
+          type: object
+          required: [currency, period, summary, items]
+          properties:
+            currency:
+              type: string
+              minLength: 3
+              maxLength: 3
+            period:
+              pattern: '^\d{4}-\d{2}$'
+              type: string
+            summary:
+              type: object
+              required: [completedRoutes, completedStops, grossAmount, adjustments, estimatedPayout]
+              properties:
+                completedRoutes:
+                  type: integer
+                  minimum: 0
+                completedStops:
+                  type: integer
+                  minimum: 0
+                grossAmount:
+                  type: number
+                  const: 0
+                adjustments:
+                  type: number
+                  const: 0
+                estimatedPayout:
+                  type: number
+                  const: 0
+            items:
+              type: array
+              maxItems: 0
+        error:
+          type: 'null'
     DriverConsentRequest:
       type: object
       required: [consents]

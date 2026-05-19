@@ -67,6 +67,36 @@ describe('Driver events route', () => {
     }
   });
 
+  test('rejects driver event tokens invalidated by a relogin token-version cutoff', async () => {
+    const { dependencies, isDriverAccessTokenActive, recordDriverEvent } = createDependencyHarness({
+      accessTokenActive: false
+    });
+    const app = await buildApp({ driverApi: dependencies });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: `Bearer ${driverToken({ tokenVersion: 1 })}` },
+        method: 'POST',
+        payload: eventPayload(),
+        url: '/driver/events'
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({
+        data: null,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid driver bearer token' }
+      });
+      expect(isDriverAccessTokenActive).toHaveBeenCalledWith({
+        driverId: 'driver-id',
+        shopDomain: 'example.myshopify.com',
+        tokenVersion: 1
+      });
+      expect(recordDriverEvent).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
   test('reports duplicate client event ids idempotently', async () => {
     const { dependencies, recordDriverEvent } = createDependencyHarness();
     recordDriverEvent.mockResolvedValueOnce({ duplicate: true, eventId: 'driver-event-id' });
@@ -94,22 +124,34 @@ describe('Driver events route', () => {
   });
 });
 
-function createDependencyHarness(): {
+function createDependencyHarness(input: { accessTokenActive?: boolean } = {}): {
   dependencies: DriverApiDependencies;
+  isDriverAccessTokenActive: ReturnType<
+    typeof vi.fn<
+      NonNullable<DriverApiDependencies['driverTokenAccessRepository']>['isDriverAccessTokenActive']
+    >
+  >;
   recordDriverEvent: ReturnType<typeof vi.fn<DriverApiDependencies['driverEventService']['recordDriverEvent']>>;
 } {
   const recordDriverEvent = vi.fn<DriverApiDependencies['driverEventService']['recordDriverEvent']>(() =>
     Promise.resolve({ duplicate: false, eventId: 'driver-event-id' })
   );
+  const isDriverAccessTokenActive = vi.fn<
+    NonNullable<DriverApiDependencies['driverTokenAccessRepository']>['isDriverAccessTokenActive']
+  >(() => Promise.resolve(input.accessTokenActive ?? true));
 
   return {
     dependencies: {
       driverEventService: {
         recordDriverEvent
       },
+      driverTokenAccessRepository: {
+        isDriverAccessTokenActive
+      },
       jwtSecret: secret,
       now: () => now
     },
+    isDriverAccessTokenActive,
     recordDriverEvent
   };
 }
@@ -126,14 +168,16 @@ function eventPayload(): Record<string, unknown> {
   };
 }
 
-function driverToken(): string {
+function driverToken(input: { tokenVersion?: number } = {}): string {
   const header = { alg: 'HS256', typ: 'JWT' };
   const payload = {
     aud: 'clever-delivery-driver',
     driverId: 'driver-id',
     exp: Math.floor(now.getTime() / 1000) + 60,
+    iat: Math.floor(now.getTime() / 1000),
     shopDomain: 'example.myshopify.com',
-    sub: 'driver-auth-subject'
+    sub: 'driver-auth-subject',
+    tokenVersion: input.tokenVersion ?? 0
   };
   const encodedHeader = Buffer.from(JSON.stringify(header), 'utf8').toString('base64url');
   const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');

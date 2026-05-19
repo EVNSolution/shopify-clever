@@ -6,12 +6,20 @@ import { AppDistribution } from "@shopify/shopify-app-react-router/server";
 import { resolveShopifyAppDistribution } from "../app/shopify-distribution.server.js";
 
 const root = process.cwd();
+const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const shopifyServerSource = readFileSync(join(root, "app/shopify.server.js"), "utf8");
 const publicEnvExample = readFileSync(join(root, "../../infra/env/shopify-app.env.example"), "utf8");
-const cleverRouteEnvExample = readFileSync(
+const devEnvExample = readFileSync(
   join(root, "../../infra/env/shopify-app-clever-route.env.example"),
   "utf8",
 );
+const publicShopifyAppConfig = readFileSync(join(root, "shopify.app.toml"), "utf8");
+const devShopifyAppConfig = readFileSync(join(root, "shopify.app.dev.toml"), "utf8");
+
+function readTomlString(source, key) {
+  const match = source.match(new RegExp(`^${key} = "([^"]+)"$`, "m"));
+  return match?.[1] ?? "";
+}
 
 test("Shopify app distribution defaults to App Store for the public app", () => {
   assert.equal(resolveShopifyAppDistribution(), AppDistribution.AppStore);
@@ -19,7 +27,7 @@ test("Shopify app distribution defaults to App Store for the public app", () => 
   assert.equal(resolveShopifyAppDistribution("unknown"), AppDistribution.AppStore);
 });
 
-test("Shopify app distribution supports clever-route SingleMerchant runtime", () => {
+test("Shopify app distribution supports dev/custom-store SingleMerchant runtime", () => {
   assert.equal(resolveShopifyAppDistribution("single_merchant"), AppDistribution.SingleMerchant);
   assert.equal(resolveShopifyAppDistribution("single-merchant"), AppDistribution.SingleMerchant);
   assert.equal(resolveShopifyAppDistribution(" SINGLE_MERCHANT "), AppDistribution.SingleMerchant);
@@ -35,7 +43,60 @@ test("shopify.server uses env-selected distribution instead of a hard-coded runt
   assert.doesNotMatch(shopifyServerSource, /distribution:\s*AppDistribution\.SingleMerchant/);
 });
 
-test("public and clever-route env examples declare their intended distributions", () => {
+test("public and dev/custom-store env examples declare their intended distributions", () => {
   assert.match(publicEnvExample, /^SHOPIFY_APP_DISTRIBUTION=app_store$/m);
-  assert.match(cleverRouteEnvExample, /^SHOPIFY_APP_DISTRIBUTION=single_merchant$/m);
+  assert.match(devEnvExample, /^SHOPIFY_APP_DISTRIBUTION=single_merchant$/m);
+});
+
+test("Shopify app configs have explicit distinct production and dev identities", () => {
+  assert.equal(readTomlString(publicShopifyAppConfig, "client_id"), "6994f8bd771cebdac03a800f20e1de86");
+  assert.equal(readTomlString(publicShopifyAppConfig, "name"), "CLEVER");
+  assert.equal(readTomlString(publicShopifyAppConfig, "handle"), "clever-route");
+  assert.equal(
+    readTomlString(publicShopifyAppConfig, "application_url"),
+    "https://clever-admin.3-39-216-177.sslip.io",
+  );
+
+  assert.equal(readTomlString(devShopifyAppConfig, "client_id"), "9be6895e1de376bf056787803e863a4d");
+  assert.equal(readTomlString(devShopifyAppConfig, "name"), "CleverRoute Dev");
+  assert.equal(readTomlString(devShopifyAppConfig, "handle"), "clever-route-dev");
+  assert.equal(
+    readTomlString(devShopifyAppConfig, "application_url"),
+    "https://clever-test-admin.3-39-216-177.sslip.io",
+  );
+
+  assert.notEqual(
+    readTomlString(publicShopifyAppConfig, "client_id"),
+    readTomlString(devShopifyAppConfig, "client_id"),
+  );
+  assert.notEqual(
+    readTomlString(publicShopifyAppConfig, "handle"),
+    readTomlString(devShopifyAppConfig, "handle"),
+  );
+});
+
+test("Shopify app URLs stay domain-rooted with only auth callback redirect URLs", () => {
+  [
+    publicShopifyAppConfig,
+    devShopifyAppConfig,
+  ].forEach((configSource) => {
+    assert.match(configSource, /^embedded = true$/m);
+    assert.match(configSource, /^application_url = "https:\/\/[^/"]+"$/m);
+    assert.match(configSource, /redirect_urls = \[ "https:\/\/[^/"]+\/auth\/callback" \]/);
+    assert.doesNotMatch(configSource, /\/app\/orders/);
+    assert.doesNotMatch(configSource, /\/app"/);
+  });
+});
+
+test("Shopify CLI scripts select explicit dev and production app configs", () => {
+  assert.equal(packageJson.scripts.dev, "shopify app dev -c dev");
+  assert.equal(packageJson.scripts.deploy, "npm run deploy:prod");
+  assert.equal(packageJson.scripts["deploy:prod"], "shopify app deploy -c shopify.app.toml");
+  assert.equal(packageJson.scripts["deploy:dev"], "shopify app deploy -c dev");
+  assert.equal(packageJson.scripts["config:validate:prod"], "shopify app config validate -c shopify.app.toml");
+  assert.equal(packageJson.scripts["config:validate:dev"], "shopify app config validate -c dev");
+  assert.match(packageJson.scripts["config:link"], /config:link:prod or npm run config:link:dev/);
+  assert.equal(packageJson.scripts["config:link:prod"], "shopify app config link -c shopify.app.toml");
+  assert.equal(packageJson.scripts["config:link:dev"], "shopify app config link -c dev");
+  assert.notEqual(packageJson.scripts.deploy, "shopify app deploy");
 });
