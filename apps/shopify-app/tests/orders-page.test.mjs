@@ -442,10 +442,44 @@ test("Orders route draft locks additions to ready orders in one route scope", ()
   assert.match(ordersPageSource, /const selectedOrders = checkedOrderIds\s*\.map\(\(orderId\) => displayOrderById\.get\(orderId\)\)/);
   assert.match(ordersPageSource, /\.filter\(\(order\) => isOrderReadyToPlan\(order\)\)/);
   assert.match(ordersPageSource, /setCreateRouteClientError\("ready 상태 주문만 route plan에 추가할 수 있습니다\."\)/);
-  assert.match(ordersPageSource, /const targetRouteScopeKey = plannedRouteScope\?\.routeScopeKey \?\? selectedOrders\.find\(\(order\) => order\.routeScopeKey\)\?\.routeScopeKey/);
-  assert.match(ordersPageSource, /selectedOrders\.filter\(\(order\) => order\.routeScopeKey === targetRouteScopeKey\)/);
+  assert.match(ordersPageSource, /const targetRouteScopeKey = plannedRouteScope\?\.routeScopeKey \?\? sameDateSelectedOrders\.find\(\(order\) => order\.routeScopeKey\)\?\.routeScopeKey/);
+  assert.match(ordersPageSource, /sameDateSelectedOrders\.filter\(\(order\) => order\.routeScopeKey === targetRouteScopeKey\)/);
   assert.match(ordersPageSource, /setCreateRouteClientError\("같은 배송일\/세션 주문만 route plan에 추가할 수 있습니다\."\)/);
   assert.match(ordersPageSource, /setCreateRouteClientError\("같은 배송일\/세션 주문만 route plan에 추가했습니다\."\)/);
+});
+
+test("Orders selection locks the table and map to the first delivery date before Add to plan", () => {
+  assert.match(ordersPageSource, /function getFirstOrderDeliveryDateByIds\(orderIds, orderById\) \{/);
+  assert.match(ordersPageSource, /function getOrdersForDeliveryDate\(orders, deliveryDate\) \{/);
+  assert.match(ordersPageSource, /const checkedDeliveryDateLock = useMemo\(\s*\(\) => getFirstOrderDeliveryDateByIds\(checkedOrderIds, displayOrderById\)/);
+  assert.match(ordersPageSource, /const plannedDeliveryDateLock = useMemo\(\s*\(\) => getOrderDeliveryDateValue\(plannedOrders\[0\]\)/);
+  assert.match(ordersPageSource, /const routePlanDeliveryDateLock =\s*plannedDeliveryDateLock \|\| checkedDeliveryDateLock/);
+  assert.match(ordersPageSource, /const filteredDeliveryDateLock = useMemo\(\s*\(\) => getOrderDeliveryDateValue\(\{ deliveryDate: orderFilters\.deliveryDate \}\)/);
+  assert.match(ordersPageSource, /const applyDeliveryDateFilterLock = useCallback\(\(deliveryDate\) => \{/);
+  assert.match(ordersPageSource, /const normalizedDeliveryDate = getOrderDeliveryDateValue\(\{ deliveryDate \}\)/);
+  assert.match(ordersPageSource, /filteredDeliveryDateLock === normalizedDeliveryDate/);
+  assert.match(ordersPageSource, /updateOrderFilterSearchParams\(searchParams, \{\s*\.\.\.orderFilters,\s*deliveryDate: normalizedDeliveryDate,\s*\}\)/);
+  assert.match(ordersPageSource, /const applyOrderDeliveryDateSelectionLock = useCallback\(\(order\) => \{/);
+  assert.match(ordersPageSource, /const orderDeliveryDate = getOrderDeliveryDateValue\(order\)/);
+  assert.match(ordersPageSource, /routePlanDeliveryDateLock \|\| filteredDeliveryDateLock/);
+  assert.match(ordersPageSource, /currentDeliveryDateLock &&[\s\S]*orderDeliveryDate !== currentDeliveryDateLock/);
+  assert.match(ordersPageSource, /applyDeliveryDateFilterLock\(currentDeliveryDateLock\)/);
+  assert.match(ordersPageSource, /applyDeliveryDateFilterLock\(orderDeliveryDate\)/);
+  assert.match(ordersPageSource, /if \(!isAlreadyChecked && !applyOrderDeliveryDateSelectionLock\(order\)\) \{/);
+  assert.match(ordersPageSource, /const sameDateSelectableOrders = getOrdersForDeliveryDate\(\s*selectableTableOrders,\s*targetDeliveryDate,\s*\)/);
+  assert.match(ordersPageSource, /\.\.\.sameDateSelectableOrders\.map\(\(order\) => order\.id\)/);
+  assert.match(ordersPageSource, /if \(!applyOrderDeliveryDateSelectionLock\(order\)\) \{/);
+  assert.match(ordersPageSource, /const sameDateSelectedOrders = getOrdersForDeliveryDate\(\s*selectedOrders,\s*targetDeliveryDate,\s*\)/);
+  assert.match(ordersPageSource, /const ROUTE_PLAN_DELIVERY_DATE_PARTIAL_ADD_ERROR =\s*"같은 배송일 주문만 route plan에 추가했습니다\."/);
+  assert.match(ordersPageSource, /setCreateRouteClientError\(ROUTE_PLAN_DELIVERY_DATE_PARTIAL_ADD_ERROR\)/);
+});
+
+test("Orders delivery-date lock survives filter clear or conflicting filter changes while a draft exists", () => {
+  assert.match(ordersPageSource, /filterKey === "deliveryDate" &&\s*routePlanDeliveryDateLock &&\s*filterValue !== routePlanDeliveryDateLock/);
+  assert.match(ordersPageSource, /deliveryDate: routePlanDeliveryDateLock/);
+  assert.match(ordersPageSource, /const ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR =\s*"선택된 주문과 같은 배송일만 표시합니다/);
+  assert.match(ordersPageSource, /if \(\s*!routePlanDeliveryDateLock \|\|[\s\S]*filteredDeliveryDateLock === routePlanDeliveryDateLock[\s\S]*\) \{\s*return;\s*\}/);
+  assert.match(ordersPageSource, /updateOrderFilterSearchParams\(searchParams, \{\s*\.\.\.orderFilters,\s*deliveryDate: routePlanDeliveryDateLock,\s*\}\)/);
 });
 
 test("Orders page shows route readiness before moving to Routes", () => {
@@ -532,7 +566,7 @@ test("Orders table hides orders after they move into the route plan", () => {
   assert.match(ordersPageSource, /tableOrders\.filter\(\s*\(order\) =>\s*isOrderReadyToPlan\(order\) &&\s*!isOrderRoutePlanningLocked\(order, orderFilterReferenceDate\),?\s*\)/);
   assert.match(ordersPageSource, /selectableTableOrders\.length > 0 &&\s*selectableTableOrders\.every\(\(order\) => checkedOrderIdSet\.has\(order\.id\)\)/);
   assert.match(ordersPageSource, /const visibleOrderIds = new Set\(selectableTableOrders\.map\(\(order\) => order\.id\)\)/);
-  assert.match(ordersPageSource, /\.\.\.selectableTableOrders\.map\(\(order\) => order\.id\)/);
+  assert.match(ordersPageSource, /\.\.\.sameDateSelectableOrders\.map\(\(order\) => order\.id\)/);
   assert.match(ordersPageSource, /\{tableOrders\.map\(\(order\) => \{/);
   assert.doesNotMatch(ordersPageSource, /\{sortedOrders\.map\(\(order\) => \(/);
 });

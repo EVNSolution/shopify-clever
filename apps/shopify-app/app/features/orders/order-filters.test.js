@@ -70,6 +70,20 @@ test("filters orders by delivery area, delivery date, and ordered date", () => {
   );
 });
 
+test("filters delivery dates with date-only normalization", () => {
+  assert.deepEqual(
+    filterOrders(
+      [
+        { id: "date-only", deliveryDate: "2026-05-18" },
+        { id: "date-time", deliveryDate: "2026-05-18T13:30:00.000Z" },
+        { id: "other-date", deliveryDate: "2026-05-19T00:00:00.000Z" },
+      ],
+      { deliveryDate: "2026-05-18" },
+    ).map((order) => order.id),
+    ["date-only", "date-time"],
+  );
+});
+
 test("ignores removed search filters and legacy q query parameters", () => {
   assert.deepEqual(
     filterOrders(orders, { search: "city centre" }).map((order) => order.id),
