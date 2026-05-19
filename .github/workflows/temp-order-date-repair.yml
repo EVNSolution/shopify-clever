@@ -219,14 +219,17 @@ jobs:
           LIMIT 10;
           COMMIT;
           SQL
+          scp -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes /tmp/order-date-repair.sql "$EC2_USER@$EC2_HOST:/tmp/order-date-repair.sql"
           ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "$EC2_USER@$EC2_HOST" "
             set -euo pipefail
             cd '$DEPLOY_PATH'
             backup=\"/backups/order-date-repair-\$(date -u +%Y%m%dT%H%M%SZ).dump\"
             docker compose -f infra/compose/docker-compose.prod.yml exec -T postgres sh -lc 'pg_dump --format=custom --no-owner --no-acl -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f \"\$1\"' sh \"\$backup\"
             echo \"backup=\$backup\"
-            docker compose -f infra/compose/docker-compose.prod.yml exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\"'
-          " < /tmp/order-date-repair.sql
+            docker compose -f infra/compose/docker-compose.prod.yml exec -T postgres sh -lc 'cat > /tmp/order-date-repair.sql' < /tmp/order-date-repair.sql
+            docker compose -f infra/compose/docker-compose.prod.yml exec -T postgres sh -lc 'psql -v ON_ERROR_STOP=1 -U \"\$POSTGRES_USER\" -d \"\$POSTGRES_DB\" -f /tmp/order-date-repair.sql'
+            rm -f /tmp/order-date-repair.sql
+          "
 
       - name: Revoke temporary runner SSH ingress
         if: ${{ always() && steps.ssh_ingress.outputs.runner_cidr != '' && steps.ssh_ingress.outputs.authorized == 'true' }}
