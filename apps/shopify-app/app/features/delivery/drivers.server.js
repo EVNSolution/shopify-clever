@@ -29,6 +29,28 @@ export async function fetchDeliveryDrivers(request, options = {}) {
   };
 }
 
+export async function deleteDeliveryDriver(request, driverId, options = {}) {
+  const normalizedDriverId = textOrNull(driverId);
+
+  if (!normalizedDriverId) {
+    return {
+      driverId: null,
+      errors: [{ message: "삭제할 배송원 ID가 필요합니다." }],
+    };
+  }
+
+  const result = await deliveryApiRequest(request, `/admin/drivers/${encodeURIComponent(normalizedDriverId)}`, {
+    fetch: options.fetch,
+    method: "DELETE",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    driverId: result.data?.driverId ?? result.data?.id ?? normalizedDriverId,
+    errors: result.errors,
+  };
+}
+
 export async function regenerateDeliveryDriverInviteCode(request, driverId, options = {}) {
   const result = await deliveryApiRequest(request, `/admin/drivers/${driverId}/regenerate-invite-code`, {
     fetch: options.fetch,

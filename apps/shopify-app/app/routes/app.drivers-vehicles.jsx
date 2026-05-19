@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { createPendingDeliveryDriver, fetchDeliveryDrivers, regenerateDeliveryDriverInviteCode } from "../features/delivery/drivers.server";
+import { createPendingDeliveryDriver, deleteDeliveryDriver, fetchDeliveryDrivers, regenerateDeliveryDriverInviteCode } from "../features/delivery/drivers.server";
 import {
   formatInvitePhoneInput,
   formatSavedDriverPhone,
@@ -69,7 +69,9 @@ const driverRows = [
     phone: "+1 416 555 0108",
     status: "Active",
     authStatus: "App linked",
-    assignedRoute: { href: "/app/routes/route-plan-morning-01", label: "Thu 05/14 · West" },
+    isInvitePending: false,
+    assignedRoute: { label: "Thu 05/14 · West" },
+    joinedAt: "2026-05-10",
     lastSeenAt: "Today 09:42",
     recentEvents: "4 events",
   },
@@ -77,9 +79,11 @@ const driverRows = [
     id: "driver-daniel",
     displayName: "Daniel Lee",
     phone: "+1 647 555 0134",
-    status: "Available",
+    status: "Active",
     authStatus: "Invite pending",
-    assignedRoute: { href: "/app/routes?status=DRAFT", label: "Unassigned" },
+    isInvitePending: true,
+    assignedRoute: { label: "Unassigned" },
+    joinedAt: "2026-05-11",
     lastSeenAt: "Yesterday 18:10",
     recentEvents: "1 event",
   },
@@ -89,7 +93,9 @@ const driverRows = [
     phone: "+1 437 555 0187",
     status: "Inactive",
     authStatus: "Not linked",
-    assignedRoute: { href: "/app/routes/route-plan-east-02", label: "Fri 05/15 · East" },
+    isInvitePending: false,
+    assignedRoute: { label: "Fri 05/15 · East" },
+    joinedAt: "2026-05-09",
     lastSeenAt: "May 9, 2026",
     recentEvents: "No events",
   },
@@ -148,6 +154,18 @@ const secondaryButtonStyle = {
   background: "#ffffff",
   borderColor: "#c9c9c9",
   color: "#303030",
+};
+
+const dangerButtonStyle = {
+  ...secondaryButtonStyle,
+  borderColor: "#d72c0d",
+  color: "#d72c0d",
+};
+
+const disabledActionButtonStyle = {
+  ...secondaryButtonStyle,
+  cursor: "not-allowed",
+  opacity: 0.55,
 };
 
 const toolbarStyle = {
@@ -224,6 +242,12 @@ const tableHeaderCellStyle = {
   zIndex: 2,
 };
 
+const checkboxHeaderCellStyle = {
+  ...tableHeaderCellStyle,
+  padding: "8px 8px",
+  textAlign: "center",
+};
+
 const tableCellStyle = {
   borderBottom: "1px solid #ebebeb",
   color: "#303030",
@@ -231,6 +255,61 @@ const tableCellStyle = {
   textAlign: "left",
   verticalAlign: "middle",
   wordBreak: "break-word",
+};
+
+const checkboxCellStyle = {
+  ...tableCellStyle,
+  padding: "8px 8px",
+  textAlign: "center",
+};
+
+const appAccessCellStyle = {
+  ...tableCellStyle,
+  whiteSpace: "nowrap",
+  wordBreak: "normal",
+};
+
+const appAccessInlineStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  gap: "6px",
+  maxWidth: "100%",
+  minWidth: 0,
+  whiteSpace: "nowrap",
+};
+
+const appAccessStatusTextStyle = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const appAccessInlineButtonStyle = {
+  background: "transparent",
+  border: 0,
+  color: "#174a7c",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 650,
+  lineHeight: 1.2,
+  padding: 0,
+  whiteSpace: "nowrap",
+};
+
+const inviteCodeInlineStyle = {
+  alignItems: "center",
+  color: "#616161",
+  display: "inline-flex",
+  fontSize: "12px",
+  gap: "6px",
+  minWidth: 0,
+  whiteSpace: "nowrap",
+};
+
+const compactInviteButtonStyle = {
+  ...secondaryButtonStyle,
+  minHeight: "26px",
+  padding: "2px 7px",
 };
 
 const statusPillStyle = {
@@ -244,10 +323,19 @@ const statusPillStyle = {
   padding: "3px 8px",
 };
 
-const routeLinkStyle = {
-  color: "#174a7c",
+const driverFeedbackStyle = {
+  background: "#fff4f4",
+  border: "1px solid #ffd6d6",
+  borderRadius: "10px",
+  color: "#8e1f0b",
+  fontSize: "13px",
+  lineHeight: 1.4,
+  padding: "10px 12px",
+};
+
+const assignedRouteTextStyle = {
+  color: "#303030",
   fontWeight: 650,
-  textDecoration: "none",
 };
 
 const emptyRowStyle = {
@@ -428,6 +516,8 @@ function buildDriverSearchText(driver) {
     driver.status,
     driver.authStatus,
     driver.assignedRoute?.label,
+    driver.joinedAt,
+    driver.lastSeenAt,
   ].filter(Boolean).join(" "));
 }
 
@@ -445,12 +535,15 @@ function mapDeliveryDriverToRow(driver) {
     id: driverId,
     displayName: textOrFallback(driver.displayName, phone, "Pending driver"),
     phone,
-    status: invitePending ? "Pending" : formatDriverStatus(driver.status),
+    status: formatOperationalDriverStatus(driver.status, { invitePending }),
     authStatus: invitePending ? "Invite pending" : appLinked ? "App linked" : "Not linked",
+    isInvitePending: invitePending,
+    isAppLinked: appLinked,
     inviteCode: driver.inviteCode,
     inviteCodeExpiresAt: driver.inviteCodeExpiresAt,
-    assignedRoute: { href: `/app/routes?driverId=${encodeURIComponent(driverId)}`, label: "Unassigned" },
-    lastSeenAt: formatDriverTimestamp(driver.lastSeenAt ?? driver.createdAt) ?? "Pending invite",
+    assignedRoute: { label: "Unassigned" },
+    joinedAt: formatDriverTimestamp(driver.createdAt) ?? "—",
+    lastSeenAt: formatDriverTimestamp(driver.lastSeenAt) ?? null,
     recentEvents: formatRecentEvents(driver.recentEventsCount),
   };
 }
@@ -468,6 +561,11 @@ function textOrFallback(...values) {
 function formatDriverStatus(value) {
   const status = textOrFallback(value, "Active").toLowerCase();
   return status.charAt(0).toUpperCase() + status.slice(1).replaceAll("_", " ");
+}
+
+function formatOperationalDriverStatus(value, { invitePending } = {}) {
+  if (invitePending) return "Active";
+  return formatDriverStatus(value);
 }
 
 function formatDriverTimestamp(value) {
@@ -488,6 +586,17 @@ function buildDriverInviteMessage({ downloadLink, inviteCode }) {
   return `배송원 앱 다운로드 링크: ${downloadLink}\n인증코드: ${code}`;
 }
 
+function canShowDriverInviteActions(driver) {
+  return (
+    driver?.isInvitePending === true &&
+    normalizeSearchText(driver?.authStatus) === "invite pending"
+  );
+}
+
+function canShowDriverReloginAction(driver) {
+  return driver?.isAppLinked === true && driver?.isInvitePending !== true;
+}
+
 function mergeDriverRows(baseRows, submittedRow) {
   if (!submittedRow) return baseRows;
 
@@ -502,6 +611,18 @@ function formText(value) {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function parseDriverIds(value) {
+  try {
+    const parsedDriverIds = JSON.parse(value ?? "[]");
+
+    return Array.isArray(parsedDriverIds)
+      ? parsedDriverIds.map((driverId) => String(driverId).trim()).filter(Boolean)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
   return fetchDeliveryDrivers(request);
@@ -511,6 +632,26 @@ export const action = async ({ request }) => {
   await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formText(formData.get("_intent"));
+
+  if (intent === "deleteDriver") {
+    const driverIds = parseDriverIds(formData.get("driverIds"));
+    const shopifySessionToken = formText(formData.get("shopifySessionToken"));
+
+    if (driverIds.length === 0) {
+      return { driverIds: [], errors: [{ message: "삭제할 배송원을 선택해주세요." }] };
+    }
+
+    const deleteResults = await Promise.all(
+      driverIds.map((driverId) =>
+        deleteDeliveryDriver(request, driverId, { sessionToken: shopifySessionToken }),
+      ),
+    );
+
+    return {
+      driverIds: deleteResults.map((result) => result.driverId).filter(Boolean),
+      errors: deleteResults.flatMap((result) => result.errors ?? []),
+    };
+  }
 
   if (intent === "regenerateInviteCode") {
     const driverId = formText(formData.get("driverId"));
@@ -541,6 +682,7 @@ export const action = async ({ request }) => {
 export default function DriversVehiclesPage() {
   const { drivers = [], errors = [] } = useLoaderData();
   const driverInviteFetcher = useFetcher();
+  const driverDeleteFetcher = useFetcher();
   const shopify = useAppBridge();
   const [searchText, setSearchText] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -549,6 +691,8 @@ export default function DriversVehiclesPage() {
   const [countryCodeOpen, setCountryCodeOpen] = useState(false);
   const [copyStatus, setCopyStatus] = useState("");
   const [pendingDownloadLink, setPendingDownloadLink] = useState("");
+  const [checkedDriverIds, setCheckedDriverIds] = useState([]);
+  const [deletedDriverIds, setDeletedDriverIds] = useState([]);
 
   const serverDriverRows = useMemo(
     () => (Array.isArray(drivers) ? drivers : []).map(mapDeliveryDriverToRow).filter(Boolean),
@@ -563,13 +707,27 @@ export default function DriversVehiclesPage() {
     () => mergeDriverRows(baseDriverRows, submittedDriverRow),
     [baseDriverRows, submittedDriverRow],
   );
+  const deletedDriverIdSet = useMemo(() => new Set(deletedDriverIds), [deletedDriverIds]);
+  const visibleDrivers = useMemo(
+    () => allDrivers.filter((driver) => !deletedDriverIdSet.has(driver.id)),
+    [allDrivers, deletedDriverIdSet],
+  );
 
   const filteredDrivers = useMemo(() => {
     const query = normalizeSearchText(searchText);
-    if (!query) return allDrivers;
+    if (!query) return visibleDrivers;
 
-    return allDrivers.filter((driver) => buildDriverSearchText(driver).includes(query));
-  }, [allDrivers, searchText]);
+    return visibleDrivers.filter((driver) => buildDriverSearchText(driver).includes(query));
+  }, [searchText, visibleDrivers]);
+
+  const selectableDriverRows = filteredDrivers;
+  const checkedDriverIdSet = new Set(checkedDriverIds);
+  const allVisibleDriversChecked =
+    selectableDriverRows.length > 0 &&
+    selectableDriverRows.every((driver) => checkedDriverIdSet.has(driver.id));
+  const driverDeleteDisabled = checkedDriverIds.length === 0 || driverDeleteFetcher.state !== "idle";
+  const driverDeleteErrors = Array.isArray(driverDeleteFetcher.data?.errors) ? driverDeleteFetcher.data.errors : [];
+  const visibleErrors = [...errors, ...driverDeleteErrors];
 
   const selectedCountryCode = countryDialCodeOptions.find((option) => option.id === selectedCountryCodeId) ?? countryDialCodeOptions[0];
   const currentInviteDriver = driverInviteFetcher.data?.driver ?? null;
@@ -671,6 +829,15 @@ export default function DriversVehiclesPage() {
     setCopyStatus("Pending driver saved.");
   }, [driverInviteFetcher.data, driverInviteFetcher.state, pendingDownloadLink]);
 
+  useEffect(() => {
+    if (driverDeleteFetcher.state !== "idle" || !driverDeleteFetcher.data) return;
+    if ((driverDeleteFetcher.data.errors ?? []).length > 0) return;
+
+    const deletedIds = Array.isArray(driverDeleteFetcher.data.driverIds) ? driverDeleteFetcher.data.driverIds : [];
+    setDeletedDriverIds((currentDriverIds) => Array.from(new Set([...currentDriverIds, ...deletedIds])));
+    setCheckedDriverIds([]);
+  }, [driverDeleteFetcher.data, driverDeleteFetcher.state]);
+
   const regenerateInviteCode = async (driverId) => {
     const sessionToken = await shopify.idToken();
     const formData = new FormData();
@@ -680,6 +847,47 @@ export default function DriversVehiclesPage() {
     driverInviteFetcher.submit(formData, { method: "post" });
   };
 
+  function toggleDriverCheck(driverId) {
+    setCheckedDriverIds((currentDriverIds) =>
+      currentDriverIds.includes(driverId)
+        ? currentDriverIds.filter((currentDriverId) => currentDriverId !== driverId)
+        : [...currentDriverIds, driverId],
+    );
+  }
+
+  function toggleAllVisibleDriverChecks() {
+    setCheckedDriverIds((currentDriverIds) => {
+      if (allVisibleDriversChecked) {
+        const visibleDriverIds = new Set(selectableDriverRows.map((driver) => driver.id));
+        return currentDriverIds.filter((driverId) => !visibleDriverIds.has(driverId));
+      }
+
+      return Array.from(
+        new Set([
+          ...currentDriverIds,
+          ...selectableDriverRows.map((driver) => driver.id),
+        ]),
+      );
+    });
+  }
+
+  async function handleDeleteSelectedDrivers() {
+    if (driverDeleteDisabled) return;
+
+    const formData = new FormData();
+    formData.set("_intent", "deleteDriver");
+    formData.set("driverIds", JSON.stringify(checkedDriverIds));
+
+    try {
+      const sessionToken = await shopify.idToken();
+      formData.set("shopifySessionToken", sessionToken);
+    } catch {
+      // The server action still returns an actionable auth error when the token cannot be fetched.
+    }
+
+    driverDeleteFetcher.submit(formData, { method: "post" });
+  }
+
   return (
     <PageShell title={null}>
       <div style={driversPageStyle}>
@@ -687,8 +895,20 @@ export default function DriversVehiclesPage() {
         <h1 style={pageTitleStyle}>Drivers</h1>
         <div style={pageActionsStyle}>
           <button type="button" style={primaryButtonStyle} onClick={openInviteModal}>Invite driver</button>
+          <button
+            type="button"
+            style={driverDeleteDisabled ? disabledActionButtonStyle : dangerButtonStyle}
+            disabled={driverDeleteDisabled}
+            onClick={handleDeleteSelectedDrivers}
+          >
+            Delete selected
+          </button>
         </div>
       </div>
+
+      {visibleErrors.length > 0 ? (
+        <div style={driverFeedbackStyle}>{visibleErrors[0].message ?? "Driver 작업을 완료하지 못했습니다."}</div>
+      ) : null}
 
       <div style={driverTableSurfaceStyle}>
         <div style={toolbarStyle}>
@@ -701,26 +921,38 @@ export default function DriversVehiclesPage() {
             onChange={(event) => setSearchText(event.currentTarget.value)}
           />
           <span style={toolbarSummaryStyle}>
-            Drivers: {allDrivers.filter((driver) => driver.status !== "Inactive").length} active / {allDrivers.length} total
+            Drivers: {visibleDrivers.filter((driver) => normalizeSearchText(driver.status) === "active").length} active / {visibleDrivers.length} total
           </span>
         </div>
 
         <div style={tableWrapStyle}>
           <table aria-label="Driver list" style={tableStyle}>
             <colgroup>
-              <col style={{ width: "21%" }} />
-              <col style={{ width: "17%" }} />
-              <col style={{ width: "13%" }} />
-              <col style={{ width: "16%" }} />
-              <col style={{ width: "20%" }} />
-              <col style={{ width: "13%" }} />
+              <col style={{ width: "40px" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "150px" }} />
+              <col style={{ width: "96px" }} />
+              <col style={{ width: "110px" }} />
+              <col style={{ width: "110px" }} />
+              <col style={{ width: "110px" }} />
+              <col style={{ width: "110px" }} />
             </colgroup>
             <thead>
               <tr>
+                <th scope="col" style={checkboxHeaderCellStyle}>
+                  <input
+                    type="checkbox"
+                    aria-label="Select all visible drivers"
+                    checked={allVisibleDriversChecked}
+                    disabled={selectableDriverRows.length === 0}
+                    onChange={toggleAllVisibleDriverChecks}
+                  />
+                </th>
                 <th style={tableHeaderCellStyle}>Driver</th>
                 <th style={tableHeaderCellStyle}>Phone</th>
                 <th style={tableHeaderCellStyle}>Status</th>
                 <th style={tableHeaderCellStyle}>App access</th>
+                <th style={tableHeaderCellStyle}>Joined</th>
                 <th style={tableHeaderCellStyle}>Assigned route</th>
                 <th style={tableHeaderCellStyle}>Recent events</th>
               </tr>
@@ -728,53 +960,73 @@ export default function DriversVehiclesPage() {
             <tbody>
               {filteredDrivers.length > 0 ? filteredDrivers.map((driver) => (
                 <tr key={driver.id}>
+                  <td style={checkboxCellStyle}>
+                    <input
+                      type="checkbox"
+                      aria-label={`Select ${driver.displayName} for deletion`}
+                      checked={checkedDriverIdSet.has(driver.id)}
+                      onChange={() => toggleDriverCheck(driver.id)}
+                    />
+                  </td>
                   <td style={tableCellStyle}>
                     <strong>{driver.displayName}</strong>
-                    <br />
-                    <span style={{ color: "#616161", fontSize: "12px" }}>{driver.lastSeenAt}</span>
                   </td>
                   <td style={tableCellStyle}>{driver.phone}</td>
                   <td style={tableCellStyle}><span style={statusPillStyle}>{driver.status}</span></td>
-                  <td style={tableCellStyle}>
-                    {driver.authStatus}
-                    {driver.inviteCode ? (
-                      <div style={{ marginTop: "4px", fontSize: "12px", color: "#616161" }}>
-                        코드: <strong>{driver.inviteCode}</strong>
-                        <button 
-                          type="button" 
-                          style={{ marginLeft: "6px", background: "none", border: "none", color: "#174a7c", cursor: "pointer", padding: 0 }}
-                          onClick={() => regenerateInviteCode(driver.id)}
-                        >
-                          재생성
-                        </button>
+                  <td style={appAccessCellStyle}>
+                    <span style={appAccessInlineStyle}>
+                      <span style={appAccessStatusTextStyle}>{driver.authStatus}</span>
+                      {canShowDriverReloginAction(driver) ? (
                         <button
                           type="button"
-                          style={{ marginLeft: "6px", background: "none", border: "none", color: "#174a7c", cursor: "pointer", padding: 0 }}
-                          onClick={() => copyDriverInviteMessage(driver.inviteCode)}
-                        >
-                          복사
-                        </button>
-                      </div>
-                    ) : (
-                      <div style={{ marginTop: "4px" }}>
-                        <button
-                          type="button"
-                          style={{ ...secondaryButtonStyle, minHeight: "28px", padding: "3px 8px" }}
+                          style={appAccessInlineButtonStyle}
                           onClick={() => regenerateInviteCode(driver.id)}
                         >
-                          인증코드 생성
+                          재로그인
                         </button>
-                      </div>
-                    )}
+                      ) : null}
+                      {canShowDriverInviteActions(driver) ? (
+                        driver.inviteCode ? (
+                          <>
+                            <span style={inviteCodeInlineStyle}>
+                              코드: <strong>{driver.inviteCode}</strong>
+                            </span>
+                            <button
+                              type="button"
+                              style={appAccessInlineButtonStyle}
+                              onClick={() => regenerateInviteCode(driver.id)}
+                            >
+                              재생성
+                            </button>
+                            <button
+                              type="button"
+                              style={appAccessInlineButtonStyle}
+                              onClick={() => copyDriverInviteMessage(driver.inviteCode)}
+                            >
+                              복사
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            type="button"
+                            style={compactInviteButtonStyle}
+                            onClick={() => regenerateInviteCode(driver.id)}
+                          >
+                            인증코드 생성
+                          </button>
+                        )
+                      ) : null}
+                    </span>
                   </td>
+                  <td style={tableCellStyle}>{driver.joinedAt}</td>
                   <td style={tableCellStyle}>
-                    <a href={driver.assignedRoute.href} style={routeLinkStyle}>{driver.assignedRoute.label}</a>
+                    <span style={assignedRouteTextStyle}>{driver.assignedRoute.label}</span>
                   </td>
                   <td style={tableCellStyle}>{driver.recentEvents}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={6} style={emptyRowStyle}>No drivers match this search.</td>
+                  <td colSpan={8} style={emptyRowStyle}>No drivers match this search.</td>
                 </tr>
               )}
             </tbody>

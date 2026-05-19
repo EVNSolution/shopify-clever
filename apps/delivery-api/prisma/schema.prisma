@@ -269,23 +269,25 @@ model RoutePlanStop {
 }
 
 model Driver {
-  id               String                @id @default(uuid()) @db.Uuid
-  shopId           String                @db.Uuid
-  shop             Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
-  displayName      String                @db.Text
-  phone            String?               @db.Text
-  status           DriverStatus          @default(ACTIVE)
-  inviteCode       String?               @db.Text
-  inviteCodeExpiresAt DateTime?          @db.Timestamptz(6)
-  authSubject      String?               @unique @db.Text
-  lastSeenAt       DateTime?             @db.Timestamptz(6)
-  createdAt        DateTime              @default(now()) @db.Timestamptz(6)
-  updatedAt        DateTime              @updatedAt @db.Timestamptz(6)
-  sessions         DriverSession[]
-  routePlans       RoutePlan[]
-  driverEvents     DriverEvent[]
-  consentRecords   DriverConsentRecord[]
-  driverProofMedia DriverProofMedia[]
+  id                  String                @id @default(uuid()) @db.Uuid
+  shopId              String                @db.Uuid
+  shop                Shop                  @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  displayName         String                @db.Text
+  phone               String?               @db.Text
+  status              DriverStatus          @default(ACTIVE)
+  inviteCode          String?               @db.Text
+  inviteCodeExpiresAt DateTime?             @db.Timestamptz(6)
+  authSubject         String?               @unique @db.Text
+  tokenVersion        Int                   @default(0)
+  tokensInvalidatedAt DateTime?             @db.Timestamptz(6)
+  lastSeenAt          DateTime?             @db.Timestamptz(6)
+  createdAt           DateTime              @default(now()) @db.Timestamptz(6)
+  updatedAt           DateTime              @updatedAt @db.Timestamptz(6)
+  sessions            DriverSession[]
+  routePlans          RoutePlan[]
+  driverEvents        DriverEvent[]
+  consentRecords      DriverConsentRecord[]
+  driverProofMedia    DriverProofMedia[]
 
   @@unique([shopId, inviteCode])
   @@index([shopId, status])

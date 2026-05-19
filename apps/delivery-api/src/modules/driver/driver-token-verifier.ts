@@ -4,8 +4,10 @@ const DRIVER_AUDIENCE = 'clever-delivery-driver';
 
 export type VerifiedDriverToken = {
   driverId: string;
+  issuedAt: Date;
   shopDomain: string;
   subject: string;
+  tokenVersion: number;
 };
 
 export type VerifyDriverTokenOptions = {
@@ -18,6 +20,7 @@ export type SignDriverTokenInput = {
   expiresInSeconds: number;
   shopDomain: string;
   subject: string;
+  tokenVersion?: number;
 };
 
 export type SignDriverTokenResult = {
@@ -35,9 +38,11 @@ type DriverTokenClaims = {
   aud?: unknown;
   driverId?: unknown;
   exp?: unknown;
+  iat?: unknown;
   nbf?: unknown;
   shopDomain?: unknown;
   sub?: unknown;
+  tokenVersion?: unknown;
 };
 
 export function verifyDriverToken(
@@ -66,8 +71,10 @@ export function verifyDriverToken(
   const audience = requireStringClaim(claims.aud, 'aud');
   const driverId = requireStringClaim(claims.driverId, 'driverId');
   const expiresAt = requireNumberClaim(claims.exp, 'exp');
+  const issuedAtSeconds = requireNumberClaim(claims.iat, 'iat');
   const shopDomain = normalizeShopDomain(requireStringClaim(claims.shopDomain, 'shopDomain'));
   const subject = requireStringClaim(claims.sub, 'sub');
+  const tokenVersion = readTokenVersionClaim(claims.tokenVersion);
 
   if (audience !== DRIVER_AUDIENCE) {
     throw new Error('Driver token audience mismatch');
@@ -81,7 +88,13 @@ export function verifyDriverToken(
     throw new Error('Driver token is not active yet');
   }
 
-  return { driverId, shopDomain, subject };
+  return {
+    driverId,
+    issuedAt: new Date(issuedAtSeconds * 1000),
+    shopDomain,
+    subject,
+    tokenVersion
+  };
 }
 
 export function signDriverToken(
@@ -100,7 +113,8 @@ export function signDriverToken(
     iat: issuedAtSeconds,
     nbf: issuedAtSeconds,
     shopDomain,
-    sub: requireStringClaim(input.subject, 'sub')
+    sub: requireStringClaim(input.subject, 'sub'),
+    tokenVersion: readTokenVersionClaim(input.tokenVersion)
   };
   const encodedHeader = Buffer.from(JSON.stringify(header), 'utf8').toString('base64url');
   const encodedPayload = Buffer.from(JSON.stringify(claims), 'utf8').toString('base64url');
@@ -164,6 +178,19 @@ function requireStringClaim(value: unknown, claimName: string): string {
 function requireNumberClaim(value: unknown, claimName: string): number {
   if (typeof value !== 'number' || !Number.isFinite(value)) {
     throw new Error(`Driver token ${claimName} claim is required`);
+  }
+
+  return value;
+}
+
+
+function readTokenVersionClaim(value: unknown): number {
+  if (value === undefined) {
+    return 0;
+  }
+
+  if (typeof value !== 'number' || !Number.isInteger(value) || value < 0) {
+    throw new Error('Driver token tokenVersion claim must be a non-negative integer');
   }
 
   return value;

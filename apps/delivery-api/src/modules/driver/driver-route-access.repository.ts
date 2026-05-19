@@ -18,6 +18,7 @@ type DriverRoutePlanRecord = {
     id: string;
     phone: string | null;
     status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+    tokenVersion: number;
   } | null;
   id: string;
   name: string;
@@ -29,7 +30,7 @@ type DriverRoutePlanRecord = {
 
 const routePlanSelect = {
   constraints: true,
-  driver: { select: { authSubject: true, id: true, phone: true, status: true } },
+  driver: { select: { authSubject: true, id: true, phone: true, status: true, tokenVersion: true } },
   id: true,
   name: true,
   planDate: true,
@@ -172,7 +173,8 @@ function mapRoutePlan(
   return {
     driverContext: {
       driverId: routePlan.driver.id,
-      shopDomain: normalizeShopDomain(routePlan.shop.shopDomain)
+      shopDomain: normalizeShopDomain(routePlan.shop.shopDomain),
+      tokenVersion: routePlan.driver.tokenVersion
     },
     status: 'INVITED',
     routeAccess: {

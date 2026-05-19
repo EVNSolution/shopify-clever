@@ -4,10 +4,11 @@ import type { PrismaClient } from '@prisma/client';
 import type {
   AdminDriverRow,
   CreatePendingDriverRecordInput,
+  DeleteAdminDriverInput,
   ListAdminDriversInput
 } from './admin-driver.types.js';
 
-type AdminDriverPrismaClient = Pick<PrismaClient, 'driver' | 'shop'>;
+type AdminDriverPrismaClient = Pick<PrismaClient, 'driver' | 'driverSession' | 'shop'>;
 
 const INVITE_CODE_TTL_HOURS = 24;
 
@@ -22,6 +23,8 @@ type DriverRecord = {
   lastSeenAt: Date | null;
   phone: string | null;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  tokenVersion: number;
+  tokensInvalidatedAt: Date | null;
   updatedAt: Date;
 };
 
@@ -91,6 +94,24 @@ export class PrismaAdminDriverRepository {
     return drivers.map((driver) => toAdminDriverRow(driver));
   }
 
+  async deleteDriver(input: DeleteAdminDriverInput): Promise<string> {
+    const shopDomain = normalizeShopDomain(input.shopDomain);
+    const shop = await this.prisma.shop.findUnique({
+      select: { id: true },
+      where: { shopDomain }
+    });
+    if (shop === null) {
+      throw new Error('Shop not found');
+    }
+
+    const deletedDriver = await this.prisma.driver.delete({
+      select: { id: true },
+      where: { id: input.driverId, shopId: shop.id }
+    });
+
+    return deletedDriver.id;
+  }
+
   async regenerateInviteCode(input: { driverId: string; shopDomain: string }): Promise<AdminDriverRow> {
     const shopDomain = normalizeShopDomain(input.shopDomain);
     const shop = await this.prisma.shop.findUnique({
@@ -103,11 +124,22 @@ export class PrismaAdminDriverRepository {
 
     const inviteCode = generateInviteCode();
     const inviteCodeExpiresAt = new Date(Date.now() + INVITE_CODE_TTL_HOURS * 60 * 60 * 1000);
+    const tokensInvalidatedAt = new Date();
 
     const driver = await this.prisma.driver.update({
-      data: { inviteCode, inviteCodeExpiresAt },
+      data: {
+        authSubject: null,
+        inviteCode,
+        inviteCodeExpiresAt,
+        tokensInvalidatedAt,
+        tokenVersion: { increment: 1 }
+      },
       include: driverInclude,
       where: { id: input.driverId, shopId: shop.id }
+    });
+    await this.prisma.driverSession.updateMany({
+      data: { revokedAt: tokensInvalidatedAt },
+      where: { driverId: driver.id, revokedAt: null }
     });
 
     return toAdminDriverRow(driver);

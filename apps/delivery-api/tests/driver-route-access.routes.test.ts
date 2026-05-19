@@ -27,7 +27,8 @@ const invitedLookup = {
   status: 'INVITED' as const,
   driverContext: {
     driverId: 'driver-id',
-    shopDomain: 'tomatono.myshopify.com'
+    shopDomain: 'tomatono.myshopify.com',
+    tokenVersion: 4
   },
   routeAccess: {
     nextState: 'consent_required' as const,
@@ -166,8 +167,10 @@ describe('Driver route access lookup route', () => {
         secret: 'driver-secret'
       })).toEqual({
         driverId: 'driver-id',
+        issuedAt: now,
         shopDomain: 'tomatono.myshopify.com',
-        subject: 'driver:driver-id'
+        subject: 'driver:driver-id',
+        tokenVersion: 4
       });
       expect(JSON.stringify(body)).not.toContain('driverContext');
       expect(lookupRouteAccess).toHaveBeenCalledWith({

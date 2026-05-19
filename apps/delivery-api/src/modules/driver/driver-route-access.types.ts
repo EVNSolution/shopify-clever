@@ -28,6 +28,7 @@ export type DriverRouteAccessInvitedRoute = {
   driverContext: {
     driverId: string;
     shopDomain: string;
+    tokenVersion: number;
   };
   status: 'INVITED';
   routeAccess: {

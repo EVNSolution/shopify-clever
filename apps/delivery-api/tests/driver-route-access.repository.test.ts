@@ -17,7 +17,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
     expect(prisma.routePlan.findUnique).toHaveBeenCalledWith({
       select: {
         constraints: true,
-        driver: { select: { authSubject: true, id: true, phone: true, status: true } },
+        driver: { select: { authSubject: true, id: true, phone: true, status: true, tokenVersion: true } },
         id: true,
         name: true,
         planDate: true,
@@ -28,7 +28,8 @@ describe('PrismaDriverRouteAccessRepository', () => {
     expect(result).toEqual({
       driverContext: {
         driverId: 'driver-id',
-        shopDomain: 'tomatono.myshopify.com'
+        shopDomain: 'tomatono.myshopify.com',
+        tokenVersion: 4
       },
       status: 'INVITED',
       routeAccess: {
@@ -78,7 +79,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
       orderBy: [{ planDate: 'asc' }, { name: 'asc' }],
       select: {
         constraints: true,
-        driver: { select: { authSubject: true, id: true, phone: true, status: true } },
+        driver: { select: { authSubject: true, id: true, phone: true, status: true, tokenVersion: true } },
         id: true,
         name: true,
         planDate: true,
@@ -216,7 +217,7 @@ describe('PrismaDriverRouteAccessRepository', () => {
       orderBy: [{ planDate: 'asc' }, { name: 'asc' }],
       select: {
         constraints: true,
-        driver: { select: { authSubject: true, id: true, phone: true, status: true } },
+        driver: { select: { authSubject: true, id: true, phone: true, status: true, tokenVersion: true } },
         id: true,
         name: true,
         planDate: true,
@@ -358,7 +359,8 @@ function routePlanRecord(
       authSubject: overrides.authSubject === undefined ? 'driver-auth-subject' : overrides.authSubject,
       id: 'driver-id',
       phone: '+14165550123',
-      status: overrides.driverStatus ?? 'ACTIVE'
+      status: overrides.driverStatus ?? 'ACTIVE',
+      tokenVersion: 4
     },
     id: overrides.id ?? routePlanId,
     name: overrides.name ?? 'Tuesday AM Route',

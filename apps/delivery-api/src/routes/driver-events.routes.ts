@@ -1,7 +1,12 @@
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { MultipartFile, MultipartValue } from '@fastify/multipart';
 
-import { signDriverToken, verifyDriverToken } from '../modules/driver/driver-token-verifier.js';
+import {
+  signDriverToken,
+  verifyDriverToken,
+  type VerifiedDriverToken
+} from '../modules/driver/driver-token-verifier.js';
+import type { DriverTokenAccessRepositoryContract } from '../modules/driver/driver-token-access.repository.js';
 import type { DriverAssignedRouteServiceContract } from '../modules/driver/driver-assigned-route.types.js';
 import type {
   DriverConsentRecordInput,
@@ -42,6 +47,7 @@ export type DriverApiDependencies = {
       shopDomain: string;
     }): Promise<{ duplicate: boolean; eventId: string }>;
   };
+  driverTokenAccessRepository?: DriverTokenAccessRepositoryContract;
   jwtSecret: string;
   proofMediaService?: DriverProofMediaServiceContract;
   now?: () => Date;
@@ -78,6 +84,10 @@ type DriverEventRequestBody = {
 type DriverProofMediaAccessParams = {
   mediaId?: unknown;
 };
+
+type DriverAuthenticationResult =
+  | { status: 'authenticated'; context: VerifiedDriverToken }
+  | { status: 'invalid' | 'missing' };
 
 const DRIVER_EVENT_TYPES = new Set([
   'ROUTE_STARTED',
@@ -125,21 +135,13 @@ export function registerDriverEventRoutes(
   const driverAssignedRouteService = dependencies.driverAssignedRouteService;
   if (driverAssignedRouteService !== undefined) {
     app.get<{ Querystring: DriverAssignedRouteQuery }>('/driver/assigned-route', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let routeContext: string | null;
       try {
@@ -164,21 +166,13 @@ export function registerDriverEventRoutes(
   const driverConsentService = dependencies.driverConsentService;
   if (driverConsentService !== undefined) {
     app.post<{ Body: DriverConsentRequestBody }>('/driver/consents', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let consentInput: Omit<RecordDriverConsentsInput, 'driverId' | 'shopDomain'>;
       try {
@@ -204,21 +198,13 @@ export function registerDriverEventRoutes(
   const proofMediaService = dependencies.proofMediaService;
   if (proofMediaService !== undefined) {
     app.get<{ Params: DriverProofMediaAccessParams }>('/driver/proof-media/:mediaId/access', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let mediaId: string;
       try {
@@ -253,21 +239,13 @@ export function registerDriverEventRoutes(
     });
 
     app.post('/driver/proof-media', async (request, reply) => {
-      const token = extractBearerToken(request.headers.authorization);
-      if (token === null) {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+      const authentication = await authenticateDriverRequest(request, dependencies);
+      if (authentication.status !== 'authenticated') {
+        return reply
+          .code(401)
+          .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
       }
-
-      let driverContext: { driverId: string; shopDomain: string };
-      try {
-        const now = dependencies.now?.();
-        driverContext = verifyDriverToken(
-          token,
-          now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-        );
-      } catch {
-        return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-      }
+      const driverContext = authentication.context;
 
       let uploadInput: Omit<StoreDriverProofMediaInput, 'driverId' | 'shopDomain'>;
       try {
@@ -303,21 +281,13 @@ export function registerDriverEventRoutes(
   }
 
   app.post<{ Body: DriverEventRequestBody }>('/driver/events', async (request, reply) => {
-    const token = extractBearerToken(request.headers.authorization);
-    if (token === null) {
-      return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Missing driver bearer token'));
+    const authentication = await authenticateDriverRequest(request, dependencies);
+    if (authentication.status !== 'authenticated') {
+      return reply
+        .code(401)
+        .send(errorResponse('UNAUTHORIZED', driverAuthenticationMessage(authentication.status)));
     }
-
-    let driverContext: { driverId: string; shopDomain: string };
-    try {
-      const now = dependencies.now?.();
-      driverContext = verifyDriverToken(
-        token,
-        now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
-      );
-    } catch {
-      return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid driver bearer token'));
-    }
+    const driverContext = authentication.context;
 
     let eventInput: ReturnType<typeof readDriverEventBody>;
     try {
@@ -343,6 +313,44 @@ export function registerDriverEventRoutes(
   });
 }
 
+async function authenticateDriverRequest(
+  request: FastifyRequest,
+  dependencies: DriverApiDependencies
+): Promise<DriverAuthenticationResult> {
+  const token = extractBearerToken(request.headers.authorization);
+  if (token === null) {
+    return { status: 'missing' };
+  }
+
+  let driverContext: VerifiedDriverToken;
+  try {
+    const now = dependencies.now?.();
+    driverContext = verifyDriverToken(
+      token,
+      now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
+    );
+  } catch {
+    return { status: 'invalid' };
+  }
+
+  const tokenAccessRepository = dependencies.driverTokenAccessRepository;
+  if (tokenAccessRepository !== undefined) {
+    const isActive = await tokenAccessRepository.isDriverAccessTokenActive({
+      driverId: driverContext.driverId,
+      shopDomain: driverContext.shopDomain,
+      tokenVersion: driverContext.tokenVersion
+    });
+    if (!isActive) {
+      return { status: 'invalid' };
+    }
+  }
+
+  return { status: 'authenticated', context: driverContext };
+}
+
+function driverAuthenticationMessage(status: DriverAuthenticationResult['status']): string {
+  return status === 'missing' ? 'Missing driver bearer token' : 'Invalid driver bearer token';
+}
 
 function buildDriverRouteAccessResponse(
   result: DriverRouteAccessLookupResult,
@@ -372,7 +380,8 @@ function buildInvitedDriverRouteAccessResponse(
       driverId: result.driverContext.driverId,
       expiresInSeconds: DRIVER_ACCESS_TOKEN_TTL_SECONDS,
       shopDomain: result.driverContext.shopDomain,
-      subject: `driver:${result.driverContext.driverId}`
+      subject: `driver:${result.driverContext.driverId}`,
+      tokenVersion: result.driverContext.tokenVersion
     },
     now === undefined ? { secret: dependencies.jwtSecret } : { now, secret: dependencies.jwtSecret }
   );

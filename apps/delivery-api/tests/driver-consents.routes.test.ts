@@ -133,8 +133,10 @@ function driverToken(): string {
     aud: 'clever-delivery-driver',
     driverId: 'driver-id',
     exp: Math.floor(now.getTime() / 1000) + 60,
+    iat: Math.floor(now.getTime() / 1000),
     shopDomain: 'example.myshopify.com',
-    sub: 'driver-auth-subject'
+    sub: 'driver-auth-subject',
+    tokenVersion: 0
   };
   const encodedHeader = Buffer.from(JSON.stringify(header), 'utf8').toString('base64url');
   const encodedPayload = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');

@@ -12,7 +12,8 @@ describe('Driver auth routes', () => {
         driverId: 'driver-id',
         expiresAt: new Date('2026-06-15T00:00:00.000Z'),
         refreshToken: 'refresh-token',
-        shopDomain: 'tomatono.myshopify.com'
+        shopDomain: 'tomatono.myshopify.com',
+        tokenVersion: 2
       })
     );
     const app = await buildApp({
@@ -25,14 +26,15 @@ describe('Driver auth routes', () => {
     try {
       const response = await app.inject({
         method: 'POST',
-        payload: { phone: '+14165550123', inviteCode: 'abc123' },
+        payload: { phone: '+14165550123', inviteCode: 'abc123', displayName: '  Minji Kim  ' },
         url: '/driver/auth/verify-invite'
       });
 
       expect(response.statusCode).toBe(200);
       expect(verifyInvite).toHaveBeenCalledWith({
         phone: '+14165550123',
-        inviteCode: 'ABC123'
+        inviteCode: 'ABC123',
+        displayName: 'Minji Kim'
       });
       expect(response.json()).toMatchObject({
         data: {
@@ -42,6 +44,51 @@ describe('Driver auth routes', () => {
         },
         error: null
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  test('logs sanitized verify-invite payload shape without raw invite secrets', async () => {
+    const verifyInvite = vi.fn<DriverAuthDependencies['driverAuthRepository']['verifyInvite']>(() =>
+      Promise.resolve({
+        driverId: 'driver-id',
+        expiresAt: new Date('2026-06-15T00:00:00.000Z'),
+        refreshToken: 'refresh-token',
+        shopDomain: 'tomatono.myshopify.com',
+        tokenVersion: 2
+      })
+    );
+    const logLines: string[] = [];
+    const app = await buildApp({
+      driverAuth: {
+        driverAuthRepository: { verifyInvite } as never,
+        jwtSecret: 'test-secret'
+      },
+      logger: {
+        level: 'info',
+        stream: { write: (line: string) => logLines.push(line) }
+      }
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        payload: { phone: '+14165550123', inviteCode: 'abc123', displayName: '  Minji Kim  ' },
+        url: '/driver/auth/verify-invite'
+      });
+
+      expect(response.statusCode).toBe(200);
+      const payloadLog = logLines.find((line) => line.includes('driver invite verification payload accepted')) ?? '';
+      expect(payloadLog).toContain('phoneLast4');
+      expect(payloadLog).toContain('0123');
+      expect(payloadLog).toContain('displayNameProvided');
+      expect(payloadLog).toContain('displayNameLength');
+      expect(payloadLog).toContain('inviteCodeLength');
+      expect(payloadLog).not.toContain('+14165550123');
+      expect(payloadLog).not.toContain('abc123');
+      expect(payloadLog).not.toContain('ABC123');
+      expect(payloadLog).not.toContain('Minji Kim');
     } finally {
       await app.close();
     }

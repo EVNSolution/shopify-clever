@@ -92,16 +92,25 @@ describe('PrismaAdminDriverRepository', () => {
     });
     expect(prisma.driver.update).toHaveBeenCalledWith({
       data: {
+        authSubject: null,
         inviteCode: sixHexCodeMatcher,
-        inviteCodeExpiresAt: anyDateMatcher
+        inviteCodeExpiresAt: anyDateMatcher,
+        tokensInvalidatedAt: anyDateMatcher,
+        tokenVersion: { increment: 1 }
       },
       include: { _count: { select: { driverEvents: true } } },
       where: { id: 'driver-id', shopId: 'shop-id' }
     });
+    expect(prisma.driverSession.updateMany).toHaveBeenCalledWith({
+      data: { revokedAt: anyDateMatcher },
+      where: { driverId: 'driver-id', revokedAt: null }
+    });
     expect(driver).toEqual(expect.objectContaining({
+      authStatus: 'INVITE_PENDING',
       id: 'driver-id',
       inviteCode: 'ABC123',
-      inviteCodeExpiresAt: '2026-05-12T02:00:00.000Z'
+      inviteCodeExpiresAt: '2026-05-12T02:00:00.000Z',
+      status: 'PENDING'
     }));
   });
 
@@ -155,9 +164,30 @@ describe('PrismaAdminDriverRepository', () => {
     expect(drivers).toEqual([]);
     expect(prisma.driver.findMany).not.toHaveBeenCalled();
   });
+
+  test('deletes only the authenticated shop driver', async () => {
+    const { prisma } = createPrismaHarness({ deletedDriver: { id: 'driver-id' } });
+    const repository = new PrismaAdminDriverRepository(prisma as never);
+
+    const driverId = await repository.deleteDriver({
+      driverId: 'driver-id',
+      shopDomain: 'example.myshopify.com'
+    });
+
+    expect(prisma.shop.findUnique).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { shopDomain: 'example.myshopify.com' }
+    });
+    expect(prisma.driver.delete).toHaveBeenCalledWith({
+      select: { id: true },
+      where: { id: 'driver-id', shopId: 'shop-id' }
+    });
+    expect(driverId).toBe('driver-id');
+  });
 });
 
 function createPrismaHarness(input: {
+  deletedDriver?: { id: string };
   existingDriver?: ReturnType<typeof driverRecord> | null;
   listDrivers?: ReturnType<typeof driverRecord>[];
   shop?: { id: string } | null;
@@ -166,9 +196,13 @@ function createPrismaHarness(input: {
   prisma: {
     driver: {
       create: ReturnType<typeof vi.fn>;
+      delete: ReturnType<typeof vi.fn>;
       findFirst: ReturnType<typeof vi.fn>;
       findMany: ReturnType<typeof vi.fn>;
       update: ReturnType<typeof vi.fn>;
+    };
+    driverSession: {
+      updateMany: ReturnType<typeof vi.fn>;
     };
     shop: {
       findUnique: ReturnType<typeof vi.fn>;
@@ -182,9 +216,13 @@ function createPrismaHarness(input: {
     prisma: {
       driver: {
         create: vi.fn(() => Promise.resolve(createdDriver)),
+        delete: vi.fn(() => Promise.resolve(input.deletedDriver ?? { id: 'driver-id' })),
         findFirst: vi.fn(() => Promise.resolve(input.existingDriver ?? null)),
         findMany: vi.fn(() => Promise.resolve(input.listDrivers ?? [])),
         update: vi.fn(() => Promise.resolve(input.updatedDriver ?? input.existingDriver ?? createdDriver))
+      },
+      driverSession: {
+        updateMany: vi.fn(() => Promise.resolve({ count: 0 }))
       },
       shop: {
         findUnique: vi.fn(() => Promise.resolve(shop)),
@@ -205,6 +243,8 @@ function driverRecord(overrides: Partial<{
   inviteCode: string | null;
   inviteCodeExpiresAt: Date | null;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  tokenVersion: number;
+  tokensInvalidatedAt: Date | null;
   updatedAt: Date;
 }> = {}): {
   _count: { driverEvents: number };
@@ -217,6 +257,8 @@ function driverRecord(overrides: Partial<{
   lastSeenAt: Date | null;
   phone: string | null;
   status: 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+  tokenVersion: number;
+  tokensInvalidatedAt: Date | null;
   updatedAt: Date;
 } {
   return {
@@ -230,6 +272,8 @@ function driverRecord(overrides: Partial<{
     lastSeenAt: overrides.lastSeenAt ?? null,
     phone: overrides.phone ?? '+821089216198',
     status: overrides.status ?? 'ACTIVE',
+    tokenVersion: overrides.tokenVersion ?? 0,
+    tokensInvalidatedAt: overrides.tokensInvalidatedAt ?? null,
     updatedAt: overrides.updatedAt ?? new Date('2026-05-11T02:00:00.000Z')
   };
 }

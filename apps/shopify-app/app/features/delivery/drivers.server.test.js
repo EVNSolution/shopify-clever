@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 
 import {
   createPendingDeliveryDriver,
+  deleteDeliveryDriver,
   fetchDeliveryDrivers,
 } from "./drivers.server.js";
 
@@ -91,6 +92,60 @@ test("lists persisted delivery drivers through the delivery Admin API", async ()
   assert.deepEqual(result, {
     drivers: [{ id: "driver-1", phone: "+14165550108" }],
     errors: [],
+  });
+});
+
+test("deletes a delivery driver through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+
+  const result = await deleteDeliveryDriver(
+    new Request("https://app.example/app/drivers-vehicles"),
+    "driver id/with spaces",
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({
+          data: { driverId: "driver id/with spaces" },
+          error: null,
+        });
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/drivers/driver%20id%2Fwith%20spaces");
+  assert.equal(calls[0].options.method, "DELETE");
+  assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.equal(calls[0].options.body, undefined);
+  assert.deepEqual(result, {
+    driverId: "driver id/with spaces",
+    errors: [],
+  });
+});
+
+test("rejects blank driver ids before calling the delivery Admin API", async () => {
+  const calls = [];
+
+  const result = await deleteDeliveryDriver(
+    new Request("https://app.example/app/drivers-vehicles"),
+    "   ",
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({ data: { driverId: "unexpected" }, error: null });
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  assert.deepEqual(calls, []);
+  assert.deepEqual(result, {
+    driverId: null,
+    errors: [{ message: "삭제할 배송원 ID가 필요합니다." }],
   });
 });
 

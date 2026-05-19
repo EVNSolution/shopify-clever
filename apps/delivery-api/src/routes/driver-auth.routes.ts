@@ -8,22 +8,37 @@ export type DriverAuthDependencies = {
 };
 
 export function registerDriverAuthRoutes(app: FastifyInstance, dependencies: DriverAuthDependencies): void {
-  app.post<{ Body: { phone: string; inviteCode: string } }>('/driver/auth/verify-invite', async (request, reply) => {
-    const { phone, inviteCode } = request.body;
+  app.post<{ Body: { displayName?: unknown; phone: string; inviteCode: string } }>('/driver/auth/verify-invite', async (request, reply) => {
+    const { displayName, phone, inviteCode } = request.body;
 
     if (typeof phone !== 'string' || !/^\+[1-9]\d{7,14}$/u.test(phone.trim()) || typeof inviteCode !== 'string') {
       return reply.code(400).send({ data: null, error: { code: 'BAD_REQUEST', message: 'phone and inviteCode are required' } });
+    }
+    if (displayName !== undefined && displayName !== null && typeof displayName !== 'string') {
+      return reply.code(400).send({ data: null, error: { code: 'BAD_REQUEST', message: 'displayName must be a string' } });
     }
 
     const normalizedInviteCode = inviteCode.trim().toUpperCase();
     if (!/^[0-9A-F]{6}$/u.test(normalizedInviteCode)) {
       return reply.code(400).send({ data: null, error: { code: 'BAD_REQUEST', message: 'inviteCode must be a 6-character hexadecimal code' } });
     }
+    const normalizedDisplayName = typeof displayName === 'string' && displayName.trim().length > 0 ? displayName.trim() : undefined;
+    request.log.info(
+      {
+        displayNameLength: normalizedDisplayName?.length ?? 0,
+        displayNameProvided: normalizedDisplayName !== undefined,
+        inviteCodeLength: normalizedInviteCode.length,
+        payloadKeys: Object.keys(request.body).sort(),
+        phoneLast4: phone.trim().slice(-4)
+      },
+      'driver invite verification payload accepted'
+    );
 
     try {
       const sessionInfo = await dependencies.driverAuthRepository.verifyInvite({
         phone: phone.trim(),
-        inviteCode: normalizedInviteCode
+        inviteCode: normalizedInviteCode,
+        ...(normalizedDisplayName === undefined ? {} : { displayName: normalizedDisplayName })
       });
       
       const tokenResult = signDriverToken(
@@ -31,7 +46,8 @@ export function registerDriverAuthRoutes(app: FastifyInstance, dependencies: Dri
           driverId: sessionInfo.driverId,
           expiresInSeconds: 15 * 60, // 15 minutes access token
           shopDomain: sessionInfo.shopDomain,
-          subject: `driver:${sessionInfo.driverId}`
+          subject: `driver:${sessionInfo.driverId}`,
+          tokenVersion: sessionInfo.tokenVersion
         },
         { secret: dependencies.jwtSecret }
       );
