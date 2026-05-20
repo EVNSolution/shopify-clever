@@ -82,7 +82,7 @@ test("builds a delivery-server route-plan payload from selected Shopify orders",
   });
 
   assert.deepEqual(payload, {
-    name: "Tomatono route draft",
+    name: "CLEVER route draft",
     planDate: "2026-05-07",
     routeScope: {
       deliveryDate: "2026-05-07",

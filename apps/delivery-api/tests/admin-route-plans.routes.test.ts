@@ -21,7 +21,7 @@ const routePlanSummary = {
   },
   id: 'route-plan-id',
   missingCoordinates: 0,
-  name: 'Tomatono route draft',
+  name: 'CLEVER route draft',
   planDate: '2026-05-08',
   status: 'DRAFT',
   stopsCount: 1,
@@ -834,7 +834,7 @@ function routePlanPayload(): Record<string, unknown> {
       latitude: 43.6532,
       longitude: -79.3832
     },
-    name: 'Tomatono route draft',
+    name: 'CLEVER route draft',
     orders: [
       {
         attributes: [{ key: 'Delivery Area', value: 'Mississauga' }],
