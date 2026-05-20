@@ -52,6 +52,13 @@ const ORDER_PIN_PLANNED_IMAGE_ID = "orders-map-pin-planned";
 const ORDER_PIN_PIXEL_RATIO = 2;
 const ORDER_PIN_ICON_SIZE = 0.62;
 const ORDER_PIN_LABEL_OFFSET = [0, -1.92];
+const ORDER_FILTER_REVALIDATION_QUERY_KEYS = new Set([
+  "deliveryArea",
+  "deliveryDate",
+  "orderedDate",
+  "planned",
+  "q",
+]);
 const ORDER_PIN_PATH =
   "M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z";
 const PERF_ENDPOINT = "/perf";
@@ -644,6 +651,51 @@ function getSanitizedUrl(url) {
   }
 }
 
+function getSearchParamDiffKeys(currentSearchParams, nextSearchParams) {
+  const searchParamKeys = new Set([
+    ...currentSearchParams.keys(),
+    ...nextSearchParams.keys(),
+  ]);
+
+  return Array.from(searchParamKeys).filter((searchParamKey) => {
+    const currentValues = currentSearchParams.getAll(searchParamKey);
+    const nextValues = nextSearchParams.getAll(searchParamKey);
+
+    if (currentValues.length !== nextValues.length) return true;
+
+    return currentValues.some(
+      (currentValue, valueIndex) => currentValue !== nextValues[valueIndex],
+    );
+  });
+}
+
+function isOrdersFilterOnlySearchChange(currentUrl, nextUrl) {
+  if (!currentUrl || !nextUrl || currentUrl.pathname !== nextUrl.pathname) {
+    return false;
+  }
+
+  const changedSearchParamKeys = getSearchParamDiffKeys(
+    currentUrl.searchParams,
+    nextUrl.searchParams,
+  );
+
+  return (
+    changedSearchParamKeys.length > 0 &&
+    changedSearchParamKeys.every((searchParamKey) =>
+      ORDER_FILTER_REVALIDATION_QUERY_KEYS.has(searchParamKey),
+    )
+  );
+}
+
+function getActiveOrderFilterMetricKeys(orderFilters) {
+  return Object.entries(orderFilters)
+    .filter(([filterKey, filterValue]) => {
+      if (!filterValue) return false;
+      return !(filterKey === "planned" && filterValue === "false");
+    })
+    .map(([filterKey]) => filterKey);
+}
+
 function emitPerformanceMetric(metric) {
   if (!PERF_CAPTURE_ENABLED || typeof window === "undefined") return;
 
@@ -1103,6 +1155,23 @@ function renderWidthIcon(isMapWide) {
   return isMapWide ? renderRestoreWidthIcon() : renderExpandWidthIcon();
 }
 
+export function shouldRevalidate({
+  currentUrl,
+  nextUrl,
+  formMethod,
+  defaultShouldRevalidate,
+}) {
+  if (formMethod && formMethod.toLowerCase() !== "get") {
+    return defaultShouldRevalidate;
+  }
+
+  if (isOrdersFilterOnlySearchChange(currentUrl, nextUrl)) {
+    return false;
+  }
+
+  return defaultShouldRevalidate;
+}
+
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
@@ -1438,7 +1507,7 @@ export default function OrdersPage() {
   const mapContainerRef = useRef(null);
   const mapLibraryRef = useRef(null);
   const mapRef = useRef(null);
-  const markersRef = useRef([]);
+  const departureMarkerRef = useRef(null);
   const mapRecoveryTimerRef = useRef(null);
   const mapRecoveryAttemptsRef = useRef(0);
   const initialMapFitAppliedRef = useRef(false);
@@ -1446,12 +1515,39 @@ export default function OrdersPage() {
   const initialPerfEmittedRef = useRef(false);
   const submittedRouteSessionTokenRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
+  const filterChangeStartedAtRef = useRef(null);
+  const orderMapInteractionContextRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
+  const [ordersMapLayerReady, setOrdersMapLayerReady] = useState(false);
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const [mapStatus, setMapStatus] = useState("idle");
   const [isMapWide, setIsMapWide] = useState(false);
   const [planFitRequest, setPlanFitRequest] = useState(0);
   const [selectedOrderFocusRequest, setSelectedOrderFocusRequest] = useState(0);
+
+  useEffect(() => {
+    const filterChangeStartedAt = filterChangeStartedAtRef.current;
+    if (filterChangeStartedAt === null) return undefined;
+
+    const activeFilterKeys = getActiveOrderFilterMetricKeys(orderFilters);
+    const filterRenderFrame = window.requestAnimationFrame(() => {
+      emitPerformanceMetric({
+        name: "orders.filters.render",
+        category: "orders-filter-render",
+        durationMs: roundPerfDuration(performance.now() - filterChangeStartedAt),
+        activeFilterCount: activeFilterKeys.length,
+        activeFilterKeys: activeFilterKeys.join(","),
+        displayedOrderCount: displayOrders.length,
+        filteredOrderCount: filteredOrders.length,
+        locatedOrderCount: locatedOrders.length,
+      });
+      filterChangeStartedAtRef.current = null;
+    });
+
+    return () => {
+      window.cancelAnimationFrame(filterRenderFrame);
+    };
+  }, [displayOrders.length, filteredOrders.length, locatedOrders.length, orderFilters]);
 
   const sortedOrders = useMemo(() => {
     if (!sortConfig) return filteredOrders;
@@ -1741,6 +1837,8 @@ export default function OrdersPage() {
   ]);
 
   const handleOrderFilterChange = (filterKey, filterValue) => {
+    filterChangeStartedAtRef.current = performance.now();
+
     const nextFilterValue =
       filterKey === "deliveryDate" &&
       routePlanDeliveryDateLock &&
@@ -1819,6 +1917,7 @@ export default function OrdersPage() {
       mapRecoveryTimerRef.current = null;
       mapRecoveryAttemptsRef.current += 1;
       setIsMapReady(false);
+      setOrdersMapLayerReady(false);
       setMapRenderKey((currentRenderKey) => currentRenderKey + 1);
     }, MAP_RECOVERY_DELAY_MS);
   }, []);
@@ -1827,6 +1926,7 @@ export default function OrdersPage() {
     clearMapRecoveryTimer();
     mapRecoveryAttemptsRef.current = 0;
     setIsMapReady(false);
+    setOrdersMapLayerReady(false);
     setMapStatus("idle");
     setMapRenderKey((currentRenderKey) => currentRenderKey + 1);
   };
@@ -2169,6 +2269,14 @@ export default function OrdersPage() {
     }
   }, [perf]);
 
+  orderMapInteractionContextRef.current = {
+    displayOrderById,
+    handleAddOrderToPlan,
+    handleSelectOrder,
+    orderFilterReferenceDate,
+    plannedOrderIds,
+  };
+
   useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
 
   useEffect(() => {
@@ -2176,6 +2284,7 @@ export default function OrdersPage() {
       return undefined;
     }
 
+    setOrdersMapLayerReady(false);
     let isMounted = true;
 
     const initializeMap = async () => {
@@ -2257,13 +2366,13 @@ export default function OrdersPage() {
       cancelMapInitialization();
       isMounted = false;
       const mapRemoveStartedAt = performance.now();
-      const markerCount = markersRef.current.length;
+      const markerCount = departureMarkerRef.current ? 1 : 0;
       const markersRemoveStartedAt = performance.now();
-      markersRef.current.forEach((marker) => marker.remove());
+      departureMarkerRef.current?.remove();
       const markersRemoveMs = roundPerfDuration(
         performance.now() - markersRemoveStartedAt,
       );
-      markersRef.current = [];
+      departureMarkerRef.current = null;
       const singleMapRemoveStartedAt = performance.now();
       mapRef.current?.remove();
       const mapRemoveMs = roundPerfDuration(
@@ -2284,27 +2393,45 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !mapLibraryRef.current) {
-      return;
+      return undefined;
     }
 
-    markersRef.current.forEach((marker) => marker.remove());
-    markersRef.current = [];
+    departureMarkerRef.current?.remove();
+    departureMarkerRef.current = null;
+
+    if (!departureLocation?.hasCoordinates) {
+      return undefined;
+    }
 
     const maplibregl = mapLibraryRef.current;
     const map = mapRef.current;
+    const departureMarkerElement = createDepartureMarkerElement(departureLocation);
+    const departureMarker = new maplibregl.Marker({
+      element: departureMarkerElement,
+      anchor: "bottom",
+    })
+      .setLngLat(departureLocation.coordinates)
+      .addTo(map);
 
-    if (departureLocation?.hasCoordinates) {
-      const departureMarkerElement = createDepartureMarkerElement(departureLocation);
-      const departureMarker = new maplibregl.Marker({ element: departureMarkerElement, anchor: "bottom" })
-        .setLngLat(departureLocation.coordinates)
-        .addTo(map);
+    departureMarkerRef.current = departureMarker;
 
-      markersRef.current.push(departureMarker);
+    return () => {
+      departureMarkerRef.current?.remove();
+      departureMarkerRef.current = null;
+    };
+  }, [departureLocation, isMapReady]);
+
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current) {
+      return;
     }
+
+    const map = mapRef.current;
 
     const sourceUpdateStartedAt = performance.now();
     const hadExistingOrderSource = Boolean(map.getSource?.(ORDERS_MAP_SOURCE_ID));
     const ordersLayerSynced = syncOrdersMapMarkerLayer(map, locatedOrders, plannedOrderIds);
+    setOrdersMapLayerReady(ordersLayerSynced);
     const sourceUpdateMs = roundPerfDuration(performance.now() - sourceUpdateStartedAt);
 
     emitPerformanceMetric({
@@ -2317,15 +2444,41 @@ export default function OrdersPage() {
       sourceCreated: ordersLayerSynced && !hadExistingOrderSource,
       sourceSynced: ordersLayerSynced,
     });
+  }, [
+    isMapReady,
+    locatedOrders,
+    plannedOrderIds,
+  ]);
 
-    if (!ordersLayerSynced) return undefined;
+  useEffect(() => {
+    if (
+      !isMapReady ||
+      !ordersMapLayerReady ||
+      !mapRef.current ||
+      !mapLibraryRef.current ||
+      !mapRef.current.getLayer?.(ORDERS_MAP_ORDER_LAYER_ID)
+    ) {
+      return undefined;
+    }
+
+    const maplibregl = mapLibraryRef.current;
+    const map = mapRef.current;
 
     const handleOrderMarkerClick = (event) => {
       const orderId = getOrderIdFromMapFeature(event.features?.[0]);
       if (!orderId) return;
 
-      const order = displayOrderById.get(orderId);
-      if (!order?.hasCoordinates) return;
+      const {
+        displayOrderById,
+        handleAddOrderToPlan,
+        handleSelectOrder,
+        orderFilterReferenceDate,
+        plannedOrderIds = [],
+      } = orderMapInteractionContextRef.current ?? {};
+      const order = displayOrderById?.get(orderId);
+      if (!order?.hasCoordinates || !handleSelectOrder || !handleAddOrderToPlan) {
+        return;
+      }
 
       const plannedIndex = plannedOrderIds.indexOf(order.id) + 1;
       handleSelectOrder(order.id, { focusMap: false });
@@ -2369,19 +2522,8 @@ export default function OrdersPage() {
       map.off("click", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerClick);
       map.off("mouseenter", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseEnter);
       map.off("mouseleave", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseLeave);
-      markersRef.current.forEach((marker) => marker.remove());
-      markersRef.current = [];
     };
-  }, [
-    departureLocation,
-    displayOrderById,
-    handleAddOrderToPlan,
-    handleSelectOrder,
-    isMapReady,
-    locatedOrders,
-    orderFilterReferenceDate,
-    plannedOrderIds,
-  ]);
+  }, [isMapReady, ordersMapLayerReady]);
 
   useEffect(() => {
     if (

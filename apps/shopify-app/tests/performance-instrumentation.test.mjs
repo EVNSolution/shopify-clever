@@ -57,12 +57,15 @@ test("Orders page emits loader, iframe, document, and MapLibre timing metrics", 
   assert.match(ordersPageSource, /name: "orders\.maplibre\.init"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.remove"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.source_update"/);
+  assert.match(ordersPageSource, /name: "orders\.filters\.render"/);
   assert.match(ordersPageSource, /shopifyOrdersMs/);
   assert.match(ordersPageSource, /departureLocationMs/);
   assert.match(ordersPageSource, /mapLibreImportMs/);
   assert.match(ordersPageSource, /mapRemoveMs/);
   assert.match(ordersPageSource, /sourceUpdateMs/);
   assert.match(ordersPageSource, /plannedOrderCount/);
+  assert.match(ordersPageSource, /activeFilterKeys/);
+  assert.match(ordersPageSource, /filteredOrderCount/);
 });
 
 test("root document preconnects to map tile infrastructure before MapLibre loads", () => {

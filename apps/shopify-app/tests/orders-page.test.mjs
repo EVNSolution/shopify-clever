@@ -55,6 +55,23 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.equal(packageJson.dependencies.pmtiles?.length > 0, true);
 });
 
+test("Orders route skips loader revalidation for filter-only query changes", () => {
+  const filterRevalidationKeyBlock = ordersPageSource.match(
+    /const ORDER_FILTER_REVALIDATION_QUERY_KEYS = new Set\(\[[\s\S]*?\]\);/,
+  )?.[0] ?? "";
+
+  assert.match(ordersPageSource, /const ORDER_FILTER_REVALIDATION_QUERY_KEYS = new Set\(\[\s*"deliveryArea",\s*"deliveryDate",\s*"orderedDate",\s*"planned",\s*"q",\s*\]\)/);
+  assert.match(ordersPageSource, /function getSearchParamDiffKeys\(currentSearchParams, nextSearchParams\) \{/);
+  assert.match(ordersPageSource, /function isOrdersFilterOnlySearchChange\(currentUrl, nextUrl\) \{/);
+  assert.match(ordersPageSource, /currentUrl\.pathname !== nextUrl\.pathname/);
+  assert.match(ordersPageSource, /changedSearchParamKeys\.every\(\(searchParamKey\) =>\s*ORDER_FILTER_REVALIDATION_QUERY_KEYS\.has\(searchParamKey\)/);
+  assert.match(ordersPageSource, /export function shouldRevalidate\(\{\s*currentUrl,\s*nextUrl,\s*formMethod,\s*defaultShouldRevalidate,\s*\}\)/);
+  assert.match(ordersPageSource, /formMethod && formMethod\.toLowerCase\(\) !== "get"/);
+  assert.match(ordersPageSource, /if \(isOrdersFilterOnlySearchChange\(currentUrl, nextUrl\)\) \{\s*return false;\s*\}/);
+  assert.match(ordersPageSource, /return defaultShouldRevalidate/);
+  assert.doesNotMatch(filterRevalidationKeyBlock, /id_token|shop|host/);
+});
+
 test("Orders map defers MapLibre initialization until after initial navigation paint", () => {
   assert.match(ordersPageSource, /function scheduleIdleTask\(callback\) \{/);
   assert.match(ordersPageSource, /window\.requestIdleCallback/);
@@ -826,8 +843,12 @@ test("Orders map shows the Shopify departure location as the route start point",
   assert.doesNotMatch(ordersPageSource, /markerPinElement\.textContent = "Start"/);
   assert.match(ordersPageSource, /markerElement\.style\.zIndex = "3000"/);
   assert.match(ordersPageSource, /departureLocation\?\.hasCoordinates \? departureLocation\.coordinates : DEFAULT_CENTER/);
-  assert.match(ordersPageSource, /new maplibregl\.Marker\(\{ element: departureMarkerElement, anchor: "bottom" \}\)/);
+  assert.match(ordersPageSource, /new maplibregl\.Marker\(\{\s*element: departureMarkerElement,\s*anchor: "bottom",\s*\}\)/);
   assert.match(ordersPageSource, /\.setLngLat\(departureLocation\.coordinates\)/);
+  assert.match(ordersPageSource, /const departureMarkerRef = useRef\(null\)/);
+  assert.match(ordersPageSource, /departureMarkerRef\.current = departureMarker/);
+  assert.match(ordersPageSource, /\}, \[departureLocation, isMapReady\]\)/);
+  assert.doesNotMatch(ordersPageSource, /markersRef/);
   assert.match(ordersPageSource, /markerElement\.setAttribute\("aria-label", `Route start: \$\{departureLocation\.name\}`\)/);
   assert.match(globalCssSource, /\.departure-map-marker\s*\{/);
   assert.match(globalCssSource, /\.departure-map-marker__pin\s*\{/);
@@ -949,6 +970,8 @@ test("Orders filters hide non-target map markers without reshaping matched marke
   assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds\)/);
   assert.match(ordersPageSource, /existingSource\.setData\(featureCollection\)/);
   assert.match(ordersPageSource, /map\.addSource\(ORDERS_MAP_SOURCE_ID/);
+  assert.match(ordersPageSource, /orderMapInteractionContextRef\.current = \{/);
+  assert.match(ordersPageSource, /orderMapInteractionContextRef\.current \?\? \{\}/);
   assert.doesNotMatch(ordersPageSource, /function createOrderMarkerElement\(order, plannedIndex\)/);
   assert.doesNotMatch(ordersPageSource, /filteredOrderIdSet/);
   assert.doesNotMatch(ordersPageSource, /markerMatchState/);
