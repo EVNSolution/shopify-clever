@@ -1,6 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 
 import {
+  logRejectedAdminSessionToken,
+  type AdminSessionAuthLogContext,
+  type AdminSessionTokenVerifier
+} from './admin-session-auth.js';
+
+import {
   RoutePlanDriverAssignInvalidError,
   RoutePlanOrderAlreadyPlannedError,
   RoutePlanStopUpdateInvalidError
@@ -18,9 +24,7 @@ import type {
 
 export type AdminRoutePlanDependencies = {
   routePlanService: RoutePlanService;
-  sessionTokenVerifier: {
-    verify(sessionToken: string, options?: object): { shopDomain: string; subject: string };
-  };
+  sessionTokenVerifier: AdminSessionTokenVerifier;
 };
 
 export function registerAdminRoutePlanRoutes(
@@ -28,7 +32,10 @@ export function registerAdminRoutePlanRoutes(
   dependencies: AdminRoutePlanDependencies
 ): void {
   app.post<{ Body: unknown }>('/admin/route-plans', async (request, reply) => {
-    const authenticated = authenticate(request.headers.authorization, dependencies);
+    const authenticated = authenticate(request.headers.authorization, dependencies, {
+      log: request.log,
+      surface: 'admin_route_plans'
+    });
     if (authenticated.status === 'unauthorized') {
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
@@ -74,7 +81,10 @@ export function registerAdminRoutePlanRoutes(
   });
 
   app.get('/admin/route-plans', async (request, reply) => {
-    const authenticated = authenticate(request.headers.authorization, dependencies);
+    const authenticated = authenticate(request.headers.authorization, dependencies, {
+      log: request.log,
+      surface: 'admin_route_plans'
+    });
     if (authenticated.status === 'unauthorized') {
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
@@ -92,7 +102,10 @@ export function registerAdminRoutePlanRoutes(
   app.get<{ Params: { routePlanId: string } }>(
     '/admin/route-plans/:routePlanId',
     async (request, reply) => {
-      const authenticated = authenticate(request.headers.authorization, dependencies);
+      const authenticated = authenticate(request.headers.authorization, dependencies, {
+        log: request.log,
+        surface: 'admin_route_plans'
+      });
       if (authenticated.status === 'unauthorized') {
         return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
       }
@@ -115,7 +128,10 @@ export function registerAdminRoutePlanRoutes(
   app.patch<{ Body: unknown; Params: { routePlanId: string } }>(
     '/admin/route-plans/:routePlanId/driver',
     async (request, reply) => {
-      const authenticated = authenticate(request.headers.authorization, dependencies);
+      const authenticated = authenticate(request.headers.authorization, dependencies, {
+        log: request.log,
+        surface: 'admin_route_plans'
+      });
       if (authenticated.status === 'unauthorized') {
         return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
       }
@@ -153,7 +169,10 @@ export function registerAdminRoutePlanRoutes(
   app.patch<{ Body: unknown; Params: { routePlanId: string } }>(
     '/admin/route-plans/:routePlanId/stops',
     async (request, reply) => {
-      const authenticated = authenticate(request.headers.authorization, dependencies);
+      const authenticated = authenticate(request.headers.authorization, dependencies, {
+        log: request.log,
+        surface: 'admin_route_plans'
+      });
       if (authenticated.status === 'unauthorized') {
         return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
       }
@@ -201,7 +220,10 @@ export function registerAdminRoutePlanRoutes(
   app.delete<{ Params: { routePlanId: string } }>(
     '/admin/route-plans/:routePlanId',
     async (request, reply) => {
-      const authenticated = authenticate(request.headers.authorization, dependencies);
+      const authenticated = authenticate(request.headers.authorization, dependencies, {
+        log: request.log,
+        surface: 'admin_route_plans'
+      });
       if (authenticated.status === 'unauthorized') {
         return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
       }
@@ -221,7 +243,8 @@ export function registerAdminRoutePlanRoutes(
 
 function authenticate(
   authorization: string | undefined,
-  dependencies: AdminRoutePlanDependencies
+  dependencies: AdminRoutePlanDependencies,
+  options: AdminSessionAuthLogContext
 ):
   | { shopDomain: string; status: 'authenticated'; subject: string }
   | { message: string; status: 'unauthorized' } {
@@ -237,7 +260,8 @@ function authenticate(
       status: 'authenticated',
       subject: verified.subject
     };
-  } catch {
+  } catch (error) {
+    logRejectedAdminSessionToken({ ...options, error });
     return { message: 'Invalid Shopify session token', status: 'unauthorized' };
   }
 }

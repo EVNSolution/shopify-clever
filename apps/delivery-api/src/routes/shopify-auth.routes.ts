@@ -1,13 +1,13 @@
 import type { FastifyInstance } from 'fastify';
 
+import {
+  logRejectedAdminSessionToken,
+  type AdminSessionTokenVerifier
+} from './admin-session-auth.js';
+
 export type ShopifyAuthDependencies = {
   apiVersion: string;
-  sessionTokenVerifier: {
-    verify(
-      sessionToken: string,
-      options: { expectedShopDomain?: string }
-    ): { shopDomain: string; subject: string };
-  };
+  sessionTokenVerifier: AdminSessionTokenVerifier;
   shopTokenService: {
     storeAdminApiToken(input: {
       accessToken: string;
@@ -63,7 +63,12 @@ export function registerShopifyAuthRoutes(
       const verifyOptions =
         expectedShopDomain === undefined ? {} : { expectedShopDomain };
       verified = dependencies.sessionTokenVerifier.verify(sessionToken, verifyOptions);
-    } catch {
+    } catch (error) {
+      logRejectedAdminSessionToken({
+        error,
+        log: request.log,
+        surface: 'shopify_auth_token_exchange'
+      });
       return reply.code(401).send(errorResponse('UNAUTHORIZED', 'Invalid Shopify session token'));
     }
 

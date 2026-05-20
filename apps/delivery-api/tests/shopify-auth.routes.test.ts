@@ -105,6 +105,48 @@ describe('Shopify auth routes', () => {
     }
   });
 
+  test('logs invalid session tokens with a sanitized reason during token exchange', async () => {
+    const { dependencies, exchange, verify } = createDependencyHarness();
+    verify.mockImplementationOnce(() => {
+      throw new Error('Invalid Shopify session token signature');
+    });
+    const logLines: string[] = [];
+    const app = await buildApp({
+      logger: {
+        level: 'warn',
+        stream: { write: (line: string) => logLines.push(line) }
+      },
+      shopifyAuth: dependencies
+    });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'POST',
+        payload: { shopDomain: 'example.myshopify.com' },
+        url: '/shopify/auth/token-exchange'
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({
+        data: null,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid Shopify session token' }
+      });
+      expect(exchange).not.toHaveBeenCalled();
+      expect(
+        logLines.some((line) =>
+          line.includes('shopify admin session token rejected') &&
+          line.includes('shopify_admin_session_token_rejected') &&
+          line.includes('shopify_auth_token_exchange') &&
+          line.includes('signature_mismatch') &&
+          !line.includes('session-token')
+        )
+      ).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
   test('rejects malformed optional shop domain before token exchange', async () => {
     const { dependencies, exchange, verify } = createDependencyHarness();
     const app = await buildApp({ shopifyAuth: dependencies });
