@@ -57,6 +57,48 @@ describe('Admin drivers routes', () => {
     }
   });
 
+  test('logs invalid Shopify session tokens with a sanitized reason', async () => {
+    const { createPendingDriver, dependencies } = createDependencyHarness();
+    dependencies.sessionTokenVerifier.verify = vi.fn(() => {
+      throw new Error('Shopify session token audience mismatch');
+    });
+    const logLines: string[] = [];
+    const app = await buildApp({
+      adminDrivers: dependencies,
+      logger: {
+        level: 'warn',
+        stream: { write: (line: string) => logLines.push(line) }
+      }
+    });
+
+    try {
+      const response = await app.inject({
+        headers: { authorization: 'Bearer session-token' },
+        method: 'POST',
+        payload: driverInvitePayload(),
+        url: '/admin/drivers'
+      });
+
+      expect(response.statusCode).toBe(401);
+      expect(response.json()).toEqual({
+        data: null,
+        error: { code: 'UNAUTHORIZED', message: 'Invalid Shopify session token' }
+      });
+      expect(createPendingDriver).not.toHaveBeenCalled();
+      expect(
+        logLines.some((line) =>
+          line.includes('shopify admin session token rejected') &&
+          line.includes('shopify_admin_session_token_rejected') &&
+          line.includes('admin_drivers') &&
+          line.includes('audience_mismatch') &&
+          !line.includes('session-token')
+        )
+      ).toBe(true);
+    } finally {
+      await app.close();
+    }
+  });
+
   test('rejects invalid driver invite payloads', async () => {
     const { createPendingDriver, dependencies } = createDependencyHarness();
     const app = await buildApp({ adminDrivers: dependencies });

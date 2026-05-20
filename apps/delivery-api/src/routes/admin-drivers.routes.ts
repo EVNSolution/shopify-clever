@@ -1,12 +1,16 @@
 import type { FastifyInstance } from 'fastify';
 
+import {
+  logRejectedAdminSessionToken,
+  type AdminSessionAuthLogContext,
+  type AdminSessionTokenVerifier
+} from './admin-session-auth.js';
+
 import type { AdminDriverServiceContract, CreatePendingDriverInput } from '../modules/driver/admin-driver.types.js';
 
 export type AdminDriversDependencies = {
   adminDriverService: AdminDriverServiceContract;
-  sessionTokenVerifier: {
-    verify(sessionToken: string, options?: object): { shopDomain: string; subject: string };
-  };
+  sessionTokenVerifier: AdminSessionTokenVerifier;
 };
 
 type ErrorResponse = {
@@ -16,7 +20,10 @@ type ErrorResponse = {
 
 export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: AdminDriversDependencies): void {
   app.post<{ Body: unknown }>('/admin/drivers', async (request, reply) => {
-    const authenticated = authenticate(request.headers.authorization, dependencies);
+    const authenticated = authenticate(request.headers.authorization, dependencies, {
+      log: request.log,
+      surface: 'admin_drivers'
+    });
     if (authenticated.status === 'unauthorized') {
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
@@ -46,7 +53,10 @@ export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: A
   });
 
   app.get('/admin/drivers', async (request, reply) => {
-    const authenticated = authenticate(request.headers.authorization, dependencies);
+    const authenticated = authenticate(request.headers.authorization, dependencies, {
+      log: request.log,
+      surface: 'admin_drivers'
+    });
     if (authenticated.status === 'unauthorized') {
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
@@ -64,7 +74,10 @@ export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: A
   });
 
   app.delete<{ Params: { id: string } }>('/admin/drivers/:id', async (request, reply) => {
-    const authenticated = authenticate(request.headers.authorization, dependencies);
+    const authenticated = authenticate(request.headers.authorization, dependencies, {
+      log: request.log,
+      surface: 'admin_drivers'
+    });
     if (authenticated.status === 'unauthorized') {
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
@@ -90,7 +103,10 @@ export function registerAdminDriversRoutes(app: FastifyInstance, dependencies: A
   });
 
   app.post<{ Params: { id: string } }>('/admin/drivers/:id/regenerate-invite-code', async (request, reply) => {
-    const authenticated = authenticate(request.headers.authorization, dependencies);
+    const authenticated = authenticate(request.headers.authorization, dependencies, {
+      log: request.log,
+      surface: 'admin_drivers'
+    });
     if (authenticated.status === 'unauthorized') {
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
@@ -127,7 +143,8 @@ function readDriverInvitePayload(value: unknown): DriverInvitePayload {
 
 function authenticate(
   authorization: string | undefined,
-  dependencies: AdminDriversDependencies
+  dependencies: AdminDriversDependencies,
+  options: AdminSessionAuthLogContext
 ):
   | { shopDomain: string; status: 'authenticated'; subject: string }
   | { message: string; status: 'unauthorized' } {
@@ -143,7 +160,8 @@ function authenticate(
       status: 'authenticated',
       subject: verified.subject
     };
-  } catch {
+  } catch (error) {
+    logRejectedAdminSessionToken({ ...options, error });
     return { message: 'Invalid Shopify session token', status: 'unauthorized' };
   }
 }

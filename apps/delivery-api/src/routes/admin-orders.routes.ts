@@ -1,5 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 
+import {
+  logRejectedAdminSessionToken,
+  type AdminSessionAuthLogContext,
+  type AdminSessionTokenVerifier
+} from './admin-session-auth.js';
+
 import type { ListCanonicalOrdersFilters } from '../modules/shopify/order-sync.repository.js';
 import type { ShopifyOrderNode } from '../modules/shopify/order-sync.mapper.js';
 import type { SyncOrdersSnapshotInput, SyncOrdersSnapshotResult } from '../modules/shopify/order-sync.service.js';
@@ -36,9 +42,7 @@ export type AdminOrdersDependencies = {
     }): Promise<SyncOrdersSnapshotResult['orders']>;
     syncOrdersSnapshot(input: SyncOrdersSnapshotInput): Promise<SyncOrdersSnapshotResult>;
   };
-  sessionTokenVerifier: {
-    verify(sessionToken: string, options?: object): { shopDomain: string; subject: string };
-  };
+  sessionTokenVerifier: AdminSessionTokenVerifier;
 };
 
 export function registerAdminOrdersRoutes(
@@ -46,7 +50,10 @@ export function registerAdminOrdersRoutes(
   dependencies: AdminOrdersDependencies
 ): void {
   app.patch<{ Body: unknown }>('/admin/orders/sync', async (request, reply) => {
-    const authenticated = authenticate(request.headers.authorization, dependencies);
+    const authenticated = authenticate(request.headers.authorization, dependencies, {
+      log: request.log,
+      surface: 'admin_orders'
+    });
     if (authenticated.status === 'unauthorized') {
       return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
     }
@@ -102,7 +109,10 @@ export function registerAdminOrdersRoutes(
   app.get<{ Querystring: Record<string, string | string[] | undefined> }>(
     '/admin/orders',
     async (request, reply) => {
-      const authenticated = authenticate(request.headers.authorization, dependencies);
+      const authenticated = authenticate(request.headers.authorization, dependencies, {
+        log: request.log,
+        surface: 'admin_orders'
+      });
       if (authenticated.status === 'unauthorized') {
         return reply.code(401).send(errorResponse('UNAUTHORIZED', authenticated.message));
       }
@@ -126,7 +136,8 @@ export function registerAdminOrdersRoutes(
 
 function authenticate(
   authorization: string | undefined,
-  dependencies: AdminOrdersDependencies
+  dependencies: AdminOrdersDependencies,
+  options: AdminSessionAuthLogContext
 ):
   | { shopDomain: string; status: 'authenticated'; subject: string }
   | { message: string; status: 'unauthorized' } {
@@ -138,7 +149,8 @@ function authenticate(
   try {
     const verified = dependencies.sessionTokenVerifier.verify(sessionToken);
     return { shopDomain: verified.shopDomain, status: 'authenticated', subject: verified.subject };
-  } catch {
+  } catch (error) {
+    logRejectedAdminSessionToken({ ...options, error });
     return { message: 'Invalid Shopify session token', status: 'unauthorized' };
   }
 }
