@@ -82,7 +82,7 @@ export function buildCreateRoutePlanPayload({
   const routeDraftScope = buildRouteScopeFromOrders(plannedOrders) ?? routeScope;
 
   return {
-    name: "Tomatono route draft",
+    name: "CLEVER route draft",
     planDate: routeDraftScope?.deliveryDate ?? now.toISOString().slice(0, 10),
     ...(routeDraftScope ? { routeScope: routeDraftScope } : {}),
     depot: mapDepartureLocationToDepot(departureLocation),

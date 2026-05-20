@@ -25,7 +25,7 @@ Request:
 
 ```json
 {
-  "name": "Tomatono route draft",
+  "name": "CLEVER route draft",
   "planDate": "2026-05-08",
   "depot": {
     "address": "Shopify departure location",
@@ -80,7 +80,7 @@ Response `201`:
   "data": {
     "routePlan": {
       "id": "uuid",
-      "name": "Tomatono route draft",
+      "name": "CLEVER route draft",
       "status": "DRAFT",
       "planDate": "2026-05-08",
       "stopsCount": 1,
@@ -111,7 +111,7 @@ Response `200`:
     "routePlans": [
       {
         "id": "uuid",
-        "name": "Tomatono route draft",
+        "name": "CLEVER route draft",
         "status": "DRAFT",
         "planDate": "2026-05-08",
         "stopsCount": 1,
@@ -140,7 +140,7 @@ Response `200`:
   "data": {
     "routePlan": {
       "id": "uuid",
-      "name": "Tomatono route draft",
+      "name": "CLEVER route draft",
       "status": "DRAFT",
       "planDate": "2026-05-08",
       "stopsCount": 1,

@@ -200,7 +200,7 @@ test("canonical order adapter preserves route assignment metadata", () => {
       planningStatus: "PLANNED",
       routePlanId: "route-plan-1",
       routeStatus: "DRAFT",
-      routePlanName: "Tomatono route draft",
+      routePlanName: "CLEVER route draft",
       routeSequence: "3",
     },
   ]);
@@ -208,7 +208,7 @@ test("canonical order adapter preserves route assignment metadata", () => {
   assert.equal(row.planningStatus, "PLANNED");
   assert.equal(row.routePlanId, "route-plan-1");
   assert.equal(row.routeStatus, "DRAFT");
-  assert.equal(row.routePlanName, "Tomatono route draft");
+  assert.equal(row.routePlanName, "CLEVER route draft");
   assert.equal(row.routeSequence, 3);
 });
 

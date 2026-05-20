@@ -22,7 +22,7 @@ describe('PrismaRoutePlanRepository', () => {
         latitude: 43.6532,
         longitude: -79.3832
       },
-      name: 'Tomatono route draft',
+      name: 'CLEVER route draft',
       orders: [
         routePlanOrder({ gid: 'gid://shopify/Order/123', name: '#1035' }),
         routePlanOrder({ gid: 'gid://shopify/Order/124', name: '#1036' })
@@ -104,7 +104,7 @@ describe('PrismaRoutePlanRepository', () => {
           latitude: 43.6532,
           longitude: -79.3832
         },
-        name: 'Tomatono route draft',
+        name: 'CLEVER route draft',
         orders: [
           routePlanOrder({ gid: 'gid://shopify/Order/123', name: '#1035' }),
           routePlanOrder({ gid: 'gid://shopify/Order/124', name: '#1036' })
@@ -504,7 +504,7 @@ function createPrismaHarness(input: {
             missingCoordinates: 0,
             stopsCount: 2
           },
-          name: 'Tomatono route draft',
+          name: 'CLEVER route draft',
           planDate: new Date('2026-05-08T00:00:00.000Z'),
           status: 'DRAFT',
           updatedAt: new Date('2026-05-07T12:30:00.000Z')
@@ -526,7 +526,7 @@ function createPrismaHarness(input: {
                 missingCoordinates: 0,
                 stopsCount: 0
               },
-              name: 'Tomatono route draft',
+              name: 'CLEVER route draft',
               planDate: new Date('2026-05-08T00:00:00.000Z'),
               routeStops: [],
               status: 'DRAFT',
@@ -547,7 +547,7 @@ function createPrismaHarness(input: {
             missingCoordinates: 0,
             stopsCount: 2
           },
-          name: 'Tomatono route draft',
+          name: 'CLEVER route draft',
           planDate: new Date('2026-05-08T00:00:00.000Z'),
           status: 'DRAFT',
           updatedAt: new Date('2026-05-07T12:30:00.000Z')
