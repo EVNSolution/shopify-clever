@@ -455,9 +455,11 @@ test("Orders selection locks the table and map to the first delivery date before
   assert.match(ordersPageSource, /const plannedDeliveryDateLock = useMemo\(\s*\(\) => getOrderDeliveryDateValue\(plannedOrders\[0\]\)/);
   assert.match(ordersPageSource, /const routePlanDeliveryDateLock =\s*plannedDeliveryDateLock \|\| checkedDeliveryDateLock/);
   assert.match(ordersPageSource, /const filteredDeliveryDateLock = useMemo\(\s*\(\) => getOrderDeliveryDateValue\(\{ deliveryDate: orderFilters\.deliveryDate \}\)/);
+  assert.match(ordersPageSource, /const \[autoAppliedDeliveryDateFilter, setAutoAppliedDeliveryDateFilter\] =\s*useState\(null\)/);
   assert.match(ordersPageSource, /const applyDeliveryDateFilterLock = useCallback\(\(deliveryDate\) => \{/);
   assert.match(ordersPageSource, /const normalizedDeliveryDate = getOrderDeliveryDateValue\(\{ deliveryDate \}\)/);
   assert.match(ordersPageSource, /filteredDeliveryDateLock === normalizedDeliveryDate/);
+  assert.match(ordersPageSource, /setAutoAppliedDeliveryDateFilter\(normalizedDeliveryDate\)/);
   assert.match(ordersPageSource, /updateOrderFilterSearchParams\(searchParams, \{\s*\.\.\.orderFilters,\s*deliveryDate: normalizedDeliveryDate,\s*\}\)/);
   assert.match(ordersPageSource, /const applyOrderDeliveryDateSelectionLock = useCallback\(\(order\) => \{/);
   assert.match(ordersPageSource, /const orderDeliveryDate = getOrderDeliveryDateValue\(order\)/);
@@ -474,11 +476,20 @@ test("Orders selection locks the table and map to the first delivery date before
   assert.match(ordersPageSource, /setCreateRouteClientError\(ROUTE_PLAN_DELIVERY_DATE_PARTIAL_ADD_ERROR\)/);
 });
 
+test("Orders auto delivery-date filter clears only itself when the draft is empty", () => {
+  assert.match(ordersPageSource, /routePlanDeliveryDateLock \|\|\s*!autoAppliedDeliveryDateFilter \|\|\s*filteredDeliveryDateLock !== autoAppliedDeliveryDateFilter/);
+  assert.match(ordersPageSource, /setAutoAppliedDeliveryDateFilter\(null\);\s*setSearchParams\(\s*updateOrderFilterSearchParams\(searchParams, \{\s*\.\.\.orderFilters,\s*deliveryDate: "",\s*\}\)/);
+  assert.match(ordersPageSource, /filterKey === "deliveryDate"[\s\S]*setAutoAppliedDeliveryDateFilter\(\s*routePlanDeliveryDateLock && nextFilterValue === routePlanDeliveryDateLock[\s\S]*: null,\s*\)/);
+  assert.match(ordersPageSource, /setAutoAppliedDeliveryDateFilter\(routePlanDeliveryDateLock \|\| null\)/);
+});
+
 test("Orders delivery-date lock survives filter clear or conflicting filter changes while a draft exists", () => {
   assert.match(ordersPageSource, /filterKey === "deliveryDate" &&\s*routePlanDeliveryDateLock &&\s*filterValue !== routePlanDeliveryDateLock/);
   assert.match(ordersPageSource, /deliveryDate: routePlanDeliveryDateLock/);
   assert.match(ordersPageSource, /const ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR =\s*"선택된 주문과 같은 배송일만 표시합니다/);
-  assert.match(ordersPageSource, /if \(\s*!routePlanDeliveryDateLock \|\|[\s\S]*filteredDeliveryDateLock === routePlanDeliveryDateLock[\s\S]*\) \{\s*return;\s*\}/);
+  assert.match(ordersPageSource, /if \(!routePlanDeliveryDateLock\) \{\s*return;\s*\}/);
+  assert.match(ordersPageSource, /if \(filteredDeliveryDateLock === routePlanDeliveryDateLock\) \{\s*return;\s*\}/);
+  assert.match(ordersPageSource, /setAutoAppliedDeliveryDateFilter\(routePlanDeliveryDateLock\)/);
   assert.match(ordersPageSource, /updateOrderFilterSearchParams\(searchParams, \{\s*\.\.\.orderFilters,\s*deliveryDate: routePlanDeliveryDateLock,\s*\}\)/);
 });
 
@@ -607,6 +618,8 @@ test("Orders route plan list can be reordered with a left drag handle before cre
   assert.match(ordersPageSource, /reorderOrderIds\(currentOrderIds, sourceOrderId, targetOrderId\)/);
   assert.match(ordersPageSource, /draggable=\{true\}/);
   assert.match(ordersPageSource, /style=\{routePlanDragHandleStyle\}/);
+  assert.match(ordersPageSource, />⋮<\/span>/);
+  assert.doesNotMatch(ordersPageSource, />⋮⋮<\/span>/);
   assert.match(ordersPageSource, /aria-label=\{`Drag route plan order \$\{orderIndex \+ 1\}`\}/);
   assert.match(ordersPageSource, /onDrop=\{\(event\) => handlePlanOrderDrop\(event, order\.id\)\}/);
 });

@@ -644,6 +644,8 @@ test("Route detail lets operators edit stop sequence with a clean drag mode", ()
   assert.match(routeDetailSource, /const handleRouteStopDrop = useCallback\(\(event, targetStopId\) => \{/);
   assert.match(routeDetailSource, /draggable=\{isEditingRouteSequence\}/);
   assert.match(routeDetailSource, /aria-label=\{`Drag stop \$\{stop\.stop\}`\}/);
+  assert.match(routeDetailSource, />⋮<\/span>/);
+  assert.doesNotMatch(routeDetailSource, />⋮⋮<\/span>/);
   assert.doesNotMatch(routeDetailSource, />Edit<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Edit sequence<\/button>/);
   assert.match(routeDetailSource, /"Save order"/);

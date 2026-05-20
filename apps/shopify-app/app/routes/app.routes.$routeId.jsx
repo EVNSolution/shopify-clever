@@ -360,7 +360,7 @@ const routeStopDragHandleStyle = {
   height: "20px",
   justifyContent: "center",
   lineHeight: 1,
-  width: "18px",
+  width: "12px",
 };
 
 const routeStopSequenceActionButtonStyle = {
@@ -1852,7 +1852,7 @@ export default function RouteDetailPage() {
                           aria-label={`Drag stop ${stop.stop}`}
                           role="img"
                           style={routeStopDragHandleStyle}
-                        >⋮⋮</span>
+                        >⋮</span>
                         <span>{stop.stop}</span>
                       </td>
                       <td style={routesDetailCellStyle}>{stop.order}</td>

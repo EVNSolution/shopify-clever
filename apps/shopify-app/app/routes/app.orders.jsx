@@ -201,10 +201,9 @@ const routePlanDragHandleStyle = {
   fontSize: "16px",
   fontWeight: 700,
   justifyContent: "center",
-  letterSpacing: "-2px",
   lineHeight: 1,
   minHeight: "28px",
-  padding: "0 2px 0 0",
+  padding: "0 1px 0 0",
 };
 
 const routePlanOrderButtonStyle = {
@@ -1432,6 +1431,8 @@ export default function OrdersPage() {
   );
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
+  const [autoAppliedDeliveryDateFilter, setAutoAppliedDeliveryDateFilter] =
+    useState(null);
   const [activeDraggedPlanOrderId, setActiveDraggedPlanOrderId] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
   const mapContainerRef = useRef(null);
@@ -1594,12 +1595,15 @@ export default function OrdersPage() {
   }, [displayOrders, filteredOrders, orderFilterReferenceDate]);
 
   useEffect(() => {
-    if (
-      !routePlanDeliveryDateLock ||
-      filteredDeliveryDateLock === routePlanDeliveryDateLock
-    ) {
+    if (!routePlanDeliveryDateLock) {
       return;
     }
+
+    if (filteredDeliveryDateLock === routePlanDeliveryDateLock) {
+      return;
+    }
+
+    setAutoAppliedDeliveryDateFilter(routePlanDeliveryDateLock);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, {
@@ -1614,6 +1618,35 @@ export default function OrdersPage() {
   }, [
     orderFilters,
     filteredDeliveryDateLock,
+    routePlanDeliveryDateLock,
+    searchParams,
+    setSearchParams,
+  ]);
+
+  useEffect(() => {
+    if (
+      routePlanDeliveryDateLock ||
+      !autoAppliedDeliveryDateFilter ||
+      filteredDeliveryDateLock !== autoAppliedDeliveryDateFilter
+    ) {
+      return;
+    }
+
+    setAutoAppliedDeliveryDateFilter(null);
+    setSearchParams(
+      updateOrderFilterSearchParams(searchParams, {
+        ...orderFilters,
+        deliveryDate: "",
+      }),
+      {
+        preventScrollReset: true,
+        replace: true,
+      },
+    );
+  }, [
+    autoAppliedDeliveryDateFilter,
+    filteredDeliveryDateLock,
+    orderFilters,
     routePlanDeliveryDateLock,
     searchParams,
     setSearchParams,
@@ -1657,12 +1690,15 @@ export default function OrdersPage() {
   const applyDeliveryDateFilterLock = useCallback((deliveryDate) => {
     const normalizedDeliveryDate = getOrderDeliveryDateValue({ deliveryDate });
 
-    if (
-      !normalizedDeliveryDate ||
-      filteredDeliveryDateLock === normalizedDeliveryDate
-    ) {
+    if (!normalizedDeliveryDate) {
       return;
     }
+
+    if (filteredDeliveryDateLock === normalizedDeliveryDate) {
+      return;
+    }
+
+    setAutoAppliedDeliveryDateFilter(normalizedDeliveryDate);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, {
@@ -1716,6 +1752,14 @@ export default function OrdersPage() {
       setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR);
     }
 
+    if (filterKey === "deliveryDate") {
+      setAutoAppliedDeliveryDateFilter(
+        routePlanDeliveryDateLock && nextFilterValue === routePlanDeliveryDateLock
+          ? routePlanDeliveryDateLock
+          : null,
+      );
+    }
+
     const nextFilters = {
       ...orderFilters,
       [filterKey]: nextFilterValue,
@@ -1734,6 +1778,8 @@ export default function OrdersPage() {
     if (routePlanDeliveryDateLock) {
       setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR);
     }
+
+    setAutoAppliedDeliveryDateFilter(routePlanDeliveryDateLock || null);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, {
@@ -2521,7 +2567,7 @@ export default function OrdersPage() {
                         aria-label={`Drag route plan order ${orderIndex + 1}`}
                         role="img"
                         style={routePlanDragHandleStyle}
-                      >⋮⋮</span>
+                      >⋮</span>
                       <button
                         type="button"
                         className="route-plan-address-button"
