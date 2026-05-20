@@ -1,5 +1,5 @@
 const PMTILES_PROTOCOL_NAME = "pmtiles";
-const PMTILES_PROTOCOL_KEY = "__tomatonoPmtilesProtocolInstalled";
+const PMTILES_PROTOCOL_KEY = "__cleverPmtilesProtocolInstalled";
 
 export function installPmtilesProtocol(maplibregl, Protocol) {
   if (!maplibregl || !Protocol || typeof window === "undefined") {

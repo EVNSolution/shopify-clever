@@ -9,9 +9,9 @@ import {
 } from "./app-preferences.server.js";
 
 test("app preferences query reads the language setting metafield", () => {
-  assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /query TomatonoRouteAppPreferences/);
+  assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /query CleverRouteAppPreferences/);
   assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /currentAppInstallation\s*\{/);
-  assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /metafield\(namespace: "tomatono_route", key: "app_preferences"\)/);
+  assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /metafield\(namespace: "clever_route", key: "app_preferences"\)/);
 });
 
 test("maps saved app language preferences with English fallback", () => {
@@ -75,7 +75,7 @@ test("saves app language preferences to an app-data metafield", async () => {
                       metafields: [
                         {
                           key: "app_preferences",
-                          namespace: "tomatono_route",
+                          namespace: "clever_route",
                           value: options.variables.metafields[0].value,
                         },
                       ],
@@ -92,7 +92,7 @@ test("saves app language preferences to an app-data metafield", async () => {
   assert.match(SAVE_APP_PREFERENCES_MUTATION, /metafieldsSet/);
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1].options.variables.metafields[0], {
-    namespace: "tomatono_route",
+    namespace: "clever_route",
     key: "app_preferences",
     ownerId: "gid://shopify/AppInstallation/1",
     type: "json",

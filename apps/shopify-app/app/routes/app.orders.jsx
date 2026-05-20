@@ -38,7 +38,7 @@ import { TabLayout } from "../ui/tab-layout";
 
 export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
 
-const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-tomatono-lite.json";
+const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-clever-lite.json";
 const DEFAULT_CENTER = [-79.4163, 43.787];
 const INITIAL_HOME_ZOOM = 10;
 const MAP_RECOVERY_DELAY_MS = 2500;
@@ -177,6 +177,11 @@ const routePlanItemStyle = {
   padding: "10px",
 };
 
+const routePlanDraggingItemStyle = {
+  ...routePlanItemStyle,
+  opacity: 0.55,
+};
+
 const routePlanItemHeaderStyle = {
   alignItems: "center",
   display: "flex",
@@ -184,13 +189,33 @@ const routePlanItemHeaderStyle = {
   justifyContent: "space-between",
 };
 
+const routePlanDragHandleStyle = {
+  alignItems: "center",
+  alignSelf: "stretch",
+  background: "transparent",
+  border: 0,
+  color: "#8a8a8a",
+  cursor: "grab",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "16px",
+  fontWeight: 700,
+  justifyContent: "center",
+  letterSpacing: "-2px",
+  lineHeight: 1,
+  minHeight: "28px",
+  padding: "0 2px 0 0",
+};
+
 const routePlanOrderButtonStyle = {
   background: "transparent",
   border: 0,
   color: "#303030",
   cursor: "pointer",
+  flex: "1 1 auto",
   fontSize: "12px",
   lineHeight: 1.35,
+  minWidth: 0,
   padding: 0,
   textAlign: "left",
 };
@@ -624,7 +649,7 @@ function emitPerformanceMetric(metric) {
   if (!PERF_CAPTURE_ENABLED || typeof window === "undefined") return;
 
   const payload = {
-    app: "tomatono-route-app",
+    app: "clever-route-app",
     page: "orders",
     url: getSanitizedUrl(window.location.href),
     referrer: getSanitizedUrl(document.referrer),
@@ -633,8 +658,8 @@ function emitPerformanceMetric(metric) {
     ...metric,
   };
 
-  window.__tomatonoPerfEvents = window.__tomatonoPerfEvents ?? [];
-  window.__tomatonoPerfEvents.push(payload);
+  window.__cleverPerfEvents = window.__cleverPerfEvents ?? [];
+  window.__cleverPerfEvents.push(payload);
 
   const serializedPayload = JSON.stringify(payload);
 
@@ -961,6 +986,24 @@ function buildOrdersMapFeatureCollection(orders, plannedOrderIds) {
         };
       }),
   };
+}
+
+function reorderOrderIds(orderIds, sourceOrderId, targetOrderId) {
+  if (!sourceOrderId || !targetOrderId || sourceOrderId === targetOrderId) {
+    return orderIds;
+  }
+
+  const sourceIndex = orderIds.indexOf(sourceOrderId);
+  const targetIndex = orderIds.indexOf(targetOrderId);
+
+  if (sourceIndex < 0 || targetIndex < 0) {
+    return orderIds;
+  }
+
+  const nextOrderIds = [...orderIds];
+  const [movedOrderId] = nextOrderIds.splice(sourceIndex, 1);
+  nextOrderIds.splice(targetIndex, 0, movedOrderId);
+  return nextOrderIds;
 }
 
 function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
@@ -1389,6 +1432,7 @@ export default function OrdersPage() {
   );
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
+  const [activeDraggedPlanOrderId, setActiveDraggedPlanOrderId] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
   const mapContainerRef = useRef(null);
   const mapLibraryRef = useRef(null);
@@ -1936,11 +1980,40 @@ export default function OrdersPage() {
     setPlannedOrderIds((currentOrderIds) =>
       currentOrderIds.filter((plannedOrderId) => plannedOrderId !== orderId),
     );
+    setActiveDraggedPlanOrderId((currentOrderId) =>
+      currentOrderId === orderId ? null : currentOrderId,
+    );
   };
 
   const handleClearPlan = () => {
     setPlannedOrderIds([]);
+    setActiveDraggedPlanOrderId(null);
   };
+
+  const handlePlanOrderDragStart = useCallback((event, orderId) => {
+    setActiveDraggedPlanOrderId(orderId);
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", orderId);
+  }, []);
+
+  const handlePlanOrderDragOver = useCallback((event) => {
+    event.preventDefault();
+    event.dataTransfer.dropEffect = "move";
+  }, []);
+
+  const handlePlanOrderDrop = useCallback((event, targetOrderId) => {
+    event.preventDefault();
+    const sourceOrderId = activeDraggedPlanOrderId ?? event.dataTransfer.getData("text/plain");
+
+    setPlannedOrderIds((currentOrderIds) =>
+      reorderOrderIds(currentOrderIds, sourceOrderId, targetOrderId),
+    );
+    setActiveDraggedPlanOrderId(null);
+  }, [activeDraggedPlanOrderId]);
+
+  const handlePlanOrderDragEnd = useCallback(() => {
+    setActiveDraggedPlanOrderId(null);
+  }, []);
 
   const handleZoomToPlanned = () => {
     fitMapToOrders(routeFitLocations);
@@ -2430,8 +2503,25 @@ export default function OrdersPage() {
             ) : (
               <div style={routePlanListStyle} aria-label="Route plan orders">
                 {plannedOrders.map((order, orderIndex) => (
-                  <div key={order.id} style={routePlanItemStyle}>
+                  <div
+                    draggable={true}
+                    key={order.id}
+                    onDragEnd={handlePlanOrderDragEnd}
+                    onDragOver={handlePlanOrderDragOver}
+                    onDragStart={(event) => handlePlanOrderDragStart(event, order.id)}
+                    onDrop={(event) => handlePlanOrderDrop(event, order.id)}
+                    style={
+                      activeDraggedPlanOrderId === order.id
+                        ? routePlanDraggingItemStyle
+                        : routePlanItemStyle
+                    }
+                  >
                     <div style={routePlanItemHeaderStyle}>
+                      <span
+                        aria-label={`Drag route plan order ${orderIndex + 1}`}
+                        role="img"
+                        style={routePlanDragHandleStyle}
+                      >⋮⋮</span>
                       <button
                         type="button"
                         className="route-plan-address-button"

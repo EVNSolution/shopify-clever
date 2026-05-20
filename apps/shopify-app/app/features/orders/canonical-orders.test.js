@@ -300,7 +300,7 @@ test("getOrderSyncSnapshots returns only server-acceptable Shopify snapshots", (
     phone: "",
     customAttributes: [{ key: "Delivery Area", value: "" }],
     lineItems: {
-      nodes: [{ title: "Tomatono", sku: "", variantTitle: "" }],
+      nodes: [{ title: "CLEVER", sku: "", variantTitle: "" }],
     },
     shippingAddress: {
       address1: "300 City Centre Dr",
@@ -335,7 +335,7 @@ test("getOrderSyncSnapshots returns only server-acceptable Shopify snapshots", (
         ...completeRawPayload,
         customAttributes: [],
         lineItems: {
-          nodes: [{ title: "Tomatono", sku: null, variantTitle: null }],
+          nodes: [{ title: "CLEVER", sku: null, variantTitle: null }],
         },
         note: null,
         phone: null,
@@ -374,7 +374,7 @@ test("getOrderSyncSnapshots normalizes optional fields for the strict delivery p
           lineItems: {
             nodes: [
               {
-                title: "Tomatono",
+                title: "CLEVER",
                 name: "",
                 quantity: "2",
                 sku: "",
@@ -419,7 +419,7 @@ test("getOrderSyncSnapshots normalizes optional fields for the strict delivery p
         lineItems: {
           nodes: [
             {
-              title: "Tomatono",
+              title: "CLEVER",
               name: null,
               quantity: 2,
               sku: null,

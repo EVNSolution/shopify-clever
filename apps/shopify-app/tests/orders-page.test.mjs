@@ -23,9 +23,9 @@ const pmtilesProtocolSource = readFileSync(
 const openFreeMapStyle = JSON.parse(
   readFileSync(join(root, "public/vendor/openfreemap-liberty.json"), "utf8"),
 );
-const tomatonoLiteStylePath = join(root, "public/vendor/openfreemap-tomatono-lite.json");
-const tomatonoLiteStyle = existsSync(tomatonoLiteStylePath)
-  ? JSON.parse(readFileSync(tomatonoLiteStylePath, "utf8"))
+const cleverLiteStylePath = join(root, "public/vendor/openfreemap-clever-lite.json");
+const cleverLiteStyle = existsSync(cleverLiteStylePath)
+  ? JSON.parse(readFileSync(cleverLiteStylePath, "utf8"))
   : null;
 
 test("Orders tab loads Shopify orders and renders them in the shared map layout", () => {
@@ -74,19 +74,19 @@ test("Orders map assets use stable local URLs to avoid dev console load warnings
   );
   assert.match(
     ordersPageSource,
-    /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-tomatono-lite\.json"/,
+    /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-clever-lite\.json"/,
   );
   assert.equal(
     existsSync(join(root, "public/vendor/maplibre-gl.css")),
     true,
   );
   assert.equal(
-    existsSync(tomatonoLiteStylePath),
+    existsSync(cleverLiteStylePath),
     true,
   );
 });
 
-test("Tomatono lite map style keeps lightweight buildings without POI-heavy layers", () => {
+test("CLEVER lite map style keeps lightweight buildings without POI-heavy layers", () => {
   const expectedLayerIds = [
     "background",
     "natural_earth",
@@ -113,16 +113,16 @@ test("Tomatono lite map style keeps lightweight buildings without POI-heavy laye
     "label_city",
     "label_city_capital",
   ];
-  const layerIds = tomatonoLiteStyle?.layers?.map((layer) => layer.id) ?? [];
-  const buildingLayer = tomatonoLiteStyle?.layers?.find((layer) => layer.id === "building");
+  const layerIds = cleverLiteStyle?.layers?.map((layer) => layer.id) ?? [];
+  const buildingLayer = cleverLiteStyle?.layers?.find((layer) => layer.id === "building");
 
   assert.deepEqual(layerIds, expectedLayerIds);
-  assert.equal(tomatonoLiteStyle?.sources?.openmaptiles?.url, "https://tiles.openfreemap.org/planet");
+  assert.equal(cleverLiteStyle?.sources?.openmaptiles?.url, "https://tiles.openfreemap.org/planet");
   assert.equal(
-    tomatonoLiteStyle?.sources?.overture_buildings?.url,
+    cleverLiteStyle?.sources?.overture_buildings?.url,
     "pmtiles://https://overturemaps-tiles-us-west-2-beta.s3.amazonaws.com/2026-01-21/buildings.pmtiles",
   );
-  assert.equal(tomatonoLiteStyle?.layers?.filter((layer) => layer.type === "symbol").length, 6);
+  assert.equal(cleverLiteStyle?.layers?.filter((layer) => layer.type === "symbol").length, 6);
   assert.equal(buildingLayer?.type, "fill");
   assert.equal(buildingLayer?.source, "overture_buildings");
   assert.equal(buildingLayer?.["source-layer"], "building");
@@ -130,26 +130,26 @@ test("Tomatono lite map style keeps lightweight buildings without POI-heavy laye
   assert.equal(buildingLayer?.maxzoom, undefined);
   assert.equal(buildingLayer?.paint?.["fill-opacity"], 0.34);
   assert.equal(layerIds.includes("building-3d"), false);
-  assert.equal(tomatonoLiteStyle?.layers?.some((layer) =>
+  assert.equal(cleverLiteStyle?.layers?.some((layer) =>
     /poi|aeroway|rail|transit|shield|one_way|label_country|label_state|label_village|label_other|landuse|landcover/i.test(layer.id),
   ), false);
 });
 
 test("PMTiles protocol is installed once before building overlay styles load", () => {
   assert.match(pmtilesProtocolSource, /const PMTILES_PROTOCOL_NAME = "pmtiles"/);
-  assert.match(pmtilesProtocolSource, /const PMTILES_PROTOCOL_KEY = "__tomatonoPmtilesProtocolInstalled"/);
+  assert.match(pmtilesProtocolSource, /const PMTILES_PROTOCOL_KEY = "__cleverPmtilesProtocolInstalled"/);
   assert.match(pmtilesProtocolSource, /new Protocol\(\{ metadata: true \}\)/);
   assert.match(pmtilesProtocolSource, /maplibregl\.addProtocol\(PMTILES_PROTOCOL_NAME, protocol\.tile\)/);
   assert.match(pmtilesProtocolSource, /window\[PMTILES_PROTOCOL_KEY\]/);
 });
 
-test("Tomatono lite map style mutes bright yellow road colors", () => {
+test("CLEVER lite map style mutes bright yellow road colors", () => {
   const roadColors = new Map(
-    tomatonoLiteStyle?.layers
+    cleverLiteStyle?.layers
       ?.filter((layer) => /^(road|bridge)_/.test(layer.id))
       .map((layer) => [layer.id, layer.paint?.["line-color"]]) ?? [],
   );
-  const styleJson = JSON.stringify(tomatonoLiteStyle);
+  const styleJson = JSON.stringify(cleverLiteStyle);
 
   assert.equal(roadColors.get("road_link"), "#ead9bd");
   assert.equal(roadColors.get("road_secondary_tertiary"), "#ead9bd");
@@ -599,6 +599,18 @@ test("Orders side card manages the route plan list instead of showing only selec
   assert.doesNotMatch(ordersPageSource, /Plan에서 추가\/제거합니다/);
 });
 
+test("Orders route plan list can be reordered with a left drag handle before creation", () => {
+  assert.match(ordersPageSource, /function reorderOrderIds\(orderIds, sourceOrderId, targetOrderId\) \{/);
+  assert.match(ordersPageSource, /const \[activeDraggedPlanOrderId, setActiveDraggedPlanOrderId\] = useState\(null\)/);
+  assert.match(ordersPageSource, /const handlePlanOrderDragStart = useCallback\(\(event, orderId\) => \{/);
+  assert.match(ordersPageSource, /const handlePlanOrderDrop = useCallback\(\(event, targetOrderId\) => \{/);
+  assert.match(ordersPageSource, /reorderOrderIds\(currentOrderIds, sourceOrderId, targetOrderId\)/);
+  assert.match(ordersPageSource, /draggable=\{true\}/);
+  assert.match(ordersPageSource, /style=\{routePlanDragHandleStyle\}/);
+  assert.match(ordersPageSource, /aria-label=\{`Drag route plan order \$\{orderIndex \+ 1\}`\}/);
+  assert.match(ordersPageSource, /onDrop=\{\(event\) => handlePlanOrderDrop\(event, order\.id\)\}/);
+});
+
 test("Orders route plan side panel keeps compact copy in a fixed scroll container", () => {
   assert.match(ordersPageSource, /const routePlanScrollAreaStyle = \{/);
   assert.match(ordersPageSource, /height:\s*"420px"/);
@@ -771,7 +783,7 @@ test("Orders map captures MapLibre tile errors without long visible copy", () =>
 
 test("Orders map zooms to fit the route plan only when the table Add to plan action registers orders", () => {
   const markerPopupAddBlock = ordersPageSource.match(
-    /const handleAddOrderToPlan = useCallback\(\(orderId\) => \{[\s\S]*?\n  \}, \[\]\);/,
+    /const handleAddOrderToPlan = useCallback\(\(orderId\) => \{[\s\S]*?\n  \]\);/,
   )?.[0] ?? "";
   const tableAddBlock = ordersPageSource.match(
     /const handleAddToPlan = \(\) => \{[\s\S]*?\n  \};/,

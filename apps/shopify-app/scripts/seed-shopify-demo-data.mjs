@@ -7,15 +7,15 @@ const root = process.cwd();
 const project = JSON.parse(readFileSync(join(root, ".shopify/project.json"), "utf8"));
 const firstProject = Object.values(project)[0] ?? {};
 const store = process.env.SHOPIFY_STORE ?? firstProject.dev_store_url;
-const runId = process.env.TOMATONO_SEED_RUN_ID ?? new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
+const runId = process.env.CLEVER_SEED_RUN_ID ?? new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14);
 
 if (!store) {
   throw new Error("No Shopify store found. Set SHOPIFY_STORE=<store>.myshopify.com.");
 }
 
-const seedTag = `tomatono-seed-${runId}`;
-const baseTags = ["tomatono-route-demo", seedTag];
-const seedNow = new Date(process.env.TOMATONO_SEED_NOW ?? Date.now());
+const seedTag = `clever-seed-${runId}`;
+const baseTags = ["clever-route-demo", seedTag];
+const seedNow = new Date(process.env.CLEVER_SEED_NOW ?? Date.now());
 const deliveryBatch = getDeliveryBatchForSeed(seedNow);
 
 const areas = [
@@ -146,10 +146,10 @@ const products = Array.from({ length: 20 }, (_, index) => {
   const categories = ["Fresh Box", "Juice", "Salad", "Sauce", "Snack"];
   const category = categories[index % categories.length];
   return {
-    title: `Tomatono ${category} ${String(number).padStart(2, "0")} ${deliveryBatch.label} ${runId}`,
-    descriptionHtml: `<p>Tomatono Route seed product ${number}. Delivery batch ${deliveryBatch.label}.</p>`,
-    productType: "Tomatono Route Demo",
-    vendor: "Tomatono Demo",
+    title: `CLEVER ${category} ${String(number).padStart(2, "0")} ${deliveryBatch.label} ${runId}`,
+    descriptionHtml: `<p>CLEVER Route seed product ${number}. Delivery batch ${deliveryBatch.label}.</p>`,
+    productType: "CLEVER Route Demo",
+    vendor: "CLEVER Demo",
     status: "ACTIVE",
     tags: [...baseTags, "route-seed-product", category],
   };
@@ -161,7 +161,7 @@ const customers = areas.map((area, index) => {
   const phone = `+1416555${phoneSuffix}`;
   const primaryAddress = area.addressStops[0];
   return {
-    email: `tomatono.seed+${runId}-${number}@example.com`,
+    email: `clever.seed+${runId}-${number}@example.com`,
     phone,
     firstName: area.firstName,
     lastName: area.lastName,
@@ -307,7 +307,7 @@ function createProducts() {
       }`,
     )
     .join("\n");
-  const data = execute(`mutation SeedTomatonoProducts(${variableDefs}) { ${fields} }`, makeVariables("product", products));
+  const data = execute(`mutation SeedCleverProducts(${variableDefs}) { ${fields} }`, makeVariables("product", products));
   assertNoUserErrors(data, "productCreate");
   return Object.values(data).map((entry) => {
     const variant = entry.product.variants.nodes[0];
@@ -338,7 +338,7 @@ function updateProductPrices(createdProducts) {
       },
     ];
   });
-  const data = execute(`mutation SeedTomatonoProductPrices(${variableDefs}) { ${fields} }`, variables);
+  const data = execute(`mutation SeedCleverProductPrices(${variableDefs}) { ${fields} }`, variables);
   assertNoUserErrors(data, "productVariantsBulkUpdate");
 }
 
@@ -353,7 +353,7 @@ function createCustomers() {
       }`,
     )
     .join("\n");
-  const data = execute(`mutation SeedTomatonoCustomers(${variableDefs}) { ${fields} }`, makeVariables("customer", inputs));
+  const data = execute(`mutation SeedCleverCustomers(${variableDefs}) { ${fields} }`, makeVariables("customer", inputs));
   assertNoUserErrors(data, "customerCreate");
   return Object.values(data).map((entry, index) => ({
     id: entry.customer.id,
@@ -401,13 +401,13 @@ function buildDraftOrderInputs(createdProducts, createdCustomers) {
     return {
       email: customer.email,
       phone: customer.phone,
-      note: `Tomatono Route seed order ${orderNumber} / ${runId}`,
+      note: `CLEVER Route seed order ${orderNumber} / ${runId}`,
       tags: [...baseTags, "route-seed-order", area.label],
       purchasingEntity: { customerId: customer.id },
       shippingAddress: address,
       billingAddress: address,
       shippingLine: {
-        title: "Tomatono local delivery",
+        title: "CLEVER local delivery",
         price: "5.00",
       },
       lineItems: [
@@ -415,13 +415,13 @@ function buildDraftOrderInputs(createdProducts, createdCustomers) {
         { variantId: productB.variantId, quantity: ((index + 1) % 2) + 1 },
       ],
       customAttributes: [
-        { key: "tomatono_lat", value: String(coordinates.lat) },
-        { key: "tomatono_lng", value: String(coordinates.lng) },
+        { key: "clever_lat", value: String(coordinates.lat) },
+        { key: "clever_lng", value: String(coordinates.lng) },
         { key: "Delivery Area", value: area.deliveryArea },
         { key: "Delivery Day", value: area.deliveryDay },
         { key: "Note (Customer)", value: orderNumber % 4 === 1 ? "12시 전으로 배송할것" : "" },
-        { key: "tomatono_seed_run", value: runId },
-        { key: "tomatono_area", value: area.label },
+        { key: "clever_seed_run", value: runId },
+        { key: "clever_area", value: area.label },
       ],
     };
   });
@@ -437,7 +437,7 @@ function createDraftOrders(orderInputs) {
       }`,
     )
     .join("\n");
-  const data = execute(`mutation SeedTomatonoDraftOrders(${variableDefs}) { ${fields} }`, makeVariables("order", orderInputs));
+  const data = execute(`mutation SeedCleverDraftOrders(${variableDefs}) { ${fields} }`, makeVariables("order", orderInputs));
   assertNoUserErrors(data, "draftOrderCreate");
   return Object.values(data).map((entry) => ({ id: entry.draftOrder.id, name: entry.draftOrder.name }));
 }
@@ -445,7 +445,7 @@ function createDraftOrders(orderInputs) {
 function completeDraftOrders(draftOrders) {
   return draftOrders.map((draftOrder) => {
     const data = execute(
-      `mutation CompleteTomatonoDraftOrder($draft: ID!) {
+      `mutation CompleteCleverDraftOrder($draft: ID!) {
         complete: draftOrderComplete(id: $draft, paymentPending: true) {
           draftOrder { id order { id name } }
           userErrors { field message }
