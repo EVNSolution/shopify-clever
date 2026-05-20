@@ -11,7 +11,7 @@ import {
 } from "./shopify-orders.server.js";
 
 test("orders query reads Shopify orders without requiring customer scope", () => {
-  assert.match(SHOPIFY_ORDERS_QUERY, /query TomatonoRouteOrders\(\$first: Int!, \$after: String\)/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /query CleverRouteOrders\(\$first: Int!, \$after: String\)/);
   assert.match(SHOPIFY_ORDERS_QUERY, /orders\(first: \$first, after: \$after, sortKey: CREATED_AT, reverse: true\)/);
   assert.match(SHOPIFY_ORDERS_QUERY, /pageInfo\s*\{[\s\S]*hasNextPage[\s\S]*endCursor[\s\S]*\}/);
   assert.match(SHOPIFY_ORDERS_QUERY, /shippingAddress\s*\{/);
@@ -111,7 +111,7 @@ test("maps Shopify orders into map-ready rows", () => {
                 nodes: [
                   {
                     title: "토마토노 밀키트 세트 5/7-5/9",
-                    name: "TOMATONO MEAL KIT SET",
+                    name: "CLEVER MEAL KIT SET",
                     variantTitle: "Premium",
                     quantity: 1,
                     sku: "MEALKIT",
@@ -207,7 +207,7 @@ test("maps Shopify orders into map-ready rows", () => {
           nodes: [
             {
               title: "토마토노 밀키트 세트 5/7-5/9",
-              name: "TOMATONO MEAL KIT SET",
+              name: "CLEVER MEAL KIT SET",
               variantTitle: "Premium",
               quantity: 1,
               sku: "MEALKIT",
@@ -253,7 +253,7 @@ test("maps Shopify orders into map-ready rows", () => {
           nodes: [
             {
               title: "토마토노 밀키트 세트 5/7-5/9",
-              name: "TOMATONO MEAL KIT SET",
+              name: "CLEVER MEAL KIT SET",
               variantTitle: "Premium",
               quantity: 1,
               sku: "MEALKIT",
@@ -277,7 +277,7 @@ test("maps Shopify orders into map-ready rows", () => {
   ]);
 });
 
-test("uses Tomatono order custom attributes as a coordinate fallback", () => {
+test("uses legacy route order custom attributes as a coordinate fallback", () => {
   const rows = mapShopifyOrdersResponse({
     data: {
       orders: {
@@ -312,6 +312,41 @@ test("uses Tomatono order custom attributes as a coordinate fallback", () => {
   assert.deepEqual(rows[0].coordinates, [126.978, 37.5665]);
 });
 
+test("uses CLEVER order custom attributes as a coordinate fallback", () => {
+  const rows = mapShopifyOrdersResponse({
+    data: {
+      orders: {
+        edges: [
+          {
+            node: {
+              id: "gid://shopify/Order/1003",
+              name: "#1003",
+              displayFulfillmentStatus: "UNFULFILLED",
+              displayFinancialStatus: "PENDING",
+              customAttributes: [
+                { key: "clever_lat", value: "43.6532" },
+                { key: "clever_lng", value: "-79.3832" },
+              ],
+              shippingAddress: {
+                name: "Kim Mina",
+                address1: "100 Queen St W",
+                city: "Toronto",
+                zip: "M5H 2N2",
+                countryCodeV2: "CA",
+                latitude: null,
+                longitude: null,
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(rows[0].hasCoordinates, true);
+  assert.deepEqual(rows[0].coordinates, [-79.3832, 43.6532]);
+});
+
 test("maps raw Shopify orders to dated delivery labels without treating route-time text as order time", () => {
   const [row] = mapShopifyOrdersResponse({
     data: {
@@ -327,7 +362,7 @@ test("maps raw Shopify orders to dated delivery labels without treating route-ti
                 { key: "Delivery Day", value: "Friday 5pm to 9pm *Check delivery map" },
               ],
               lineItems: {
-                nodes: [{ title: "Tomatono weekly menu" }],
+                nodes: [{ title: "CLEVER weekly menu" }],
               },
               shippingAddress: {
                 name: "Lee Hana",
@@ -352,7 +387,7 @@ test("maps raw Shopify orders to dated delivery labels without treating route-ti
   assert.equal(row.timeWindowEnd, undefined);
 });
 
-test("maps tomatono_delivery_date attributes without falling back to Date pending", () => {
+test("maps legacy delivery-date attributes without falling back to Date pending", () => {
   const [row] = mapShopifyOrdersResponse({
     data: {
       orders: {
@@ -368,7 +403,7 @@ test("maps tomatono_delivery_date attributes without falling back to Date pendin
                 { key: "tomatono_delivery_date", value: "2026-05-18" },
               ],
               lineItems: {
-                nodes: [{ title: "Tomatono daily order" }],
+                nodes: [{ title: "CLEVER daily order" }],
               },
               shippingAddress: {
                 name: "Park Jiin",
@@ -392,6 +427,41 @@ test("maps tomatono_delivery_date attributes without falling back to Date pendin
   assert.equal(row.planningGroupKey, "2026-05-18|DELIVERY|||Thornhill");
 });
 
+test("maps CLEVER delivery-date attributes without falling back to Date pending", () => {
+  const [row] = mapShopifyOrdersResponse({
+    data: {
+      orders: {
+        edges: [
+          {
+            node: {
+              id: "gid://shopify/Order/1008",
+              name: "#1008",
+              createdAt: "2026-05-20T15:30:00.000Z",
+              customAttributes: [
+                { key: "Delivery Area", value: "North York" },
+                { key: "Delivery Day", value: "Wednesday" },
+                { key: "clever_delivery_date", value: "2026-05-20" },
+              ],
+              lineItems: {
+                nodes: [{ title: "CLEVER daily order" }],
+              },
+              shippingAddress: {
+                name: "Alex Chen",
+                address1: "5100 Yonge St",
+                city: "North York",
+                province: "ON",
+                countryCodeV2: "CA",
+              },
+            },
+          },
+        ],
+      },
+    },
+  });
+
+  assert.equal(row.deliveryDate, "2026-05-20");
+  assert.equal(row.deliveryLabel, "Wed 05/20");
+});
 
 test("maps explicit Delivery Date attributes without falling back to Date pending", () => {
   const [row] = mapShopifyOrdersResponse({
@@ -408,7 +478,7 @@ test("maps explicit Delivery Date attributes without falling back to Date pendin
                 { key: "Delivery Date", value: "2026-05-18" },
               ],
               lineItems: {
-                nodes: [{ title: "Tomatono daily order" }],
+                nodes: [{ title: "CLEVER daily order" }],
               },
               shippingAddress: {
                 name: "Park Jiin",

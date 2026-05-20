@@ -50,7 +50,7 @@ test("infers the concrete delivery date from a Shopify line item range and deliv
 });
 
 
-test("infers delivery dates from the Tomatono Tuesday-to-Monday order cycle", () => {
+test("infers delivery dates from the CLEVER Tuesday-to-Monday order cycle", () => {
   assert.equal(
     inferDeliveryDateFromOrderCycle({
       deliveryDay: "Friday",
@@ -81,7 +81,7 @@ test("uses the order cycle when Shopify line items do not include a date range",
     inferDeliveryDateForOrder({
       deliveryDay: "Friday",
       lineItems: {
-        nodes: [{ title: "Tomatono weekly menu" }],
+        nodes: [{ title: "CLEVER weekly menu" }],
       },
       orderCreatedAt: "2026-05-01T15:30:00.000Z",
     }),
@@ -94,7 +94,7 @@ test("uses an explicit delivery date before weekday/range inference", () => {
     inferDeliveryDateForOrder({
       deliveryDate: "2026-05-18",
       lineItems: {
-        nodes: [{ title: "Tomatono 2026.05.18-05.31" }],
+        nodes: [{ title: "CLEVER 2026.05.18-05.31" }],
       },
       orderCreatedAt: null,
     }),

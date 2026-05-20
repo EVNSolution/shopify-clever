@@ -11,9 +11,9 @@ import {
 } from "./shopify-locations.server.js";
 
 test("departure location query reads Shopify app settings and active Locations", () => {
-  assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /query TomatonoRouteDepartureLocation/);
+  assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /query CleverRouteDepartureLocation/);
   assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /currentAppInstallation\s*\{/);
-  assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /metafield\(namespace: "tomatono_route", key: "departure_location"\)/);
+  assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /metafield\(namespace: "clever_route", key: "departure_location"\)/);
   assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /location\s*\{/);
   assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /locations\(first: 10/);
   assert.match(SHOPIFY_DEPARTURE_LOCATION_QUERY, /address\s*\{/);
@@ -38,7 +38,7 @@ test("uses the app settings departure location when it is saved", () => {
       },
       location: {
         id: "gid://shopify/Location/1",
-        name: "Tomatono HQ",
+        name: "CLEVER HQ",
         isActive: true,
         address: {
           formatted: ["123 Tomato Rd"],
@@ -65,7 +65,7 @@ test("maps Shopify primary Location into a departure start point", () => {
     data: {
       location: {
         id: "gid://shopify/Location/1",
-        name: "Tomatono HQ",
+        name: "CLEVER HQ",
         isActive: true,
         address: {
           formatted: [
@@ -82,7 +82,7 @@ test("maps Shopify primary Location into a departure start point", () => {
 
   assert.deepEqual(departureLocation, {
     id: "gid://shopify/Location/1",
-    name: "Tomatono HQ",
+    name: "CLEVER HQ",
     address: "123 Tomato Rd, Toronto ON M5V 2T6, Canada",
     coordinates: [-79.3871, 43.6426],
     hasCoordinates: true,
@@ -279,7 +279,7 @@ test("invalidates cached Shopify departure location reads after settings save", 
                   metafields: [
                     {
                       key: "departure_location",
-                      namespace: "tomatono_route",
+                      namespace: "clever_route",
                       value: options.variables.metafields[0].value,
                     },
                   ],
@@ -339,7 +339,7 @@ test("saves departure location settings to an app-data metafield", async () => {
                       metafields: [
                         {
                           key: "departure_location",
-                          namespace: "tomatono_route",
+                          namespace: "clever_route",
                           value: options.variables.metafields[0].value,
                         },
                       ],
@@ -361,7 +361,7 @@ test("saves departure location settings to an app-data metafield", async () => {
   assert.match(SAVE_DEPARTURE_LOCATION_MUTATION, /metafieldsSet/);
   assert.equal(calls.length, 2);
   assert.deepEqual(calls[1].options.variables.metafields[0], {
-    namespace: "tomatono_route",
+    namespace: "clever_route",
     key: "departure_location",
     ownerId: "gid://shopify/AppInstallation/1",
     type: "json",

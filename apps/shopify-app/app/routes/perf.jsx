@@ -6,7 +6,7 @@ const PERF_LOG_PATH = join(process.cwd(), ".omx/perf/orders-navigation.jsonl");
 const MAX_PERF_PAYLOAD_BYTES = 32_000;
 
 function isPerformanceCaptureEnabled() {
-  return process.env.NODE_ENV !== "production" || process.env.TOMATONO_PERF_CAPTURE === "1";
+  return process.env.NODE_ENV !== "production" || process.env.CLEVER_PERF_CAPTURE === "1";
 }
 
 function jsonResponse(payload, init = {}) {

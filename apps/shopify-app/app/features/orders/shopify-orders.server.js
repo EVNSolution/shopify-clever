@@ -7,7 +7,7 @@ const SHOPIFY_ORDERS_PAGE_SIZE = 50;
 const SHOPIFY_ORDERS_MAX_PAGES = 20;
 
 export const SHOPIFY_ORDERS_QUERY = `#graphql
-  query TomatonoRouteOrders($first: Int!, $after: String) {
+  query CleverRouteOrders($first: Int!, $after: String) {
     orders(first: $first, after: $after, sortKey: CREATED_AT, reverse: true) {
       edges {
         node {
@@ -75,6 +75,16 @@ const PROTECTED_ORDER_ACCESS_MESSAGE =
 
 const DEFAULT_SHOPIFY_ORDERS_CACHE_TTL_MS = 30_000;
 const shopifyOrdersCache = new Map();
+const LATITUDE_ATTRIBUTE_KEYS = ["clever_lat", "tomatono_lat"];
+const LONGITUDE_ATTRIBUTE_KEYS = ["clever_lng", "tomatono_lng"];
+const DELIVERY_DATE_ATTRIBUTE_KEYS = [
+  "Delivery Date",
+  "Delivery date",
+  "clever_delivery_date",
+  "deliveryDate",
+  "delivery_date",
+  "tomatono_delivery_date",
+];
 
 export function clearShopifyOrdersCache() {
   shopifyOrdersCache.clear();
@@ -355,8 +365,8 @@ function getCoordinateAttributes(customAttributes) {
   const attributes = getAttributeMap(customAttributes);
 
   return {
-    latitude: attributes.tomatono_lat,
-    longitude: attributes.tomatono_lng,
+    latitude: getFirstAttributeValue(attributes, LATITUDE_ATTRIBUTE_KEYS),
+    longitude: getFirstAttributeValue(attributes, LONGITUDE_ATTRIBUTE_KEYS),
   };
 }
 
@@ -383,13 +393,16 @@ function getAttributeMap(customAttributes) {
 }
 
 function getDeliveryDateAttribute(attributes) {
-  return (
-    textOrUndefined(attributes["Delivery Date"]) ??
-    textOrUndefined(attributes["Delivery date"]) ??
-    textOrUndefined(attributes.deliveryDate) ??
-    textOrUndefined(attributes.delivery_date) ??
-    textOrUndefined(attributes.tomatono_delivery_date)
-  );
+  return getFirstAttributeValue(attributes, DELIVERY_DATE_ATTRIBUTE_KEYS);
+}
+
+function getFirstAttributeValue(attributes, keys) {
+  for (const key of keys) {
+    const value = textOrUndefined(attributes[key]);
+    if (value) return value;
+  }
+
+  return undefined;
 }
 
 function formatDeliveryAttributes(attributes) {

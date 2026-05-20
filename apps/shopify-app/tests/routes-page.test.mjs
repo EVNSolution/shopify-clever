@@ -109,7 +109,7 @@ test("Routes page keeps copied controls out while using checkbox route selection
   assert.match(routesPageSource, /key=\{`\$\{width\}-\$\{index\}`\}/);
 });
 
-test("Routes table uses aligned Tomatono planning columns", () => {
+test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routesPageSource, /function buildRouteRows\(routePlans\) \{/);
   assert.match(routesPageSource, /routeRows\.map\(\(route\) =>/);
   assert.match(routesPageSource, /aria-label="Select all visible routes"/);
@@ -381,7 +381,7 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /export const links = \(\) => \[\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}\]/);
   assert.match(
     routeDetailSource,
-    /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-tomatono-lite\.json"/,
+    /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-clever-lite\.json"/,
   );
   assert.match(routeDetailSource, /import\("maplibre-gl"\)/);
   assert.match(routeDetailSource, /import\("pmtiles"\)/);
@@ -627,7 +627,7 @@ test("Route detail renders a focused stop table below the map", () => {
 });
 
 test("Route detail lets operators edit stop sequence with a clean drag mode", () => {
-  assert.match(routeDetailSource, /const \[isEditingRouteSequence, setIsEditingRouteSequence\] = useState\(false\)/);
+  assert.match(routeDetailSource, /const \[isEditingRouteSequence, setIsEditingRouteSequence\] = useState\(true\)/);
   assert.match(routeDetailSource, /const \[committedRouteStops, setCommittedRouteStops\] = useState\(\[\]\)/);
   assert.match(routeDetailSource, /const \[draftRouteStops, setDraftRouteStops\] = useState\(\[\]\)/);
   assert.match(routeDetailSource, /const \[committedRouteStopOrderIds, setCommittedRouteStopOrderIds\] = useState\(\[\]\)/);
@@ -637,14 +637,14 @@ test("Route detail lets operators edit stop sequence with a clean drag mode", ()
   assert.match(routeDetailSource, /function resequenceRouteStops\(routeStops\) \{/);
   assert.match(routeDetailSource, /const visibleRouteStopOrderIds = isEditingRouteSequence \? draftRouteStopOrderIds : committedRouteStopOrderIds/);
   assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => orderRouteStops\(editableRouteStops, visibleRouteStopOrderIds\), \[editableRouteStops, visibleRouteStopOrderIds\]\)/);
-  assert.match(routeDetailSource, /const startRouteSequenceEdit = useCallback\(\(\) => \{/);
+  assert.match(routeDetailSource, /const visibleRouteDetailColumnWidths = \[\.\.\.routeDetailColumnWidths, "96px"\]/);
   assert.match(routeDetailSource, /const saveRouteSequenceEdit = useCallback\(async \(\) => \{/);
   assert.match(routeDetailSource, /const cancelRouteSequenceEdit = useCallback\(\(\) => \{/);
   assert.match(routeDetailSource, /const handleRouteStopDragStart = useCallback\(\(event, stopId\) => \{/);
   assert.match(routeDetailSource, /const handleRouteStopDrop = useCallback\(\(event, targetStopId\) => \{/);
   assert.match(routeDetailSource, /draggable=\{isEditingRouteSequence\}/);
   assert.match(routeDetailSource, /aria-label=\{`Drag stop \$\{stop\.stop\}`\}/);
-  assert.match(routeDetailSource, />Edit<\/button>/);
+  assert.doesNotMatch(routeDetailSource, />Edit<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Edit sequence<\/button>/);
   assert.match(routeDetailSource, /"Save order"/);
   assert.match(routeDetailSource, />Cancel<\/button>/);

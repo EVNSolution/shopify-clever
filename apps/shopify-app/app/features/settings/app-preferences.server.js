@@ -1,10 +1,13 @@
 import { DEFAULT_LANGUAGE, normalizeLanguage } from "../../i18n/i18n.js";
 
 export const SHOPIFY_APP_PREFERENCES_QUERY = `#graphql
-  query TomatonoRouteAppPreferences {
+  query CleverRouteAppPreferences {
     currentAppInstallation {
       id
-      metafield(namespace: "tomatono_route", key: "app_preferences") {
+      metafield(namespace: "clever_route", key: "app_preferences") {
+        value
+      }
+      legacyMetafield: metafield(namespace: "tomatono_route", key: "app_preferences") {
         value
       }
     }
@@ -12,7 +15,7 @@ export const SHOPIFY_APP_PREFERENCES_QUERY = `#graphql
 `;
 
 export const CURRENT_APP_INSTALLATION_QUERY = `#graphql
-  query TomatonoRouteCurrentAppInstallationForPreferences {
+  query CleverRouteCurrentAppInstallationForPreferences {
     currentAppInstallation {
       id
     }
@@ -20,7 +23,7 @@ export const CURRENT_APP_INSTALLATION_QUERY = `#graphql
 `;
 
 export const SAVE_APP_PREFERENCES_MUTATION = `#graphql
-  mutation TomatonoRouteSaveAppPreferences($metafields: [MetafieldsSetInput!]!) {
+  mutation CleverRouteSaveAppPreferences($metafields: [MetafieldsSetInput!]!) {
     metafieldsSet(metafields: $metafields) {
       metafields {
         namespace
@@ -69,7 +72,7 @@ export async function saveShopifyAppPreferences(admin, input) {
       variables: {
         metafields: [
           {
-            namespace: "tomatono_route",
+            namespace: "clever_route",
             key: "app_preferences",
             ownerId,
             type: "json",
@@ -94,7 +97,9 @@ export async function saveShopifyAppPreferences(admin, input) {
 }
 
 export function mapShopifyAppPreferencesResponse(payload) {
-  const value = payload?.data?.currentAppInstallation?.metafield?.value;
+  const value =
+    payload?.data?.currentAppInstallation?.metafield?.value ??
+    payload?.data?.currentAppInstallation?.legacyMetafield?.value;
   if (!value) return normalizeAppPreferences();
 
   try {

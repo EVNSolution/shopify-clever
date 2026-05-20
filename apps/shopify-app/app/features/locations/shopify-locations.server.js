@@ -1,8 +1,11 @@
 export const SHOPIFY_DEPARTURE_LOCATION_QUERY = `#graphql
-  query TomatonoRouteDepartureLocation {
+  query CleverRouteDepartureLocation {
     currentAppInstallation {
       id
-      metafield(namespace: "tomatono_route", key: "departure_location") {
+      metafield(namespace: "clever_route", key: "departure_location") {
+        value
+      }
+      legacyMetafield: metafield(namespace: "tomatono_route", key: "departure_location") {
         value
       }
     }
@@ -44,7 +47,7 @@ export const SHOPIFY_DEPARTURE_LOCATION_QUERY = `#graphql
 `;
 
 export const CURRENT_APP_INSTALLATION_QUERY = `#graphql
-  query TomatonoRouteCurrentAppInstallation {
+  query CleverRouteCurrentAppInstallation {
     currentAppInstallation {
       id
     }
@@ -52,7 +55,7 @@ export const CURRENT_APP_INSTALLATION_QUERY = `#graphql
 `;
 
 export const SAVE_DEPARTURE_LOCATION_MUTATION = `#graphql
-  mutation TomatonoRouteSaveDepartureLocation($metafields: [MetafieldsSetInput!]!) {
+  mutation CleverRouteSaveDepartureLocation($metafields: [MetafieldsSetInput!]!) {
     metafieldsSet(metafields: $metafields) {
       metafields {
         namespace
@@ -139,7 +142,7 @@ export async function saveShopifyDepartureLocation(admin, input) {
       variables: {
         metafields: [
           {
-            namespace: "tomatono_route",
+            namespace: "clever_route",
             key: "departure_location",
             ownerId,
             type: "json",
@@ -270,7 +273,9 @@ function mapShopifyLocation(location) {
 }
 
 function mapSavedDepartureLocationFromMetafield(currentAppInstallation) {
-  const value = currentAppInstallation?.metafield?.value;
+  const value =
+    currentAppInstallation?.metafield?.value ??
+    currentAppInstallation?.legacyMetafield?.value;
   if (!value) return null;
 
   try {

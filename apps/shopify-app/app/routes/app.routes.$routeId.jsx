@@ -17,7 +17,7 @@ import { authenticate } from "../shopify.server";
 
 export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
 
-const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-tomatono-lite.json";
+const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-clever-lite.json";
 const DEFAULT_CENTER = [-79.3832, 43.6532];
 const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
@@ -1286,7 +1286,7 @@ export default function RouteDetailPage() {
     : "Unassigned";
   const [selectedRouteDriverId, setSelectedRouteDriverId] = useState(routeDriverId);
   const routeStops = useMemo(() => buildRouteStops(stops), [stops]);
-  const [isEditingRouteSequence, setIsEditingRouteSequence] = useState(false);
+  const [isEditingRouteSequence, setIsEditingRouteSequence] = useState(true);
   const [committedRouteStops, setCommittedRouteStops] = useState([]);
   const [draftRouteStops, setDraftRouteStops] = useState([]);
   const [committedRouteStopOrderIds, setCommittedRouteStopOrderIds] = useState([]);
@@ -1311,9 +1311,7 @@ export default function RouteDetailPage() {
     ...(routeStopSaveErrors ?? []),
     ...(routeDriverSaveErrors ?? []),
   ];
-  const visibleRouteDetailColumnWidths = isEditingRouteSequence
-    ? [...routeDetailColumnWidths, "96px"]
-    : routeDetailColumnWidths;
+  const visibleRouteDetailColumnWidths = [...routeDetailColumnWidths, "96px"];
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, orderedRouteStops),
     [departureLocation, orderedRouteStops],
@@ -1355,7 +1353,7 @@ export default function RouteDetailPage() {
     setCommittedRouteStopOrderIds(routeStopIds);
     setDraftRouteStopOrderIds(routeStopIds);
     setDraftRemovedRouteStopIds([]);
-    setIsEditingRouteSequence(false);
+    setIsEditingRouteSequence(true);
     setActiveDraggedRouteStopId(null);
   }, [routeStops]);
 
@@ -1383,17 +1381,9 @@ export default function RouteDetailPage() {
     setDraftRouteStops(nextRouteStops);
     setDraftRouteStopOrderIds(nextRouteStopOrderIds);
     setDraftRemovedRouteStopIds([]);
-    setIsEditingRouteSequence(false);
+    setIsEditingRouteSequence(true);
     setActiveDraggedRouteStopId(null);
   }, [draftRouteStops, routeStopSaveFetcher.data, routeStopSaveFetcher.state]);
-
-  const startRouteSequenceEdit = useCallback(() => {
-    setRouteStopSaveClientError(null);
-    setDraftRouteStops(committedRouteStops);
-    setDraftRouteStopOrderIds(committedRouteStopOrderIds);
-    setDraftRemovedRouteStopIds([]);
-    setIsEditingRouteSequence(true);
-  }, [committedRouteStopOrderIds, committedRouteStops]);
 
   const saveRouteDriver = useCallback(async () => {
     if (isSavingRouteDriver) return;
@@ -1452,7 +1442,7 @@ export default function RouteDetailPage() {
     setDraftRouteStopOrderIds(committedRouteStopOrderIds);
     setDraftRemovedRouteStopIds([]);
     setRouteStopSaveClientError(null);
-    setIsEditingRouteSequence(false);
+    setIsEditingRouteSequence(true);
     setActiveDraggedRouteStopId(null);
   }, [committedRouteStopOrderIds, committedRouteStops]);
 
@@ -1805,28 +1795,18 @@ export default function RouteDetailPage() {
             <div style={routeDetailStopsTitleStyle}>stop sequence list</div>
             <div style={routeDetailStopsHeaderActionsStyle}>
               <div style={routesDetailDescriptionStyle}>{orderedRouteStops.length} selected orders</div>
-              {isEditingRouteSequence ? (
-                <>
-                  <button
-                    disabled={isSavingRouteStops}
-                    onClick={saveRouteSequenceEdit}
-                    style={routeStopSequencePrimaryButtonStyle}
-                    type="button"
-                  >{isSavingRouteStops ? "Saving…" : "Save order"}</button>
-                  <button
-                    disabled={isSavingRouteStops}
-                    onClick={cancelRouteSequenceEdit}
-                    style={routeStopSequenceActionButtonStyle}
-                    type="button"
-                  >Cancel</button>
-                </>
-              ) : (
-                <button
-                  onClick={startRouteSequenceEdit}
-                  style={routeStopSequenceActionButtonStyle}
-                  type="button"
-                >Edit</button>
-              )}
+              <button
+                disabled={isSavingRouteStops}
+                onClick={saveRouteSequenceEdit}
+                style={routeStopSequencePrimaryButtonStyle}
+                type="button"
+              >{isSavingRouteStops ? "Saving…" : "Save order"}</button>
+              <button
+                disabled={isSavingRouteStops}
+                onClick={cancelRouteSequenceEdit}
+                style={routeStopSequenceActionButtonStyle}
+                type="button"
+              >Cancel</button>
             </div>
           </div>
 
@@ -1847,15 +1827,13 @@ export default function RouteDetailPage() {
                   <th style={routesDetailHeaderCellStyle}>Payment</th>
                   <th style={routesDetailHeaderCellStyle}>Attributes</th>
                   <th style={routesDetailHeaderCellStyle}>Coordinates</th>
-                  {isEditingRouteSequence ? (
-                    <th style={routesDetailHeaderCellStyle}>Actions</th>
-                  ) : null}
+                  <th style={routesDetailHeaderCellStyle}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {orderedRouteStops.length === 0 ? (
                   <tr>
-                    <td colSpan={isEditingRouteSequence ? 9 : 8} style={routesDetailEmptyCellStyle}>No route stops selected.</td>
+                    <td colSpan={9} style={routesDetailEmptyCellStyle}>No route stops selected.</td>
                   </tr>
                 ) : (
                   orderedRouteStops.map((stop, stopIndex) => (
@@ -1870,13 +1848,11 @@ export default function RouteDetailPage() {
                       style={activeDraggedRouteStopId === stop.id ? routeStopDraggingRowStyle : undefined}
                     >
                       <td style={routeStopSequenceCellStyle}>
-                        {isEditingRouteSequence ? (
-                          <span
-                            aria-label={`Drag stop ${stop.stop}`}
-                            role="img"
-                            style={routeStopDragHandleStyle}
-                          >⋮⋮</span>
-                        ) : null}
+                        <span
+                          aria-label={`Drag stop ${stop.stop}`}
+                          role="img"
+                          style={routeStopDragHandleStyle}
+                        >⋮⋮</span>
                         <span>{stop.stop}</span>
                       </td>
                       <td style={routesDetailCellStyle}>{stop.order}</td>
@@ -1886,16 +1862,14 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>{stop.payment}</td>
                       <td style={routesDetailCellStyle}>{stop.attributes}</td>
                       <td style={routesDetailCellStyle}>{stop.coordinatesLabel}</td>
-                      {isEditingRouteSequence ? (
-                        <td style={routesDetailCellStyle}>
-                          <button
-                            aria-label={`Remove stop ${stop.stop}`}
-                            onClick={() => removeDraftRouteStop(stop.id)}
-                            style={routeStopSequenceActionButtonStyle}
-                            type="button"
-                          >Remove</button>
-                        </td>
-                      ) : null}
+                      <td style={routesDetailCellStyle}>
+                        <button
+                          aria-label={`Remove stop ${stop.stop}`}
+                          onClick={() => removeDraftRouteStop(stop.id)}
+                          style={routeStopSequenceActionButtonStyle}
+                          type="button"
+                        >Remove</button>
+                      </td>
                     </tr>
                   ))
                 )}
