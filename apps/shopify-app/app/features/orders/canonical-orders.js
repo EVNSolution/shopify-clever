@@ -101,9 +101,11 @@ export function mergeShopifyOrderRowsWithCanonicalRows(shopifyRows, canonicalRow
 
   if (canonicalRowById.size === 0) return safeShopifyRows;
 
-  return safeShopifyRows.map((shopifyRow) => {
+  const mergedRows = safeShopifyRows.map((shopifyRow) => {
     const canonicalRow = canonicalRowById.get(textOrUndefined(shopifyRow?.id));
     if (!canonicalRow) return shopifyRow;
+
+    canonicalRowById.delete(textOrUndefined(shopifyRow?.id));
 
     return {
       ...shopifyRow,
@@ -113,6 +115,8 @@ export function mergeShopifyOrderRowsWithCanonicalRows(shopifyRows, canonicalRow
       rawPayload: shopifyRow?.rawPayload ?? canonicalRow?.rawPayload,
     };
   });
+
+  return [...mergedRows, ...canonicalRowById.values()];
 }
 
 export function isOrderReadyToPlan(order) {

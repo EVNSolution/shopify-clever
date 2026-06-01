@@ -284,6 +284,85 @@ test("merges server planning metadata into Shopify rows without losing sync snap
   assert.equal(mergedRows[1], shopifyRows[1]);
 });
 
+test("keeps canonical-only order rows for history and all-orders coverage", () => {
+  const recentShopifyRow = {
+    id: "gid://shopify/Order/1001",
+    name: "#1001",
+    customer: "Recent Shopify row",
+    shopifyOrderSnapshot: {
+      id: "gid://shopify/Order/1001",
+      legacyResourceId: "1001",
+      name: "#1001",
+      updatedAt: "2026-05-07T13:00:00.000Z",
+    },
+  };
+  const historicalCanonicalRow = {
+    id: "gid://shopify/Order/0999",
+    name: "#0999",
+    customer: "Historical canonical row",
+    deliveryDate: "2026-04-30",
+    planningStatus: "DELIVERED",
+    shopifyOrderSnapshot: {
+      id: "gid://shopify/Order/0999",
+      legacyResourceId: "999",
+      name: "#0999",
+      updatedAt: "2026-04-30T13:00:00.000Z",
+    },
+  };
+
+  const mergedRows = mergeShopifyOrderRowsWithCanonicalRows(
+    [recentShopifyRow],
+    [historicalCanonicalRow],
+  );
+
+  assert.equal(mergedRows.length, 2);
+  assert.equal(mergedRows[0], recentShopifyRow);
+  assert.equal(mergedRows[1], historicalCanonicalRow);
+  assert.deepEqual(
+    getOrderSyncSnapshots(mergedRows),
+    [recentShopifyRow.shopifyOrderSnapshot, historicalCanonicalRow.shopifyOrderSnapshot],
+  );
+});
+
+test("preserves canonical-only rows without sync snapshots when background sync refreshes loaded rows", () => {
+  const loadedShopifyRow = {
+    id: "gid://shopify/Order/1001",
+    name: "#1001",
+    customer: "Loaded Shopify row",
+    planningStatus: "UNPLANNED",
+    shopifyOrderSnapshot: {
+      id: "gid://shopify/Order/1001",
+      legacyResourceId: "1001",
+      name: "#1001",
+      updatedAt: "2026-05-07T13:00:00.000Z",
+    },
+  };
+  const canonicalOnlyHistoryRow = {
+    id: "gid://shopify/Order/0901",
+    name: "#0901",
+    customer: "Canonical history row",
+    deliveryDate: "2026-04-01",
+    planningStatus: "DELIVERED",
+  };
+  const refreshedSyncedRow = {
+    id: "gid://shopify/Order/1001",
+    name: "#1001",
+    customer: "Refreshed server row",
+    readiness: "READY_TO_PLAN",
+  };
+
+  const mergedRows = mergeShopifyOrderRowsWithCanonicalRows(
+    [loadedShopifyRow, canonicalOnlyHistoryRow],
+    [refreshedSyncedRow],
+  );
+
+  assert.equal(mergedRows.length, 2);
+  assert.equal(mergedRows[0].customer, "Refreshed server row");
+  assert.equal(mergedRows[0].readiness, "READY_TO_PLAN");
+  assert.equal(mergedRows[0].shopifyOrderSnapshot, loadedShopifyRow.shopifyOrderSnapshot);
+  assert.equal(mergedRows[1], canonicalOnlyHistoryRow);
+});
+
 test("getOrderSyncSnapshots returns only server-acceptable Shopify snapshots", () => {
   const completeSnapshot = {
     id: "gid://shopify/Order/1001",

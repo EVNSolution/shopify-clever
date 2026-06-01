@@ -3,9 +3,38 @@ export const ORDER_FILTER_QUERY_KEYS = {
   deliveryDate: "deliveryDate",
   orderedDate: "orderedDate",
   planned: "planned",
+  scope: "scope",
+  search: "search",
+  serviceType: "serviceType",
+  tab: "tab",
 };
 
 const LEGACY_ORDER_FILTER_QUERY_KEYS = ["q"];
+export const ORDER_PLANNING_SCOPE = "planning";
+export const ORDER_HISTORY_SCOPE = "history";
+export const ORDER_DEFAULT_TAB = "unplanned";
+export const ORDER_STATUS_TABS = [
+  { label: "All", value: "all" },
+  { label: "Unplanned", value: "unplanned" },
+  { label: "Planned", value: "planned" },
+  { label: "Needs Review", value: "needs_review" },
+];
+export const ORDER_SERVICE_TYPE_OPTIONS = [
+  { label: "Delivery", value: "DELIVERY" },
+  { label: "Evening Delivery", value: "EVENING_DELIVERY" },
+  { label: "Pickup", value: "PICKUP" },
+];
+export const ORDER_UNAVAILABLE_REASON_LABELS = {
+  already_planned: "Already planned",
+  date_lock_mismatch: "Different delivery date",
+  history_read_only: "History is read-only",
+  missing_coordinates: "Missing coordinates",
+  missing_delivery_date: "Missing delivery date",
+  missing_route_scope: "Missing route scope",
+  needs_review: "Needs review",
+  past_delivery_date: "Past delivery date",
+  route_scope_mismatch: "Different route scope",
+};
 const POST_PLANNING_STATUSES = new Set([
   "planned",
   "route_planned",
@@ -28,6 +57,7 @@ const DELIVERY_COMPLETE_STATUSES = new Set([
   "delivered",
   "fulfilled",
 ]);
+const CANCELLED_STATUSES = new Set(["cancelled", "canceled", "voided"]);
 const ROUTE_ASSIGNED_STATUSES = new Set([
   "assigned",
   "unstarted",
@@ -55,6 +85,21 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
   const referenceDate = options.referenceDate ?? filters.referenceDate;
 
   if (
+    normalizedFilters.scope === ORDER_PLANNING_SCOPE &&
+    !isOrderInPlanningScope(order, referenceDate)
+  ) {
+    return false;
+  }
+
+  if (
+    normalizedFilters.scope === ORDER_PLANNING_SCOPE &&
+    normalizedFilters.tab !== "all" &&
+    getOrderTabState(order, referenceDate) !== normalizedFilters.tab
+  ) {
+    return false;
+  }
+
+  if (
     normalizedFilters.deliveryArea &&
     normalizeComparableText(order?.deliveryArea) !==
       normalizeComparableText(normalizedFilters.deliveryArea)
@@ -78,9 +123,19 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
     return false;
   }
 
-  if (normalizedFilters.planned === "false") {
-    if (isOrderRouteCreated(order)) return false;
-    if (isOrderDeliveryDatePast(order, referenceDate)) return false;
+  if (
+    normalizedFilters.serviceType &&
+    normalizeServiceType(normalizedFilters.serviceType) !==
+      normalizeServiceType(order?.serviceType)
+  ) {
+    return false;
+  }
+
+  if (
+    normalizedFilters.search &&
+    !orderMatchesSearch(order, normalizedFilters.search)
+  ) {
+    return false;
   }
 
   return true;
@@ -93,6 +148,7 @@ export function getOrderFilterOptions(orders) {
     deliveryAreas: getSortedUniqueValues(safeOrders, "deliveryArea"),
     deliveryDates: getSortedUniqueValues(safeOrders, "deliveryDate"),
     orderedDates: getSortedUniqueValues(safeOrders, "orderedDate"),
+    serviceTypes: getSortedServiceTypes(safeOrders),
   };
 }
 
@@ -105,6 +161,12 @@ export function getOrderFiltersFromSearchParams(searchParams) {
     deliveryDate: params.get(ORDER_FILTER_QUERY_KEYS.deliveryDate),
     orderedDate: params.get(ORDER_FILTER_QUERY_KEYS.orderedDate),
     planned: params.has(plannedQueryKey) ? params.get(plannedQueryKey) : "false",
+    scope: params.get(ORDER_FILTER_QUERY_KEYS.scope),
+    search:
+      params.get(ORDER_FILTER_QUERY_KEYS.search) ??
+      params.get(LEGACY_ORDER_FILTER_QUERY_KEYS[0]),
+    serviceType: params.get(ORDER_FILTER_QUERY_KEYS.serviceType),
+    tab: params.get(ORDER_FILTER_QUERY_KEYS.tab),
   });
 }
 
@@ -133,7 +195,11 @@ export function normalizeOrderFilters(filters = {}) {
     deliveryArea: textOrEmpty(filters.deliveryArea),
     deliveryDate: textOrEmpty(filters.deliveryDate),
     orderedDate: textOrEmpty(filters.orderedDate),
-    planned: normalizePlannedFilter(filters.planned),
+    planned: "",
+    scope: normalizeScope(filters.scope),
+    search: textOrEmpty(filters.search),
+    serviceType: normalizeServiceType(filters.serviceType),
+    tab: normalizeTab(filters.tab, filters.planned),
   };
 }
 
@@ -143,7 +209,8 @@ export function hasActiveOrderFilters(filters = {}) {
   return Object.entries(normalizedFilters).some(
     ([filterKey, value]) =>
       value.length > 0 &&
-      !(filterKey === "planned" && value === "false"),
+      !(filterKey === "tab" && value === ORDER_DEFAULT_TAB) &&
+      !(filterKey === "scope" && value === ORDER_PLANNING_SCOPE),
   );
 }
 
@@ -202,6 +269,18 @@ export function isOrderDeliveryComplete(order) {
   );
 }
 
+export function isOrderCancelled(order) {
+  const statusValues = [
+    order?.cancelledAt ? "cancelled" : "",
+    order?.status,
+    order?.displayFulfillmentStatus,
+    order?.fulfillmentStatus,
+    order?.financialStatus,
+  ].map(normalizeComparableText);
+
+  return statusValues.some((statusValue) => CANCELLED_STATUSES.has(statusValue));
+}
+
 export function getOrderDeliveryDateValue(order) {
   return normalizeDateOnlyValue(order?.deliveryDate);
 }
@@ -230,6 +309,87 @@ export function isOrderRoutePlanningLocked(order, referenceDate = new Date()) {
   return isOrderRouteCreated(order) || isOrderDeliveryDatePast(order, referenceDate);
 }
 
+export function isOrderInPlanningScope(order, referenceDate = new Date()) {
+  return (
+    !isOrderCancelled(order) &&
+    !isOrderDeliveryComplete(order) &&
+    !isOrderDeliveryDatePast(order, referenceDate)
+  );
+}
+
+export function getOrderTabState(order, referenceDate = new Date()) {
+  if (isOrderRouteCreated(order)) return "planned";
+  if (isOrderNeedsReview(order, referenceDate)) return "needs_review";
+  return "unplanned";
+}
+
+export function getOrderUnavailableReasons(order, context = {}) {
+  const referenceDate = context.referenceDate ?? new Date();
+  const reasons = [];
+
+  if (context.scope === ORDER_HISTORY_SCOPE) reasons.push("history_read_only");
+  if (isOrderRouteCreated(order)) reasons.push("already_planned");
+  if (isOrderDeliveryDatePast(order, referenceDate)) reasons.push("past_delivery_date");
+  if (!getOrderDeliveryDateValue(order)) reasons.push("missing_delivery_date");
+  if (!order?.hasCoordinates) reasons.push("missing_coordinates");
+  if (!textOrEmpty(order?.routeScopeKey)) reasons.push("missing_route_scope");
+  if (isOrderNeedsReview(order, referenceDate)) reasons.push("needs_review");
+
+  const deliveryDateLock = normalizeDateOnlyValue(context.deliveryDateLock);
+  const orderDeliveryDate = getOrderDeliveryDateValue(order);
+  if (deliveryDateLock && orderDeliveryDate && orderDeliveryDate !== deliveryDateLock) {
+    reasons.push("date_lock_mismatch");
+  }
+
+  const routeScopeKey = textOrEmpty(context.routeScopeKey);
+  const orderRouteScopeKey = textOrEmpty(order?.routeScopeKey);
+  if (routeScopeKey && orderRouteScopeKey && orderRouteScopeKey !== routeScopeKey) {
+    reasons.push("route_scope_mismatch");
+  }
+
+  return Array.from(new Set(reasons));
+}
+
+export function isOrderSelectableForCurrentWorkset(order, context = {}) {
+  return getOrderUnavailableReasons(order, context).length === 0;
+}
+
+export function getBulkOrderSelectionState(orders, context = {}) {
+  const selectedOrders = [];
+  const unavailableReasonCounts = {};
+
+  for (const order of Array.isArray(orders) ? orders : []) {
+    const reasons = getOrderUnavailableReasons(order, context);
+    if (reasons.length === 0) {
+      selectedOrders.push(order);
+      continue;
+    }
+
+    for (const reason of reasons) {
+      unavailableReasonCounts[reason] = (unavailableReasonCounts[reason] ?? 0) + 1;
+    }
+  }
+
+  return {
+    selectedOrderIds: selectedOrders.map((order) => order.id).filter(Boolean),
+    selectedOrders,
+    unavailableCount: (Array.isArray(orders) ? orders.length : 0) - selectedOrders.length,
+    unavailableReasonCounts,
+  };
+}
+
+export function formatUnavailableReason(reason) {
+  return ORDER_UNAVAILABLE_REASON_LABELS[reason] ?? reason;
+}
+
+export function formatServiceTypeLabel(value) {
+  const normalizedValue = normalizeServiceType(value);
+  return (
+    ORDER_SERVICE_TYPE_OPTIONS.find((option) => option.value === normalizedValue)?.label ??
+    textOrEmpty(value)
+  );
+}
+
 function getSortedUniqueValues(orders, key) {
   return Array.from(
     new Set(
@@ -243,6 +403,28 @@ function getSortedUniqueValues(orders, key) {
       sensitivity: "base",
     }),
   );
+}
+
+function getSortedServiceTypes(orders) {
+  const knownValues = new Set(
+    ORDER_SERVICE_TYPE_OPTIONS.map((option) => option.value),
+  );
+  const values = Array.from(
+    new Set(
+      orders
+        .map((order) => normalizeServiceType(order?.serviceType))
+        .filter(Boolean),
+    ),
+  );
+
+  return [
+    ...ORDER_SERVICE_TYPE_OPTIONS.map((option) => option.value).filter((value) =>
+      values.includes(value),
+    ),
+    ...values
+      .filter((value) => !knownValues.has(value))
+      .sort((leftValue, rightValue) => leftValue.localeCompare(rightValue)),
+  ];
 }
 
 function normalizeComparableText(value) {
@@ -276,6 +458,69 @@ function normalizePlannedFilter(value) {
   if (normalizedValue === "all" || normalizedValue === "true") return "all";
 
   return "";
+}
+
+function normalizeTab(value, legacyPlannedValue) {
+  const normalizedValue = normalizeComparableText(value);
+  if (["all", "unplanned", "planned", "needs_review"].includes(normalizedValue)) {
+    return normalizedValue;
+  }
+
+  const legacyPlanned = normalizePlannedFilter(legacyPlannedValue);
+  if (legacyPlanned === "all") return "all";
+
+  return ORDER_DEFAULT_TAB;
+}
+
+function normalizeScope(value) {
+  const normalizedValue = normalizeComparableText(value);
+  return normalizedValue === ORDER_HISTORY_SCOPE
+    ? ORDER_HISTORY_SCOPE
+    : ORDER_PLANNING_SCOPE;
+}
+
+function normalizeServiceType(value) {
+  const normalizedValue = textOrEmpty(value).toUpperCase().replace(/[\s-]+/g, "_");
+  return ["DELIVERY", "EVENING_DELIVERY", "PICKUP"].includes(normalizedValue)
+    ? normalizedValue
+    : "";
+}
+
+function isOrderNeedsReview(order, referenceDate) {
+  if (!order) return true;
+  if (normalizeComparableText(order.readiness) === "needs_review") return true;
+  if (Array.isArray(order.reviewReasons) && order.reviewReasons.length > 0) return true;
+  if (!order.hasCoordinates) return true;
+  if (!getOrderDeliveryDateValue(order)) return true;
+  if (!textOrEmpty(order.routeScopeKey)) return true;
+  if (isOrderDeliveryDatePast(order, referenceDate)) return false;
+
+  return false;
+}
+
+function orderMatchesSearch(order, searchValue) {
+  const query = normalizeSearchText(searchValue);
+  if (!query) return true;
+
+  return [
+    order?.name,
+    order?.orderId,
+    order?.legacyResourceId,
+    order?.customer,
+    order?.address,
+    order?.email,
+    order?.phone,
+    order?.deliveryArea,
+    order?.deliveryLabel,
+    order?.planningStatus,
+    order?.serviceType,
+  ]
+    .map(normalizeSearchText)
+    .some((value) => value.includes(query));
+}
+
+function normalizeSearchText(value) {
+  return textOrEmpty(value).toLowerCase();
 }
 
 function textOrEmpty(value) {

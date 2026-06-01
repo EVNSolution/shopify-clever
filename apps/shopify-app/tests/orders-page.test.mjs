@@ -264,9 +264,10 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.doesNotMatch(ordersPageSource, /const orderFilterBarStyle = \{/);
   assert.doesNotMatch(ordersPageSource, /const planActionRowStyle = \{/);
   assert.match(ordersPageSource, /padding:\s*"6px 10px"/);
-  assert.match(ordersPageSource, /flexWrap:\s*"nowrap"/);
-  assert.match(ordersPageSource, /overflowX:\s*"auto"/);
-  assert.match(ordersPageSource, /overflowY:\s*"hidden"/);
+  assert.match(ordersPageSource, /flexWrap:\s*"wrap"/);
+  assert.match(ordersPageSource, /maxWidth:\s*"100%"/);
+  assert.match(ordersPageSource, /overflowX:\s*"visible"/);
+  assert.match(ordersPageSource, /overflowY:\s*"visible"/);
   assert.match(ordersPageSource, /role="alert" style=\{compactAlertStyle\}/);
   assert.doesNotMatch(ordersPageSource, /<s-banner tone="critical">/);
   assert.match(ordersPageSource, /<div style=\{orderControlsStyle\}>/);
@@ -293,9 +294,12 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /tableColumnWidths = \["4%", "8%", "9%", "13%", "27%", "11%", "12%", "8%", "8%"\]/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
-  assert.match(ordersPageSource, /aria-label=\{`Select \${order\.name} for plan`\}/);
-  assert.match(ordersPageSource, /checked=\{!routePlanningLocked && checkedOrderIdSet\.has\(order\.id\)\}/);
-  assert.match(ordersPageSource, /disabled=\{routePlanningLocked\}/);
+  assert.match(ordersPageSource, /const unavailableReasons = getOrderUnavailableReasons\(order, worksetAvailabilityContext\)/);
+  assert.match(ordersPageSource, /const routePlanningUnavailable = unavailableReasons\.length > 0/);
+  assert.match(ordersPageSource, /`Select \${order\.name} for plan`/);
+  assert.match(ordersPageSource, /checked=\{!routePlanningUnavailable && checkedOrderIdSet\.has\(order\.id\)\}/);
+  assert.match(ordersPageSource, /disabled=\{routePlanningUnavailable\}/);
+  assert.match(ordersPageSource, /title=\{unavailableLabel\}/);
 });
 
 test("Orders column uses the order number itself as a neutral transparent button area", () => {
@@ -340,11 +344,13 @@ test("Orders page persists scoped planned orders through the delivery route-plan
   assert.match(ordersPageSource, /const sessionToken = await shopify\.idToken\(\)/);
   assert.match(ordersPageSource, /const routeDraftScope = buildRouteScopeFromOrders\(readyPlannedOrders\)/);
   assert.match(ordersPageSource, /formData\.set\("routeScope", JSON\.stringify\(routeDraftScope\)\)/);
+  assert.match(ordersPageSource, /formData\.set\("orderScope", orderFilters\.scope\)/);
   assert.match(ordersPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /navigate\(`\/app\/routes\/\$\{createdRoutePlan\.id\}\?id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
   assert.match(ordersPageSource, />Create route<\/button>/);
-  assert.match(ordersPageSource, /disabled=\{readyPlannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"\}/);
+  assert.match(ordersPageSource, /const createRouteDisabled =\s*historyScopeActive \|\|[\s\S]*readyPlannedOrders\.length === 0 \|\|[\s\S]*routePlanFetcher\.state !== "idle"/);
+  assert.match(ordersPageSource, /disabled=\{createRouteDisabled\}/);
   assert.doesNotMatch(ordersPageSource, /createRouteDraftSearchParams/);
   assert.doesNotMatch(ordersPageSource, /return redirect/);
 });
@@ -393,7 +399,8 @@ test("Orders page syncs loaded Shopify snapshots without adding sync cards", () 
   assert.match(ordersPageSource, /getOrderSyncSnapshots\(safeOrders\)/);
   assert.match(ordersPageSource, /ordersSyncFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /mapCanonicalOrdersToOrderRows\(ordersSyncFetcher\.data\?\.syncedOrders\)/);
-  assert.match(ordersPageSource, /const displayOrders = syncedOrders\.length > 0 \? syncedOrders : safeOrders/);
+  assert.match(ordersPageSource, /const displayOrders = useMemo\(/);
+  assert.match(ordersPageSource, /syncedOrders\.length > 0[\s\S]*mergeShopifyOrderRowsWithCanonicalRows\(safeOrders, syncedOrders\)[\s\S]*: safeOrders/);
   assert.doesNotMatch(ordersPageSource, /Orders sync KPI/);
   assert.doesNotMatch(ordersPageSource, /orders sync card/i);
   assert.doesNotMatch(ordersPageSource, /sync status panel/i);
@@ -401,8 +408,9 @@ test("Orders page syncs loaded Shopify snapshots without adding sync cards", () 
 
 test("Orders route creation only submits ready planned orders", () => {
   assert.match(ordersPageSource, /const readyPlannedOrders = useMemo\(\(\) => plannedOrders\.filter\(isOrderReadyToPlan\), \[plannedOrders\]\)/);
-  assert.match(ordersPageSource, /readyPlannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);
+  assert.match(ordersPageSource, /const createRouteDisabled =\s*historyScopeActive \|\|[\s\S]*readyPlannedOrders\.length === 0 \|\|[\s\S]*routePlanFetcher\.state !== "idle"/);
   assert.match(ordersPageSource, /JSON\.stringify\(readyPlannedOrders\.map\(\(order\) => order\.id\)\)/);
+  assert.match(ordersPageSource, /if \(historyScopeActive\) \{[\s\S]*History \/ All Orders scope는 조회 전용입니다/);
   assert.match(ordersPageSource, /setCreateRouteClientError\("Route plan에는 ready 상태의 주문만 보낼 수 있습니다\."\)/);
   assert.match(ordersPageSource, /plannedOrders\.some\(\(order\) => isOrderRoutePlanningLocked\(order, orderFilterReferenceDate\)\)/);
   assert.match(ordersPageSource, /이미 route가 있거나 Delivery 날짜가 지난 주문은 route plan을 생성할 수 없습니다\./);
@@ -411,7 +419,12 @@ test("Orders route creation only submits ready planned orders", () => {
 test("Orders route creation syncs only selected planned orders during preflight", () => {
   assert.match(ordersPageSource, /const plannedOrderIdSet = new Set\(plannedOrderIds\)/);
   assert.match(ordersPageSource, /const plannedShopifyOrders = orderData\.orders\.filter\(\s*\(order\) =>\s*plannedOrderIdSet\.has\(order\.id\),?\s*\)/);
-  assert.match(ordersPageSource, /orders: getOrderSyncSnapshots\(plannedShopifyOrders\)/);
+  assert.match(ordersPageSource, /const plannedShopifyOrderSnapshots = getOrderSyncSnapshots\(plannedShopifyOrders\)/);
+  assert.match(ordersPageSource, /plannedShopifyOrderSnapshots\.length > 0\s*\?\s*await syncDeliveryOrders/);
+  assert.match(ordersPageSource, /orders: plannedShopifyOrderSnapshots/);
+  assert.match(ordersPageSource, /const canonicalOrderData = await fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,\s*sessionToken: shopifySessionToken,?\s*\},?\s*\)/);
+  assert.match(ordersPageSource, /const canonicalOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*mapCanonicalOrdersToOrderRows\(canonicalOrderData\.orders\),\s*mapCanonicalOrdersToOrderRows\(syncedOrderData\.orders\),\s*\)/);
+  assert.match(ordersPageSource, /if \(plannedOrders\.length !== plannedOrderIds\.length\)/);
   assert.doesNotMatch(ordersPageSource, /orders: getOrderSyncSnapshots\(orderData\.orders\)/);
 });
 
@@ -423,6 +436,9 @@ test("Orders route creation revalidates planned orders after preflight sync", ()
   assert.match(ordersPageSource, /const expiredDeliveryDateOrders = plannedOrders\.filter/);
   assert.match(ordersPageSource, /!isOrderRouteCreated\(order\) &&[\s\S]*isOrderRoutePlanningLocked\(order, shopLocalDate\)/);
   assert.match(ordersPageSource, /Delivery 날짜가 지난 주문은 새 route plan에 추가하지 않았습니다/);
+  assert.match(ordersPageSource, /import \{[\s\S]*isOrderInPlanningScope[\s\S]*\} from "\.\.\/features\/orders\/order-filters"/);
+  assert.match(ordersPageSource, /const nonPlanningScopeOrders = plannedOrders\.filter\(\s*\(order\) => !isOrderInPlanningScope\(order, shopLocalDate\),?\s*\)/);
+  assert.match(ordersPageSource, /Planning scope에 없는 주문은 route를 만들 수 없습니다/);
   assert.match(ordersPageSource, /buildCreateRoutePlanPayload\(\{/);
 });
 
@@ -439,9 +455,10 @@ test("Orders page keeps background sync errors out of the route creation alert",
 
 test("Orders route draft locks additions to ready orders in one route scope", () => {
   assert.match(ordersPageSource, /const plannedRouteScope = useMemo\(\(\) => buildRouteScopeFromOrders\(plannedOrders\), \[plannedOrders\]\)/);
-  assert.match(ordersPageSource, /const selectedOrders = checkedOrderIds\s*\.map\(\(orderId\) => displayOrderById\.get\(orderId\)\)/);
-  assert.match(ordersPageSource, /\.filter\(\(order\) => isOrderReadyToPlan\(order\)\)/);
-  assert.match(ordersPageSource, /setCreateRouteClientError\("ready 상태 주문만 route plan에 추가할 수 있습니다\."\)/);
+  assert.match(ordersPageSource, /const checkedOrders = checkedOrderIds\s*\.map\(\(orderId\) => displayOrderById\.get\(orderId\)\)/);
+  assert.match(ordersPageSource, /const selectedOrders = checkedOrders\.filter\(\(order\) =>\s*isOrderSelectableForCurrentWorkset\(order, worksetAvailabilityContext\),\s*\)/);
+  assert.match(ordersPageSource, /const blockedState = getBulkOrderSelectionState\(checkedOrders, worksetAvailabilityContext\)/);
+  assert.match(ordersPageSource, /No selected orders are available/);
   assert.match(ordersPageSource, /const targetRouteScopeKey = plannedRouteScope\?\.routeScopeKey \?\? sameDateSelectedOrders\.find\(\(order\) => order\.routeScopeKey\)\?\.routeScopeKey/);
   assert.match(ordersPageSource, /sameDateSelectedOrders\.filter\(\(order\) => order\.routeScopeKey === targetRouteScopeKey\)/);
   assert.match(ordersPageSource, /setCreateRouteClientError\("같은 배송일\/세션 주문만 route plan에 추가할 수 있습니다\."\)/);
@@ -524,12 +541,11 @@ test("Orders page keeps Add to plan in the table controls", () => {
   assert.match(ordersPageSource, /checkedOrderIds\.length === 0/);
   assert.match(ordersPageSource, /setPlannedOrderIds\(\(currentOrderIds\) =>/);
   assert.match(ordersPageSource, />Add to plan<\/button>/);
-  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0\}/);
+  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0 \|\| historyScopeActive\}/);
   assert.match(ordersPageSource, /const orderControlsTrailingStyle = \{[\s\S]*?marginLeft:\s*"auto"/);
-  assert.match(
-    ordersPageSource,
-    /<div style=\{orderControlsTrailingStyle\}>[\s\S]*>Add to plan<\/button>[\s\S]*\{filteredOrders\.length\}\/\{displayOrders\.length\} orders[\s\S]*\$\{plannedOrderIds\.length\} added to plan\.[\s\S]*<\/div>/,
-  );
+  assert.match(ordersPageSource, />Clear selection<\/button>/);
+  assert.match(ordersPageSource, /\{filteredOrders\.length\} shown · \{selectableTableOrders\.length\} selectable · \{tableSelectionState\.unavailableCount\} unavailable/);
+  assert.match(ordersPageSource, /\$\{plannedOrderIds\.length\} added to plan\./);
   assert.doesNotMatch(ordersPageSource, />Add to plan<\/button>[\s\S]{0,400}>Create route<\/button>/);
 });
 
@@ -574,7 +590,7 @@ test("Orders table hides orders after they move into the route plan", () => {
   assert.match(ordersPageSource, /const plannedOrderIdSet = useMemo\(\s*\(\) => new Set\(plannedOrderIds\),\s*\[plannedOrderIds\],\s*\)/);
   assert.match(ordersPageSource, /const tableOrders = useMemo\(\s*\(\) => sortedOrders\.filter\(\(order\) => !plannedOrderIdSet\.has\(order\.id\)\),\s*\[plannedOrderIdSet, sortedOrders\],\s*\)/);
   assert.match(ordersPageSource, /const selectableTableOrders = useMemo\(/);
-  assert.match(ordersPageSource, /tableOrders\.filter\(\s*\(order\) =>\s*isOrderReadyToPlan\(order\) &&\s*!isOrderRoutePlanningLocked\(order, orderFilterReferenceDate\),?\s*\)/);
+  assert.match(ordersPageSource, /tableOrders\.filter\(\(order\) =>\s*isOrderSelectableForCurrentWorkset\(order, worksetAvailabilityContext\),\s*\)/);
   assert.match(ordersPageSource, /selectableTableOrders\.length > 0 &&\s*selectableTableOrders\.every\(\(order\) => checkedOrderIdSet\.has\(order\.id\)\)/);
   assert.match(ordersPageSource, /const visibleOrderIds = new Set\(selectableTableOrders\.map\(\(order\) => order\.id\)\)/);
   assert.match(ordersPageSource, /\.\.\.sameDateSelectableOrders\.map\(\(order\) => order\.id\)/);
@@ -689,25 +705,27 @@ test("Orders map highlights markers that were added to the plan", () => {
 });
 
 test("Orders map marker popup can add the clicked order to the route plan", () => {
-  assert.match(ordersPageSource, /function createOrderMarkerPopupElement\(order, plannedIndex, onAddToPlan, referenceDate\)/);
+  assert.match(ordersPageSource, /function createOrderMarkerPopupElement\(order, plannedIndex, onAddToPlan, availabilityContext\)/);
   assert.match(ordersPageSource, /const deliveryMetaValues = \[order\.deliveryArea, formatOrderDeliveryLabel\(order\)\]\.filter\(Boolean\)/);
   assert.match(ordersPageSource, /metaTabElement\.className = "order-marker-popup__meta-tab"/);
   assert.match(globalCssSource, /\.order-marker-popup__meta-tab\s*\{/);
   assert.match(globalCssSource, /background:\s*rgba\(0, 0, 0, 0\.05\)/);
   assert.match(globalCssSource, /color:\s*#303030/);
+  assert.match(ordersPageSource, /const referenceDate = availabilityContext\?\.referenceDate \?\? new Date\(\)/);
+  assert.match(ordersPageSource, /const unavailableReasons = getOrderUnavailableReasons\(order, availabilityContext\)/);
   assert.match(ordersPageSource, /const routePlanningLocked = isOrderRoutePlanningLocked\(order, referenceDate\)/);
-  assert.match(ordersPageSource, /const routePlanningUnavailable = routePlanningLocked \|\| !isOrderReadyToPlan\(order\)/);
-  assert.match(ordersPageSource, /routePlanningLocked\s*\?\s*formatOrderDeliveryState\(order, referenceDate\)[\s\S]*:\s*routePlanningUnavailable\s*\?\s*"Needs review"[\s\S]*:\s*"Add to plan"/);
+  assert.match(ordersPageSource, /const routePlanningUnavailable = unavailableReasons\.length > 0/);
+  assert.match(ordersPageSource, /routePlanningLocked\s*\?\s*formatOrderDeliveryState\(order, referenceDate\)[\s\S]*:\s*routePlanningUnavailable\s*\?\s*formatUnavailableReason\(unavailableReasons\[0\]\)[\s\S]*:\s*"Add to plan"/);
   assert.match(ordersPageSource, /popupActionButton\.disabled = plannedIndex > 0 \|\| routePlanningUnavailable/);
   assert.match(ordersPageSource, /popupActionButton\.addEventListener\("click", \(event\) => \{/);
   assert.match(ordersPageSource, /if \(routePlanningUnavailable\) return/);
   assert.match(ordersPageSource, /onAddToPlan\(order\.id\)/);
   assert.match(
     ordersPageSource,
-    /\.setDOMContent\(\s*createOrderMarkerPopupElement\(\s*order,\s*plannedIndex,\s*handleAddOrderToPlan,\s*orderFilterReferenceDate,\s*\),\s*\)/,
+    /\.setDOMContent\(\s*createOrderMarkerPopupElement\(\s*order,\s*plannedIndex,\s*handleAddOrderToPlan,\s*worksetAvailabilityContext,\s*\),\s*\)/,
   );
   const popupBlock = ordersPageSource.match(
-    /function createOrderMarkerPopupElement\(order, plannedIndex, onAddToPlan, referenceDate\) \{[\s\S]*?\n\}/,
+    /function createOrderMarkerPopupElement\(order, plannedIndex, onAddToPlan, availabilityContext\) \{[\s\S]*?\n\}/,
   )?.[0] ?? "";
   assert.doesNotMatch(popupBlock, /order\.status/);
   assert.doesNotMatch(popupBlock, /order\.paymentStatus/);
@@ -904,43 +922,52 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.doesNotMatch(ordersPageSource, /safeOrders\.map\(\(order\) =>\s*\(\s*<tr/);
 });
 
-test("Orders page filters table rows by area, delivery date, and ordered date without search", () => {
+test("Orders page filters table rows by planning tabs, scope, search, and service type", () => {
   assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams \} from "react-router"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*hasActiveOrderFilters[\s\S]*isOrderRouteCreated[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "\.\.\/features\/orders\/order-filters"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*formatServiceTypeLabel[\s\S]*getBulkOrderSelectionState[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_HISTORY_SCOPE[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_SERVICE_TYPE_OPTIONS[\s\S]*ORDER_STATUS_TABS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "\.\.\/features\/orders\/order-filters"/);
   assert.match(ordersPageSource, /const \[searchParams, setSearchParams\] = useSearchParams\(\)/);
   assert.match(ordersPageSource, /const orderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const \{ orders, errors, departureLocation, perf, shopLocalDate \} = useLoaderData\(\)/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
-  assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) => filterOrders\(displayOrders, \{[\s\S]*?planned: orderFilters\.planned,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\),\s*\[displayOrders, orderFilters\.planned, orderFilterReferenceDate\],\s*\)/);
-  assert.match(ordersPageSource, /const orderFilterOptions = useMemo\(\s*\(\) => getOrderFilterOptions\(orderFilterOptionOrders\),\s*\[orderFilterOptionOrders\],\s*\)/);
+  assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) => filterOrders\(displayOrders, \{[\s\S]*?scope: orderFilters\.scope,[\s\S]*?tab: orderFilters\.tab,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\),\s*\[displayOrders, orderFilters\.scope, orderFilters\.tab, orderFilterReferenceDate\],\s*\)/);
+  assert.match(ordersPageSource, /const serviceTypeFilterOptions = useMemo\(/);
   assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) => filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\),\s*\[displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /getOrderSortValue\(leftOrder, sortConfig\.key, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /isOrderRoutePlanningLocked\(order, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return filteredOrders/);
+  assert.match(ordersPageSource, /aria-label="Order planning tabs" role="tablist"/);
+  assert.match(ordersPageSource, /ORDER_STATUS_TABS\.map\(\(tab\) =>/);
+  assert.match(ordersPageSource, /aria-selected=\{orderFilters\.tab === tab\.value\}/);
+  assert.match(ordersPageSource, /onClick=\{\(\) => handleOrderFilterChange\("tab", tab\.value\)\}/);
+  assert.match(ordersPageSource, /aria-label="Choose order scope"/);
+  assert.match(ordersPageSource, />Planning Scope<\/option>/);
+  assert.match(ordersPageSource, />History \/ All Orders<\/option>/);
   assert.match(ordersPageSource, /aria-label="Filter orders by delivery area"/);
   assert.match(ordersPageSource, /aria-label="Filter orders by delivery date"/);
+  assert.match(ordersPageSource, /aria-label="Filter orders by service type"/);
+  assert.match(ordersPageSource, /formatServiceTypeLabel\(serviceType\)/);
   assert.match(ordersPageSource, /aria-label="Filter orders by ordered date"/);
-  assert.doesNotMatch(ordersPageSource, /aria-label="Search orders"/);
-  assert.doesNotMatch(ordersPageSource, /placeholder="Search order, recipient, address"/);
-  assert.doesNotMatch(ordersPageSource, /type="search"/);
-  assert.doesNotMatch(ordersPageSource, /handleOrderFilterChange\("search"/);
-  assert.doesNotMatch(ordersPageSource, /orderFilters\.search/);
+  assert.match(ordersPageSource, /aria-label="Search orders"/);
+  assert.match(ordersPageSource, /placeholder="Search orders"/);
+  assert.match(ordersPageSource, /type="search"/);
+  assert.match(ordersPageSource, /handleOrderFilterChange\("search", event\.currentTarget\.value\)/);
+  assert.match(ordersPageSource, /value=\{orderFilters\.search\}/);
   assert.match(ordersPageSource, />Clear filters<\/button>/);
-  assert.match(ordersPageSource, /const allOrdersShown = orderFilters\.planned === "all"/);
-  assert.match(ordersPageSource, /handleOrderFilterChange\("planned", allOrdersShown \? "" : "all"\)/);
-  assert.match(ordersPageSource, /aria-pressed=\{allOrdersShown\}/);
-  assert.match(ordersPageSource, /const orderFilterButtonStyle = \{/);
-  assert.match(ordersPageSource, /const activeOrderFilterButtonStyle = \{/);
-  assert.match(ordersPageSource, /style=\{allOrdersShown \? activeOrderFilterButtonStyle : orderFilterButtonStyle\}/);
-  assert.match(ordersPageSource, /style=\{activeOrderFilters \? orderFilterButtonStyle : disabledOrderFilterButtonStyle\}/);
-  assert.match(ordersPageSource, />\s*All\s*<\/button>/);
-  assert.match(
-    ordersPageSource,
-    /aria-pressed=\{allOrdersShown\}[\s\S]*>\s*All\s*<\/button>[\s\S]*>Clear filters<\/button>/,
-  );
+  assert.match(ordersPageSource, />Clear selection<\/button>/);
+  assert.match(ordersPageSource, />Clear plan<\/button>/);
+  assert.match(ordersPageSource, /const historyScopeActive = orderFilters\.scope === ORDER_HISTORY_SCOPE/);
+  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0 \|\| historyScopeActive\}/);
+  assert.match(ordersPageSource, /const orderFilterSearchStyle = \{[\s\S]*?maxWidth:\s*"100%"/);
+  assert.match(ordersPageSource, /boxSizing:\s*"border-box"/);
+  assert.match(ordersPageSource, /const orderControlsStyle = \{[\s\S]*?flexWrap:\s*"wrap"[\s\S]*?maxWidth:\s*"100%"/);
+  assert.match(ordersPageSource, /overflowX:\s*"auto"/);
+  assert.doesNotMatch(ordersPageSource, /const allOrdersShown = orderFilters\.planned === "all"/);
+  assert.doesNotMatch(ordersPageSource, /aria-pressed=\{allOrdersShown\}/);
+  assert.doesNotMatch(ordersPageSource, /Showing all orders, including past and planned orders/);
+  assert.doesNotMatch(ordersPageSource, /Include past and planned orders/);
   assert.doesNotMatch(ordersPageSource, />\s*Un-routed\s*<\/button>/);
   assert.doesNotMatch(ordersPageSource, /Show routed orders/);
-  assert.doesNotMatch(ordersPageSource, /Show all orders/);
+  assert.doesNotMatch(ordersPageSource, />\s*Clear\s*<\/button>/);
 });
 
 test("Orders filters hide non-target map markers without reshaping matched markers", () => {

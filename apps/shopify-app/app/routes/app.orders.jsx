@@ -21,15 +21,25 @@ import {
 } from "../features/orders/canonical-orders";
 import {
   filterOrders,
+  formatServiceTypeLabel,
+  formatUnavailableReason,
+  getBulkOrderSelectionState,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
   getOrderDeliveryDateValue,
   getOrderDeliveryExceptionState,
+  getOrderUnavailableReasons,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
+  isOrderInPlanningScope,
   isOrderRouteCreated,
   isOrderRouteAssigned,
   isOrderRoutePlanningLocked,
+  isOrderSelectableForCurrentWorkset,
+  ORDER_HISTORY_SCOPE,
+  ORDER_PLANNING_SCOPE,
+  ORDER_SERVICE_TYPE_OPTIONS,
+  ORDER_STATUS_TABS,
   updateOrderFilterSearchParams,
 } from "../features/orders/order-filters";
 import { fetchShopifyOrders } from "../features/orders/shopify-orders.server";
@@ -270,9 +280,11 @@ const planSummaryTextStyle = {
 const orderControlsTrailingStyle = {
   alignItems: "center",
   display: "flex",
-  flex: "0 0 auto",
+  flex: "1 1 260px",
+  flexWrap: "wrap",
   gap: "6px",
   marginLeft: "auto",
+  minWidth: 0,
 };
 
 const createRouteButtonStyle = {
@@ -362,12 +374,13 @@ const orderControlsStyle = {
   background: "#ffffff",
   borderBottom: "1px solid #ebebeb",
   display: "flex",
-  flexWrap: "nowrap",
+  flexWrap: "wrap",
   gap: "6px",
-  overflowX: "auto",
-  overflowY: "hidden",
+  maxWidth: "100%",
+  overflowX: "visible",
+  overflowY: "visible",
   padding: "6px 10px",
-  whiteSpace: "nowrap",
+  whiteSpace: "normal",
 };
 
 const tableWrapStyle = {
@@ -380,12 +393,29 @@ const orderFilterSelectStyle = {
   background: "#ffffff",
   border: "1px solid #d6d6d6",
   borderRadius: "8px",
+  boxSizing: "border-box",
   color: "#303030",
-  flex: "0 0 160px",
+  flex: "1 1 150px",
   fontSize: "13px",
   minHeight: "30px",
-  minWidth: "132px",
+  minWidth: "120px",
   padding: "3px 8px",
+};
+
+const orderFilterSearchStyle = {
+  ...orderFilterSelectStyle,
+  flex: "2 1 220px",
+  minWidth: "180px",
+  maxWidth: "100%",
+};
+
+const orderStatusTabsStyle = {
+  alignItems: "center",
+  display: "flex",
+  flex: "1 1 100%",
+  flexWrap: "wrap",
+  gap: "6px",
+  minWidth: 0,
 };
 
 const orderFilterSummaryStyle = {
@@ -393,6 +423,13 @@ const orderFilterSummaryStyle = {
   fontSize: "12px",
   fontWeight: 650,
   whiteSpace: "nowrap",
+};
+
+const unavailableSummaryStyle = {
+  color: "#8a4b00",
+  fontSize: "12px",
+  fontWeight: 600,
+  whiteSpace: "normal",
 };
 
 const tableColumnWidths = ["4%", "8%", "9%", "13%", "27%", "11%", "12%", "8%", "8%"];
@@ -807,6 +844,18 @@ function formatFilterDateLabel(value) {
   return `${weekday} ${value.slice(5, 7)}/${value.slice(8, 10)}`;
 }
 
+function formatUnavailableSummary(unavailableReasonCounts) {
+  const entries = Object.entries(unavailableReasonCounts ?? {}).filter(
+    ([, count]) => count > 0,
+  );
+
+  if (entries.length === 0) return "";
+
+  return entries
+    .map(([reason, count]) => `${formatUnavailableReason(reason)} ${count}`)
+    .join(" · ");
+}
+
 function createDepartureMarkerIconElement() {
   const iconElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
   const iconPathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
@@ -837,15 +886,17 @@ function createDepartureMarkerElement(departureLocation) {
   return markerElement;
 }
 
-function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan, referenceDate) {
+function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan, availabilityContext) {
   const popupElement = document.createElement("div");
   const popupTitleElement = document.createElement("strong");
   const popupAddressElement = document.createElement("div");
   const popupMetaElement = document.createElement("div");
   const popupActionButton = document.createElement("button");
   const deliveryMetaValues = [order.deliveryArea, formatOrderDeliveryLabel(order)].filter(Boolean);
+  const referenceDate = availabilityContext?.referenceDate ?? new Date();
+  const unavailableReasons = getOrderUnavailableReasons(order, availabilityContext);
   const routePlanningLocked = isOrderRoutePlanningLocked(order, referenceDate);
-  const routePlanningUnavailable = routePlanningLocked || !isOrderReadyToPlan(order);
+  const routePlanningUnavailable = unavailableReasons.length > 0;
 
   popupElement.className = "order-marker-popup";
   popupTitleElement.className = "order-marker-popup__title";
@@ -867,8 +918,11 @@ function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan, referen
       : routePlanningLocked
         ? formatOrderDeliveryState(order, referenceDate)
         : routePlanningUnavailable
-          ? "Needs review"
+          ? formatUnavailableReason(unavailableReasons[0])
           : "Add to plan";
+  if (routePlanningUnavailable) {
+    popupActionButton.title = unavailableReasons.map(formatUnavailableReason).join(", ");
+  }
   popupActionButton.disabled = plannedIndex > 0 || routePlanningUnavailable;
   popupActionButton.addEventListener("click", (event) => {
     event.preventDefault();
@@ -1146,6 +1200,20 @@ export const action = async ({ request }) => {
 
   const plannedOrderIds = JSON.parse(formData.get("plannedOrderIds") ?? "[]");
   const routeScope = JSON.parse(formData.get("routeScope") ?? "null");
+  const submittedOrderScope = String(
+    formData.get("orderScope") ?? ORDER_PLANNING_SCOPE,
+  );
+
+  if (submittedOrderScope === ORDER_HISTORY_SCOPE) {
+    return {
+      errors: [
+        {
+          message:
+            "History / All Orders scope는 조회 전용입니다. route를 만들려면 Planning Scope로 전환해주세요.",
+        },
+      ],
+    };
+  }
 
   if (!Array.isArray(plannedOrderIds) || plannedOrderIds.length === 0) {
     return { errors: [{ message: "Route plan에 추가된 주문이 없습니다." }] };
@@ -1161,14 +1229,18 @@ export const action = async ({ request }) => {
   const plannedShopifyOrders = orderData.orders.filter((order) =>
     plannedOrderIdSet.has(order.id),
   );
-  const syncedOrderData = await syncDeliveryOrders(
-    request,
-    {
-      reason: "route_create_preflight",
-      orders: getOrderSyncSnapshots(plannedShopifyOrders),
-    },
-    { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
-  );
+  const plannedShopifyOrderSnapshots = getOrderSyncSnapshots(plannedShopifyOrders);
+  const syncedOrderData =
+    plannedShopifyOrderSnapshots.length > 0
+      ? await syncDeliveryOrders(
+          request,
+          {
+            reason: "route_create_preflight",
+            orders: plannedShopifyOrderSnapshots,
+          },
+          { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
+        )
+      : { orders: [], errors: [] };
 
   if ((syncedOrderData.errors ?? []).length > 0) {
     return {
@@ -1180,18 +1252,38 @@ export const action = async ({ request }) => {
     };
   }
 
-  const canonicalOrders = mapCanonicalOrdersToOrderRows(syncedOrderData.orders);
+  const canonicalOrderData = await fetchDeliveryOrders(
+    request,
+    {},
+    { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
+  );
+
+  if ((canonicalOrderData.errors ?? []).length > 0) {
+    return {
+      errors: [
+        ...(orderData.errors ?? []),
+        ...(syncedOrderData.errors ?? []),
+        ...(canonicalOrderData.errors ?? []),
+        ...(departureLocationData.errors ?? []),
+      ],
+    };
+  }
+
+  const canonicalOrders = mergeShopifyOrderRowsWithCanonicalRows(
+    mapCanonicalOrdersToOrderRows(canonicalOrderData.orders),
+    mapCanonicalOrdersToOrderRows(syncedOrderData.orders),
+  );
   const orderById = new Map(canonicalOrders.map((order) => [order.id, order]));
   const plannedOrders = plannedOrderIds
     .map((orderId) => orderById.get(orderId))
     .filter(Boolean);
 
-  if (plannedOrders.length === 0) {
+  if (plannedOrders.length !== plannedOrderIds.length) {
     return {
       errors: [
         {
           message:
-            "서버에서 route scope가 계산된 주문을 찾지 못했습니다. 주문 동기화 후 다시 시도해주세요.",
+            "서버에서 route scope가 계산된 일부 주문을 찾지 못했습니다. 주문 동기화 후 다시 시도해주세요.",
         },
       ],
     };
@@ -1221,6 +1313,21 @@ export const action = async ({ request }) => {
         {
           message:
             `Delivery 날짜가 지난 주문은 새 route plan에 추가하지 않았습니다: ${formatOrderNames(expiredDeliveryDateOrders)}. All view에서는 상태 확인만 하고, route 생성은 오늘 이후 주문으로 진행해주세요.`,
+        },
+      ],
+    };
+  }
+
+  const nonPlanningScopeOrders = plannedOrders.filter(
+    (order) => !isOrderInPlanningScope(order, shopLocalDate),
+  );
+
+  if (nonPlanningScopeOrders.length > 0) {
+    return {
+      errors: [
+        {
+          message:
+            `Planning scope에 없는 주문은 route를 만들 수 없습니다: ${formatOrderNames(nonPlanningScopeOrders)}. History / All Orders에서는 조회만 하고, 현재/미래 미완료 주문으로 진행해주세요.`,
         },
       ],
     };
@@ -1377,7 +1484,13 @@ export default function OrdersPage() {
     () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders),
     [ordersSyncFetcher.data?.syncedOrders],
   );
-  const displayOrders = syncedOrders.length > 0 ? syncedOrders : safeOrders;
+  const displayOrders = useMemo(
+    () =>
+      syncedOrders.length > 0
+        ? mergeShopifyOrderRowsWithCanonicalRows(safeOrders, syncedOrders)
+        : safeOrders,
+    [safeOrders, syncedOrders],
+  );
   const orderFilters = useMemo(
     () => getOrderFiltersFromSearchParams(searchParams),
     [searchParams],
@@ -1388,14 +1501,25 @@ export default function OrdersPage() {
   );
   const orderFilterOptionOrders = useMemo(
     () => filterOrders(displayOrders, {
-      planned: orderFilters.planned,
+      scope: orderFilters.scope,
+      tab: orderFilters.tab,
       referenceDate: orderFilterReferenceDate,
     }),
-    [displayOrders, orderFilters.planned, orderFilterReferenceDate],
+    [displayOrders, orderFilters.scope, orderFilters.tab, orderFilterReferenceDate],
   );
   const orderFilterOptions = useMemo(
     () => getOrderFilterOptions(orderFilterOptionOrders),
     [orderFilterOptionOrders],
+  );
+  const serviceTypeFilterOptions = useMemo(
+    () =>
+      Array.from(
+        new Set([
+          ...ORDER_SERVICE_TYPE_OPTIONS.map((option) => option.value),
+          ...(orderFilterOptions.serviceTypes ?? []),
+        ]),
+      ),
+    [orderFilterOptions.serviceTypes],
   );
   const filteredOrders = useMemo(
     () => filterOrders(displayOrders, {
@@ -1485,14 +1609,6 @@ export default function OrdersPage() {
     () => sortedOrders.filter((order) => !plannedOrderIdSet.has(order.id)),
     [plannedOrderIdSet, sortedOrders],
   );
-  const selectableTableOrders = useMemo(
-    () => tableOrders.filter(
-      (order) =>
-        isOrderReadyToPlan(order) &&
-        !isOrderRoutePlanningLocked(order, orderFilterReferenceDate),
-    ),
-    [tableOrders, orderFilterReferenceDate],
-  );
 
   const plannedOrders = useMemo(() => {
     return plannedOrderIds
@@ -1517,6 +1633,35 @@ export default function OrdersPage() {
 
   const readyPlannedOrders = useMemo(() => plannedOrders.filter(isOrderReadyToPlan), [plannedOrders]);
   const plannedRouteScope = useMemo(() => buildRouteScopeFromOrders(plannedOrders), [plannedOrders]);
+  const worksetAvailabilityContext = useMemo(
+    () => ({
+      deliveryDateLock: routePlanDeliveryDateLock || filteredDeliveryDateLock,
+      referenceDate: orderFilterReferenceDate,
+      routeScopeKey: plannedRouteScope?.routeScopeKey ?? "",
+      scope: orderFilters.scope,
+    }),
+    [
+      filteredDeliveryDateLock,
+      orderFilterReferenceDate,
+      orderFilters.scope,
+      plannedRouteScope?.routeScopeKey,
+      routePlanDeliveryDateLock,
+    ],
+  );
+  const selectableTableOrders = useMemo(
+    () => tableOrders.filter((order) =>
+      isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext),
+    ),
+    [tableOrders, worksetAvailabilityContext],
+  );
+  const tableSelectionState = useMemo(
+    () => getBulkOrderSelectionState(tableOrders, worksetAvailabilityContext),
+    [tableOrders, worksetAvailabilityContext],
+  );
+  const unavailableSummary = useMemo(
+    () => formatUnavailableSummary(tableSelectionState.unavailableReasonCounts),
+    [tableSelectionState.unavailableReasonCounts],
+  );
   const plannedLocatedOrders = useMemo(() => plannedOrders.filter((order) => order.hasCoordinates), [plannedOrders]);
   const initialMapCenter = useMemo(
     () => departureLocation?.hasCoordinates ? departureLocation.coordinates : DEFAULT_CENTER,
@@ -1552,7 +1697,11 @@ export default function OrdersPage() {
   const allVisibleOrdersChecked =
     selectableTableOrders.length > 0 &&
     selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
-  const allOrdersShown = orderFilters.planned === "all";
+  const historyScopeActive = orderFilters.scope === ORDER_HISTORY_SCOPE;
+  const createRouteDisabled =
+    historyScopeActive ||
+    readyPlannedOrders.length === 0 ||
+    routePlanFetcher.state !== "idle";
 
   useEffect(() => {
     if (filteredOrders.length === 0) {
@@ -1569,7 +1718,7 @@ export default function OrdersPage() {
     const displayOrderIds = new Set(displayOrders.map((order) => order.id));
     const routeCandidateOrderIds = new Set(
       filteredOrders
-        .filter((order) => !isOrderRoutePlanningLocked(order, orderFilterReferenceDate))
+        .filter((order) => isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext))
         .map((order) => order.id),
     );
 
@@ -1592,7 +1741,7 @@ export default function OrdersPage() {
         ? currentOrderIds
         : nextOrderIds;
     });
-  }, [displayOrders, filteredOrders, orderFilterReferenceDate]);
+  }, [displayOrders, filteredOrders, worksetAvailabilityContext]);
 
   useEffect(() => {
     if (!routePlanDeliveryDateLock) {
@@ -1786,7 +1935,10 @@ export default function OrdersPage() {
         deliveryArea: "",
         deliveryDate: routePlanDeliveryDateLock,
         orderedDate: "",
-        planned: "",
+        scope: ORDER_PLANNING_SCOPE,
+        search: "",
+        serviceType: "",
+        tab: "unplanned",
       }),
       {
         preventScrollReset: true,
@@ -1795,8 +1947,8 @@ export default function OrdersPage() {
     );
   };
 
-  const handleToggleAllOrders = () => {
-    handleOrderFilterChange("planned", allOrdersShown ? "" : "all");
+  const handleClearSelection = () => {
+    setCheckedOrderIds([]);
   };
 
   const clearMapRecoveryTimer = useCallback(() => {
@@ -1876,6 +2028,19 @@ export default function OrdersPage() {
     const order = displayOrderById.get(orderId);
     const isAlreadyChecked = checkedOrderIdSet.has(orderId);
 
+    if (
+      !isAlreadyChecked &&
+      !isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext)
+    ) {
+      const reasons = getOrderUnavailableReasons(order, worksetAvailabilityContext);
+      setCreateRouteClientError(
+        reasons.length > 0
+          ? `This order is unavailable: ${reasons.map(formatUnavailableReason).join(", ")}.`
+          : "This order is unavailable.",
+      );
+      return;
+    }
+
     if (!isAlreadyChecked && !applyOrderDeliveryDateSelectionLock(order)) {
       return;
     }
@@ -1927,6 +2092,18 @@ export default function OrdersPage() {
   const handleAddOrderToPlan = useCallback((orderId) => {
     const order = displayOrderById.get(orderId);
     const targetRouteScopeKey = plannedRouteScope?.routeScopeKey ?? order?.routeScopeKey;
+    const availabilityContext = {
+      ...worksetAvailabilityContext,
+      routeScopeKey: targetRouteScopeKey,
+    };
+    const unavailableReasons = getOrderUnavailableReasons(order, availabilityContext);
+
+    if (unavailableReasons.length > 0) {
+      setCreateRouteClientError(
+        `This order is unavailable: ${unavailableReasons.map(formatUnavailableReason).join(", ")}.`,
+      );
+      return;
+    }
 
     if (isOrderRouteCreated(order)) {
       setCreateRouteClientError("이미 route가 생성된 주문은 route plan에 다시 추가할 수 없습니다.");
@@ -1967,19 +2144,26 @@ export default function OrdersPage() {
     displayOrderById,
     orderFilterReferenceDate,
     plannedRouteScope,
+    worksetAvailabilityContext,
   ]);
 
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
 
-    const selectedOrders = checkedOrderIds
+    const checkedOrders = checkedOrderIds
       .map((orderId) => displayOrderById.get(orderId))
-      .filter(Boolean)
-      .filter((order) => !isOrderRoutePlanningLocked(order, orderFilterReferenceDate))
-      .filter((order) => isOrderReadyToPlan(order));
+      .filter(Boolean);
+    const selectedOrders = checkedOrders.filter((order) =>
+      isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext),
+    );
 
     if (selectedOrders.length === 0) {
-      setCreateRouteClientError("ready 상태 주문만 route plan에 추가할 수 있습니다.");
+      const blockedState = getBulkOrderSelectionState(checkedOrders, worksetAvailabilityContext);
+      setCreateRouteClientError(
+        blockedState.unavailableCount > 0
+          ? `No selected orders are available. ${formatUnavailableSummary(blockedState.unavailableReasonCounts)}.`
+          : "ready 상태 주문만 route plan에 추가할 수 있습니다.",
+      );
       return;
     }
 
@@ -2068,6 +2252,13 @@ export default function OrdersPage() {
   const handleCreateRoute = async () => {
     if (plannedOrderIds.length === 0 || isCreatingRoute) return;
 
+    if (historyScopeActive) {
+      setCreateRouteClientError(
+        "History / All Orders scope는 조회 전용입니다. route를 만들려면 Planning Scope로 전환해주세요.",
+      );
+      return;
+    }
+
     if (readyPlannedOrders.length === 0) {
       setCreateRouteClientError("Route plan에는 ready 상태의 주문만 보낼 수 있습니다.");
       return;
@@ -2094,6 +2285,7 @@ export default function OrdersPage() {
       formData.set("_intent", "createRoutePlan");
       formData.set("plannedOrderIds", JSON.stringify(readyPlannedOrders.map((order) => order.id)));
       formData.set("routeScope", JSON.stringify(routeDraftScope));
+      formData.set("orderScope", orderFilters.scope);
       formData.set("shopifySessionToken", sessionToken);
       routePlanFetcher.submit(formData, { method: "post" });
     } catch {
@@ -2336,7 +2528,7 @@ export default function OrdersPage() {
             order,
             plannedIndex,
             handleAddOrderToPlan,
-            orderFilterReferenceDate,
+            worksetAvailabilityContext,
           ),
         )
         .addTo(map);
@@ -2379,8 +2571,8 @@ export default function OrdersPage() {
     handleSelectOrder,
     isMapReady,
     locatedOrders,
-    orderFilterReferenceDate,
     plannedOrderIds,
+    worksetAvailabilityContext,
   ]);
 
   useEffect(() => {
@@ -2489,11 +2681,11 @@ export default function OrdersPage() {
                 <button
                   type="button"
                   style={
-                    readyPlannedOrders.length === 0 || routePlanFetcher.state !== "idle"
+                    createRouteDisabled
                       ? disabledCreateRouteButtonStyle
                       : createRouteButtonStyle
                   }
-                  disabled={readyPlannedOrders.length === 0 || routePlanFetcher.state !== "idle"}
+                  disabled={createRouteDisabled}
                   onClick={handleCreateRoute}
                 >Create route</button>
                 <button
@@ -2605,6 +2797,33 @@ export default function OrdersPage() {
               </div>
             ) : null}
           <div style={orderControlsStyle}>
+            <div aria-label="Order planning tabs" role="tablist" style={orderStatusTabsStyle}>
+              {ORDER_STATUS_TABS.map((tab) => (
+                <button
+                  key={tab.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={orderFilters.tab === tab.value}
+                  style={
+                    orderFilters.tab === tab.value
+                      ? activeOrderFilterButtonStyle
+                      : orderFilterButtonStyle
+                  }
+                  onClick={() => handleOrderFilterChange("tab", tab.value)}
+                >
+                  {tab.label}
+                </button>
+              ))}
+            </div>
+            <select
+              aria-label="Choose order scope"
+              style={orderFilterSelectStyle}
+              value={orderFilters.scope}
+              onChange={(event) => handleOrderFilterChange("scope", event.currentTarget.value)}
+            >
+              <option value={ORDER_PLANNING_SCOPE}>Planning Scope</option>
+              <option value={ORDER_HISTORY_SCOPE}>History / All Orders</option>
+            </select>
             <select
               aria-label="Filter orders by delivery area"
               style={orderFilterSelectStyle}
@@ -2632,6 +2851,19 @@ export default function OrdersPage() {
               ))}
             </select>
             <select
+              aria-label="Filter orders by service type"
+              style={orderFilterSelectStyle}
+              value={orderFilters.serviceType}
+              onChange={(event) => handleOrderFilterChange("serviceType", event.currentTarget.value)}
+            >
+              <option value="">All service types</option>
+              {serviceTypeFilterOptions.map((serviceType) => (
+                <option key={serviceType} value={serviceType}>
+                  {formatServiceTypeLabel(serviceType)}
+                </option>
+              ))}
+            </select>
+            <select
               aria-label="Filter orders by ordered date"
               style={orderFilterSelectStyle}
               value={orderFilters.orderedDate}
@@ -2644,22 +2876,17 @@ export default function OrdersPage() {
                 </option>
               ))}
             </select>
+            <input
+              aria-label="Search orders"
+              placeholder="Search orders"
+              style={orderFilterSearchStyle}
+              type="search"
+              value={orderFilters.search}
+              onChange={(event) => handleOrderFilterChange("search", event.currentTarget.value)}
+            />
             <button
               type="button"
-              aria-pressed={allOrdersShown}
-              title={
-                allOrdersShown
-                  ? "Showing all orders, including past and planned orders"
-                  : "Include past and planned orders"
-              }
-              style={allOrdersShown ? activeOrderFilterButtonStyle : orderFilterButtonStyle}
-              onClick={handleToggleAllOrders}
-            >
-              All
-            </button>
-            <button
-              type="button"
-              title="Return to the current unplanned view"
+              title="Return to the planning Unplanned view"
               style={activeOrderFilters ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
               disabled={!activeOrderFilters}
               onClick={handleClearOrderFilters}
@@ -2669,15 +2896,28 @@ export default function OrdersPage() {
                 type="button"
                 style={
                   checkedOrderIds.length === 0
+                    ? disabledOrderFilterButtonStyle
+                    : orderFilterButtonStyle
+                }
+                disabled={checkedOrderIds.length === 0}
+                onClick={handleClearSelection}
+              >Clear selection</button>
+              <button
+                type="button"
+                style={
+                  checkedOrderIds.length === 0 || historyScopeActive
                     ? disabledCreateRouteButtonStyle
                     : addToPlanButtonStyle
                 }
-                disabled={checkedOrderIds.length === 0}
+                disabled={checkedOrderIds.length === 0 || historyScopeActive}
                 onClick={handleAddToPlan}
               >Add to plan</button>
               <span style={orderFilterSummaryStyle}>
-                {filteredOrders.length}/{displayOrders.length} orders
+                {filteredOrders.length} shown · {selectableTableOrders.length} selectable · {tableSelectionState.unavailableCount} unavailable
               </span>
+              {unavailableSummary ? (
+                <span style={unavailableSummaryStyle}>{unavailableSummary}</span>
+              ) : null}
               <span style={planSummaryTextStyle}>
                 {checkedOrderIds.length > 0
                   ? `${checkedOrderIds.length} selected.`
@@ -2726,16 +2966,23 @@ export default function OrdersPage() {
               </thead>
               <tbody>
                 {tableOrders.map((order) => {
-                  const routePlanningLocked = isOrderRoutePlanningLocked(order, orderFilterReferenceDate);
+                  const unavailableReasons = getOrderUnavailableReasons(order, worksetAvailabilityContext);
+                  const routePlanningUnavailable = unavailableReasons.length > 0;
+                  const unavailableLabel = unavailableReasons.map(formatUnavailableReason).join(", ");
 
                   return (
                     <tr key={order.id}>
                       <td style={checkboxCellStyle}>
                         <input
                           type="checkbox"
-                          aria-label={`Select ${order.name} for plan`}
-                          checked={!routePlanningLocked && checkedOrderIdSet.has(order.id)}
-                          disabled={routePlanningLocked}
+                          aria-label={
+                            routePlanningUnavailable
+                              ? `${order.name} unavailable for plan: ${unavailableLabel}`
+                              : `Select ${order.name} for plan`
+                          }
+                          title={unavailableLabel}
+                          checked={!routePlanningUnavailable && checkedOrderIdSet.has(order.id)}
+                          disabled={routePlanningUnavailable}
                           onChange={() => toggleOrderCheck(order.id)}
                         />
                       </td>
