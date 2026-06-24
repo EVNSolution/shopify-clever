@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
 
-const DEFAULT_DELIVERY_API_URL = "https://clever-delivery.3-39-216-177.sslip.io";
+const DEFAULT_DELIVERY_API_URL = "https://clever-route.cleversystem.ai";
 const COMPLIANCE_WEBHOOK_TOPICS = new Set([
   "customers/data_request",
   "customers/redact",

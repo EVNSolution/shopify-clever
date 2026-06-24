@@ -3,13 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "setup": "npm --prefix apps/shopify-app ci && npm --prefix apps/delivery-api ci",
-    "build": "npm --prefix apps/shopify-app run build && npm --prefix apps/delivery-api run prisma:generate && npm --prefix apps/delivery-api run build",
-    "typecheck": "npm --prefix apps/shopify-app run typecheck && npm --prefix apps/delivery-api run typecheck",
+    "setup": "npm --prefix apps/shopify-app ci",
+    "build": "npm --prefix apps/shopify-app run build",
+    "typecheck": "npm --prefix apps/shopify-app run typecheck",
     "test:shopify-app": "cd apps/shopify-app && node --test tests/*.test.mjs",
-    "test:delivery-api": "npm --prefix apps/delivery-api run test",
-    "test": "npm run test:shopify-app && npm run test:delivery-api",
-    "deploy:compose": "docker compose -f infra/compose/docker-compose.prod.yml up -d --build",
+    "test": "npm run test:shopify-app",
+    "deploy:shopify-main": "docker compose -f infra/compose/docker-compose.shopify-main.yml up -d --build",
+    "deploy:shopify-dev": "docker compose -f infra/compose/docker-compose.shopify-dev.yml up -d --build",
     "check:public-urls": "node scripts/check-public-url-hosts.mjs",
     "check:shopify-submission": "node scripts/check-shopify-submission-readiness.mjs"
   }

@@ -1,0 +1,137 @@
+name: EC2 Shopify compose deploy
+description: Sync this repo to EC2 and restart one Shopify compose service.
+inputs:
+  ec2-host:
+    required: true
+  ec2-user:
+    required: true
+  deploy-path:
+    required: true
+  ec2-ssh-key:
+    required: true
+  security-group-id:
+    required: false
+  compose-file:
+    required: true
+  service:
+    required: true
+  sqlite-path:
+    required: true
+  env-file:
+    required: true
+  smoke-url:
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Validate deployment configuration
+      shell: bash
+      run: |
+        test -n "${{ inputs.ec2-host }}"
+        test -n "${{ inputs.ec2-user }}"
+        test -n "${{ inputs.deploy-path }}"
+        test -n "${{ inputs.ec2-ssh-key }}"
+
+    - name: Check AWS CLI for temporary SSH ingress
+      if: ${{ env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && inputs.security-group-id != '' }}
+      shell: bash
+      run: aws --version
+
+    - name: Temporarily allow this runner to SSH to EC2
+      if: ${{ env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && inputs.security-group-id != '' }}
+      id: ssh_ingress
+      shell: bash
+      run: |
+        set -euo pipefail
+        runner_ip="$(curl -fsS https://checkip.amazonaws.com | tr -d '[:space:]')"
+        runner_cidr="$runner_ip/32"
+        echo "runner_cidr=$runner_cidr" >> "$GITHUB_OUTPUT"
+        if aws ec2 authorize-security-group-ingress \
+          --group-id "${{ inputs.security-group-id }}" \
+          --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=$runner_cidr,Description=shopify-clever-ci}]"; then
+          echo "authorized=true" >> "$GITHUB_OUTPUT"
+        else
+          if aws ec2 describe-security-groups \
+            --group-ids "${{ inputs.security-group-id }}" \
+            --query "SecurityGroups[0].IpPermissions[?FromPort==\`22\` && ToPort==\`22\`].IpRanges[].CidrIp" \
+            --output text | tr '\t' '\n' | grep -Fxq "$runner_cidr"; then
+            echo "authorized=false" >> "$GITHUB_OUTPUT"
+          else
+            exit 1
+          fi
+        fi
+
+    - name: Configure SSH
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ~/.ssh
+        install -m 600 /dev/null ~/.ssh/deploy_key
+        printf '%s\n' "${{ inputs.ec2-ssh-key }}" > ~/.ssh/deploy_key
+        touch ~/.ssh/known_hosts
+        for attempt in 1 2 3; do
+          if ssh-keyscan -4 -T 20 -H "${{ inputs.ec2-host }}" >> ~/.ssh/known_hosts; then
+            exit 0
+          fi
+          sleep "$((attempt * 5))"
+        done
+        exit 1
+
+    - name: Sync source to EC2
+      shell: bash
+      run: |
+        rsync -az --delete \
+          --exclude '.git/' \
+          --exclude '.github/' \
+          --exclude 'node_modules/' \
+          --exclude 'build/' \
+          --exclude 'dist/' \
+          --exclude '.react-router/' \
+          --exclude '.shopify/' \
+          --exclude '.omx/' \
+          --exclude 'infra/env/*.env' \
+          --exclude 'infra/compose/.env*' \
+          --exclude 'infra/compose/*.env' \
+          --exclude 'data/' \
+          --exclude '.DS_Store' \
+          -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
+          ./ "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}:${{ inputs.deploy-path }}/"
+
+    - name: Build and restart Shopify service on EC2
+      shell: bash
+      run: |
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}" "
+          set -euo pipefail
+          cd '${{ inputs.deploy-path }}'
+          test -f '${{ inputs.env-file }}'
+          mkdir -p \"\$(dirname '${{ inputs.sqlite-path }}')\"
+          touch '${{ inputs.sqlite-path }}'
+          chmod 600 '${{ inputs.env-file }}' '${{ inputs.sqlite-path }}'
+          docker compose -f '${{ inputs.compose-file }}' config --quiet
+          docker compose -f '${{ inputs.compose-file }}' build
+          docker compose -f '${{ inputs.compose-file }}' up -d '${{ inputs.service }}'
+          docker compose -f '${{ inputs.compose-file }}' ps
+        "
+
+    - name: Smoke test Shopify endpoint
+      shell: bash
+      run: |
+        body="$(mktemp)"
+        for attempt in {1..12}; do
+          if test "$(curl -sS -L -o "$body" -w '%{http_code}' '${{ inputs.smoke-url }}')" = "200" \
+            && grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$body" \
+            && grep -q 'name="shopify-api-key"' "$body"; then
+            exit 0
+          fi
+          sleep 5
+        done
+        sed -n '1,80p' "$body" || true
+        exit 1
+
+    - name: Revoke temporary runner SSH ingress
+      if: ${{ always() && steps.ssh_ingress.outputs.runner_cidr != '' && steps.ssh_ingress.outputs.authorized == 'true' }}
+      shell: bash
+      run: |
+        aws ec2 revoke-security-group-ingress \
+          --group-id "${{ inputs.security-group-id }}" \
+          --ip-permissions "IpProtocol=tcp,FromPort=22,ToPort=22,IpRanges=[{CidrIp=${{ steps.ssh_ingress.outputs.runner_cidr }}}]" || true

@@ -46,7 +46,7 @@ Source: `apps/shopify-app/app/features/orders/shopify-orders.server.js`
 
 ### Delivery API background sync query
 
-Source: `apps/delivery-api/src/modules/shopify/order-sync.query.ts`
+Source: `clever-route-server/apps/delivery-api/src/modules/shopify/order-sync.query.ts`
 
 The delivery API sync query mirrors the embedded app fields for updated orders and uses the same protected field categories: order data, name, address/location, and phone.
 

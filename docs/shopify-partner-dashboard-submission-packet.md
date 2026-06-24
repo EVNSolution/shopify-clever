@@ -8,7 +8,7 @@ This packet is the copy/paste working document for the authorized Partner Dashbo
 
 - App: `clever`
 - Production admin URL: `https://clever-admin.3-39-216-177.sslip.io`
-- Production delivery API URL: `https://clever-delivery.3-39-216-177.sslip.io`
+- Production delivery API URL: `https://clever-route.cleversystem.ai`
 - Active Shopify app version: `compliance-20260514-0d05a46`
 - Version ID: `gid://shopify/Version/963177807873`
 - Shopify app version release commit: `0d05a46295e499ffeb22d057b6b7e2ca789262de`
@@ -57,7 +57,7 @@ Use `docs/shopify-protected-customer-data-field-map.md` as the code-backed field
   - Name
   - Address
   - Phone
-- Do **not** request email for the current release unless the product scope changes. Evidence: the Shopify order GraphQL queries in `apps/shopify-app/app/features/orders/shopify-orders.server.js` and `apps/delivery-api/src/modules/shopify/order-sync.query.ts` request order `phone` and `shippingAddress { name phone address1 address2 city province provinceCode zip countryCodeV2 latitude longitude }`, but do not request `email`.
+- Do **not** request email for the current release unless the product scope changes. Evidence: the Shopify order GraphQL queries in `apps/shopify-app/app/features/orders/shopify-orders.server.js` and `clever-route-server/apps/delivery-api/src/modules/shopify/order-sync.query.ts` request order `phone` and `shippingAddress { name phone address1 address2 city province provinceCode zip countryCodeV2 latitude longitude }`, but do not request `email`.
 
 Paste-ready justification:
 
@@ -216,7 +216,7 @@ Suggested test flow:
 
 Production URLs:
 - Admin app URL: https://clever-admin.3-39-216-177.sslip.io
-- Delivery API health: https://clever-delivery.3-39-216-177.sslip.io/healthz
+- Delivery API health: https://clever-route.cleversystem.ai/healthz
 
 Current released version:
 - compliance-20260514-0d05a46
@@ -250,7 +250,7 @@ npm run check:shopify-submission
    - `customers/redact`
    - `shop/redact`
 7. Confirm delivery API webhook processing is active:
-   - Shopify admin app forwards verified compliance webhooks to `https://clever-delivery.3-39-216-177.sslip.io/shopify/webhooks`.
+   - Shopify admin app forwards verified compliance webhooks to `https://clever-route.cleversystem.ai/shopify/webhooks`.
    - Delivery API re-validates the Shopify HMAC and sanitizes compliance payload storage.
    - `customers/redact` and `shop/redact` perform repository-owned delivery-data deletion.
 

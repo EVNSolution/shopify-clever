@@ -59,16 +59,11 @@ match("docs/shopify-protected-customer-data-field-map.md", /read_orders,read_loc
 const embeddedOrdersQuerySource = read("apps/shopify-app/app/features/orders/shopify-orders.server.js");
 ok("embedded Shopify order query does not request email", !/\bemail\b/.test(embeddedOrdersQuerySource), "apps/shopify-app/app/features/orders/shopify-orders.server.js");
 ok("embedded Shopify order query does not request customer object", !/customer\s*\{/.test(embeddedOrdersQuerySource), "apps/shopify-app/app/features/orders/shopify-orders.server.js");
-const deliveryOrdersQuerySource = read("apps/delivery-api/src/modules/shopify/order-sync.query.ts");
-ok("delivery Shopify order sync query does not request email", !/\bemail\b/.test(deliveryOrdersQuerySource), "apps/delivery-api/src/modules/shopify/order-sync.query.ts");
-ok("delivery Shopify order sync query does not request customer object", !/customer\s*\{/.test(deliveryOrdersQuerySource), "apps/delivery-api/src/modules/shopify/order-sync.query.ts");
 ok("Shopify app config does not request read_customers", !/read_customers/.test(appConfig), "apps/shopify-app/shopify.app.toml");
 ok("Shopify app config does not request read_all_orders", !/read_all_orders/.test(appConfig), "apps/shopify-app/shopify.app.toml");
 
 match("apps/shopify-app/app/routes/webhooks.compliance.jsx", /authenticate\.webhook\(requestForAuth\)/, "compliance route authenticates Shopify webhook clone");
 match("apps/shopify-app/app/routes/webhooks.compliance.jsx", /forwardComplianceWebhookToDeliveryApi\(request, rawBody\)/, "compliance route forwards raw body to delivery API");
-match("apps/delivery-api/src/modules/shopify/webhook-event.repository.ts", /customers\/redact/, "delivery repository handles customers/redact");
-match("apps/delivery-api/src/modules/shopify/webhook-event.repository.ts", /shop\/redact/, "delivery repository handles shop/redact");
 
 const iconPath = "docs/shopify-app-store-assets/clever-app-icon-1200.png";
 requireFile(iconPath, "prepared Shopify App Store icon exists");

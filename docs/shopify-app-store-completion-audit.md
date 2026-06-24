@@ -25,7 +25,7 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 | Detailed Shopify AI self-review | `docs/shopify-ai-self-review-detail.md` maps the live local-codebase self-review source to 27 likely passing, 0 likely failing, 4 needs-review, and 10 skipped groups. | Done |
 | Validate Shopify app config | Fresh `shopify app config validate --json` returned `{ "valid": true, "issues": [] }`. | Done |
 | Mandatory compliance webhook subscriptions | `apps/shopify-app/shopify.app.toml` subscribes to `customers/data_request`, `customers/redact`, `shop/redact`. | Done |
-| Compliance webhook authentication and delivery processing | `apps/shopify-app/app/routes/webhooks.compliance.jsx` authenticates then forwards raw body/HMAC headers; `apps/delivery-api/src/modules/shopify/webhook-event.repository.ts` sanitizes payloads and processes repository-owned redaction. | Done |
+| Compliance webhook authentication and delivery processing | `apps/shopify-app/app/routes/webhooks.compliance.jsx` authenticates then forwards raw body/HMAC headers; `clever-route-server/apps/delivery-api/src/modules/shopify/webhook-event.repository.ts` sanitizes payloads and processes repository-owned redaction. | Done |
 | Protected customer data minimization | Submission packet requests protected data plus name/address/phone only; it explicitly excludes email for current Shopify queries. | Repo prepared; Partner Dashboard request still manual |
 | Protected customer data field map | `docs/shopify-protected-customer-data-field-map.md` maps active Shopify GraphQL fields to Partner Dashboard protected-data categories and records explicit exclusions. | Done |
 | Full local validation | `shopify app config validate --json`; `npm --prefix apps/shopify-app run lint`; `npm run test:shopify-app`; `npm run build`; `npm run check:public-urls`; `npm run typecheck`; `npm test` all passed before runtime release. | Done |
@@ -56,7 +56,7 @@ Use Shopify AI Toolkit and Shopify's current approval/deployment documentation t
 - Production workflow evidence: https://github.com/EVNSolution/shopify-clever/actions/runs/25856190483
 - Detailed AI self-review PR CI: https://github.com/EVNSolution/shopify-clever/actions/runs/25857796867
 - Admin URL: `https://clever-admin.3-39-216-177.sslip.io`
-- Delivery API URL: `https://clever-delivery.3-39-216-177.sslip.io`
+- Delivery API URL: `https://clever-route.cleversystem.ai`
 - Target tracking issue: EVNSolution/shopify-clever#6
 - Change-control issue: EVNSolution/clever-change-control#211 (`chg-20260514-001`)
 

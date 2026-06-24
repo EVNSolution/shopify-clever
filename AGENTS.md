@@ -17,8 +17,7 @@
 - target service: `shopify-clever`
 - app roots:
   - `apps/shopify-app` — Shopify embedded admin app, React Router
-  - `apps/delivery-api` — delivery API, Fastify
-- template lineage: `clever Shopify monorepo / React Router Shopify app + Fastify delivery API / AWS single-EIP EC2`
+  - - template lineage: `clever Shopify monorepo / React Router Shopify app + Fastify delivery API / AWS single-EIP EC2`
 - default integration branch: `main`
 - production deploy mode: manual GitHub Actions `workflow_dispatch` with
   `deploy_production=true`
@@ -171,7 +170,7 @@ Shopify 설정상 public URL hostname에 `shopify` 또는 `example` 단어를 �
 
 - Admin URL: `https://clever-admin.3-39-216-177.sslip.io`
 - Redirect URL: `https://clever-admin.3-39-216-177.sslip.io/auth/callback`
-- Delivery URL: `https://clever-delivery.3-39-216-177.sslip.io`
+- Delivery URL: `https://clever-route.cleversystem.ai`
 
 URL 변경 시 반드시 실행한다.
 
@@ -211,12 +210,11 @@ Private GitHub-hosted Actions는 org quota를 소모하므로 workflow 전략은
 - Host deploy root: `/srv/shopify-clever`
 - Admin URL: `https://clever-admin.3-39-216-177.sslip.io`
 - Redirect URL: `https://clever-admin.3-39-216-177.sslip.io/auth/callback`
-- Delivery URL: `https://clever-delivery.3-39-216-177.sslip.io`
+- Delivery URL: `https://clever-route.cleversystem.ai`
 
 Runtime env files are not committed:
 
 - `infra/env/shopify-app.env`
-- `infra/env/delivery-api.env`
 
 Required GitHub variables:
 
@@ -255,8 +253,7 @@ Compose 관련 변경 시:
 
 ```bash
 cp infra/env/shopify-app.env.example infra/env/shopify-app.env
-cp infra/env/delivery-api.env.example infra/env/delivery-api.env
-docker compose -f infra/compose/docker-compose.prod.yml config --quiet
+docker compose -f infra/compose/docker-compose.shopify-main.yml config --quiet
 ```
 
 ## Lore Commit Protocol

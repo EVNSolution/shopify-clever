@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 
 import { buildRouteScopeFromOrders } from "./route-scope.js";
 
-const DEFAULT_DELIVERY_API_URL = "https://clever-delivery.3-39-216-177.sslip.io";
+const DEFAULT_DELIVERY_API_URL = "https://clever-route.cleversystem.ai";
 const DEFAULT_CLEVER_APP_ID = "clever";
 const DEFAULT_DELIVERY_API_GET_CACHE_TTL_MS = 15_000;
 const MAX_DELIVERY_API_GET_CACHE_ENTRIES = 100;

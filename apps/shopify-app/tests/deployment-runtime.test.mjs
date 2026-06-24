@@ -9,16 +9,22 @@ function readRepoFile(relativePath) {
   return readFileSync(join(monorepoRoot, relativePath), "utf8");
 }
 
-test("production deploy runs delivery API schema push before app startup", () => {
-  const composeSource = readRepoFile("infra/compose/docker-compose.prod.yml");
+test("Shopify compose files run only the app containers on the route-server network", () => {
+  const mainCompose = readRepoFile("infra/compose/docker-compose.shopify-main.yml");
+  const devCompose = readRepoFile("infra/compose/docker-compose.shopify-dev.yml");
   const workflowSource = readRepoFile(".github/workflows/ci-cd.yml");
 
-  assert.match(composeSource, /delivery-api-migrate:/);
-  assert.match(composeSource, /target: build/);
-  assert.match(composeSource, /command:\s*\["npm", "exec", "--", "prisma", "db", "push", "--skip-generate"\]/);
-  assert.match(composeSource, /delivery-api-migrate:[\s\S]*?condition: service_completed_successfully/);
+  for (const composeSource of [mainCompose, devCompose]) {
+    assert.match(composeSource, /context: \.\.\/\.\.\/apps\/shopify-app/);
+    assert.match(composeSource, /CLEVER_DELIVERY_API_URL: http:\/\/delivery-api:3000/);
+    assert.match(composeSource, /route-server:[\s\S]*external: true/);
+    assert.doesNotMatch(composeSource, /context: \.\.\/\.\.\/apps\/delivery-api/);
+    assert.doesNotMatch(composeSource, /postgres/);
+    assert.doesNotMatch(composeSource, /caddy/);
+  }
 
-  assert.match(workflowSource, /up -d postgres/);
-  assert.match(workflowSource, /up --force-recreate delivery-api-migrate/);
-  assert.match(workflowSource, /up -d shopify-app delivery-api/);
+  assert.match(workflowSource, /docker-compose\.shopify-main\.yml/);
+  assert.match(workflowSource, /docker-compose\.shopify-dev\.yml/);
+  assert.doesNotMatch(workflowSource, /delivery-api-migrate/);
+  assert.doesNotMatch(workflowSource, /up -d postgres/);
 });

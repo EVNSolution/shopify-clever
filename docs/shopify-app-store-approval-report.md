@@ -69,7 +69,7 @@ Evidence:
   - `shop/redact`
 - `apps/shopify-app/app/routes/webhooks.compliance.jsx` acknowledges those topics only after `authenticate.webhook(request)` verifies the Shopify webhook.
 - The verified compliance webhook raw body and Shopify HMAC headers are forwarded to `delivery-api` at `/shopify/webhooks`, where the delivery server independently verifies the HMAC before recording or processing the event.
-- `apps/delivery-api/src/modules/shopify/webhook-event.repository.ts` now minimizes stored compliance payloads and performs delivery-data redaction:
+- `clever-route-server/apps/delivery-api/src/modules/shopify/webhook-event.repository.ts` now minimizes stored compliance payloads and performs delivery-data redaction:
   - `customers/data_request` stores only sanitized request identifiers for manual fulfillment; customer email/phone from the webhook payload are not persisted.
   - `customers/redact` deletes matching locally stored Shopify orders by legacy order ID and stores a sanitized `PROCESSED` receipt.
   - `shop/redact` deletes the shop row in the delivery database, cascading shop-scoped orders, stops, routes, drivers, vehicles, webhook events, driver events, consent records, and proof-media metadata.
@@ -243,8 +243,8 @@ Outcome:
   - `https://clever-admin.3-39-216-177.sslip.io/auth/login` returned `200`.
   - The production admin HTML includes `https://cdn.shopify.com/shopifycloud/app-bridge.js`.
   - The production admin HTML includes `name="shopify-api-key"`.
-  - `https://clever-delivery.3-39-216-177.sslip.io/healthz` returned `{"service":"clever-delivery-server","status":"ok"}`.
-  - `https://clever-delivery.3-39-216-177.sslip.io/readyz` returned `{"checks":{"http":true},"service":"clever-delivery-server","status":"ready"}`.
+  - `https://clever-route.cleversystem.ai/healthz` returned `{"service":"clever-delivery-server","status":"ok"}`.
+  - `https://clever-route.cleversystem.ai/readyz` returned `{"checks":{"http":true},"service":"clever-delivery-server","status":"ready"}`.
   - Invalid delivery webhook HMAC smoke returned `401` with `Invalid Shopify webhook HMAC`.
 
 ## Release notes included in current Shopify app version
