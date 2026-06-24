@@ -239,7 +239,9 @@ test("does not build a route scope when planned orders mix sessions", () => {
 
 test("creates route plans through the delivery Admin API with the Shopify session token", async () => {
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  const previousAppId = process.env.CLEVER_APP_ID;
   process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  process.env.CLEVER_APP_ID = "clever-route-dev";
   const calls = [];
 
   const result = await createDeliveryRoutePlan(
@@ -274,10 +276,16 @@ test("creates route plans through the delivery Admin API with the Shopify sessio
   );
 
   process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  if (previousAppId === undefined) {
+    delete process.env.CLEVER_APP_ID;
+  } else {
+    process.env.CLEVER_APP_ID = previousAppId;
+  }
 
   assert.equal(calls[0].url, "https://delivery.example/admin/route-plans");
   assert.equal(calls[0].options.method, "POST");
   assert.equal(calls[0].options.headers.authorization, "Bearer session-token");
+  assert.equal(calls[0].options.headers["x-clever-app-id"], "clever-route-dev");
   assert.equal(calls[0].options.headers["content-type"], "application/json");
   assert.equal(JSON.parse(calls[0].options.body).name, "Route");
   assert.equal(result.routePlan.id, "route-1");
@@ -309,6 +317,7 @@ test("creates route plans with an explicit Shopify session token from the client
   );
 
   assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.equal(calls[0].options.headers["x-clever-app-id"], "clever");
   assert.equal(result.routePlan.id, "route-2");
   assert.deepEqual(result.errors, []);
 });

@@ -16,6 +16,7 @@ services:
       SHOPIFY_APP_DISTRIBUTION: single_merchant
       SHOPIFY_APP_URL: https://clever-test-admin.3-39-216-177.sslip.io
       CLEVER_DELIVERY_API_URL: http://delivery-api-clever-route:3000
+      CLEVER_APP_ID: clever-route-dev
     restart: unless-stopped
     volumes:
       - /srv/shopify-clever-test/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
