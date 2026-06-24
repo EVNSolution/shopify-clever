@@ -1,0 +1,25 @@
+name: shopify-clever-dev
+
+services:
+  shopify-app-clever-route:
+    build:
+      context: ../../apps/shopify-app
+      dockerfile: Dockerfile
+    image: shopify-clever-dev-shopify-app:local
+    env_file:
+      - ../env/shopify-app-clever-route.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      SHOPIFY_APP_URL: https://clever-route-app.cleversystem.ai
+      CLEVER_DELIVERY_API_URL: http://delivery-api:3000
+    restart: unless-stopped
+    volumes:
+      - /srv/shopify-clever-dev/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
+    networks:
+      - route-server
+
+networks:
+  route-server:
+    external: true
+    name: ${ROUTE_SERVER_NETWORK:-clever-route_default}

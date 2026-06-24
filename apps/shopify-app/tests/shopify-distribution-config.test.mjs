@@ -54,7 +54,7 @@ test("Shopify app configs have explicit distinct production and dev identities",
   assert.equal(readTomlString(publicShopifyAppConfig, "handle"), "clever-route");
   assert.equal(
     readTomlString(publicShopifyAppConfig, "application_url"),
-    "https://clever-admin.3-39-216-177.sslip.io",
+    "https://clever-admin.cleversystem.ai",
   );
 
   assert.equal(readTomlString(devShopifyAppConfig, "client_id"), "9be6895e1de376bf056787803e863a4d");
@@ -62,7 +62,7 @@ test("Shopify app configs have explicit distinct production and dev identities",
   assert.equal(readTomlString(devShopifyAppConfig, "handle"), "clever-route-dev");
   assert.equal(
     readTomlString(devShopifyAppConfig, "application_url"),
-    "https://clever-test-admin.3-39-216-177.sslip.io",
+    "https://clever-route-app.cleversystem.ai",
   );
 
   assert.notEqual(

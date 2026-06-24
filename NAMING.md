@@ -10,8 +10,8 @@ This document is the source of truth for CLEVER Shopify app naming. Shopify uses
 | Shopify app config `name` | `CLEVER` | `CleverRoute Dev` | The name in `shopify.app.toml` / `shopify.app.dev.toml` released by Shopify CLI. |
 | Shopify app `handle` | `clever-route` | `clever-route-dev` | Unique Shopify Admin URL slug. Handles are globally constrained and can be rejected if already taken. |
 | Shopify Admin app path | `/apps/clever-route/...` | `/apps/clever-route-dev/...` | The path visible inside `admin.shopify.com` when opening the embedded app. |
-| Hosted app URL | `https://clever-admin.3-39-216-177.sslip.io` | `https://clever-test-admin.3-39-216-177.sslip.io` | The web app host Shopify loads in the embedded app iframe. |
-| Delivery API URL | `https://clever-delivery.3-39-216-177.sslip.io` | `https://clever-test-delivery.3-39-216-177.sslip.io` | The delivery backend paired with each app runtime. |
+| Hosted app URL | `https://clever-admin.cleversystem.ai` | `https://clever-route-app.cleversystem.ai` | The web app host Shopify loads in the embedded app iframe. |
+| Delivery API URL | `https://clever-delivery.3-39-216-177.sslip.io` | `https://clever-route.cleversystem.ai` | The delivery backend paired with each app runtime. |
 | Shopify config file | `apps/shopify-app/shopify.app.toml` | `apps/shopify-app/shopify.app.dev.toml` | Local CLI configuration file. |
 | Runtime distribution | `app_store` | `single_merchant` | Runtime value for `SHOPIFY_APP_DISTRIBUTION`. |
 
@@ -27,7 +27,7 @@ In other words, this is intentional:
 ```text
 Production display name: CLEVER
 Production handle:       clever-route
-Production app URL:      https://clever-admin.3-39-216-177.sslip.io
+Production app URL:      https://clever-admin.cleversystem.ai
 ```
 
 ## Why production uses `clever-route` as the handle
@@ -64,7 +64,7 @@ These are different:
 
 ```text
 Shopify Admin path: /apps/clever-route/...
-Hosted app URL:    https://clever-admin.3-39-216-177.sslip.io
+Hosted app URL:    https://clever-admin.cleversystem.ai
 ```
 
 The Admin path is controlled by the Shopify handle. The hosted app URL is controlled by our infrastructure and `application_url`.

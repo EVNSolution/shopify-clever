@@ -3,7 +3,7 @@
 client_id = "6994f8bd771cebdac03a800f20e1de86"
 name = "CLEVER"
 handle = "clever-route"
-application_url = "https://clever-admin.3-39-216-177.sslip.io"
+application_url = "https://clever-admin.cleversystem.ai"
 embedded = true
 
 [access_scopes]
@@ -27,7 +27,7 @@ api_version = "2026-07"
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
 
 [auth]
-redirect_urls = [ "https://clever-admin.3-39-216-177.sslip.io/auth/callback" ]
+redirect_urls = [ "https://clever-admin.cleversystem.ai/auth/callback" ]
 
 [build]
 automatically_update_urls_on_dev = false

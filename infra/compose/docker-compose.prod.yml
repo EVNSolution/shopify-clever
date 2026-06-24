@@ -24,7 +24,7 @@ services:
       NODE_ENV: production
       PORT: 3000
       SHOPIFY_APP_DISTRIBUTION: app_store
-      SHOPIFY_APP_URL: https://clever-admin.3-39-216-177.sslip.io
+      SHOPIFY_APP_URL: https://clever-admin.cleversystem.ai
       CLEVER_DELIVERY_API_URL: http://delivery-api:3000
     restart: unless-stopped
     volumes:
@@ -45,7 +45,7 @@ services:
     environment:
       NODE_ENV: production
       PORT: 3000
-      SHOPIFY_APP_URL: https://clever-admin.3-39-216-177.sslip.io
+      SHOPIFY_APP_URL: https://clever-admin.cleversystem.ai
     restart: unless-stopped
 
   delivery-api-migrate:

@@ -13,15 +13,15 @@ The apps stay as separate runtime roots. The root package only orchestrates app-
 
 Public/App Store runtime:
 
-- App URL: `https://clever-admin.3-39-216-177.sslip.io`
-- Redirect URL: `https://clever-admin.3-39-216-177.sslip.io/auth/callback`
+- App URL: `https://clever-admin.cleversystem.ai`
+- Redirect URL: `https://clever-admin.cleversystem.ai/auth/callback`
 - Delivery API: `https://clever-delivery.3-39-216-177.sslip.io`
 
 Custom/dev `clever-route` runtime on the same EC2/EIP:
 
-- App URL: `https://clever-test-admin.3-39-216-177.sslip.io`
-- Redirect URL: `https://clever-test-admin.3-39-216-177.sslip.io/auth/callback`
-- Delivery API: `https://clever-test-delivery.3-39-216-177.sslip.io`
+- App URL: `https://clever-route-app.cleversystem.ai`
+- Redirect URL: `https://clever-route-app.cleversystem.ai/auth/callback`
+- Delivery API: `https://clever-route.cleversystem.ai`
 
 Public URL hostnames must not contain `shopify` or `example`.
 
@@ -105,7 +105,7 @@ so the workflow is intentionally split:
 
 Production and custom runtimes run on the existing delivery EC2 instance at `/srv/shopify-clever` behind Caddy:
 
-- `clever-admin.3-39-216-177.sslip.io` → `shopify-app:3000`
+- `clever-admin.cleversystem.ai` → `shopify-app:3000`
 - `clever-delivery.3-39-216-177.sslip.io` → `delivery-api:3000`
 - `clever-test-admin.3-39-216-177.sslip.io` → `shopify-app-clever-route:3000`
 - `clever-test-delivery.3-39-216-177.sslip.io` → `delivery-api-clever-route:3000`
