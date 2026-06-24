@@ -16,7 +16,7 @@ services:
       CLEVER_DELIVERY_API_URL: http://delivery-api:3000
     restart: unless-stopped
     volumes:
-      - /srv/shopify-clever-main/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
+      - /srv/shopify-clever/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
     networks:
       - route-server
 
