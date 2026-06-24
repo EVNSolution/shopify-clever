@@ -9,7 +9,9 @@ import { clearDeliveryApiResponseCache } from "./route-plans.server.js";
 
 test("syncs delivery orders through the delivery Admin API with an explicit client token", async () => {
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  const previousAppId = process.env.CLEVER_APP_ID;
   process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  process.env.CLEVER_APP_ID = "clever-route-dev";
   const calls = [];
   const orders = [{ id: "gid://shopify/Order/1001", name: "#1001" }];
 
@@ -32,10 +34,16 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
   );
 
   process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  if (previousAppId === undefined) {
+    delete process.env.CLEVER_APP_ID;
+  } else {
+    process.env.CLEVER_APP_ID = previousAppId;
+  }
 
   assert.equal(calls[0].url, "https://delivery.example/admin/orders/sync");
   assert.equal(calls[0].options.method, "PATCH");
   assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.equal(calls[0].options.headers["x-clever-app-id"], "clever-route-dev");
   assert.equal(calls[0].options.headers["content-type"], "application/json");
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     source: "clever-app-orders",
@@ -84,6 +92,7 @@ test("fetches delivery orders with serialized non-empty filters and the request 
   );
   assert.equal(calls[0].options.method, "GET");
   assert.equal(calls[0].options.headers.authorization, "Bearer header-session-token");
+  assert.equal(calls[0].options.headers["x-clever-app-id"], "clever");
   assert.equal(calls[0].options.headers["content-type"], undefined);
   assert.equal(calls[0].options.body, undefined);
   assert.deepEqual(result, {

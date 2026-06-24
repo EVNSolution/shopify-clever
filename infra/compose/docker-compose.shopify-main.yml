@@ -14,6 +14,7 @@ services:
       SHOPIFY_APP_DISTRIBUTION: app_store
       SHOPIFY_APP_URL: https://clever-admin.cleversystem.ai
       CLEVER_DELIVERY_API_URL: http://delivery-api:3000
+      CLEVER_APP_ID: clever
     restart: unless-stopped
     volumes:
       - /srv/shopify-clever/data/shopify/dev.sqlite:/app/prisma/dev.sqlite

@@ -10,7 +10,9 @@ import {
 
 test("creates a pending delivery driver with a plain app download link", async () => {
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  const previousAppId = process.env.CLEVER_APP_ID;
   process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  process.env.CLEVER_APP_ID = "clever-route-dev";
   const calls = [];
 
   const result = await createPendingDeliveryDriver(
@@ -40,10 +42,16 @@ test("creates a pending delivery driver with a plain app download link", async (
   );
 
   process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  if (previousAppId === undefined) {
+    delete process.env.CLEVER_APP_ID;
+  } else {
+    process.env.CLEVER_APP_ID = previousAppId;
+  }
 
   assert.equal(calls[0].url, "https://delivery.example/admin/drivers");
   assert.equal(calls[0].options.method, "POST");
   assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.equal(calls[0].options.headers["x-clever-app-id"], "clever-route-dev");
   assert.equal(calls[0].options.headers["content-type"], "application/json");
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     source: "clever-app-driver-invite",
@@ -88,6 +96,7 @@ test("lists persisted delivery drivers through the delivery Admin API", async ()
   assert.equal(calls[0].url, "https://delivery.example/admin/drivers");
   assert.equal(calls[0].options.method, "GET");
   assert.equal(calls[0].options.headers.authorization, "Bearer header-session-token");
+  assert.equal(calls[0].options.headers["x-clever-app-id"], "clever");
   assert.equal(calls[0].options.body, undefined);
   assert.deepEqual(result, {
     drivers: [{ id: "driver-1", phone: "+14165550108" }],

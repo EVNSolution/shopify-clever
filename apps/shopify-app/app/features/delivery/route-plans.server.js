@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { buildRouteScopeFromOrders } from "./route-scope.js";
 
 const DEFAULT_DELIVERY_API_URL = "https://clever-delivery.3-39-216-177.sslip.io";
+const DEFAULT_CLEVER_APP_ID = "clever";
 const DEFAULT_DELIVERY_API_GET_CACHE_TTL_MS = 15_000;
 const MAX_DELIVERY_API_GET_CACHE_ENTRIES = 100;
 export const DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE = "DELIVERY_SESSION_TOKEN_MISSING";
@@ -29,6 +30,12 @@ export function getShopifySessionBearer(request) {
   return idToken ? `Bearer ${idToken}` : null;
 }
 
+export function getCleverAppId() {
+  const configuredAppId = process.env.CLEVER_APP_ID?.trim();
+
+  return configuredAppId || DEFAULT_CLEVER_APP_ID;
+}
+
 export function getDeliveryApiBaseUrl() {
   const configuredBaseUrl = process.env.CLEVER_DELIVERY_API_URL?.trim();
   const baseUrl = configuredBaseUrl || DEFAULT_DELIVERY_API_URL;
@@ -51,8 +58,10 @@ export function primeDeliveryApiGetResponseCache(request, path, result, options 
   if (cacheTtlMs <= 0) return false;
 
   const fetchImpl = options.fetch ?? fetch;
+  const appId = options.appId ?? getCleverAppId();
   const baseUrl = getDeliveryApiBaseUrl();
   const cacheScope = getDeliveryApiGetCacheScope({
+    appId,
     authorization,
     cacheKey: options.cacheKey,
   });
@@ -272,6 +281,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
 
   const fetchImpl = options.fetch ?? fetch;
   const method = (options.method ?? "GET").toUpperCase();
+  const appId = options.appId ?? getCleverAppId();
   const baseUrl = getDeliveryApiBaseUrl();
   const url = `${baseUrl}${path}`;
   const cacheTtlMs = getDeliveryApiGetCacheTtlMs();
@@ -279,6 +289,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
 
   if (canUseCache) {
     const cacheScope = getDeliveryApiGetCacheScope({
+      appId,
       authorization,
       cacheKey: options.cacheKey,
     });
@@ -296,6 +307,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
     }
 
     const resultPromise = executeDeliveryApiRequest({
+      appId,
       authorization,
       body: options.body,
       fetchImpl,
@@ -326,6 +338,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
   }
 
   const result = await executeDeliveryApiRequest({
+    appId,
     authorization,
     body: options.body,
     fetchImpl,
@@ -342,6 +355,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
 }
 
 async function executeDeliveryApiRequest({
+  appId,
   authorization,
   body,
   fetchImpl,
@@ -353,6 +367,7 @@ async function executeDeliveryApiRequest({
     body,
     headers: {
       authorization,
+      "x-clever-app-id": appId,
       ...(body ? { "content-type": "application/json" } : {}),
     },
     method,
@@ -405,13 +420,13 @@ function buildDeliveryApiGetCacheKey({ baseUrl, cacheScope, fetchImpl, path }) {
   ].join("\n");
 }
 
-function getDeliveryApiGetCacheScope({ authorization, cacheKey }) {
+function getDeliveryApiGetCacheScope({ appId, authorization, cacheKey }) {
   const explicitCacheKey = textOrNull(cacheKey);
   if (explicitCacheKey) {
-    return `cache-key:${hashCacheScope(explicitCacheKey)}`;
+    return `app:${appId}:cache-key:${hashCacheScope(explicitCacheKey)}`;
   }
 
-  return `authorization:${hashCacheScope(authorization)}`;
+  return `app:${appId}:authorization:${hashCacheScope(authorization)}`;
 }
 
 function hashCacheScope(value) {
