@@ -13,6 +13,7 @@ import {
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { SUPPORTED_LANGUAGES, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
+import { MapPanel, MapToolbar, renderMapFitIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
 import { PageShell } from "../ui/page-shell";
 
 export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
@@ -100,14 +101,6 @@ const settingsMapFrameStyle = {
   border: "1px solid #c9c9c9",
   borderRadius: "10px",
   height: "300px",
-  overflow: "hidden",
-  position: "relative",
-  width: "100%",
-};
-
-const settingsMapCanvasStyle = {
-  height: "100%",
-  width: "100%",
 };
 
 const settingsActionRowStyle = {
@@ -367,10 +360,6 @@ function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
           : DEFAULT_SETTINGS_MAP_ZOOM,
       });
       installMissingMapImageFallback(mapRef.current);
-      mapRef.current.addControl(
-        new maplibregl.NavigationControl({ showCompass: false }),
-        "top-right",
-      );
       mapRef.current.on("load", () => {
         if (isMounted) setIsMapReady(true);
       });
@@ -393,6 +382,24 @@ function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
       mapLibraryRef.current = null;
     };
   }, []);
+
+  const handleFitHighlightedMapMarkers = useCallback(() => {
+    if (!coordinate || !mapRef.current) return;
+
+    mapRef.current.easeTo({
+      center: coordinateToLngLat(coordinate),
+      duration: 300,
+      zoom: SETTINGS_MAP_COORDINATE_ZOOM,
+    });
+  }, [coordinate]);
+
+  const handleZoomInMap = () => {
+    mapRef.current?.zoomIn({ duration: 250 });
+  };
+
+  const handleZoomOutMap = () => {
+    mapRef.current?.zoomOut({ duration: 250 });
+  };
 
   useEffect(() => {
     const maplibregl = mapLibraryRef.current;
@@ -436,9 +443,33 @@ function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
   }, [coordinate, isMapReady]);
 
   return (
-    <div aria-label="Departure location map" role="region" style={settingsMapFrameStyle}>
-      <div ref={mapContainerRef} style={settingsMapCanvasStyle} />
-    </div>
+    <MapPanel
+      ariaLabel="Departure location map"
+      canvasRef={mapContainerRef}
+      frameStyle={settingsMapFrameStyle}
+      toolbar={
+        <MapToolbar
+          actions={[
+            {
+              ariaLabel: "Zoom map in",
+              icon: renderMapZoomInIcon(),
+              onClick: handleZoomInMap,
+            },
+            {
+              ariaLabel: "Zoom map out",
+              icon: renderMapZoomOutIcon(),
+              onClick: handleZoomOutMap,
+            },
+            {
+              ariaLabel: "Fit highlighted map markers",
+              disabled: !coordinate,
+              icon: renderMapFitIcon(),
+              onClick: handleFitHighlightedMapMarkers,
+            },
+          ]}
+        />
+      }
+    />
   );
 }
 

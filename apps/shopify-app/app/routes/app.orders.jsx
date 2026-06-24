@@ -20,6 +20,10 @@ import {
   mergeShopifyOrderRowsWithCanonicalRows,
 } from "../features/orders/canonical-orders";
 import {
+  collectServiceErrors,
+  getServiceErrorNotice,
+} from "../features/service-errors";
+import {
   filterOrders,
   formatServiceTypeLabel,
   formatUnavailableReason,
@@ -44,6 +48,7 @@ import {
 } from "../features/orders/order-filters";
 import { fetchShopifyOrders } from "../features/orders/shopify-orders.server";
 import { authenticate } from "../shopify.server";
+import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
 import { TabLayout } from "../ui/tab-layout";
 
 export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
@@ -83,58 +88,8 @@ const SHOP_TIME_ZONE_QUERY = `#graphql
   }
 `;
 
-const mapFrameStyle = {
-  position: "relative",
-};
-
-const mapCanvasStyle = {
-  height: "100%",
+const ordersMapCanvasStyle = {
   minHeight: "420px",
-  width: "100%",
-};
-
-const mapToolbarStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  left: "12px",
-  position: "absolute",
-  top: "12px",
-  zIndex: 2,
-};
-
-const mapToolbarButtonStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid #c9c9c9",
-  borderRadius: "8px",
-  color: "#303030",
-  cursor: "pointer",
-  display: "flex",
-  height: "34px",
-  justifyContent: "center",
-  padding: 0,
-  width: "34px",
-};
-
-const mapToolbarIconStyle = {
-  display: "block",
-  height: "16px",
-  width: "16px",
-};
-
-const mapStatusStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid #d6d6d6",
-  borderRadius: "999px",
-  color: "#303030",
-  display: "flex",
-  fontSize: "12px",
-  fontWeight: 700,
-  height: "24px",
-  justifyContent: "center",
-  width: "24px",
 };
 
 const routePlanPanelStyle = {
@@ -354,9 +309,10 @@ const routePlanDetailStyle = {
   padding: "10px",
 };
 
-const compactAlertStyle = {
+const orderPageNoticeStyle = {
   background: "#fff4f4",
-  borderBottom: "1px solid #fed3d1",
+  border: 0,
+  borderRadius: 0,
   color: "#8e1f0b",
   fontSize: "12px",
   lineHeight: 1.35,
@@ -550,7 +506,6 @@ const orderNumberButtonStyle = {
   width: "100%",
 };
 
-const PROTECTED_ORDER_ACCESS_ERROR_CODE = "PROTECTED_ORDER_ACCESS";
 
 const SORTABLE_ORDER_COLUMNS = [
   { key: "name", label: "Order" },
@@ -760,14 +715,6 @@ function formatOrderNames(orders) {
   return orderNames.length > 0 ? orderNames.join(", ") : "selected orders";
 }
 
-function getFirstErrorMessage(errors) {
-  const firstError = Array.isArray(errors)
-    ? errors.find((error) => error?.message)
-    : null;
-
-  return firstError?.message ?? null;
-}
-
 function getFirstOrderDeliveryDateByIds(orderIds, orderById) {
   if (!Array.isArray(orderIds) || !(orderById instanceof Map)) return "";
 
@@ -785,12 +732,6 @@ function getOrdersForDeliveryDate(orders, deliveryDate) {
 
   return (Array.isArray(orders) ? orders : []).filter(
     (order) => getOrderDeliveryDateValue(order) === normalizedDeliveryDate,
-  );
-}
-
-function getVisibleDeliveryOrderLoaderErrors(errors) {
-  return (Array.isArray(errors) ? errors : []).filter(
-    (error) => error?.code !== DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
   );
 }
 
@@ -1108,55 +1049,6 @@ function getOrderIdFromMapFeature(feature) {
   return typeof orderId === "string" && orderId.length > 0 ? orderId : null;
 }
 
-function renderToolbarIcon(children) {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      style={mapToolbarIconStyle}
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function renderRefreshIcon() {
-  return renderToolbarIcon(
-    <>
-      <path d="M16 7a6 6 0 1 0 1 5" />
-      <path d="M16 3v4h-4" />
-    </>,
-  );
-}
-
-function renderExpandWidthIcon() {
-  return renderToolbarIcon(
-    <>
-      <path d="m7 6-4 4 4 4" />
-      <path d="m13 6 4 4-4 4" />
-    </>,
-  );
-}
-
-function renderRestoreWidthIcon() {
-  return renderToolbarIcon(
-    <>
-      <path d="m3 6 4 4-4 4" />
-      <path d="m17 6-4 4 4 4" />
-    </>,
-  );
-}
-
-function renderWidthIcon(isMapWide) {
-  return isMapWide ? renderRestoreWidthIcon() : renderExpandWidthIcon();
-}
-
 export const action = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
@@ -1449,11 +1341,10 @@ export const loader = async ({ request }) => {
 
   return {
     orders: mergedOrders,
-    errors: [
-      ...(orderData.errors ?? []),
-      ...(departureLocationData.errors ?? []),
-      ...getVisibleDeliveryOrderLoaderErrors(serverOrderData.errors),
-    ],
+    errors: collectServiceErrors(
+      [orderData, departureLocationData, serverOrderData],
+      { ignoredCodes: [DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE] },
+    ),
     departureLocation: departureLocationData.departureLocation,
     shopLocalDate,
     shopTimeZone: shopTimeZoneData.ianaTimezone ?? null,
@@ -1536,18 +1427,13 @@ export default function OrdersPage() {
     () => filteredOrders.filter((order) => order.hasCoordinates),
     [filteredOrders],
   );
-  const protectedOrderAccessError = errors?.some(
-    (error) => error?.code === PROTECTED_ORDER_ACCESS_ERROR_CODE,
-  );
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
   const actionErrors = createRouteClientError
     ? [{ message: createRouteClientError }]
-    : [
-        ...(routePlanFetcher.data?.errors ?? []),
-      ];
-  const visibleOrderErrorMessage = getFirstErrorMessage([
-    ...actionErrors,
-    ...(errors ?? []),
+    : routePlanFetcher.data;
+  const orderPageNoticeMessage = getServiceErrorNotice([
+    actionErrors,
+    { errors },
   ]);
   const isCreatingRoute = routePlanFetcher.state !== "idle";
   const [selectedOrderId, setSelectedOrderId] = useState(
@@ -1987,6 +1873,14 @@ export default function OrdersPage() {
     setIsMapWide((currentIsMapWide) => !currentIsMapWide);
   };
 
+  const handleZoomInMap = () => {
+    mapRef.current?.zoomIn({ duration: 250 });
+  };
+
+  const handleZoomOutMap = () => {
+    mapRef.current?.zoomOut({ duration: 250 });
+  };
+
   const fitMapToOrders = useCallback((ordersToFit) => {
     if (
       !isMapReady ||
@@ -2397,10 +2291,6 @@ export default function OrdersPage() {
       });
       installMissingMapImageFallback(mapRef.current);
 
-      mapRef.current.addControl(
-        new maplibregl.NavigationControl({ showCompass: false }),
-        "top-right",
-      );
       const mapConstructMs = roundPerfDuration(
         performance.now() - mapConstructStartedAt,
       );
@@ -2631,46 +2521,60 @@ export default function OrdersPage() {
     <TabLayout
       title="Orders"
       primaryExpanded={isMapWide}
-      primary={
-        <div style={mapFrameStyle}>
-          <div style={mapToolbarStyle}>
-            <button
-              type="button"
-              style={mapToolbarButtonStyle}
-              aria-label={isMapWide ? "Restore map width" : "Expand map width"}
-              onClick={handleToggleMapWide}
-            >
-              {renderWidthIcon(isMapWide)}
-            </button>
-            <button
-              type="button"
-              style={mapToolbarButtonStyle}
-              aria-label="Refresh map"
-              onClick={handleRefreshMap}
-            >
-              {renderRefreshIcon()}
-            </button>
-            {mapStatus !== "idle" ? (
-              <span
-                style={mapStatusStyle}
-                role="status"
-                aria-label={
-                  mapStatus === "recovering" ? "Map is refreshing" : "Map refresh failed"
-                }
-              >
-                <span aria-hidden="true">
-                  {mapStatus === "recovering" ? "…" : "!"}
-                </span>
-              </span>
-            ) : null}
+      notice={
+        orderPageNoticeMessage ? (
+          <div className="orders-error-filter" role="alert" style={orderPageNoticeStyle}>
+            {orderPageNoticeMessage}
           </div>
-          <div
-            id="orders-map"
-            ref={mapContainerRef}
-            style={mapCanvasStyle}
-            aria-label="Shopify delivery order map"
-          />
-        </div>
+        ) : null
+      }
+      primary={
+        <MapPanel
+          ariaLabel="Shopify delivery order map"
+          canvasRef={mapContainerRef}
+          canvasStyle={ordersMapCanvasStyle}
+          id="orders-map"
+          toolbar={
+            <MapToolbar
+              actions={[
+                {
+                  ariaLabel: "Zoom map in",
+                  icon: renderMapZoomInIcon(),
+                  onClick: handleZoomInMap,
+                },
+                {
+                  ariaLabel: "Zoom map out",
+                  icon: renderMapZoomOutIcon(),
+                  onClick: handleZoomOutMap,
+                },
+                {
+                  ariaLabel: isMapWide ? "Restore map width" : "Expand map width",
+                  icon: renderMapWidthIcon(isMapWide),
+                  onClick: handleToggleMapWide,
+                },
+                {
+                  ariaLabel: "Fit highlighted map markers",
+                  disabled: routeFitLocations.length === 0,
+                  icon: renderMapFitIcon(),
+                  onClick: handleZoomToPlanned,
+                },
+                {
+                  ariaLabel: "Refresh map",
+                  icon: renderMapRefreshIcon(),
+                  onClick: handleRefreshMap,
+                },
+              ]}
+              statusGlyph={mapStatus === "recovering" ? "…" : "!"}
+              statusLabel={
+                mapStatus !== "idle"
+                  ? mapStatus === "recovering"
+                    ? "Map is refreshing"
+                    : "Map refresh failed"
+                  : null
+              }
+            />
+          }
+        />
       }
       secondary={
         <div className="order-route-plan" style={routePlanPanelStyle}>
@@ -2784,18 +2688,6 @@ export default function OrdersPage() {
       }
       lower={
         <div style={orderTableLayoutStyle}>
-            {protectedOrderAccessError ? (
-              <div role="alert" style={compactAlertStyle}>
-                Shopify Order 보호 고객 데이터 접근이 아직 활성화되지 않았습니다.
-                Dev Dashboard의 Protected customer data access에서 Protected
-                customer data와 필요한 고객 필드(Name, Address, Phone)를 저장한 뒤
-                앱을 다시 열어주세요.
-              </div>
-            ) : visibleOrderErrorMessage ? (
-              <div role="alert" style={compactAlertStyle}>
-                {visibleOrderErrorMessage}
-              </div>
-            ) : null}
           <div style={orderControlsStyle}>
             <div aria-label="Order planning tabs" role="tablist" style={orderStatusTabsStyle}>
               {ORDER_STATUS_TABS.map((tab) => (

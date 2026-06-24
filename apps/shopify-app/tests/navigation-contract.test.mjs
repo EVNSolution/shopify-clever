@@ -231,7 +231,7 @@ test("Settings is a single plain form without navigation-only setting sections",
   assert.match(source, /SUPPORTED_LANGUAGES\.map/);
   assert.match(source, /geocodeAddress/);
   assert.match(source, /name="departureAddress"/);
-  assert.match(source, /aria-label="Departure location map"/);
+  assert.match(source, /ariaLabel="Departure location map"/);
   assert.match(source, /name="departureLatitude"|name="departureLongitude"/);
   assert.match(source, /type="hidden"/);
   assert.match(source, />\{copy\("settings\.departureLocation\.latitude"\)\}<\/span>/);

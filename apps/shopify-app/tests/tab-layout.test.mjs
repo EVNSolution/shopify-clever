@@ -34,6 +34,7 @@ test("Orders can still use TabLayout without moving new page responsibilities in
   assert.match(ordersSource, /<TabLayout\s+title="Orders"/);
   assert.match(tabLayoutSource, /className="tab-layout"/);
   assert.match(tabLayoutSource, /primary, secondary, lower/);
+  assert.match(tabLayoutSource, /notice/);
   assert.doesNotMatch(tabLayoutSource, /Analytics|Workflows|Drivers|Settings|User variables|Runtime\/system values/);
 });
 

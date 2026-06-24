@@ -20,6 +20,14 @@ const pmtilesProtocolSource = readFileSync(
   join(root, "app/features/maps/pmtiles-protocol.js"),
   "utf8",
 );
+const serviceErrorsSource = readFileSync(
+  join(root, "app/features/service-errors.js"),
+  "utf8",
+);
+const mapPanelSource = readFileSync(
+  join(root, "app/ui/map-panel.jsx"),
+  "utf8",
+);
 const openFreeMapStyle = JSON.parse(
   readFileSync(join(root, "public/vendor/openfreemap-liberty.json"), "utf8"),
 );
@@ -43,8 +51,8 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.match(ordersPageSource, /label: "Area"/);
   assert.match(ordersPageSource, /label: "Ordered"/);
   assert.match(ordersPageSource, /label: "Delivery"/);
-  assert.match(ordersPageSource, /PROTECTED_ORDER_ACCESS/);
-  assert.match(ordersPageSource, /Protected customer data access/);
+  assert.match(serviceErrorsSource, /PROTECTED_ORDER_ACCESS/);
+  assert.match(serviceErrorsSource, /Protected customer data access/);
   assert.match(ordersPageSource, /import\("maplibre-gl"\)/);
   assert.match(ordersPageSource, /import\("pmtiles"\)/);
   assert.match(ordersPageSource, /installPmtilesProtocol\(maplibregl, Protocol\)/);
@@ -260,7 +268,7 @@ test("Orders table keeps the title row sticky outside Shopify table internals", 
 test("Orders filter and plan controls sit outside the table scroll area", () => {
   assert.match(ordersPageSource, /const orderTableLayoutStyle = \{/);
   assert.match(ordersPageSource, /const orderControlsStyle = \{/);
-  assert.match(ordersPageSource, /const compactAlertStyle = \{/);
+  assert.match(ordersPageSource, /const orderPageNoticeStyle = \{/);
   assert.doesNotMatch(ordersPageSource, /const orderFilterBarStyle = \{/);
   assert.doesNotMatch(ordersPageSource, /const planActionRowStyle = \{/);
   assert.match(ordersPageSource, /padding:\s*"6px 10px"/);
@@ -268,9 +276,11 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.match(ordersPageSource, /maxWidth:\s*"100%"/);
   assert.match(ordersPageSource, /overflowX:\s*"visible"/);
   assert.match(ordersPageSource, /overflowY:\s*"visible"/);
-  assert.match(ordersPageSource, /role="alert" style=\{compactAlertStyle\}/);
+  assert.match(ordersPageSource, /className="orders-error-filter" role="alert" style=\{orderPageNoticeStyle\}/);
   assert.doesNotMatch(ordersPageSource, /<s-banner tone="critical">/);
   assert.match(ordersPageSource, /<div style=\{orderControlsStyle\}>/);
+  assert.match(ordersPageSource, /getServiceErrorNotice\(\[/);
+  assert.match(ordersPageSource, /collectServiceErrors\(\s*\[orderData, departureLocationData, serverOrderData\]/);
   assert.doesNotMatch(ordersPageSource, /style=\{orderFilterBarStyle\}/);
   assert.doesNotMatch(ordersPageSource, /style=\{planActionRowStyle\}/);
   assert.match(ordersPageSource, /<div style=\{tableWrapStyle\}>\s*<table/s);
@@ -443,14 +453,15 @@ test("Orders route creation revalidates planned orders after preflight sync", ()
 });
 
 test("Orders page surfaces concrete route creation errors instead of a generic message", () => {
-  assert.match(ordersPageSource, /const visibleOrderErrorMessage = getFirstErrorMessage\(\[\s*\.\.\.actionErrors,\s*\.\.\.\(errors \?\? \[\]\),\s*\]\)/);
-  assert.match(ordersPageSource, /\{visibleOrderErrorMessage\}/);
+  assert.match(ordersPageSource, /getServiceErrorNotice\(\[/);
+  assert.match(ordersPageSource, /\{orderPageNoticeMessage\}/);
   assert.doesNotMatch(ordersPageSource, /Shopify 주문 또는 route plan 저장 중 일부 오류가 반환되었습니다\./);
 });
 
 test("Orders page keeps background sync errors out of the route creation alert", () => {
-  assert.match(ordersPageSource, /\.\.\.\(routePlanFetcher\.data\?\.errors \?\? \[\]\)/);
-  assert.doesNotMatch(ordersPageSource, /\.\.\.\(ordersSyncFetcher\.data\?\.errors \?\? \[\]\)/);
+  assert.match(ordersPageSource, /: routePlanFetcher\.data/);
+  assert.match(ordersPageSource, /getServiceErrorNotice\(\[/);
+  assert.doesNotMatch(ordersPageSource, /ordersSyncFetcher\.data\?\.errors/);
 });
 
 test("Orders route draft locks additions to ready orders in one route scope", () => {
@@ -746,16 +757,28 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(ordersPageSource, /setMapStatus\("idle"\)/);
   assert.match(ordersPageSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
   assert.match(ordersPageSource, /\}, \[mapRenderKey, scheduleMapRecovery\]\)/);
-  assert.match(ordersPageSource, /aria-label="Refresh map"/);
-  assert.match(ordersPageSource, /const mapToolbarButtonStyle = \{/);
-  assert.match(ordersPageSource, /const mapToolbarIconStyle = \{/);
-  assert.match(ordersPageSource, /width: "16px"/);
-  assert.match(ordersPageSource, /height: "16px"/);
-  assert.match(ordersPageSource, /function renderRefreshIcon\(\) \{/);
-  assert.match(ordersPageSource, /viewBox="0 0 20 20"/);
-  assert.match(ordersPageSource, /strokeWidth="1\.8"/);
+  assert.match(ordersPageSource, /ariaLabel: "Refresh map"/);
+  assert.match(ordersPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
+  assert.match(ordersPageSource, /<MapPanel/);
+  assert.match(ordersPageSource, /<MapToolbar/);
+  assert.match(mapPanelSource, /flexDirection: "column"/);
+  assert.match(mapPanelSource, /right: `\$\{MAPLIBRE_CONTROL_OFFSET_PX\}px`/);
+  assert.match(mapPanelSource, /MAPLIBRE_CONTROL_OFFSET_PX = 12/);
+  assert.match(mapPanelSource, /MAPLIBRE_CONTROL_SIZE_PX = 30/);
+  assert.match(mapPanelSource, /MAPLIBRE_CONTROL_BORDER_WIDTH_PX = 2/);
+  assert.match(mapPanelSource, /const toolbarGroups = \[actions\.slice\(0, 2\), actions\.slice\(2\)\]/);
+  assert.match(mapPanelSource, /MAP_TOOLBAR_BORDER_COLOR = "#8a8a8a"/);
+  assert.match(mapPanelSource, /MAP_TOOLBAR_DIVIDER_COLOR = MAP_TOOLBAR_BORDER_COLOR/);
+  assert.match(mapPanelSource, /border: `\$\{MAPLIBRE_CONTROL_BORDER_WIDTH_PX\}px solid \$\{MAP_TOOLBAR_BORDER_COLOR\}`/);
+  assert.match(mapPanelSource, /borderTop: `\$\{MAPLIBRE_CONTROL_BORDER_WIDTH_PX\}px solid \$\{MAP_TOOLBAR_DIVIDER_COLOR\}`/);
+  assert.match(mapPanelSource, /top: `\$\{MAPLIBRE_CONTROL_OFFSET_PX\}px`/);
+  assert.match(ordersPageSource, /renderMapZoomInIcon\(\)/);
+  assert.match(ordersPageSource, /renderMapZoomOutIcon\(\)/);
+  assert.doesNotMatch(ordersPageSource, /NavigationControl/);
+  assert.match(ordersPageSource, /ariaLabel: "Fit highlighted map markers"/);
+  assert.match(ordersPageSource, /onClick: handleZoomToPlanned/);
   assert.doesNotMatch(ordersPageSource, /aria-hidden="true">↻<\/span>/);
-  assert.match(ordersPageSource, /onClick=\{handleRefreshMap\}/);
+  assert.match(ordersPageSource, /onClick: handleRefreshMap/);
   assert.doesNotMatch(ordersPageSource, />Re-render map<\/button>/);
 });
 
@@ -764,22 +787,20 @@ test("Orders map has a compact width toggle that is not browser fullscreen", () 
   assert.match(ordersPageSource, /const handleToggleMapWide = \(\) => \{/);
   assert.match(ordersPageSource, /setIsMapWide\(\(currentIsMapWide\) => !currentIsMapWide\)/);
   assert.match(ordersPageSource, /primaryExpanded=\{isMapWide\}/);
-  assert.match(ordersPageSource, /aria-label=\{isMapWide \? "Restore map width" : "Expand map width"\}/);
-  assert.match(ordersPageSource, /function renderWidthIcon\(isMapWide\) \{/);
-  assert.match(ordersPageSource, /isMapWide \? renderRestoreWidthIcon\(\) : renderExpandWidthIcon\(\)/);
-  assert.match(ordersPageSource, /function renderRestoreWidthIcon\(\) \{/);
-  assert.match(ordersPageSource, /<path d="m3 6 4 4-4 4" \/>/);
-  assert.match(ordersPageSource, /<path d="m17 6-4 4 4 4" \/>/);
-  assert.doesNotMatch(ordersPageSource, /<path d="m4 7 3 3-3 3" \/>/);
-  assert.doesNotMatch(ordersPageSource, /<path d="m16 7-3 3 3 3" \/>/);
-  assert.doesNotMatch(ordersPageSource, /<path d="m6 7 3 3-3 3" \/>/);
-  assert.doesNotMatch(ordersPageSource, /<path d="m14 7-3 3 3 3" \/>/);
-  assert.doesNotMatch(ordersPageSource, /<rect /);
-  assert.doesNotMatch(ordersPageSource, /<path d="M3 10h14" \/>/);
-  assert.doesNotMatch(ordersPageSource, /<path d="M3 10h6" \/>/);
-  assert.doesNotMatch(ordersPageSource, /<path d="M17 10h-6" \/>/);
+  assert.match(ordersPageSource, /ariaLabel: isMapWide \? "Restore map width" : "Expand map width"/);
+  assert.match(ordersPageSource, /renderMapWidthIcon\(isMapWide\)/);
+  assert.match(mapPanelSource, /<path d="m3 6 4 4-4 4" \/>/);
+  assert.match(mapPanelSource, /<path d="m17 6-4 4 4 4" \/>/);
+  assert.doesNotMatch(mapPanelSource, /<path d="m4 7 3 3-3 3" \/>/);
+  assert.doesNotMatch(mapPanelSource, /<path d="m16 7-3 3 3 3" \/>/);
+  assert.doesNotMatch(mapPanelSource, /<path d="m6 7 3 3-3 3" \/>/);
+  assert.doesNotMatch(mapPanelSource, /<path d="m14 7-3 3 3 3" \/>/);
+  assert.doesNotMatch(mapPanelSource, /<rect /);
+  assert.doesNotMatch(mapPanelSource, /<path d="M3 10h14" \/>/);
+  assert.doesNotMatch(mapPanelSource, /<path d="M3 10h6" \/>/);
+  assert.doesNotMatch(mapPanelSource, /<path d="M17 10h-6" \/>/);
   assert.doesNotMatch(ordersPageSource, /isMapWide \? "⤡" : "⤢"/);
-  assert.match(ordersPageSource, /onClick=\{handleToggleMapWide\}/);
+  assert.match(ordersPageSource, /onClick: handleToggleMapWide/);
   assert.match(ordersPageSource, /mapRef\.current\?\.resize\(\)/);
   assert.doesNotMatch(ordersPageSource, /requestFullscreen|webkitRequestFullscreen|mozRequestFullScreen|msRequestFullscreen/);
 });
@@ -808,7 +829,7 @@ test("Orders map captures MapLibre tile errors without long visible copy", () =>
   assert.match(ordersPageSource, /AJAXError/);
   assert.match(ordersPageSource, /setMapStatus\("recovering"\)/);
   assert.match(ordersPageSource, /setMapStatus\("failed"\)/);
-  assert.match(ordersPageSource, /\{mapStatus !== "idle" \? \(/);
+  assert.match(ordersPageSource, /statusLabel=\{\s*mapStatus !== "idle"/s);
   assert.doesNotMatch(ordersPageSource, /지도 타일을 불러오지 못했습니다/);
 });
 

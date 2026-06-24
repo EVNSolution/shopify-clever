@@ -309,6 +309,7 @@ s-badge {
   cursor: not-allowed;
 }
 
+
 .maplibregl-popup {
   z-index: 5000;
 }

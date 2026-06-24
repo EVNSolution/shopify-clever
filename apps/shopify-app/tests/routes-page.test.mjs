@@ -391,10 +391,11 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(routeDetailSource, /style: OPENFREEMAP_STYLE_URL/);
   assert.match(routeDetailSource, /new maplibregl\.Map\(\{/);
-  assert.match(routeDetailSource, /new maplibregl\.NavigationControl\(\{ showCompass: false \}\)/);
+  assert.doesNotMatch(routeDetailSource, /new maplibregl\.NavigationControl/);
+  assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
   assert.match(routeDetailSource, /const routeDetailMapFrameStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailMapCanvasStyle = \{/);
-  assert.match(routeDetailSource, /ref=\{mapContainerRef\}/);
+  assert.match(routeDetailSource, /canvasRef=\{mapContainerRef\}/);
   assert.match(routeDetailSource, /createRouteStartMarkerElement\(departureLocation\)/);
   assert.match(routeDetailSource, /const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route"/);
   assert.match(routeDetailSource, /const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line"/);
@@ -573,9 +574,13 @@ test("Route detail avoids WebGL stop layers so marker visibility is not style-la
 test("Route detail map has compact refresh and automatic recovery controls", () => {
   assert.match(routeDetailSource, /const MAP_RECOVERY_DELAY_MS = 2500/);
   assert.match(routeDetailSource, /const MAX_MAP_RECOVERY_ATTEMPTS = 3/);
-  assert.match(routeDetailSource, /const routeDetailMapToolbarStyle = \{/);
-  assert.match(routeDetailSource, /function renderRouteDetailRefreshIcon\(\) \{/);
-  assert.match(routeDetailSource, /function renderRouteDetailFitIcon\(\) \{/);
+  assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
+  assert.match(routeDetailSource, /<MapPanel/);
+  assert.match(routeDetailSource, /<MapToolbar/);
+  assert.match(routeDetailSource, /renderMapRefreshIcon\(\)/);
+  assert.match(routeDetailSource, /renderMapFitIcon\(\)/);
+  assert.match(routeDetailSource, /renderMapZoomInIcon\(\)/);
+  assert.match(routeDetailSource, /renderMapZoomOutIcon\(\)/);
   assert.match(routeDetailSource, /const clearMapRecoveryTimer = useCallback\(\(\) => \{/);
   assert.match(routeDetailSource, /const scheduleMapRecovery = useCallback\(\(\) => \{/);
   assert.match(routeDetailSource, /const handleRefreshMap = \(\) => \{/);
@@ -583,10 +588,11 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
   assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, mapLibraryRef\.current, routeMapLocations\)/);
   assert.match(routeDetailSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
   assert.match(routeDetailSource, /scheduleMapRecovery\(\)/);
-  assert.match(routeDetailSource, /aria-label="Refresh route map"/);
-  assert.match(routeDetailSource, /aria-label="Zoom route map to fit"/);
+  assert.match(routeDetailSource, /ariaLabel: "Refresh route map"/);
+  assert.match(routeDetailSource, /ariaLabel: "Fit highlighted map markers"/);
+  assert.doesNotMatch(routeDetailSource, /Zoom route map to store|handleFitStoreMap/);
   assert.doesNotMatch(routeDetailSource, />Zoom to fit<|>Fit<|>Zoom<|>줌/);
-  assert.match(routeDetailSource, /key=\{mapRenderKey\}/);
+  assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
   assert.doesNotMatch(routeDetailSource, />Loading map</);
   assert.doesNotMatch(routeDetailSource, />Map unavailable</);
 });

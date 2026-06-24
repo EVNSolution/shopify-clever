@@ -2,6 +2,12 @@ import {
   formatDeliveryScopeLabel,
   inferDeliveryDateForOrder,
 } from "../delivery/delivery-labels.js";
+import {
+  SERVICE_ERROR_CODES,
+  SERVICE_ERROR_NOTICES,
+  getServiceErrorMessage,
+  normalizeGraphqlErrors as normalizeServiceGraphqlErrors,
+} from "../service-errors.js";
 
 const SHOPIFY_ORDERS_PAGE_SIZE = 50;
 const SHOPIFY_ORDERS_MAX_PAGES = 20;
@@ -65,13 +71,12 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
 `;
 
 export const ORDER_SCOPE_ACCESS_ERROR_CODE = "ORDER_SCOPE_ACCESS";
-export const PROTECTED_ORDER_ACCESS_ERROR_CODE = "PROTECTED_ORDER_ACCESS";
+export const PROTECTED_ORDER_ACCESS_ERROR_CODE = SERVICE_ERROR_CODES.PROTECTED_ORDER_ACCESS;
 
 const ORDER_SCOPE_ACCESS_MESSAGE =
   "Shopify Orders 권한이 아직 승인되지 않았습니다. shopify.app.toml의 access_scopes에 read_orders를 포함한 뒤 Shopify 앱을 다시 설치/권한 갱신해 주세요.";
 
-const PROTECTED_ORDER_ACCESS_MESSAGE =
-  "Shopify Order 보호 고객 데이터 접근이 아직 활성화되지 않았습니다. Dev Dashboard에서 Protected customer data access를 저장/활성화해야 주문을 읽을 수 있습니다.";
+const PROTECTED_ORDER_ACCESS_MESSAGE = SERVICE_ERROR_NOTICES.PROTECTED_ORDER_ACCESS;
 
 const DEFAULT_SHOPIFY_ORDERS_CACHE_TTL_MS = 30_000;
 const shopifyOrdersCache = new Map();
@@ -417,25 +422,25 @@ function formatDeliveryAttributes(attributes) {
 }
 
 function normalizeGraphqlErrors(errors) {
-  if (!Array.isArray(errors)) return [];
+  return normalizeServiceGraphqlErrors(errors, { mapError: normalizeOrderGraphqlError });
+}
 
-  return errors.map((error) => {
-    if (isOrderScopeAccessError(error)) {
-      return {
-        code: ORDER_SCOPE_ACCESS_ERROR_CODE,
-        message: ORDER_SCOPE_ACCESS_MESSAGE,
-      };
-    }
+function normalizeOrderGraphqlError(error) {
+  if (isOrderScopeAccessError(error)) {
+    return {
+      code: ORDER_SCOPE_ACCESS_ERROR_CODE,
+      message: ORDER_SCOPE_ACCESS_MESSAGE,
+    };
+  }
 
-    if (isProtectedOrderAccessError(error)) {
-      return {
-        code: PROTECTED_ORDER_ACCESS_ERROR_CODE,
-        message: PROTECTED_ORDER_ACCESS_MESSAGE,
-      };
-    }
+  if (isProtectedOrderAccessError(error)) {
+    return {
+      code: PROTECTED_ORDER_ACCESS_ERROR_CODE,
+      message: PROTECTED_ORDER_ACCESS_MESSAGE,
+    };
+  }
 
-    return error;
-  });
+  return { message: getServiceErrorMessage(error) };
 }
 
 function isOrderScopeAccessError(error) {

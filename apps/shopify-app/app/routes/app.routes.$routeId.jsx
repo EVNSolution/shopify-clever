@@ -13,6 +13,7 @@ import {
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
+import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
 import { authenticate } from "../shopify.server";
 
 export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
@@ -212,58 +213,10 @@ const routesDetailCardStyle = {
 
 const routeDetailMapFrameStyle = {
   height: "440px",
-  overflow: "hidden",
-  position: "relative",
 };
 
 const routeDetailMapCanvasStyle = {
-  height: "100%",
   minHeight: "440px",
-  width: "100%",
-};
-
-const routeDetailMapToolbarStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  left: "12px",
-  position: "absolute",
-  top: "12px",
-  zIndex: 2,
-};
-
-const routeDetailMapToolbarButtonStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid #c9c9c9",
-  borderRadius: "8px",
-  color: "#303030",
-  cursor: "pointer",
-  display: "flex",
-  height: "34px",
-  justifyContent: "center",
-  padding: 0,
-  width: "34px",
-};
-
-const routeDetailMapToolbarIconStyle = {
-  display: "block",
-  height: "16px",
-  width: "16px",
-};
-
-const routeDetailMapStatusStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid #d6d6d6",
-  borderRadius: "999px",
-  color: "#303030",
-  display: "flex",
-  fontSize: "12px",
-  fontWeight: 700,
-  height: "24px",
-  justifyContent: "center",
-  width: "24px",
 };
 
 const routeDetailStopsHeaderStyle = {
@@ -1203,44 +1156,6 @@ function renderRouteHeaderMetric(label, value) {
   );
 }
 
-function renderRouteDetailToolbarIcon(children) {
-  return (
-    <svg
-      aria-hidden="true"
-      fill="none"
-      focusable="false"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-      style={routeDetailMapToolbarIconStyle}
-      viewBox="0 0 20 20"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function renderRouteDetailRefreshIcon() {
-  return renderRouteDetailToolbarIcon(
-    <>
-      <path d="M16 7a6 6 0 1 0 1 5" />
-      <path d="M16 3v4h-4" />
-    </>,
-  );
-}
-
-function renderRouteDetailFitIcon() {
-  return renderRouteDetailToolbarIcon(
-    <>
-      <path d="M4.5 8V4.5H8" />
-      <path d="M12 4.5h3.5V8" />
-      <path d="M15.5 12v3.5H12" />
-      <path d="M8 15.5H4.5V12" />
-    </>,
-  );
-}
-
 export default function RouteDetailPage() {
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -1532,6 +1447,14 @@ export default function RouteDetailPage() {
     fitRouteDetailMap(mapRef.current, mapLibraryRef.current, routeMapLocations);
   };
 
+  const handleZoomInMap = () => {
+    mapRef.current?.zoomIn({ duration: 250 });
+  };
+
+  const handleZoomOutMap = () => {
+    mapRef.current?.zoomOut({ duration: 250 });
+  };
+
   useEffect(() => {
     routeMapCenterRef.current = routeMapCenter;
   }, [routeMapCenter]);
@@ -1567,10 +1490,6 @@ export default function RouteDetailPage() {
           zoom: 11,
         });
         installMissingMapImageFallback(mapRef.current);
-        mapRef.current.addControl(
-          new maplibregl.NavigationControl({ showCompass: false }),
-          "top-right",
-        );
         mapRef.current.on("load", () => {
           mapLoadedRef.current = true;
           mapRecoveryAttemptsRef.current = 0;
@@ -1746,50 +1665,50 @@ export default function RouteDetailPage() {
         ) : null}
 
         <section style={routesDetailCardStyle}>
-          <div style={routeDetailMapFrameStyle}>
-            <div style={routeDetailMapToolbarStyle}>
-              <button
-                aria-label="Zoom route map to fit"
-                disabled={routeMapLocations.length === 0}
-                onClick={handleFitRouteMap}
-                style={routeDetailMapToolbarButtonStyle}
-                type="button"
-              >
-                {renderRouteDetailFitIcon()}
-              </button>
-              <button
-                aria-label="Refresh route map"
-                onClick={handleRefreshMap}
-                style={routeDetailMapToolbarButtonStyle}
-                type="button"
-              >
-                {renderRouteDetailRefreshIcon()}
-              </button>
-              {mapStatus !== "idle" ? (
-                <span
-                  aria-label={
-                    mapStatus === "recovering"
+          <MapPanel
+            ariaLabel="Route stop location map"
+            canvasKey={mapRenderKey}
+            canvasRef={mapContainerRef}
+            canvasStyle={routeDetailMapCanvasStyle}
+            frameStyle={routeDetailMapFrameStyle}
+            toolbar={
+              <MapToolbar
+                actions={[
+                  {
+                    ariaLabel: "Zoom map in",
+                    icon: renderMapZoomInIcon(),
+                    onClick: handleZoomInMap,
+                  },
+                  {
+                    ariaLabel: "Zoom map out",
+                    icon: renderMapZoomOutIcon(),
+                    onClick: handleZoomOutMap,
+                  },
+                  {
+                    ariaLabel: "Fit highlighted map markers",
+                    disabled: routeMapLocations.length === 0,
+                    icon: renderMapFitIcon(),
+                    onClick: handleFitRouteMap,
+                  },
+                  {
+                    ariaLabel: "Refresh route map",
+                    icon: renderMapRefreshIcon(),
+                    onClick: handleRefreshMap,
+                  },
+                ]}
+                statusGlyph={mapStatus === "failed" ? "!" : "…"}
+                statusLabel={
+                  mapStatus !== "idle"
+                    ? mapStatus === "recovering"
                       ? "Route map is refreshing"
                       : mapStatus === "failed"
                         ? "Route map refresh failed"
                         : "Route map is loading"
-                  }
-                  role="status"
-                  style={routeDetailMapStatusStyle}
-                >
-                  <span aria-hidden="true">
-                    {mapStatus === "failed" ? "!" : "…"}
-                  </span>
-                </span>
-              ) : null}
-            </div>
-            <div
-              aria-label="Route stop location map"
-              key={mapRenderKey}
-              ref={mapContainerRef}
-              style={routeDetailMapCanvasStyle}
-            />
-          </div>
+                    : null
+                }
+              />
+            }
+          />
 
           <div style={routeDetailStopsHeaderStyle}>
             <div style={routeDetailStopsTitleStyle}>stop sequence list</div>
