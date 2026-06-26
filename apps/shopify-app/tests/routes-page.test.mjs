@@ -640,6 +640,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
+  assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
+  assert.match(routeDetailSource, /aria-label="Edit route line name"/);
   assert.match(routeDetailSource, /viewBox="0 0 10 10"/);
   assert.doesNotMatch(routeDetailSource, />⌄<\/span>/);
   assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);

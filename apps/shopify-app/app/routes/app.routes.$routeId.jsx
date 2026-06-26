@@ -270,7 +270,7 @@ const routePlanRowsColumnWidths = [
 const routeLineNameStyle = {
   alignItems: "center",
   display: "inline-flex",
-  gap: "6px",
+  gap: "4px",
   maxWidth: "100%",
   minWidth: 0,
 };
@@ -291,16 +291,34 @@ const routeStatusDotStyle = {
   width: "7px",
 };
 
+const routeLineEditButtonStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  color: "#8a8a8a",
+  cursor: "pointer",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  height: "14px",
+  justifyContent: "center",
+  padding: 0,
+  width: "14px",
+};
+
+const routeLineEditIconStyle = {
+  display: "block",
+};
+
 const routeDepartureStatusStyle = {
   background: "#fff7cc",
   border: "1px solid #eadf9b",
   borderRadius: "999px",
   color: "#5f4b00",
   display: "inline-flex",
-  fontSize: "11px",
+  fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1,
-  padding: "2px 6px",
+  padding: "1px 5px",
 };
 
 const routeEditableValueStyle = {
@@ -311,9 +329,9 @@ const routeEditableValueStyle = {
   cursor: "pointer",
   display: "inline-flex",
   fontFamily: "inherit",
-  fontSize: "12px",
+  fontSize: "13px",
   fontWeight: 600,
-  gap: "3px",
+  gap: "2px",
   lineHeight: 1.1,
   maxWidth: "100%",
   minWidth: 0,
@@ -418,11 +436,11 @@ const routesDetailHeaderCellStyle = {
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#616161",
-  fontSize: "11px",
+  fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1.15,
   overflow: "hidden",
-  padding: "5px 6px",
+  padding: "4px",
   textAlign: "left",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -433,10 +451,10 @@ const routesDetailCellStyle = {
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#303030",
-  fontSize: "12px",
+  fontSize: "13px",
   lineHeight: 1.2,
   overflow: "hidden",
-  padding: "5px 6px",
+  padding: "4px",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
@@ -1110,6 +1128,27 @@ function renderRouteEditableChevron() {
   );
 }
 
+function renderRouteLineEditIcon() {
+  return (
+    <svg fill="none" height="12" style={routeLineEditIconStyle} viewBox="0 0 12 12" width="12">
+      <path
+        d="M2.25 8.9 2 10l1.1-.25 5.95-5.95-0.85-.85L2.25 8.9Z"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.2"
+      />
+      <path
+        d="m8.15 2.1.65-.65a.85.85 0 0 1 1.2 1.2l-.65.65"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.2"
+      />
+    </svg>
+  );
+}
+
 export default function RouteDetailPage() {
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -1582,6 +1621,9 @@ export default function RouteDetailPage() {
                     <span style={routeLineNameStyle}>
                       <span aria-hidden="true" style={routeStatusDotStyle}></span>
                       <span style={routeLineTitleStyle}>{childRouteTitle}</span>
+                      <button aria-label="Edit route line name" style={routeLineEditButtonStyle} type="button">
+                        {renderRouteLineEditIcon()}
+                      </button>
                     </span>
                   </td>
                   <td style={routesDetailCellStyle}><span style={routeDepartureStatusStyle}>{routeDepartureStatus}</span></td>
