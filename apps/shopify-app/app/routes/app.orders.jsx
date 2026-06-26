@@ -91,7 +91,7 @@ function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, routeSc
     ...(dateRangeStart ? { planDate: dateRangeStart } : {}),
     ...(depot ? { depot } : {}),
     name: textOrUndefined(routeName) ?? DEFAULT_ROUTE_PLAN_TITLE,
-    orderIds: plannedOrders.map((order) => order.id),
+    orderIds: plannedOrders.map((order) => order.orderId),
   };
 }
 
@@ -1521,6 +1521,17 @@ async function handleOrdersAction(request) {
         {
           message:
             "서버에서 route scope가 계산된 일부 주문을 찾지 못했습니다. 주문 동기화 후 다시 시도해주세요.",
+        },
+      ],
+    };
+  }
+
+  if (plannedOrders.some((order) => !textOrUndefined(order.orderId))) {
+    return {
+      errors: [
+        {
+          message:
+            "서버 주문 ID가 없는 주문이 있어 경로를 만들 수 없습니다. 주문 동기화 후 다시 시도해주세요.",
         },
       ],
     };

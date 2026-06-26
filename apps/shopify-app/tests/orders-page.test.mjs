@@ -388,6 +388,12 @@ test("Orders page keeps the UI label as route creation while using route groups 
   assert.match(ordersPageSource, />Create route<\/button>/);
 });
 
+test("Orders route-group payload sends delivery-api order UUIDs, not Shopify GIDs", () => {
+  assert.match(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.orderId\)/);
+  assert.doesNotMatch(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.id\)/);
+  assert.match(ordersPageSource, /서버 주문 ID가 없는 주문이 있어 경로를 만들 수 없습니다/);
+});
+
 test("Orders action separates background order sync from route creation", () => {
   assert.match(ordersPageSource, /import \{[\s\S]*fetchDeliveryOrders[\s\S]*syncDeliveryOrders[\s\S]*\} from "\.\.\/features\/delivery\/orders\.server"/);
   assert.match(ordersPageSource, /import \{[\s\S]*getOrderSyncSnapshots[\s\S]*mapCanonicalOrdersToOrderRows[\s\S]*mergeShopifyOrderRowsWithCanonicalRows[\s\S]*\} from "\.\.\/features\/orders\/canonical-orders"/);
