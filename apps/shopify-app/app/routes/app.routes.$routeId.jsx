@@ -331,10 +331,17 @@ const routeEditableValueTextStyle = {
 };
 
 const routeEditableArrowStyle = {
+  alignItems: "center",
   color: "#616161",
+  display: "inline-flex",
   flex: "0 0 auto",
-  fontSize: "11px",
-  lineHeight: 1,
+  height: "12px",
+  justifyContent: "center",
+  width: "12px",
+};
+
+const routeEditableChevronSvgStyle = {
+  display: "block",
 };
 
 const routeTimelineStyle = {
@@ -1087,6 +1094,22 @@ function renderRouteHeaderMetric(label, value) {
   );
 }
 
+function renderRouteEditableChevron() {
+  return (
+    <span aria-hidden="true" style={routeEditableArrowStyle}>
+      <svg fill="none" height="10" style={routeEditableChevronSvgStyle} viewBox="0 0 10 10" width="10">
+        <path
+          d="M2.25 3.75 5 6.25l2.75-2.5"
+          stroke="currentColor"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          strokeWidth="1.4"
+        />
+      </svg>
+    </span>
+  );
+}
+
 export default function RouteDetailPage() {
   const navigate = useNavigate();
   const shopify = useAppBridge();
@@ -1565,19 +1588,19 @@ export default function RouteDetailPage() {
                   <td style={routesDetailCellStyle}>
                     <button aria-label="Change route driver" style={routeEditableValueStyle} type="button">
                       <span style={routeEditableValueTextStyle}>{routeDriverSummary}</span>
-                      <span aria-hidden="true" style={routeEditableArrowStyle}>⌄</span>
+                      {renderRouteEditableChevron()}
                     </button>
                   </td>
                   <td style={routesDetailCellStyle}>
                     <button aria-label="Change route vehicle" style={routeEditableValueStyle} type="button">
                       <span style={routeEditableValueTextStyle}>{routeVehicleLabel}</span>
-                      <span aria-hidden="true" style={routeEditableArrowStyle}>⌄</span>
+                      {renderRouteEditableChevron()}
                     </button>
                   </td>
                   <td style={routesDetailCellStyle}>
                     <button aria-label="Change route start time" style={routeEditableValueStyle} type="button">
                       <span style={routeEditableValueTextStyle}>{routeStartTimeLabel}</span>
-                      <span aria-hidden="true" style={routeEditableArrowStyle}>⌄</span>
+                      {renderRouteEditableChevron()}
                     </button>
                   </td>
                   <td style={routesDetailCellStyle}>{orderedRouteStops.length}</td>
