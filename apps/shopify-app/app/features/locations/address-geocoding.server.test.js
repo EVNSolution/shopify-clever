@@ -5,6 +5,7 @@ import { geocodeAddress } from "./address-geocoding.server.js";
 test("geocodes a departure address into latitude and longitude", async () => {
   const calls = [];
   const result = await geocodeAddress("123 Queen St W, Toronto, ON", {
+    endpoint: "https://geocoder.example.test/search",
     fetchImpl: async (url, options) => {
       calls.push({ url: String(url), options });
       return {
@@ -41,6 +42,7 @@ test("returns null when the address is blank or no provider result exists", asyn
   }), null);
 
   const result = await geocodeAddress("No result address", {
+    endpoint: "https://geocoder.example.test/search",
     fetchImpl: async () => {
       callCount += 1;
       return {
@@ -56,6 +58,7 @@ test("returns null when the address is blank or no provider result exists", asyn
 
 test("returns null instead of saving invalid provider coordinates", async () => {
   const result = await geocodeAddress("Bad coordinate address", {
+    endpoint: "https://geocoder.example.test/search",
     fetchImpl: async () => ({
       ok: true,
       json: async () => [
@@ -68,6 +71,29 @@ test("returns null instead of saving invalid provider coordinates", async () => 
   });
 
   assert.equal(result, null);
+});
+
+test("does not geocode when no endpoint is configured", async () => {
+  const previousEndpoint = process.env.GEOCODING_SEARCH_URL;
+  delete process.env.GEOCODING_SEARCH_URL;
+  let called = false;
+
+  try {
+    const result = await geocodeAddress("123 Queen St W, Toronto, ON", {
+      fetchImpl: async () => {
+        called = true;
+      },
+    });
+
+    assert.equal(result, null);
+    assert.equal(called, false);
+  } finally {
+    if (previousEndpoint === undefined) {
+      delete process.env.GEOCODING_SEARCH_URL;
+    } else {
+      process.env.GEOCODING_SEARCH_URL = previousEndpoint;
+    }
+  }
 });
 
 test("lets deployments override the geocoding endpoint and user agent", async () => {

@@ -45,7 +45,7 @@ test("keeps saved driver phone numbers as compact normalized table values", () =
 
 test("keeps driver download links free of invite phone data", () => {
   assert.equal(
-    getDriverDownloadLink("https://clever.delivery/driver/download", "+82", "010-1234-5678"),
-    "https://clever.delivery/driver/download",
+    getDriverDownloadLink("https://driver-download.example.test/app", "+82", "010-1234-5678"),
+    "https://driver-download.example.test/app",
   );
 });

@@ -147,6 +147,7 @@ test("compliance webhook route verifies Shopify webhooks before acknowledging pr
   assert.match(complianceWebhookRouteSource, /forwardComplianceWebhookToDeliveryApi\(request, rawBody\)/);
   assert.match(complianceWebhookRouteSource, /\/shopify\/webhooks/);
   assert.match(complianceWebhookRouteSource, /x-shopify-hmac-sha256/);
+  assert.doesNotMatch(complianceWebhookRouteSource, /DEFAULT_DELIVERY_API_URL|clever-route\.cleversystem\.ai/);
 });
 
 const catchAllRouteSource = readFileSync(

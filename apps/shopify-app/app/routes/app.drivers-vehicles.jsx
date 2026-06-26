@@ -12,8 +12,6 @@ import {
 import { authenticate } from "../shopify.server";
 import { PageShell } from "../ui/page-shell";
 
-const DRIVER_DOWNLOAD_LINK = "https://clever.delivery/driver/download";
-
 const countryDialCodeOptions = [
   { id: "ca-us", label: "Canada / United States", flag: "🇨🇦", dialCode: "+1", example: "416 555 0100" },
   { id: "kr", label: "South Korea", flag: "🇰🇷", dialCode: "+82", example: "010 1234 5678" },
@@ -639,7 +637,11 @@ function parseDriverIds(value) {
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
-  return fetchDeliveryDrivers(request);
+  const result = await fetchDeliveryDrivers(request);
+  return {
+    ...result,
+    driverDownloadLink: process.env.CLEVER_DRIVER_DOWNLOAD_URL?.trim() ?? "",
+  };
 };
 
 export const action = async ({ request }) => {
@@ -694,7 +696,7 @@ export const action = async ({ request }) => {
 };
 
 export default function DriversVehiclesPage() {
-  const { drivers = [], errors = [] } = useLoaderData();
+  const { driverDownloadLink = "", drivers = [], errors = [] } = useLoaderData();
   const driverInviteFetcher = useFetcher();
   const driverDeleteFetcher = useFetcher();
   const shopify = useAppBridge();
@@ -747,7 +749,7 @@ export default function DriversVehiclesPage() {
   const currentInviteDriver = driverInviteFetcher.data?.driver ?? null;
   const currentInviteCode = currentInviteDriver?.inviteCode;
   const inviteMessagePreview = buildDriverInviteMessage({
-    downloadLink: getDriverDownloadLink(DRIVER_DOWNLOAD_LINK),
+    downloadLink: getDriverDownloadLink(driverDownloadLink),
     inviteCode: currentInviteCode,
   });
 
@@ -760,13 +762,18 @@ export default function DriversVehiclesPage() {
   const getCurrentInvite = () => {
     const normalizedPhone = normalizeInvitePhone(selectedCountryCode.dialCode, invitePhone);
     return {
-      downloadLink: getDriverDownloadLink(DRIVER_DOWNLOAD_LINK),
+      downloadLink: getDriverDownloadLink(driverDownloadLink),
       normalizedPhone,
     };
   };
 
   const savePendingDriver = async () => {
     const { downloadLink, normalizedPhone } = getCurrentInvite();
+    if (!downloadLink) {
+      setCopyStatus("배송원 앱 다운로드 링크가 설정되지 않았습니다. CLEVER_DRIVER_DOWNLOAD_URL을 확인해주세요.");
+      return;
+    }
+
     if (!normalizedPhone || driverInviteFetcher.state !== "idle") {
       setCopyStatus(normalizedPhone ? "Pending driver registration is already running." : "Enter a valid driver phone number.");
       return;

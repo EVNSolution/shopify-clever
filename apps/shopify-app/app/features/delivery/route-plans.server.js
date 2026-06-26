@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 
 import { buildRouteScopeFromOrders } from "./route-scope.js";
 
-const DEFAULT_DELIVERY_API_URL = "https://clever-route.cleversystem.ai";
 const DEFAULT_CLEVER_APP_ID = "clever";
 const DEFAULT_DELIVERY_API_GET_CACHE_TTL_MS = 15_000;
 const MAX_DELIVERY_API_GET_CACHE_ENTRIES = 100;
@@ -37,8 +36,11 @@ export function getCleverAppId() {
 }
 
 export function getDeliveryApiBaseUrl() {
-  const configuredBaseUrl = process.env.CLEVER_DELIVERY_API_URL?.trim();
-  const baseUrl = configuredBaseUrl || DEFAULT_DELIVERY_API_URL;
+  const baseUrl = process.env.CLEVER_DELIVERY_API_URL?.trim();
+
+  if (!baseUrl) {
+    throw new Error("CLEVER_DELIVERY_API_URL is required.");
+  }
 
   return baseUrl.replace(/\/+$/, "");
 }
@@ -59,7 +61,12 @@ export function primeDeliveryApiGetResponseCache(request, path, result, options 
 
   const fetchImpl = options.fetch ?? fetch;
   const appId = options.appId ?? getCleverAppId();
-  const baseUrl = getDeliveryApiBaseUrl();
+  let baseUrl;
+  try {
+    baseUrl = getDeliveryApiBaseUrl();
+  } catch {
+    return false;
+  }
   const cacheScope = getDeliveryApiGetCacheScope({
     appId,
     authorization,
@@ -283,7 +290,22 @@ export async function deliveryApiRequest(request, path, options = {}) {
   const fetchImpl = options.fetch ?? fetch;
   const method = (options.method ?? "GET").toUpperCase();
   const appId = options.appId ?? getCleverAppId();
-  const baseUrl = getDeliveryApiBaseUrl();
+  let baseUrl;
+  try {
+    baseUrl = getDeliveryApiBaseUrl();
+  } catch (error) {
+    return {
+      data: null,
+      errors: [
+        {
+          code: DELIVERY_API_ERROR_CODE,
+          message: error?.message ?? "CLEVER_DELIVERY_API_URL is required.",
+          path,
+          status: 0,
+        },
+      ],
+    };
+  }
   const url = `${baseUrl}${path}`;
   const cacheTtlMs = getDeliveryApiGetCacheTtlMs();
   const canUseCache = method === "GET" && !options.body && cacheTtlMs > 0;

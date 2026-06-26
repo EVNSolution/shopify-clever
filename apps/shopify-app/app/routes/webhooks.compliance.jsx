@@ -1,6 +1,6 @@
 import { authenticate } from "../shopify.server";
+import { getDeliveryApiBaseUrl } from "../features/delivery/route-plans.server";
 
-const DEFAULT_DELIVERY_API_URL = "https://clever-route.cleversystem.ai";
 const COMPLIANCE_WEBHOOK_TOPICS = new Set([
   "customers/data_request",
   "customers/redact",
@@ -58,12 +58,4 @@ function getForwardedWebhookHeaders(sourceHeaders) {
   }
 
   return headers;
-}
-
-function getDeliveryApiBaseUrl() {
-  // eslint-disable-next-line no-undef
-  const configuredBaseUrl = process.env.CLEVER_DELIVERY_API_URL?.trim();
-  const baseUrl = configuredBaseUrl || DEFAULT_DELIVERY_API_URL;
-
-  return baseUrl.replace(/\/+$/, "");
 }

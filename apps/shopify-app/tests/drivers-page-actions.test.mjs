@@ -57,6 +57,8 @@ test("Drivers tab separates operational status from app access state", () => {
   assert.match(source, /isInvitePending: invitePending/);
   assert.match(source, /isAppLinked: appLinked/);
   assert.match(source, /function canShowDriverInviteActions\(driver\)/);
+  assert.match(source, /CLEVER_DRIVER_DOWNLOAD_URL/);
+  assert.doesNotMatch(source, /https:\/\/clever\.delivery\/driver\/download/);
   assert.match(source, /driver\?\.isInvitePending === true/);
   assert.match(source, /normalizeSearchText\(driver\?\.authStatus\) === "invite pending"/);
   assert.match(source, /function canShowDriverReloginAction\(driver\)/);

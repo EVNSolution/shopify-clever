@@ -7,8 +7,10 @@ import {
   buildCreateRoutePlanPayload,
   createDeliveryRoutePlan,
   deleteDeliveryRoutePlan,
+  DELIVERY_API_ERROR_CODE,
   fetchDeliveryRoutePlanDetail,
   fetchDeliveryRoutePlans,
+  getDeliveryApiBaseUrl,
   getShopifySessionBearer,
   updateDeliveryRoutePlanStops,
   assignDeliveryRoutePlanDriver,
@@ -682,6 +684,40 @@ test("returns an actionable error when a delivery API call has no session token"
   assert.equal(called, false);
   assert.deepEqual(result.routePlans, []);
   assert.equal(result.errors[0].code, "DELIVERY_SESSION_TOKEN_MISSING");
+});
+
+test("requires an explicit delivery API URL instead of falling back to production", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  delete process.env.CLEVER_DELIVERY_API_URL;
+
+  let called = false;
+
+  try {
+    assert.throws(() => getDeliveryApiBaseUrl(), /CLEVER_DELIVERY_API_URL/);
+
+    const result = await fetchDeliveryRoutePlans(
+      new Request("https://app.example/app/routes", {
+        headers: { authorization: "Bearer session-token" },
+      }),
+      {
+        fetch: async () => {
+          called = true;
+          return Response.json({});
+        },
+      },
+    );
+
+    assert.equal(called, false);
+    assert.deepEqual(result.routePlans, []);
+    assert.equal(result.errors[0].code, DELIVERY_API_ERROR_CODE);
+    assert.match(result.errors[0].message, /CLEVER_DELIVERY_API_URL/);
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.CLEVER_DELIVERY_API_URL;
+    } else {
+      process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    }
+  }
 });
 
 test("invalidates cached delivery route GET responses after successful mutations", async () => {

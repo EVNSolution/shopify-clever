@@ -1,4 +1,3 @@
-const DEFAULT_GEOCODING_ENDPOINT = "https://nominatim.openstreetmap.org/search";
 const DEFAULT_GEOCODING_USER_AGENT = "clever-shopify-app";
 
 export async function geocodeAddress(address, options = {}) {
@@ -9,7 +8,10 @@ export async function geocodeAddress(address, options = {}) {
   if (typeof fetchImpl !== "function") return null;
 
   try {
-    const url = createGeocodingUrl(query, options.endpoint);
+    const endpoint = textOrUndefined(options.endpoint) ?? textOrUndefined(process.env.GEOCODING_SEARCH_URL);
+    if (!endpoint) return null;
+
+    const url = createGeocodingUrl(query, endpoint);
     const response = await fetchImpl(url, {
       headers: {
         Accept: "application/json",
@@ -38,7 +40,7 @@ export async function geocodeAddress(address, options = {}) {
 }
 
 function createGeocodingUrl(query, endpoint) {
-  const url = new URL(endpoint ?? process.env.GEOCODING_SEARCH_URL ?? DEFAULT_GEOCODING_ENDPOINT);
+  const url = new URL(endpoint);
   url.searchParams.set("format", "jsonv2");
   url.searchParams.set("limit", "1");
   url.searchParams.set("q", query);
