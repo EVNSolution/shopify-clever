@@ -342,10 +342,11 @@ test("Orders order-number button shows a subtle rounded hover state", () => {
 });
 
 
-test("Orders page persists scoped planned orders through the delivery route-plan action", () => {
+test("Orders page creates grouped child routes from scoped planned orders", () => {
   assert.match(ordersPageSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams \} from "react-router"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*createDeliveryRoutePlan[\s\S]*\} from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*\} from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*createDeliveryRouteGroup[\s\S]*generateDeliveryRouteGroupChildRoutes[\s\S]*\} from "\.\.\/features\/delivery\/route-groups\.server"/);
   assert.match(ordersPageSource, /import \{ buildRouteScopeFromOrders \} from "\.\.\/features\/delivery\/route-scope"/);
   assert.match(ordersPageSource, /export const action = async \(\{ request \}\) => \{/);
   assert.match(ordersPageSource, /const formData = await request\.formData\(\)/);
@@ -357,8 +358,10 @@ test("Orders page persists scoped planned orders through the delivery route-plan
   assert.match(ordersPageSource, /buildCreateRoutePlanPayload\(\{/);
   assert.match(ordersPageSource, /routeName,/);
   assert.match(ordersPageSource, /routeScope,/);
-  assert.match(ordersPageSource, /createDeliveryRoutePlan\(\s*request,\s*routePlanPayload,\s*\{\s*sessionToken: shopifySessionToken/s);
-  assert.match(ordersPageSource, /return \{ routePlan, errors: \[\] \}/);
+  assert.match(ordersPageSource, /createDeliveryRouteGroup\(\s*request,\s*buildCreateRouteGroupPayload\(\{/s);
+  assert.match(ordersPageSource, /generateDeliveryRouteGroupChildRoutes\(\s*request,\s*routeGroup\.id,/s);
+  assert.match(ordersPageSource, /const routePlan = getFirstRouteGroupRoutePlan\(generatedRouteGroup\)/);
+  assert.match(ordersPageSource, /return \{ routePlan, routeGroup: generatedRouteGroup, errors: \[\] \}/);
   assert.match(ordersPageSource, /const routePlanFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /const shopify = useAppBridge\(\)/);
   assert.match(ordersPageSource, /const navigate = useNavigate\(\)/);
@@ -378,11 +381,9 @@ test("Orders page persists scoped planned orders through the delivery route-plan
 });
 
 
-test("Orders page keeps parent/child grouping out of the route creation choice", () => {
-  assert.doesNotMatch(ordersPageSource, /createDeliveryRouteGroup/);
-  assert.doesNotMatch(ordersPageSource, /buildCreateRouteGroupPayload/);
-  assert.doesNotMatch(ordersPageSource, /createRouteGroup/);
-  assert.doesNotMatch(ordersPageSource, /createdRouteGroup/);
+test("Orders page keeps the UI label as route creation while using route groups underneath", () => {
+  assert.match(ordersPageSource, /createDeliveryRouteGroup/);
+  assert.match(ordersPageSource, /buildCreateRouteGroupPayload/);
   assert.doesNotMatch(ordersPageSource, />Create group<\/button>/);
   assert.match(ordersPageSource, />Create route<\/button>/);
 });
@@ -771,7 +772,7 @@ test("Orders map marker popup can add the clicked order to the route plan", () =
 });
 
 test("Orders map popup content stays above all map markers", () => {
-  assert.match(ordersPageSource, /map\.addLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID,\s+type: "symbol"/);
+  assert.match(ordersPageSource, /map\.addLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID,[\s\S]*?type: "symbol"/);
   assert.match(ordersPageSource, /"symbol-sort-key": \["get", "sortKey"\]/);
   assert.match(mapMarkersSource, /markerElement\.style\.zIndex = options\.zIndex \?\? "3000"/);
   assert.match(globalCssSource, /\.maplibregl-popup\s*\{/);

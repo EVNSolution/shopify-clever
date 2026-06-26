@@ -6,10 +6,13 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "../features/delivery/orders.server";
 import {
   buildCreateRoutePlanPayload,
-  createDeliveryRoutePlan,
   DELIVERY_API_ERROR_CODE,
   DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
 } from "../features/delivery/route-plans.server";
+import {
+  createDeliveryRouteGroup,
+  generateDeliveryRouteGroupChildRoutes,
+} from "../features/delivery/route-groups.server";
 import { buildRouteScopeFromOrders } from "../features/delivery/route-scope";
 import { createDepartureMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
@@ -73,6 +76,30 @@ const SHOP_TIME_ZONE_QUERY = `#graphql
   }
 `;
 const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, routeScope }) {
+  const deliveryDates = plannedOrders
+    .map((order) => textOrUndefined(order.deliveryDate))
+    .filter(Boolean)
+    .sort();
+  const dateRangeStart = deliveryDates[0] ?? routeScope?.deliveryDate;
+  const dateRangeEnd = deliveryDates.at(-1) ?? dateRangeStart;
+
+  return {
+    ...(dateRangeStart ? { dateRangeStart } : {}),
+    ...(dateRangeEnd ? { dateRangeEnd } : {}),
+    ...(dateRangeStart ? { planDate: dateRangeStart } : {}),
+    ...(depot ? { depot } : {}),
+    name: textOrUndefined(routeName) ?? DEFAULT_ROUTE_PLAN_TITLE,
+    orderIds: plannedOrders.map((order) => order.id),
+  };
+}
+
+function getFirstRouteGroupRoutePlan(routeGroup) {
+  const firstChild = routeGroup?.children?.find((child) => child?.routePlan?.id || child?.routePlanId);
+  if (!firstChild) return null;
+  return firstChild.routePlan ?? { id: firstChild.routePlanId };
+}
 
 function getTableColumnPixelState(tableElement) {
   const widths = Array.from(
@@ -1506,13 +1533,30 @@ async function handleOrdersAction(request) {
     routeScope,
   });
   const createRoutePlanStartedAt = getSafePerformanceNow();
-  const { routePlan, errors: routePlanErrors } = await createDeliveryRoutePlan(
+  const { routeGroup, errors: routeGroupErrors } = await createDeliveryRouteGroup(
     request,
-    routePlanPayload,
-    {
-      sessionToken: shopifySessionToken,
-    },
+    buildCreateRouteGroupPayload({
+      depot: routePlanPayload.depot,
+      plannedOrders,
+      routeName: routePlanPayload.name,
+      routeScope,
+    }),
+    { sessionToken: shopifySessionToken },
   );
+  const generatedRouteGroupData = routeGroup?.id
+    ? await generateDeliveryRouteGroupChildRoutes(
+        request,
+        routeGroup.id,
+        { confirmRisk: false },
+        { sessionToken: shopifySessionToken },
+      )
+    : { routeGroup: null, errors: [] };
+  const generatedRouteGroup = generatedRouteGroupData.routeGroup ?? routeGroup;
+  const routePlan = getFirstRouteGroupRoutePlan(generatedRouteGroup);
+  const routePlanErrors = [
+    ...(routeGroupErrors ?? []),
+    ...(generatedRouteGroupData.errors ?? []),
+  ];
   routeCreateTimings.createRoutePlanMs = roundPerfDuration(getSafePerformanceNow() - createRoutePlanStartedAt);
   logDevPerformanceMetric("orders.create_route.action", {
     ...routeCreateTimings,
@@ -1520,12 +1564,13 @@ async function handleOrdersAction(request) {
     plannedOrderCount: plannedOrders.length,
     syncedOrderCount: syncedOrderData.orders?.length ?? 0,
     canonicalOrderCount: canonicalOrderData.orders?.length ?? 0,
+    routeGroupId: generatedRouteGroup?.id ?? null,
     routePlanId: routePlan?.id ?? null,
-    errorCount: routePlanErrors?.length ?? 0,
+    errorCount: routePlanErrors.length,
   });
 
   if (routePlan?.id) {
-    return { routePlan, errors: [] };
+    return { routePlan, routeGroup: generatedRouteGroup, errors: [] };
   }
 
   return {
@@ -1533,7 +1578,7 @@ async function handleOrdersAction(request) {
       ...(orderData.errors ?? []),
       ...(syncedOrderData.errors ?? []),
       ...(departureLocationData.errors ?? []),
-      ...(routePlanErrors ?? []),
+      ...routePlanErrors,
     ],
   };
 }
