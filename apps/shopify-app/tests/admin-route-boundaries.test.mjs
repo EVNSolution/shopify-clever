@@ -39,3 +39,12 @@ test("routes that authenticate admin requests export Shopify boundary helpers", 
 
   assert.deepEqual(missingBoundaryExports, []);
 });
+
+
+test("custom client entry leaves Shopify boundary responses to App Bridge", () => {
+  const source = fs.readFileSync(path.resolve("app/entry.client.jsx"), "utf8");
+
+  assert.match(source, /document\.body\.firstElementChild\?\.textContent === "Handling response"/);
+  assert.match(source, /if \(!isShopifyBoundaryResponse\(\)\)/);
+  assert.match(source, /<HydratedRouter \/>/);
+});

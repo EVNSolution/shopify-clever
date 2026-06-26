@@ -39,11 +39,24 @@ const authLoginRouteSource = readFileSync(
   join(process.cwd(), "app/routes/auth.login/route.jsx"),
   "utf8",
 );
+const authCatchAllRouteSource = readFileSync(
+  join(process.cwd(), "app/routes/auth.$.jsx"),
+  "utf8",
+);
 
 test("auth fallback does not ask merchants to manually log in", () => {
   assert.doesNotMatch(authLoginRouteSource, /<Form\b/);
   assert.doesNotMatch(authLoginRouteSource, /type="submit"/);
   assert.doesNotMatch(authLoginRouteSource, /Log in|Shop domain/i);
+});
+
+test("auth catch-all redirects session-token reloads instead of rendering an empty leaf", () => {
+  assert.match(authCatchAllRouteSource, /export default function AuthRedirect\(\)/);
+  assert.match(authCatchAllRouteSource, /return null/);
+  assert.match(authCatchAllRouteSource, /getSafeShopifyReloadRedirect\(request\)/);
+  assert.match(authCatchAllRouteSource, /url\.searchParams\.get\("shopify-reload"\)/);
+  assert.match(authCatchAllRouteSource, /target\.origin !== url\.origin/);
+  assert.match(authCatchAllRouteSource, /return redirect\(getSafeShopifyReloadRedirect\(request\)\)/);
 });
 
 const appShellRouteSource = readFileSync(
@@ -134,4 +147,17 @@ test("compliance webhook route verifies Shopify webhooks before acknowledging pr
   assert.match(complianceWebhookRouteSource, /forwardComplianceWebhookToDeliveryApi\(request, rawBody\)/);
   assert.match(complianceWebhookRouteSource, /\/shopify\/webhooks/);
   assert.match(complianceWebhookRouteSource, /x-shopify-hmac-sha256/);
+});
+
+const catchAllRouteSource = readFileSync(
+  join(process.cwd(), "app/routes/$.jsx"),
+  "utf8",
+);
+
+test("unknown app URLs recover into the embedded orders page instead of rendering 404", () => {
+  assert.match(catchAllRouteSource, /export const loader = \(\{ request \}\) => redirect\(getFallbackAppPath\(request\)\)/);
+  assert.match(catchAllRouteSource, /return `\/app\/orders\$\{url\.search\}`/);
+  assert.match(catchAllRouteSource, /url\.searchParams\.get\("shopify-reload"\)/);
+  assert.match(catchAllRouteSource, /target\.origin === url\.origin/);
+  assert.match(catchAllRouteSource, /앱 화면을 다시 여는 중입니다/);
 });

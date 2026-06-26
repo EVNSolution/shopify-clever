@@ -50,6 +50,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       cancelledAt: textOrUndefined(order?.cancelledAt),
       totalPriceAmount: textOrUndefined(order?.totalPriceAmount),
       currencyCode: textOrUndefined(order?.currencyCode),
+      lineItems: order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems,
       attributes: formatDeliveryAttributes(deliveryArea, deliveryDay),
       attributeList: formatCanonicalAttributeList(deliveryArea, deliveryDay),
       deliveryArea,

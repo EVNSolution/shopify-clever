@@ -55,17 +55,17 @@ s-badge {
 .order-map-marker {
   --marker-border-width: 3.2px;
   --marker-color: #006fbb;
-  --marker-height: 30px;
-  --marker-label-size: 20px;
-  --marker-label-top: 2px;
+  --marker-height: 26px;
+  --marker-label-size: 18px;
+  --marker-label-top: 1px;
   --marker-shadow: drop-shadow(0 0 2px rgba(255, 255, 255, 0.95)) drop-shadow(0 2px 3px rgba(0, 111, 187, 0.42)) drop-shadow(0 8px 14px rgba(0, 0, 0, 0.42));
-  --marker-width: 23px;
+  --marker-width: 20px;
   appearance: none;
   background-color: transparent;
   border: 0;
   color: #ffffff;
   display: block;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
   height: var(--marker-height);
   line-height: 1;
@@ -108,13 +108,13 @@ s-badge {
 }
 
 .order-map-marker--planned {
-  --marker-color: #e11900;
+  --marker-color: #006fbb;
 }
 
 .route-stop-overlap-pointer {
   align-items: center;
   appearance: none;
-  background: #303030;
+  background: var(--map-marker-color, #303030);
   border: 2px solid #ffffff;
   border-radius: 999px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.32), 0 0 0 1px rgba(48, 48, 48, 0.18);
@@ -131,7 +131,7 @@ s-badge {
 }
 
 .route-stop-overlap-pointer:is(:hover, :focus-visible) {
-  background: #000000;
+  background: var(--map-marker-hover-color, #000000);
   outline: 2px solid rgba(0, 0, 0, 0.22);
   outline-offset: 2px;
 }
@@ -141,21 +141,21 @@ s-badge {
 }
 
 .route-snapped-stop-point {
-  background: #1473e6;
+  background: var(--map-marker-color, #1473e6);
   border: 2px solid #ffffff;
   border-radius: 999px;
   box-sizing: border-box;
   box-shadow: 0 0 0 1px rgba(20, 115, 230, 0.24), 0 2px 4px rgba(20, 115, 230, 0.34);
   display: block;
-  height: 11px;
+  height: 8px;
   pointer-events: none;
   position: relative;
-  width: 11px;
+  width: 8px;
 }
 
 .route-detail-stop-marker {
   appearance: none;
-  background: #303030;
+  background: var(--map-marker-color, #303030);
   border: 2px solid #ffffff;
   border-radius: 999px;
   box-sizing: border-box;
@@ -163,38 +163,43 @@ s-badge {
   color: #ffffff;
   cursor: pointer;
   display: grid;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 700;
-  height: 20px;
+  height: 16px;
   line-height: 1;
   padding: 0;
   place-items: center;
   position: relative;
-  width: 20px;
+  width: 16px;
 }
 
 .route-detail-stop-marker:is(:hover, :focus-visible) {
-  background: #000000;
+  background: var(--map-marker-hover-color, #000000);
   outline: 2px solid rgba(0, 0, 0, 0.22);
   outline-offset: 2px;
 }
 
 .route-detail-stop-marker__label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
   line-height: 1;
-  transform: translateY(-0.5px);
+  transform: translateY(0.5px);
+  width: 100%;
 }
 
 .route-detail-snapped-stop-point {
-  background: #1473e6;
+  background: var(--map-marker-color, #1473e6);
   border: 2px solid #ffffff;
   border-radius: 999px;
   box-sizing: border-box;
   box-shadow: 0 0 0 1px rgba(20, 115, 230, 0.24), 0 2px 4px rgba(20, 115, 230, 0.34);
   display: block;
-  height: 11px;
+  height: 8px;
   pointer-events: none;
   position: relative;
-  width: 11px;
+  width: 8px;
 }
 
 .departure-map-marker {
@@ -204,54 +209,56 @@ s-badge {
   color: #ffffff;
   cursor: pointer;
   display: block;
-  height: 38px;
+  height: 34px;
   line-height: 1;
   padding: 0;
   position: relative;
-  width: 30px;
+  width: 26px;
 }
 
 .departure-map-marker__pin {
   align-items: center;
-  background: #008060;
+  background: var(--map-marker-color, #008060);
   border: 2px solid #ffffff;
   border-radius: 999px;
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.3);
   box-sizing: border-box;
-  display: flex;
-  height: 30px;
-  justify-content: center;
+  display: grid;
+  height: 26px;
+  place-items: center;
   left: 50%;
-  min-width: 30px;
+  min-width: 26px;
   padding: 0;
   position: absolute;
   top: 0;
   transform: translateX(-50%);
-  width: 30px;
+  width: 26px;
 }
 
 .departure-map-marker__pin::after {
-  background: #008060;
+  background: var(--map-marker-color, #008060);
   border-bottom: 2px solid #ffffff;
   border-right: 2px solid #ffffff;
-  bottom: -5px;
+  bottom: -4px;
   box-sizing: border-box;
   content: "";
-  height: 11px;
+  height: 9px;
   left: 50%;
   position: absolute;
   transform: translateX(-50%) rotate(45deg);
-  width: 11px;
+  width: 9px;
   z-index: 0;
 }
 
 .departure-map-marker__icon {
   display: block;
   fill: currentColor;
-  height: 15px;
+  height: 13px;
+  line-height: 0;
+  overflow: visible;
   pointer-events: none;
   position: relative;
-  width: 15px;
+  width: 13px;
   z-index: 1;
 }
 
@@ -520,6 +527,20 @@ s-badge {
   color: #616161;
 }
 
+.order-route-summary {
+  container: route-summary / inline-size;
+}
+
+.order-route-summary-grid {
+  grid-template-columns: repeat(2, minmax(136px, 1fr));
+}
+
+@container route-summary (max-width: 280px) {
+  .order-route-summary-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .route-overview-header,
 .route-overview-main,
 .route-overview-driver-control,
@@ -557,7 +578,7 @@ s-badge {
   }
 
   .route-overview-summary {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: repeat(2, minmax(136px, 1fr));
   }
 }
 

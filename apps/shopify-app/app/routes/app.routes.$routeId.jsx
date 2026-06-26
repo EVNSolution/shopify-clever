@@ -10,6 +10,7 @@ import {
   fetchDeliveryRoutePlanDetail,
   updateDeliveryRoutePlanStops,
 } from "../features/delivery/route-plans.server";
+import { createDepartureMarkerElement, createDotMarkerElement, createNumberedMarkerElement, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
@@ -25,6 +26,24 @@ const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
 const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
+const ROUTE_DETAIL_PERF_CAPTURE_ENABLED = import.meta.env.DEV;
+
+function roundPerfDuration(duration) {
+  return Number(duration.toFixed(2));
+}
+
+function getRouteDetailPerfNow() {
+  return typeof performance === "undefined" ? 0 : performance.now();
+}
+
+function logRouteDetailPerformance(name, metric) {
+  if (!ROUTE_DETAIL_PERF_CAPTURE_ENABLED) return;
+
+  console.info(name, {
+    measuredAt: new Date().toISOString(),
+    ...metric,
+  });
+}
 
 const routesDetailPageStyle = {
   padding: "8px 12px 12px",
@@ -393,8 +412,10 @@ const routeDetailErrorStyle = {
 
 
 export const loader = async ({ params, request }) => {
+  const loaderStartedAt = getRouteDetailPerfNow();
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
+  const primaryDataStartedAt = getRouteDetailPerfNow();
   const [routePlanData, departureLocationData, driverData] = await Promise.all([
     fetchDeliveryRoutePlanDetail(request, params.routeId, {
       cacheKey: shopifyShopCacheKey,
@@ -402,7 +423,9 @@ export const loader = async ({ params, request }) => {
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
     fetchDeliveryDrivers(request, {}),
   ]);
+  const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
   const routeDeliveryDate = getRouteDeliveryDate(routePlanData.routePlan);
+  const sameDateOrdersStartedAt = getRouteDetailPerfNow();
   const sameDateOrderData = routeDeliveryDate
     ? await fetchDeliveryOrders(
         request,
@@ -410,6 +433,21 @@ export const loader = async ({ params, request }) => {
         { cacheKey: shopifyShopCacheKey },
       )
     : { orders: [], errors: [] };
+  const sameDateOrdersMs = roundPerfDuration(getRouteDetailPerfNow() - sameDateOrdersStartedAt);
+
+  logRouteDetailPerformance("routes.detail.loader", {
+    totalMs: roundPerfDuration(getRouteDetailPerfNow() - loaderStartedAt),
+    primaryDataMs,
+    sameDateOrdersMs,
+    routeId: params.routeId,
+    stopCount: routePlanData.stops?.length ?? 0,
+    sameDateOrderCount: sameDateOrderData.orders?.length ?? 0,
+    driverCount: driverData.drivers?.length ?? 0,
+    errorCount:
+      (routePlanData.errors?.length ?? 0) +
+      (driverData.errors?.length ?? 0) +
+      (sameDateOrderData.errors?.length ?? 0),
+  });
 
   return {
     ...routePlanData,
@@ -1034,60 +1072,23 @@ function fitRouteStopAndSnappedPoint(map, maplibregl, stop, routeStopPoint) {
   });
 }
 
-function createDepartureMarkerIconElement() {
-  const iconElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  const iconPathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
-
-  iconElement.classList.add("departure-map-marker__icon");
-  iconElement.setAttribute("viewBox", "0 0 20 20");
-  iconElement.setAttribute("aria-hidden", "true");
-  iconPathElement.setAttribute(
-    "d",
-    "M10 3.2 3.5 8.4v8.1h4v-5h5v5h4V8.4L10 3.2Z",
-  );
-  iconElement.append(iconPathElement);
-
-  return iconElement;
-}
-
-function createRouteStartMarkerElement(departureLocation) {
-  const markerElement = document.createElement("button");
-  const markerPinElement = document.createElement("span");
-
-  markerElement.type = "button";
-  markerElement.className = "departure-map-marker";
-  markerElement.style.zIndex = "3000";
-  markerElement.setAttribute("aria-label", `Route start: ${departureLocation.name}`);
-  markerPinElement.className = "departure-map-marker__pin";
-  markerPinElement.append(createDepartureMarkerIconElement());
-  markerElement.append(markerPinElement);
-
-  return markerElement;
-}
-
 function createRouteStopMarkerElement(stop) {
-  const markerElement = document.createElement("button");
-  const labelElement = document.createElement("span");
-
-  markerElement.type = "button";
-  markerElement.className = "route-detail-stop-marker";
-  markerElement.style.zIndex = "3200";
-  markerElement.setAttribute("aria-label", `Stop ${stop.stop}: ${stop.order}`);
-  labelElement.className = "route-detail-stop-marker__label";
-  labelElement.textContent = String(stop.stop);
-  markerElement.append(labelElement);
-
-  return markerElement;
+  return createNumberedMarkerElement({
+    ariaLabel: `Stop ${stop.stop}: ${stop.order}`,
+    className: "route-detail-stop-marker",
+    color: MAP_MARKER_PALETTE.routeStop.color,
+    label: stop.stop,
+    labelClassName: "route-detail-stop-marker__label",
+    zIndex: "3200",
+  });
 }
 
 function createRouteStopPointMarkerElement() {
-  const markerElement = document.createElement("span");
-
-  markerElement.className = "route-detail-snapped-stop-point";
-  markerElement.style.zIndex = "3100";
-  markerElement.setAttribute("aria-hidden", "true");
-
-  return markerElement;
+  return createDotMarkerElement({
+    className: "route-detail-snapped-stop-point",
+    color: MAP_MARKER_PALETTE.snappedStop.color,
+    zIndex: "3100",
+  });
 }
 
 function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeStops, routeStopPoints) {
@@ -1096,7 +1097,7 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
   if (departureLocation?.hasCoordinates) {
     const startMarker = new maplibregl.Marker({
       anchor: "bottom",
-      element: createRouteStartMarkerElement(departureLocation),
+      element: createDepartureMarkerElement(departureLocation),
     })
       .setLngLat(departureLocation.coordinates)
       .addTo(map);
@@ -1471,16 +1472,20 @@ export default function RouteDetailPage() {
     let isMounted = true;
 
     const initializeRouteDetailMap = async () => {
+      const mapInitStartedAt = performance.now();
       try {
+        const importStartedAt = performance.now();
         const [{ default: maplibregl }, { Protocol }] = await Promise.all([
           import("maplibre-gl"),
           import("pmtiles"),
         ]);
+        const importMs = roundPerfDuration(performance.now() - importStartedAt);
 
         if (!isMounted || !mapContainerRef.current || mapRef.current) return;
 
         installPmtilesProtocol(maplibregl, Protocol);
         mapLibraryRef.current = maplibregl;
+        const constructStartedAt = performance.now();
         mapRef.current = new maplibregl.Map({
           attributionControl: { compact: true },
           center: routeMapCenterRef.current,
@@ -1489,8 +1494,15 @@ export default function RouteDetailPage() {
           style: OPENFREEMAP_STYLE_URL,
           zoom: 11,
         });
+        const constructMs = roundPerfDuration(performance.now() - constructStartedAt);
         installMissingMapImageFallback(mapRef.current);
         mapRef.current.on("load", () => {
+          logRouteDetailPerformance("routes.detail.map.load", {
+            totalMs: roundPerfDuration(performance.now() - mapInitStartedAt),
+            importMs,
+            constructMs,
+            loadWaitMs: roundPerfDuration(performance.now() - mapInitStartedAt - importMs - constructMs),
+          });
           mapLoadedRef.current = true;
           mapRecoveryAttemptsRef.current = 0;
           setIsMapReady(true);
@@ -1541,7 +1553,11 @@ export default function RouteDetailPage() {
     const maplibregl = mapLibraryRef.current;
 
     const syncRouteDetailMap = () => {
+      const syncStartedAt = performance.now();
+      const routeLineStartedAt = performance.now();
       syncRouteDetailRouteLine(map, savedRouteGeometry);
+      const routeLineMs = roundPerfDuration(performance.now() - routeLineStartedAt);
+      const markerStartedAt = performance.now();
       const routeDetailMarkers = createRouteDetailMapMarkers(
         map,
         maplibregl,
@@ -1549,8 +1565,21 @@ export default function RouteDetailPage() {
         orderedRouteStops,
         savedRouteStopPoints,
       );
+      const markerCreateMs = roundPerfDuration(performance.now() - markerStartedAt);
+      const markerRemoveStartedAt = performance.now();
       markersRef.current.forEach((marker) => marker.remove());
+      const markerRemoveMs = roundPerfDuration(performance.now() - markerRemoveStartedAt);
       markersRef.current = routeDetailMarkers;
+      logRouteDetailPerformance("routes.detail.map.sync", {
+        totalMs: roundPerfDuration(performance.now() - syncStartedAt),
+        routeLineMs,
+        markerCreateMs,
+        markerRemoveMs,
+        markerCount: routeDetailMarkers.length,
+        stopCount: orderedRouteStops.length,
+        stopPointCount: savedRouteStopPoints.length,
+        hasRouteGeometry: Boolean(savedRouteGeometry),
+      });
     };
     const handleRouteDetailStyleData = () => {
       syncRouteDetailRouteLine(map, savedRouteGeometry);

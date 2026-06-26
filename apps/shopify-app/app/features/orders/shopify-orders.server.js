@@ -279,6 +279,7 @@ function mapOrderNode(order) {
     currencyCode: textOrUndefined(
       order.currentTotalPriceSet?.shopMoney?.currencyCode,
     ),
+    lineItems: order.lineItems,
     shippingAddress: mapShippingAddress(shippingAddress),
     attributes: formatDeliveryAttributes(attributes),
     attributeList: getAttributeList(order.customAttributes),

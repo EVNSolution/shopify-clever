@@ -70,10 +70,12 @@ export function TabLayout({ title, description, notice, primary, secondary, lowe
   return (
     <main className="tab-layout" style={layoutStyle}>
       <div style={pageStyle}>
-        <header className="tab-layout-header" style={headerStyle}>
-          <h1 style={titleStyle}>{title}</h1>
-          {description ? <p style={descriptionStyle}>{description}</p> : null}
-        </header>
+        {title || description ? (
+          <header className="tab-layout-header" style={headerStyle}>
+            {title ? <h1 style={titleStyle}>{title}</h1> : null}
+            {description ? <p style={descriptionStyle}>{description}</p> : null}
+          </header>
+        ) : null}
 
         {notice ? <div className="tab-layout-notice">{notice}</div> : null}
 

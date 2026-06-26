@@ -1,7 +1,11 @@
 export const ORDER_FILTER_QUERY_KEYS = {
   deliveryArea: "deliveryArea",
   deliveryDate: "deliveryDate",
+  deliveryState: "deliveryState",
+  deliveryWeekday: "deliveryWeekday",
   orderedDate: "orderedDate",
+  orderedDateFrom: "orderedDateFrom",
+  orderedDateTo: "orderedDateTo",
   planned: "planned",
   scope: "scope",
   search: "search",
@@ -23,6 +27,23 @@ export const ORDER_SERVICE_TYPE_OPTIONS = [
   { label: "Delivery", value: "DELIVERY" },
   { label: "Evening Delivery", value: "EVENING_DELIVERY" },
   { label: "Pickup", value: "PICKUP" },
+];
+export const ORDER_WEEKDAY_OPTIONS = [
+  { label: "Sunday", value: "SUNDAY" },
+  { label: "Monday", value: "MONDAY" },
+  { label: "Tuesday", value: "TUESDAY" },
+  { label: "Wednesday", value: "WEDNESDAY" },
+  { label: "Thursday", value: "THURSDAY" },
+  { label: "Friday", value: "FRIDAY" },
+  { label: "Saturday", value: "SATURDAY" },
+];
+export const ORDER_DELIVERY_STATE_OPTIONS = [
+  { label: "Unplanned", value: "unplanned" },
+  { label: "Planned", value: "planned" },
+  { label: "Assigned", value: "assigned_undelivered" },
+  { label: "Assigned overdue", value: "assigned_overdue" },
+  { label: "Past due", value: "past_due" },
+  { label: "Delivered", value: "delivered" },
 ];
 export const ORDER_UNAVAILABLE_REASON_LABELS = {
   already_planned: "Already planned",
@@ -116,18 +137,35 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
   }
 
   if (
-    normalizedFilters.orderedDate &&
-    normalizeComparableText(order?.orderedDate) !==
-      normalizeComparableText(normalizedFilters.orderedDate)
+    normalizedFilters.deliveryWeekday &&
+    getOrderDeliveryWeekday(order) !== normalizedFilters.deliveryWeekday
   ) {
     return false;
   }
 
   if (
-    normalizedFilters.serviceType &&
-    normalizeServiceType(normalizedFilters.serviceType) !==
-      normalizeServiceType(order?.serviceType)
+    normalizedFilters.deliveryState &&
+    getOrderDeliveryStateFilterValue(order, referenceDate) !== normalizedFilters.deliveryState
   ) {
+    return false;
+  }
+
+  const orderedDateValue = normalizeDateOnlyValue(order?.orderedDate);
+  if (
+    normalizedFilters.orderedDateFrom &&
+    (!orderedDateValue || orderedDateValue < normalizedFilters.orderedDateFrom)
+  ) {
+    return false;
+  }
+
+  if (
+    normalizedFilters.orderedDateTo &&
+    (!orderedDateValue || orderedDateValue > normalizedFilters.orderedDateTo)
+  ) {
+    return false;
+  }
+
+  if (normalizedFilters.serviceType && !orderMatchesServiceType(order, normalizedFilters.serviceType)) {
     return false;
   }
 
@@ -147,6 +185,8 @@ export function getOrderFilterOptions(orders) {
   return {
     deliveryAreas: getSortedUniqueValues(safeOrders, "deliveryArea"),
     deliveryDates: getSortedUniqueValues(safeOrders, "deliveryDate"),
+    deliveryStates: getSortedDeliveryStates(safeOrders),
+    deliveryWeekdays: getSortedDeliveryWeekdays(safeOrders),
     orderedDates: getSortedUniqueValues(safeOrders, "orderedDate"),
     serviceTypes: getSortedServiceTypes(safeOrders),
   };
@@ -159,7 +199,11 @@ export function getOrderFiltersFromSearchParams(searchParams) {
   return normalizeOrderFilters({
     deliveryArea: params.get(ORDER_FILTER_QUERY_KEYS.deliveryArea),
     deliveryDate: params.get(ORDER_FILTER_QUERY_KEYS.deliveryDate),
+    deliveryState: params.get(ORDER_FILTER_QUERY_KEYS.deliveryState),
+    deliveryWeekday: params.get(ORDER_FILTER_QUERY_KEYS.deliveryWeekday),
     orderedDate: params.get(ORDER_FILTER_QUERY_KEYS.orderedDate),
+    orderedDateFrom: params.get(ORDER_FILTER_QUERY_KEYS.orderedDateFrom),
+    orderedDateTo: params.get(ORDER_FILTER_QUERY_KEYS.orderedDateTo),
     planned: params.has(plannedQueryKey) ? params.get(plannedQueryKey) : "false",
     scope: params.get(ORDER_FILTER_QUERY_KEYS.scope),
     search:
@@ -191,10 +235,18 @@ export function updateOrderFilterSearchParams(currentSearchParams, filters = {})
 }
 
 export function normalizeOrderFilters(filters = {}) {
+  const legacyOrderedDate = normalizeDateOnlyValue(filters.orderedDate);
+  const orderedDateFrom = normalizeDateOnlyValue(filters.orderedDateFrom) || legacyOrderedDate;
+  const orderedDateTo = normalizeDateOnlyValue(filters.orderedDateTo) || legacyOrderedDate;
+
   return {
     deliveryArea: textOrEmpty(filters.deliveryArea),
     deliveryDate: textOrEmpty(filters.deliveryDate),
-    orderedDate: textOrEmpty(filters.orderedDate),
+    deliveryState: normalizeDeliveryState(filters.deliveryState),
+    deliveryWeekday: normalizeDeliveryWeekday(filters.deliveryWeekday),
+    orderedDate: "",
+    orderedDateFrom: orderedDateFrom && orderedDateTo && orderedDateFrom > orderedDateTo ? orderedDateTo : orderedDateFrom,
+    orderedDateTo: orderedDateFrom && orderedDateTo && orderedDateFrom > orderedDateTo ? orderedDateFrom : orderedDateTo,
     planned: "",
     scope: normalizeScope(filters.scope),
     search: textOrEmpty(filters.search),
@@ -283,6 +335,25 @@ export function isOrderCancelled(order) {
 
 export function getOrderDeliveryDateValue(order) {
   return normalizeDateOnlyValue(order?.deliveryDate);
+}
+
+export function getOrderDeliveryWeekday(order) {
+  const explicitWeekday = normalizeDeliveryWeekday(order?.deliveryWeekday);
+  if (explicitWeekday) return explicitWeekday;
+
+  return getWeekdayFromDate(getOrderDeliveryDateValue(order));
+}
+
+export function getOrderDeliveryStateFilterValue(order, referenceDate = new Date()) {
+  const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
+
+  if (exceptionState === "overdue_assigned") return "assigned_overdue";
+  if (exceptionState === "overdue_unassigned") return "past_due";
+  if (isOrderDeliveryComplete(order)) return "delivered";
+  if (isOrderRouteAssigned(order)) return "assigned_undelivered";
+  if (isOrderRouteCreated(order)) return "planned";
+
+  return "unplanned";
 }
 
 export function isOrderDeliveryDatePast(order, referenceDate = new Date()) {
@@ -405,6 +476,24 @@ function getSortedUniqueValues(orders, key) {
   );
 }
 
+function getSortedDeliveryStates(orders) {
+  const values = new Set(
+    orders.map((order) => getOrderDeliveryStateFilterValue(order)).filter(Boolean),
+  );
+
+  return ORDER_DELIVERY_STATE_OPTIONS.map((option) => option.value).filter((value) =>
+    values.has(value),
+  );
+}
+
+function getSortedDeliveryWeekdays(orders) {
+  const values = new Set(orders.map(getOrderDeliveryWeekday).filter(Boolean));
+
+  return ORDER_WEEKDAY_OPTIONS.map((option) => option.value).filter((value) =>
+    values.has(value),
+  );
+}
+
 function getSortedServiceTypes(orders) {
   const knownValues = new Set(
     ORDER_SERVICE_TYPE_OPTIONS.map((option) => option.value),
@@ -484,6 +573,39 @@ function normalizeServiceType(value) {
   return ["DELIVERY", "EVENING_DELIVERY", "PICKUP"].includes(normalizedValue)
     ? normalizedValue
     : "";
+}
+
+function normalizeDeliveryWeekday(value) {
+  const normalizedValue = textOrEmpty(value).toUpperCase().replace(/[\s-]+/g, "_");
+  return ORDER_WEEKDAY_OPTIONS.some((option) => option.value === normalizedValue)
+    ? normalizedValue
+    : "";
+}
+
+function normalizeDeliveryState(value) {
+  const normalizedValue = normalizeComparableText(value);
+  return ORDER_DELIVERY_STATE_OPTIONS.some((option) => option.value === normalizedValue)
+    ? normalizedValue
+    : "";
+}
+
+function getWeekdayFromDate(dateValue) {
+  if (!dateValue) return "";
+
+  const date = new Date(`${dateValue}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return "";
+
+  return ORDER_WEEKDAY_OPTIONS[date.getUTCDay()]?.value ?? "";
+}
+
+function orderMatchesServiceType(order, serviceTypeFilter) {
+  const normalizedFilter = normalizeServiceType(serviceTypeFilter);
+  const orderServiceType = normalizeServiceType(order?.serviceType);
+
+  if (normalizedFilter === "PICKUP") return orderServiceType === "PICKUP";
+  if (normalizedFilter === "DELIVERY") return orderServiceType !== "" && orderServiceType !== "PICKUP";
+
+  return orderServiceType === normalizedFilter;
 }
 
 function isOrderNeedsReview(order, referenceDate) {

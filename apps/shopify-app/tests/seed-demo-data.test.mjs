@@ -26,10 +26,9 @@ test("CLEVER demo seed orders use unique stop addresses instead of repeated unit
   assert.doesNotMatch(seedSource, /address1:\s*`\$\{area\.address1\} #/);
 });
 
-test("CLEVER demo seed customer phones are unique per seed run", () => {
-  assert.match(seedSource, /const phoneSuffix = String\(\(Number\(runId\.slice\(-4\)\) \+ number\) % 10000\)\.padStart\(4, "0"\)/);
-  assert.match(seedSource, /const phone = `\+1416555\$\{phoneSuffix\}`/);
-  assert.doesNotMatch(seedSource, /const phone = `\+1416555\$\{String\(number\)\.padStart\(4, "0"\)\}`/);
+test("CLEVER demo seed leaves phone out to avoid Shopify test-number validation", () => {
+  assert.doesNotMatch(seedSource, /phoneSuffix/);
+  assert.doesNotMatch(seedSource, /phone:\s*customer\.phone/);
 });
 
 test("CLEVER demo seed products carry the concrete delivery batch range", () => {

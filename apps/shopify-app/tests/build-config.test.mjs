@@ -46,6 +46,18 @@ test("dev config pre-optimizes route hydration dependencies", () => {
   });
 });
 
+test("dev config keeps /app/routes document navigations out of Vite's route manifest module", () => {
+  assert.match(viteConfigSource, /name:\s*"clever-routes-document-fallback"/);
+  assert.match(viteConfigSource, /pathname !== "\/app\/routes"/);
+  assert.match(viteConfigSource, /fetchDest\) === "document"/);
+  assert.match(viteConfigSource, /fetchMode\) === "navigate"/);
+  assert.match(viteConfigSource, /accept\.includes\("text\/html"\)/);
+  assert.match(viteConfigSource, /accept === "\*\/\*"/);
+  assert.match(viteConfigSource, /req\.headers\.accept = "text\/html"/);
+  assert.doesNotMatch(viteConfigSource, /res\.statusCode = 302|Location/);
+  assert.match(viteConfigSource, /plugins:\s*\[routesDocumentFallbackPlugin\(\),\s*reactRouter\(\),\s*tsconfigPaths\(\)\]/);
+});
+
 test("MapLibre maps avoid symbol fade delays", () => {
   assert.match(ordersPageSource, /fadeDuration:\s*0/);
   assert.match(routeDetailPageSource, /fadeDuration:\s*0/);

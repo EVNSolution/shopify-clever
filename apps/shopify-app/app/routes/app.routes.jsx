@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Outlet, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
+import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
+import { fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
+import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 
 const routesTablePageStyle = {
@@ -242,9 +244,24 @@ const routesErrorStyle = {
 };
 
 export const loader = async ({ request }) => {
+  const url = new URL(request.url);
+  if (url.pathname === "/app/routes/") {
+    url.pathname = "/app/routes";
+    return redirect(`${url.pathname}${url.search}${url.hash}`);
+  }
+
   const { session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
-  return fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey });
+  const [routePlanData, routeGroupData] = await Promise.all([
+    fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey }),
+    fetchDeliveryRouteGroups(request, {}, { cacheKey: shopifyShopCacheKey }),
+  ]);
+
+  return {
+    errors: [...(routePlanData.errors ?? []), ...(routeGroupData.errors ?? [])],
+    routeGroups: routeGroupData.routeGroups ?? [],
+    routePlans: routePlanData.routePlans ?? [],
+  };
 };
 
 export const action = async ({ request }) => {
@@ -379,12 +396,42 @@ function formatRouteDriver(driver) {
   return displayName || phone || "—";
 }
 
-function buildRouteRows(routePlans) {
-  if (!Array.isArray(routePlans) || routePlans.length === 0) {
+function buildRouteRows(routePlans, routeGroups = []) {
+  const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
+  const childRoutePlanIds = new Set(
+    safeRouteGroups.flatMap((routeGroup) =>
+      (routeGroup.children ?? []).map((child) => child.routePlanId).filter(Boolean),
+    ),
+  );
+  const standaloneRoutePlans = Array.isArray(routePlans)
+    ? routePlans.filter((routePlan) => !childRoutePlanIds.has(routePlan.id))
+    : [];
+  const routeGroupRows = safeRouteGroups.map((routeGroup) => ({
+    id: routeGroup.id,
+    isClickable: true,
+    isDeletable: false,
+    isRouteGroup: true,
+    route: routeGroup.name ?? routeGroup.id,
+    status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
+    orders: routeGroup.totalOrders ?? 0,
+    coordinates: "—",
+    delivered: 0,
+    attempted: 0,
+    missingCoordinates: 0,
+    date: formatRouteGroupDate(routeGroup),
+    deliveryArea: "—",
+    start: "Parent group",
+    end: `${routeGroup.children?.length ?? 0} child routes`,
+    driver: "—",
+    driverId: null,
+  }));
+
+  if (standaloneRoutePlans.length === 0 && routeGroupRows.length === 0) {
     return [
       {
         id: "empty-route-plans",
         isClickable: false,
+        isDeletable: false,
         route: "No routes",
         status: "Waiting",
         orders: 0,
@@ -398,7 +445,7 @@ function buildRouteRows(routePlans) {
     ];
   }
 
-  return routePlans.map((routePlan) => {
+  const routePlanRows = standaloneRoutePlans.map((routePlan) => {
     const stopsCount = routePlan.stopsCount ?? 0;
     const missingCoordinates = routePlan.missingCoordinates ?? 0;
     const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
@@ -418,6 +465,7 @@ function buildRouteRows(routePlans) {
     return {
       id: routePlan.id,
       isClickable: true,
+      isDeletable: true,
       route: routePlan.name ?? routePlan.id,
       status: routePlan.status ?? "DRAFT",
       orders: stopsCount,
@@ -447,6 +495,14 @@ function buildRouteRows(routePlans) {
       ),
     };
   });
+  return [...routeGroupRows, ...routePlanRows];
+}
+
+function formatRouteGroupDate(routeGroup) {
+  const start = routeGroup?.dateRangeStart ?? routeGroup?.planDate;
+  const end = routeGroup?.dateRangeEnd ?? start;
+  if (!start) return "—";
+  return start === end ? start : `${start} ~ ${end}`;
 }
 
 function buildRoutesSummary(routeRows) {
@@ -504,6 +560,7 @@ function filterRouteRows(routeRows, routeFilters) {
       {
         id: "empty-filtered-route-plans",
         isClickable: false,
+        isDeletable: false,
         route: "No matching routes",
         status: routeFilters.status ?? "Filtered",
         orders: 0,
@@ -525,23 +582,23 @@ function getStatusBadgeStyle(status) {
   return status === "DRAFT" ? routeStatusBadgeStyle : routeWaitingBadgeStyle;
 }
 
-function createRouteDetailHref(routeId) {
-  return `/app/routes/${routeId}`;
+function createRouteDetailHref(route) {
+  return route.isRouteGroup ? `/app/route-groups/${route.id}` : `/app/routes/${route.id}`;
 }
 
 export default function RoutesPage() {
   const navigate = useNavigate();
   const { routeId } = useParams();
   const [searchParams] = useSearchParams();
-  const { routePlans = [], errors = [] } = useLoaderData();
+  const { routeGroups = [], routePlans = [], errors = [] } = useLoaderData();
   const shopify = useAppBridge();
   const routeDeleteFetcher = useFetcher();
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
-  const allRouteRows = buildRouteRows(routePlans);
+  const allRouteRows = buildRouteRows(routePlans, routeGroups);
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
   const routeRows = filterRouteRows(allRouteRows, routeFilters);
-  const selectableRouteRows = routeRows.filter((route) => route.isClickable);
+  const selectableRouteRows = routeRows.filter((route) => route.isClickable && route.isDeletable !== false);
   const checkedRouteIdSet = new Set(checkedRouteIds);
   const allVisibleRoutesChecked =
     selectableRouteRows.length > 0 &&
@@ -550,6 +607,10 @@ export default function RoutesPage() {
     checkedRouteIds.length === 0 || routeDeleteFetcher.state !== "idle";
   const actionErrors = routeDeleteFetcher.data?.errors ?? [];
   const visibleErrors = [...errors, ...actionErrors];
+  const routesNoticeMessage = getServiceErrorNotice(
+    [{ errors: visibleErrors }],
+    { context: "routes_page" },
+  );
 
   useEffect(() => {
     if (routeDeleteFetcher.state !== "idle" || !routeDeleteFetcher.data) return;
@@ -561,7 +622,7 @@ export default function RoutesPage() {
   function handleRouteRowClick(route) {
     if (!route.isClickable) return;
 
-    navigate(createRouteDetailHref(route.id));
+    navigate(createRouteDetailHref(route));
   }
 
   function handleRouteRowKeyDown(event, route) {
@@ -570,7 +631,7 @@ export default function RoutesPage() {
     if (event.key !== "Enter" && event.key !== " ") return;
 
     event.preventDefault();
-    navigate(createRouteDetailHref(route.id));
+    navigate(createRouteDetailHref(route));
   }
 
   function handleCreateRoutesClick() {
@@ -630,8 +691,8 @@ export default function RoutesPage() {
           </div>
         </header>
 
-        {visibleErrors.length > 0 ? (
-          <div style={routesErrorStyle}>{visibleErrors[0].message ?? "Route plans could not be loaded."}</div>
+        {routesNoticeMessage ? (
+          <div style={routesErrorStyle}>{routesNoticeMessage}</div>
         ) : null}
 
         <section aria-label="Routes summary" style={routesSummaryCardsStyle}>
@@ -697,7 +758,7 @@ export default function RoutesPage() {
                     tabIndex={route.isClickable ? 0 : undefined}
                   >
                     <td style={routeCheckboxCellStyle}>
-                      {route.isClickable ? (
+                      {route.isClickable && route.isDeletable !== false ? (
                         <input
                           type="checkbox"
                           aria-label={`Select ${route.route} for deletion`}

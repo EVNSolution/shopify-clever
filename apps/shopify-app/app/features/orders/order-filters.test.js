@@ -83,6 +83,56 @@ test("filters orders by delivery area, delivery date, and ordered date", () => {
   );
 });
 
+test("filters orders by ordered date range", () => {
+  assert.deepEqual(
+    filterOrders(orders, {
+      orderedDateFrom: "2026-05-08",
+      orderedDateTo: "2026-05-09",
+      scope: "history",
+    }).map((order) => order.id),
+    ["order-1", "order-2", "order-3"],
+  );
+
+  assert.deepEqual(
+    filterOrders(orders, {
+      orderedDateFrom: "2026-05-09",
+      orderedDateTo: "2026-05-09",
+      scope: "history",
+    }).map((order) => order.id),
+    ["order-2", "order-3"],
+  );
+});
+
+test("filters orders by delivery weekday", () => {
+  assert.deepEqual(
+    filterOrders(orders, {
+      deliveryWeekday: "FRIDAY",
+      scope: "history",
+    }).map((order) => order.id),
+    ["order-2"],
+  );
+});
+
+test("filters orders by delivery state", () => {
+  assert.deepEqual(
+    filterOrders(orders, {
+      deliveryState: "planned",
+      referenceDate: "2026-05-14",
+      scope: "history",
+    }).map((order) => order.id),
+    ["order-2"],
+  );
+
+  assert.deepEqual(
+    filterOrders(orders, {
+      deliveryState: "unplanned",
+      referenceDate: "2026-05-14",
+      scope: "history",
+    }).map((order) => order.id),
+    ["order-1", "order-3"],
+  );
+});
+
 test("filters delivery dates with date-only normalization", () => {
   assert.deepEqual(
     filterOrders(
@@ -106,7 +156,11 @@ test("parses and applies search while removing legacy q query parameters", () =>
   assert.deepEqual(getOrderFiltersFromSearchParams(new URLSearchParams("q=claire")), {
     deliveryArea: "",
     deliveryDate: "",
+    deliveryState: "",
+    deliveryWeekday: "",
     orderedDate: "",
+    orderedDateFrom: "",
+    orderedDateTo: "",
     planned: "",
     scope: "planning",
     search: "claire",
@@ -121,7 +175,11 @@ test("defaults the query-backed Orders view to Unplanned planning scope while Al
   assert.deepEqual(defaultFilters, {
     deliveryArea: "",
     deliveryDate: "",
+    deliveryState: "",
+    deliveryWeekday: "",
     orderedDate: "",
+    orderedDateFrom: "",
+    orderedDateTo: "",
     planned: "",
     scope: "planning",
     search: "",
@@ -313,6 +371,8 @@ test("builds sorted filter options from current orders", () => {
   assert.deepEqual(getOrderFilterOptions(orders), {
     deliveryAreas: ["Mississauga", "Scarborough", "Thornhill"],
     deliveryDates: ["2026-05-14", "2026-05-15", "2026-05-16"],
+    deliveryStates: ["assigned_overdue", "past_due"],
+    deliveryWeekdays: ["THURSDAY", "FRIDAY", "SATURDAY"],
     orderedDates: ["2026-05-08", "2026-05-09"],
     serviceTypes: [],
   });
@@ -320,13 +380,17 @@ test("builds sorted filter options from current orders", () => {
 
 test("reads and updates Orders filter query parameters without dropping embedded app params", () => {
   const currentParams = new URLSearchParams(
-    "id_token=session&deliveryArea=Thornhill&deliveryDate=2026-05-14&orderedDate=2026-05-08&planned=true&q=claire",
+    "id_token=session&deliveryArea=Thornhill&deliveryDate=2026-05-14&deliveryWeekday=THURSDAY&orderedDate=2026-05-08&planned=true&q=claire",
   );
 
   assert.deepEqual(getOrderFiltersFromSearchParams(currentParams), {
     deliveryArea: "Thornhill",
     deliveryDate: "2026-05-14",
-    orderedDate: "2026-05-08",
+    deliveryState: "",
+    deliveryWeekday: "THURSDAY",
+    orderedDate: "",
+    orderedDateFrom: "2026-05-08",
+    orderedDateTo: "2026-05-08",
     planned: "",
     scope: "planning",
     search: "claire",
@@ -344,7 +408,11 @@ test("reads and updates Orders filter query parameters without dropping embedded
   const nextParams = updateOrderFilterSearchParams(currentParams, {
     deliveryArea: "",
     deliveryDate: "2026-05-15",
+    deliveryState: "planned",
+    deliveryWeekday: "FRIDAY",
     orderedDate: "",
+    orderedDateFrom: "2026-05-08",
+    orderedDateTo: "2026-05-09",
     scope: "planning",
     search: "  Ryan  ",
     serviceType: "DELIVERY",
@@ -354,7 +422,11 @@ test("reads and updates Orders filter query parameters without dropping embedded
   assert.equal(nextParams.get("id_token"), "session");
   assert.equal(nextParams.has("deliveryArea"), false);
   assert.equal(nextParams.get("deliveryDate"), "2026-05-15");
+  assert.equal(nextParams.get("deliveryState"), "planned");
+  assert.equal(nextParams.get("deliveryWeekday"), "FRIDAY");
   assert.equal(nextParams.has("orderedDate"), false);
+  assert.equal(nextParams.get("orderedDateFrom"), "2026-05-08");
+  assert.equal(nextParams.get("orderedDateTo"), "2026-05-09");
   assert.equal(nextParams.has("planned"), false);
   assert.equal(nextParams.get("scope"), "planning");
   assert.equal(nextParams.get("search"), "Ryan");
@@ -373,10 +445,19 @@ test("filters by service type and exposes stable service labels", () => {
   assert.deepEqual(
     filterOrders(serviceOrders, {
       referenceDate: "2026-05-18",
-      serviceType: "EVENING_DELIVERY",
+      serviceType: "DELIVERY",
       tab: "all",
     }).map((order) => order.id),
-    ["evening"],
+    ["day", "evening"],
+  );
+
+  assert.deepEqual(
+    filterOrders(serviceOrders, {
+      referenceDate: "2026-05-18",
+      serviceType: "PICKUP",
+      tab: "all",
+    }).map((order) => order.id),
+    ["pickup"],
   );
   assert.equal(formatServiceTypeLabel("DELIVERY"), "Delivery");
   assert.equal(formatServiceTypeLabel("EVENING_DELIVERY"), "Evening Delivery");

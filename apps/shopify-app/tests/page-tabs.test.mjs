@@ -112,7 +112,8 @@ test("Orders and Routes remain first-pass complete surfaces without new tab-shel
   const ordersSource = readAppFile("app/routes/app.orders.jsx");
   const routesSource = readAppFile("app/routes/app.routes.jsx");
 
-  assert.match(ordersSource, /<TabLayout\s+title="Orders"/);
+  assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
+  assert.doesNotMatch(ordersSource, /title="Orders"/);
   assert.match(routesSource, /<h1 style=\{routesTitleStyle\}>Routes<\/h1>/);
   assert.match(routesSource, />Create routes<\/button>/);
   assert.doesNotMatch(routesSource, /Filter routes|Optimize route|Assign driver|Schedule route/);
