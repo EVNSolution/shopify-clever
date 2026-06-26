@@ -1721,19 +1721,26 @@ export default function OrdersPage() {
     () => shopLocalDate ?? new Date(),
     [shopLocalDate],
   );
+  const activeOrderFilters = useMemo(
+    () => hasActiveOrderFilters(orderFilters),
+    [orderFilters],
+  );
   const orderFilterOptionOrders = useMemo(
-    () => filterOrders(displayOrders, {
-      ...orderFilters,
-      tab: "all",
-      deliveryArea: "",
-      deliveryState: "",
-      deliveryWeekday: "",
-      orderedDateFrom: "",
-      orderedDateTo: "",
-      serviceType: "",
-      referenceDate: orderFilterReferenceDate,
-    }),
-    [displayOrders, orderFilters, orderFilterReferenceDate],
+    () =>
+      activeOrderFilters
+        ? filterOrders(displayOrders, {
+            ...orderFilters,
+            tab: "all",
+            deliveryArea: "",
+            deliveryState: "",
+            deliveryWeekday: "",
+            orderedDateFrom: "",
+            orderedDateTo: "",
+            serviceType: "",
+            referenceDate: orderFilterReferenceDate,
+          })
+        : displayOrders,
+    [activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate],
   );
   const orderFilterOptions = useMemo(
     () => ({
@@ -1765,16 +1772,15 @@ export default function OrdersPage() {
     [orderFilterOptionOrders, orderFilters, orderFilterReferenceDate],
   );
   const filteredOrders = useMemo(
-    () => filterOrders(displayOrders, {
-      ...orderFilters,
-      tab: "all",
-      referenceDate: orderFilterReferenceDate,
-    }),
-    [displayOrders, orderFilters, orderFilterReferenceDate],
-  );
-  const activeOrderFilters = useMemo(
-    () => hasActiveOrderFilters(orderFilters),
-    [orderFilters],
+    () =>
+      activeOrderFilters
+        ? filterOrders(displayOrders, {
+            ...orderFilters,
+            tab: "all",
+            referenceDate: orderFilterReferenceDate,
+          })
+        : displayOrders,
+    [activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate],
   );
 
   useEffect(() => {

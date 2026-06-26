@@ -513,6 +513,12 @@ test("Orders table keeps route-created orders visible and relies on State labels
   assert.match(ordersPageSource, /getOrderDeliveryStateTabStyle\(order, orderFilterReferenceDate\)/);
 });
 
+
+test("Orders table treats no active filters as literally unfiltered", () => {
+  assert.match(ordersPageSource, /const activeOrderFilters = useMemo\([\s\S]*hasActiveOrderFilters\(orderFilters\)/);
+  assert.match(ordersPageSource, /activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?: displayOrders/);
+});
+
 test("Orders filter changes apply directly without automatic delivery-date lock rewrites", () => {
   assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?\[filterKey\]: filterValue/);
   assert.doesNotMatch(ordersPageSource, /autoAppliedDeliveryDateFilter/);
@@ -1028,11 +1034,11 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
   assert.match(ordersPageSource, /const \{ orders, errors, departureLocation, perf, shopLocalDate \} = useLoaderData\(\)/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
-  assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) => filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\),\s*\[displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
+  assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /deliveryAreas: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryArea: ""/);
   assert.match(ordersPageSource, /deliveryWeekdays: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryWeekday: ""/);
   assert.match(ordersPageSource, /serviceTypes: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?serviceType: ""/);
-  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) => filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\),\s*\[displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
+  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /getOrderSortValue\(leftOrder, sortConfig\.key, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return filteredOrders/);
   assert.match(ordersPageSource, /!orderedDateFilterActive \? <span style=\{orderFilterLabelStyle\}>Order date<\/span> : null/);
