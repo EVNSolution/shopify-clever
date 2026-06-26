@@ -54,6 +54,22 @@ export async function updateDeliveryRouteGroupOrders(request, routeGroupId, payl
   return mutateRouteGroup(request, routeGroupId, "/orders", payload, options, "수정할 route group ID가 없습니다.");
 }
 
+export async function createDeliveryRouteGroupBranch(request, routeGroupId, payload, options = {}) {
+  return mutateRouteGroup(request, routeGroupId, "/branches", payload, { ...options, method: "POST" }, "branch를 만들 route group ID가 없습니다.");
+}
+
+export async function updateDeliveryRouteGroupBranchOrders(request, routeGroupId, branchId, payload, options = {}) {
+  const safeBranchId = encodeURIComponent(branchId ?? "");
+  if (!safeBranchId) return missingRouteGroupResult("수정할 branch ID가 없습니다.");
+  return mutateRouteGroup(request, routeGroupId, `/branches/${safeBranchId}/orders`, payload, options, "수정할 route group ID가 없습니다.");
+}
+
+export async function deleteDeliveryRouteGroupBranch(request, routeGroupId, branchId, options = {}) {
+  const safeBranchId = encodeURIComponent(branchId ?? "");
+  if (!safeBranchId) return missingRouteGroupResult("삭제할 branch ID가 없습니다.");
+  return mutateRouteGroup(request, routeGroupId, `/branches/${safeBranchId}`, {}, { ...options, method: "DELETE" }, "삭제할 route group ID가 없습니다.");
+}
+
 export async function saveDeliveryRouteGroupPolygons(request, routeGroupId, payload, options = {}) {
   return mutateRouteGroup(request, routeGroupId, "/polygons", payload, options, "수정할 route group ID가 없습니다.");
 }
@@ -89,9 +105,9 @@ async function mutateRouteGroup(request, routeGroupId, suffix, payload, options,
   if (!safeRouteGroupId) return missingRouteGroupResult(missingMessage);
 
   const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}${suffix}`, {
-    body: JSON.stringify(payload ?? {}),
+    ...(options.method === "DELETE" ? {} : { body: JSON.stringify(payload ?? {}) }),
     fetch: options.fetch,
-    method: "PATCH",
+    method: options.method ?? "PATCH",
     sessionToken: options.sessionToken,
   });
 
