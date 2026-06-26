@@ -4,11 +4,9 @@ import { useFetcher, useLoaderData, useNavigate, useRouteError } from "react-rou
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { fetchDeliveryDrivers } from "../features/delivery/drivers.server";
-import { fetchDeliveryOrders } from "../features/delivery/orders.server";
 import {
   assignDeliveryRoutePlanDriver,
   fetchDeliveryRoutePlanDetail,
-  updateDeliveryRoutePlanStops,
 } from "../features/delivery/route-plans.server";
 import { createDepartureMarkerElement, createDotMarkerElement, createNumberedMarkerElement, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
@@ -177,13 +175,6 @@ const routeOverviewDriverPanelStyle = {
   textAlign: "left",
 };
 
-const routesDetailDescriptionStyle = {
-  margin: 0,
-  color: "#6b7280",
-  fontSize: "13px",
-  lineHeight: "20px",
-};
-
 const routeStatusBadgeStyle = {
   background: "#fff1b8",
   borderRadius: "999px",
@@ -234,67 +225,6 @@ const routeDetailMapCanvasStyle = {
   minHeight: "440px",
 };
 
-const routeDetailStopsHeaderStyle = {
-  alignItems: "center",
-  borderBottomColor: "#ececec",
-  borderBottomStyle: "solid",
-  borderBottomWidth: "1px",
-  display: "flex",
-  gap: "6px",
-  justifyContent: "space-between",
-  padding: "6px 10px",
-};
-
-const routeDetailStopsHeaderActionsStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "6px",
-};
-
-const routeDetailStopsTitleStyle = {
-  color: "#303030",
-  fontSize: "14px",
-  fontWeight: 650,
-};
-
-const routeDriverWorkbenchStyle = {
-  borderBottom: "1px solid #ececec",
-  display: "grid",
-  gap: "8px",
-  padding: "8px 10px",
-};
-
-const routeDriverToggleListStyle = {
-  alignItems: "center",
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "6px",
-};
-
-const routeDriverToggleButtonStyle = {
-  alignItems: "center",
-  background: "#303030",
-  border: "1px solid #303030",
-  borderRadius: "999px",
-  color: "#ffffff",
-  cursor: "pointer",
-  display: "inline-flex",
-  fontFamily: "inherit",
-  fontSize: "12px",
-  fontWeight: 650,
-  gap: "6px",
-  minHeight: "28px",
-  padding: "3px 10px",
-};
-
-const routeDriverToggleCountStyle = {
-  background: "rgba(255, 255, 255, 0.18)",
-  borderRadius: "999px",
-  fontSize: "11px",
-  lineHeight: 1,
-  padding: "3px 6px",
-};
-
 const routeMetaGridStyle = {
   borderBottom: "1px solid #ececec",
   display: "grid",
@@ -316,19 +246,65 @@ const routeMetaItemStyle = {
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "760px",
+  minWidth: "1548px",
   tableLayout: "fixed",
   width: "100%",
 };
 
-const routePlanRowsColumnWidths = ["32px", "240px", "112px", "160px", "92px", "120px"];
+const routePlanRowsColumnWidths = [
+  "180px",
+  "100px",
+  "160px",
+  "100px",
+  "170px",
+  "72px",
+  "88px",
+  "88px",
+  "96px",
+  "120px",
+  "120px",
+  "104px",
+  "150px",
+];
+
+const routeLineNameStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  gap: "8px",
+  minWidth: 0,
+};
 
 const routeStatusDotStyle = {
   background: "#0ea5e9",
   borderRadius: "999px",
   display: "inline-block",
+  flex: "0 0 auto",
   height: "8px",
   width: "8px",
+};
+
+const routeDepartureStatusStyle = {
+  background: "#fff7cc",
+  border: "1px solid #eadf9b",
+  borderRadius: "999px",
+  color: "#5f4b00",
+  display: "inline-flex",
+  fontSize: "12px",
+  fontWeight: 650,
+  lineHeight: 1,
+  padding: "4px 8px",
+};
+
+const routeStartInputStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "7px",
+  color: "#303030",
+  fontFamily: "inherit",
+  fontSize: "12px",
+  minHeight: "28px",
+  padding: "2px 6px",
+  width: "150px",
 };
 
 const routeTimelineStyle = {
@@ -396,25 +372,6 @@ const routesDetailTableFrameStyle = {
   overflowX: "auto",
 };
 
-const routesDetailTableStyle = {
-  borderCollapse: "separate",
-  borderSpacing: 0,
-  minWidth: "1040px",
-  tableLayout: "fixed",
-  width: "100%",
-};
-
-const routeDetailColumnWidths = [
-  "64px",
-  "96px",
-  "128px",
-  "420px",
-  "112px",
-  "112px",
-  "196px",
-  "104px",
-];
-
 const routesDetailHeaderCellStyle = {
   background: "#f7f7f7",
   borderBottomColor: "#d6d6d6",
@@ -443,92 +400,6 @@ const routesDetailCellStyle = {
   whiteSpace: "nowrap",
 };
 
-const routeStopSequenceCellStyle = {
-  ...routesDetailCellStyle,
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  justifyContent: "flex-start",
-  overflow: "visible",
-  textOverflow: "clip",
-};
-
-const routeStopDragHandleStyle = {
-  alignItems: "center",
-  color: "#8a8a8a",
-  cursor: "grab",
-  display: "inline-flex",
-  fontSize: "14px",
-  fontWeight: 650,
-  height: "20px",
-  justifyContent: "center",
-  lineHeight: 1,
-  width: "12px",
-};
-
-const routeStopSequenceActionButtonStyle = {
-  background: "#ffffff",
-  borderColor: "#c9c9c9",
-  borderRadius: "8px",
-  borderStyle: "solid",
-  borderWidth: "1px",
-  color: "#303030",
-  cursor: "pointer",
-  fontFamily: "inherit",
-  fontSize: "12px",
-  fontWeight: 650,
-  lineHeight: 1.2,
-  minHeight: "28px",
-  padding: "3px 9px",
-};
-
-const routeStopSequencePrimaryButtonStyle = {
-  ...routeStopSequenceActionButtonStyle,
-  background: "#303030",
-  borderColor: "#303030",
-  color: "#ffffff",
-};
-
-const routeStopDraggingRowStyle = {
-  opacity: 0.55,
-};
-
-const routeDetailCandidatePanelStyle = {
-  borderTop: "1px solid #ececec",
-  display: "grid",
-  gap: "8px",
-  padding: "10px 12px",
-};
-
-const routeDetailCandidateListStyle = {
-  display: "grid",
-  gap: "6px",
-};
-
-const routeDetailCandidateItemStyle = {
-  alignItems: "center",
-  background: "#fafafa",
-  border: "1px solid #e3e3e3",
-  borderRadius: "8px",
-  display: "grid",
-  gap: "8px",
-  gridTemplateColumns: "minmax(0, 96px) minmax(0, 128px) minmax(0, 1fr) auto",
-  padding: "8px",
-};
-
-const routeDetailCandidateTextStyle = {
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const routesDetailEmptyCellStyle = {
-  ...routesDetailCellStyle,
-  color: "#616161",
-  padding: "18px 12px",
-  textAlign: "center",
-};
-
 const routeDetailErrorStyle = {
   background: "#fff4f4",
   borderColor: "#ffd6d6",
@@ -555,29 +426,16 @@ export const loader = async ({ params, request }) => {
     fetchDeliveryDrivers(request, {}),
   ]);
   const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
-  const routeDeliveryDate = getRouteDeliveryDate(routePlanData.routePlan);
-  const sameDateOrdersStartedAt = getRouteDetailPerfNow();
-  const sameDateOrderData = routeDeliveryDate
-    ? await fetchDeliveryOrders(
-        request,
-        { deliveryDate: routeDeliveryDate },
-        { cacheKey: shopifyShopCacheKey },
-      )
-    : { orders: [], errors: [] };
-  const sameDateOrdersMs = roundPerfDuration(getRouteDetailPerfNow() - sameDateOrdersStartedAt);
 
   logRouteDetailPerformance("routes.detail.loader", {
     totalMs: roundPerfDuration(getRouteDetailPerfNow() - loaderStartedAt),
     primaryDataMs,
-    sameDateOrdersMs,
     routeId: params.routeId,
     stopCount: routePlanData.stops?.length ?? 0,
-    sameDateOrderCount: sameDateOrderData.orders?.length ?? 0,
     driverCount: driverData.drivers?.length ?? 0,
     errorCount:
       (routePlanData.errors?.length ?? 0) +
-      (driverData.errors?.length ?? 0) +
-      (sameDateOrderData.errors?.length ?? 0),
+      (driverData.errors?.length ?? 0),
   });
 
   return {
@@ -585,11 +443,9 @@ export const loader = async ({ params, request }) => {
     errors: [
       ...(routePlanData.errors ?? []),
       ...(driverData.errors ?? []),
-      ...(sameDateOrderData.errors ?? []),
     ],
     currentDepartureLocation: departureLocationData.departureLocation,
     drivers: driverData.drivers,
-    sameDateOrders: sameDateOrderData.orders,
   };
 };
 
@@ -610,57 +466,12 @@ export const action = async ({ params, request }) => {
     );
   }
 
-  if (intent !== "saveRouteStops") {
-    return {
-      routePlan: null,
-      stops: [],
-      errors: [{ message: "지원하지 않는 route stop 작업입니다." }],
-    };
-  }
-
-  const stopsPayload = parseRouteStopsPayload(formData.get("stops"));
-
-  if (stopsPayload.length === 0) {
-    return {
-      routePlan: null,
-      stops: [],
-      errors: [{ message: "저장할 route stop이 없습니다." }],
-    };
-  }
-
-  const result = await updateDeliveryRoutePlanStops(
-    request,
-    params.routeId,
-    { stops: stopsPayload },
-    { sessionToken: shopifySessionToken },
-  );
-
-  return result;
+  return {
+    routePlan: null,
+    stops: [],
+    errors: [{ message: "지원하지 않는 route 작업입니다." }],
+  };
 };
-
-function parseRouteStopsPayload(value) {
-  try {
-    const parsedStops = JSON.parse(value ?? "[]");
-    if (!Array.isArray(parsedStops)) return [];
-
-    return parsedStops.flatMap((stop, index) => {
-      const shopifyOrderGid = textOrUndefined(stop?.shopifyOrderGid);
-      if (!shopifyOrderGid) return [];
-
-      return [{
-        deliveryStopId: textOrUndefined(stop?.deliveryStopId) ?? null,
-        shopifyOrderGid,
-        sequence: numberOrUndefined(stop?.sequence) ?? index + 1,
-      }];
-    });
-  } catch {
-    return [];
-  }
-}
-
-function formatRouteValues(values) {
-  return Array.isArray(values) && values.length > 0 ? values.join(", ") : "—";
-}
 
 function formatRouteDeliveryScope(routePlan) {
   return formatDeliveryScopeLabel({
@@ -674,12 +485,6 @@ function createRouteDetailHref(routeId) {
   return `/app/routes/${routeId}`;
 }
 
-function getRouteDeliveryDate(routePlan) {
-  return textOrUndefined(
-    routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate,
-  );
-}
-
 function buildRouteDetail(routePlan) {
   if (!routePlan) {
     return {
@@ -688,7 +493,6 @@ function buildRouteDetail(routePlan) {
       orders: 0,
       coordinates: "0/0",
       missingCoordinates: 0,
-      deliveryArea: "—",
       deliveryDate: "—",
     };
   }
@@ -703,13 +507,54 @@ function buildRouteDetail(routePlan) {
     orders: stopsCount,
     coordinates: `${locatedCount}/${stopsCount}`,
     missingCoordinates,
-    deliveryArea: formatRouteValues(routePlan.deliveryAreas),
     deliveryDate: formatRouteDeliveryScope(routePlan),
   };
 }
 
 function getRouteDriverId(routePlan) {
   return textOrUndefined(routePlan?.driverId ?? routePlan?.driver?.id) ?? "";
+}
+
+function getRouteDepartureStatus(routePlan) {
+  const status = String(routePlan?.departureStatus ?? routePlan?.dispatchStatus ?? "").toUpperCase();
+
+  return status === "STARTED" || routePlan?.startedAt ? "Started" : "Unstarted";
+}
+
+function getRouteStartDateTimeValue(routePlan) {
+  const value = textOrUndefined(
+    routePlan?.scheduledStartAt ?? routePlan?.startTime ?? routePlan?.startedAt,
+  );
+
+  if (value?.includes("T")) return value.slice(0, 16);
+
+  const date = textOrUndefined(routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate);
+  return date ? `${date}T09:00` : "";
+}
+
+function getRouteCreatedLabel(routePlan) {
+  return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? "—";
+}
+
+function getRouteVehicleLabel(routePlan) {
+  return textOrUndefined(routePlan?.vehicle?.name ?? routePlan?.vehicleName) ?? "—";
+}
+
+function countRouteStopsByStatus(routeStops, statuses) {
+  const statusSet = new Set(statuses);
+
+  return routeStops.filter((stop) => statusSet.has(String(stop.status).toUpperCase())).length;
+}
+
+function getRouteTotalItems(routePlan, routeStops) {
+  const explicitTotal = numberOrUndefined(routePlan?.totalItems ?? routePlan?.itemsCount ?? routePlan?.itemCount);
+  const stopTotal = routeStops.reduce((total, stop) => total + (numberOrUndefined(stop.itemCount) ?? 0), 0);
+
+  return explicitTotal ?? (stopTotal > 0 ? stopTotal : "—");
+}
+
+function getRouteMetricLabel(...values) {
+  return values.map(textOrUndefined).find(Boolean) ?? "—";
 }
 
 function buildRouteDriverOptions(drivers, currentDriver) {
@@ -805,6 +650,7 @@ function buildRouteStops(stops) {
       status: stop.fulfillmentStatus ?? stop.status ?? "PENDING",
       payment: stop.paymentStatus ?? stop.financialStatus ?? "—",
       attributes: formatStopAttributes(stop.attributes),
+      itemCount: numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems),
       coordinatesLabel: coordinates != null ? "Yes" : "No",
       coordinates,
       hasCoordinates: coordinates != null,
@@ -819,102 +665,6 @@ function resequenceRouteStops(routeStops) {
     ...stop,
     stop: index + 1,
   }));
-}
-
-function buildSameDateCandidateStops(sameDateOrders, routeStops, routeDeliveryDate) {
-  if (!routeDeliveryDate) return [];
-
-  const existingOrderIds = new Set(
-    routeStops
-      .map((stop) => textOrUndefined(stop.shopifyOrderGid))
-      .filter(Boolean),
-  );
-
-  return (Array.isArray(sameDateOrders) ? sameDateOrders : [])
-    .flatMap((order, index) => {
-      const shopifyOrderGid = getSameDateOrderIdentity(order);
-      const orderDeliveryDate = textOrUndefined(order?.deliveryDate);
-
-      if (!shopifyOrderGid || orderDeliveryDate !== routeDeliveryDate) return [];
-      if (existingOrderIds.has(shopifyOrderGid)) return [];
-
-      return [buildRouteStopFromSameDateOrder(order, shopifyOrderGid, index)];
-    });
-}
-
-function getSameDateOrderIdentity(order) {
-  return textOrUndefined(order?.shopifyOrderGid) ?? textOrUndefined(order?.id);
-}
-
-function buildRouteStopFromSameDateOrder(order, shopifyOrderGid, index) {
-  const coordinates = normalizeOrderCoordinates(order);
-
-  return {
-    id: `candidate:${shopifyOrderGid}`,
-    deliveryStopId: null,
-    shopifyOrderGid,
-    originalIndex: index,
-    sortOrder: Number.MAX_SAFE_INTEGER,
-    stop: index + 1,
-    order: textOrUndefined(order?.name) ?? shopifyOrderGid,
-    recipient: textOrUndefined(order?.recipientName) ?? textOrUndefined(order?.customer) ?? "Unknown recipient",
-    address: formatCandidateStopAddress(order),
-    status: textOrUndefined(order?.fulfillmentStatus) ?? textOrUndefined(order?.status) ?? "PENDING",
-    payment: textOrUndefined(order?.financialStatus) ?? textOrUndefined(order?.paymentStatus) ?? "—",
-    attributes: formatStopAttributes(order?.attributes ?? order?.attributeList),
-    coordinatesLabel: coordinates != null ? "Yes" : "No",
-    coordinates,
-    hasCoordinates: coordinates != null,
-  };
-}
-
-function normalizeOrderCoordinates(order) {
-  if (Array.isArray(order?.coordinates)) {
-    return normalizeLngLat(order.coordinates[1], order.coordinates[0]);
-  }
-
-  return normalizeLngLat(
-    order?.latitude ?? order?.coordinates?.latitude,
-    order?.longitude ?? order?.coordinates?.longitude,
-  );
-}
-
-function formatCandidateStopAddress(order) {
-  if (typeof order?.address === "string" && order.address.trim()) {
-    return order.address;
-  }
-
-  return formatStopAddress(order?.shippingAddress ?? order?.address);
-}
-
-function orderRouteStops(routeStops, routeStopOrderIds) {
-  if (!Array.isArray(routeStopOrderIds) || routeStopOrderIds.length === 0) {
-    return resequenceRouteStops(routeStops);
-  }
-
-  const orderRankById = new Map(routeStopOrderIds.map((stopId, index) => [stopId, index]));
-
-  return resequenceRouteStops([...routeStops].sort((firstStop, secondStop) => {
-    const firstRank = orderRankById.has(firstStop.id) ? orderRankById.get(firstStop.id) : Number.MAX_SAFE_INTEGER;
-    const secondRank = orderRankById.has(secondStop.id) ? orderRankById.get(secondStop.id) : Number.MAX_SAFE_INTEGER;
-
-    return firstRank - secondRank || firstStop.stop - secondStop.stop;
-  }));
-}
-
-function reorderRouteStopIds(routeStopOrderIds, sourceStopId, targetStopId) {
-  if (sourceStopId === targetStopId) return routeStopOrderIds;
-
-  const nextRouteStopOrderIds = [...routeStopOrderIds];
-  const sourceIndex = nextRouteStopOrderIds.indexOf(sourceStopId);
-  const targetIndex = nextRouteStopOrderIds.indexOf(targetStopId);
-
-  if (sourceIndex === -1 || targetIndex === -1) return routeStopOrderIds;
-
-  const [sourceRouteStopId] = nextRouteStopOrderIds.splice(sourceIndex, 1);
-  nextRouteStopOrderIds.splice(targetIndex, 0, sourceRouteStopId);
-
-  return nextRouteStopOrderIds;
 }
 
 function formatStopAddress(address) {
@@ -1291,7 +1041,6 @@ function renderRouteHeaderMetric(label, value) {
 export default function RouteDetailPage() {
   const navigate = useNavigate();
   const shopify = useAppBridge();
-  const routeStopSaveFetcher = useFetcher();
   const routeDriverSaveFetcher = useFetcher();
   const {
     currentDepartureLocation = null,
@@ -1300,24 +1049,16 @@ export default function RouteDetailPage() {
     routeGeometry = null,
     routeStopPoints = [],
     stops = [],
-    sameDateOrders = [],
     errors = [],
   } = useLoaderData();
-  const hasSuccessfulRouteStopSave =
-    routeStopSaveFetcher.state === "idle" &&
-    routeStopSaveFetcher.data != null &&
-    (routeStopSaveFetcher.data.errors ?? []).length === 0;
   const hasSuccessfulRouteDriverSave =
     routeDriverSaveFetcher.state === "idle" &&
     routeDriverSaveFetcher.data != null &&
     (routeDriverSaveFetcher.data.errors ?? []).length === 0;
   const effectiveRoutePlan = hasSuccessfulRouteDriverSave
     ? routeDriverSaveFetcher.data.routePlan ?? routePlan
-    : hasSuccessfulRouteStopSave
-      ? routeStopSaveFetcher.data.routePlan ?? routePlan
-      : routePlan;
+    : routePlan;
   const routesListHref = "/app/routes";
-  const routeDeliveryDate = getRouteDeliveryDate(effectiveRoutePlan);
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan), [effectiveRoutePlan]);
   const departureLocation = useMemo(
     () => buildDepartureLocation(effectiveRoutePlan, currentDepartureLocation),
@@ -1332,41 +1073,22 @@ export default function RouteDetailPage() {
     ? routeDriverOptions.find((driverOption) => driverOption.id === routeDriverId)?.label ?? "Assigned"
     : "Unassigned";
   const [selectedRouteDriverId, setSelectedRouteDriverId] = useState(routeDriverId);
-  const routeStops = useMemo(() => buildRouteStops(stops), [stops]);
-  const [isEditingRouteSequence, setIsEditingRouteSequence] = useState(true);
-  const [committedRouteStops, setCommittedRouteStops] = useState([]);
-  const [draftRouteStops, setDraftRouteStops] = useState([]);
-  const [committedRouteStopOrderIds, setCommittedRouteStopOrderIds] = useState([]);
-  const [draftRouteStopOrderIds, setDraftRouteStopOrderIds] = useState([]);
-  const [draftRemovedRouteStopIds, setDraftRemovedRouteStopIds] = useState([]);
-  const [activeDraggedRouteStopId, setActiveDraggedRouteStopId] = useState(null);
-  const [routeStopSaveClientError, setRouteStopSaveClientError] = useState(null);
-  const isSavingRouteStops = routeStopSaveFetcher.state !== "idle";
-  const editableRouteStops = isEditingRouteSequence ? draftRouteStops : committedRouteStops;
-  const visibleRouteStopOrderIds = isEditingRouteSequence ? draftRouteStopOrderIds : committedRouteStopOrderIds;
-  const orderedRouteStops = useMemo(() => orderRouteStops(editableRouteStops, visibleRouteStopOrderIds), [editableRouteStops, visibleRouteStopOrderIds]);
-  const routeDriverBuckets = useMemo(() => [{
-    id: routeDriverId || "unassigned",
-    label: routeDriverSummary,
-    stops: orderedRouteStops,
-  }], [orderedRouteStops, routeDriverId, routeDriverSummary]);
-  const [activeRouteDriverBucketId, setActiveRouteDriverBucketId] = useState(routeDriverBuckets[0]?.id ?? "unassigned");
-  const activeRouteDriverBucket = routeDriverBuckets.find((bucket) => bucket.id === activeRouteDriverBucketId) ?? routeDriverBuckets[0];
-  const activeRouteDriverStops = activeRouteDriverBucket?.stops ?? orderedRouteStops;
-  const addableSameDateStops = useMemo(
-    () => buildSameDateCandidateStops(sameDateOrders, editableRouteStops, routeDeliveryDate),
-    [editableRouteStops, routeDeliveryDate, sameDateOrders],
-  );
-  const routeStopSaveErrors = routeStopSaveClientError
-    ? [{ message: routeStopSaveClientError }]
-    : routeStopSaveFetcher.data?.errors ?? [];
+  const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
+  const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
+  const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
+  const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
+  const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
+  const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
+  const routeTotalDriveTime = getRouteMetricLabel(effectiveRoutePlan?.totalDriveTime, effectiveRoutePlan?.driveTime);
+  const routeTotalDistance = getRouteMetricLabel(effectiveRoutePlan?.totalDistance, effectiveRoutePlan?.distance);
+  const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
+  const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
+  const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
   const routeDriverSaveErrors = routeDriverSaveFetcher.data?.errors ?? [];
   const visibleErrors = [
     ...(errors ?? []),
-    ...(routeStopSaveErrors ?? []),
     ...(routeDriverSaveErrors ?? []),
   ];
-  const visibleRouteDetailColumnWidths = [...routeDetailColumnWidths, "96px"];
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, orderedRouteStops),
     [departureLocation, orderedRouteStops],
@@ -1383,68 +1105,20 @@ export default function RouteDetailPage() {
   const mapLoadedRef = useRef(false);
   const mapRecoveryAttemptsRef = useRef(0);
   const mapRecoveryTimerRef = useRef(null);
-  const appliedRouteStopSaveDataRef = useRef(null);
   const hasInitialRouteMapFitRef = useRef(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapStatus, setMapStatus] = useState("loading");
   const [mapRenderKey, setMapRenderKey] = useState(0);
-  const savedRouteGeometry = hasSuccessfulRouteStopSave
-    ? routeStopSaveFetcher.data.routeGeometry ?? null
-    : routeGeometry;
-  const savedRouteStopPoints = useMemo(() => (
-    hasSuccessfulRouteStopSave
-      ? routeStopSaveFetcher.data.routeStopPoints ?? []
-      : routeStopPoints
-  ), [hasSuccessfulRouteStopSave, routeStopSaveFetcher.data, routeStopPoints]);
+  const savedRouteGeometry = routeGeometry;
+  const savedRouteStopPoints = routeStopPoints;
   const routeDetailSaveAction = effectiveRoutePlan?.id
     ? createRouteDetailHref(effectiveRoutePlan.id)
     : routesListHref;
   const isSavingRouteDriver = routeDriverSaveFetcher.state !== "idle";
 
   useEffect(() => {
-    const routeStopIds = routeStops.map((stop) => stop.id);
-    setCommittedRouteStops(routeStops);
-    setDraftRouteStops(routeStops);
-    setCommittedRouteStopOrderIds(routeStopIds);
-    setDraftRouteStopOrderIds(routeStopIds);
-    setDraftRemovedRouteStopIds([]);
-    setIsEditingRouteSequence(true);
-    setActiveDraggedRouteStopId(null);
-  }, [routeStops]);
-
-  useEffect(() => {
     setSelectedRouteDriverId(routeDriverId);
   }, [routeDriverId]);
-
-  useEffect(() => {
-    if (routeDriverBuckets.some((bucket) => bucket.id === activeRouteDriverBucketId)) return;
-
-    setActiveRouteDriverBucketId(routeDriverBuckets[0]?.id ?? "unassigned");
-  }, [activeRouteDriverBucketId, routeDriverBuckets]);
-
-  useEffect(() => {
-    if (routeStopSaveFetcher.state !== "idle" || !routeStopSaveFetcher.data) return;
-    if ((routeStopSaveFetcher.data.errors ?? []).length > 0) return;
-    if (appliedRouteStopSaveDataRef.current === routeStopSaveFetcher.data) return;
-
-    appliedRouteStopSaveDataRef.current = routeStopSaveFetcher.data;
-
-    const savedRouteStops = Array.isArray(routeStopSaveFetcher.data.stops)
-      ? buildRouteStops(routeStopSaveFetcher.data.stops)
-      : [];
-    const nextRouteStops = savedRouteStops.length > 0 || draftRouteStops.length === 0
-      ? savedRouteStops
-      : draftRouteStops;
-    const nextRouteStopOrderIds = nextRouteStops.map((stop) => stop.id);
-
-    setCommittedRouteStops(nextRouteStops);
-    setCommittedRouteStopOrderIds(nextRouteStopOrderIds);
-    setDraftRouteStops(nextRouteStops);
-    setDraftRouteStopOrderIds(nextRouteStopOrderIds);
-    setDraftRemovedRouteStopIds([]);
-    setIsEditingRouteSequence(true);
-    setActiveDraggedRouteStopId(null);
-  }, [draftRouteStops, routeStopSaveFetcher.data, routeStopSaveFetcher.state]);
 
   const saveRouteDriver = useCallback(async () => {
     if (isSavingRouteDriver) return;
@@ -1468,90 +1142,6 @@ export default function RouteDetailPage() {
     selectedRouteDriverId,
     shopify,
   ]);
-
-  const saveRouteSequenceEdit = useCallback(async () => {
-    if (isSavingRouteStops) return;
-
-    const stopsPayload = orderedRouteStops.map((stop, index) => ({
-      deliveryStopId: stop.deliveryStopId ?? null,
-      shopifyOrderGid: stop.shopifyOrderGid,
-      sequence: index + 1,
-    }));
-
-    if (stopsPayload.some((stop) => !stop.shopifyOrderGid)) {
-      setRouteStopSaveClientError("저장할 수 없는 주문이 포함되어 있습니다.");
-      return;
-    }
-
-    const formData = new FormData();
-    formData.set("_intent", "saveRouteStops");
-    formData.set("stops", JSON.stringify(stopsPayload));
-
-    try {
-      const sessionToken = await shopify.idToken();
-      formData.set("shopifySessionToken", sessionToken);
-    } catch {
-      // The server action returns an actionable auth error if the token cannot be fetched.
-    }
-
-    setRouteStopSaveClientError(null);
-    routeStopSaveFetcher.submit(formData, { action: routeDetailSaveAction, method: "post" });
-  }, [isSavingRouteStops, orderedRouteStops, routeDetailSaveAction, routeStopSaveFetcher, shopify]);
-
-  const cancelRouteSequenceEdit = useCallback(() => {
-    setDraftRouteStops(committedRouteStops);
-    setDraftRouteStopOrderIds(committedRouteStopOrderIds);
-    setDraftRemovedRouteStopIds([]);
-    setRouteStopSaveClientError(null);
-    setIsEditingRouteSequence(true);
-    setActiveDraggedRouteStopId(null);
-  }, [committedRouteStopOrderIds, committedRouteStops]);
-
-  const removeDraftRouteStop = useCallback((stopId) => {
-    setDraftRouteStops((currentRouteStops) => currentRouteStops.filter((stop) => stop.id !== stopId));
-    setDraftRouteStopOrderIds((currentOrderIds) => currentOrderIds.filter((currentStopId) => currentStopId !== stopId));
-    setDraftRemovedRouteStopIds((currentRemovedIds) => (
-      currentRemovedIds.includes(stopId) ? currentRemovedIds : [...currentRemovedIds, stopId]
-    ));
-  }, []);
-
-  const addDraftRouteStop = useCallback((stop) => {
-    setDraftRouteStops((currentRouteStops) => resequenceRouteStops([...currentRouteStops, stop]));
-    setDraftRouteStopOrderIds((currentOrderIds) => [...currentOrderIds, stop.id]);
-    setDraftRemovedRouteStopIds((currentRemovedIds) => (
-      currentRemovedIds.filter((removedStopId) => removedStopId !== stop.id)
-    ));
-  }, []);
-
-  const handleRouteStopDragStart = useCallback((event, stopId) => {
-    if (!isEditingRouteSequence) return;
-
-    setActiveDraggedRouteStopId(stopId);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", stopId);
-  }, [isEditingRouteSequence]);
-
-  const handleRouteStopDragOver = useCallback((event) => {
-    if (!isEditingRouteSequence) return;
-
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  }, [isEditingRouteSequence]);
-
-  const handleRouteStopDrop = useCallback((event, targetStopId) => {
-    if (!isEditingRouteSequence) return;
-
-    event.preventDefault();
-    const sourceStopId = activeDraggedRouteStopId ?? event.dataTransfer.getData("text/plain");
-    setDraftRouteStopOrderIds((currentOrderIds) => (
-      reorderRouteStopIds(currentOrderIds, sourceStopId, targetStopId)
-    ));
-    setActiveDraggedRouteStopId(null);
-  }, [activeDraggedRouteStopId, isEditingRouteSequence]);
-
-  const handleRouteStopDragEnd = useCallback(() => {
-    setActiveDraggedRouteStopId(null);
-  }, []);
 
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
@@ -1881,28 +1471,11 @@ export default function RouteDetailPage() {
             }
           />
 
-          <section aria-label="Route driver stop groups" style={routeDriverWorkbenchStyle}>
-            <div style={routeDriverToggleListStyle}>
-              {routeDriverBuckets.map((bucket) => (
-                <button
-                  aria-pressed={bucket.id === activeRouteDriverBucketId}
-                  key={bucket.id}
-                  onClick={() => setActiveRouteDriverBucketId(bucket.id)}
-                  style={routeDriverToggleButtonStyle}
-                  type="button"
-                >
-                  <span>{bucket.label}</span>
-                  <span style={routeDriverToggleCountStyle}>{bucket.stops.length}</span>
-                </button>
-              ))}
-            </div>
-          </section>
-
           <section aria-label="Route timing" style={routeMetaGridStyle}>
             <div style={routeMetaItemStyle}>☆ Route start: {departureLocation.address}</div>
             <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
             <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
-            <div style={routeMetaItemStyle}>ⓘ Driver: {activeRouteDriverBucket?.label ?? "Unassigned"}</div>
+            <div style={routeMetaItemStyle}>ⓘ Driver assignment: {routeDriverSummary}</div>
           </section>
 
           <div style={routesDetailTableFrameStyle}>
@@ -1914,34 +1487,58 @@ export default function RouteDetailPage() {
               </colgroup>
               <thead>
                 <tr>
-                  <th style={routesDetailHeaderCellStyle}></th>
                   <th style={routesDetailHeaderCellStyle}>Name</th>
                   <th style={routesDetailHeaderCellStyle}>Status</th>
                   <th style={routesDetailHeaderCellStyle}>Driver</th>
+                  <th style={routesDetailHeaderCellStyle}>Vehicle</th>
+                  <th style={routesDetailHeaderCellStyle}>Start time</th>
                   <th style={routesDetailHeaderCellStyle}>Stops</th>
+                  <th style={routesDetailHeaderCellStyle}>Delivered</th>
+                  <th style={routesDetailHeaderCellStyle}>Attempted</th>
+                  <th style={routesDetailHeaderCellStyle}>Total items</th>
+                  <th style={routesDetailHeaderCellStyle}>Total drive time</th>
+                  <th style={routesDetailHeaderCellStyle}>Total distance</th>
+                  <th style={routesDetailHeaderCellStyle}>Total weight</th>
                   <th style={routesDetailHeaderCellStyle}>Created</th>
                 </tr>
               </thead>
               <tbody>
-                {routeDriverBuckets.map((bucket) => (
-                  <tr key={bucket.id}>
-                    <td style={routesDetailCellStyle}><span aria-hidden="true" style={routeStatusDotStyle}></span></td>
-                    <td style={routesDetailCellStyle}>{routeDetail.route}</td>
-                    <td style={routesDetailCellStyle}>{routeDetail.status}</td>
-                    <td style={routesDetailCellStyle}>{bucket.label}</td>
-                    <td style={routesDetailCellStyle}>{bucket.stops.length}</td>
-                    <td style={routesDetailCellStyle}>—</td>
-                  </tr>
-                ))}
+                <tr>
+                  <td style={routesDetailCellStyle}>
+                    <span style={routeLineNameStyle}>
+                      <span aria-hidden="true" style={routeStatusDotStyle}></span>
+                      <span>{routeDetail.route}</span>
+                    </span>
+                  </td>
+                  <td style={routesDetailCellStyle}><span style={routeDepartureStatusStyle}>{routeDepartureStatus}</span></td>
+                  <td style={routesDetailCellStyle}>{routeDriverSummary}</td>
+                  <td style={routesDetailCellStyle}>{routeVehicleLabel}</td>
+                  <td style={routesDetailCellStyle}>
+                    <input
+                      aria-label="Route start time"
+                      defaultValue={routeStartDateTimeValue}
+                      style={routeStartInputStyle}
+                      type="datetime-local"
+                    />
+                  </td>
+                  <td style={routesDetailCellStyle}>{orderedRouteStops.length}</td>
+                  <td style={routesDetailCellStyle}>{routeDeliveredCount}</td>
+                  <td style={routesDetailCellStyle}>{routeAttemptedCount}</td>
+                  <td style={routesDetailCellStyle}>{routeTotalItems}</td>
+                  <td style={routesDetailCellStyle}>{routeTotalDriveTime}</td>
+                  <td style={routesDetailCellStyle}>{routeTotalDistance}</td>
+                  <td style={routesDetailCellStyle}>{routeTotalWeight}</td>
+                  <td style={routesDetailCellStyle}>{routeCreatedLabel}</td>
+                </tr>
               </tbody>
             </table>
           </div>
 
           <section aria-label="Route stop timeline" style={routeTimelineStyle}>
             <div style={routeTimelineLaneStyle}>
-              <div style={routeTimelineLabelStyle}>{activeRouteDriverBucket?.label ?? "Unassigned"}</div>
+              <div style={routeTimelineLabelStyle}>{routeDetail.route}</div>
               <span title="Start" style={routeTimelineStartStyle}>★</span>
-              {activeRouteDriverStops.map((stop) => (
+              {orderedRouteStops.map((stop) => (
                 <span key={stop.id} style={routeTimelineSegmentStyle} title={stop.order}>
                   <span style={routeTimelineLineStyle}></span>
                   <span style={routeTimelineStopStyle}>{stop.stop}</span>
@@ -1949,119 +1546,6 @@ export default function RouteDetailPage() {
               ))}
             </div>
           </section>
-
-          <div style={routeDetailStopsHeaderStyle}>
-            <div style={routeDetailStopsTitleStyle}>{activeRouteDriverBucket?.label ?? "Unassigned"} stop sequence</div>
-            <div style={routeDetailStopsHeaderActionsStyle}>
-              <div style={routesDetailDescriptionStyle}>{activeRouteDriverStops.length} selected orders</div>
-              <button
-                disabled={isSavingRouteStops}
-                onClick={saveRouteSequenceEdit}
-                style={routeStopSequencePrimaryButtonStyle}
-                type="button"
-              >{isSavingRouteStops ? "Saving…" : "Save order"}</button>
-              <button
-                disabled={isSavingRouteStops}
-                onClick={cancelRouteSequenceEdit}
-                style={routeStopSequenceActionButtonStyle}
-                type="button"
-              >Cancel</button>
-            </div>
-          </div>
-
-          <div style={routesDetailTableFrameStyle}>
-            <table style={routesDetailTableStyle}>
-              <colgroup>
-                {visibleRouteDetailColumnWidths.map((width, index) => (
-                  <col key={`${width}-${index}`} style={{ width }} />
-                ))}
-              </colgroup>
-              <thead>
-                <tr>
-                  <th style={routesDetailHeaderCellStyle}>Stop</th>
-                  <th style={routesDetailHeaderCellStyle}>Order</th>
-                  <th style={routesDetailHeaderCellStyle}>Recipient</th>
-                  <th style={routesDetailHeaderCellStyle}>Address</th>
-                  <th style={routesDetailHeaderCellStyle}>Status</th>
-                  <th style={routesDetailHeaderCellStyle}>Payment</th>
-                  <th style={routesDetailHeaderCellStyle}>Attributes</th>
-                  <th style={routesDetailHeaderCellStyle}>Coordinates</th>
-                  <th style={routesDetailHeaderCellStyle}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {activeRouteDriverStops.length === 0 ? (
-                  <tr>
-                    <td colSpan={9} style={routesDetailEmptyCellStyle}>No route stops selected.</td>
-                  </tr>
-                ) : (
-                  activeRouteDriverStops.map((stop, stopIndex) => (
-                    <tr
-                      data-route-stop-index={stopIndex}
-                      draggable={isEditingRouteSequence}
-                      key={stop.id}
-                      onDragEnd={handleRouteStopDragEnd}
-                      onDragOver={handleRouteStopDragOver}
-                      onDragStart={(event) => handleRouteStopDragStart(event, stop.id)}
-                      onDrop={(event) => handleRouteStopDrop(event, stop.id)}
-                      style={activeDraggedRouteStopId === stop.id ? routeStopDraggingRowStyle : undefined}
-                    >
-                      <td style={routeStopSequenceCellStyle}>
-                        <span
-                          aria-label={`Drag stop ${stop.stop}`}
-                          role="img"
-                          style={routeStopDragHandleStyle}
-                        >⋮</span>
-                        <span>{stop.stop}</span>
-                      </td>
-                      <td style={routesDetailCellStyle}>{stop.order}</td>
-                      <td style={routesDetailCellStyle}>{stop.recipient}</td>
-                      <td style={routesDetailCellStyle}>{stop.address}</td>
-                      <td style={routesDetailCellStyle}>{stop.status}</td>
-                      <td style={routesDetailCellStyle}>{stop.payment}</td>
-                      <td style={routesDetailCellStyle}>{stop.attributes}</td>
-                      <td style={routesDetailCellStyle}>{stop.coordinatesLabel}</td>
-                      <td style={routesDetailCellStyle}>
-                        <button
-                          aria-label={`Remove stop ${stop.stop}`}
-                          onClick={() => removeDraftRouteStop(stop.id)}
-                          style={routeStopSequenceActionButtonStyle}
-                          type="button"
-                        >Remove</button>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-          {isEditingRouteSequence ? (
-            <div style={routeDetailCandidatePanelStyle}>
-              <div style={routeDetailStopsTitleStyle}>Same-date orders</div>
-              <div style={routesDetailDescriptionStyle}>
-                {addableSameDateStops.length} available orders for {routeDeliveryDate ?? "this route"}
-                {draftRemovedRouteStopIds.length > 0 ? ` · ${draftRemovedRouteStopIds.length} removed from draft` : ""}
-              </div>
-              <div style={routeDetailCandidateListStyle}>
-                {addableSameDateStops.length === 0 ? (
-                  <div style={routesDetailDescriptionStyle}>No same-date orders to add.</div>
-                ) : (
-                  addableSameDateStops.map((stop) => (
-                    <div key={stop.id} style={routeDetailCandidateItemStyle}>
-                      <span style={routeDetailCandidateTextStyle}>{stop.order}</span>
-                      <span style={routeDetailCandidateTextStyle}>{stop.recipient}</span>
-                      <span style={routeDetailCandidateTextStyle}>{stop.address}</span>
-                      <button
-                        onClick={() => addDraftRouteStop(stop)}
-                        style={routeStopSequenceActionButtonStyle}
-                        type="button"
-                      >Add</button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          ) : null}
         </section>
       </div>
     </main>

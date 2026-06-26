@@ -245,6 +245,7 @@ test("Route detail saves a server-saved pending driver on the selected route", (
   assert.match(routeDetailSource, />No driver<\/option>/);
   assert.match(routeDetailSource, /Invite pending/);
   assert.doesNotMatch(routeDetailSource, /authStatus === "APP_LINKED" \?/);
+  assert.doesNotMatch(routeDetailSource, /intent !== "saveRouteStops"/);
 });
 
 test("Routes list displays assigned route drivers from the server response", () => {
@@ -260,10 +261,10 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
-  assert.match(routeDetailSource, /drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeStopPoints = \[],\s+stops = \[],\s+sameDateOrders = \[],\s+errors = \[]/);
+  assert.match(routeDetailSource, /drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
-  assert.match(routeDetailSource, /const savedRouteGeometry = hasSuccessfulRouteStopSave\s+\? routeStopSaveFetcher\.data\.routeGeometry \?\? null\s+: routeGeometry/);
-  assert.match(routeDetailSource, /const savedRouteStopPoints = useMemo\(\(\) => \(\s+hasSuccessfulRouteStopSave\s+\? routeStopSaveFetcher\.data\.routeStopPoints \?\? \[]\s+: routeStopPoints\s+\), \[hasSuccessfulRouteStopSave, routeStopSaveFetcher\.data, routeStopPoints\]\)/);
+  assert.match(routeDetailSource, /const savedRouteGeometry = routeGeometry/);
+  assert.match(routeDetailSource, /const savedRouteStopPoints = routeStopPoints/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometry\)/);
   assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+orderedRouteStops,\s+savedRouteStopPoints,\s+\)/);
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan\)/);
@@ -273,8 +274,9 @@ test("Route detail route exists for clicked persisted route rows", () => {
 });
 
 test("Route detail loader reads the selected persisted route plan", () => {
-  assert.match(routeDetailSource, /import \{ fetchDeliveryOrders \} from "\.\.\/features\/delivery\/orders\.server"/);
-  assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*updateDeliveryRoutePlanStops,[\s\S]*from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.doesNotMatch(routeDetailSource, /fetchDeliveryOrders/);
+  assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.doesNotMatch(routeDetailSource, /updateDeliveryRoutePlanStops/);
   assert.match(routeDetailSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/features\/locations\/shopify-locations\.server"/);
   assert.match(routeDetailSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
   assert.match(routeDetailSource, /export const loader = async \(\{ params, request \}\) => \{/);
@@ -283,11 +285,9 @@ test("Route detail loader reads the selected persisted route plan", () => {
   assert.match(routeDetailSource, /Promise\.all\(\[/);
   assert.match(routeDetailSource, /fetchDeliveryRoutePlanDetail\(request,\s*params\.routeId,\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\}\)/);
   assert.match(routeDetailSource, /fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/);
-  assert.match(routeDetailSource, /const routeDeliveryDate = getRouteDeliveryDate\(routePlanData\.routePlan\)/);
   assert.match(routeDetailSource, /fetchDeliveryDrivers\(request, \{\}\)/);
-  assert.match(routeDetailSource, /fetchDeliveryOrders\(\s*request,\s*\{ deliveryDate: routeDeliveryDate \},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)/);
+  assert.doesNotMatch(routeDetailSource, /sameDateOrderData/);
   assert.match(routeDetailSource, /currentDepartureLocation: departureLocationData\.departureLocation/);
-  assert.match(routeDetailSource, /sameDateOrders: sameDateOrderData\.orders/);
   assert.doesNotMatch(routeDetailSource, /fetchShopifyOrders\(admin\)/);
   assert.doesNotMatch(routeDetailSource, /getRouteOrderIds/);
 });
@@ -356,14 +356,13 @@ test("Route detail renders a cohesive route overview panel with driver assignmen
   assert.match(routeDetailSource, /aria-label="Route summary" className="route-overview-summary">[\s\S]*<\/div>\n            <\/div>\n            <div\n              aria-label="Route driver assignment"/);
   assert.match(routeDetailSource, /function renderRouteHeaderMetric\(label, value\) \{/);
   assert.match(routeDetailSource, /aria-label="Route driver assignment"/);
-  assert.match(routeDetailSource, /const routeDriverBuckets = useMemo\(\(\) => \[\{[\s\S]*id: routeDriverId \|\| "unassigned"/);
-  assert.match(routeDetailSource, /aria-label="Route driver stop groups"/);
-  assert.doesNotMatch(routeDetailSource, />Driver routes<\/div>/);
+  assert.doesNotMatch(routeDetailSource, /const routeDriverBuckets = useMemo/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Route driver stop groups"/);
   assert.match(routeDetailSource, /aria-label="Route timing"/);
   assert.match(routeDetailSource, /aria-label="Driver route rows"/);
   assert.match(routeDetailSource, /aria-label="Route stop timeline"/);
-  assert.match(routeDetailSource, /activeRouteDriverStops\.map\(\(stop\) =>/);
-  assert.match(routeDetailSource, /activeRouteDriverStops\.map\(\(stop, stopIndex\) =>/);
+  assert.match(routeDetailSource, /orderedRouteStops\.map\(\(stop\) =>/);
+  assert.doesNotMatch(routeDetailSource, /activeRouteDriverStops/);
   assert.match(routeDetailSource, /height: "440px"/);
   assert.match(routeDetailSource, /minHeight: "440px"/);
   assert.doesNotMatch(routeDetailSource, /routeDetailHeaderInfoCardStyle/);
@@ -495,23 +494,16 @@ test("Route detail falls back to route stop point coordinates before dropping st
   assert.match(routeDetailSource, /for \(const stop of routeStops\) \{\s+const routeStopPoint = findRouteStopPoint\(stop, routeStopPoints\);\s+const markerCoordinates = getRouteStopPointerCoordinates\(stop, routeStopPoint\);\s+if \(!markerCoordinates\) continue;/);
 });
 
-test("Route detail button styles avoid React border shorthand collisions", () => {
+test("Route detail driver save button avoids React border shorthand collisions", () => {
   const driverSaveButtonBlock = routeDetailSource.match(/const routeDetailDriverSaveButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const driverDisabledButtonBlock = routeDetailSource.match(/const routeDetailDriverDisabledSaveButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const sequenceActionButtonBlock = routeDetailSource.match(/const routeStopSequenceActionButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const sequencePrimaryButtonBlock = routeDetailSource.match(/const routeStopSequencePrimaryButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
 
   assert.doesNotMatch(driverSaveButtonBlock, /\bborder:\s*["']/);
   assert.match(driverSaveButtonBlock, /borderColor:\s*"#4f2bd9"/);
   assert.match(driverSaveButtonBlock, /borderStyle:\s*"solid"/);
   assert.match(driverSaveButtonBlock, /borderWidth:\s*"1px"/);
   assert.match(driverDisabledButtonBlock, /borderColor:\s*"#d6d6d6"/);
-
-  assert.doesNotMatch(sequenceActionButtonBlock, /\bborder:\s*["']/);
-  assert.match(sequenceActionButtonBlock, /borderColor:\s*"#c9c9c9"/);
-  assert.match(sequenceActionButtonBlock, /borderStyle:\s*"solid"/);
-  assert.match(sequenceActionButtonBlock, /borderWidth:\s*"1px"/);
-  assert.match(sequencePrimaryButtonBlock, /borderColor:\s*"#303030"/);
+  assert.doesNotMatch(routeDetailSource, /const routeStopSequenceActionButtonStyle/);
 });
 
 test("Route detail can zoom a stop marker to its OSRM snapped stop point", () => {
@@ -537,10 +529,9 @@ test("Route detail keeps stop point diagnostics out of console and extra network
   assert.doesNotMatch(routeDetailSource, /console\.groupCollapsed|console\.table|console\.log\("routeStopPointDebug"|console\.groupEnd/);
 });
 
-test("Route detail applies saved stops once and only auto-fits the map on initial map readiness", () => {
-  assert.match(routeDetailSource, /const appliedRouteStopSaveDataRef = useRef\(null\)/);
-  assert.match(routeDetailSource, /if \(appliedRouteStopSaveDataRef\.current === routeStopSaveFetcher\.data\) return/);
-  assert.match(routeDetailSource, /appliedRouteStopSaveDataRef\.current = routeStopSaveFetcher\.data/);
+test("Route detail only auto-fits the map on initial map readiness", () => {
+  assert.doesNotMatch(routeDetailSource, /appliedRouteStopSaveDataRef/);
+  assert.doesNotMatch(routeDetailSource, /routeStopSaveFetcher/);
   assert.match(routeDetailSource, /const hasInitialRouteMapFitRef = useRef\(false\)/);
   assert.match(routeDetailSource, /const routeMapCenterRef = useRef\(routeMapCenter\)/);
   assert.match(routeDetailSource, /routeMapCenterRef\.current = routeMapCenter/);
@@ -627,88 +618,31 @@ test("Route detail marker rendering does not call MapLibre resize from map event
   assert.doesNotMatch(routeDetailSource, /\.on\("zoomend", syncRouteDetailMapLayers\)/);
 });
 
-test("Route detail renders a focused stop table below the map", () => {
+test("Route detail renders route lines and a stop timeline below the map", () => {
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
-  assert.match(routeDetailSource, /const routeStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
-  assert.match(routeDetailSource, /const routeDetailColumnWidths = \[\s+"64px",\s+"96px",\s+"128px",\s+"420px"/);
-  assert.match(routeDetailSource, /const routeDetailStopsHeaderStyle = \{/);
-  assert.match(routeDetailSource, /padding: "6px 10px"/);
-  assert.match(routeDetailSource, /const routeDetailStopsHeaderActionsStyle = \{[\s\S]+gap: "6px"/);
-  assert.match(routeDetailSource, /minHeight: "28px"/);
-  assert.match(routeDetailSource, /padding: "3px 9px"/);
-  assert.match(routeDetailSource, />Stop<\/th>/);
-  assert.match(routeDetailSource, />Order<\/th>/);
-  assert.match(routeDetailSource, />Recipient<\/th>/);
-  assert.match(routeDetailSource, />Address<\/th>/);
+  assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
+  assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
+  assert.match(routeDetailSource, />Name<\/th>/);
   assert.match(routeDetailSource, />Status<\/th>/);
-  assert.match(routeDetailSource, />Payment<\/th>/);
-  assert.match(routeDetailSource, />Attributes<\/th>/);
-  assert.match(routeDetailSource, />Coordinates<\/th>/);
-  assert.match(routeDetailSource, /activeRouteDriverStops\.map\(\(stop, stopIndex\) =>/);
-});
-
-test("Route detail lets operators edit stop sequence with a clean drag mode", () => {
-  assert.match(routeDetailSource, /const \[isEditingRouteSequence, setIsEditingRouteSequence\] = useState\(true\)/);
-  assert.match(routeDetailSource, /const \[committedRouteStops, setCommittedRouteStops\] = useState\(\[\]\)/);
-  assert.match(routeDetailSource, /const \[draftRouteStops, setDraftRouteStops\] = useState\(\[\]\)/);
-  assert.match(routeDetailSource, /const \[committedRouteStopOrderIds, setCommittedRouteStopOrderIds\] = useState\(\[\]\)/);
-  assert.match(routeDetailSource, /const \[draftRouteStopOrderIds, setDraftRouteStopOrderIds\] = useState\(\[\]\)/);
-  assert.match(routeDetailSource, /function reorderRouteStopIds\(routeStopOrderIds, sourceStopId, targetStopId\) \{/);
-  assert.match(routeDetailSource, /function orderRouteStops\(routeStops, routeStopOrderIds\) \{/);
-  assert.match(routeDetailSource, /function resequenceRouteStops\(routeStops\) \{/);
-  assert.match(routeDetailSource, /const visibleRouteStopOrderIds = isEditingRouteSequence \? draftRouteStopOrderIds : committedRouteStopOrderIds/);
-  assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => orderRouteStops\(editableRouteStops, visibleRouteStopOrderIds\), \[editableRouteStops, visibleRouteStopOrderIds\]\)/);
-  assert.match(routeDetailSource, /const visibleRouteDetailColumnWidths = \[\.\.\.routeDetailColumnWidths, "96px"\]/);
-  assert.match(routeDetailSource, /const saveRouteSequenceEdit = useCallback\(async \(\) => \{/);
-  assert.match(routeDetailSource, /const cancelRouteSequenceEdit = useCallback\(\(\) => \{/);
-  assert.match(routeDetailSource, /const handleRouteStopDragStart = useCallback\(\(event, stopId\) => \{/);
-  assert.match(routeDetailSource, /const handleRouteStopDrop = useCallback\(\(event, targetStopId\) => \{/);
-  assert.match(routeDetailSource, /draggable=\{isEditingRouteSequence\}/);
-  assert.match(routeDetailSource, /aria-label=\{`Drag stop \$\{stop\.stop\}`\}/);
-  assert.match(routeDetailSource, />⋮<\/span>/);
-  assert.doesNotMatch(routeDetailSource, />⋮⋮<\/span>/);
-  assert.doesNotMatch(routeDetailSource, />Edit<\/button>/);
-  assert.doesNotMatch(routeDetailSource, />Edit sequence<\/button>/);
-  assert.match(routeDetailSource, /"Save order"/);
-  assert.match(routeDetailSource, />Cancel<\/button>/);
-  assert.doesNotMatch(routeDetailSource, /Move stop \$\{stop\.stop\} up|Move stop \$\{stop\.stop\} down|>↑<\/button>|>↓<\/button>/);
-});
-
-test("Route detail edit mode can remove and add only same-date orders", () => {
-  assert.match(routeDetailSource, /sameDateOrders = \[\]/);
-  assert.match(routeDetailSource, /function buildSameDateCandidateStops\(sameDateOrders, routeStops, routeDeliveryDate\) \{/);
-  assert.match(routeDetailSource, /orderDeliveryDate !== routeDeliveryDate/);
-  assert.match(routeDetailSource, /const \[draftRemovedRouteStopIds, setDraftRemovedRouteStopIds\] = useState\(\[\]\)/);
-  assert.match(routeDetailSource, /const addableSameDateStops = useMemo\(\s+\(\) => buildSameDateCandidateStops\(sameDateOrders, editableRouteStops, routeDeliveryDate\)/);
-  assert.match(routeDetailSource, /const removeDraftRouteStop = useCallback\(\(stopId\) => \{/);
-  assert.match(routeDetailSource, /const addDraftRouteStop = useCallback\(\(stop\) => \{/);
-  assert.match(routeDetailSource, /aria-label=\{`Remove stop \$\{stop\.stop\}`\}/);
-  assert.match(routeDetailSource, />Remove<\/button>/);
-  assert.match(routeDetailSource, /Same-date orders/);
-  assert.match(routeDetailSource, /addableSameDateStops\.map\(\(stop\) =>/);
-  assert.match(routeDetailSource, /onClick=\{\(\) => addDraftRouteStop\(stop\)\}/);
-  assert.match(routeDetailSource, />Add<\/button>/);
-});
-
-test("Route detail save submits the ordered stop payload through the route plan action", () => {
-  assert.match(routeDetailSource, /export const action = async \(\{ params, request \}\) => \{/);
-  assert.match(routeDetailSource, /formData\.get\("_intent"\)/);
-  assert.match(routeDetailSource, /intent !== "saveRouteStops"/);
-  assert.match(routeDetailSource, /parseRouteStopsPayload\(formData\.get\("stops"\)\)/);
-  assert.match(routeDetailSource, /updateDeliveryRoutePlanStops\(\s+request,\s+params\.routeId,\s+\{ stops: stopsPayload \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
-  assert.match(routeDetailSource, /const routeStopSaveFetcher = useFetcher\(\)/);
-  assert.match(routeDetailSource, /const shopify = useAppBridge\(\)/);
-  assert.match(routeDetailSource, /const stopsPayload = orderedRouteStops\.map\(\(stop, index\) => \(\{/);
-  assert.match(routeDetailSource, /deliveryStopId: stop\.deliveryStopId \?\? null/);
-  assert.match(routeDetailSource, /shopifyOrderGid: stop\.shopifyOrderGid/);
-  assert.match(routeDetailSource, /sequence: index \+ 1/);
-  assert.match(routeDetailSource, /formData\.set\("_intent", "saveRouteStops"\)/);
-  assert.match(routeDetailSource, /formData\.set\("stops", JSON\.stringify\(stopsPayload\)\)/);
-  assert.match(routeDetailSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
-  assert.match(routeDetailSource, /const routeDetailSaveAction = effectiveRoutePlan\?\.id\s+\? createRouteDetailHref\(effectiveRoutePlan\.id\)\s+: routesListHref/);
-  assert.match(routeDetailSource, /routeStopSaveFetcher\.submit\(formData, \{ action: routeDetailSaveAction, method: "post" \}\)/);
-  assert.match(routeDetailSource, /routeStopSaveFetcher\.data\?\.errors/);
-  assert.doesNotMatch(routeDetailSource, /formData\.set\("stops", JSON\.stringify\(stopsPayload\)\);\s+formData\.set\("stops", JSON\.stringify\(stopsPayload\)\)/);
+  assert.match(routeDetailSource, />Driver<\/th>/);
+  assert.match(routeDetailSource, />Vehicle<\/th>/);
+  assert.match(routeDetailSource, />Start time<\/th>/);
+  assert.match(routeDetailSource, />Stops<\/th>/);
+  assert.match(routeDetailSource, />Delivered<\/th>/);
+  assert.match(routeDetailSource, />Attempted<\/th>/);
+  assert.match(routeDetailSource, />Total items<\/th>/);
+  assert.match(routeDetailSource, />Total drive time<\/th>/);
+  assert.match(routeDetailSource, />Total distance<\/th>/);
+  assert.match(routeDetailSource, />Total weight<\/th>/);
+  assert.match(routeDetailSource, />Created<\/th>/);
+  assert.match(routeDetailSource, /aria-label="Route start time"/);
+  assert.match(routeDetailSource, /type="datetime-local"/);
+  assert.match(routeDetailSource, /orderedRouteStops\.map\(\(stop\) =>/);
+  assert.doesNotMatch(routeDetailSource, />Order<\/th>/);
+  assert.doesNotMatch(routeDetailSource, />Recipient<\/th>/);
+  assert.doesNotMatch(routeDetailSource, />Address<\/th>/);
+  assert.doesNotMatch(routeDetailSource, /Same-date orders/);
+  assert.doesNotMatch(routeDetailSource, /Save order/);
 });
 
 test("Route detail page provides page navigation back to the route list", () => {
