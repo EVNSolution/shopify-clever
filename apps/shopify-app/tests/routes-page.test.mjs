@@ -635,13 +635,13 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total distance<\/th>/);
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
-  assert.match(routeDetailSource, /function getChildRouteTitle\(routePlan\) \{/);
+  assert.match(routeDetailSource, /function getRouteCandidateTitle\(routePlan\) \{/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
-  assert.match(routeDetailSource, /aria-label="Edit route line name"/);
+  assert.match(routeDetailSource, /aria-label="Edit route candidate name"/);
   assert.match(routeDetailSource, /viewBox="0 0 10 10"/);
   assert.doesNotMatch(routeDetailSource, />⌄<\/span>/);
   assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);

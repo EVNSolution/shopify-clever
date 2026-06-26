@@ -597,13 +597,15 @@ function getRouteStartTimeLabel(value) {
   return value.replace("T", " ");
 }
 
-function getChildRouteTitle(routePlan) {
+function getRouteCandidateTitle(routePlan) {
   return textOrUndefined(
     routePlan?.childRouteName ??
     routePlan?.routeLineName ??
+    routePlan?.routeCandidateName ??
+    routePlan?.candidateRouteName ??
     routePlan?.branchName ??
     routePlan?.branch?.label,
-  ) ?? "Unassigned";
+  ) ?? "Route 1";
 }
 
 function getRouteCreatedLabel(routePlan) {
@@ -1186,7 +1188,7 @@ export default function RouteDetailPage() {
   const [selectedRouteDriverId, setSelectedRouteDriverId] = useState(routeDriverId);
   const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
-  const childRouteTitle = getChildRouteTitle(effectiveRoutePlan);
+  const routeCandidateTitle = getRouteCandidateTitle(effectiveRoutePlan);
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
@@ -1620,8 +1622,8 @@ export default function RouteDetailPage() {
                   <td style={routesDetailCellStyle}>
                     <span style={routeLineNameStyle}>
                       <span aria-hidden="true" style={routeStatusDotStyle}></span>
-                      <span style={routeLineTitleStyle}>{childRouteTitle}</span>
-                      <button aria-label="Edit route line name" style={routeLineEditButtonStyle} type="button">
+                      <span style={routeLineTitleStyle}>{routeCandidateTitle}</span>
+                      <button aria-label="Edit route candidate name" style={routeLineEditButtonStyle} type="button">
                         {renderRouteLineEditIcon()}
                       </button>
                     </span>
@@ -1660,7 +1662,7 @@ export default function RouteDetailPage() {
 
           <section aria-label="Route stop timeline" style={routeTimelineStyle}>
             <div style={routeTimelineLaneStyle}>
-              <div style={routeTimelineLabelStyle}>{childRouteTitle}</div>
+              <div style={routeTimelineLabelStyle}>{routeCandidateTitle}</div>
               <span title="Start" style={routeTimelineStartStyle}>★</span>
               {orderedRouteStops.map((stop) => (
                 <span key={stop.id} style={routeTimelineSegmentStyle} title={stop.order}>
