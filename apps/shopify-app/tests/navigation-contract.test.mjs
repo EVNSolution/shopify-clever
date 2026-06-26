@@ -96,7 +96,7 @@ test("Routes keeps route plan/group detail routes hidden behind the route table"
 
   assert.match(detailSource, /route-overview-header/);
   assert.match(detailSource, /route-overview-summary/);
-  assert.match(detailSource, /aria-label="Route driver assignment"/);
+  assert.doesNotMatch(detailSource, /aria-label="Route driver assignment"/);
   assert.match(detailSource, /Route stop location map/);
   assert.match(detailSource, /aria-label="Driver route rows"/);
   assert.match(detailSource, /aria-label="Route stop timeline"/);

@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useAppBridge } from "@shopify/app-bridge-react";
-import { useFetcher, useLoaderData, useNavigate, useRouteError } from "react-router";
+import { useLoaderData, useNavigate, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { fetchDeliveryDrivers } from "../features/delivery/drivers.server";
@@ -23,6 +22,7 @@ const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
 const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
+const ROUTE_EMPTY_LABEL = "–";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 const ROUTE_DETAIL_PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 
@@ -58,8 +58,8 @@ const routeOverviewHeaderStyle = {
   borderRadius: "16px",
   boxShadow: "0 8px 24px rgba(0, 0, 0, 0.045)",
   display: "grid",
-  gap: "14px",
-  padding: "16px",
+  gap: "10px",
+  padding: "14px 16px",
 };
 
 const routeOverviewTopBarStyle = {
@@ -70,7 +70,7 @@ const routeOverviewTopBarStyle = {
 
 const routeOverviewTitleBlockStyle = {
   display: "grid",
-  gap: "8px",
+  gap: "4px",
   minWidth: 0,
 };
 
@@ -78,7 +78,7 @@ const routeOverviewTitleLineStyle = {
   alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "8px",
   minWidth: 0,
 };
 
@@ -117,62 +117,6 @@ const routeDetailTitleMetricValueStyle = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
-};
-
-const routeDetailDriverLabelStyle = {
-  color: "#616161",
-  fontSize: "12px",
-  fontWeight: 650,
-  lineHeight: 1.15,
-  whiteSpace: "nowrap",
-};
-
-const routeDetailDriverSelectStyle = {
-  background: "#ffffff",
-  border: "1px solid #c9c9c9",
-  borderRadius: "8px",
-  color: "#303030",
-  fontFamily: "inherit",
-  fontSize: "13px",
-  minHeight: "28px",
-  minWidth: 0,
-  padding: "3px 8px",
-  width: "100%",
-};
-
-const routeDetailDriverSaveButtonStyle = {
-  background: "#4f2bd9",
-  borderColor: "#4f2bd9",
-  borderRadius: "8px",
-  borderStyle: "solid",
-  borderWidth: "1px",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontFamily: "inherit",
-  fontSize: "12px",
-  fontWeight: 650,
-  lineHeight: 1.2,
-  minHeight: "28px",
-  padding: "3px 10px",
-  whiteSpace: "nowrap",
-};
-
-const routeDetailDriverDisabledSaveButtonStyle = {
-  ...routeDetailDriverSaveButtonStyle,
-  background: "#f1f1f1",
-  borderColor: "#d6d6d6",
-  color: "#8a8a8a",
-  cursor: "not-allowed",
-};
-
-const routeOverviewDriverPanelStyle = {
-  alignItems: "center",
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "8px",
-  justifyContent: "flex-end",
-  minWidth: 0,
-  textAlign: "left",
 };
 
 const routeStatusBadgeStyle = {
@@ -228,9 +172,9 @@ const routeDetailMapCanvasStyle = {
 const routeMetaGridStyle = {
   borderBottom: "1px solid #ececec",
   display: "grid",
-  gap: "8px 16px",
+  gap: "2px 10px",
   gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  padding: "10px 12px",
+  padding: "6px 8px",
 };
 
 const routeMetaItemStyle = {
@@ -538,11 +482,7 @@ function formatRouteDeliveryScope(routePlan) {
     deliveryDate: routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate,
     timeWindowEnd: routePlan?.routeScope?.timeWindowEnd ?? routePlan?.timeWindowEnd,
     timeWindowStart: routePlan?.routeScope?.timeWindowStart ?? routePlan?.timeWindowStart,
-  }) ?? "—";
-}
-
-function createRouteDetailHref(routeId) {
-  return `/app/routes/${routeId}`;
+  }) ?? ROUTE_EMPTY_LABEL;
 }
 
 function buildRouteDetail(routePlan) {
@@ -553,7 +493,7 @@ function buildRouteDetail(routePlan) {
       orders: 0,
       coordinates: "0/0",
       missingCoordinates: 0,
-      deliveryDate: "—",
+      deliveryDate: ROUTE_EMPTY_LABEL,
     };
   }
 
@@ -593,7 +533,7 @@ function getRouteStartDateTimeValue(routePlan) {
 }
 
 function getRouteStartTimeLabel(value) {
-  if (!value) return "—";
+  if (!value) return ROUTE_EMPTY_LABEL;
   return value.replace("T", " ");
 }
 
@@ -609,11 +549,11 @@ function getRouteCandidateTitle(routePlan) {
 }
 
 function getRouteCreatedLabel(routePlan) {
-  return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? "—";
+  return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL;
 }
 
 function getRouteVehicleLabel(routePlan) {
-  return textOrUndefined(routePlan?.vehicle?.name ?? routePlan?.vehicleName) ?? "—";
+  return textOrUndefined(routePlan?.vehicle?.name ?? routePlan?.vehicleName) ?? ROUTE_EMPTY_LABEL;
 }
 
 function countRouteStopsByStatus(routeStops, statuses) {
@@ -626,11 +566,11 @@ function getRouteTotalItems(routePlan, routeStops) {
   const explicitTotal = numberOrUndefined(routePlan?.totalItems ?? routePlan?.itemsCount ?? routePlan?.itemCount);
   const stopTotal = routeStops.reduce((total, stop) => total + (numberOrUndefined(stop.itemCount) ?? 0), 0);
 
-  return explicitTotal ?? (stopTotal > 0 ? stopTotal : "—");
+  return explicitTotal ?? (stopTotal > 0 ? stopTotal : ROUTE_EMPTY_LABEL);
 }
 
 function getRouteMetricLabel(...values) {
-  return values.map(textOrUndefined).find(Boolean) ?? "—";
+  return values.map(textOrUndefined).find(Boolean) ?? ROUTE_EMPTY_LABEL;
 }
 
 function buildRouteDriverOptions(drivers, currentDriver) {
@@ -1153,8 +1093,6 @@ function renderRouteLineEditIcon() {
 
 export default function RouteDetailPage() {
   const navigate = useNavigate();
-  const shopify = useAppBridge();
-  const routeDriverSaveFetcher = useFetcher();
   const {
     currentDepartureLocation = null,
     drivers = [],
@@ -1164,13 +1102,7 @@ export default function RouteDetailPage() {
     stops = [],
     errors = [],
   } = useLoaderData();
-  const hasSuccessfulRouteDriverSave =
-    routeDriverSaveFetcher.state === "idle" &&
-    routeDriverSaveFetcher.data != null &&
-    (routeDriverSaveFetcher.data.errors ?? []).length === 0;
-  const effectiveRoutePlan = hasSuccessfulRouteDriverSave
-    ? routeDriverSaveFetcher.data.routePlan ?? routePlan
-    : routePlan;
+  const effectiveRoutePlan = routePlan;
   const routesListHref = "/app/routes";
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan), [effectiveRoutePlan]);
   const departureLocation = useMemo(
@@ -1185,7 +1117,6 @@ export default function RouteDetailPage() {
   const routeDriverSummary = routeDriverId
     ? routeDriverOptions.find((driverOption) => driverOption.id === routeDriverId)?.label ?? "Assigned"
     : "Unassigned";
-  const [selectedRouteDriverId, setSelectedRouteDriverId] = useState(routeDriverId);
   const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
   const routeCandidateTitle = getRouteCandidateTitle(effectiveRoutePlan);
@@ -1199,11 +1130,7 @@ export default function RouteDetailPage() {
   const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
-  const routeDriverSaveErrors = routeDriverSaveFetcher.data?.errors ?? [];
-  const visibleErrors = [
-    ...(errors ?? []),
-    ...(routeDriverSaveErrors ?? []),
-  ];
+  const visibleErrors = errors ?? [];
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, orderedRouteStops),
     [departureLocation, orderedRouteStops],
@@ -1226,38 +1153,6 @@ export default function RouteDetailPage() {
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const savedRouteGeometry = routeGeometry;
   const savedRouteStopPoints = routeStopPoints;
-  const routeDetailSaveAction = effectiveRoutePlan?.id
-    ? createRouteDetailHref(effectiveRoutePlan.id)
-    : routesListHref;
-  const isSavingRouteDriver = routeDriverSaveFetcher.state !== "idle";
-
-  useEffect(() => {
-    setSelectedRouteDriverId(routeDriverId);
-  }, [routeDriverId]);
-
-  const saveRouteDriver = useCallback(async () => {
-    if (isSavingRouteDriver) return;
-
-    const formData = new FormData();
-    formData.set("_intent", "saveRouteDriver");
-    formData.set("driverId", selectedRouteDriverId);
-
-    try {
-      const sessionToken = await shopify.idToken();
-      formData.set("shopifySessionToken", sessionToken);
-    } catch {
-      // The server action returns an actionable auth error if the token cannot be fetched.
-    }
-
-    routeDriverSaveFetcher.submit(formData, { action: routeDetailSaveAction, method: "post" });
-  }, [
-    isSavingRouteDriver,
-    routeDetailSaveAction,
-    routeDriverSaveFetcher,
-    selectedRouteDriverId,
-    shopify,
-  ]);
-
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
 
@@ -1492,45 +1387,11 @@ export default function RouteDetailPage() {
               <div style={routeOverviewTitleLineStyle}>
                 <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetail.route}</h1>
                 <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
-              </div>
-              <div aria-label="Route summary" className="route-overview-summary">
-                {renderRouteHeaderMetric("Orders", routeDetail.orders)}
-                {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
-                {renderRouteHeaderMetric("Driver", routeDriverSummary)}
-              </div>
-            </div>
-            <div
-              aria-label="Route driver assignment"
-              style={routeOverviewDriverPanelStyle}
-            >
-              <label htmlFor="route-driver-select" style={routeDetailDriverLabelStyle}>Driver assignment</label>
-              <div className="route-overview-driver-control">
-                <select
-                  disabled={isSavingRouteDriver}
-                  id="route-driver-select"
-                  onChange={(event) => setSelectedRouteDriverId(event.target.value)}
-                  style={routeDetailDriverSelectStyle}
-                  value={selectedRouteDriverId}
-                >
-                  <option value="">No driver</option>
-                  {routeDriverOptions.map((driverOption) => (
-                    <option key={driverOption.id} value={driverOption.id}>
-                      {driverOption.label}
-                    </option>
-                  ))}
-                </select>
-                <button
-                  disabled={isSavingRouteDriver || selectedRouteDriverId === routeDriverId}
-                  onClick={saveRouteDriver}
-                  style={
-                    isSavingRouteDriver || selectedRouteDriverId === routeDriverId
-                      ? routeDetailDriverDisabledSaveButtonStyle
-                      : routeDetailDriverSaveButtonStyle
-                  }
-                  type="button"
-                >
-                  {isSavingRouteDriver ? "Saving…" : "Save driver"}
-                </button>
+                <div aria-label="Route summary" className="route-overview-summary">
+                  {renderRouteHeaderMetric("Orders", routeDetail.orders)}
+                  {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
+                  {renderRouteHeaderMetric("Driver", routeDriverSummary)}
+                </div>
               </div>
             </div>
           </div>

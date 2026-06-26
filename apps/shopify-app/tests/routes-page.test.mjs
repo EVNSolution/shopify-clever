@@ -226,7 +226,7 @@ test("Routes parent renders the nested route detail page", () => {
 });
 
 
-test("Route detail loader reads server-saved drivers for route driver selection", () => {
+test("Route detail loader reads server-saved drivers for route driver labels", () => {
   assert.match(routeDetailSource, /import \{ fetchDeliveryDrivers \} from "\.\.\/features\/delivery\/drivers\.server"/);
   assert.match(routeDetailSource, /drivers = \[\]/);
   assert.match(routeDetailSource, /fetchDeliveryDrivers\(request, \{\}\)/);
@@ -234,16 +234,16 @@ test("Route detail loader reads server-saved drivers for route driver selection"
   assert.match(routeDetailSource, /driverData\.errors/);
 });
 
-test("Route detail saves a server-saved pending driver on the selected route", () => {
+test("Route detail keeps the server driver action but removes the header assignment UI", () => {
   assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver/);
   assert.match(routeDetailSource, /intent === "saveRouteDriver"/);
   assert.match(routeDetailSource, /formData\.get\("driverId"\)/);
   assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+params\.routeId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
-  assert.match(routeDetailSource, /const routeDriverSaveFetcher = useFetcher\(\)/);
   assert.match(routeDetailSource, /buildRouteDriverOptions\(drivers, effectiveRoutePlan\?\.driver\)/);
-  assert.match(routeDetailSource, /routeDriverSaveFetcher\.submit\(formData, \{ action: routeDetailSaveAction, method: "post" \}\)/);
-  assert.match(routeDetailSource, />No driver<\/option>/);
   assert.match(routeDetailSource, /Invite pending/);
+  assert.doesNotMatch(routeDetailSource, /const routeDriverSaveFetcher = useFetcher\(\)/);
+  assert.doesNotMatch(routeDetailSource, /routeDriverSaveFetcher\.submit/);
+  assert.doesNotMatch(routeDetailSource, />No driver<\/option>/);
   assert.doesNotMatch(routeDetailSource, /authStatus === "APP_LINKED" \?/);
   assert.doesNotMatch(routeDetailSource, /intent !== "saveRouteStops"/);
 });
@@ -258,8 +258,8 @@ test("Routes list displays assigned route drivers from the server response", () 
 test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
-  assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.doesNotMatch(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
+  assert.match(routeDetailSource, /import \{ useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
@@ -302,23 +302,19 @@ test("Route detail summarizes delivery with the actual date label", () => {
   assert.doesNotMatch(routeDetailSource, /renderSummaryItem\("Delivery day", routeDetail\.deliveryDay\)/);
 });
 
-test("Route detail renders a cohesive route overview panel with driver assignment and summary", () => {
+test("Route detail renders a compact route overview panel with inline summary", () => {
   const headerBlock = routeDetailSource.match(/const routeOverviewHeaderStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const titleBlock = routeDetailSource.match(/const routesDetailTitleStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const metricBlock = routeDetailSource.match(/const routeDetailTitleMetricStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const metricLabelBlock = routeDetailSource.match(/const routeDetailTitleMetricLabelStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const metricValueBlock = routeDetailSource.match(/const routeDetailTitleMetricValueStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const driverPanelBlock = routeDetailSource.match(/const routeOverviewDriverPanelStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const driverLabelBlock = routeDetailSource.match(/const routeDetailDriverLabelStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const driverSelectBlock = routeDetailSource.match(/const routeDetailDriverSelectStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const driverSaveButtonBlock = routeDetailSource.match(/const routeDetailDriverSaveButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
 
   assert.match(headerBlock, /linear-gradient\(180deg, #ffffff 0%, #fafafa 100%\)/);
   assert.match(headerBlock, /border: "1px solid #e3e3e3"/);
   assert.match(headerBlock, /borderRadius: "16px"/);
   assert.match(headerBlock, /boxShadow: "0 8px 24px rgba\(0, 0, 0, 0\.045\)"/);
-  assert.match(headerBlock, /gap: "14px"/);
-  assert.match(headerBlock, /padding: "16px"/);
+  assert.match(headerBlock, /gap: "10px"/);
+  assert.match(headerBlock, /padding: "14px 16px"/);
   assert.doesNotMatch(headerBlock, /overflowX: "auto"/);
   assert.match(titleBlock, /fontSize: "24px"/);
   assert.match(titleBlock, /fontWeight: "700"/);
@@ -329,33 +325,21 @@ test("Route detail renders a cohesive route overview panel with driver assignmen
   assert.doesNotMatch(metricBlock, /border: "1px solid #ebebeb"/);
   assert.match(metricLabelBlock, /lineHeight: 1\.1/);
   assert.match(metricValueBlock, /lineHeight: 1\.15/);
-  assert.match(driverPanelBlock, /display: "flex"/);
-  assert.match(driverPanelBlock, /justifyContent: "flex-end"/);
-  assert.match(driverPanelBlock, /gap: "8px"/);
-  assert.doesNotMatch(driverPanelBlock, /background: "#f7f7f7"/);
-  assert.doesNotMatch(driverPanelBlock, /border: "1px solid #e5e5e5"/);
-  assert.match(driverLabelBlock, /lineHeight: 1\.15/);
-  assert.match(driverSelectBlock, /minHeight: "28px"/);
-  assert.match(driverSelectBlock, /minWidth: 0/);
-  assert.match(driverSelectBlock, /padding: "3px 8px"/);
-  assert.match(driverSelectBlock, /width: "100%"/);
-  assert.doesNotMatch(driverSelectBlock, /minWidth: "220px"/);
-  assert.match(driverSaveButtonBlock, /minHeight: "28px"/);
-  assert.match(driverSaveButtonBlock, /padding: "3px 10px"/);
   assert.match(routeDetailSource, /const routeDriverSummary = routeDriverId[\s\S]*: "Unassigned"/);
   assert.match(
     routeDetailSource,
-    /<header className="route-overview-header" style=\{routeOverviewHeaderStyle\}>[\s\S]*aria-label="Back to routes list"[\s\S]*className="route-overview-main"[\s\S]*aria-label="Route driver assignment"/,
+    /<h1 className="route-detail-title"[\s\S]*<span style=\{routeStatusBadgeStyle\}>[\s\S]*aria-label="Route summary" className="route-overview-summary"/,
   );
-  assert.doesNotMatch(routeDetailSource, /Review and assign a driver before publishing this route\./);
   assert.match(
     routeDetailSource,
     /aria-label="Route summary" className="route-overview-summary">[\s\S]*renderRouteHeaderMetric\("Orders", routeDetail\.orders\)[\s\S]*renderRouteHeaderMetric\("Delivery date", routeDetail\.deliveryDate\)[\s\S]*renderRouteHeaderMetric\("Driver", routeDriverSummary\)/,
   );
+  assert.doesNotMatch(routeDetailSource, /aria-label="Route driver assignment"/);
+  assert.doesNotMatch(routeDetailSource, /const routeOverviewDriverPanelStyle/);
+  assert.doesNotMatch(routeDetailSource, /const routeDetailDriverSelectStyle/);
+  assert.doesNotMatch(routeDetailSource, /Review and assign a driver before publishing this route\./);
   assert.doesNotMatch(routeDetailSource, /renderRouteHeaderMetric\("Delivery area", routeDetail\.deliveryArea\)/);
-  assert.match(routeDetailSource, /aria-label="Route summary" className="route-overview-summary">[\s\S]*<\/div>\n            <\/div>\n            <div\n              aria-label="Route driver assignment"/);
   assert.match(routeDetailSource, /function renderRouteHeaderMetric\(label, value\) \{/);
-  assert.match(routeDetailSource, /aria-label="Route driver assignment"/);
   assert.doesNotMatch(routeDetailSource, /const routeDriverBuckets = useMemo/);
   assert.doesNotMatch(routeDetailSource, /aria-label="Route driver stop groups"/);
   assert.match(routeDetailSource, /aria-label="Route timing"/);
@@ -375,19 +359,19 @@ test("Route detail renders a cohesive route overview panel with driver assignmen
   assert.doesNotMatch(routeDetailSource, /renderSummaryItem\("Missing"/);
 });
 
-test("Route overview header has responsive CSS for driver and summary regions", () => {
+
+test("Route overview header has responsive CSS for inline summary", () => {
   assert.match(globalCssSource, /\.route-overview-header/);
   assert.match(globalCssSource, /\.route-overview-main/);
-  assert.match(globalCssSource, /grid-template-columns: minmax\(0, 1fr\) minmax\(280px, 380px\)/);
-  assert.match(globalCssSource, /\.route-overview-driver-control[\s\S]*gap: 6px/);
-  assert.match(globalCssSource, /\.route-overview-driver-control[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto/);
+  assert.match(globalCssSource, /grid-template-columns: minmax\(0, 1fr\)/);
+  assert.doesNotMatch(globalCssSource, /\.route-overview-driver-control/);
   assert.match(globalCssSource, /\.route-overview-summary[\s\S]*display: flex/);
   assert.match(globalCssSource, /\.route-overview-summary[\s\S]*flex-wrap: wrap/);
-  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*gap: 6px 12px/);
+  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*gap: 4px 10px/);
   assert.doesNotMatch(globalCssSource, /\.route-overview-summary[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(globalCssSource, /@media \(max-width: 900px\)[\s\S]*\.route-overview-main[\s\S]*grid-template-columns: 1fr/);
-  assert.match(globalCssSource, /@media \(max-width: 600px\)[\s\S]*\.route-overview-driver-control[\s\S]*grid-template-columns: 1fr/);
 });
+
 
 test("Route detail uses OpenFreeMap MapLibre without copying every reference control", () => {
   assert.match(routeDetailSource, /export const links = \(\) => \[\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}\]/);
@@ -494,15 +478,9 @@ test("Route detail falls back to route stop point coordinates before dropping st
   assert.match(routeDetailSource, /for \(const stop of routeStops\) \{\s+const routeStopPoint = findRouteStopPoint\(stop, routeStopPoints\);\s+const markerCoordinates = getRouteStopPointerCoordinates\(stop, routeStopPoint\);\s+if \(!markerCoordinates\) continue;/);
 });
 
-test("Route detail driver save button avoids React border shorthand collisions", () => {
-  const driverSaveButtonBlock = routeDetailSource.match(/const routeDetailDriverSaveButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const driverDisabledButtonBlock = routeDetailSource.match(/const routeDetailDriverDisabledSaveButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-
-  assert.doesNotMatch(driverSaveButtonBlock, /\bborder:\s*["']/);
-  assert.match(driverSaveButtonBlock, /borderColor:\s*"#4f2bd9"/);
-  assert.match(driverSaveButtonBlock, /borderStyle:\s*"solid"/);
-  assert.match(driverSaveButtonBlock, /borderWidth:\s*"1px"/);
-  assert.match(driverDisabledButtonBlock, /borderColor:\s*"#d6d6d6"/);
+test("Route detail keeps removed stop-edit and driver-assignment controls out", () => {
+  assert.doesNotMatch(routeDetailSource, /const routeDetailDriverSaveButtonStyle/);
+  assert.doesNotMatch(routeDetailSource, /const routeDetailDriverDisabledSaveButtonStyle/);
   assert.doesNotMatch(routeDetailSource, /const routeStopSequenceActionButtonStyle/);
 });
 
@@ -622,6 +600,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
   assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
+  assert.match(routeDetailSource, /const ROUTE_EMPTY_LABEL = "–"/);
   assert.match(routeDetailSource, />Name<\/th>/);
   assert.match(routeDetailSource, />Status<\/th>/);
   assert.match(routeDetailSource, />Driver<\/th>/);
@@ -654,7 +633,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
 });
 
 test("Route detail page provides page navigation back to the route list", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = "\/app\/routes"/);
   assert.match(routeDetailSource, /onClick=\{\(\) => navigate\(routesListHref\)\}/);

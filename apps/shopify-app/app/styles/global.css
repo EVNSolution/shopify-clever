@@ -543,7 +543,6 @@ s-badge {
 
 .route-overview-header,
 .route-overview-main,
-.route-overview-driver-control,
 .route-overview-summary,
 .route-detail-title {
   box-sizing: border-box;
@@ -553,15 +552,8 @@ s-badge {
 .route-overview-main {
   align-items: start;
   display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(0, 1fr) minmax(280px, 380px);
-}
-
-.route-overview-driver-control {
-  align-items: center;
-  display: grid;
-  gap: 6px;
-  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0;
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .route-overview-summary {
@@ -570,7 +562,7 @@ s-badge {
   display: flex;
   flex-wrap: wrap;
   font-size: 13px;
-  gap: 6px 12px;
+  gap: 4px 10px;
   min-width: 0;
 }
 
@@ -586,13 +578,6 @@ s-badge {
     white-space: normal !important;
   }
 
-  .route-overview-driver-control {
-    grid-template-columns: 1fr;
-  }
-
-  .route-overview-driver-control button {
-    width: 100%;
-  }
 }
 
 @media (max-width: 860px) {
