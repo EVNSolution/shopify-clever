@@ -13,14 +13,21 @@ const routeDetailSource = existsSync(routeDetailPath)
   ? readFileSync(routeDetailPath, "utf8")
   : "";
 const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8");
+const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
 
-test("Routes page loads persisted route plans from the delivery Admin API", () => {
+test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
   assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.match(routesPageSource, /import \{ fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
   assert.match(routesPageSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect,/);
   assert.match(routesPageSource, /export const loader = async \(\{ request \}\) => \{/);
+  assert.match(routesPageSource, /if \(url\.pathname === "\/app\/routes\/"\) \{/);
+  assert.match(routesPageSource, /url\.pathname = "\/app\/routes"/);
+  assert.match(routesPageSource, /return redirect\(`\$\{url\.pathname\}\$\{url\.search\}\$\{url\.hash\}`\)/);
   assert.match(routesPageSource, /const \{ session \} = await authenticate\.admin\(request\)/);
   assert.match(routesPageSource, /const shopifyShopCacheKey = session\?\.shop/);
   assert.match(routesPageSource, /fetchDeliveryRoutePlans\(request,\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\}\)/);
+  assert.match(routesPageSource, /fetchDeliveryRouteGroups\(request, \{\}, \{ cacheKey: shopifyShopCacheKey \}\)/);
   assert.match(routesPageSource, /export const action = async \(\{ request \}\) => \{/);
   assert.match(routesPageSource, /await authenticate\.admin\(request\)/);
   assert.match(routesPageSource, /await request\.formData\(\)/);
@@ -28,8 +35,8 @@ test("Routes page loads persisted route plans from the delivery Admin API", () =
   assert.match(routesPageSource, /const routePlanIds = parseRoutePlanIds\(formData\.get\("routePlanIds"\)\)/);
   assert.match(routesPageSource, /routePlanIds\.map\(\(routePlanId\) =>/);
   assert.match(routesPageSource, /deleteDeliveryRoutePlan\(request, routePlanId, \{ sessionToken: shopifySessionToken \}\)/);
-  assert.match(routesPageSource, /const \{ routePlans = \[\], errors = \[\] \} = useLoaderData\(\)/);
-  assert.match(routesPageSource, /buildRouteRows\(routePlans\)/);
+  assert.match(routesPageSource, /const \{ routeGroups = \[\], routePlans = \[\], errors = \[\] \} = useLoaderData\(\)/);
+  assert.match(routesPageSource, /buildRouteRows\(routePlans, routeGroups\)/);
   assert.match(routesPageSource, /useSearchParams/);
   assert.match(routesPageSource, /const \[searchParams\] = useSearchParams\(\)/);
   assert.match(routesPageSource, /getRouteFilters\(searchParams\)/);
@@ -110,7 +117,7 @@ test("Routes page keeps copied controls out while using checkbox route selection
 });
 
 test("Routes table uses aligned CLEVER planning columns", () => {
-  assert.match(routesPageSource, /function buildRouteRows\(routePlans\) \{/);
+  assert.match(routesPageSource, /function buildRouteRows\(routePlans, routeGroups = \[\]\) \{/);
   assert.match(routesPageSource, /routeRows\.map\(\(route\) =>/);
   assert.match(routesPageSource, /aria-label="Select all visible routes"/);
   assert.match(routesPageSource, />Route<\/th>/);
@@ -127,7 +134,11 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.doesNotMatch(routesPageSource, />Missing<\/th>/);
   assert.doesNotMatch(routesPageSource, />Created<\/th>/);
   assert.match(routesPageSource, />DRAFT<\/span>/);
-  assert.match(routesPageSource, /routePlans\.map\(\(routePlan\) =>/);
+  assert.match(routesPageSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
+  assert.match(routesPageSource, /const routeGroupRows = safeRouteGroups\.map\(\(routeGroup\) =>/);
+  assert.match(routesPageSource, /isRouteGroup: true/);
+  assert.match(routesPageSource, /isDeletable: false/);
+  assert.match(routesPageSource, /formatRouteGroupDate\(routeGroup\)/);
   assert.doesNotMatch(routesPageSource, /routeIndex: routeIndex \+ 1/);
   assert.match(routesPageSource, /formatRouteValues\(routePlan\.deliveryAreas\)/);
   assert.match(routesPageSource, /formatRouteDeliveryScope\(routePlan\)/);
@@ -155,7 +166,7 @@ test("Routes table selection column uses checkboxes and a single delete action",
   assert.match(routesPageSource, /const shopify = useAppBridge\(\)/);
   assert.match(routesPageSource, /const routeDeleteFetcher = useFetcher\(\)/);
   assert.match(routesPageSource, /const \[checkedRouteIds, setCheckedRouteIds\] = useState\(\[\]\)/);
-  assert.match(routesPageSource, /const selectableRouteRows = routeRows\.filter\(\(route\) => route\.isClickable\)/);
+  assert.match(routesPageSource, /const selectableRouteRows = routeRows\.filter\(\(route\) => route\.isClickable && route\.isDeletable !== false\)/);
   assert.match(routesPageSource, /const checkedRouteIdSet = new Set\(checkedRouteIds\)/);
   assert.match(routesPageSource, /const allVisibleRoutesChecked =/);
   assert.match(routesPageSource, /function toggleRouteCheck\(routeId\) \{/);
@@ -177,12 +188,12 @@ test("Routes table selection column uses checkboxes and a single delete action",
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
-  assert.match(routesPageSource, /function createRouteDetailHref\(routeId\) \{/);
+  assert.match(routesPageSource, /function createRouteDetailHref\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);
-  assert.match(routesPageSource, /navigate\(createRouteDetailHref\(route\.id\)\)/);
+  assert.match(routesPageSource, /navigate\(createRouteDetailHref\(route\)\)/);
   assert.match(routesPageSource, /onClick=\{\(\) => handleRouteRowClick\(route\)\}/);
   assert.match(routesPageSource, /onKeyDown=\{\(event\) => handleRouteRowKeyDown\(event, route\)\}/);
   assert.match(routesPageSource, /role=\{route\.isClickable \? "link" : undefined\}/);
@@ -372,7 +383,7 @@ test("Route overview header has responsive CSS for driver and summary regions", 
   assert.match(globalCssSource, /\.route-overview-summary[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(globalCssSource, /\.route-overview-summary[\s\S]*padding-top: 12px/);
   assert.match(globalCssSource, /@media \(max-width: 900px\)[\s\S]*\.route-overview-main[\s\S]*grid-template-columns: 1fr/);
-  assert.match(globalCssSource, /@media \(max-width: 900px\)[\s\S]*\.route-overview-summary[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(globalCssSource, /@media \(max-width: 900px\)[\s\S]*\.route-overview-summary[\s\S]*grid-template-columns: repeat\(2, minmax\(136px, 1fr\)\)/);
   assert.match(globalCssSource, /@media \(max-width: 600px\)[\s\S]*\.route-overview-summary[\s\S]*grid-template-columns: 1fr/);
   assert.match(globalCssSource, /@media \(max-width: 600px\)[\s\S]*\.route-overview-driver-control[\s\S]*grid-template-columns: 1fr/);
 });
@@ -391,11 +402,12 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(routeDetailSource, /style: OPENFREEMAP_STYLE_URL/);
   assert.match(routeDetailSource, /new maplibregl\.Map\(\{/);
-  assert.match(routeDetailSource, /new maplibregl\.NavigationControl\(\{ showCompass: false \}\)/);
+  assert.doesNotMatch(routeDetailSource, /new maplibregl\.NavigationControl/);
+  assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
   assert.match(routeDetailSource, /const routeDetailMapFrameStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailMapCanvasStyle = \{/);
-  assert.match(routeDetailSource, /ref=\{mapContainerRef\}/);
-  assert.match(routeDetailSource, /createRouteStartMarkerElement\(departureLocation\)/);
+  assert.match(routeDetailSource, /canvasRef=\{mapContainerRef\}/);
+  assert.match(routeDetailSource, /createDepartureMarkerElement\(departureLocation\)/);
   assert.match(routeDetailSource, /const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route"/);
   assert.match(routeDetailSource, /const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line"/);
   assert.match(routeDetailSource, /function syncRouteDetailRouteLine\(map, routeGeometry\) \{/);
@@ -415,10 +427,12 @@ test("Route detail does not let route-line style readiness block marker renderin
   assert.match(routeDetailSource, /return map\.isStyleLoaded\(\)/);
   assert.match(routeDetailSource, /catch \{\s+return false;\s+\}/);
   assert.match(routeDetailSource, /return true/);
+  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometry\)/);
   assert.match(
     routeDetailSource,
-    /syncRouteDetailRouteLine\(map, savedRouteGeometry\);\s+const routeDetailMarkers = createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+orderedRouteStops,\s+savedRouteStopPoints,\s+\);/,
+    /const routeDetailMarkers = createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+orderedRouteStops,\s+savedRouteStopPoints,\s+\);/,
   );
+  assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.map\.sync"/);
   assert.doesNotMatch(
     routeDetailSource,
     /syncRouteDetailRouteLine\(map, savedRouteGeometry\)\s+&&\s+syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteStopPoints\)/,
@@ -446,20 +460,20 @@ test("Route detail keeps marker coordinates validated and ordered for MapLibre",
 });
 
 test("Route detail places centered DOM stop markers and the departure marker on the map", () => {
-  assert.match(routeDetailSource, /markerElement\.style\.zIndex = "3000"/);
-  assert.match(routeDetailSource, /function createDepartureMarkerIconElement\(\)/);
-  assert.match(routeDetailSource, /departure-map-marker__icon/);
-  assert.match(routeDetailSource, /markerPinElement\.append\(createDepartureMarkerIconElement\(\)\)/);
+  assert.match(mapMarkersSource, /markerElement\.style\.zIndex = options\.zIndex \?\? "3000"/);
+  assert.match(mapMarkersSource, /function createDepartureMarkerIconElement\(\)/);
+  assert.match(mapMarkersSource, /departure-map-marker__icon/);
+  assert.match(mapMarkersSource, /markerPinElement\.append\(createDepartureMarkerIconElement\(\)\)/);
   assert.doesNotMatch(routeDetailSource, /markerPinElement\.textContent = "Start"/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: createRouteStartMarkerElement\(departureLocation\),\s+\}\)/);
+  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: createDepartureMarkerElement\(departureLocation\),\s+\}\)/);
   assert.match(routeDetailSource, /function createRouteStopMarkerElement\(stop\) \{/);
-  assert.match(routeDetailSource, /markerElement\.className = "route-detail-stop-marker"/);
-  assert.match(routeDetailSource, /labelElement\.className = "route-detail-stop-marker__label"/);
-  assert.match(routeDetailSource, /labelElement\.textContent = String\(stop\.stop\)/);
-  assert.match(routeDetailSource, /markerElement\.style\.zIndex = "3200"/);
+  assert.match(routeDetailSource, /className: "route-detail-stop-marker"/);
+  assert.match(routeDetailSource, /labelClassName: "route-detail-stop-marker__label"/);
+  assert.match(routeDetailSource, /label: stop\.stop/);
+  assert.match(routeDetailSource, /zIndex: "3200"/);
   assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "center",\s+element: markerElement,\s+\}\)/);
-  assert.match(globalCssSource, /\.route-detail-stop-marker \{[\s\S]*display: grid;[\s\S]*place-items: center;/);
-  assert.match(globalCssSource, /\.route-detail-stop-marker__label \{[\s\S]*line-height: 1;/);
+  assert.match(globalCssSource, /\.route-detail-stop-marker \{[\s\S]*display: grid;[\s\S]*font-size: 9px;[\s\S]*place-items: center;/);
+  assert.match(globalCssSource, /\.route-detail-stop-marker__label \{[\s\S]*display: inline-flex;[\s\S]*align-items: center;[\s\S]*justify-content: center;[\s\S]*line-height: 1;/);
   assert.match(routeDetailSource, /markerElement\.addEventListener\("dblclick", handleStopMarkerDoubleClick\)/);
   assert.match(routeDetailSource, /event\.preventDefault\?\.\(\)/);
   assert.match(routeDetailSource, /event\.stopPropagation\?\.\(\)/);
@@ -540,9 +554,9 @@ test("Route detail applies saved stops once and only auto-fits the map on initia
 
 test("Route detail renders every stop as a small black numbered pointer without click expansion", () => {
   assert.match(routeDetailSource, /function createRouteStopMarkerElement\(stop\) \{/);
-  assert.match(routeDetailSource, /markerElement\.className = "route-detail-stop-marker"/);
-  assert.match(routeDetailSource, /markerElement\.setAttribute\("aria-label", `Stop \$\{stop\.stop\}: \$\{stop\.order\}`\)/);
-  assert.match(routeDetailSource, /labelElement\.textContent = String\(stop\.stop\)/);
+  assert.match(routeDetailSource, /className: "route-detail-stop-marker"/);
+  assert.match(routeDetailSource, /ariaLabel: `Stop \$\{stop\.stop\}: \$\{stop\.order\}`/);
+  assert.match(routeDetailSource, /label: stop\.stop/);
   assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "center",\s+element: markerElement,\s+\}\)/);
   assert.doesNotMatch(routeDetailSource, /expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|order-map-marker--planned|route-stop-precision-point|Show stop|Show \$\{group\.stops\.length\} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS/);
 });
@@ -555,11 +569,11 @@ test("Route detail renders OSRM snapped stop points as small blue DOM points wit
   assert.match(routeDetailSource, /calculateLngLatDistanceMeters\(stop\.coordinates, snappedCoordinates\)/);
   assert.match(routeDetailSource, /distanceMeters < ROUTE_STOP_POINT_MIN_DISTANCE_METERS/);
   assert.match(routeDetailSource, /function createRouteStopPointMarkerElement\(\) \{/);
-  assert.match(routeDetailSource, /markerElement\.className = "route-detail-snapped-stop-point"/);
+  assert.match(routeDetailSource, /className: "route-detail-snapped-stop-point"/);
   assert.match(routeDetailSource, /const stopPointMarker = buildRouteStopPointMarker\(stop, routeStopPoint\)/);
   assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "center",\s+element: createRouteStopPointMarkerElement\(\),\s+\}\)/);
   assert.match(routeDetailSource, /\.setLngLat\(stopPointMarker\.coordinates\)/);
-  assert.match(globalCssSource, /\.route-detail-snapped-stop-point \{[\s\S]*background: #1473e6;[\s\S]*height: 11px;[\s\S]*width: 11px;/);
+  assert.match(globalCssSource, /\.route-detail-snapped-stop-point \{[\s\S]*background: var\(--map-marker-color, #1473e6\);[\s\S]*height: 8px;[\s\S]*width: 8px;/);
   assert.doesNotMatch(routeDetailSource, /function shouldRenderRouteStopPoints|zoomend/);
 });
 
@@ -573,9 +587,13 @@ test("Route detail avoids WebGL stop layers so marker visibility is not style-la
 test("Route detail map has compact refresh and automatic recovery controls", () => {
   assert.match(routeDetailSource, /const MAP_RECOVERY_DELAY_MS = 2500/);
   assert.match(routeDetailSource, /const MAX_MAP_RECOVERY_ATTEMPTS = 3/);
-  assert.match(routeDetailSource, /const routeDetailMapToolbarStyle = \{/);
-  assert.match(routeDetailSource, /function renderRouteDetailRefreshIcon\(\) \{/);
-  assert.match(routeDetailSource, /function renderRouteDetailFitIcon\(\) \{/);
+  assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
+  assert.match(routeDetailSource, /<MapPanel/);
+  assert.match(routeDetailSource, /<MapToolbar/);
+  assert.match(routeDetailSource, /renderMapRefreshIcon\(\)/);
+  assert.match(routeDetailSource, /renderMapFitIcon\(\)/);
+  assert.match(routeDetailSource, /renderMapZoomInIcon\(\)/);
+  assert.match(routeDetailSource, /renderMapZoomOutIcon\(\)/);
   assert.match(routeDetailSource, /const clearMapRecoveryTimer = useCallback\(\(\) => \{/);
   assert.match(routeDetailSource, /const scheduleMapRecovery = useCallback\(\(\) => \{/);
   assert.match(routeDetailSource, /const handleRefreshMap = \(\) => \{/);
@@ -583,10 +601,11 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
   assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, mapLibraryRef\.current, routeMapLocations\)/);
   assert.match(routeDetailSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
   assert.match(routeDetailSource, /scheduleMapRecovery\(\)/);
-  assert.match(routeDetailSource, /aria-label="Refresh route map"/);
-  assert.match(routeDetailSource, /aria-label="Zoom route map to fit"/);
+  assert.match(routeDetailSource, /ariaLabel: "Refresh route map"/);
+  assert.match(routeDetailSource, /ariaLabel: "Fit highlighted map markers"/);
+  assert.doesNotMatch(routeDetailSource, /Zoom route map to store|handleFitStoreMap/);
   assert.doesNotMatch(routeDetailSource, />Zoom to fit<|>Fit<|>Zoom<|>줌/);
-  assert.match(routeDetailSource, /key=\{mapRenderKey\}/);
+  assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
   assert.doesNotMatch(routeDetailSource, />Loading map</);
   assert.doesNotMatch(routeDetailSource, />Map unavailable</);
 });

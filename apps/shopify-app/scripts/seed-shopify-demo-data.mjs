@@ -157,12 +157,9 @@ const products = Array.from({ length: 20 }, (_, index) => {
 
 const customers = areas.map((area, index) => {
   const number = index + 1;
-  const phoneSuffix = String((Number(runId.slice(-4)) + number) % 10000).padStart(4, "0");
-  const phone = `+1416555${phoneSuffix}`;
   const primaryAddress = area.addressStops[0];
   return {
     email: `clever.seed+${runId}-${number}@example.com`,
-    phone,
     firstName: area.firstName,
     lastName: area.lastName,
     tags: [...baseTags, "route-seed-customer", area.label],
@@ -175,7 +172,6 @@ const customers = areas.map((area, index) => {
         zip: primaryAddress.zip,
         provinceCode: primaryAddress.provinceCode,
         countryCode: "CA",
-        phone,
       },
     ],
     seedArea: area,
@@ -360,7 +356,6 @@ function createCustomers() {
     firstName: customers[index].firstName,
     lastName: customers[index].lastName,
     email: customers[index].email,
-    phone: customers[index].phone,
     area: customers[index].seedArea,
   }));
 }
@@ -395,12 +390,10 @@ function buildDraftOrderInputs(createdProducts, createdCustomers) {
       zip: addressStop.zip,
       provinceCode: addressStop.provinceCode,
       countryCode: "CA",
-      phone: customer.phone,
     };
 
     return {
       email: customer.email,
-      phone: customer.phone,
       note: `CLEVER Route seed order ${orderNumber} / ${runId}`,
       tags: [...baseTags, "route-seed-order", area.label],
       purchasingEntity: { customerId: customer.id },

@@ -35,6 +35,39 @@ if (host === "localhost") {
   };
 }
 
+function isRoutesDocumentRequest(req) {
+  const [pathname] = (req.url || "").split("?");
+  if (pathname !== "/app/routes") return false;
+
+  const accept = String(req.headers.accept || "");
+  const fetchDest = req.headers["sec-fetch-dest"];
+  const fetchMode = req.headers["sec-fetch-mode"];
+
+  if (/\b(?:text|application)\/javascript\b/.test(accept)) return false;
+
+  return (
+    String(fetchDest) === "document" ||
+    String(fetchMode) === "navigate" ||
+    accept.includes("text/html") ||
+    accept === "*/*" ||
+    accept === ""
+  );
+}
+
+function routesDocumentFallbackPlugin() {
+  return {
+    name: "clever-routes-document-fallback",
+    configureServer(server) {
+      server.middlewares.use((req, _res, next) => {
+        if (isRoutesDocumentRequest(req)) {
+          req.headers.accept = "text/html";
+        }
+        next();
+      });
+    },
+  };
+}
+
 export default defineConfig({
   server: {
     allowedHosts: [host],
@@ -48,7 +81,7 @@ export default defineConfig({
       allow: ["app", "node_modules"],
     },
   },
-  plugins: [reactRouter(), tsconfigPaths()],
+  plugins: [routesDocumentFallbackPlugin(), reactRouter(), tsconfigPaths()],
   build: {
     assetsInlineLimit: 0,
     // MapLibre is loaded only by the Orders map via dynamic import.

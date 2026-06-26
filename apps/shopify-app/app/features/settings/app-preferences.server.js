@@ -1,4 +1,5 @@
 import { DEFAULT_LANGUAGE, normalizeLanguage } from "../../i18n/i18n.js";
+import { normalizeCaughtServiceError, normalizeGraphqlErrors } from "../service-errors.js";
 
 export const SHOPIFY_APP_PREFERENCES_QUERY = `#graphql
   query CleverRouteAppPreferences {
@@ -51,7 +52,7 @@ export async function fetchShopifyAppPreferences(admin) {
   } catch (error) {
     return {
       appPreferences: normalizeAppPreferences(),
-      errors: [{ message: getErrorMessage(error) }],
+      errors: normalizeCaughtServiceError(error, "Unknown Shopify settings error."),
     };
   }
 }
@@ -91,7 +92,7 @@ export async function saveShopifyAppPreferences(admin, input) {
   } catch (error) {
     return {
       appPreferences: normalizeAppPreferences(input),
-      errors: [{ message: getErrorMessage(error) }],
+      errors: normalizeCaughtServiceError(error, "Unknown Shopify settings error."),
     };
   }
 }
@@ -120,17 +121,4 @@ async function fetchCurrentAppInstallationId(admin) {
   const payload = await response.json();
 
   return payload?.data?.currentAppInstallation?.id;
-}
-
-function normalizeGraphqlErrors(errors) {
-  if (!Array.isArray(errors)) return [];
-
-  return errors.map((error) => ({
-    message: getErrorMessage(error),
-  }));
-}
-
-function getErrorMessage(error) {
-  if (typeof error === "string") return error;
-  return error?.message ?? "Unknown Shopify settings error.";
 }

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -10,40 +11,39 @@ import {
   DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
 } from "../features/delivery/route-plans.server";
 import { buildRouteScopeFromOrders } from "../features/delivery/route-scope";
+import { createDepartureMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
 import {
   getOrderSyncSnapshots,
-  isOrderReadyToPlan,
   mapCanonicalOrdersToOrderRows,
   mergeShopifyOrderRowsWithCanonicalRows,
 } from "../features/orders/canonical-orders";
 import {
+  collectServiceErrors,
+  getServiceErrorNotice,
+  normalizeCaughtServiceError,
+} from "../features/service-errors";
+import {
   filterOrders,
-  formatServiceTypeLabel,
-  formatUnavailableReason,
-  getBulkOrderSelectionState,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
   getOrderDeliveryDateValue,
   getOrderDeliveryExceptionState,
-  getOrderUnavailableReasons,
+  getOrderDeliveryStateFilterValue,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
-  isOrderInPlanningScope,
-  isOrderRouteCreated,
   isOrderRouteAssigned,
-  isOrderRoutePlanningLocked,
-  isOrderSelectableForCurrentWorkset,
-  ORDER_HISTORY_SCOPE,
+  isOrderRouteCreated,
+  ORDER_DELIVERY_STATE_OPTIONS,
   ORDER_PLANNING_SCOPE,
-  ORDER_SERVICE_TYPE_OPTIONS,
-  ORDER_STATUS_TABS,
+  ORDER_WEEKDAY_OPTIONS,
   updateOrderFilterSearchParams,
 } from "../features/orders/order-filters";
 import { fetchShopifyOrders } from "../features/orders/shopify-orders.server";
 import { authenticate } from "../shopify.server";
+import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
 import { TabLayout } from "../ui/tab-layout";
 
 export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
@@ -60,20 +60,10 @@ const ORDERS_MAP_ORDER_LAYER_ID = "orders-map-order-pins";
 const ORDER_PIN_IMAGE_ID = "orders-map-pin";
 const ORDER_PIN_PLANNED_IMAGE_ID = "orders-map-pin-planned";
 const ORDER_PIN_PIXEL_RATIO = 2;
-const ORDER_PIN_ICON_SIZE = 0.62;
-const ORDER_PIN_LABEL_OFFSET = [0, -1.92];
-const ORDER_PIN_PATH =
-  "M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z";
+const ORDER_PIN_ICON_SIZE = 0.54;
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
-const ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR =
-  "배송일이 있는 주문만 route plan에 추가할 수 있습니다.";
-const ROUTE_PLAN_DELIVERY_DATE_MISMATCH_ERROR =
-  "같은 배송일 주문만 route plan에 추가할 수 있습니다.";
-const ROUTE_PLAN_DELIVERY_DATE_PARTIAL_ADD_ERROR =
-  "같은 배송일 주문만 route plan에 추가했습니다.";
-const ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR =
-  "선택된 주문과 같은 배송일만 표시합니다. 선택 또는 plan을 비우면 날짜 필터를 해제할 수 있습니다.";
+const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft";
 const SHOP_TIME_ZONE_QUERY = `#graphql
   query CleverShopTimeZone {
     shop {
@@ -82,80 +72,94 @@ const SHOP_TIME_ZONE_QUERY = `#graphql
     }
   }
 `;
+const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
-const mapFrameStyle = {
-  position: "relative",
-};
+function getTableColumnPixelState(tableElement) {
+  const widths = Array.from(
+    tableElement.querySelectorAll("thead th"),
+    (headerCell) => Math.round(headerCell.getBoundingClientRect().width),
+  );
+  const tableWidth = Math.round(tableElement.getBoundingClientRect().width);
+  const roundingDiff = tableWidth - widths.reduce((total, width) => total + width, 0);
 
-const mapCanvasStyle = {
-  height: "100%",
+  if (widths.length > 0 && roundingDiff !== 0) {
+    widths[widths.length - 1] += roundingDiff;
+  }
+
+  return { tableWidth, widths };
+}
+
+function getTableColumnFitWidth(tableElement, columnIndex) {
+  const cells = tableElement.querySelectorAll(
+    `thead th:nth-child(${columnIndex + 1}), tbody td:nth-child(${columnIndex + 1})`,
+  );
+
+  return Math.max(
+    MIN_TABLE_COLUMN_WIDTH,
+    ...Array.from(cells, (cell) => {
+      const clone = cell.cloneNode(true);
+
+      Object.assign(clone.style, {
+        display: "inline-block",
+        height: "auto",
+        left: "-10000px",
+        maxWidth: "none",
+        minWidth: "0",
+        overflow: "visible",
+        pointerEvents: "none",
+        position: "fixed",
+        textOverflow: "clip",
+        top: "-10000px",
+        visibility: "hidden",
+        whiteSpace: "nowrap",
+        width: "max-content",
+        zIndex: "-1",
+      });
+
+      clone.querySelectorAll("*").forEach((element) => {
+        Object.assign(element.style, {
+          maxWidth: "none",
+          overflow: "visible",
+          textOverflow: "clip",
+          width: "auto",
+        });
+      });
+
+      document.body.append(clone);
+      const width = Math.ceil(clone.getBoundingClientRect().width);
+      clone.remove();
+
+      return width + 2;
+    }),
+  );
+}
+
+const ordersMapCanvasStyle = {
   minHeight: "420px",
-  width: "100%",
-};
-
-const mapToolbarStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  left: "12px",
-  position: "absolute",
-  top: "12px",
-  zIndex: 2,
-};
-
-const mapToolbarButtonStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid #c9c9c9",
-  borderRadius: "8px",
-  color: "#303030",
-  cursor: "pointer",
-  display: "flex",
-  height: "34px",
-  justifyContent: "center",
-  padding: 0,
-  width: "34px",
-};
-
-const mapToolbarIconStyle = {
-  display: "block",
-  height: "16px",
-  width: "16px",
-};
-
-const mapStatusStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid #d6d6d6",
-  borderRadius: "999px",
-  color: "#303030",
-  display: "flex",
-  fontSize: "12px",
-  fontWeight: 700,
-  height: "24px",
-  justifyContent: "center",
-  width: "24px",
 };
 
 const routePlanPanelStyle = {
   boxSizing: "border-box",
-  display: "grid",
+  display: "flex",
+  flexDirection: "column",
   gap: "10px",
-  gridTemplateRows: "auto minmax(0, 1fr)",
   height: "420px",
   maxHeight: "420px",
-  overflow: "hidden",
+  overflowX: "hidden",
+  overflowY: "auto",
   padding: "12px",
 };
 
 const routePlanScrollAreaStyle = {
-  alignContent: "start",
+  alignContent: "end",
   display: "grid",
+  flex: "0 0 auto",
   gap: "10px",
   gridAutoRows: "max-content",
+  marginTop: "auto",
   minHeight: 0,
-  overflowY: "auto",
-  paddingRight: "2px",
+  overflow: "visible",
+  paddingRight: 0,
 };
 
 const routePlanHeaderStyle = {
@@ -171,88 +175,42 @@ const routePlanHeaderActionsStyle = {
   marginLeft: "auto",
 };
 
-const routePlanListStyle = {
-  alignContent: "start",
-  alignSelf: "start",
+const routeAssignActionsStyle = {
   display: "grid",
-  gap: "8px",
+  gap: "6px",
+  overflow: "hidden",
+  transition: "max-height 180ms ease, opacity 140ms ease, margin-top 180ms ease",
 };
 
-const routePlanItemStyle = {
-  alignSelf: "start",
-  border: "1px solid #e3e3e3",
-  borderRadius: "10px",
-  display: "grid",
-  gap: "8px",
-  padding: "10px",
+const routeAssignActionsOpenStyle = {
+  marginTop: "8px",
+  maxHeight: "100px",
+  opacity: 1,
 };
 
-const routePlanDraggingItemStyle = {
-  ...routePlanItemStyle,
-  opacity: 0.55,
-};
-
-const routePlanItemHeaderStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  justifyContent: "space-between",
-};
-
-const routePlanDragHandleStyle = {
-  alignItems: "center",
-  alignSelf: "stretch",
-  background: "transparent",
-  border: 0,
-  color: "#8a8a8a",
-  cursor: "grab",
-  display: "inline-flex",
-  flex: "0 0 auto",
-  fontSize: "16px",
-  fontWeight: 700,
-  justifyContent: "center",
-  lineHeight: 1,
-  minHeight: "28px",
-  padding: "0 1px 0 0",
-};
-
-const routePlanOrderButtonStyle = {
-  background: "transparent",
-  border: 0,
-  color: "#303030",
-  cursor: "pointer",
-  flex: "1 1 auto",
-  fontSize: "12px",
-  lineHeight: 1.35,
-  minWidth: 0,
-  padding: 0,
-  textAlign: "left",
-};
-
-const routePlanEmptyStyle = {
-  background: "#f7f7f7",
-  border: "1px solid #e3e3e3",
-  borderRadius: "10px",
-  color: "#616161",
-  fontSize: "13px",
-  padding: "10px",
+const routeAssignActionsClosedStyle = {
+  marginTop: 0,
+  maxHeight: 0,
+  opacity: 0,
 };
 
 const routeReadinessStyle = {
   background: "#ffffff",
   border: "1px solid #e3e3e3",
   borderRadius: "10px",
+  containerName: "route-summary",
+  containerType: "inline-size",
   display: "grid",
   gap: "8px",
-  overflowX: "auto",
-  overflowY: "hidden",
+  minWidth: 0,
+  overflow: "hidden",
   padding: "10px",
 };
 
 const routeReadinessHeaderStyle = {
   alignItems: "center",
   display: "flex",
-  flexWrap: "nowrap",
+  flexWrap: "wrap",
   gap: "8px",
   justifyContent: "space-between",
   whiteSpace: "nowrap",
@@ -261,30 +219,43 @@ const routeReadinessHeaderStyle = {
 const routeReadinessGridStyle = {
   display: "grid",
   gap: "6px",
-  gridTemplateColumns: "repeat(2, minmax(140px, 1fr))",
+  minWidth: 0,
 };
 
 const routeReadinessItemStyle = {
-  color: "#303030",
+  background: "#f7f7f7",
+  border: "1px solid #ebebeb",
+  borderRadius: "8px",
+  color: "#616161",
+  display: "grid",
   fontSize: "13px",
+  gap: "2px",
   lineHeight: 1.35,
+  minWidth: 0,
+  padding: "8px 10px",
   whiteSpace: "nowrap",
 };
 
-const planSummaryTextStyle = {
-  color: "#4a4a4a",
-  fontSize: "13px",
-  whiteSpace: "nowrap",
+const routeReadinessValueStyle = {
+  color: "#303030",
+  fontSize: "14px",
+  fontWeight: 650,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
 };
 
 const orderControlsTrailingStyle = {
   alignItems: "center",
   display: "flex",
-  flex: "1 1 260px",
-  flexWrap: "wrap",
   gap: "6px",
   marginLeft: "auto",
-  minWidth: 0,
+};
+
+const orderSelectionCountStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 650,
+  whiteSpace: "nowrap",
 };
 
 const createRouteButtonStyle = {
@@ -337,26 +308,60 @@ const orderFilterButtonStyle = {
   cursor: "pointer",
 };
 
-const activeOrderFilterButtonStyle = {
-  ...orderFilterButtonStyle,
-  background: "#303030",
-  borderColor: "#303030",
-  color: "#ffffff",
-};
-
 const disabledOrderFilterButtonStyle = {
   ...disabledPlanButtonStyle,
+};
+
+const routePlanTitleGroupStyle = {
+  display: "grid",
+  gap: "4px",
+};
+
+const routePlanTitleLabelStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 650,
+  lineHeight: 1.2,
+};
+
+const routePlanTitleFieldStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxSizing: "border-box",
+  color: "#1f1f1f",
+  fontFamily: "inherit",
+  fontSize: "16px",
+  fontWeight: 750,
+  letterSpacing: "-0.01em",
+  lineHeight: 1.2,
+  minHeight: "40px",
+  padding: "8px 10px",
+  width: "100%",
 };
 
 const routePlanDetailStyle = {
   background: "#f7f7f7",
   borderRadius: "8px",
+  flex: "0 0 auto",
   padding: "10px",
 };
 
-const compactAlertStyle = {
+const routeAssignActionButtonStyle = {
+  ...addToPlanButtonStyle,
+  justifyContent: "center",
+  width: "100%",
+};
+
+const disabledRouteAssignActionButtonStyle = {
+  ...disabledPlanButtonStyle,
+  width: "100%",
+};
+
+const orderPageNoticeStyle = {
   background: "#fff4f4",
-  borderBottom: "1px solid #fed3d1",
+  border: 0,
+  borderRadius: 0,
   color: "#8e1f0b",
   fontSize: "12px",
   lineHeight: 1.35,
@@ -371,16 +376,10 @@ const orderTableLayoutStyle = {
 
 const orderControlsStyle = {
   alignItems: "center",
-  background: "#ffffff",
-  borderBottom: "1px solid #ebebeb",
   display: "flex",
   flexWrap: "wrap",
   gap: "6px",
-  maxWidth: "100%",
-  overflowX: "visible",
-  overflowY: "visible",
-  padding: "6px 10px",
-  whiteSpace: "normal",
+  padding: "6px 10px 8px",
 };
 
 const tableWrapStyle = {
@@ -389,56 +388,215 @@ const tableWrapStyle = {
   overflowY: "auto",
 };
 
-const orderFilterSelectStyle = {
+const orderFilterControlStyle = {
   background: "#ffffff",
   border: "1px solid #d6d6d6",
   borderRadius: "8px",
   boxSizing: "border-box",
   color: "#303030",
-  flex: "1 1 150px",
+  flex: "0 1 142px",
   fontSize: "13px",
-  minHeight: "30px",
-  minWidth: "120px",
-  padding: "3px 8px",
+  height: "30px",
+  minWidth: "116px",
+  padding: "0 8px",
 };
 
-const orderFilterSearchStyle = {
-  ...orderFilterSelectStyle,
-  flex: "2 1 220px",
-  minWidth: "180px",
-  maxWidth: "100%",
-};
-
-const orderStatusTabsStyle = {
+const orderFilterDateFieldStyle = {
+  ...orderFilterControlStyle,
   alignItems: "center",
   display: "flex",
-  flex: "1 1 100%",
-  flexWrap: "wrap",
+  flex: "0 1 204px",
   gap: "6px",
-  minWidth: 0,
+  minWidth: "178px",
+  overflow: "hidden",
+  position: "relative",
 };
 
-const orderFilterSummaryStyle = {
+const orderFilterLabelStyle = {
   color: "#616161",
+  flex: "0 0 auto",
   fontSize: "12px",
   fontWeight: 650,
   whiteSpace: "nowrap",
 };
 
-const unavailableSummaryStyle = {
-  color: "#8a4b00",
-  fontSize: "12px",
-  fontWeight: 600,
-  whiteSpace: "normal",
+const orderFilterDateButtonStyle = {
+  background: "transparent",
+  border: 0,
+  color: "#303030",
+  cursor: "pointer",
+  flex: "1 1 auto",
+  font: "inherit",
+  height: "26px",
+  minWidth: 0,
+  overflow: "hidden",
+  padding: "0 24px 0 0",
+  textAlign: "left",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
-const tableColumnWidths = ["4%", "8%", "9%", "13%", "27%", "11%", "12%", "8%", "8%"];
+const orderFilterSelectFieldStyle = {
+  ...orderFilterControlStyle,
+  padding: 0,
+  position: "relative",
+};
+
+const orderFilterSelectStyle = {
+  appearance: "none",
+  WebkitAppearance: "none",
+  background: "transparent",
+  border: 0,
+  boxSizing: "border-box",
+  color: "#303030",
+  font: "inherit",
+  height: "100%",
+  padding: "0 28px 0 8px",
+  width: "100%",
+};
+
+
+
+const orderFilterEmptySelectStyle = {
+  ...orderFilterSelectStyle,
+  opacity: 0,
+};
+
+const orderFilterPlaceholderStyle = {
+  color: "#303030",
+  left: "8px",
+  lineHeight: 1,
+  pointerEvents: "none",
+  position: "absolute",
+  top: "50%",
+  transform: "translateY(-50%)",
+};
+
+const orderFilterIndicatorStyle = {
+  display: "grid",
+  gap: "2px",
+  justifyItems: "center",
+  lineHeight: 1,
+  pointerEvents: "none",
+  position: "absolute",
+  right: "10px",
+  top: "50%",
+  transform: "translateY(-50%)",
+};
+
+const orderFilterChevronTriangleStyle = {
+  height: 0,
+  width: 0,
+  borderLeft: "3px solid transparent",
+  borderRight: "3px solid transparent",
+};
+
+const orderFilterChevronUpStyle = {
+  ...orderFilterChevronTriangleStyle,
+  borderBottom: "4px solid #8a8a8a",
+};
+
+const orderFilterChevronDownStyle = {
+  ...orderFilterChevronTriangleStyle,
+  borderTop: "4px solid #8a8a8a",
+};
+
+const orderFilterClearButtonStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  borderRadius: "6px",
+  color: "#616161",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontSize: "15px",
+  height: "22px",
+  justifyContent: "center",
+  lineHeight: 1,
+  padding: 0,
+  position: "absolute",
+  right: "4px",
+  top: "50%",
+  transform: "translateY(-50%)",
+  width: "22px",
+};
+
+function renderOrderFilterChevron() {
+  return (
+    <span aria-hidden="true" style={orderFilterIndicatorStyle}>
+      <span style={orderFilterChevronUpStyle} />
+      <span style={orderFilterChevronDownStyle} />
+    </span>
+  );
+}
+
+const orderDateCalendarStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.14)",
+  display: "grid",
+  gap: "8px",
+  padding: "10px",
+  position: "fixed",
+  width: "238px",
+  zIndex: 2147483647,
+};
+
+const orderDateCalendarHeaderStyle = {
+  alignItems: "center",
+  display: "flex",
+  justifyContent: "space-between",
+};
+
+const orderDateCalendarGridStyle = {
+  display: "grid",
+  gap: "3px",
+  gridTemplateColumns: "repeat(7, 1fr)",
+};
+
+const orderDateCalendarWeekdayStyle = {
+  color: "#8a8a8a",
+  fontSize: "11px",
+  textAlign: "center",
+};
+
+const orderDateCalendarDayStyle = {
+  background: "transparent",
+  border: "1px solid transparent",
+  borderRadius: "7px",
+  color: "#303030",
+  cursor: "pointer",
+  fontSize: "12px",
+  height: "26px",
+  padding: 0,
+};
+
+const orderDateCalendarDayMutedStyle = {
+  ...orderDateCalendarDayStyle,
+  color: "#b5b5b5",
+};
+
+const orderDateCalendarDaySelectedStyle = {
+  ...orderDateCalendarDayStyle,
+  background: "#303030",
+  borderColor: "#303030",
+  color: "#ffffff",
+};
+
+const orderDateCalendarDayRangeStyle = {
+  ...orderDateCalendarDayStyle,
+  background: "#f1f1f1",
+};
+
+const DEFAULT_TABLE_COLUMN_WIDTHS = ["3%", "7%", "8%", "10%", "23%", "7%", "8%", "9%", "10%", "8%"];
+const MIN_TABLE_COLUMN_WIDTH = 44;
 
 const tableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
   fontSize: "13px",
-  minWidth: "1040px",
+  minWidth: "960px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -457,6 +615,39 @@ const tableHeaderCellStyle = {
   verticalAlign: "middle",
   whiteSpace: "nowrap",
   zIndex: 3,
+};
+
+const resizableHeaderCellStyle = {
+  ...tableHeaderCellStyle,
+  overflow: "visible",
+  position: "sticky",
+};
+
+const columnResizeHandleStyle = {
+  alignItems: "center",
+  bottom: "6px",
+  cursor: "col-resize",
+  display: "flex",
+  justifyContent: "center",
+  position: "absolute",
+  right: "0",
+  top: "6px",
+  touchAction: "none",
+  width: "8px",
+  zIndex: 5,
+};
+
+const columnResizeHandleLineStyle = {
+  background: "#c9c9c9",
+  borderRadius: "999px",
+  display: "block",
+  height: "100%",
+  width: "1px",
+};
+
+const checkboxHeaderCellStyle = {
+  ...tableHeaderCellStyle,
+  textOverflow: "clip",
 };
 
 const tableHeaderButtonStyle = {
@@ -498,12 +689,15 @@ const deliveryInfoCellStyle = {
 const deliveryInfoTabStyle = {
   background: "rgba(0, 0, 0, 0.04)",
   borderRadius: "999px",
+  boxSizing: "border-box",
   color: "#303030",
   display: "inline-flex",
   fontSize: "12px",
   fontWeight: 650,
+  justifyContent: "center",
   lineHeight: 1.2,
   maxWidth: "100%",
+  minWidth: 0,
   overflow: "hidden",
   padding: "3px 8px",
   textOverflow: "ellipsis",
@@ -550,16 +744,81 @@ const orderNumberButtonStyle = {
   width: "100%",
 };
 
-const PROTECTED_ORDER_ACCESS_ERROR_CODE = "PROTECTED_ORDER_ACCESS";
+const itemCellStyle = {
+  ...tableCellStyle,
+  overflow: "visible",
+  position: "relative",
+};
+
+const itemInfoButtonStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  color: "#657080",
+  cursor: "pointer",
+  display: "inline-flex",
+  height: "18px",
+  justifyContent: "center",
+  marginLeft: "4px",
+  padding: 0,
+  position: "relative",
+  top: "-1px",
+  verticalAlign: "middle",
+  width: "18px",
+};
+
+const itemPopoverStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6dce5",
+  borderRadius: "10px",
+  boxShadow: "0 10px 28px rgba(0, 0, 0, 0.16)",
+  left: "50%",
+  minWidth: "360px",
+  padding: "8px 10px 10px",
+  position: "absolute",
+  top: "28px",
+  transform: "translateX(-50%)",
+  zIndex: 20,
+};
+
+const itemPopoverTitleStyle = {
+  color: "#2f3b4c",
+  fontSize: "11px",
+  fontWeight: 800,
+  letterSpacing: "0.08em",
+  marginBottom: "6px",
+  textAlign: "left",
+  textTransform: "uppercase",
+};
+
+const itemPopoverTableStyle = {
+  borderCollapse: "collapse",
+  fontSize: "11px",
+  width: "100%",
+};
+
+const itemPopoverCellStyle = {
+  borderTop: "1px solid #edf0f3",
+  padding: "5px 6px",
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
+
+const itemPopoverQtyCellStyle = {
+  ...itemPopoverCellStyle,
+  fontWeight: 700,
+  textAlign: "right",
+};
 
 const SORTABLE_ORDER_COLUMNS = [
   { key: "name", label: "Order" },
   { key: "orderedDate", label: "Ordered" },
   { key: "customer", label: "Recipient" },
   { key: "address", label: "Address" },
+  { key: "itemCount", label: "Items" },
   { key: "deliveryArea", label: "Area" },
   { key: "deliveryLabel", label: "Delivery" },
-  { key: "planningStatus", label: "Delivery state" },
+  { key: "planningStatus", label: "State" },
   { key: "hasCoordinates", label: "Coordinates" },
 ];
 
@@ -639,6 +898,15 @@ function roundPerfDuration(duration) {
 
 function getSafePerformanceNow() {
   return typeof performance === "undefined" ? 0 : performance.now();
+}
+
+function logDevPerformanceMetric(name, metric) {
+  if (!PERF_CAPTURE_ENABLED) return;
+
+  console.info(name, {
+    measuredAt: new Date().toISOString(),
+    ...metric,
+  });
 }
 
 function getEmbeddedIframeState() {
@@ -728,6 +996,10 @@ function getOrderSortValue(order, columnKey, referenceDate) {
     return getOrderDeliveryDateValue(order) || order.deliveryLabel || "";
   }
 
+  if (columnKey === "itemCount") {
+    return getOrderItemCount(order);
+  }
+
   return order[columnKey] ?? "";
 }
 
@@ -752,60 +1024,127 @@ function formatRouteDraftList(values) {
   return values.length > 0 ? values.join(", ") : "—";
 }
 
-function formatOrderNames(orders) {
-  const orderNames = Array.isArray(orders)
-    ? orders.map((order) => order?.name).filter(Boolean)
-    : [];
+function formatRouteDraftAreaSummary(values) {
+  if (values.length === 0) return "—";
+  if (values.length === 1) return values[0];
 
-  return orderNames.length > 0 ? orderNames.join(", ") : "selected orders";
+  return `${values[0]} +${values.length - 1}`;
 }
 
-function getFirstErrorMessage(errors) {
-  const firstError = Array.isArray(errors)
-    ? errors.find((error) => error?.message)
-    : null;
 
-  return firstError?.message ?? null;
+function formatOrderDateValue(value) {
+  return value ? value.replaceAll("-", ".") : "";
 }
 
-function getFirstOrderDeliveryDateByIds(orderIds, orderById) {
-  if (!Array.isArray(orderIds) || !(orderById instanceof Map)) return "";
+function formatOrderDateRangeLabel(startDate, endDate) {
+  if (!startDate && !endDate) return "";
+  if (!endDate || startDate === endDate) return formatOrderDateValue(startDate);
 
-  for (const orderId of orderIds) {
-    const deliveryDate = getOrderDeliveryDateValue(orderById.get(orderId));
-    if (deliveryDate) return deliveryDate;
+  return `${formatOrderDateValue(startDate)}~${formatOrderDateValue(endDate)}`;
+}
+
+function getCalendarMonthValue(value = new Date()) {
+  if (typeof value === "string" && /^\d{4}-\d{2}/.test(value)) {
+    return value.slice(0, 7);
   }
 
-  return "";
+  const date = value instanceof Date ? value : new Date(value);
+  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
+
+  return `${safeDate.getUTCFullYear()}-${String(safeDate.getUTCMonth() + 1).padStart(2, "0")}`;
 }
 
-function getOrdersForDeliveryDate(orders, deliveryDate) {
-  const normalizedDeliveryDate = getOrderDeliveryDateValue({ deliveryDate });
-  if (!normalizedDeliveryDate) return [];
+function shiftCalendarMonth(monthValue, offset) {
+  const [year, month] = monthValue.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
 
-  return (Array.isArray(orders) ? orders : []).filter(
-    (order) => getOrderDeliveryDateValue(order) === normalizedDeliveryDate,
-  );
+  return getCalendarMonthValue(date);
 }
 
-function getVisibleDeliveryOrderLoaderErrors(errors) {
-  return (Array.isArray(errors) ? errors : []).filter(
-    (error) => error?.code !== DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
-  );
+function formatCalendarMonthLabel(monthValue) {
+  const [year, month] = monthValue.split("-").map(Number);
+  const date = new Date(Date.UTC(year, month - 1, 1));
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    timeZone: "UTC",
+    year: "numeric",
+  }).format(date);
+}
+
+function getCalendarDays(monthValue) {
+  const [year, month] = monthValue.split("-").map(Number);
+  const monthStart = new Date(Date.UTC(year, month - 1, 1));
+  const gridStart = new Date(monthStart);
+  gridStart.setUTCDate(monthStart.getUTCDate() - monthStart.getUTCDay());
+
+  return Array.from({ length: 42 }, (_, dayOffset) => {
+    const date = new Date(gridStart);
+    date.setUTCDate(gridStart.getUTCDate() + dayOffset);
+    const dateValue = date.toISOString().slice(0, 10);
+
+    return {
+      currentMonth: dateValue.startsWith(monthValue),
+      dateValue,
+      dayOfMonth: String(date.getUTCDate()),
+    };
+  });
+}
+
+function getCalendarDayStyle(day, filters, pendingDateStart) {
+  const startDate = pendingDateStart || filters.orderedDateFrom;
+  const endDate = pendingDateStart ? "" : filters.orderedDateTo;
+  const isRangeBoundary = day.dateValue === startDate || day.dateValue === endDate;
+  const isInRange = startDate && endDate && day.dateValue > startDate && day.dateValue < endDate;
+
+  if (isRangeBoundary) return orderDateCalendarDaySelectedStyle;
+  if (isInRange) return orderDateCalendarDayRangeStyle;
+
+  return day.currentMonth ? orderDateCalendarDayStyle : orderDateCalendarDayMutedStyle;
 }
 
 function formatDeliveryValue(value) {
   return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
 
-function formatOrderDeliveryState(order, referenceDate) {
-  const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
+function getOrderLineItems(order) {
+  const lineItems = order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
+  const nodes = Array.isArray(lineItems?.nodes)
+    ? lineItems.nodes
+    : Array.isArray(lineItems?.edges)
+      ? lineItems.edges.map((edge) => edge?.node)
+      : [];
 
-  if (exceptionState === "overdue_assigned") return "Assigned · overdue";
-  if (exceptionState === "overdue_unassigned") return "Past due";
-  if (isOrderDeliveryComplete(order)) return "Delivered";
-  if (isOrderRouteAssigned(order)) return "Assigned · undelivered";
-  if (isOrderRouteCreated(order)) return "Planned";
+  return nodes
+    .map((item) => ({
+      name: textOrUndefined(item?.title) ?? textOrUndefined(item?.name) ?? "Item",
+      options: textOrUndefined(item?.variantTitle) ?? "—",
+      quantity: Number.isFinite(Number(item?.quantity)) ? Number(item.quantity) : 1,
+      sku: textOrUndefined(item?.sku) ?? "—",
+    }))
+    .filter((item) => item.name);
+}
+
+function getOrderItemCount(order) {
+  const lineItems = getOrderLineItems(order);
+  return lineItems.reduce((sum, item) => sum + item.quantity, 0);
+}
+
+function formatOrderTotal(order) {
+  const amount = Number(order?.totalPriceAmount);
+  if (!Number.isFinite(amount)) return "—";
+
+  return `${amount.toFixed(2)} ${textOrUndefined(order?.currencyCode) ?? ""}`.trim();
+}
+
+function formatOrderDeliveryState(order, referenceDate) {
+  const stateValue = getOrderDeliveryStateFilterValue(order, referenceDate);
+
+  if (stateValue === "assigned_overdue") return "Assigned · overdue";
+  if (stateValue === "past_due") return "Past due";
+  if (stateValue === "delivered") return "Delivered";
+  if (stateValue === "assigned_undelivered") return "Assigned · undelivered";
+  if (stateValue === "planned") return "Planned";
 
   return "Unplanned";
 }
@@ -830,73 +1169,40 @@ function formatOrderDeliveryLabel(order) {
     : "Date pending";
 }
 
-function formatFilterDateLabel(value) {
-  if (typeof value !== "string" || value.trim().length === 0) return "—";
+function formatRouteDraftScopeLabel(orders) {
+  const datedOrders = orders
+    .map((order) => ({
+      date: getOrderDeliveryDateValue(order),
+      label: formatOrderDeliveryLabel(order),
+    }))
+    .filter((order) => order.date)
+    .sort((leftOrder, rightOrder) => leftOrder.date.localeCompare(rightOrder.date));
 
-  const date = new Date(`${value.slice(0, 10)}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return value;
+  if (datedOrders.length === 0) return formatOrderDeliveryLabel(orders[0]);
 
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    timeZone: "UTC",
-    weekday: "short",
-  }).format(date);
+  const firstOrder = datedOrders[0];
+  const lastOrder = datedOrders[datedOrders.length - 1];
 
-  return `${weekday} ${value.slice(5, 7)}/${value.slice(8, 10)}`;
+  return firstOrder.date === lastOrder.date
+    ? firstOrder.label
+    : `${firstOrder.label}–${lastOrder.label}`;
 }
 
-function formatUnavailableSummary(unavailableReasonCounts) {
-  const entries = Object.entries(unavailableReasonCounts ?? {}).filter(
-    ([, count]) => count > 0,
-  );
+function buildRoutePlanTitleFromOrders(orders) {
+  const scopeLabel = formatRouteDraftScopeLabel(orders);
 
-  if (entries.length === 0) return "";
-
-  return entries
-    .map(([reason, count]) => `${formatUnavailableReason(reason)} ${count}`)
-    .join(" · ");
+  return scopeLabel && scopeLabel !== "Date pending"
+    ? `${scopeLabel} orders`
+    : DEFAULT_ROUTE_PLAN_TITLE;
 }
 
-function createDepartureMarkerIconElement() {
-  const iconElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  const iconPathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
-
-  iconElement.classList.add("departure-map-marker__icon");
-  iconElement.setAttribute("viewBox", "0 0 20 20");
-  iconElement.setAttribute("aria-hidden", "true");
-  iconPathElement.setAttribute(
-    "d",
-    "M10 3.2 3.5 8.4v8.1h4v-5h5v5h4V8.4L10 3.2Z",
-  );
-  iconElement.append(iconPathElement);
-
-  return iconElement;
-}
-
-function createDepartureMarkerElement(departureLocation) {
-  const markerElement = document.createElement("button");
-  const markerPinElement = document.createElement("span");
-  markerElement.type = "button";
-  markerElement.className = "departure-map-marker";
-  markerElement.style.zIndex = "3000";
-  markerElement.setAttribute("aria-label", `Route start: ${departureLocation.name}`);
-  markerPinElement.className = "departure-map-marker__pin";
-  markerPinElement.append(createDepartureMarkerIconElement());
-  markerElement.append(markerPinElement);
-
-  return markerElement;
-}
-
-function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan, availabilityContext) {
+function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
   const popupElement = document.createElement("div");
   const popupTitleElement = document.createElement("strong");
   const popupAddressElement = document.createElement("div");
   const popupMetaElement = document.createElement("div");
   const popupActionButton = document.createElement("button");
   const deliveryMetaValues = [order.deliveryArea, formatOrderDeliveryLabel(order)].filter(Boolean);
-  const referenceDate = availabilityContext?.referenceDate ?? new Date();
-  const unavailableReasons = getOrderUnavailableReasons(order, availabilityContext);
-  const routePlanningLocked = isOrderRoutePlanningLocked(order, referenceDate);
-  const routePlanningUnavailable = unavailableReasons.length > 0;
 
   popupElement.className = "order-marker-popup";
   popupTitleElement.className = "order-marker-popup__title";
@@ -912,22 +1218,11 @@ function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan, availab
   }
   popupActionButton.type = "button";
   popupActionButton.className = "order-marker-popup__action";
-  popupActionButton.textContent =
-    plannedIndex > 0
-      ? "Added to plan"
-      : routePlanningLocked
-        ? formatOrderDeliveryState(order, referenceDate)
-        : routePlanningUnavailable
-          ? formatUnavailableReason(unavailableReasons[0])
-          : "Add to plan";
-  if (routePlanningUnavailable) {
-    popupActionButton.title = unavailableReasons.map(formatUnavailableReason).join(", ");
-  }
-  popupActionButton.disabled = plannedIndex > 0 || routePlanningUnavailable;
+  popupActionButton.textContent = plannedIndex > 0 ? "Added to map" : "Add to map";
+  popupActionButton.disabled = plannedIndex > 0;
   popupActionButton.addEventListener("click", (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (routePlanningUnavailable) return;
     onAddToPlan(order.id);
   });
 
@@ -951,34 +1246,11 @@ function isOrdersMapStyleReady(map) {
   }
 }
 
-function createOrderPinImageData(color, options = {}) {
-  const pixelRatio = options.pixelRatio ?? ORDER_PIN_PIXEL_RATIO;
-  const width = (options.width ?? 40) * pixelRatio;
-  const height = (options.height ?? 52) * pixelRatio;
-  const canvas = document.createElement("canvas");
-  canvas.width = width;
-  canvas.height = height;
-
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-
-  context.scale(pixelRatio, pixelRatio);
-  const pinPath = new Path2D(ORDER_PIN_PATH);
-  context.fillStyle = color;
-  context.strokeStyle = "#ffffff";
-  context.lineJoin = "round";
-  context.lineWidth = options.borderWidth ?? 3.2;
-  context.shadowBlur = options.shadowBlur ?? 4;
-  context.shadowColor = options.shadowColor ?? "rgba(0, 0, 0, 0.32)";
-  context.shadowOffsetY = options.shadowOffsetY ?? 2;
-  context.fill(pinPath);
-  context.shadowColor = "transparent";
-  context.stroke(pinPath);
-
-  return context.getImageData(0, 0, width, height);
+function getPlannedOrderPinImageId(plannedIndex) {
+  return `${ORDER_PIN_PLANNED_IMAGE_ID}-${plannedIndex}`;
 }
 
-function ensureOrdersMapPinImages(map) {
+function ensureOrdersMapPinImages(map, plannedOrderIds = []) {
   if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") {
     return false;
   }
@@ -986,16 +1258,22 @@ function ensureOrdersMapPinImages(map) {
   const images = [
     {
       id: ORDER_PIN_IMAGE_ID,
-      imageData: createOrderPinImageData("#006fbb", {
-        shadowColor: "rgba(0, 111, 187, 0.36)",
+      imageData: createMapPinImageData(MAP_MARKER_PALETTE.order.color, {
+        pixelRatio: ORDER_PIN_PIXEL_RATIO,
+        shadowColor: MAP_MARKER_PALETTE.order.shadowColor,
       }),
     },
-    {
-      id: ORDER_PIN_PLANNED_IMAGE_ID,
-      imageData: createOrderPinImageData("#e11900", {
-        shadowColor: "rgba(225, 25, 0, 0.4)",
-      }),
-    },
+    ...plannedOrderIds.map((_, index) => {
+      const plannedIndex = index + 1;
+      return {
+        id: getPlannedOrderPinImageId(plannedIndex),
+        imageData: createMapPinImageData(MAP_MARKER_PALETTE.plannedOrder.color, {
+          label: plannedIndex,
+          pixelRatio: ORDER_PIN_PIXEL_RATIO,
+          shadowColor: MAP_MARKER_PALETTE.plannedOrder.shadowColor,
+        }),
+      };
+    }),
   ];
 
   for (const image of images) {
@@ -1016,10 +1294,10 @@ function buildOrdersMapFeatureCollection(orders, plannedOrderIds) {
   return {
     type: "FeatureCollection",
     features: orders
-      .filter((order) => order.hasCoordinates)
+      .filter((order) => order.hasCoordinates && plannedIndexByOrderId.has(order.id))
       .map((order) => {
         const plannedIndex = plannedIndexByOrderId.get(order.id) ?? 0;
-        const isPlanned = plannedIndex > 0;
+        const isPlanned = true;
 
         return {
           type: "Feature",
@@ -1031,37 +1309,18 @@ function buildOrdersMapFeatureCollection(orders, plannedOrderIds) {
             isPlanned,
             orderId: order.id,
             orderName: order.name,
-            pinImage: isPlanned ? ORDER_PIN_PLANNED_IMAGE_ID : ORDER_PIN_IMAGE_ID,
+            pinImage: isPlanned ? getPlannedOrderPinImageId(plannedIndex) : ORDER_PIN_IMAGE_ID,
             plannedIndex,
-            plannedLabel: isPlanned ? String(plannedIndex) : "",
-            sortKey: isPlanned ? 1000 + plannedIndex : 1,
+            sortKey: isPlanned ? 1000 - plannedIndex : 1,
           },
         };
       }),
   };
 }
 
-function reorderOrderIds(orderIds, sourceOrderId, targetOrderId) {
-  if (!sourceOrderId || !targetOrderId || sourceOrderId === targetOrderId) {
-    return orderIds;
-  }
-
-  const sourceIndex = orderIds.indexOf(sourceOrderId);
-  const targetIndex = orderIds.indexOf(targetOrderId);
-
-  if (sourceIndex < 0 || targetIndex < 0) {
-    return orderIds;
-  }
-
-  const nextOrderIds = [...orderIds];
-  const [movedOrderId] = nextOrderIds.splice(sourceIndex, 1);
-  nextOrderIds.splice(targetIndex, 0, movedOrderId);
-  return nextOrderIds;
-}
-
 function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
   if (!isOrdersMapStyleReady(map)) return false;
-  if (!ensureOrdersMapPinImages(map)) return false;
+  if (!ensureOrdersMapPinImages(map, plannedOrderIds)) return false;
 
   const featureCollection = buildOrdersMapFeatureCollection(orders, plannedOrderIds);
   const existingSource = map.getSource?.(ORDERS_MAP_SOURCE_ID);
@@ -1086,16 +1345,6 @@ function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
         "icon-image": ["get", "pinImage"],
         "icon-size": ORDER_PIN_ICON_SIZE,
         "symbol-sort-key": ["get", "sortKey"],
-        "text-allow-overlap": true,
-        "text-field": ["get", "plannedLabel"],
-        "text-ignore-placement": true,
-        "text-offset": ORDER_PIN_LABEL_OFFSET,
-        "text-size": 11,
-      },
-      paint: {
-        "text-color": "#ffffff",
-        "text-halo-color": "rgba(0, 0, 0, 0.22)",
-        "text-halo-width": 0.5,
       },
     });
   }
@@ -1107,57 +1356,24 @@ function getOrderIdFromMapFeature(feature) {
   const orderId = feature?.properties?.orderId;
   return typeof orderId === "string" && orderId.length > 0 ? orderId : null;
 }
-
-function renderToolbarIcon(children) {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      style={mapToolbarIconStyle}
-      viewBox="0 0 20 20"
-      fill="none"
-      stroke="currentColor"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      strokeWidth="1.8"
-    >
-      {children}
-    </svg>
-  );
-}
-
-function renderRefreshIcon() {
-  return renderToolbarIcon(
-    <>
-      <path d="M16 7a6 6 0 1 0 1 5" />
-      <path d="M16 3v4h-4" />
-    </>,
-  );
-}
-
-function renderExpandWidthIcon() {
-  return renderToolbarIcon(
-    <>
-      <path d="m7 6-4 4 4 4" />
-      <path d="m13 6 4 4-4 4" />
-    </>,
-  );
-}
-
-function renderRestoreWidthIcon() {
-  return renderToolbarIcon(
-    <>
-      <path d="m3 6 4 4-4 4" />
-      <path d="m17 6-4 4 4 4" />
-    </>,
-  );
-}
-
-function renderWidthIcon(isMapWide) {
-  return isMapWide ? renderRestoreWidthIcon() : renderExpandWidthIcon();
-}
-
 export const action = async ({ request }) => {
+  try {
+    return await handleOrdersAction(request);
+  } catch (error) {
+    if (error instanceof Response) throw error;
+
+    console.error("orders_action_failed", {
+      message: error?.message,
+      stack: error?.stack,
+    });
+
+    return {
+      errors: normalizeCaughtServiceError(error, "Orders action failed."),
+    };
+  }
+};
+
+async function handleOrdersAction(request) {
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
   const formData = await request.formData();
@@ -1198,38 +1414,28 @@ export const action = async ({ request }) => {
     };
   }
 
+  const routeCreateStartedAt = getSafePerformanceNow();
+  const routeCreateTimings = {};
   const plannedOrderIds = JSON.parse(formData.get("plannedOrderIds") ?? "[]");
+  const routeName = textOrUndefined(formData.get("routeName"));
   const routeScope = JSON.parse(formData.get("routeScope") ?? "null");
-  const submittedOrderScope = String(
-    formData.get("orderScope") ?? ORDER_PLANNING_SCOPE,
-  );
-
-  if (submittedOrderScope === ORDER_HISTORY_SCOPE) {
-    return {
-      errors: [
-        {
-          message:
-            "History / All Orders scope는 조회 전용입니다. route를 만들려면 Planning Scope로 전환해주세요.",
-        },
-      ],
-    };
-  }
 
   if (!Array.isArray(plannedOrderIds) || plannedOrderIds.length === 0) {
     return { errors: [{ message: "Route plan에 추가된 주문이 없습니다." }] };
   }
 
-  const [orderData, departureLocationData, shopTimeZoneData] = await Promise.all([
+  const shopifyDataStartedAt = getSafePerformanceNow();
+  const [orderData, departureLocationData] = await Promise.all([
     fetchShopifyOrders(admin),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
-    fetchShopifyShopTimeZone(admin),
   ]);
-  const shopLocalDate = getShopLocalDate(shopTimeZoneData);
+  routeCreateTimings.shopifyDataMs = roundPerfDuration(getSafePerformanceNow() - shopifyDataStartedAt);
   const plannedOrderIdSet = new Set(plannedOrderIds);
   const plannedShopifyOrders = orderData.orders.filter((order) =>
     plannedOrderIdSet.has(order.id),
   );
   const plannedShopifyOrderSnapshots = getOrderSyncSnapshots(plannedShopifyOrders);
+  const syncOrdersStartedAt = getSafePerformanceNow();
   const syncedOrderData =
     plannedShopifyOrderSnapshots.length > 0
       ? await syncDeliveryOrders(
@@ -1241,6 +1447,7 @@ export const action = async ({ request }) => {
           { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
         )
       : { orders: [], errors: [] };
+  routeCreateTimings.syncOrdersMs = roundPerfDuration(getSafePerformanceNow() - syncOrdersStartedAt);
 
   if ((syncedOrderData.errors ?? []).length > 0) {
     return {
@@ -1252,11 +1459,13 @@ export const action = async ({ request }) => {
     };
   }
 
+  const canonicalOrdersStartedAt = getSafePerformanceNow();
   const canonicalOrderData = await fetchDeliveryOrders(
     request,
     {},
     { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
   );
+  routeCreateTimings.canonicalOrdersMs = roundPerfDuration(getSafePerformanceNow() - canonicalOrdersStartedAt);
 
   if ((canonicalOrderData.errors ?? []).length > 0) {
     return {
@@ -1289,68 +1498,13 @@ export const action = async ({ request }) => {
     };
   }
 
-  const alreadyPlannedOrders = plannedOrders.filter(isOrderRouteCreated);
-
-  if (alreadyPlannedOrders.length > 0) {
-    return {
-      errors: [
-        {
-          message:
-            `이미 계획 이후 단계인 주문이 포함되어 route를 만들지 않았습니다: ${formatOrderNames(alreadyPlannedOrders)}. Orders의 기본 Unplanned view에서 아직 계획되지 않은 주문만 선택해주세요.`,
-        },
-      ],
-    };
-  }
-
-  const expiredDeliveryDateOrders = plannedOrders.filter((order) =>
-    !isOrderRouteCreated(order) &&
-    isOrderRoutePlanningLocked(order, shopLocalDate),
-  );
-
-  if (expiredDeliveryDateOrders.length > 0) {
-    return {
-      errors: [
-        {
-          message:
-            `Delivery 날짜가 지난 주문은 새 route plan에 추가하지 않았습니다: ${formatOrderNames(expiredDeliveryDateOrders)}. All view에서는 상태 확인만 하고, route 생성은 오늘 이후 주문으로 진행해주세요.`,
-        },
-      ],
-    };
-  }
-
-  const nonPlanningScopeOrders = plannedOrders.filter(
-    (order) => !isOrderInPlanningScope(order, shopLocalDate),
-  );
-
-  if (nonPlanningScopeOrders.length > 0) {
-    return {
-      errors: [
-        {
-          message:
-            `Planning scope에 없는 주문은 route를 만들 수 없습니다: ${formatOrderNames(nonPlanningScopeOrders)}. History / All Orders에서는 조회만 하고, 현재/미래 미완료 주문으로 진행해주세요.`,
-        },
-      ],
-    };
-  }
-
-  const unreadyPlannedOrders = plannedOrders.filter((order) => !isOrderReadyToPlan(order));
-
-  if (unreadyPlannedOrders.length > 0) {
-    return {
-      errors: [
-        {
-          message:
-            `Route plan에는 ready 상태의 주문만 보낼 수 있습니다: ${formatOrderNames(unreadyPlannedOrders)}.`,
-        },
-      ],
-    };
-  }
-
   const routePlanPayload = buildCreateRoutePlanPayload({
     departureLocation: departureLocationData.departureLocation,
     plannedOrders,
+    routeName,
     routeScope,
   });
+  const createRoutePlanStartedAt = getSafePerformanceNow();
   const { routePlan, errors: routePlanErrors } = await createDeliveryRoutePlan(
     request,
     routePlanPayload,
@@ -1358,6 +1512,16 @@ export const action = async ({ request }) => {
       sessionToken: shopifySessionToken,
     },
   );
+  routeCreateTimings.createRoutePlanMs = roundPerfDuration(getSafePerformanceNow() - createRoutePlanStartedAt);
+  logDevPerformanceMetric("orders.create_route.action", {
+    ...routeCreateTimings,
+    totalMs: roundPerfDuration(getSafePerformanceNow() - routeCreateStartedAt),
+    plannedOrderCount: plannedOrders.length,
+    syncedOrderCount: syncedOrderData.orders?.length ?? 0,
+    canonicalOrderCount: canonicalOrderData.orders?.length ?? 0,
+    routePlanId: routePlan?.id ?? null,
+    errorCount: routePlanErrors?.length ?? 0,
+  });
 
   if (routePlan?.id) {
     return { routePlan, errors: [] };
@@ -1371,7 +1535,7 @@ export const action = async ({ request }) => {
       ...(routePlanErrors ?? []),
     ],
   };
-};
+}
 
 export const loader = async ({ request }) => {
   const loaderStartedAt = getSafePerformanceNow();
@@ -1449,11 +1613,10 @@ export const loader = async ({ request }) => {
 
   return {
     orders: mergedOrders,
-    errors: [
-      ...(orderData.errors ?? []),
-      ...(departureLocationData.errors ?? []),
-      ...getVisibleDeliveryOrderLoaderErrors(serverOrderData.errors),
-    ],
+    errors: collectServiceErrors(
+      [orderData, departureLocationData, serverOrderData],
+      { ignoredCodes: [DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE] },
+    ),
     departureLocation: departureLocationData.departureLocation,
     shopLocalDate,
     shopTimeZone: shopTimeZoneData.ianaTimezone ?? null,
@@ -1476,6 +1639,7 @@ export default function OrdersPage() {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const { orders, errors, departureLocation, perf, shopLocalDate } = useLoaderData();
+  const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
     [orders],
@@ -1491,39 +1655,62 @@ export default function OrdersPage() {
         : safeOrders,
     [safeOrders, syncedOrders],
   );
-  const orderFilters = useMemo(
+  const urlOrderFilters = useMemo(
     () => getOrderFiltersFromSearchParams(searchParams),
     [searchParams],
   );
+  const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? new Date(),
     [shopLocalDate],
   );
   const orderFilterOptionOrders = useMemo(
     () => filterOrders(displayOrders, {
-      scope: orderFilters.scope,
-      tab: orderFilters.tab,
+      ...orderFilters,
+      tab: "all",
+      deliveryArea: "",
+      deliveryState: "",
+      deliveryWeekday: "",
+      orderedDateFrom: "",
+      orderedDateTo: "",
+      serviceType: "",
       referenceDate: orderFilterReferenceDate,
     }),
-    [displayOrders, orderFilters.scope, orderFilters.tab, orderFilterReferenceDate],
+    [displayOrders, orderFilters, orderFilterReferenceDate],
   );
   const orderFilterOptions = useMemo(
-    () => getOrderFilterOptions(orderFilterOptionOrders),
-    [orderFilterOptionOrders],
-  );
-  const serviceTypeFilterOptions = useMemo(
-    () =>
-      Array.from(
-        new Set([
-          ...ORDER_SERVICE_TYPE_OPTIONS.map((option) => option.value),
-          ...(orderFilterOptions.serviceTypes ?? []),
-        ]),
-      ),
-    [orderFilterOptions.serviceTypes],
+    () => ({
+      deliveryAreas: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
+        ...orderFilters,
+        tab: "all",
+        deliveryArea: "",
+        referenceDate: orderFilterReferenceDate,
+      })).deliveryAreas,
+      deliveryWeekdays: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
+        ...orderFilters,
+        tab: "all",
+        deliveryWeekday: "",
+        referenceDate: orderFilterReferenceDate,
+      })).deliveryWeekdays,
+      deliveryStates: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
+        ...orderFilters,
+        tab: "all",
+        deliveryState: "",
+        referenceDate: orderFilterReferenceDate,
+      })).deliveryStates,
+      serviceTypes: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
+        ...orderFilters,
+        tab: "all",
+        serviceType: "",
+        referenceDate: orderFilterReferenceDate,
+      })).serviceTypes,
+    }),
+    [orderFilterOptionOrders, orderFilters, orderFilterReferenceDate],
   );
   const filteredOrders = useMemo(
     () => filterOrders(displayOrders, {
       ...orderFilters,
+      tab: "all",
       referenceDate: orderFilterReferenceDate,
     }),
     [displayOrders, orderFilters, orderFilterReferenceDate],
@@ -1532,33 +1719,36 @@ export default function OrdersPage() {
     () => hasActiveOrderFilters(orderFilters),
     [orderFilters],
   );
+
+  useEffect(() => {
+    setOptimisticOrderFilters(null);
+  }, [searchParams]);
   const locatedOrders = useMemo(
     () => filteredOrders.filter((order) => order.hasCoordinates),
     [filteredOrders],
   );
-  const protectedOrderAccessError = errors?.some(
-    (error) => error?.code === PROTECTED_ORDER_ACCESS_ERROR_CODE,
-  );
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
   const actionErrors = createRouteClientError
     ? [{ message: createRouteClientError }]
-    : [
-        ...(routePlanFetcher.data?.errors ?? []),
-      ];
-  const visibleOrderErrorMessage = getFirstErrorMessage([
-    ...actionErrors,
-    ...(errors ?? []),
-  ]);
+    : routePlanFetcher.data;
+  const orderPageNoticeMessage = getServiceErrorNotice([
+    actionErrors,
+    { errors },
+  ], { context: "orders_page" });
   const isCreatingRoute = routePlanFetcher.state !== "idle";
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
   );
+  const [hoveredItemPopoverOrderId, setHoveredItemPopoverOrderId] = useState(null);
+  const [pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId] = useState(null);
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
-  const [autoAppliedDeliveryDateFilter, setAutoAppliedDeliveryDateFilter] =
-    useState(null);
-  const [activeDraggedPlanOrderId, setActiveDraggedPlanOrderId] = useState(null);
+  const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
+  const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState(null);
+  const [tableColumnWidths, setTableColumnWidths] = useState(DEFAULT_TABLE_COLUMN_WIDTHS);
+  const [lockedTableWidth, setLockedTableWidth] = useState(null);
+  const tableRef = useRef(null);
   const mapContainerRef = useRef(null);
   const mapLibraryRef = useRef(null);
   const mapRef = useRef(null);
@@ -1570,12 +1760,30 @@ export default function OrdersPage() {
   const initialPerfEmittedRef = useRef(false);
   const submittedRouteSessionTokenRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
+  const orderedDateCalendarRef = useRef(null);
+  const orderedDateButtonRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const [mapStatus, setMapStatus] = useState("idle");
   const [isMapWide, setIsMapWide] = useState(false);
   const [planFitRequest, setPlanFitRequest] = useState(0);
   const [selectedOrderFocusRequest, setSelectedOrderFocusRequest] = useState(0);
+  const [orderedDateCalendarOpen, setOrderedDateCalendarOpen] = useState(false);
+  const [pendingOrderedDateStart, setPendingOrderedDateStart] = useState("");
+  const [orderedDateCalendarMonth, setOrderedDateCalendarMonth] = useState(() =>
+    getCalendarMonthValue(shopLocalDate),
+  );
+  const [orderedDateCalendarPosition, setOrderedDateCalendarPosition] = useState({ left: 0, top: 0 });
+  const orderedDateLabel = formatOrderDateRangeLabel(
+    orderFilters.orderedDateFrom,
+    orderFilters.orderedDateTo,
+  );
+  const orderedDateFilterActive = Boolean(orderFilters.orderedDateFrom || orderFilters.orderedDateTo);
+  const visibleItemPopoverOrderId = pinnedItemPopoverOrderId ?? hoveredItemPopoverOrderId;
+  const orderedDateCalendarDays = useMemo(
+    () => getCalendarDays(orderedDateCalendarMonth),
+    [orderedDateCalendarMonth],
+  );
 
   const sortedOrders = useMemo(() => {
     if (!sortConfig) return filteredOrders;
@@ -1605,10 +1813,8 @@ export default function OrdersPage() {
     [plannedOrderIds],
   );
 
-  const tableOrders = useMemo(
-    () => sortedOrders.filter((order) => !plannedOrderIdSet.has(order.id)),
-    [plannedOrderIdSet, sortedOrders],
-  );
+  const tableOrders = sortedOrders;
+  const tableWidth = lockedTableWidth ? `${lockedTableWidth}px` : "100%";
 
   const plannedOrders = useMemo(() => {
     return plannedOrderIds
@@ -1616,51 +1822,9 @@ export default function OrdersPage() {
       .filter(Boolean);
   }, [displayOrderById, plannedOrderIds]);
 
-  const checkedDeliveryDateLock = useMemo(
-    () => getFirstOrderDeliveryDateByIds(checkedOrderIds, displayOrderById),
-    [checkedOrderIds, displayOrderById],
-  );
-  const plannedDeliveryDateLock = useMemo(
-    () => getOrderDeliveryDateValue(plannedOrders[0]),
-    [plannedOrders],
-  );
-  const routePlanDeliveryDateLock =
-    plannedDeliveryDateLock || checkedDeliveryDateLock;
-  const filteredDeliveryDateLock = useMemo(
-    () => getOrderDeliveryDateValue({ deliveryDate: orderFilters.deliveryDate }),
-    [orderFilters.deliveryDate],
-  );
-
-  const readyPlannedOrders = useMemo(() => plannedOrders.filter(isOrderReadyToPlan), [plannedOrders]);
-  const plannedRouteScope = useMemo(() => buildRouteScopeFromOrders(plannedOrders), [plannedOrders]);
-  const worksetAvailabilityContext = useMemo(
-    () => ({
-      deliveryDateLock: routePlanDeliveryDateLock || filteredDeliveryDateLock,
-      referenceDate: orderFilterReferenceDate,
-      routeScopeKey: plannedRouteScope?.routeScopeKey ?? "",
-      scope: orderFilters.scope,
-    }),
-    [
-      filteredDeliveryDateLock,
-      orderFilterReferenceDate,
-      orderFilters.scope,
-      plannedRouteScope?.routeScopeKey,
-      routePlanDeliveryDateLock,
-    ],
-  );
   const selectableTableOrders = useMemo(
-    () => tableOrders.filter((order) =>
-      isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext),
-    ),
-    [tableOrders, worksetAvailabilityContext],
-  );
-  const tableSelectionState = useMemo(
-    () => getBulkOrderSelectionState(tableOrders, worksetAvailabilityContext),
-    [tableOrders, worksetAvailabilityContext],
-  );
-  const unavailableSummary = useMemo(
-    () => formatUnavailableSummary(tableSelectionState.unavailableReasonCounts),
-    [tableSelectionState.unavailableReasonCounts],
+    () => tableOrders.filter((order) => !plannedOrderIdSet.has(order.id)),
+    [plannedOrderIdSet, tableOrders],
   );
   const plannedLocatedOrders = useMemo(() => plannedOrders.filter((order) => order.hasCoordinates), [plannedOrders]);
   const initialMapCenter = useMemo(
@@ -1688,20 +1852,16 @@ export default function OrdersPage() {
 
     return {
       orderCount: plannedOrders.length,
-      locatedCount: plannedLocatedOrders.length,
-      scopeLabel: formatOrderDeliveryLabel(plannedOrders[0]),
+      itemCount: plannedOrders.reduce((total, order) => total + getOrderItemCount(order), 0),
+      scopeLabel: formatRouteDraftScopeLabel(plannedOrders),
       deliveryAreas,
     };
-  }, [plannedLocatedOrders.length, plannedOrders]);
+  }, [plannedOrders]);
 
   const allVisibleOrdersChecked =
     selectableTableOrders.length > 0 &&
     selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
-  const historyScopeActive = orderFilters.scope === ORDER_HISTORY_SCOPE;
-  const createRouteDisabled =
-    historyScopeActive ||
-    readyPlannedOrders.length === 0 ||
-    routePlanFetcher.state !== "idle";
+  const createRouteDisabled = plannedOrders.length === 0 || routePlanFetcher.state !== "idle";
 
   useEffect(() => {
     if (filteredOrders.length === 0) {
@@ -1716,15 +1876,15 @@ export default function OrdersPage() {
 
   useEffect(() => {
     const displayOrderIds = new Set(displayOrders.map((order) => order.id));
-    const routeCandidateOrderIds = new Set(
+    const selectableOrderIds = new Set(
       filteredOrders
-        .filter((order) => isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext))
+        .filter((order) => !plannedOrderIdSet.has(order.id))
         .map((order) => order.id),
     );
 
     setCheckedOrderIds((currentOrderIds) => {
       const nextOrderIds = currentOrderIds.filter((orderId) =>
-        routeCandidateOrderIds.has(orderId),
+        selectableOrderIds.has(orderId),
       );
 
       return nextOrderIds.length === currentOrderIds.length
@@ -1741,65 +1901,7 @@ export default function OrdersPage() {
         ? currentOrderIds
         : nextOrderIds;
     });
-  }, [displayOrders, filteredOrders, worksetAvailabilityContext]);
-
-  useEffect(() => {
-    if (!routePlanDeliveryDateLock) {
-      return;
-    }
-
-    if (filteredDeliveryDateLock === routePlanDeliveryDateLock) {
-      return;
-    }
-
-    setAutoAppliedDeliveryDateFilter(routePlanDeliveryDateLock);
-
-    setSearchParams(
-      updateOrderFilterSearchParams(searchParams, {
-        ...orderFilters,
-        deliveryDate: routePlanDeliveryDateLock,
-      }),
-      {
-        preventScrollReset: true,
-        replace: true,
-      },
-    );
-  }, [
-    orderFilters,
-    filteredDeliveryDateLock,
-    routePlanDeliveryDateLock,
-    searchParams,
-    setSearchParams,
-  ]);
-
-  useEffect(() => {
-    if (
-      routePlanDeliveryDateLock ||
-      !autoAppliedDeliveryDateFilter ||
-      filteredDeliveryDateLock !== autoAppliedDeliveryDateFilter
-    ) {
-      return;
-    }
-
-    setAutoAppliedDeliveryDateFilter(null);
-    setSearchParams(
-      updateOrderFilterSearchParams(searchParams, {
-        ...orderFilters,
-        deliveryDate: "",
-      }),
-      {
-        preventScrollReset: true,
-        replace: true,
-      },
-    );
-  }, [
-    autoAppliedDeliveryDateFilter,
-    filteredDeliveryDateLock,
-    orderFilters,
-    routePlanDeliveryDateLock,
-    searchParams,
-    setSearchParams,
-  ]);
+  }, [displayOrders, filteredOrders, plannedOrderIdSet]);
 
   const selectedOrder =
     displayOrders.find((order) => order.id === selectedOrderId) ?? filteredOrders[0];
@@ -1818,13 +1920,11 @@ export default function OrdersPage() {
         return { key: columnKey, direction: "ascending" };
       }
 
-      return {
-        key: columnKey,
-        direction:
-          currentSortConfig.direction === "ascending"
-            ? "descending"
-            : "ascending",
-      };
+      if (currentSortConfig.direction === "ascending") {
+        return { key: columnKey, direction: "descending" };
+      }
+
+      return null;
     });
   };
 
@@ -1836,83 +1936,108 @@ export default function OrdersPage() {
     return sortConfig.direction === "ascending" ? " ▲" : " ▼";
   };
 
-  const applyDeliveryDateFilterLock = useCallback((deliveryDate) => {
-    const normalizedDeliveryDate = getOrderDeliveryDateValue({ deliveryDate });
+  const handleColumnResizeStart = (columnIndex, event) => {
+    event.preventDefault();
+    event.stopPropagation();
 
-    if (!normalizedDeliveryDate) {
-      return;
-    }
+    const tableElement = tableRef.current;
+    if (!tableElement) return;
 
-    if (filteredDeliveryDateLock === normalizedDeliveryDate) {
-      return;
-    }
-
-    setAutoAppliedDeliveryDateFilter(normalizedDeliveryDate);
-
-    setSearchParams(
-      updateOrderFilterSearchParams(searchParams, {
-        ...orderFilters,
-        deliveryDate: normalizedDeliveryDate,
-      }),
-      {
-        preventScrollReset: true,
-        replace: true,
-      },
-    );
-  }, [filteredDeliveryDateLock, orderFilters, searchParams, setSearchParams]);
-
-  const applyOrderDeliveryDateSelectionLock = useCallback((order) => {
-    const orderDeliveryDate = getOrderDeliveryDateValue(order);
-
-    if (!orderDeliveryDate) {
-      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR);
-      return null;
-    }
-
-    const currentDeliveryDateLock =
-      routePlanDeliveryDateLock || filteredDeliveryDateLock;
+    const rightColumnIndex = columnIndex + 1;
+    const { tableWidth: measuredTableWidth, widths: startWidths } =
+      getTableColumnPixelState(tableElement);
+    const leftStartWidth = startWidths[columnIndex];
+    const rightStartWidth = startWidths[rightColumnIndex];
 
     if (
-      currentDeliveryDateLock &&
-      orderDeliveryDate !== currentDeliveryDateLock
+      rightColumnIndex >= startWidths.length ||
+      !Number.isFinite(leftStartWidth) ||
+      !Number.isFinite(rightStartWidth)
     ) {
-      applyDeliveryDateFilterLock(currentDeliveryDateLock);
-      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_MISMATCH_ERROR);
-      return null;
+      return;
     }
 
-    applyDeliveryDateFilterLock(orderDeliveryDate);
-    return orderDeliveryDate;
-  }, [
-    applyDeliveryDateFilterLock,
-    filteredDeliveryDateLock,
-    routePlanDeliveryDateLock,
-  ]);
+    setLockedTableWidth(measuredTableWidth);
+    setTableColumnWidths(startWidths);
+
+    const startX = event.clientX;
+    const minDelta = MIN_TABLE_COLUMN_WIDTH - leftStartWidth;
+    const maxDelta = rightStartWidth - MIN_TABLE_COLUMN_WIDTH;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+
+    document.body.style.cursor = "col-resize";
+    document.body.style.userSelect = "none";
+
+    const handlePointerMove = (moveEvent) => {
+      const rawDelta = Math.round(moveEvent.clientX - startX);
+      const delta = Math.max(minDelta, Math.min(rawDelta, maxDelta));
+
+      setTableColumnWidths(
+        startWidths.map((width, widthIndex) => {
+          if (widthIndex === columnIndex) return leftStartWidth + delta;
+          if (widthIndex === rightColumnIndex) return rightStartWidth - delta;
+          return width;
+        }),
+      );
+    };
+
+    const stopResize = () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener("pointermove", handlePointerMove);
+      window.removeEventListener("pointerup", stopResize);
+      window.removeEventListener("pointercancel", stopResize);
+    };
+
+    window.addEventListener("pointermove", handlePointerMove);
+    window.addEventListener("pointerup", stopResize);
+    window.addEventListener("pointercancel", stopResize);
+  };
+
+  const handleColumnAutoFit = (columnIndex, event) => {
+    event.preventDefault();
+    event.stopPropagation();
+
+    const tableElement = tableRef.current;
+    if (!tableElement) return;
+
+    const rightColumnIndex = columnIndex + 1;
+    const { tableWidth: measuredTableWidth, widths: startWidths } =
+      getTableColumnPixelState(tableElement);
+    const leftStartWidth = startWidths[columnIndex];
+    const rightStartWidth = startWidths[rightColumnIndex];
+
+    if (
+      rightColumnIndex >= startWidths.length ||
+      !Number.isFinite(leftStartWidth) ||
+      !Number.isFinite(rightStartWidth)
+    ) {
+      return;
+    }
+
+    const rawDelta = getTableColumnFitWidth(tableElement, columnIndex) - leftStartWidth;
+    const minDelta = MIN_TABLE_COLUMN_WIDTH - leftStartWidth;
+    const maxDelta = rightStartWidth - MIN_TABLE_COLUMN_WIDTH;
+    const delta = Math.max(minDelta, Math.min(rawDelta, maxDelta));
+
+    setLockedTableWidth(measuredTableWidth);
+    setTableColumnWidths(
+      startWidths.map((width, widthIndex) => {
+        if (widthIndex === columnIndex) return leftStartWidth + delta;
+        if (widthIndex === rightColumnIndex) return rightStartWidth - delta;
+        return width;
+      }),
+    );
+  };
 
   const handleOrderFilterChange = (filterKey, filterValue) => {
-    const nextFilterValue =
-      filterKey === "deliveryDate" &&
-      routePlanDeliveryDateLock &&
-      filterValue !== routePlanDeliveryDateLock
-        ? routePlanDeliveryDateLock
-        : filterValue;
-
-    if (filterKey === "deliveryDate" && filterValue !== nextFilterValue) {
-      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR);
-    }
-
-    if (filterKey === "deliveryDate") {
-      setAutoAppliedDeliveryDateFilter(
-        routePlanDeliveryDateLock && nextFilterValue === routePlanDeliveryDateLock
-          ? routePlanDeliveryDateLock
-          : null,
-      );
-    }
-
     const nextFilters = {
       ...orderFilters,
-      [filterKey]: nextFilterValue,
+      [filterKey]: filterValue,
     };
+
+    setOptimisticOrderFilters(nextFilters);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -1923,23 +2048,22 @@ export default function OrdersPage() {
     );
   };
 
-  const handleClearOrderFilters = () => {
-    if (routePlanDeliveryDateLock) {
-      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR);
+  const handleClearOrderFilter = (filterKey) => {
+    const nextFilters = { ...orderFilters };
+
+    if (filterKey === "orderedDate") {
+      nextFilters.orderedDateFrom = "";
+      nextFilters.orderedDateTo = "";
+      setPendingOrderedDateStart("");
+      setOrderedDateCalendarOpen(false);
+    } else {
+      nextFilters[filterKey] = "";
     }
 
-    setAutoAppliedDeliveryDateFilter(routePlanDeliveryDateLock || null);
+    setOptimisticOrderFilters(nextFilters);
 
     setSearchParams(
-      updateOrderFilterSearchParams(searchParams, {
-        deliveryArea: "",
-        deliveryDate: routePlanDeliveryDateLock,
-        orderedDate: "",
-        scope: ORDER_PLANNING_SCOPE,
-        search: "",
-        serviceType: "",
-        tab: "unplanned",
-      }),
+      updateOrderFilterSearchParams(searchParams, nextFilters),
       {
         preventScrollReset: true,
         replace: true,
@@ -1947,8 +2071,123 @@ export default function OrdersPage() {
     );
   };
 
-  const handleClearSelection = () => {
-    setCheckedOrderIds([]);
+  const applyOrderedDateRange = useCallback((startDate, endDate) => {
+    const nextFilters = {
+      ...orderFilters,
+      orderedDateFrom: startDate,
+      orderedDateTo: endDate,
+    };
+
+    setOptimisticOrderFilters(nextFilters);
+
+    setSearchParams(
+      updateOrderFilterSearchParams(searchParams, nextFilters),
+      {
+        preventScrollReset: true,
+        replace: true,
+      },
+    );
+  }, [orderFilters, searchParams, setSearchParams]);
+
+  const positionOrderedDateCalendar = useCallback(() => {
+    const rect = orderedDateButtonRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    setOrderedDateCalendarPosition({
+      left: Math.max(8, rect.left),
+      top: rect.bottom + 8,
+    });
+  }, []);
+
+  const handleOrderedDateCalendarOpen = () => {
+    positionOrderedDateCalendar();
+    setOrderedDateCalendarMonth(
+      getCalendarMonthValue(orderFilters.orderedDateFrom || shopLocalDate),
+    );
+    setOrderedDateCalendarOpen((isOpen) => !isOpen);
+  };
+
+  const handleOrderedDatePick = (dateValue) => {
+    if (!pendingOrderedDateStart) {
+      setPendingOrderedDateStart(dateValue);
+      return;
+    }
+
+    const [startDate, endDate] = [pendingOrderedDateStart, dateValue].sort();
+    applyOrderedDateRange(startDate, endDate);
+    setPendingOrderedDateStart("");
+    setOrderedDateCalendarOpen(false);
+  };
+
+  useEffect(() => {
+    if (!pinnedItemPopoverOrderId) return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      if (event.target?.closest?.('[data-order-items-popover-root="true"]')) return;
+      setPinnedItemPopoverOrderId(null);
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [pinnedItemPopoverOrderId]);
+
+  useEffect(() => {
+    if (!orderedDateCalendarOpen) return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      if (orderedDateCalendarRef.current?.contains(event.target)) return;
+      if (orderedDateButtonRef.current?.contains(event.target)) return;
+
+      if (pendingOrderedDateStart) {
+        applyOrderedDateRange(pendingOrderedDateStart, pendingOrderedDateStart);
+      }
+
+      setPendingOrderedDateStart("");
+      setOrderedDateCalendarOpen(false);
+    };
+    const handleWindowLayoutChange = () => positionOrderedDateCalendar();
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    window.addEventListener("resize", handleWindowLayoutChange);
+    window.addEventListener("scroll", handleWindowLayoutChange, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      window.removeEventListener("resize", handleWindowLayoutChange);
+      window.removeEventListener("scroll", handleWindowLayoutChange, true);
+    };
+  }, [
+    applyOrderedDateRange,
+    orderedDateCalendarOpen,
+    pendingOrderedDateStart,
+    positionOrderedDateCalendar,
+  ]);
+
+  const handleClearOrderFilters = () => {
+    const nextFilters = {
+      deliveryArea: "",
+      deliveryDate: "",
+      deliveryState: "",
+      deliveryWeekday: "",
+      orderedDate: "",
+      orderedDateFrom: "",
+      orderedDateTo: "",
+      scope: ORDER_PLANNING_SCOPE,
+      search: "",
+      serviceType: "",
+      tab: "unplanned",
+    };
+
+    setOptimisticOrderFilters(nextFilters);
+    setPendingOrderedDateStart("");
+    setOrderedDateCalendarOpen(false);
+
+    setSearchParams(
+      updateOrderFilterSearchParams(searchParams, nextFilters),
+      {
+        preventScrollReset: true,
+        replace: true,
+      },
+    );
   };
 
   const clearMapRecoveryTimer = useCallback(() => {
@@ -1985,6 +2224,14 @@ export default function OrdersPage() {
 
   const handleToggleMapWide = () => {
     setIsMapWide((currentIsMapWide) => !currentIsMapWide);
+  };
+
+  const handleZoomInMap = () => {
+    mapRef.current?.zoomIn({ duration: 250 });
+  };
+
+  const handleZoomOutMap = () => {
+    mapRef.current?.zoomOut({ duration: 250 });
   };
 
   const fitMapToOrders = useCallback((ordersToFit) => {
@@ -2025,61 +2272,27 @@ export default function OrdersPage() {
   }, [isMapReady]);
 
   const toggleOrderCheck = (orderId) => {
-    const order = displayOrderById.get(orderId);
-    const isAlreadyChecked = checkedOrderIdSet.has(orderId);
-
-    if (
-      !isAlreadyChecked &&
-      !isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext)
-    ) {
-      const reasons = getOrderUnavailableReasons(order, worksetAvailabilityContext);
-      setCreateRouteClientError(
-        reasons.length > 0
-          ? `This order is unavailable: ${reasons.map(formatUnavailableReason).join(", ")}.`
-          : "This order is unavailable.",
-      );
-      return;
-    }
-
-    if (!isAlreadyChecked && !applyOrderDeliveryDateSelectionLock(order)) {
-      return;
-    }
+    if (plannedOrderIdSet.has(orderId)) return;
 
     setCheckedOrderIds((currentOrderIds) =>
-      isAlreadyChecked
+      checkedOrderIdSet.has(orderId)
         ? currentOrderIds.filter((selectedOrderId) => selectedOrderId !== orderId)
         : [...currentOrderIds, orderId],
     );
+    setCreateRouteClientError(null);
   };
 
   const toggleAllVisibleOrderChecks = () => {
     if (!allVisibleOrdersChecked) {
-      const targetDeliveryDate =
-        routePlanDeliveryDateLock ||
-        filteredDeliveryDateLock ||
-        getOrderDeliveryDateValue(selectableTableOrders[0]);
-      const sameDateSelectableOrders = getOrdersForDeliveryDate(
-        selectableTableOrders,
-        targetDeliveryDate,
-      );
-
-      if (sameDateSelectableOrders.length === 0) {
-        setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR);
-        return;
-      }
-
-      if (!routePlanDeliveryDateLock) {
-        applyDeliveryDateFilterLock(targetDeliveryDate);
-      }
-
       setCheckedOrderIds((currentOrderIds) =>
         Array.from(
           new Set([
             ...currentOrderIds,
-            ...sameDateSelectableOrders.map((order) => order.id),
+            ...selectableTableOrders.map((order) => order.id),
           ]),
         ),
       );
+      setCreateRouteClientError(null);
       return;
     }
 
@@ -2090,201 +2303,74 @@ export default function OrdersPage() {
   };
 
   const handleAddOrderToPlan = useCallback((orderId) => {
-    const order = displayOrderById.get(orderId);
-    const targetRouteScopeKey = plannedRouteScope?.routeScopeKey ?? order?.routeScopeKey;
-    const availabilityContext = {
-      ...worksetAvailabilityContext,
-      routeScopeKey: targetRouteScopeKey,
-    };
-    const unavailableReasons = getOrderUnavailableReasons(order, availabilityContext);
+    if (plannedOrderIdSet.has(orderId)) return;
 
-    if (unavailableReasons.length > 0) {
-      setCreateRouteClientError(
-        `This order is unavailable: ${unavailableReasons.map(formatUnavailableReason).join(", ")}.`,
-      );
-      return;
-    }
+    const nextOrderIds = Array.from(new Set([...plannedOrderIds, orderId]));
+    const nextOrders = nextOrderIds
+      .map((nextOrderId) => displayOrderById.get(nextOrderId))
+      .filter(Boolean);
 
-    if (isOrderRouteCreated(order)) {
-      setCreateRouteClientError("이미 route가 생성된 주문은 route plan에 다시 추가할 수 없습니다.");
-      return;
-    }
-
-    if (isOrderRoutePlanningLocked(order, orderFilterReferenceDate)) {
-      setCreateRouteClientError("Delivery 날짜가 지난 주문은 새 route plan에 추가할 수 없습니다.");
-      return;
-    }
-
-    if (!isOrderReadyToPlan(order)) {
-      setCreateRouteClientError("ready 상태 주문만 route plan에 추가할 수 있습니다.");
-      return;
-    }
-
-    if (!applyOrderDeliveryDateSelectionLock(order)) {
-      return;
-    }
-
-    if (!order?.routeScopeKey || order.routeScopeKey !== targetRouteScopeKey) {
-      setCreateRouteClientError("같은 배송일/세션 주문만 route plan에 추가할 수 있습니다.");
-      return;
-    }
-
-    setPlannedOrderIds((currentOrderIds) =>
-      currentOrderIds.includes(orderId)
-        ? currentOrderIds
-        : [...currentOrderIds, orderId],
-    );
+    setPlannedOrderIds(nextOrderIds);
+    setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setCheckedOrderIds((currentOrderIds) =>
       currentOrderIds.filter((checkedOrderId) => checkedOrderId !== orderId),
     );
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
-  }, [
-    applyOrderDeliveryDateSelectionLock,
-    displayOrderById,
-    orderFilterReferenceDate,
-    plannedRouteScope,
-    worksetAvailabilityContext,
-  ]);
+  }, [displayOrderById, plannedOrderIdSet, plannedOrderIds]);
 
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
 
-    const checkedOrders = checkedOrderIds
+    const selectedOrderIds = checkedOrderIds.filter((orderId) =>
+      displayOrderById.has(orderId) && !plannedOrderIdSet.has(orderId),
+    );
+
+    if (selectedOrderIds.length === 0) return;
+
+    const nextOrderIds = Array.from(new Set([...plannedOrderIds, ...selectedOrderIds]));
+    const nextOrders = nextOrderIds
       .map((orderId) => displayOrderById.get(orderId))
       .filter(Boolean);
-    const selectedOrders = checkedOrders.filter((order) =>
-      isOrderSelectableForCurrentWorkset(order, worksetAvailabilityContext),
-    );
 
-    if (selectedOrders.length === 0) {
-      const blockedState = getBulkOrderSelectionState(checkedOrders, worksetAvailabilityContext);
-      setCreateRouteClientError(
-        blockedState.unavailableCount > 0
-          ? `No selected orders are available. ${formatUnavailableSummary(blockedState.unavailableReasonCounts)}.`
-          : "ready 상태 주문만 route plan에 추가할 수 있습니다.",
-      );
-      return;
-    }
-
-    const targetDeliveryDate =
-      routePlanDeliveryDateLock || getOrderDeliveryDateValue(selectedOrders[0]);
-    const sameDateSelectedOrders = getOrdersForDeliveryDate(
-      selectedOrders,
-      targetDeliveryDate,
-    );
-
-    if (!targetDeliveryDate || sameDateSelectedOrders.length === 0) {
-      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_REQUIRED_ERROR);
-      return;
-    }
-
-    applyDeliveryDateFilterLock(targetDeliveryDate);
-
-    const targetRouteScopeKey = plannedRouteScope?.routeScopeKey ?? sameDateSelectedOrders.find((order) => order.routeScopeKey)?.routeScopeKey;
-    const scopedSelectedOrders = sameDateSelectedOrders.filter((order) => order.routeScopeKey === targetRouteScopeKey);
-
-    if (!targetRouteScopeKey || scopedSelectedOrders.length === 0) {
-      setCreateRouteClientError("같은 배송일/세션 주문만 route plan에 추가할 수 있습니다.");
-      return;
-    }
-
-    if (sameDateSelectedOrders.length !== selectedOrders.length) {
-      setCreateRouteClientError(ROUTE_PLAN_DELIVERY_DATE_PARTIAL_ADD_ERROR);
-    } else if (scopedSelectedOrders.length !== sameDateSelectedOrders.length) {
-      setCreateRouteClientError("같은 배송일/세션 주문만 route plan에 추가했습니다.");
-    } else {
-      setCreateRouteClientError(null);
-    }
-
-    const scopedOrderIds = scopedSelectedOrders.map((order) => order.id);
-
-    setPlannedOrderIds((currentOrderIds) =>
-      Array.from(new Set([...currentOrderIds, ...scopedOrderIds])),
-    );
+    setPlannedOrderIds(nextOrderIds);
+    setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setCheckedOrderIds([]);
+    setCreateRouteClientError(null);
     setPlanFitRequest((requestCount) => requestCount + 1);
-  };
-
-  const handleRemoveFromPlan = (orderId) => {
-    setPlannedOrderIds((currentOrderIds) =>
-      currentOrderIds.filter((plannedOrderId) => plannedOrderId !== orderId),
-    );
-    setActiveDraggedPlanOrderId((currentOrderId) =>
-      currentOrderId === orderId ? null : currentOrderId,
-    );
   };
 
   const handleClearPlan = () => {
     setPlannedOrderIds([]);
-    setActiveDraggedPlanOrderId(null);
+    setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
+    setRouteAssignActionsOpen(false);
   };
-
-  const handlePlanOrderDragStart = useCallback((event, orderId) => {
-    setActiveDraggedPlanOrderId(orderId);
-    event.dataTransfer.effectAllowed = "move";
-    event.dataTransfer.setData("text/plain", orderId);
-  }, []);
-
-  const handlePlanOrderDragOver = useCallback((event) => {
-    event.preventDefault();
-    event.dataTransfer.dropEffect = "move";
-  }, []);
-
-  const handlePlanOrderDrop = useCallback((event, targetOrderId) => {
-    event.preventDefault();
-    const sourceOrderId = activeDraggedPlanOrderId ?? event.dataTransfer.getData("text/plain");
-
-    setPlannedOrderIds((currentOrderIds) =>
-      reorderOrderIds(currentOrderIds, sourceOrderId, targetOrderId),
-    );
-    setActiveDraggedPlanOrderId(null);
-  }, [activeDraggedPlanOrderId]);
-
-  const handlePlanOrderDragEnd = useCallback(() => {
-    setActiveDraggedPlanOrderId(null);
-  }, []);
 
   const handleZoomToPlanned = () => {
     fitMapToOrders(routeFitLocations);
   };
 
+  const handleToggleRouteAssignActions = () => {
+    if (createRouteDisabled) return;
+
+    setRouteAssignActionsOpen((isOpen) => !isOpen);
+  };
+
+
   const handleCreateRoute = async () => {
     if (plannedOrderIds.length === 0 || isCreatingRoute) return;
-
-    if (historyScopeActive) {
-      setCreateRouteClientError(
-        "History / All Orders scope는 조회 전용입니다. route를 만들려면 Planning Scope로 전환해주세요.",
-      );
-      return;
-    }
-
-    if (readyPlannedOrders.length === 0) {
-      setCreateRouteClientError("Route plan에는 ready 상태의 주문만 보낼 수 있습니다.");
-      return;
-    }
-
-    if (plannedOrders.some((order) => isOrderRoutePlanningLocked(order, orderFilterReferenceDate))) {
-      setCreateRouteClientError("이미 route가 있거나 Delivery 날짜가 지난 주문은 route plan을 생성할 수 없습니다.");
-      return;
-    }
-
-    const routeDraftScope = buildRouteScopeFromOrders(readyPlannedOrders);
-
-    if (!routeDraftScope) {
-      setCreateRouteClientError("같은 배송일/세션 주문만 route plan을 생성할 수 있습니다.");
-      return;
-    }
 
     try {
       setCreateRouteClientError(null);
       const sessionToken = await shopify.idToken();
       submittedRouteSessionTokenRef.current = sessionToken;
 
+      const routeDraftScope = buildRouteScopeFromOrders(plannedOrders);
       const formData = new FormData();
       formData.set("_intent", "createRoutePlan");
-      formData.set("plannedOrderIds", JSON.stringify(readyPlannedOrders.map((order) => order.id)));
+      formData.set("plannedOrderIds", JSON.stringify(plannedOrders.map((order) => order.id)));
       formData.set("routeScope", JSON.stringify(routeDraftScope));
+      formData.set("routeName", routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE);
       formData.set("orderScope", orderFilters.scope);
       formData.set("shopifySessionToken", sessionToken);
       routePlanFetcher.submit(formData, { method: "post" });
@@ -2329,7 +2415,9 @@ export default function OrdersPage() {
     const createdRoutePlan = routePlanFetcher.data?.routePlan;
     const sessionToken = submittedRouteSessionTokenRef.current;
 
-    if (!createdRoutePlan?.id || !sessionToken) return;
+    if (!sessionToken) return;
+
+    if (!createdRoutePlan?.id) return;
 
     submittedRouteSessionTokenRef.current = null;
     navigate(`/app/routes/${createdRoutePlan.id}?id_token=${encodeURIComponent(sessionToken)}`);
@@ -2397,10 +2485,6 @@ export default function OrdersPage() {
       });
       installMissingMapImageFallback(mapRef.current);
 
-      mapRef.current.addControl(
-        new maplibregl.NavigationControl({ showCompass: false }),
-        "top-right",
-      );
       const mapConstructMs = roundPerfDuration(
         performance.now() - mapConstructStartedAt,
       );
@@ -2528,7 +2612,6 @@ export default function OrdersPage() {
             order,
             plannedIndex,
             handleAddOrderToPlan,
-            worksetAvailabilityContext,
           ),
         )
         .addTo(map);
@@ -2572,7 +2655,6 @@ export default function OrdersPage() {
     isMapReady,
     locatedOrders,
     plannedOrderIds,
-    worksetAvailabilityContext,
   ]);
 
   useEffect(() => {
@@ -2629,51 +2711,74 @@ export default function OrdersPage() {
 
   return (
     <TabLayout
-      title="Orders"
       primaryExpanded={isMapWide}
-      primary={
-        <div style={mapFrameStyle}>
-          <div style={mapToolbarStyle}>
-            <button
-              type="button"
-              style={mapToolbarButtonStyle}
-              aria-label={isMapWide ? "Restore map width" : "Expand map width"}
-              onClick={handleToggleMapWide}
-            >
-              {renderWidthIcon(isMapWide)}
-            </button>
-            <button
-              type="button"
-              style={mapToolbarButtonStyle}
-              aria-label="Refresh map"
-              onClick={handleRefreshMap}
-            >
-              {renderRefreshIcon()}
-            </button>
-            {mapStatus !== "idle" ? (
-              <span
-                style={mapStatusStyle}
-                role="status"
-                aria-label={
-                  mapStatus === "recovering" ? "Map is refreshing" : "Map refresh failed"
-                }
-              >
-                <span aria-hidden="true">
-                  {mapStatus === "recovering" ? "…" : "!"}
-                </span>
-              </span>
-            ) : null}
+      notice={
+        orderPageNoticeMessage ? (
+          <div className="orders-error-filter" role="alert" style={orderPageNoticeStyle}>
+            {orderPageNoticeMessage}
           </div>
-          <div
-            id="orders-map"
-            ref={mapContainerRef}
-            style={mapCanvasStyle}
-            aria-label="Shopify delivery order map"
-          />
-        </div>
+        ) : null
+      }
+      primary={
+        <MapPanel
+          ariaLabel="Shopify delivery order map"
+          canvasRef={mapContainerRef}
+          canvasStyle={ordersMapCanvasStyle}
+          id="orders-map"
+          toolbar={
+            <MapToolbar
+              actions={[
+                {
+                  ariaLabel: "Zoom map in",
+                  icon: renderMapZoomInIcon(),
+                  onClick: handleZoomInMap,
+                },
+                {
+                  ariaLabel: "Zoom map out",
+                  icon: renderMapZoomOutIcon(),
+                  onClick: handleZoomOutMap,
+                },
+                {
+                  ariaLabel: isMapWide ? "Restore map width" : "Expand map width",
+                  icon: renderMapWidthIcon(isMapWide),
+                  onClick: handleToggleMapWide,
+                },
+                {
+                  ariaLabel: "Fit highlighted map markers",
+                  disabled: routeFitLocations.length === 0,
+                  icon: renderMapFitIcon(),
+                  onClick: handleZoomToPlanned,
+                },
+                {
+                  ariaLabel: "Refresh map",
+                  icon: renderMapRefreshIcon(),
+                  onClick: handleRefreshMap,
+                },
+              ]}
+              statusGlyph={mapStatus === "recovering" ? "…" : "!"}
+              statusLabel={
+                mapStatus !== "idle"
+                  ? mapStatus === "recovering"
+                    ? "Map is refreshing"
+                    : "Map refresh failed"
+                  : null
+              }
+            />
+          }
+        />
       }
       secondary={
         <div className="order-route-plan" style={routePlanPanelStyle}>
+          <label style={routePlanTitleGroupStyle}>
+            <span style={routePlanTitleLabelStyle}>Title</span>
+            <input
+              aria-label="Route plan title"
+              value={routePlanTitle}
+              onChange={(event) => setRoutePlanTitle(event.currentTarget.value)}
+              placeholder={DEFAULT_ROUTE_PLAN_TITLE}
+              style={routePlanTitleFieldStyle}
+            />
+          </label>
           <div style={routePlanDetailStyle}>
             <div style={routePlanHeaderStyle}>
               <s-heading>Route plan</s-heading>
@@ -2685,9 +2790,10 @@ export default function OrdersPage() {
                       ? disabledCreateRouteButtonStyle
                       : createRouteButtonStyle
                   }
+                  aria-expanded={routeAssignActionsOpen}
                   disabled={createRouteDisabled}
-                  onClick={handleCreateRoute}
-                >Create route</button>
+                  onClick={handleToggleRouteAssignActions}
+                >Assign to route</button>
                 <button
                   type="button"
                   style={
@@ -2700,12 +2806,54 @@ export default function OrdersPage() {
                 >Clear plan</button>
               </div>
             </div>
+            <div
+              style={{
+                ...routeAssignActionsStyle,
+                ...(routeAssignActionsOpen
+                  ? routeAssignActionsOpenStyle
+                  : routeAssignActionsClosedStyle),
+              }}
+            >
+              <button
+                type="button"
+                style={disabledRouteAssignActionButtonStyle}
+                disabled={true}
+              >Add to route</button>
+              <button
+                type="button"
+                style={
+                  createRouteDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={createRouteDisabled}
+                onClick={handleCreateRoute}
+              >Create route</button>
+            </div>
+          </div>
+
+          <div style={routePlanDetailStyle}>
+            <div style={routePlanHeaderStyle}>
+              <s-heading>Inventory plan</s-heading>
+              <div style={routePlanHeaderActionsStyle}>
+                <button
+                  type="button"
+                  style={disabledPlanButtonStyle}
+                  disabled={true}
+                >Add</button>
+                <button
+                  type="button"
+                  style={disabledPlanButtonStyle}
+                  disabled={true}
+                >Create</button>
+              </div>
+            </div>
           </div>
 
           <div style={routePlanScrollAreaStyle}>
-            <div style={routeReadinessStyle} aria-label="Route readiness">
+            <div className="order-route-summary" style={routeReadinessStyle} aria-label="Order summary">
               <div style={routeReadinessHeaderStyle}>
-                <s-heading>Route readiness</s-heading>
+                <s-heading>Order summary</s-heading>
                 <button
                   type="button"
                   style={
@@ -2718,223 +2866,246 @@ export default function OrdersPage() {
                   onClick={handleZoomToPlanned}
                 >Zoom to planned</button>
               </div>
-              <div style={routeReadinessGridStyle}>
+              <div className="order-route-summary-grid" style={routeReadinessGridStyle}>
                 <div style={routeReadinessItemStyle}>
-                  Scope: {routeDraftSummary.scopeLabel}
+                  <span>Scope</span>
+                  <span style={routeReadinessValueStyle} title={routeDraftSummary.scopeLabel}>
+                    {routeDraftSummary.scopeLabel}
+                  </span>
                 </div>
                 <div style={routeReadinessItemStyle}>
-                  Orders: {routeDraftSummary.orderCount}
+                  <span>Orders</span>
+                  <span style={routeReadinessValueStyle}>{routeDraftSummary.orderCount}</span>
                 </div>
                 <div style={routeReadinessItemStyle}>
-                  Coords: {routeDraftSummary.locatedCount}/{routeDraftSummary.orderCount}
+                  <span>Areas</span>
+                  <span
+                    style={routeReadinessValueStyle}
+                    title={formatRouteDraftList(routeDraftSummary.deliveryAreas)}
+                  >
+                    {formatRouteDraftAreaSummary(routeDraftSummary.deliveryAreas)}
+                  </span>
                 </div>
                 <div style={routeReadinessItemStyle}>
-                  Areas: {formatRouteDraftList(routeDraftSummary.deliveryAreas)}
+                  <span>Items</span>
+                  <span style={routeReadinessValueStyle}>{routeDraftSummary.itemCount}</span>
                 </div>
               </div>
             </div>
-
-            {plannedOrders.length === 0 ? (
-              <div style={routePlanEmptyStyle}>
-                Plan이 비어있습니다.
-              </div>
-            ) : (
-              <div style={routePlanListStyle} aria-label="Route plan orders">
-                {plannedOrders.map((order, orderIndex) => (
-                  <div
-                    draggable={true}
-                    key={order.id}
-                    onDragEnd={handlePlanOrderDragEnd}
-                    onDragOver={handlePlanOrderDragOver}
-                    onDragStart={(event) => handlePlanOrderDragStart(event, order.id)}
-                    onDrop={(event) => handlePlanOrderDrop(event, order.id)}
-                    style={
-                      activeDraggedPlanOrderId === order.id
-                        ? routePlanDraggingItemStyle
-                        : routePlanItemStyle
-                    }
-                  >
-                    <div style={routePlanItemHeaderStyle}>
-                      <span
-                        aria-label={`Drag route plan order ${orderIndex + 1}`}
-                        role="img"
-                        style={routePlanDragHandleStyle}
-                      >⋮</span>
-                      <button
-                        type="button"
-                        className="route-plan-address-button"
-                        style={routePlanOrderButtonStyle}
-                        onClick={() => handleSelectOrder(order.id)}
-                      >
-                        {orderIndex + 1}. {order.address}
-                      </button>
-                      <button
-                        type="button"
-                        style={removeFromPlanButtonStyle}
-                        aria-label={`Remove ${order.name} from route plan`}
-                        onClick={() => handleRemoveFromPlan(order.id)}
-                      >Remove</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
           </div>
         </div>
       }
       lower={
         <div style={orderTableLayoutStyle}>
-            {protectedOrderAccessError ? (
-              <div role="alert" style={compactAlertStyle}>
-                Shopify Order 보호 고객 데이터 접근이 아직 활성화되지 않았습니다.
-                Dev Dashboard의 Protected customer data access에서 Protected
-                customer data와 필요한 고객 필드(Name, Address, Phone)를 저장한 뒤
-                앱을 다시 열어주세요.
-              </div>
-            ) : visibleOrderErrorMessage ? (
-              <div role="alert" style={compactAlertStyle}>
-                {visibleOrderErrorMessage}
-              </div>
-            ) : null}
           <div style={orderControlsStyle}>
-            <div aria-label="Order planning tabs" role="tablist" style={orderStatusTabsStyle}>
-              {ORDER_STATUS_TABS.map((tab) => (
+            <div style={orderFilterDateFieldStyle}>
+              {!orderedDateFilterActive ? <span style={orderFilterLabelStyle}>Order date</span> : null}
+              <button
+                ref={orderedDateButtonRef}
+                aria-label="Filter orders by ordered date"
+                style={orderFilterDateButtonStyle}
+                type="button"
+                onClick={handleOrderedDateCalendarOpen}
+              >{orderedDateLabel}</button>
+              {orderedDateFilterActive ? (
                 <button
-                  key={tab.value}
                   type="button"
-                  role="tab"
-                  aria-selected={orderFilters.tab === tab.value}
-                  style={
-                    orderFilters.tab === tab.value
-                      ? activeOrderFilterButtonStyle
-                      : orderFilterButtonStyle
-                  }
-                  onClick={() => handleOrderFilterChange("tab", tab.value)}
-                >
-                  {tab.label}
-                </button>
-              ))}
+                  aria-label="Clear ordered date filter"
+                  style={orderFilterClearButtonStyle}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => handleClearOrderFilter("orderedDate")}
+                >×</button>
+              ) : (
+                renderOrderFilterChevron()
+              )}
+              {orderedDateCalendarOpen
+                ? createPortal(
+                    <div
+                      ref={orderedDateCalendarRef}
+                      style={{
+                        ...orderDateCalendarStyle,
+                        left: `${orderedDateCalendarPosition.left}px`,
+                        top: `${orderedDateCalendarPosition.top}px`,
+                      }}
+                    >
+                      <div style={orderDateCalendarHeaderStyle}>
+                        <button
+                          type="button"
+                          style={orderFilterButtonStyle}
+                          onClick={() => setOrderedDateCalendarMonth(shiftCalendarMonth(orderedDateCalendarMonth, -1))}
+                        >‹</button>
+                        <strong>{formatCalendarMonthLabel(orderedDateCalendarMonth)}</strong>
+                        <button
+                          type="button"
+                          style={orderFilterButtonStyle}
+                          onClick={() => setOrderedDateCalendarMonth(shiftCalendarMonth(orderedDateCalendarMonth, 1))}
+                        >›</button>
+                      </div>
+                      <div style={orderDateCalendarGridStyle}>
+                        {CALENDAR_WEEKDAYS.map((weekday) => (
+                          <span key={weekday} style={orderDateCalendarWeekdayStyle}>{weekday}</span>
+                        ))}
+                        {orderedDateCalendarDays.map((day) => (
+                          <button
+                            key={day.dateValue}
+                            type="button"
+                            style={getCalendarDayStyle(day, orderFilters, pendingOrderedDateStart)}
+                            onClick={() => handleOrderedDatePick(day.dateValue)}
+                          >{day.dayOfMonth}</button>
+                        ))}
+                      </div>
+                    </div>,
+                    document.body,
+                  )
+                : null}
             </div>
-            <select
-              aria-label="Choose order scope"
-              style={orderFilterSelectStyle}
-              value={orderFilters.scope}
-              onChange={(event) => handleOrderFilterChange("scope", event.currentTarget.value)}
-            >
-              <option value={ORDER_PLANNING_SCOPE}>Planning Scope</option>
-              <option value={ORDER_HISTORY_SCOPE}>History / All Orders</option>
-            </select>
-            <select
-              aria-label="Filter orders by delivery area"
-              style={orderFilterSelectStyle}
-              value={orderFilters.deliveryArea}
-              onChange={(event) => handleOrderFilterChange("deliveryArea", event.currentTarget.value)}
-            >
-              <option value="">All areas</option>
-              {orderFilterOptions.deliveryAreas.map((deliveryArea) => (
-                <option key={deliveryArea} value={deliveryArea}>
-                  {deliveryArea}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Filter orders by delivery date"
-              style={orderFilterSelectStyle}
-              value={orderFilters.deliveryDate}
-              onChange={(event) => handleOrderFilterChange("deliveryDate", event.currentTarget.value)}
-            >
-              <option value="">All delivery dates</option>
-              {orderFilterOptions.deliveryDates.map((deliveryDate) => (
-                <option key={deliveryDate} value={deliveryDate}>
-                  {formatFilterDateLabel(deliveryDate)}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Filter orders by service type"
-              style={orderFilterSelectStyle}
-              value={orderFilters.serviceType}
-              onChange={(event) => handleOrderFilterChange("serviceType", event.currentTarget.value)}
-            >
-              <option value="">All service types</option>
-              {serviceTypeFilterOptions.map((serviceType) => (
-                <option key={serviceType} value={serviceType}>
-                  {formatServiceTypeLabel(serviceType)}
-                </option>
-              ))}
-            </select>
-            <select
-              aria-label="Filter orders by ordered date"
-              style={orderFilterSelectStyle}
-              value={orderFilters.orderedDate}
-              onChange={(event) => handleOrderFilterChange("orderedDate", event.currentTarget.value)}
-            >
-              <option value="">All order dates</option>
-              {orderFilterOptions.orderedDates.map((orderedDate) => (
-                <option key={orderedDate} value={orderedDate}>
-                  {orderedDate}
-                </option>
-              ))}
-            </select>
-            <input
-              aria-label="Search orders"
-              placeholder="Search orders"
-              style={orderFilterSearchStyle}
-              type="search"
-              value={orderFilters.search}
-              onChange={(event) => handleOrderFilterChange("search", event.currentTarget.value)}
-            />
-            <button
-              type="button"
-              title="Return to the planning Unplanned view"
-              style={activeOrderFilters ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
-              disabled={!activeOrderFilters}
-              onClick={handleClearOrderFilters}
-            >Clear filters</button>
+            <div style={orderFilterSelectFieldStyle}>
+              <select
+                aria-label="Filter orders by delivery day"
+                style={orderFilters.deliveryWeekday ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
+                value={orderFilters.deliveryWeekday}
+                onChange={(event) => handleOrderFilterChange("deliveryWeekday", event.currentTarget.value)}
+              >
+                {ORDER_WEEKDAY_OPTIONS.map((weekday) => (
+                  <option key={weekday.value} value={weekday.value}>
+                    {weekday.label}
+                  </option>
+                ))}
+              </select>
+              {!orderFilters.deliveryWeekday ? (
+                <span style={orderFilterPlaceholderStyle}>Delivery day</span>
+              ) : null}
+              {orderFilters.deliveryWeekday ? (
+                <button
+                  type="button"
+                  aria-label="Clear delivery day filter"
+                  style={orderFilterClearButtonStyle}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => handleClearOrderFilter("deliveryWeekday")}
+                >×</button>
+              ) : (
+                renderOrderFilterChevron()
+              )}
+            </div>
+            <div style={orderFilterSelectFieldStyle}>
+              <select
+                aria-label="Filter orders by service type"
+                style={orderFilters.serviceType ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
+                value={orderFilters.serviceType}
+                onChange={(event) => handleOrderFilterChange("serviceType", event.currentTarget.value)}
+              >
+                <option value="DELIVERY">Delivery</option>
+                <option value="PICKUP">Pickup</option>
+              </select>
+              {!orderFilters.serviceType ? (
+                <span style={orderFilterPlaceholderStyle}>Type</span>
+              ) : null}
+              {orderFilters.serviceType ? (
+                <button
+                  type="button"
+                  aria-label="Clear service type filter"
+                  style={orderFilterClearButtonStyle}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => handleClearOrderFilter("serviceType")}
+                >×</button>
+              ) : (
+                renderOrderFilterChevron()
+              )}
+            </div>
+            <div style={orderFilterSelectFieldStyle}>
+              <select
+                aria-label="Filter orders by delivery area"
+                style={orderFilters.deliveryArea ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
+                value={orderFilters.deliveryArea}
+                onChange={(event) => handleOrderFilterChange("deliveryArea", event.currentTarget.value)}
+              >
+                {orderFilterOptions.deliveryAreas.map((deliveryArea) => (
+                  <option key={deliveryArea} value={deliveryArea}>
+                    {deliveryArea}
+                  </option>
+                ))}
+              </select>
+              {!orderFilters.deliveryArea ? (
+                <span style={orderFilterPlaceholderStyle}>Area</span>
+              ) : null}
+              {orderFilters.deliveryArea ? (
+                <button
+                  type="button"
+                  aria-label="Clear delivery area filter"
+                  style={orderFilterClearButtonStyle}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => handleClearOrderFilter("deliveryArea")}
+                >×</button>
+              ) : (
+                renderOrderFilterChevron()
+              )}
+            </div>
+            <div style={orderFilterSelectFieldStyle}>
+              <select
+                aria-label="Filter orders by state"
+                style={orderFilters.deliveryState ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
+                value={orderFilters.deliveryState}
+                onChange={(event) => handleOrderFilterChange("deliveryState", event.currentTarget.value)}
+              >
+                {ORDER_DELIVERY_STATE_OPTIONS.map((stateOption) => (
+                  <option key={stateOption.value} value={stateOption.value}>
+                    {stateOption.label}
+                  </option>
+                ))}
+              </select>
+              {!orderFilters.deliveryState ? (
+                <span style={orderFilterPlaceholderStyle}>State</span>
+              ) : null}
+              {orderFilters.deliveryState ? (
+                <button
+                  type="button"
+                  aria-label="Clear state filter"
+                  style={orderFilterClearButtonStyle}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={() => handleClearOrderFilter("deliveryState")}
+                >×</button>
+              ) : (
+                renderOrderFilterChevron()
+              )}
+            </div>
             <div style={orderControlsTrailingStyle}>
+              <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
+              <button
+                type="button"
+                title="Return to the planning Unplanned view"
+                style={activeOrderFilters ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
+                disabled={!activeOrderFilters}
+                onClick={handleClearOrderFilters}
+              >Clear filters</button>
               <button
                 type="button"
                 style={
                   checkedOrderIds.length === 0
-                    ? disabledOrderFilterButtonStyle
-                    : orderFilterButtonStyle
-                }
-                disabled={checkedOrderIds.length === 0}
-                onClick={handleClearSelection}
-              >Clear selection</button>
-              <button
-                type="button"
-                style={
-                  checkedOrderIds.length === 0 || historyScopeActive
                     ? disabledCreateRouteButtonStyle
                     : addToPlanButtonStyle
                 }
-                disabled={checkedOrderIds.length === 0 || historyScopeActive}
+                disabled={checkedOrderIds.length === 0}
                 onClick={handleAddToPlan}
-              >Add to plan</button>
-              <span style={orderFilterSummaryStyle}>
-                {filteredOrders.length} shown · {selectableTableOrders.length} selectable · {tableSelectionState.unavailableCount} unavailable
-              </span>
-              {unavailableSummary ? (
-                <span style={unavailableSummaryStyle}>{unavailableSummary}</span>
-              ) : null}
-              <span style={planSummaryTextStyle}>
-                {checkedOrderIds.length > 0
-                  ? `${checkedOrderIds.length} selected.`
-                  : `${plannedOrderIds.length} added to plan.`}
-              </span>
+              >Add to map</button>
             </div>
           </div>
           <div style={tableWrapStyle}>
-            <table aria-label="Shopify orders" style={tableStyle}>
+            <table
+              ref={tableRef}
+              aria-label="Shopify orders"
+              style={{ ...tableStyle, width: tableWidth }}
+            >
               <colgroup>
                 {tableColumnWidths.map((width, columnIndex) => (
-                  <col key={`${width}-${columnIndex}`} style={{ width }} />
+                  <col
+                    key={columnIndex}
+                    style={{ width: typeof width === "number" ? `${width}px` : width }}
+                  />
                 ))}
               </colgroup>
               <thead>
                 <tr>
-                  <th scope="col" style={tableHeaderCellStyle}>
+                  <th scope="col" style={checkboxHeaderCellStyle}>
                     <input
                       type="checkbox"
                       aria-label="Select all visible orders for plan"
@@ -2943,11 +3114,11 @@ export default function OrdersPage() {
                       onChange={toggleAllVisibleOrderChecks}
                     />
                   </th>
-                  {SORTABLE_ORDER_COLUMNS.map((column) => (
+                  {SORTABLE_ORDER_COLUMNS.map((column, columnIndex) => (
                     <th
                       key={column.key}
                       scope="col"
-                      style={tableHeaderCellStyle}
+                      style={resizableHeaderCellStyle}
                       aria-sort={getHeaderAriaSort(column.key)}
                     >
                       <button
@@ -2960,15 +3131,24 @@ export default function OrdersPage() {
                           {getSortIndicator(column.key)}
                         </span>
                       </button>
+                      {columnIndex < SORTABLE_ORDER_COLUMNS.length - 1 ? (
+                        <span
+                          aria-hidden="true"
+                          style={columnResizeHandleStyle}
+                          onPointerDown={(event) => handleColumnResizeStart(columnIndex + 1, event)}
+                          onDoubleClick={(event) => handleColumnAutoFit(columnIndex + 1, event)}
+                        >
+                          <span style={columnResizeHandleLineStyle} />
+                        </span>
+                      ) : null}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {tableOrders.map((order) => {
-                  const unavailableReasons = getOrderUnavailableReasons(order, worksetAvailabilityContext);
-                  const routePlanningUnavailable = unavailableReasons.length > 0;
-                  const unavailableLabel = unavailableReasons.map(formatUnavailableReason).join(", ");
+                  const orderIsPlanned = plannedOrderIdSet.has(order.id);
+                  const checkboxChecked = orderIsPlanned || checkedOrderIdSet.has(order.id);
 
                   return (
                     <tr key={order.id}>
@@ -2976,13 +3156,13 @@ export default function OrdersPage() {
                         <input
                           type="checkbox"
                           aria-label={
-                            routePlanningUnavailable
-                              ? `${order.name} unavailable for plan: ${unavailableLabel}`
+                            orderIsPlanned
+                              ? `${order.name} already added to map`
                               : `Select ${order.name} for plan`
                           }
-                          title={unavailableLabel}
-                          checked={!routePlanningUnavailable && checkedOrderIdSet.has(order.id)}
-                          disabled={routePlanningUnavailable}
+                          title={orderIsPlanned ? "Already added to map" : ""}
+                          checked={checkboxChecked}
+                          disabled={orderIsPlanned}
                           onChange={() => toggleOrderCheck(order.id)}
                         />
                       </td>
@@ -3004,6 +3184,50 @@ export default function OrdersPage() {
                       </td>
                       <td style={tableCellStyle}>{order.customer}</td>
                       <td style={tableCellStyle}>{order.address}</td>
+                      <td style={itemCellStyle}>
+                        {getOrderItemCount(order)}
+                        <span data-order-items-popover-root="true">
+                          <button
+                            type="button"
+                            aria-label={`Show items for ${order.name}`}
+                            style={itemInfoButtonStyle}
+                            onMouseEnter={() => setHoveredItemPopoverOrderId(order.id)}
+                            onMouseLeave={() => setHoveredItemPopoverOrderId((currentOrderId) => currentOrderId === order.id ? null : currentOrderId)}
+                            onClick={() => setPinnedItemPopoverOrderId((currentOrderId) => currentOrderId === order.id ? null : order.id)}
+                          >
+                            <s-icon type="info" size="base" color="subdued"></s-icon>
+                          </button>
+                          {visibleItemPopoverOrderId === order.id ? (
+                            <div style={itemPopoverStyle}>
+                            <div style={itemPopoverTitleStyle}>Ordered items</div>
+                            <table style={itemPopoverTableStyle}>
+                              <thead>
+                                <tr>
+                                  <th style={itemPopoverCellStyle}>Item</th>
+                                  <th style={itemPopoverCellStyle}>Options</th>
+                                  <th style={itemPopoverCellStyle}>SKU</th>
+                                  <th style={itemPopoverQtyCellStyle}>Qty</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {getOrderLineItems(order).map((item, itemIndex) => (
+                                  <tr key={`${item.name}-${itemIndex}`}>
+                                    <td style={itemPopoverCellStyle}>{item.name}</td>
+                                    <td style={itemPopoverCellStyle}>{item.options}</td>
+                                    <td style={itemPopoverCellStyle}>{item.sku}</td>
+                                    <td style={itemPopoverQtyCellStyle}>{item.quantity}</td>
+                                  </tr>
+                                ))}
+                                <tr>
+                                  <td style={itemPopoverCellStyle} colSpan={3}>Order total</td>
+                                  <td style={itemPopoverQtyCellStyle}>{formatOrderTotal(order)}</td>
+                                </tr>
+                              </tbody>
+                            </table>
+                            </div>
+                          ) : null}
+                        </span>
+                      </td>
                       <td style={deliveryInfoCellStyle}>
                         <span style={deliveryInfoTabStyle}>
                           {formatDeliveryValue(order.deliveryArea)}

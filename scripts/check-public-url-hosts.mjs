@@ -4,13 +4,10 @@ import path from 'node:path';
 const targets = [
   'apps/shopify-app/shopify.app.toml',
   'apps/shopify-app/shopify.app.dev.toml',
-  'infra/caddy/Caddyfile',
-  'infra/compose/docker-compose.prod.yml',
-  'infra/compose/docker-compose.clever-route.yml',
+  'infra/compose/docker-compose.shopify-main.yml',
+  'infra/compose/docker-compose.shopify-dev.yml',
   'infra/env/shopify-app.env.example',
   'infra/env/shopify-app-clever-route.env.example',
-  'infra/env/delivery-api.env.example',
-  'infra/env/delivery-api-clever-route.env.example',
   'docs/deployment/aws-single-eip-deployment-2026-05-14.md'
 ];
 

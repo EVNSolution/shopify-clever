@@ -64,16 +64,20 @@ const lowerStyle = {
   overflow: "hidden",
 };
 
-export function TabLayout({ title, description, primary, secondary, lower, primaryExpanded = false }) {
+export function TabLayout({ title, description, notice, primary, secondary, lower, primaryExpanded = false }) {
   const activeGridStyle = primaryExpanded ? expandedGridStyle : gridStyle;
 
   return (
     <main className="tab-layout" style={layoutStyle}>
       <div style={pageStyle}>
-        <header className="tab-layout-header" style={headerStyle}>
-          <h1 style={titleStyle}>{title}</h1>
-          {description ? <p style={descriptionStyle}>{description}</p> : null}
-        </header>
+        {title || description ? (
+          <header className="tab-layout-header" style={headerStyle}>
+            {title ? <h1 style={titleStyle}>{title}</h1> : null}
+            {description ? <p style={descriptionStyle}>{description}</p> : null}
+          </header>
+        ) : null}
+
+        {notice ? <div className="tab-layout-notice">{notice}</div> : null}
 
         <div className="tab-layout-grid" style={activeGridStyle}>
           <section className="tab-layout-primary" style={primaryStyle}>

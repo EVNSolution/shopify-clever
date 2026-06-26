@@ -92,7 +92,13 @@ test("Settings tab lets operators preview geocoding and adjust the pin on a map"
   assert.match(settingsPageSource, /type="button"/);
   assert.match(settingsPageSource, />\{copy\("settings\.departureLocation\.checkAddress"\)\}<\/button>/);
   assert.match(settingsPageSource, /<SettingsDepartureMap/);
-  assert.match(settingsPageSource, /aria-label="Departure location map"/);
+  assert.match(settingsPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
+  assert.match(settingsPageSource, /ariaLabel="Departure location map"/);
+  assert.match(settingsPageSource, /ariaLabel: "Fit highlighted map markers"/);
+  assert.match(settingsPageSource, /renderMapZoomInIcon\(\)/);
+  assert.match(settingsPageSource, /renderMapZoomOutIcon\(\)/);
+  assert.doesNotMatch(settingsPageSource, /NavigationControl/);
+  assert.match(settingsPageSource, /const handleFitHighlightedMapMarkers = useCallback\(\(\) => \{/);
   assert.match(settingsPageSource, /await import\("maplibre-gl"\)/);
   assert.match(settingsPageSource, /new maplibregl\.Marker\(\{\s*color: "#008060",\s*draggable: true,\s*\}\)/);
   assert.match(settingsPageSource, /markerRef\.current\.on\("dragend"/);

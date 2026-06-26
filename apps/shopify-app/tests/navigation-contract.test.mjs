@@ -64,24 +64,25 @@ test("additional and forbidden object-detail routes are not present", () => {
   );
   assert.deepEqual(
     appRouteFiles.filter((file) => file.includes("$")),
-    ["app.routes.$routeId.jsx"],
-    "only RoutePlan should have an app object detail route",
+    ["app.route-groups.$routeGroupId.jsx", "app.routes.$routeId.jsx"],
+    "only route plans and parent route groups should have app object detail routes",
   );
 });
 
 test("Orders stays map/table/route-plan first without placeholder KPI or review cards", () => {
   const source = readAppFile("app/routes/app.orders.jsx");
 
-  assert.match(source, /<TabLayout\s+title="Orders"/);
+  assert.match(source, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
+  assert.doesNotMatch(source, /title="Orders"/);
   assert.match(source, /id="orders-map"/);
-  assert.match(source, /<table aria-label="Shopify orders"/);
+  assert.match(source, /<table[\s\S]*?aria-label="Shopify orders"/);
   assert.match(source, /className="order-route-plan"/);
   assert.doesNotMatch(source, /ordersKpi|ordersFilter|orderReviewPanel|orderReviewCard/);
   assert.doesNotMatch(source, /Order detail drawer|DeliveryStop review panel|Create route plan panel/);
   assert.doesNotMatch(source, /orders\/:orderId|app\.orders\.\$orderId/);
 });
 
-test("Routes has the only hidden detail route and keeps the route table as the main surface", () => {
+test("Routes keeps route plan/group detail routes hidden behind the route table", () => {
   const routesSource = readAppFile("app/routes/app.routes.jsx");
   const detailSource = readAppFile("app/routes/app.routes.$routeId.jsx");
 
@@ -91,7 +92,7 @@ test("Routes has the only hidden detail route and keeps the route table as the m
   assert.match(routesSource, /getRouteFilters\(searchParams\)/);
   assert.match(routesSource, /filterRouteRows\(allRouteRows, routeFilters\)/);
   assert.match(routesSource, /<table style=\{singleRouteTableStyle\}>/);
-  assert.match(routesSource, /createRouteDetailHref\(routeId\)/);
+  assert.match(routesSource, /createRouteDetailHref\(route\)/);
 
   assert.match(detailSource, /route-overview-header/);
   assert.match(detailSource, /route-overview-summary/);
@@ -231,7 +232,7 @@ test("Settings is a single plain form without navigation-only setting sections",
   assert.match(source, /SUPPORTED_LANGUAGES\.map/);
   assert.match(source, /geocodeAddress/);
   assert.match(source, /name="departureAddress"/);
-  assert.match(source, /aria-label="Departure location map"/);
+  assert.match(source, /ariaLabel="Departure location map"/);
   assert.match(source, /name="departureLatitude"|name="departureLongitude"/);
   assert.match(source, /type="hidden"/);
   assert.match(source, />\{copy\("settings\.departureLocation\.latitude"\)\}<\/span>/);

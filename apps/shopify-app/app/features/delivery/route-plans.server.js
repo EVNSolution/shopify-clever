@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 
 import { buildRouteScopeFromOrders } from "./route-scope.js";
 
-const DEFAULT_DELIVERY_API_URL = "https://clever-delivery.3-39-216-177.sslip.io";
 const DEFAULT_CLEVER_APP_ID = "clever";
 const DEFAULT_DELIVERY_API_GET_CACHE_TTL_MS = 15_000;
 const MAX_DELIVERY_API_GET_CACHE_ENTRIES = 100;
@@ -37,8 +36,11 @@ export function getCleverAppId() {
 }
 
 export function getDeliveryApiBaseUrl() {
-  const configuredBaseUrl = process.env.CLEVER_DELIVERY_API_URL?.trim();
-  const baseUrl = configuredBaseUrl || DEFAULT_DELIVERY_API_URL;
+  const baseUrl = process.env.CLEVER_DELIVERY_API_URL?.trim();
+
+  if (!baseUrl) {
+    throw new Error("CLEVER_DELIVERY_API_URL is required.");
+  }
 
   return baseUrl.replace(/\/+$/, "");
 }
@@ -59,7 +61,12 @@ export function primeDeliveryApiGetResponseCache(request, path, result, options 
 
   const fetchImpl = options.fetch ?? fetch;
   const appId = options.appId ?? getCleverAppId();
-  const baseUrl = getDeliveryApiBaseUrl();
+  let baseUrl;
+  try {
+    baseUrl = getDeliveryApiBaseUrl();
+  } catch {
+    return false;
+  }
   const cacheScope = getDeliveryApiGetCacheScope({
     appId,
     authorization,
@@ -86,12 +93,13 @@ export function buildCreateRoutePlanPayload({
   departureLocation,
   now = new Date(),
   plannedOrders,
+  routeName,
   routeScope,
 }) {
   const routeDraftScope = buildRouteScopeFromOrders(plannedOrders) ?? routeScope;
 
   return {
-    name: "CLEVER route draft",
+    name: textOrNull(routeName) ?? "CLEVER route draft",
     planDate: routeDraftScope?.deliveryDate ?? now.toISOString().slice(0, 10),
     ...(routeDraftScope ? { routeScope: routeDraftScope } : {}),
     depot: mapDepartureLocationToDepot(departureLocation),
@@ -282,7 +290,22 @@ export async function deliveryApiRequest(request, path, options = {}) {
   const fetchImpl = options.fetch ?? fetch;
   const method = (options.method ?? "GET").toUpperCase();
   const appId = options.appId ?? getCleverAppId();
-  const baseUrl = getDeliveryApiBaseUrl();
+  let baseUrl;
+  try {
+    baseUrl = getDeliveryApiBaseUrl();
+  } catch (error) {
+    return {
+      data: null,
+      errors: [
+        {
+          code: DELIVERY_API_ERROR_CODE,
+          message: error?.message ?? "CLEVER_DELIVERY_API_URL is required.",
+          path,
+          status: 0,
+        },
+      ],
+    };
+  }
   const url = `${baseUrl}${path}`;
   const cacheTtlMs = getDeliveryApiGetCacheTtlMs();
   const canUseCache = method === "GET" && !options.body && cacheTtlMs > 0;
@@ -314,6 +337,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
       method,
       path,
       url,
+      suppressErrorStatuses: options.suppressErrorStatuses,
     });
     const cacheEntry = {
       expiresAt: now + cacheTtlMs,
@@ -345,6 +369,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
     method,
     path,
     url,
+    suppressErrorStatuses: options.suppressErrorStatuses,
   });
 
   if (method !== "GET" && result.errors.length === 0) {
@@ -362,22 +387,47 @@ async function executeDeliveryApiRequest({
   method,
   path,
   url,
+  suppressErrorStatuses,
 }) {
-  const response = await fetchImpl(url, {
-    body,
-    headers: {
-      authorization,
-      "x-clever-app-id": appId,
-      ...(body ? { "content-type": "application/json" } : {}),
-    },
-    method,
-  });
+  let response;
+
+  try {
+    response = await fetchImpl(url, {
+      body,
+      headers: {
+        authorization,
+        "x-clever-app-id": appId,
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
+      method,
+    });
+  } catch (error) {
+    const normalizedError = normalizeDeliveryApiNetworkError(error, path);
+    logDeliveryApiFailure({ appId, error: normalizedError, method, path, status: 0 });
+
+    return {
+      data: null,
+      errors: [normalizedError],
+    };
+  }
+
   const payload = await readJsonResponse(response);
 
   if (!response.ok || payload?.error) {
+    const normalizedError = normalizeDeliveryApiError(payload?.error, response.status, path, url);
+    if (!shouldSuppressDeliveryApiError(response.status, suppressErrorStatuses)) {
+      logDeliveryApiFailure({
+        appId,
+        error: normalizedError,
+        method,
+        path,
+        status: response.status,
+      });
+    }
+
     return {
       data: payload?.data ?? null,
-      errors: [normalizeDeliveryApiError(payload?.error, response.status, path, url)],
+      errors: [normalizedError],
     };
   }
 
@@ -385,6 +435,32 @@ async function executeDeliveryApiRequest({
     data: payload?.data ?? null,
     errors: [],
   };
+}
+
+function normalizeDeliveryApiNetworkError(error, path) {
+  const reason = error?.message ? ` (${error.message})` : "";
+
+  return {
+    code: DELIVERY_API_ERROR_CODE,
+    message: `${getDeliveryApiFailureMessage(path)}${reason}`,
+    path,
+    status: 0,
+  };
+}
+
+function shouldSuppressDeliveryApiError(status, suppressErrorStatuses) {
+  return Array.isArray(suppressErrorStatuses) && suppressErrorStatuses.includes(status);
+}
+
+function logDeliveryApiFailure({ appId, error, method, path, status }) {
+  console.warn("delivery_api_request_failed", {
+    appId,
+    code: error?.code ?? DELIVERY_API_ERROR_CODE,
+    message: error?.message,
+    method,
+    path,
+    status,
+  });
 }
 
 function readDeliveryApiGetCache(cacheKey, now) {
@@ -510,6 +586,7 @@ function normalizeDeliveryApiError(error, status, path, url) {
       message:
         `배송원 저장 API를 찾지 못했습니다. 현재 Shopify app dev가 ${url} 를 호출 중입니다. ` +
         "delivery-api를 최신 커밋으로 재시작하거나 CLEVER_DELIVERY_API_URL을 최신 delivery server로 지정해주세요.",
+      path,
       status,
     };
   }
@@ -518,6 +595,7 @@ function normalizeDeliveryApiError(error, status, path, url) {
     return {
       code: DELIVERY_API_ERROR_CODE,
       message: error,
+      path,
       status,
     };
   }
@@ -525,6 +603,7 @@ function normalizeDeliveryApiError(error, status, path, url) {
   return {
     code: error?.code ?? DELIVERY_API_ERROR_CODE,
     message: error?.message ?? getDeliveryApiFailureMessage(path),
+    path,
     status,
   };
 }

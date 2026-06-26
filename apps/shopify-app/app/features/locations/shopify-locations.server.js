@@ -1,3 +1,4 @@
+import { normalizeCaughtServiceError, normalizeGraphqlErrors } from "../service-errors.js";
 export const SHOPIFY_DEPARTURE_LOCATION_QUERY = `#graphql
   query CleverRouteDepartureLocation {
     currentAppInstallation {
@@ -117,11 +118,7 @@ async function loadShopifyDepartureLocation(admin) {
   } catch (error) {
     return {
       departureLocation: null,
-      errors: [
-        {
-          message: getErrorMessage(error),
-        },
-      ],
+      errors: normalizeCaughtServiceError(error, "Shopify Location을 읽지 못했습니다."),
     };
   }
 }
@@ -169,11 +166,7 @@ export async function saveShopifyDepartureLocation(admin, input) {
   } catch (error) {
     return {
       departureLocation: null,
-      errors: [
-        {
-          message: getErrorMessage(error),
-        },
-      ],
+      errors: normalizeCaughtServiceError(error, "Shopify Location을 읽지 못했습니다."),
     };
   }
 }
@@ -371,29 +364,4 @@ function numberOrUndefined(value) {
   if (value == null) return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
-}
-
-function normalizeGraphqlErrors(errors) {
-  if (!Array.isArray(errors)) return [];
-
-  return errors.map((error) => ({
-    message: getErrorMessage(error),
-  }));
-}
-
-function getErrorMessage(error) {
-  const message = [
-    error?.message,
-    error?.body?.errors?.message,
-    ...(Array.isArray(error?.body?.errors?.graphQLErrors)
-      ? error.body.errors.graphQLErrors.map((graphQLError) => graphQLError?.message)
-      : []),
-    ...(Array.isArray(error?.body?.errors)
-      ? error.body.errors.map((graphqlError) => graphqlError?.message)
-      : []),
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  return message || "Shopify Location을 읽지 못했습니다.";
 }

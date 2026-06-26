@@ -14,6 +14,8 @@ services:
       SHOPIFY_APP_URL: https://clever-route-app.cleversystem.ai
       CLEVER_DELIVERY_API_URL: http://delivery-api:3000
       CLEVER_APP_ID: clever-route-dev
+      GEOCODING_SEARCH_URL: https://nominatim.openstreetmap.org/search
+      CLEVER_DRIVER_DOWNLOAD_URL: https://clever.delivery/driver/download
     restart: unless-stopped
     volumes:
       - /srv/shopify-clever-dev/data/shopify/dev.sqlite:/app/prisma/dev.sqlite

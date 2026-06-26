@@ -33,7 +33,8 @@ test("sidebar pages use tab titles instead of duplicating the app name", () => {
   }
 
   const ordersSource = readFileSync(join(root, "app/routes/app.orders.jsx"), "utf8");
-  assert.match(ordersSource, /<TabLayout\s+title="Orders"/);
+  assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
+  assert.doesNotMatch(ordersSource, /title="Orders"/);
 
   const routesSource = readFileSync(join(root, "app/routes/app.routes.jsx"), "utf8");
   assert.match(routesSource, /<h1 style=\{routesTitleStyle\}>Routes<\/h1>/);

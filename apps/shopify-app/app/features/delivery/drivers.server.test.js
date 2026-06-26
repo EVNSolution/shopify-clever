@@ -18,7 +18,7 @@ test("creates a pending delivery driver with a plain app download link", async (
   const result = await createPendingDeliveryDriver(
     new Request("https://app.example/app/drivers-vehicles"),
     {
-      inviteLink: "https://clever.delivery/driver/download",
+      inviteLink: "https://driver-download.example.test/app",
       phone: "+821012345678",
     },
     {
@@ -56,7 +56,7 @@ test("creates a pending delivery driver with a plain app download link", async (
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     source: "clever-app-driver-invite",
     displayName: null,
-    inviteLink: "https://clever.delivery/driver/download",
+    inviteLink: "https://driver-download.example.test/app",
     phone: "+821012345678",
   });
   assert.deepEqual(result, {
@@ -162,7 +162,7 @@ test("returns a driver-specific error when the delivery drivers API returns a no
   const result = await createPendingDeliveryDriver(
     new Request("https://app.example/app/drivers-vehicles"),
     {
-      inviteLink: "https://clever.delivery/driver/download",
+      inviteLink: "https://driver-download.example.test/app",
       phone: "+821089216198",
     },
     {
@@ -176,6 +176,7 @@ test("returns a driver-specific error when the delivery drivers API returns a no
     {
       code: "DELIVERY_API_ERROR",
       message: "Delivery drivers API 호출에 실패했습니다.",
+      path: "/admin/drivers",
       status: 502,
     },
   ]);

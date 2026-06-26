@@ -11,7 +11,7 @@ This document is the source of truth for CLEVER Shopify app naming. Shopify uses
 | Shopify app `handle` | `clever-route` | `clever-route-dev` | Unique Shopify Admin URL slug. Handles are globally constrained and can be rejected if already taken. |
 | Shopify Admin app path | `/apps/clever-route/...` | `/apps/clever-route-dev/...` | The path visible inside `admin.shopify.com` when opening the embedded app. |
 | Hosted app URL | `https://clever-admin.cleversystem.ai` | `https://clever-route-app.cleversystem.ai` | The web app host Shopify loads in the embedded app iframe. |
-| Delivery API URL | `https://clever-delivery.3-39-216-177.sslip.io` | `https://clever-route.cleversystem.ai` | The delivery backend paired with each app runtime. |
+| Delivery API URL | `https://clever-route.cleversystem.ai` | `https://clever-route.cleversystem.ai` | The delivery backend paired with each app runtime. |
 | Shopify config file | `apps/shopify-app/shopify.app.toml` | `apps/shopify-app/shopify.app.dev.toml` | Local CLI configuration file. |
 | Runtime distribution | `app_store` | `single_merchant` | Runtime value for `SHOPIFY_APP_DISTRIBUTION`. |
 

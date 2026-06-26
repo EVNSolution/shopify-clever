@@ -7,8 +7,10 @@ import {
   buildCreateRoutePlanPayload,
   createDeliveryRoutePlan,
   deleteDeliveryRoutePlan,
+  DELIVERY_API_ERROR_CODE,
   fetchDeliveryRoutePlanDetail,
   fetchDeliveryRoutePlans,
+  getDeliveryApiBaseUrl,
   getShopifySessionBearer,
   updateDeliveryRoutePlanStops,
   assignDeliveryRoutePlanDriver,
@@ -237,6 +239,18 @@ test("does not build a route scope when planned orders mix sessions", () => {
   );
 });
 
+test("uses a provided route name in the delivery-server route-plan payload", () => {
+  const payload = buildCreateRoutePlanPayload({
+    departureLocation: null,
+    now: new Date("2026-05-08T11:30:00.000Z"),
+    plannedOrders: [],
+    routeName: "Thu 06/25 orders",
+    routeScope: { deliveryDate: "2026-06-25" },
+  });
+
+  assert.equal(payload.name, "Thu 06/25 orders");
+});
+
 test("creates route plans through the delivery Admin API with the Shopify session token", async () => {
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
   const previousAppId = process.env.CLEVER_APP_ID;
@@ -320,6 +334,26 @@ test("creates route plans with an explicit Shopify session token from the client
   assert.equal(calls[0].options.headers["x-clever-app-id"], "clever");
   assert.equal(result.routePlan.id, "route-2");
   assert.deepEqual(result.errors, []);
+});
+
+test("returns a route-plan API error instead of throwing when delivery API is unreachable", async () => {
+  const result = await createDeliveryRoutePlan(
+    new Request("https://app.example/app/orders"),
+    { name: "Route", planDate: "2026-05-08", depot: {}, orders: [] },
+    {
+      fetch: async () => {
+        throw new Error("connect ECONNREFUSED");
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  assert.equal(result.routePlan, null);
+  assert.equal(result.errors[0].code, "DELIVERY_API_ERROR");
+  assert.equal(result.errors[0].path, "/admin/route-plans");
+  assert.equal(result.errors[0].status, 0);
+  assert.match(result.errors[0].message, /Delivery route plan API 호출에 실패했습니다/);
+  assert.match(result.errors[0].message, /connect ECONNREFUSED/);
 });
 
 test("lists and reads persisted route plans through the delivery Admin API", async () => {
@@ -650,6 +684,40 @@ test("returns an actionable error when a delivery API call has no session token"
   assert.equal(called, false);
   assert.deepEqual(result.routePlans, []);
   assert.equal(result.errors[0].code, "DELIVERY_SESSION_TOKEN_MISSING");
+});
+
+test("requires an explicit delivery API URL instead of falling back to production", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  delete process.env.CLEVER_DELIVERY_API_URL;
+
+  let called = false;
+
+  try {
+    assert.throws(() => getDeliveryApiBaseUrl(), /CLEVER_DELIVERY_API_URL/);
+
+    const result = await fetchDeliveryRoutePlans(
+      new Request("https://app.example/app/routes", {
+        headers: { authorization: "Bearer session-token" },
+      }),
+      {
+        fetch: async () => {
+          called = true;
+          return Response.json({});
+        },
+      },
+    );
+
+    assert.equal(called, false);
+    assert.deepEqual(result.routePlans, []);
+    assert.equal(result.errors[0].code, DELIVERY_API_ERROR_CODE);
+    assert.match(result.errors[0].message, /CLEVER_DELIVERY_API_URL/);
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.CLEVER_DELIVERY_API_URL;
+    } else {
+      process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    }
+  }
 });
 
 test("invalidates cached delivery route GET responses after successful mutations", async () => {
