@@ -350,14 +350,19 @@ test("Route detail renders a cohesive route overview panel with driver assignmen
   assert.doesNotMatch(routeDetailSource, /Review and assign a driver before publishing this route\./);
   assert.match(
     routeDetailSource,
-    /aria-label="Route summary" className="route-overview-summary">[\s\S]*renderRouteHeaderMetric\("Orders", routeDetail\.orders\)[\s\S]*renderRouteHeaderMetric\("Delivery area", routeDetail\.deliveryArea\)[\s\S]*renderRouteHeaderMetric\("Delivery date", routeDetail\.deliveryDate\)[\s\S]*renderRouteHeaderMetric\("Driver", routeDriverSummary\)/,
+    /aria-label="Route summary" className="route-overview-summary">[\s\S]*renderRouteHeaderMetric\("Orders", routeDetail\.orders\)[\s\S]*renderRouteHeaderMetric\("Delivery date", routeDetail\.deliveryDate\)[\s\S]*renderRouteHeaderMetric\("Driver", routeDriverSummary\)/,
   );
+  assert.doesNotMatch(routeDetailSource, /renderRouteHeaderMetric\("Delivery area", routeDetail\.deliveryArea\)/);
   assert.match(routeDetailSource, /aria-label="Route summary" className="route-overview-summary">[\s\S]*<\/div>\n            <\/div>\n            <div\n              aria-label="Route driver assignment"/);
   assert.match(routeDetailSource, /function renderRouteHeaderMetric\(label, value\) \{/);
   assert.match(routeDetailSource, /aria-label="Route driver assignment"/);
   assert.match(routeDetailSource, /const routeDriverBuckets = useMemo\(\(\) => \[\{[\s\S]*id: routeDriverId \|\| "unassigned"/);
   assert.match(routeDetailSource, /aria-label="Route driver stop groups"/);
-  assert.match(routeDetailSource, />Driver routes<\/div>/);
+  assert.doesNotMatch(routeDetailSource, />Driver routes<\/div>/);
+  assert.match(routeDetailSource, /aria-label="Route timing"/);
+  assert.match(routeDetailSource, /aria-label="Driver route rows"/);
+  assert.match(routeDetailSource, /aria-label="Route stop timeline"/);
+  assert.match(routeDetailSource, /activeRouteDriverStops\.map\(\(stop\) =>/);
   assert.match(routeDetailSource, /activeRouteDriverStops\.map\(\(stop, stopIndex\) =>/);
   assert.match(routeDetailSource, /height: "440px"/);
   assert.match(routeDetailSource, /minHeight: "440px"/);

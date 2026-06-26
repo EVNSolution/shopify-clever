@@ -295,6 +295,103 @@ const routeDriverToggleCountStyle = {
   padding: "3px 6px",
 };
 
+const routeMetaGridStyle = {
+  borderBottom: "1px solid #ececec",
+  display: "grid",
+  gap: "8px 16px",
+  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+  padding: "10px 12px",
+};
+
+const routeMetaItemStyle = {
+  color: "#4b5563",
+  fontSize: "13px",
+  lineHeight: 1.35,
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const routePlanRowsTableStyle = {
+  borderCollapse: "separate",
+  borderSpacing: 0,
+  minWidth: "760px",
+  tableLayout: "fixed",
+  width: "100%",
+};
+
+const routePlanRowsColumnWidths = ["32px", "240px", "112px", "160px", "92px", "120px"];
+
+const routeStatusDotStyle = {
+  background: "#0ea5e9",
+  borderRadius: "999px",
+  display: "inline-block",
+  height: "8px",
+  width: "8px",
+};
+
+const routeTimelineStyle = {
+  borderTop: "1px solid #ececec",
+  display: "grid",
+  gap: "10px",
+  overflowX: "auto",
+  padding: "14px 12px",
+};
+
+const routeTimelineLaneStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  minWidth: "max-content",
+};
+
+const routeTimelineLabelStyle = {
+  color: "#303030",
+  fontSize: "13px",
+  fontWeight: 650,
+  marginRight: "14px",
+  minWidth: "120px",
+};
+
+const routeTimelineStartStyle = {
+  alignItems: "center",
+  background: "#0f8f72",
+  borderRadius: "999px",
+  color: "#ffffff",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontSize: "12px",
+  fontWeight: 700,
+  height: "26px",
+  justifyContent: "center",
+  width: "26px",
+};
+
+const routeTimelineSegmentStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  flex: "0 0 auto",
+};
+
+const routeTimelineLineStyle = {
+  background: "#0ea5e9",
+  height: "2px",
+  width: "44px",
+};
+
+const routeTimelineStopStyle = {
+  alignItems: "center",
+  background: "#0b84d8",
+  borderRadius: "999px",
+  color: "#ffffff",
+  display: "inline-flex",
+  fontSize: "11px",
+  fontWeight: 700,
+  height: "26px",
+  justifyContent: "center",
+  width: "26px",
+};
+
 const routesDetailTableFrameStyle = {
   overflowX: "auto",
 };
@@ -1693,7 +1790,6 @@ export default function RouteDetailPage() {
               </div>
               <div aria-label="Route summary" className="route-overview-summary">
                 {renderRouteHeaderMetric("Orders", routeDetail.orders)}
-                {renderRouteHeaderMetric("Delivery area", routeDetail.deliveryArea)}
                 {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
                 {renderRouteHeaderMetric("Driver", routeDriverSummary)}
               </div>
@@ -1786,7 +1882,6 @@ export default function RouteDetailPage() {
           />
 
           <section aria-label="Route driver stop groups" style={routeDriverWorkbenchStyle}>
-            <div style={routeDetailStopsTitleStyle}>Driver routes</div>
             <div style={routeDriverToggleListStyle}>
               {routeDriverBuckets.map((bucket) => (
                 <button
@@ -1799,6 +1894,58 @@ export default function RouteDetailPage() {
                   <span>{bucket.label}</span>
                   <span style={routeDriverToggleCountStyle}>{bucket.stops.length}</span>
                 </button>
+              ))}
+            </div>
+          </section>
+
+          <section aria-label="Route timing" style={routeMetaGridStyle}>
+            <div style={routeMetaItemStyle}>☆ Route start: {departureLocation.address}</div>
+            <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
+            <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
+            <div style={routeMetaItemStyle}>ⓘ Driver: {activeRouteDriverBucket?.label ?? "Unassigned"}</div>
+          </section>
+
+          <div style={routesDetailTableFrameStyle}>
+            <table aria-label="Driver route rows" style={routePlanRowsTableStyle}>
+              <colgroup>
+                {routePlanRowsColumnWidths.map((width, index) => (
+                  <col key={`${width}-${index}`} style={{ width }} />
+                ))}
+              </colgroup>
+              <thead>
+                <tr>
+                  <th style={routesDetailHeaderCellStyle}></th>
+                  <th style={routesDetailHeaderCellStyle}>Name</th>
+                  <th style={routesDetailHeaderCellStyle}>Status</th>
+                  <th style={routesDetailHeaderCellStyle}>Driver</th>
+                  <th style={routesDetailHeaderCellStyle}>Stops</th>
+                  <th style={routesDetailHeaderCellStyle}>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {routeDriverBuckets.map((bucket) => (
+                  <tr key={bucket.id}>
+                    <td style={routesDetailCellStyle}><span aria-hidden="true" style={routeStatusDotStyle}></span></td>
+                    <td style={routesDetailCellStyle}>{routeDetail.route}</td>
+                    <td style={routesDetailCellStyle}>{routeDetail.status}</td>
+                    <td style={routesDetailCellStyle}>{bucket.label}</td>
+                    <td style={routesDetailCellStyle}>{bucket.stops.length}</td>
+                    <td style={routesDetailCellStyle}>—</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <section aria-label="Route stop timeline" style={routeTimelineStyle}>
+            <div style={routeTimelineLaneStyle}>
+              <div style={routeTimelineLabelStyle}>{activeRouteDriverBucket?.label ?? "Unassigned"}</div>
+              <span title="Start" style={routeTimelineStartStyle}>★</span>
+              {activeRouteDriverStops.map((stop) => (
+                <span key={stop.id} style={routeTimelineSegmentStyle} title={stop.order}>
+                  <span style={routeTimelineLineStyle}></span>
+                  <span style={routeTimelineStopStyle}>{stop.stop}</span>
+                </span>
               ))}
             </div>
           </section>
