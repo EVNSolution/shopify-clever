@@ -246,9 +246,9 @@ const routeMetaItemStyle = {
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1180px",
+  minWidth: "1216px",
   tableLayout: "fixed",
-  width: "max-content",
+  width: "100%",
 };
 
 const routePlanRowsColumnWidths = [
