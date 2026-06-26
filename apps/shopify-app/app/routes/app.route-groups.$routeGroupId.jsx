@@ -1,12 +1,16 @@
+/* eslint-disable react/prop-types */
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import {
+  createDeliveryRouteGroupBranch,
+  deleteDeliveryRouteGroupBranch,
   fetchDeliveryRouteGroupDetail,
   generateDeliveryRouteGroupChildRoutes,
   resolveDeliveryRouteGroupAssignments,
   saveDeliveryRouteGroupPolygons,
+  updateDeliveryRouteGroupBranchOrders,
   updateDeliveryRouteGroupOrders,
 } from "../features/delivery/route-groups.server";
 import { authenticate } from "../shopify.server";
@@ -34,6 +38,34 @@ export const action = async ({ params, request }) => {
       request,
       params.routeGroupId,
       { confirmRisk: formData.get("confirmRisk") === "true" },
+      { sessionToken },
+    );
+  }
+
+  if (intent === "createBranch") {
+    return createDeliveryRouteGroupBranch(
+      request,
+      params.routeGroupId,
+      readJsonFormValue(formData.get("payload"), {}),
+      { sessionToken },
+    );
+  }
+
+  if (intent === "updateBranchOrders") {
+    return updateDeliveryRouteGroupBranchOrders(
+      request,
+      params.routeGroupId,
+      formData.get("branchId"),
+      readJsonFormValue(formData.get("payload"), {}),
+      { sessionToken },
+    );
+  }
+
+  if (intent === "deleteBranch") {
+    return deleteDeliveryRouteGroupBranch(
+      request,
+      params.routeGroupId,
+      formData.get("branchId"),
       { sessionToken },
     );
   }
@@ -74,12 +106,18 @@ export default function RouteGroupDetailPage() {
   const actionFetcher = useFetcher();
   const currentRouteGroup = actionFetcher.data?.routeGroup ?? routeGroup;
   const currentErrors = actionFetcher.data?.errors ?? errors;
+  const assignments = currentRouteGroup?.assignments ?? [];
+  const branches = currentRouteGroup?.branches ?? [];
+  const branchedOrderIds = new Set(branches.flatMap((branch) => branch.orderIds ?? []));
+  const unbranchedOrderIds = assignments.filter((assignment) => !branchedOrderIds.has(assignment.orderId)).map((assignment) => assignment.orderId);
 
-  const handleGenerateChildRoutes = async () => {
+  const submitIntent = async (intent, payload = {}, fields = {}) => {
     const sessionToken = await shopify.idToken();
     const formData = new FormData();
-    formData.set("_intent", "generateChildRoutes");
+    formData.set("_intent", intent);
+    formData.set("payload", JSON.stringify(payload));
     formData.set("shopifySessionToken", sessionToken);
+    for (const [key, value] of Object.entries(fields)) formData.set(key, value);
     actionFetcher.submit(formData, { method: "post" });
   };
 
@@ -92,11 +130,6 @@ export default function RouteGroupDetailPage() {
             {formatDateRange(currentRouteGroup)} · {currentRouteGroup?.displayStatus ?? "—"}
           </p>
         </div>
-        <button
-          type="button"
-          disabled={!currentRouteGroup || actionFetcher.state !== "idle"}
-          onClick={handleGenerateChildRoutes}
-        >Regenerate</button>
       </header>
 
       {currentErrors.length > 0 ? (
@@ -116,18 +149,60 @@ export default function RouteGroupDetailPage() {
       </section>
 
       <section style={{ border: "1px solid #ddd", borderRadius: "12px", padding: "12px" }}>
+        <div style={{ display: "flex", gap: "8px", justifyContent: "space-between", alignItems: "center" }}>
+          <s-heading>Branches</s-heading>
+          <button
+            type="button"
+            disabled={!currentRouteGroup || unbranchedOrderIds.length === 0 || actionFetcher.state !== "idle"}
+            onClick={() => submitIntent("createBranch", { label: `Branch ${branches.length + 1}`, orderIds: unbranchedOrderIds })}
+          >Create branch</button>
+        </div>
+        <div style={{ display: "grid", gap: "8px", marginTop: "8px" }}>
+          {branches.map((branch) => (
+            <div key={branch.id} style={{ border: "1px solid #eee", borderRadius: "8px", display: "grid", gap: "6px", padding: "8px" }}>
+              <strong>{branch.label ?? branch.driverName ?? "Unassigned branch"}</strong>
+              <span>{branch.ordersCount ?? 0} orders · {branch.driverName ?? "No driver"}</span>
+              <div style={{ display: "flex", gap: "8px" }}>
+                <button
+                  type="button"
+                  disabled={(branch.orderIds ?? []).length === 0 || actionFetcher.state !== "idle"}
+                  onClick={() => submitIntent("updateBranchOrders", { removeOrderIds: branch.orderIds ?? [] }, { branchId: branch.id })}
+                >Release orders</button>
+                <button
+                  type="button"
+                  disabled={actionFetcher.state !== "idle"}
+                  onClick={() => submitIntent("deleteBranch", {}, { branchId: branch.id })}
+                >Delete branch</button>
+              </div>
+            </div>
+          ))}
+          {branches.length === 0 ? <p>모든 주문이 기본 미등록 상태입니다.</p> : null}
+        </div>
+      </section>
+
+      <section style={{ border: "1px solid #ddd", borderRadius: "12px", padding: "12px" }}>
         <s-heading>Orders</s-heading>
         <div style={{ display: "grid", gap: "6px", marginTop: "8px" }}>
-          {(currentRouteGroup?.assignments ?? []).map((assignment) => (
-            <div key={assignment.orderId} style={{ display: "grid", gridTemplateColumns: "90px 1fr 120px", gap: "8px" }}>
+          {assignments.map((assignment) => (
+            <div key={assignment.orderId} style={{ display: "grid", gridTemplateColumns: "90px 1fr 120px 140px", gap: "8px" }}>
               <strong>{assignment.orderName}</strong>
               <span>{assignment.addressLabel}</span>
               <span>{assignment.assignmentStatus}</span>
+              <span>{branchLabelForOrder(branches, assignment.orderId)}</span>
             </div>
           ))}
-          {(currentRouteGroup?.assignments ?? []).length === 0 ? <p>No orders.</p> : null}
+          {assignments.length === 0 ? <p>No orders.</p> : null}
         </div>
       </section>
+
+      <details>
+        <summary>Legacy child route projection</summary>
+        <button
+          type="button"
+          disabled={!currentRouteGroup || actionFetcher.state !== "idle"}
+          onClick={() => submitIntent("generateChildRoutes", { confirmRisk: false })}
+        >Generate child routes</button>
+      </details>
     </main>
   );
 }
@@ -145,6 +220,11 @@ function formatDateRange(routeGroup) {
   if (!routeGroup) return "—";
   if (routeGroup.dateRangeStart === routeGroup.dateRangeEnd) return routeGroup.dateRangeStart;
   return `${routeGroup.dateRangeStart} ~ ${routeGroup.dateRangeEnd}`;
+}
+
+function branchLabelForOrder(branches, orderId) {
+  const branch = branches.find((candidate) => (candidate.orderIds ?? []).includes(orderId));
+  return branch?.label ?? branch?.driverName ?? "Unassigned";
 }
 
 function readJsonFormValue(value, fallback) {
