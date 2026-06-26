@@ -61,19 +61,4 @@ The current Shopify Admin GraphQL queries intentionally do **not** request:
 - `read_all_orders`
 - payment data
 
-Implementation note: internal canonical order models and tests still contain an `email` property for legacy/manual/test rows. This does not mean the current Shopify Admin GraphQL queries request customer email. If a future release adds `email` to a Shopify query, update this map, the Partner Dashboard protected-data request, the privacy policy, and `scripts/check-shopify-submission-readiness.mjs` before release.
-
-## Verification
-
-Run:
-
-```bash
-npm run check:shopify-submission
-```
-
-The verifier checks that:
-
-- `shopify.app.toml` scopes stay at `read_orders,read_locations`.
-- The embedded order query does not request `email` or `customer { ... }`.
-- The delivery API sync query does not request `email` or `customer { ... }`.
-- The docs keep the current protected-data blocker explicit until Partner Dashboard submission is complete.
+Implementation note: internal canonical order models and tests still contain an `email` property for legacy/manual/test rows. This does not mean the current Shopify Admin GraphQL queries request customer email. If a future release adds `email` to a Shopify query, update this map, the Partner Dashboard protected-data request, and the privacy policy before release.

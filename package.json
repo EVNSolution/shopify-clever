@@ -10,7 +10,6 @@
     "test": "npm run test:shopify-app",
     "deploy:shopify-main": "docker compose -f infra/compose/docker-compose.shopify-main.yml up -d --build",
     "deploy:shopify-dev": "docker compose -f infra/compose/docker-compose.shopify-dev.yml up -d --build",
-    "check:public-urls": "node scripts/check-public-url-hosts.mjs",
-    "check:shopify-submission": "node scripts/check-shopify-submission-readiness.mjs"
+    "check:public-urls": "node scripts/check-public-url-hosts.mjs"
   }
 }

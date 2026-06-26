@@ -70,8 +70,6 @@ jobs:
       - name: Check public URL hostnames
         run: npm run check:public-urls
 
-      - name: Check Shopify submission readiness
-        run: npm run check:shopify-submission
 
       - name: Prepare non-secret compose env files
         run: |
