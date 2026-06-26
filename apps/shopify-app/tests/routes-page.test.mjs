@@ -248,6 +248,23 @@ test("Route detail keeps the server driver action but removes the header assignm
   assert.doesNotMatch(routeDetailSource, /intent !== "saveRouteStops"/);
 });
 
+
+test("Route detail wires route group action buttons through App Bridge", () => {
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
+  assert.match(routeDetailSource, /createDeliveryRouteGroupBranch/);
+  assert.match(routeDetailSource, /generateDeliveryRouteGroupChildRoutes/);
+  assert.match(routeDetailSource, /intent === "reOptimizeRouteGroup"/);
+  assert.match(routeDetailSource, /intent === "addEmptyRouteBranch"/);
+  assert.match(routeDetailSource, /const shopify = useAppBridge\(\)/);
+  assert.match(routeDetailSource, /const routeActionFetcher = useFetcher\(\)/);
+  assert.match(routeDetailSource, /effectiveRoutePlan\?\.routeGroupingChild\?\.groupingId/);
+  assert.match(routeDetailSource, /shopify\.idToken\(\)/);
+  assert.match(routeDetailSource, /routeActionFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("reOptimizeRouteGroup"\)/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("addEmptyRouteBranch", \{ label: "Route" \}\)/);
+});
+
 test("Routes list displays assigned route drivers from the server response", () => {
   assert.match(routesPageSource, /function formatRouteDriver\(driver\) \{/);
   assert.match(routesPageSource, /driverId: routePlan\.driverId \?\? routePlan\.driver\?\.id \?\? null/);
@@ -258,8 +275,8 @@ test("Routes list displays assigned route drivers from the server response", () 
 test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
-  assert.doesNotMatch(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /import \{ useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
@@ -648,7 +665,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
 });
 
 test("Route detail page provides page navigation back to the route list", () => {
-  assert.match(routeDetailSource, /import \{ useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = "\/app\/routes"/);
   assert.match(routeDetailSource, /onClick=\{\(\) => navigate\(routesListHref\)\}/);

@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useLoaderData, useNavigate, useRouteError } from "react-router";
+import { useFetcher, useLoaderData, useNavigate, useRouteError } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { fetchDeliveryDrivers } from "../features/delivery/drivers.server";
+import {
+  createDeliveryRouteGroupBranch,
+  generateDeliveryRouteGroupChildRoutes,
+} from "../features/delivery/route-groups.server";
 import {
   assignDeliveryRoutePlanDriver,
   fetchDeliveryRoutePlanDetail,
@@ -625,6 +630,24 @@ export const action = async ({ params, request }) => {
       request,
       params.routeId,
       { driverId },
+      { sessionToken: shopifySessionToken },
+    );
+  }
+
+  if (intent === "reOptimizeRouteGroup") {
+    return generateDeliveryRouteGroupChildRoutes(
+      request,
+      formData.get("routeGroupId"),
+      { confirmRisk: false },
+      { sessionToken: shopifySessionToken },
+    );
+  }
+
+  if (intent === "addEmptyRouteBranch") {
+    return createDeliveryRouteGroupBranch(
+      request,
+      formData.get("routeGroupId"),
+      { label: textOrUndefined(formData.get("label")) ?? "Route", orderIds: [] },
       { sessionToken: shopifySessionToken },
     );
   }
@@ -1281,6 +1304,8 @@ function renderRouteTimelineStartIcon() {
 
 export default function RouteDetailPage() {
   const navigate = useNavigate();
+  const shopify = useAppBridge();
+  const routeActionFetcher = useFetcher();
   const {
     currentDepartureLocation = null,
     drivers = [],
@@ -1318,7 +1343,8 @@ export default function RouteDetailPage() {
   const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
-  const visibleErrors = errors ?? [];
+  const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId);
+  const routeGroupActionBusy = routeActionFetcher.state !== "idle";
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, orderedRouteStops),
     [departureLocation, orderedRouteStops],
@@ -1344,6 +1370,12 @@ export default function RouteDetailPage() {
   const [routeLineDraftTitle, setRouteLineDraftTitle] = useState(defaultRouteCandidateTitle);
   const [routeLineDraftColor, setRouteLineDraftColor] = useState(MAP_MARKER_PALETTE.plannedOrder.color);
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
+  const [routeGroupClientError, setRouteGroupClientError] = useState(null);
+  const visibleErrors = [
+    ...(routeGroupClientError ? [{ message: routeGroupClientError }] : []),
+    ...(routeActionFetcher.data?.errors ?? []),
+    ...(errors ?? []),
+  ];
   const routePathColor = softenRouteColor(routeLineColor);
   const savedRouteGeometry = routeGeometry;
   const savedRouteStopPoints = routeStopPoints;
@@ -1405,6 +1437,28 @@ export default function RouteDetailPage() {
     setRouteCandidateTitle(routeLineDraftTitle.trim() || defaultRouteCandidateTitle);
     setRouteLineColor(routeLineDraftColor);
     setIsRouteLineEditorOpen(false);
+  };
+
+  const submitRouteGroupAction = async (intent, fields = {}) => {
+    if (!routeGroupId) {
+      setRouteGroupClientError("Route group id가 없어 작업을 실행할 수 없습니다.");
+      return;
+    }
+
+    try {
+      setRouteGroupClientError(null);
+      const sessionToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("_intent", intent);
+      formData.set("routeGroupId", routeGroupId);
+      formData.set("shopifySessionToken", sessionToken);
+      for (const [key, value] of Object.entries(fields)) formData.set(key, value);
+      routeActionFetcher.submit(formData, { method: "post" });
+    } catch {
+      setRouteGroupClientError(
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      );
+    }
   };
 
   useEffect(() => {
@@ -1693,8 +1747,18 @@ export default function RouteDetailPage() {
               <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
             </section>
             <div aria-label="Route actions" style={routeActionColumnStyle}>
-              <button style={routeActionButtonStyle} type="button">Re-optimize</button>
-              <button style={routeActionButtonStyle} type="button">Add Empty Route</button>
+              <button
+                disabled={routeGroupActionBusy}
+                onClick={() => submitRouteGroupAction("reOptimizeRouteGroup")}
+                style={routeActionButtonStyle}
+                type="button"
+              >{routeGroupActionBusy ? "Working…" : "Re-optimize"}</button>
+              <button
+                disabled={routeGroupActionBusy}
+                onClick={() => submitRouteGroupAction("addEmptyRouteBranch", { label: "Route" })}
+                style={routeActionButtonStyle}
+                type="button"
+              >Add Empty Route</button>
             </div>
           </section>
 
