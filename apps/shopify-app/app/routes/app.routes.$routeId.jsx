@@ -246,32 +246,40 @@ const routeMetaItemStyle = {
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1548px",
+  minWidth: "100%",
   tableLayout: "fixed",
   width: "100%",
 };
 
 const routePlanRowsColumnWidths = [
-  "180px",
-  "100px",
-  "160px",
-  "100px",
-  "170px",
-  "72px",
-  "88px",
-  "88px",
-  "96px",
-  "120px",
-  "120px",
-  "104px",
-  "150px",
+  "13%",
+  "7%",
+  "10%",
+  "6%",
+  "11%",
+  "4%",
+  "6%",
+  "6%",
+  "6%",
+  "8%",
+  "8%",
+  "6%",
+  "9%",
 ];
 
 const routeLineNameStyle = {
   alignItems: "center",
   display: "inline-flex",
-  gap: "8px",
+  gap: "6px",
+  maxWidth: "100%",
   minWidth: 0,
+};
+
+const routeLineTitleStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const routeStatusDotStyle = {
@@ -279,8 +287,8 @@ const routeStatusDotStyle = {
   borderRadius: "999px",
   display: "inline-block",
   flex: "0 0 auto",
-  height: "8px",
-  width: "8px",
+  height: "7px",
+  width: "7px",
 };
 
 const routeDepartureStatusStyle = {
@@ -289,30 +297,52 @@ const routeDepartureStatusStyle = {
   borderRadius: "999px",
   color: "#5f4b00",
   display: "inline-flex",
-  fontSize: "12px",
+  fontSize: "11px",
   fontWeight: 650,
   lineHeight: 1,
-  padding: "4px 8px",
+  padding: "2px 6px",
 };
 
-const routeStartInputStyle = {
-  background: "#ffffff",
-  border: "1px solid #d6d6d6",
-  borderRadius: "7px",
+const routeEditableValueStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
   color: "#303030",
+  cursor: "pointer",
+  display: "inline-flex",
   fontFamily: "inherit",
   fontSize: "12px",
-  minHeight: "28px",
-  padding: "2px 6px",
-  width: "150px",
+  fontWeight: 600,
+  gap: "3px",
+  lineHeight: 1.1,
+  maxWidth: "100%",
+  minWidth: 0,
+  overflow: "hidden",
+  padding: 0,
+  textAlign: "left",
+  whiteSpace: "nowrap",
+};
+
+const routeEditableValueTextStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const routeEditableArrowStyle = {
+  color: "#616161",
+  flex: "0 0 auto",
+  fontSize: "11px",
+  lineHeight: 1,
 };
 
 const routeTimelineStyle = {
   borderTop: "1px solid #ececec",
   display: "grid",
-  gap: "10px",
+  gap: "8px",
   overflowX: "auto",
-  padding: "14px 12px",
+  padding: "10px 8px",
 };
 
 const routeTimelineLaneStyle = {
@@ -323,10 +353,13 @@ const routeTimelineLaneStyle = {
 
 const routeTimelineLabelStyle = {
   color: "#303030",
-  fontSize: "13px",
+  fontSize: "12px",
   fontWeight: 650,
-  marginRight: "14px",
-  minWidth: "120px",
+  marginRight: "10px",
+  minWidth: "96px",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const routeTimelineStartStyle = {
@@ -336,11 +369,11 @@ const routeTimelineStartStyle = {
   color: "#ffffff",
   display: "inline-flex",
   flex: "0 0 auto",
-  fontSize: "12px",
+  fontSize: "11px",
   fontWeight: 700,
-  height: "26px",
+  height: "22px",
   justifyContent: "center",
-  width: "26px",
+  width: "22px",
 };
 
 const routeTimelineSegmentStyle = {
@@ -352,7 +385,7 @@ const routeTimelineSegmentStyle = {
 const routeTimelineLineStyle = {
   background: "#0ea5e9",
   height: "2px",
-  width: "44px",
+  width: "34px",
 };
 
 const routeTimelineStopStyle = {
@@ -361,15 +394,15 @@ const routeTimelineStopStyle = {
   borderRadius: "999px",
   color: "#ffffff",
   display: "inline-flex",
-  fontSize: "11px",
+  fontSize: "10px",
   fontWeight: 700,
-  height: "26px",
+  height: "22px",
   justifyContent: "center",
-  width: "26px",
+  width: "22px",
 };
 
 const routesDetailTableFrameStyle = {
-  overflowX: "auto",
+  overflowX: "hidden",
 };
 
 const routesDetailHeaderCellStyle = {
@@ -378,11 +411,13 @@ const routesDetailHeaderCellStyle = {
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#616161",
-  fontSize: "12px",
+  fontSize: "11px",
   fontWeight: 650,
-  lineHeight: 1.25,
-  padding: "9px 10px",
+  lineHeight: 1.15,
+  overflow: "hidden",
+  padding: "5px 6px",
   textAlign: "left",
+  textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
@@ -391,10 +426,10 @@ const routesDetailCellStyle = {
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#303030",
-  fontSize: "13px",
-  lineHeight: 1.35,
+  fontSize: "12px",
+  lineHeight: 1.2,
   overflow: "hidden",
-  padding: "10px",
+  padding: "5px 6px",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
@@ -530,6 +565,20 @@ function getRouteStartDateTimeValue(routePlan) {
 
   const date = textOrUndefined(routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate);
   return date ? `${date}T09:00` : "";
+}
+
+function getRouteStartTimeLabel(value) {
+  if (!value) return "—";
+  return value.replace("T", " ");
+}
+
+function getChildRouteTitle(routePlan) {
+  return textOrUndefined(
+    routePlan?.childRouteName ??
+    routePlan?.routeLineName ??
+    routePlan?.branchName ??
+    routePlan?.branch?.label,
+  ) ?? "Unassigned";
 }
 
 function getRouteCreatedLabel(routePlan) {
@@ -1075,7 +1124,9 @@ export default function RouteDetailPage() {
   const [selectedRouteDriverId, setSelectedRouteDriverId] = useState(routeDriverId);
   const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
+  const childRouteTitle = getChildRouteTitle(effectiveRoutePlan);
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
+  const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
@@ -1507,19 +1558,27 @@ export default function RouteDetailPage() {
                   <td style={routesDetailCellStyle}>
                     <span style={routeLineNameStyle}>
                       <span aria-hidden="true" style={routeStatusDotStyle}></span>
-                      <span>{routeDetail.route}</span>
+                      <span style={routeLineTitleStyle}>{childRouteTitle}</span>
                     </span>
                   </td>
                   <td style={routesDetailCellStyle}><span style={routeDepartureStatusStyle}>{routeDepartureStatus}</span></td>
-                  <td style={routesDetailCellStyle}>{routeDriverSummary}</td>
-                  <td style={routesDetailCellStyle}>{routeVehicleLabel}</td>
                   <td style={routesDetailCellStyle}>
-                    <input
-                      aria-label="Route start time"
-                      defaultValue={routeStartDateTimeValue}
-                      style={routeStartInputStyle}
-                      type="datetime-local"
-                    />
+                    <button aria-label="Change route driver" style={routeEditableValueStyle} type="button">
+                      <span style={routeEditableValueTextStyle}>{routeDriverSummary}</span>
+                      <span aria-hidden="true" style={routeEditableArrowStyle}>⌄</span>
+                    </button>
+                  </td>
+                  <td style={routesDetailCellStyle}>
+                    <button aria-label="Change route vehicle" style={routeEditableValueStyle} type="button">
+                      <span style={routeEditableValueTextStyle}>{routeVehicleLabel}</span>
+                      <span aria-hidden="true" style={routeEditableArrowStyle}>⌄</span>
+                    </button>
+                  </td>
+                  <td style={routesDetailCellStyle}>
+                    <button aria-label="Change route start time" style={routeEditableValueStyle} type="button">
+                      <span style={routeEditableValueTextStyle}>{routeStartTimeLabel}</span>
+                      <span aria-hidden="true" style={routeEditableArrowStyle}>⌄</span>
+                    </button>
                   </td>
                   <td style={routesDetailCellStyle}>{orderedRouteStops.length}</td>
                   <td style={routesDetailCellStyle}>{routeDeliveredCount}</td>
@@ -1536,7 +1595,7 @@ export default function RouteDetailPage() {
 
           <section aria-label="Route stop timeline" style={routeTimelineStyle}>
             <div style={routeTimelineLaneStyle}>
-              <div style={routeTimelineLabelStyle}>{routeDetail.route}</div>
+              <div style={routeTimelineLabelStyle}>{childRouteTitle}</div>
               <span title="Start" style={routeTimelineStartStyle}>★</span>
               {orderedRouteStops.map((stop) => (
                 <span key={stop.id} style={routeTimelineSegmentStyle} title={stop.order}>
