@@ -72,7 +72,7 @@ const routeOverviewTopBarStyle = {
 
 const routeOverviewTitleBlockStyle = {
   display: "grid",
-  gap: "6px",
+  gap: "8px",
   minWidth: 0,
 };
 
@@ -96,14 +96,11 @@ const routesDetailTitleStyle = {
 };
 
 const routeDetailTitleMetricStyle = {
-  background: "#ffffff",
-  border: "1px solid #ebebeb",
-  borderRadius: "10px",
-  display: "grid",
-  gap: "2px",
+  alignItems: "baseline",
+  display: "inline-flex",
+  gap: "4px",
   maxWidth: "100%",
   minWidth: 0,
-  padding: "8px 10px",
   textAlign: "left",
 };
 
@@ -116,9 +113,9 @@ const routeDetailTitleMetricLabelStyle = {
 
 const routeDetailTitleMetricValueStyle = {
   color: "#1f1f1f",
-  fontSize: "14px",
+  fontSize: "13px",
   fontWeight: 700,
-  lineHeight: 1.2,
+  lineHeight: 1.15,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -171,13 +168,12 @@ const routeDetailDriverDisabledSaveButtonStyle = {
 };
 
 const routeOverviewDriverPanelStyle = {
-  background: "#f7f7f7",
-  border: "1px solid #e5e5e5",
-  borderRadius: "12px",
-  display: "grid",
-  gap: "6px",
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  justifyContent: "flex-end",
   minWidth: 0,
-  padding: "8px 10px",
   textAlign: "left",
 };
 
@@ -259,6 +255,44 @@ const routeDetailStopsTitleStyle = {
   color: "#303030",
   fontSize: "14px",
   fontWeight: 650,
+};
+
+const routeDriverWorkbenchStyle = {
+  borderBottom: "1px solid #ececec",
+  display: "grid",
+  gap: "8px",
+  padding: "8px 10px",
+};
+
+const routeDriverToggleListStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "6px",
+};
+
+const routeDriverToggleButtonStyle = {
+  alignItems: "center",
+  background: "#303030",
+  border: "1px solid #303030",
+  borderRadius: "999px",
+  color: "#ffffff",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontFamily: "inherit",
+  fontSize: "12px",
+  fontWeight: 650,
+  gap: "6px",
+  minHeight: "28px",
+  padding: "3px 10px",
+};
+
+const routeDriverToggleCountStyle = {
+  background: "rgba(255, 255, 255, 0.18)",
+  borderRadius: "999px",
+  fontSize: "11px",
+  lineHeight: 1,
+  padding: "3px 6px",
 };
 
 const routesDetailTableFrameStyle = {
@@ -1214,6 +1248,14 @@ export default function RouteDetailPage() {
   const editableRouteStops = isEditingRouteSequence ? draftRouteStops : committedRouteStops;
   const visibleRouteStopOrderIds = isEditingRouteSequence ? draftRouteStopOrderIds : committedRouteStopOrderIds;
   const orderedRouteStops = useMemo(() => orderRouteStops(editableRouteStops, visibleRouteStopOrderIds), [editableRouteStops, visibleRouteStopOrderIds]);
+  const routeDriverBuckets = useMemo(() => [{
+    id: routeDriverId || "unassigned",
+    label: routeDriverSummary,
+    stops: orderedRouteStops,
+  }], [orderedRouteStops, routeDriverId, routeDriverSummary]);
+  const [activeRouteDriverBucketId, setActiveRouteDriverBucketId] = useState(routeDriverBuckets[0]?.id ?? "unassigned");
+  const activeRouteDriverBucket = routeDriverBuckets.find((bucket) => bucket.id === activeRouteDriverBucketId) ?? routeDriverBuckets[0];
+  const activeRouteDriverStops = activeRouteDriverBucket?.stops ?? orderedRouteStops;
   const addableSameDateStops = useMemo(
     () => buildSameDateCandidateStops(sameDateOrders, editableRouteStops, routeDeliveryDate),
     [editableRouteStops, routeDeliveryDate, sameDateOrders],
@@ -1276,6 +1318,12 @@ export default function RouteDetailPage() {
   useEffect(() => {
     setSelectedRouteDriverId(routeDriverId);
   }, [routeDriverId]);
+
+  useEffect(() => {
+    if (routeDriverBuckets.some((bucket) => bucket.id === activeRouteDriverBucketId)) return;
+
+    setActiveRouteDriverBucketId(routeDriverBuckets[0]?.id ?? "unassigned");
+  }, [activeRouteDriverBucketId, routeDriverBuckets]);
 
   useEffect(() => {
     if (routeStopSaveFetcher.state !== "idle" || !routeStopSaveFetcher.data) return;
@@ -1643,7 +1691,12 @@ export default function RouteDetailPage() {
                 <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetail.route}</h1>
                 <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
               </div>
-              <p style={routesDetailDescriptionStyle}>Review and assign a driver before publishing this route.</p>
+              <div aria-label="Route summary" className="route-overview-summary">
+                {renderRouteHeaderMetric("Orders", routeDetail.orders)}
+                {renderRouteHeaderMetric("Delivery area", routeDetail.deliveryArea)}
+                {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
+                {renderRouteHeaderMetric("Driver", routeDriverSummary)}
+              </div>
             </div>
             <div
               aria-label="Route driver assignment"
@@ -1679,13 +1732,6 @@ export default function RouteDetailPage() {
                 </button>
               </div>
             </div>
-          </div>
-
-          <div aria-label="Route summary" className="route-overview-summary">
-            {renderRouteHeaderMetric("Orders", routeDetail.orders)}
-            {renderRouteHeaderMetric("Delivery area", routeDetail.deliveryArea)}
-            {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
-            {renderRouteHeaderMetric("Driver", routeDriverSummary)}
           </div>
         </header>
 
@@ -1739,10 +1785,28 @@ export default function RouteDetailPage() {
             }
           />
 
+          <section aria-label="Route driver stop groups" style={routeDriverWorkbenchStyle}>
+            <div style={routeDetailStopsTitleStyle}>Driver routes</div>
+            <div style={routeDriverToggleListStyle}>
+              {routeDriverBuckets.map((bucket) => (
+                <button
+                  aria-pressed={bucket.id === activeRouteDriverBucketId}
+                  key={bucket.id}
+                  onClick={() => setActiveRouteDriverBucketId(bucket.id)}
+                  style={routeDriverToggleButtonStyle}
+                  type="button"
+                >
+                  <span>{bucket.label}</span>
+                  <span style={routeDriverToggleCountStyle}>{bucket.stops.length}</span>
+                </button>
+              ))}
+            </div>
+          </section>
+
           <div style={routeDetailStopsHeaderStyle}>
-            <div style={routeDetailStopsTitleStyle}>stop sequence list</div>
+            <div style={routeDetailStopsTitleStyle}>{activeRouteDriverBucket?.label ?? "Unassigned"} stop sequence</div>
             <div style={routeDetailStopsHeaderActionsStyle}>
-              <div style={routesDetailDescriptionStyle}>{orderedRouteStops.length} selected orders</div>
+              <div style={routesDetailDescriptionStyle}>{activeRouteDriverStops.length} selected orders</div>
               <button
                 disabled={isSavingRouteStops}
                 onClick={saveRouteSequenceEdit}
@@ -1779,12 +1843,12 @@ export default function RouteDetailPage() {
                 </tr>
               </thead>
               <tbody>
-                {orderedRouteStops.length === 0 ? (
+                {activeRouteDriverStops.length === 0 ? (
                   <tr>
                     <td colSpan={9} style={routesDetailEmptyCellStyle}>No route stops selected.</td>
                   </tr>
                 ) : (
-                  orderedRouteStops.map((stop, stopIndex) => (
+                  activeRouteDriverStops.map((stop, stopIndex) => (
                     <tr
                       data-route-stop-index={stopIndex}
                       draggable={isEditingRouteSequence}

@@ -305,7 +305,6 @@ test("Route detail summarizes delivery with the actual date label", () => {
 test("Route detail renders a cohesive route overview panel with driver assignment and summary", () => {
   const headerBlock = routeDetailSource.match(/const routeOverviewHeaderStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const titleBlock = routeDetailSource.match(/const routesDetailTitleStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
-  const descriptionBlock = routeDetailSource.match(/const routesDetailDescriptionStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const metricBlock = routeDetailSource.match(/const routeDetailTitleMetricStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const metricLabelBlock = routeDetailSource.match(/const routeDetailTitleMetricLabelStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   const metricValueBlock = routeDetailSource.match(/const routeDetailTitleMetricValueStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
@@ -324,19 +323,17 @@ test("Route detail renders a cohesive route overview panel with driver assignmen
   assert.match(titleBlock, /fontSize: "24px"/);
   assert.match(titleBlock, /fontWeight: "700"/);
   assert.match(titleBlock, /lineHeight: "32px"/);
-  assert.match(descriptionBlock, /color: "#6b7280"/);
-  assert.match(metricBlock, /background: "#ffffff"/);
-  assert.match(metricBlock, /border: "1px solid #ebebeb"/);
-  assert.match(metricBlock, /borderRadius: "10px"/);
-  assert.match(metricBlock, /gap: "2px"/);
-  assert.match(metricBlock, /padding: "8px 10px"/);
+  assert.match(metricBlock, /display: "inline-flex"/);
+  assert.match(metricBlock, /gap: "4px"/);
+  assert.doesNotMatch(metricBlock, /background: "#ffffff"/);
+  assert.doesNotMatch(metricBlock, /border: "1px solid #ebebeb"/);
   assert.match(metricLabelBlock, /lineHeight: 1\.1/);
-  assert.match(metricValueBlock, /lineHeight: 1\.2/);
-  assert.match(driverPanelBlock, /background: "#f7f7f7"/);
-  assert.match(driverPanelBlock, /border: "1px solid #e5e5e5"/);
-  assert.match(driverPanelBlock, /borderRadius: "12px"/);
-  assert.match(driverPanelBlock, /gap: "6px"/);
-  assert.match(driverPanelBlock, /padding: "8px 10px"/);
+  assert.match(metricValueBlock, /lineHeight: 1\.15/);
+  assert.match(driverPanelBlock, /display: "flex"/);
+  assert.match(driverPanelBlock, /justifyContent: "flex-end"/);
+  assert.match(driverPanelBlock, /gap: "8px"/);
+  assert.doesNotMatch(driverPanelBlock, /background: "#f7f7f7"/);
+  assert.doesNotMatch(driverPanelBlock, /border: "1px solid #e5e5e5"/);
   assert.match(driverLabelBlock, /lineHeight: 1\.15/);
   assert.match(driverSelectBlock, /minHeight: "28px"/);
   assert.match(driverSelectBlock, /minWidth: 0/);
@@ -350,17 +347,18 @@ test("Route detail renders a cohesive route overview panel with driver assignmen
     routeDetailSource,
     /<header className="route-overview-header" style=\{routeOverviewHeaderStyle\}>[\s\S]*aria-label="Back to routes list"[\s\S]*className="route-overview-main"[\s\S]*aria-label="Route driver assignment"/,
   );
-  assert.match(routeDetailSource, /Review and assign a driver before publishing this route\./);
+  assert.doesNotMatch(routeDetailSource, /Review and assign a driver before publishing this route\./);
   assert.match(
     routeDetailSource,
     /aria-label="Route summary" className="route-overview-summary">[\s\S]*renderRouteHeaderMetric\("Orders", routeDetail\.orders\)[\s\S]*renderRouteHeaderMetric\("Delivery area", routeDetail\.deliveryArea\)[\s\S]*renderRouteHeaderMetric\("Delivery date", routeDetail\.deliveryDate\)[\s\S]*renderRouteHeaderMetric\("Driver", routeDriverSummary\)/,
   );
-  assert.doesNotMatch(
-    routeDetailSource,
-    /aria-label="Route summary"[\s\S]*route-driver-select[\s\S]*<\/div>/,
-  );
+  assert.match(routeDetailSource, /aria-label="Route summary" className="route-overview-summary">[\s\S]*<\/div>\n            <\/div>\n            <div\n              aria-label="Route driver assignment"/);
   assert.match(routeDetailSource, /function renderRouteHeaderMetric\(label, value\) \{/);
   assert.match(routeDetailSource, /aria-label="Route driver assignment"/);
+  assert.match(routeDetailSource, /const routeDriverBuckets = useMemo\(\(\) => \[\{[\s\S]*id: routeDriverId \|\| "unassigned"/);
+  assert.match(routeDetailSource, /aria-label="Route driver stop groups"/);
+  assert.match(routeDetailSource, />Driver routes<\/div>/);
+  assert.match(routeDetailSource, /activeRouteDriverStops\.map\(\(stop, stopIndex\) =>/);
   assert.match(routeDetailSource, /height: "440px"/);
   assert.match(routeDetailSource, /minHeight: "440px"/);
   assert.doesNotMatch(routeDetailSource, /routeDetailHeaderInfoCardStyle/);
@@ -379,12 +377,11 @@ test("Route overview header has responsive CSS for driver and summary regions", 
   assert.match(globalCssSource, /grid-template-columns: minmax\(0, 1fr\) minmax\(280px, 380px\)/);
   assert.match(globalCssSource, /\.route-overview-driver-control[\s\S]*gap: 6px/);
   assert.match(globalCssSource, /\.route-overview-driver-control[\s\S]*grid-template-columns: minmax\(0, 1fr\) auto/);
-  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*gap: 8px/);
-  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
-  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*padding-top: 12px/);
+  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*display: flex/);
+  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*flex-wrap: wrap/);
+  assert.match(globalCssSource, /\.route-overview-summary[\s\S]*gap: 6px 12px/);
+  assert.doesNotMatch(globalCssSource, /\.route-overview-summary[\s\S]*grid-template-columns: repeat\(4, minmax\(0, 1fr\)\)/);
   assert.match(globalCssSource, /@media \(max-width: 900px\)[\s\S]*\.route-overview-main[\s\S]*grid-template-columns: 1fr/);
-  assert.match(globalCssSource, /@media \(max-width: 900px\)[\s\S]*\.route-overview-summary[\s\S]*grid-template-columns: repeat\(2, minmax\(136px, 1fr\)\)/);
-  assert.match(globalCssSource, /@media \(max-width: 600px\)[\s\S]*\.route-overview-summary[\s\S]*grid-template-columns: 1fr/);
   assert.match(globalCssSource, /@media \(max-width: 600px\)[\s\S]*\.route-overview-driver-control[\s\S]*grid-template-columns: 1fr/);
 });
 
@@ -642,7 +639,7 @@ test("Route detail renders a focused stop table below the map", () => {
   assert.match(routeDetailSource, />Payment<\/th>/);
   assert.match(routeDetailSource, />Attributes<\/th>/);
   assert.match(routeDetailSource, />Coordinates<\/th>/);
-  assert.match(routeDetailSource, /orderedRouteStops\.map\(\(stop, stopIndex\) =>/);
+  assert.match(routeDetailSource, /activeRouteDriverStops\.map\(\(stop, stopIndex\) =>/);
 });
 
 test("Route detail lets operators edit stop sequence with a clean drag mode", () => {

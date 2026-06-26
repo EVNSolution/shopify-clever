@@ -565,20 +565,18 @@ s-badge {
 }
 
 .route-overview-summary {
-  border-top: 1px solid #ebebeb;
-  display: grid;
-  gap: 8px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  padding-top: 12px;
+  align-items: center;
+  color: #6b7280;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 13px;
+  gap: 6px 12px;
+  min-width: 0;
 }
 
 @media (max-width: 900px) {
   .route-overview-main {
     grid-template-columns: 1fr;
-  }
-
-  .route-overview-summary {
-    grid-template-columns: repeat(2, minmax(136px, 1fr));
   }
 }
 
@@ -586,10 +584,6 @@ s-badge {
   .route-detail-title {
     overflow-wrap: anywhere;
     white-space: normal !important;
-  }
-
-  .route-overview-summary {
-    grid-template-columns: 1fr;
   }
 
   .route-overview-driver-control {
