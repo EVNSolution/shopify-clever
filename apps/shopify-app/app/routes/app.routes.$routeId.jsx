@@ -246,25 +246,25 @@ const routeMetaItemStyle = {
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "100%",
+  minWidth: "1180px",
   tableLayout: "fixed",
-  width: "100%",
+  width: "max-content",
 };
 
 const routePlanRowsColumnWidths = [
-  "13%",
-  "7%",
-  "10%",
-  "6%",
-  "11%",
-  "4%",
-  "6%",
-  "6%",
-  "6%",
-  "8%",
-  "8%",
-  "6%",
-  "9%",
+  "112px",
+  "82px",
+  "116px",
+  "74px",
+  "128px",
+  "52px",
+  "74px",
+  "76px",
+  "82px",
+  "104px",
+  "104px",
+  "96px",
+  "116px",
 ];
 
 const routeLineNameStyle = {
@@ -427,7 +427,7 @@ const routeTimelineStopStyle = {
 };
 
 const routesDetailTableFrameStyle = {
-  overflowX: "hidden",
+  overflowX: "auto",
 };
 
 const routesDetailHeaderCellStyle = {
