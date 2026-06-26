@@ -34,7 +34,6 @@ import {
   getOrderDeliveryStateFilterValue,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
-  isOrderRouteAssigned,
   isOrderRouteCreated,
   ORDER_DELIVERY_STATE_OPTIONS,
   ORDER_PLANNING_SCOPE,
@@ -55,6 +54,7 @@ const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const MARKER_CLICK_ZOOM_OUT_THRESHOLD = 8;
 const MARKER_CLICK_TARGET_ZOOM = 10;
+const ORDER_MARKER_MIN_ZOOM = 7;
 const ORDERS_MAP_SOURCE_ID = "orders-map-orders";
 const ORDERS_MAP_ORDER_LAYER_ID = "orders-map-order-pins";
 const ORDER_PIN_IMAGE_ID = "orders-map-pin";
@@ -1336,6 +1336,7 @@ function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
   if (!map.getLayer?.(ORDERS_MAP_ORDER_LAYER_ID)) {
     map.addLayer({
       id: ORDERS_MAP_ORDER_LAYER_ID,
+      minzoom: ORDER_MARKER_MIN_ZOOM,
       type: "symbol",
       source: ORDERS_MAP_SOURCE_ID,
       layout: {

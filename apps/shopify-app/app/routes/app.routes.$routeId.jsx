@@ -7,7 +7,7 @@ import {
   assignDeliveryRoutePlanDriver,
   fetchDeliveryRoutePlanDetail,
 } from "../features/delivery/route-plans.server";
-import { createDepartureMarkerElement, createDotMarkerElement, createNumberedMarkerElement, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
+import { createDepartureMarkerElement, createDotMarkerElement, MAP_MARKER_PALETTE, MAP_PIN_PATH } from "../features/maps/map-markers";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
@@ -24,7 +24,9 @@ const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
 const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
 const ROUTE_EMPTY_LABEL = "–";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
+const ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM = 7;
 const ROUTE_DETAIL_PERF_CAPTURE_ENABLED = import.meta.env.DEV;
+const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -166,24 +168,53 @@ const routeDetailMapFrameStyle = {
 };
 
 const routeDetailMapCanvasStyle = {
-  minHeight: "440px",
+  minHeight: "490px",
+};
+
+const routeMetaActionsStyle = {
+  borderBottom: "1px solid #ececec",
+  display: "grid",
+  gap: "8px",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  padding: "6px 8px",
 };
 
 const routeMetaGridStyle = {
-  borderBottom: "1px solid #ececec",
   display: "grid",
-  gap: "2px 10px",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-  padding: "6px 8px",
+  gap: "2px",
+  gridTemplateColumns: "minmax(0, 1fr)",
 };
 
 const routeMetaItemStyle = {
   color: "#4b5563",
-  fontSize: "13px",
+  fontSize: "14px",
   lineHeight: 1.35,
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const routeActionColumnStyle = {
+  display: "grid",
+  gap: "4px",
+  width: "128px",
+};
+
+const routeActionButtonStyle = {
+  background: "#ffffff",
+  borderColor: "#c9c9c9",
+  borderRadius: "8px",
+  borderStyle: "solid",
+  borderWidth: "1px",
+  color: "#303030",
+  cursor: "pointer",
+  flex: "0 0 auto",
+  fontFamily: "inherit",
+  fontSize: "13px",
+  fontWeight: 650,
+  minHeight: "26px",
+  padding: "3px 10px",
   whiteSpace: "nowrap",
 };
 
@@ -227,7 +258,6 @@ const routeLineTitleStyle = {
 };
 
 const routeStatusDotStyle = {
-  background: "#0ea5e9",
   borderRadius: "999px",
   display: "inline-block",
   flex: "0 0 auto",
@@ -243,26 +273,33 @@ const routeLineEditButtonStyle = {
   cursor: "pointer",
   display: "inline-flex",
   flex: "0 0 auto",
-  height: "14px",
+  fontSize: "13px",
+  height: "16px",
   justifyContent: "center",
+  lineHeight: 1,
   padding: 0,
-  width: "14px",
+  width: "16px",
 };
 
 const routeLineEditIconStyle = {
   display: "block",
+  transform: "translateY(-0.5px)",
 };
 
 const routeDepartureStatusStyle = {
+  alignItems: "center",
   background: "#fff7cc",
   border: "1px solid #eadf9b",
-  borderRadius: "999px",
+  borderRadius: "6px",
+  boxSizing: "border-box",
   color: "#5f4b00",
   display: "inline-flex",
   fontSize: "12px",
   fontWeight: 650,
+  justifyContent: "center",
   lineHeight: 1,
-  padding: "1px 5px",
+  minHeight: "17px",
+  padding: "0 5px",
 };
 
 const routeEditableValueStyle = {
@@ -322,7 +359,7 @@ const routeTimelineLaneStyle = {
 
 const routeTimelineLabelStyle = {
   color: "#303030",
-  fontSize: "12px",
+  fontSize: "13px",
   fontWeight: 650,
   marginRight: "10px",
   minWidth: "96px",
@@ -345,6 +382,13 @@ const routeTimelineStartStyle = {
   width: "22px",
 };
 
+const routeTimelineStartIconStyle = {
+  display: "block",
+  fill: "currentColor",
+  height: "12px",
+  width: "12px",
+};
+
 const routeTimelineSegmentStyle = {
   alignItems: "center",
   display: "inline-flex",
@@ -352,22 +396,116 @@ const routeTimelineSegmentStyle = {
 };
 
 const routeTimelineLineStyle = {
-  background: "#0ea5e9",
+  background: "var(--route-line-color, #0b84d8)",
   height: "2px",
   width: "34px",
 };
 
 const routeTimelineStopStyle = {
   alignItems: "center",
-  background: "#0b84d8",
+  background: "var(--route-marker-color, #0b84d8)",
   borderRadius: "999px",
   color: "#ffffff",
   display: "inline-flex",
-  fontSize: "10px",
+  fontSize: "11px",
   fontWeight: 700,
   height: "22px",
   justifyContent: "center",
   width: "22px",
+};
+
+const routeLineEditorOverlayStyle = {
+  alignItems: "center",
+  background: "rgba(0, 0, 0, 0.18)",
+  boxSizing: "border-box",
+  display: "grid",
+  inset: 0,
+  justifyItems: "center",
+  padding: "24px",
+  position: "fixed",
+  zIndex: 2147483647,
+};
+
+const routeLineEditorBackdropButtonStyle = {
+  background: "transparent",
+  border: 0,
+  cursor: "default",
+  inset: 0,
+  padding: 0,
+  position: "absolute",
+};
+
+const routeLineEditorDialogStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "12px",
+  boxShadow: "0 18px 48px rgba(0, 0, 0, 0.24)",
+  boxSizing: "border-box",
+  display: "grid",
+  gap: "12px",
+  maxWidth: "calc(100vw - 48px)",
+  padding: "16px",
+  position: "relative",
+  width: "320px",
+  zIndex: 1,
+};
+
+const routeLineEditorTitleStyle = {
+  color: "#303030",
+  fontSize: "15px",
+  fontWeight: 750,
+  margin: 0,
+};
+
+const routeLineEditorFieldStyle = {
+  display: "grid",
+  gap: "4px",
+};
+
+const routeLineEditorLabelStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 650,
+};
+
+const routeLineEditorInputStyle = {
+  border: "1px solid #d0d0d0",
+  borderRadius: "8px",
+  boxSizing: "border-box",
+  color: "#303030",
+  fontFamily: "inherit",
+  fontSize: "13px",
+  lineHeight: 1.2,
+  minHeight: "32px",
+  padding: "4px 8px",
+  width: "100%",
+};
+
+const routeLineColorGridStyle = {
+  display: "flex",
+  gap: "6px",
+};
+
+const routeLineColorButtonStyle = {
+  border: "1px solid #bdbdbd",
+  borderRadius: "999px",
+  cursor: "pointer",
+  height: "22px",
+  padding: 0,
+  width: "22px",
+};
+
+const routeLineEditorActionsStyle = {
+  display: "flex",
+  gap: "6px",
+  justifyContent: "flex-end",
+};
+
+const routeLineEditorPrimaryButtonStyle = {
+  ...routeActionButtonStyle,
+  background: "#303030",
+  borderColor: "#303030",
+  color: "#ffffff",
 };
 
 const routesDetailTableFrameStyle = {
@@ -380,7 +518,7 @@ const routesDetailHeaderCellStyle = {
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#616161",
-  fontSize: "12px",
+  fontSize: "13px",
   fontWeight: 650,
   lineHeight: 1.15,
   overflow: "hidden",
@@ -390,18 +528,39 @@ const routesDetailHeaderCellStyle = {
   whiteSpace: "nowrap",
 };
 
+const routeStatusHeaderCellStyle = {
+  ...routesDetailHeaderCellStyle,
+  textAlign: "center",
+};
+
+const routeNameHeaderCellStyle = {
+  ...routesDetailHeaderCellStyle,
+  paddingLeft: "8px",
+};
+
 const routesDetailCellStyle = {
   borderBottomColor: "#ececec",
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#303030",
-  fontSize: "13px",
+  fontSize: "14px",
   lineHeight: 1.2,
   overflow: "hidden",
   padding: "4px",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
+};
+
+const routeStatusCellStyle = {
+  ...routesDetailCellStyle,
+  padding: "4px 2px",
+  textAlign: "center",
+};
+
+const routeNameCellStyle = {
+  ...routesDetailCellStyle,
+  paddingLeft: "8px",
 };
 
 const routeDetailErrorStyle = {
@@ -839,7 +998,25 @@ function isRouteDetailMapStyleReady(map) {
   }
 }
 
-function syncRouteDetailRouteLine(map, routeGeometry) {
+function syncRouteDetailMarkerZoomVisibility(map, container) {
+  if (!container || typeof map?.getZoom !== "function") return;
+
+  container.classList.toggle(
+    "route-detail-map--hide-order-markers",
+    map.getZoom() < ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM,
+  );
+}
+
+function softenRouteColor(routeColor) {
+  const match = /^#([0-9a-f]{6})$/i.exec(String(routeColor).trim());
+  if (!match) return routeColor;
+
+  const mix = (hex) => Math.round(Number.parseInt(hex, 16) * 0.66 + 255 * 0.34);
+  const color = match[1];
+  return `rgb(${mix(color.slice(0, 2))}, ${mix(color.slice(2, 4))}, ${mix(color.slice(4, 6))})`;
+}
+
+function syncRouteDetailRouteLine(map, routeGeometry, routeColor = "#e11900") {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
   const routeLineFeature = buildRouteDetailRouteLineFeature(routeGeometry);
@@ -851,6 +1028,9 @@ function syncRouteDetailRouteLine(map, routeGeometry) {
   const existingSource = map.getSource?.(ROUTE_DETAIL_ROUTE_SOURCE_ID);
   if (existingSource?.setData) {
     existingSource.setData(routeLineFeature);
+    if (map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) {
+      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", routeColor);
+    }
     return true;
   }
 
@@ -867,9 +1047,9 @@ function syncRouteDetailRouteLine(map, routeGeometry) {
       "line-join": "round",
     },
     paint: {
-      "line-color": "#e11900",
+      "line-color": routeColor,
       "line-opacity": 0.78,
-      "line-width": 4,
+      "line-width": 2.5,
     },
   });
   return true;
@@ -969,26 +1149,41 @@ function fitRouteStopAndSnappedPoint(map, maplibregl, stop, routeStopPoint) {
   });
 }
 
-function createRouteStopMarkerElement(stop) {
-  return createNumberedMarkerElement({
-    ariaLabel: `Stop ${stop.stop}: ${stop.order}`,
-    className: "route-detail-stop-marker",
-    color: MAP_MARKER_PALETTE.routeStop.color,
-    label: stop.stop,
-    labelClassName: "route-detail-stop-marker__label",
-    zIndex: "3200",
-  });
+function createRouteStopMarkerElement(stop, routeColor) {
+  const markerElement = document.createElement("button");
+  const svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  const pathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
+  const labelElement = document.createElement("span");
+
+  markerElement.type = "button";
+  markerElement.className = "order-map-marker order-map-marker--planned";
+  markerElement.style.zIndex = "3200";
+  markerElement.style.setProperty("--marker-color", routeColor);
+  markerElement.setAttribute("aria-label", `Stop ${stop.stop}: ${stop.order}`);
+
+  svgElement.classList.add("order-map-marker__svg");
+  svgElement.setAttribute("viewBox", "0 0 40 52");
+  svgElement.setAttribute("aria-hidden", "true");
+  pathElement.classList.add("order-map-marker__shape");
+  pathElement.setAttribute("d", MAP_PIN_PATH);
+  svgElement.append(pathElement);
+
+  labelElement.className = "order-map-marker__label";
+  labelElement.textContent = String(stop.stop);
+  markerElement.append(svgElement, labelElement);
+
+  return markerElement;
 }
 
-function createRouteStopPointMarkerElement() {
+function createRouteStopPointMarkerElement(routeColor) {
   return createDotMarkerElement({
     className: "route-detail-snapped-stop-point",
-    color: MAP_MARKER_PALETTE.snappedStop.color,
+    color: routeColor,
     zIndex: "3100",
   });
 }
 
-function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeStops, routeStopPoints) {
+function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeStops, routeStopPoints, routeColor) {
   const markers = [];
 
   if (departureLocation?.hasCoordinates) {
@@ -1017,11 +1212,11 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
         routeStopPoint,
       );
     };
-    const markerElement = createRouteStopMarkerElement(stop);
+    const markerElement = createRouteStopMarkerElement(stop, routeColor);
     markerElement.addEventListener("dblclick", handleStopMarkerDoubleClick);
 
     const stopMarker = new maplibregl.Marker({
-      anchor: "center",
+      anchor: "bottom",
       element: markerElement,
     })
       .setLngLat(markerCoordinates)
@@ -1034,7 +1229,7 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
 
     const snappedStopPointMarker = new maplibregl.Marker({
       anchor: "center",
-      element: createRouteStopPointMarkerElement(),
+      element: createRouteStopPointMarkerElement(routeColor),
     })
       .setLngLat(stopPointMarker.coordinates)
       .addTo(map);
@@ -1072,21 +1267,14 @@ function renderRouteEditableChevron() {
 
 function renderRouteLineEditIcon() {
   return (
-    <svg fill="none" height="12" style={routeLineEditIconStyle} viewBox="0 0 12 12" width="12">
-      <path
-        d="M2.25 8.9 2 10l1.1-.25 5.95-5.95-0.85-.85L2.25 8.9Z"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.2"
-      />
-      <path
-        d="m8.15 2.1.65-.65a.85.85 0 0 1 1.2 1.2l-.65.65"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.2"
-      />
+    <span aria-hidden="true" style={routeLineEditIconStyle}>✎</span>
+  );
+}
+
+function renderRouteTimelineStartIcon() {
+  return (
+    <svg aria-hidden="true" style={routeTimelineStartIconStyle} viewBox="0 0 20 20">
+      <path d="M10 3.2 3.5 8.4v8.1h4v-5h5v5h4V8.4L10 3.2Z" />
     </svg>
   );
 }
@@ -1119,7 +1307,7 @@ export default function RouteDetailPage() {
     : "Unassigned";
   const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
-  const routeCandidateTitle = getRouteCandidateTitle(effectiveRoutePlan);
+  const defaultRouteCandidateTitle = getRouteCandidateTitle(effectiveRoutePlan);
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
@@ -1151,6 +1339,12 @@ export default function RouteDetailPage() {
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapStatus, setMapStatus] = useState("loading");
   const [mapRenderKey, setMapRenderKey] = useState(0);
+  const [routeCandidateTitle, setRouteCandidateTitle] = useState(defaultRouteCandidateTitle);
+  const [routeLineColor, setRouteLineColor] = useState(MAP_MARKER_PALETTE.plannedOrder.color);
+  const [routeLineDraftTitle, setRouteLineDraftTitle] = useState(defaultRouteCandidateTitle);
+  const [routeLineDraftColor, setRouteLineDraftColor] = useState(MAP_MARKER_PALETTE.plannedOrder.color);
+  const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
+  const routePathColor = softenRouteColor(routeLineColor);
   const savedRouteGeometry = routeGeometry;
   const savedRouteStopPoints = routeStopPoints;
   const clearMapRecoveryTimer = useCallback(() => {
@@ -1201,6 +1395,23 @@ export default function RouteDetailPage() {
     mapRef.current?.zoomOut({ duration: 250 });
   };
 
+  const handleOpenRouteLineEditor = () => {
+    setRouteLineDraftTitle(routeCandidateTitle);
+    setRouteLineDraftColor(routeLineColor);
+    setIsRouteLineEditorOpen(true);
+  };
+
+  const handleSaveRouteLineEditor = () => {
+    setRouteCandidateTitle(routeLineDraftTitle.trim() || defaultRouteCandidateTitle);
+    setRouteLineColor(routeLineDraftColor);
+    setIsRouteLineEditorOpen(false);
+  };
+
+  useEffect(() => {
+    setRouteCandidateTitle(defaultRouteCandidateTitle);
+    setRouteLineDraftTitle(defaultRouteCandidateTitle);
+  }, [defaultRouteCandidateTitle]);
+
   useEffect(() => {
     routeMapCenterRef.current = routeMapCenter;
   }, [routeMapCenter]);
@@ -1212,7 +1423,8 @@ export default function RouteDetailPage() {
   useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return undefined;
+    const mapContainerElement = mapContainerRef.current;
+    if (!mapContainerElement || mapRef.current) return undefined;
 
     let isMounted = true;
 
@@ -1226,7 +1438,7 @@ export default function RouteDetailPage() {
         ]);
         const importMs = roundPerfDuration(performance.now() - importStartedAt);
 
-        if (!isMounted || !mapContainerRef.current || mapRef.current) return;
+        if (!isMounted || mapRef.current) return;
 
         installPmtilesProtocol(maplibregl, Protocol);
         mapLibraryRef.current = maplibregl;
@@ -1234,14 +1446,19 @@ export default function RouteDetailPage() {
         mapRef.current = new maplibregl.Map({
           attributionControl: { compact: true },
           center: routeMapCenterRef.current,
-          container: mapContainerRef.current,
+          container: mapContainerElement,
           fadeDuration: 0,
           style: OPENFREEMAP_STYLE_URL,
           zoom: 11,
         });
+        const syncMarkerZoomVisibility = () => {
+          syncRouteDetailMarkerZoomVisibility(mapRef.current, mapContainerElement);
+        };
+        syncMarkerZoomVisibility();
         const constructMs = roundPerfDuration(performance.now() - constructStartedAt);
         installMissingMapImageFallback(mapRef.current);
         mapRef.current.on("load", () => {
+          syncMarkerZoomVisibility();
           logRouteDetailPerformance("routes.detail.map.load", {
             totalMs: roundPerfDuration(performance.now() - mapInitStartedAt),
             importMs,
@@ -1253,6 +1470,7 @@ export default function RouteDetailPage() {
           setIsMapReady(true);
           setMapStatus("idle");
         });
+        mapRef.current.on("zoom", syncMarkerZoomVisibility);
         mapRef.current.on("error", (event) => {
           const message = event?.error?.message ?? "";
           const isOpenFreeMapTileError =
@@ -1285,6 +1503,7 @@ export default function RouteDetailPage() {
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
       mapRef.current?.remove();
+      mapContainerElement.classList.remove("route-detail-map--hide-order-markers");
       mapRef.current = null;
       mapLibraryRef.current = null;
       mapLoadedRef.current = false;
@@ -1296,11 +1515,23 @@ export default function RouteDetailPage() {
 
     const map = mapRef.current;
     const maplibregl = mapLibraryRef.current;
+    let routeLineRetryTimer = null;
+
+    const scheduleRouteLineRetry = () => {
+      if (routeLineRetryTimer != null) return;
+      routeLineRetryTimer = window.setTimeout(() => {
+        routeLineRetryTimer = null;
+        syncRouteDetailRouteLine(map, savedRouteGeometry, routePathColor);
+      }, 80);
+    };
 
     const syncRouteDetailMap = () => {
       const syncStartedAt = performance.now();
       const routeLineStartedAt = performance.now();
-      syncRouteDetailRouteLine(map, savedRouteGeometry);
+      const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometry, routePathColor);
+      if (!didSyncRouteLine) {
+        scheduleRouteLineRetry();
+      }
       const routeLineMs = roundPerfDuration(performance.now() - routeLineStartedAt);
       const markerStartedAt = performance.now();
       const routeDetailMarkers = createRouteDetailMapMarkers(
@@ -1309,6 +1540,7 @@ export default function RouteDetailPage() {
         departureLocation,
         orderedRouteStops,
         savedRouteStopPoints,
+        routeLineColor,
       );
       const markerCreateMs = roundPerfDuration(performance.now() - markerStartedAt);
       const markerRemoveStartedAt = performance.now();
@@ -1327,13 +1559,18 @@ export default function RouteDetailPage() {
       });
     };
     const handleRouteDetailStyleData = () => {
-      syncRouteDetailRouteLine(map, savedRouteGeometry);
+      if (!syncRouteDetailRouteLine(map, savedRouteGeometry, routePathColor)) {
+        scheduleRouteLineRetry();
+      }
     };
 
     syncRouteDetailMap();
     map.on("styledata", handleRouteDetailStyleData);
 
     return () => {
+      if (routeLineRetryTimer != null) {
+        window.clearTimeout(routeLineRetryTimer);
+      }
       map.off("styledata", handleRouteDetailStyleData);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
@@ -1342,6 +1579,8 @@ export default function RouteDetailPage() {
     departureLocation,
     isMapReady,
     orderedRouteStops,
+    routeLineColor,
+    routePathColor,
     savedRouteGeometry,
     savedRouteStopPoints,
   ]);
@@ -1447,11 +1686,16 @@ export default function RouteDetailPage() {
             }
           />
 
-          <section aria-label="Route timing" style={routeMetaGridStyle}>
-            <div style={routeMetaItemStyle}>☆ Route start: {departureLocation.address}</div>
-            <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
-            <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
-            <div style={routeMetaItemStyle}>ⓘ Driver assignment: {routeDriverSummary}</div>
+          <section style={routeMetaActionsStyle}>
+            <section aria-label="Route timing" style={routeMetaGridStyle}>
+              <div style={routeMetaItemStyle}>Route start: {departureLocation.address}</div>
+              <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
+              <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
+            </section>
+            <div aria-label="Route actions" style={routeActionColumnStyle}>
+              <button style={routeActionButtonStyle} type="button">Re-optimize</button>
+              <button style={routeActionButtonStyle} type="button">Add Empty Route</button>
+            </div>
           </section>
 
           <div style={routesDetailTableFrameStyle}>
@@ -1463,8 +1707,8 @@ export default function RouteDetailPage() {
               </colgroup>
               <thead>
                 <tr>
-                  <th style={routesDetailHeaderCellStyle}>Name</th>
-                  <th style={routesDetailHeaderCellStyle}>Status</th>
+                  <th style={routeNameHeaderCellStyle}>Name</th>
+                  <th style={routeStatusHeaderCellStyle}>Status</th>
                   <th style={routesDetailHeaderCellStyle}>Driver</th>
                   <th style={routesDetailHeaderCellStyle}>Vehicle</th>
                   <th style={routesDetailHeaderCellStyle}>Start time</th>
@@ -1480,16 +1724,21 @@ export default function RouteDetailPage() {
               </thead>
               <tbody>
                 <tr>
-                  <td style={routesDetailCellStyle}>
+                  <td style={routeNameCellStyle}>
                     <span style={routeLineNameStyle}>
-                      <span aria-hidden="true" style={routeStatusDotStyle}></span>
+                      <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: routeLineColor }}></span>
                       <span style={routeLineTitleStyle}>{routeCandidateTitle}</span>
-                      <button aria-label="Edit route candidate name" style={routeLineEditButtonStyle} type="button">
+                      <button
+                        aria-label="Edit route candidate name"
+                        onClick={handleOpenRouteLineEditor}
+                        style={routeLineEditButtonStyle}
+                        type="button"
+                      >
                         {renderRouteLineEditIcon()}
                       </button>
                     </span>
                   </td>
-                  <td style={routesDetailCellStyle}><span style={routeDepartureStatusStyle}>{routeDepartureStatus}</span></td>
+                  <td style={routeStatusCellStyle}><span style={routeDepartureStatusStyle}>{routeDepartureStatus}</span></td>
                   <td style={routesDetailCellStyle}>
                     <button aria-label="Change route driver" style={routeEditableValueStyle} type="button">
                       <span style={routeEditableValueTextStyle}>{routeDriverSummary}</span>
@@ -1522,9 +1771,9 @@ export default function RouteDetailPage() {
           </div>
 
           <section aria-label="Route stop timeline" style={routeTimelineStyle}>
-            <div style={routeTimelineLaneStyle}>
+            <div style={{ ...routeTimelineLaneStyle, "--route-line-color": routePathColor, "--route-marker-color": routeLineColor }}>
               <div style={routeTimelineLabelStyle}>{routeCandidateTitle}</div>
-              <span title="Start" style={routeTimelineStartStyle}>★</span>
+              <span title="Start" style={routeTimelineStartStyle}>{renderRouteTimelineStartIcon()}</span>
               {orderedRouteStops.map((stop) => (
                 <span key={stop.id} style={routeTimelineSegmentStyle} title={stop.order}>
                   <span style={routeTimelineLineStyle}></span>
@@ -1534,6 +1783,63 @@ export default function RouteDetailPage() {
             </div>
           </section>
         </section>
+
+        {isRouteLineEditorOpen ? (
+          <div style={routeLineEditorOverlayStyle}>
+          <button
+            aria-label="Close route editor"
+            onClick={() => setIsRouteLineEditorOpen(false)}
+            style={routeLineEditorBackdropButtonStyle}
+            type="button"
+          />
+          <div
+            aria-label="Edit route line"
+            role="dialog"
+            style={routeLineEditorDialogStyle}
+          >
+            <h2 style={routeLineEditorTitleStyle}>Edit route</h2>
+            <div style={routeLineEditorFieldStyle}>
+              <label htmlFor="route-line-title" style={routeLineEditorLabelStyle}>Name</label>
+              <input
+                id="route-line-title"
+                onChange={(event) => setRouteLineDraftTitle(event.target.value)}
+                style={routeLineEditorInputStyle}
+                type="text"
+                value={routeLineDraftTitle}
+              />
+            </div>
+            <div style={routeLineEditorFieldStyle}>
+              <span style={routeLineEditorLabelStyle}>Color</span>
+              <div style={routeLineColorGridStyle}>
+                {ROUTE_COLOR_OPTIONS.map((color) => (
+                  <button
+                    aria-label={`Use route color ${color}`}
+                    key={color}
+                    onClick={() => setRouteLineDraftColor(color)}
+                    style={{
+                      ...routeLineColorButtonStyle,
+                      background: color,
+                      boxShadow: color === routeLineDraftColor ? "0 0 0 2px #303030" : "none",
+                    }}
+                    type="button"
+                  />
+                ))}
+              </div>
+              <input
+                aria-label="Route color code"
+                onChange={(event) => setRouteLineDraftColor(event.target.value)}
+                style={routeLineEditorInputStyle}
+                type="text"
+                value={routeLineDraftColor}
+              />
+            </div>
+            <div style={routeLineEditorActionsStyle}>
+              <button onClick={() => setIsRouteLineEditorOpen(false)} style={routeActionButtonStyle} type="button">Cancel</button>
+              <button onClick={handleSaveRouteLineEditor} style={routeLineEditorPrimaryButtonStyle} type="button">Save</button>
+            </div>
+          </div>
+          </div>
+        ) : null}
       </div>
     </main>
   );

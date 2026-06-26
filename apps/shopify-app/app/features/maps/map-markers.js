@@ -10,12 +10,6 @@ export const MAP_MARKER_PALETTE = {
     color: "#006fbb",
     shadowColor: "rgba(0, 111, 187, 0.36)",
   },
-  routeStop: {
-    color: "#303030",
-  },
-  snappedStop: {
-    color: "#1473e6",
-  },
 };
 
 export const MAP_PIN_PATH =
@@ -50,29 +44,6 @@ export function createDepartureMarkerIconElement() {
   iconElement.append(iconPathElement);
 
   return iconElement;
-}
-
-export function createNumberedMarkerElement({
-  ariaLabel,
-  className,
-  color,
-  label,
-  labelClassName,
-  zIndex,
-}) {
-  const markerElement = document.createElement("button");
-  const labelElement = document.createElement("span");
-
-  markerElement.type = "button";
-  markerElement.className = className;
-  markerElement.style.zIndex = zIndex;
-  if (color) markerElement.style.setProperty("--map-marker-color", color);
-  markerElement.setAttribute("aria-label", ariaLabel);
-  labelElement.className = labelClassName;
-  labelElement.textContent = String(label);
-  markerElement.append(labelElement);
-
-  return markerElement;
 }
 
 export function createDotMarkerElement({ ariaHidden = true, className, color, zIndex }) {
