@@ -426,6 +426,7 @@ function buildRouteRows(routePlans, routeGroups = []) {
     : [];
   const routeGroupRows = safeRouteGroups.map((routeGroup) => ({
     id: routeGroup.id,
+    detailRoutePlanId: routeGroup.children?.find((child) => child?.routePlanId)?.routePlanId ?? null,
     isClickable: true,
     isDeletable: true,
     isRouteGroup: true,
@@ -603,6 +604,7 @@ function getStatusBadgeStyle(status) {
 }
 
 function createRouteDetailHref(route) {
+  if (route.isRouteGroup && route.detailRoutePlanId) return `/app/routes/${route.detailRoutePlanId}`;
   return route.isRouteGroup ? `/app/route-groups/${route.id}` : `/app/routes/${route.id}`;
 }
 

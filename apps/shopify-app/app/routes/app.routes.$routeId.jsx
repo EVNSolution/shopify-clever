@@ -38,7 +38,7 @@ const ROUTE_EMPTY_LABEL = "–";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 const ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM = 7;
 const ROUTE_POLYGON_CLICK_DELAY_MS = 220;
-const ROUTE_DETAIL_PERF_CAPTURE_ENABLED = import.meta.env.DEV;
+const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
 
 function roundPerfDuration(duration) {
@@ -49,14 +49,7 @@ function getRouteDetailPerfNow() {
   return typeof performance === "undefined" ? 0 : performance.now();
 }
 
-function logRouteDetailPerformance(name, metric) {
-  if (!ROUTE_DETAIL_PERF_CAPTURE_ENABLED) return;
-
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
-}
+function logRouteDetailPerformance() {}
 
 const routesDetailPageStyle = {
   padding: "8px 12px 12px",
@@ -579,14 +572,14 @@ const routePolygonSaveButtonStyle = {
 };
 
 const routePolygonEditOverlayStyle = {
-  background: "rgba(79, 124, 255, 0.08)",
-  border: "4px solid rgba(79, 124, 255, 0.95)",
+  border: "2px solid rgba(37, 99, 235, 0.85)",
   boxSizing: "border-box",
   inset: 0,
   pointerEvents: "none",
   position: "absolute",
   zIndex: 1,
 };
+
 
 const routePolygonSaveButtonActiveStyle = {
   background: "#d92d20",
@@ -755,6 +748,34 @@ export const loader = async ({ params, request }) => {
   const routeGroupData = routeGroupId
     ? await fetchDeliveryRouteGroupDetail(request, routeGroupId, { cacheKey: shopifyShopCacheKey })
     : { errors: [], routeGroup: null };
+  const childRoutePlanIds = [
+    ...new Set(
+      (routeGroupData.routeGroup?.children ?? [])
+        .map((child) => textOrUndefined(child?.routePlanId))
+        .filter(Boolean),
+    ),
+  ];
+  const childRouteDetailResults = await Promise.all(
+    childRoutePlanIds
+      .filter((routePlanId) => routePlanId !== params.routeId)
+      .map((routePlanId) => fetchDeliveryRoutePlanDetail(request, routePlanId, { cacheKey: shopifyShopCacheKey })),
+  );
+  const routeChildDetails = [
+    {
+      routeGeometry: routePlanData.routeGeometry,
+      routePlan: routePlanData.routePlan,
+      routePlanId: routePlanData.routePlan?.id ?? params.routeId,
+      routeStopPoints: routePlanData.routeStopPoints ?? [],
+      stops: routePlanData.stops ?? [],
+    },
+    ...childRouteDetailResults.map((detail) => ({
+      routeGeometry: detail.routeGeometry,
+      routePlan: detail.routePlan,
+      routePlanId: detail.routePlan?.id,
+      routeStopPoints: detail.routeStopPoints ?? [],
+      stops: detail.stops ?? [],
+    })),
+  ];
 
   logRouteDetailPerformance("routes.detail.loader", {
     totalMs: roundPerfDuration(getRouteDetailPerfNow() - loaderStartedAt),
@@ -768,7 +789,8 @@ export const loader = async ({ params, request }) => {
     errorCount:
       (routePlanData.errors?.length ?? 0) +
       (routeGroupData.errors?.length ?? 0) +
-      (driverData.errors?.length ?? 0),
+      (driverData.errors?.length ?? 0) +
+      childRouteDetailResults.reduce((total, detail) => total + (detail.errors?.length ?? 0), 0),
   });
 
   return {
@@ -777,7 +799,9 @@ export const loader = async ({ params, request }) => {
       ...(routePlanData.errors ?? []),
       ...(routeGroupData.errors ?? []),
       ...(driverData.errors ?? []),
+      ...childRouteDetailResults.flatMap((detail) => detail.errors ?? []),
     ],
+    childRouteDetails: routeChildDetails,
     currentDepartureLocation: departureLocationData.departureLocation,
     drivers: driverData.drivers,
     routeGroup: routeGroupData.routeGroup,
@@ -1241,25 +1265,39 @@ function getRouteMapCenter(departureLocation, routeStops) {
   return getRouteMapLocations(departureLocation, routeStops)[0]?.coordinates ?? DEFAULT_CENTER;
 }
 
-function buildRouteDetailRouteLineFeature(routeGeometry) {
-  if (routeGeometry?.type !== "LineString" || !Array.isArray(routeGeometry.coordinates)) {
-    return null;
-  }
-
-  const coordinates = routeGeometry.coordinates.filter((coordinate) => (
+function getValidRouteLineCoordinates(coordinates) {
+  return coordinates.filter((coordinate) => (
     Array.isArray(coordinate) &&
     isValidLongitude(Number(coordinate[0])) &&
     isValidLatitude(Number(coordinate[1]))
   ));
-  if (coordinates.length < 2) return null;
+}
+
+function buildRouteDetailRouteLineData(routeLines, fallbackRouteColor) {
+  const lines = Array.isArray(routeLines)
+    ? routeLines
+    : [{ routeColor: fallbackRouteColor, routeGeometry: routeLines }];
+  const features = lines.flatMap((routeLine) => {
+    const routeGeometry = routeLine?.routeGeometry;
+    if (routeGeometry?.type !== "LineString" || !Array.isArray(routeGeometry.coordinates)) {
+      return [];
+    }
+
+    const coordinates = getValidRouteLineCoordinates(routeGeometry.coordinates);
+    if (coordinates.length < 2) return [];
+
+    return [{
+      type: "Feature",
+      geometry: { type: "LineString", coordinates },
+      properties: { routeColor: routeLine.routeColor ?? fallbackRouteColor },
+    }];
+  });
+
+  if (features.length === 0) return null;
 
   return {
-    type: "Feature",
-    geometry: {
-      type: "LineString",
-      coordinates,
-    },
-    properties: {},
+    type: "FeatureCollection",
+    features,
   };
 }
 
@@ -1300,27 +1338,27 @@ function softenRouteColor(routeColor) {
   return `rgb(${mix(color.slice(0, 2))}, ${mix(color.slice(2, 4))}, ${mix(color.slice(4, 6))})`;
 }
 
-function syncRouteDetailRouteLine(map, routeGeometry, routeColor = "#e11900") {
+function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900") {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
-  const routeLineFeature = buildRouteDetailRouteLineFeature(routeGeometry);
-  if (!routeLineFeature) {
+  const routeLineData = buildRouteDetailRouteLineData(routeLines, routeColor);
+  if (!routeLineData) {
     removeRouteDetailRouteLine(map);
     return true;
   }
 
   const existingSource = map.getSource?.(ROUTE_DETAIL_ROUTE_SOURCE_ID);
   if (existingSource?.setData) {
-    existingSource.setData(routeLineFeature);
+    existingSource.setData(routeLineData);
     if (map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) {
-      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", routeColor);
+      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", ["coalesce", ["get", "routeColor"], routeColor]);
     }
     return true;
   }
 
   map.addSource(ROUTE_DETAIL_ROUTE_SOURCE_ID, {
     type: "geojson",
-    data: routeLineFeature,
+    data: routeLineData,
   });
   map.addLayer({
     id: ROUTE_DETAIL_ROUTE_LAYER_ID,
@@ -1331,7 +1369,7 @@ function syncRouteDetailRouteLine(map, routeGeometry, routeColor = "#e11900") {
       "line-join": "round",
     },
     paint: {
-      "line-color": routeColor,
+      "line-color": ["coalesce", ["get", "routeColor"], routeColor],
       "line-opacity": 0.78,
       "line-width": 2.5,
     },
@@ -1381,7 +1419,9 @@ function buildRouteEditPolygonData(points, isClosed) {
 }
 
 function syncRouteEditPolygon(map, points, isClosed) {
-  if (!isRouteDetailMapStyleReady(map)) return false;
+  if (!isRouteDetailMapStyleReady(map)) {
+    return false;
+  }
   if (points.length === 0) {
     removeRouteEditPolygon(map);
     return true;
@@ -1389,7 +1429,8 @@ function syncRouteEditPolygon(map, points, isClosed) {
 
   const data = buildRouteEditPolygonData(points, isClosed);
   const existingSource = map.getSource?.(ROUTE_DETAIL_POLYGON_SOURCE_ID);
-  if (existingSource?.setData) {
+  const didUpdateExistingSource = Boolean(existingSource?.setData);
+  if (didUpdateExistingSource) {
     existingSource.setData(data);
   } else {
     map.addSource(ROUTE_DETAIL_POLYGON_SOURCE_ID, {
@@ -1398,19 +1439,21 @@ function syncRouteEditPolygon(map, points, isClosed) {
     });
   }
 
-  if (!map.getLayer?.(ROUTE_DETAIL_POLYGON_FILL_LAYER_ID)) {
+  const didHaveFillLayer = Boolean(map.getLayer?.(ROUTE_DETAIL_POLYGON_FILL_LAYER_ID));
+  if (!didHaveFillLayer) {
     map.addLayer({
       id: ROUTE_DETAIL_POLYGON_FILL_LAYER_ID,
       type: "fill",
       source: ROUTE_DETAIL_POLYGON_SOURCE_ID,
       filter: ["==", ["geometry-type"], "Polygon"],
       paint: {
-        "fill-color": "#d92d20",
-        "fill-opacity": 0.12,
+        "fill-color": "#2563eb",
+        "fill-opacity": 0.16,
       },
     });
   }
-  if (!map.getLayer?.(ROUTE_DETAIL_POLYGON_LINE_LAYER_ID)) {
+  const didHaveLineLayer = Boolean(map.getLayer?.(ROUTE_DETAIL_POLYGON_LINE_LAYER_ID));
+  if (!didHaveLineLayer) {
     map.addLayer({
       id: ROUTE_DETAIL_POLYGON_LINE_LAYER_ID,
       type: "line",
@@ -1420,14 +1463,11 @@ function syncRouteEditPolygon(map, points, isClosed) {
         "line-join": "round",
       },
       paint: {
-        "line-color": "#d92d20",
-        "line-dasharray": isClosed ? [1, 0] : [1.5, 1],
-        "line-opacity": 0.9,
-        "line-width": 2,
+        "line-color": "#1d4ed8",
+        "line-opacity": 0.95,
+        "line-width": 3,
       },
     });
-  } else {
-    map.setPaintProperty?.(ROUTE_DETAIL_POLYGON_LINE_LAYER_ID, "line-dasharray", isClosed ? [1, 0] : [1.5, 1]);
   }
 
   return true;
@@ -1439,7 +1479,7 @@ function createRoutePolygonCornerElement(index) {
   markerElement.setAttribute("aria-label", `Polygon corner ${index + 1}`);
   Object.assign(markerElement.style, {
     background: "#ffffff",
-    border: "2px solid #d92d20",
+    border: "2px solid #2563eb",
     borderRadius: "999px",
     boxShadow: "0 1px 4px rgba(0, 0, 0, 0.24)",
     boxSizing: "border-box",
@@ -1578,12 +1618,14 @@ function createRouteStopMarkerElement(stop, routeColor) {
     markerElement.style.filter = "drop-shadow(0 0 7px rgba(79, 124, 255, 0.95)) drop-shadow(0 0 2px #ffffff)";
   }
   markerElement.style.setProperty("--marker-color", routeColor);
+  markerElement.style.setProperty("--map-marker-color", routeColor);
   markerElement.setAttribute("aria-label", `Stop ${stop.stop}: ${stop.order}`);
 
   svgElement.classList.add("order-map-marker__svg");
   svgElement.setAttribute("viewBox", "0 0 40 52");
   svgElement.setAttribute("aria-hidden", "true");
   pathElement.classList.add("order-map-marker__shape");
+  pathElement.style.fill = routeColor;
   pathElement.setAttribute("d", MAP_PIN_PATH);
   svgElement.append(pathElement);
 
@@ -1595,14 +1637,26 @@ function createRouteStopMarkerElement(stop, routeColor) {
 }
 
 function createRouteStopPointMarkerElement(routeColor) {
-  return createDotMarkerElement({
+  const markerElement = createDotMarkerElement({
     className: "route-detail-snapped-stop-point",
     color: routeColor,
     zIndex: "3100",
   });
+  markerElement.style.backgroundColor = routeColor;
+  return markerElement;
 }
 
-function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeStops, routeStopPoints, routeColor) {
+function getRouteStopDisplayColor(stop, routeColor, routeStopColorById) {
+  return (
+    routeStopColorById?.get(stop.id) ??
+    routeStopColorById?.get(stop.deliveryStopId) ??
+    routeStopColorById?.get(stop.orderId) ??
+    stop.routeColor ??
+    routeColor
+  );
+}
+
+function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map()) {
   const markers = [];
 
   if (departureLocation?.hasCoordinates) {
@@ -1631,7 +1685,8 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
         routeStopPoint,
       );
     };
-    const markerElement = createRouteStopMarkerElement(stop, stop.routeColor ?? routeColor);
+    const stopColor = getRouteStopDisplayColor(stop, routeColor, routeStopColorById);
+    const markerElement = createRouteStopMarkerElement(stop, stopColor);
     markerElement.addEventListener("dblclick", handleStopMarkerDoubleClick);
 
     const stopMarker = new maplibregl.Marker({
@@ -1648,7 +1703,7 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
 
     const snappedStopPointMarker = new maplibregl.Marker({
       anchor: "center",
-      element: createRouteStopPointMarkerElement(routeColor),
+      element: createRouteStopPointMarkerElement(stopColor),
     })
       .setLngLat(stopPointMarker.coordinates)
       .addTo(map);
@@ -1670,7 +1725,7 @@ function buildRouteBranchRows(routeGroup, routeStops = []) {
     const branchStops = orderIds.map((orderId) => stopByOrderId.get(orderId)).filter(Boolean);
     return {
       attemptedCount: 0,
-      color: textOrUndefined(branch.color) ?? ROUTE_COLOR_OPTIONS[index % ROUTE_COLOR_OPTIONS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
+      color: textOrUndefined(branch.color) ?? ROUTE_DEFAULT_COLORS[(index + 1) % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
       createdLabel: textOrUndefined(branch.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL,
       deliveredCount: 0,
       driverLabel: textOrUndefined(branch.driverName) ?? "Unassigned",
@@ -1700,12 +1755,12 @@ function getUnusedRouteColor(preferredColor, usedColors, offset = 0) {
   const preferred = normalizeRouteColor(preferredColor);
   if (preferred && !usedColors.has(preferred)) return preferred;
 
-  for (let index = 0; index < ROUTE_COLOR_OPTIONS.length; index += 1) {
-    const color = normalizeRouteColor(ROUTE_COLOR_OPTIONS[(index + offset) % ROUTE_COLOR_OPTIONS.length]);
+  for (let index = 0; index < ROUTE_DEFAULT_COLORS.length; index += 1) {
+    const color = normalizeRouteColor(ROUTE_DEFAULT_COLORS[(index + offset) % ROUTE_DEFAULT_COLORS.length]);
     if (color && !usedColors.has(color)) return color;
   }
 
-  return preferred ?? normalizeRouteColor(ROUTE_COLOR_OPTIONS[offset % ROUTE_COLOR_OPTIONS.length]) ?? MAP_MARKER_PALETTE.plannedOrder.color;
+  return preferred ?? normalizeRouteColor(ROUTE_DEFAULT_COLORS[offset % ROUTE_DEFAULT_COLORS.length]) ?? MAP_MARKER_PALETTE.plannedOrder.color;
 }
 
 function ensureUniqueRouteRowColors(routeRows) {
@@ -1784,6 +1839,45 @@ function buildTimelineRows(routeRows, orderByRouteId) {
   });
 }
 
+function routeOrderKey(stops = []) {
+  return stops
+    .map((stop) => textOrUndefined(stop.orderId))
+    .filter(Boolean)
+    .sort()
+    .join("|");
+}
+
+function mapRouteChildDetailsByOrders(childRouteDetails = []) {
+  const detailsByOrderKey = new Map();
+  for (const detail of childRouteDetails) {
+    const stops = buildRouteStops(detail?.stops ?? []);
+    const key = routeOrderKey(stops);
+    if (!key) continue;
+    detailsByOrderKey.set(key, {
+      routeGeometry: detail.routeGeometry ?? null,
+      routePlanId: textOrUndefined(detail.routePlanId ?? detail.routePlan?.id),
+      routeStopPoints: Array.isArray(detail.routeStopPoints) ? detail.routeStopPoints : [],
+      stops,
+    });
+  }
+  return detailsByOrderKey;
+}
+
+function buildRouteGeometryRows(routeRows, childRouteDetailsByOrders, fallbackRouteGeometry, fallbackRouteStopPoints) {
+  const hasBranchRoutes = routeRows.some((routeRow) => !routeRow.isCurrent && routeRow.stops.length > 0);
+
+  return routeRows.map((routeRow) => {
+    const childDetail = childRouteDetailsByOrders.get(routeOrderKey(routeRow.stops));
+    const canUseFallback = !hasBranchRoutes && routeRow.isCurrent;
+    return {
+      routeColor: softenRouteColor(routeRow.color),
+      routeGeometry: childDetail?.routeGeometry ?? (canUseFallback ? fallbackRouteGeometry : null),
+      routeId: routeRow.id,
+      routeStopPoints: childDetail?.routeStopPoints ?? (canUseFallback ? fallbackRouteStopPoints : []),
+    };
+  });
+}
+
 function buildRouteDraftPayload(routeRows) {
   return {
     routes: routeRows.map((routeRow) => ({
@@ -1843,6 +1937,7 @@ export default function RouteDetailPage() {
   const shopify = useAppBridge();
   const routeActionFetcher = useFetcher();
   const {
+    childRouteDetails = [],
     currentDepartureLocation = null,
     drivers = [],
     routePlan,
@@ -1973,21 +2068,34 @@ export default function RouteDetailPage() {
   const polygonHighlightedOrderIds = new Set(
     isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds,
   );
+  const routeStopColorById = new Map(timelineRouteRows.flatMap((routeRow) => (
+    routeRow.stops.flatMap((stop) => [
+      [stop.id, routeRow.color],
+      ...(stop.deliveryStopId ? [[stop.deliveryStopId, routeRow.color]] : []),
+      ...(stop.orderId ? [[stop.orderId, routeRow.color]] : []),
+    ])
+  )));
   const routeMapStops = timelineRouteRows.flatMap((routeRow) =>
     routeRow.stops.map((stop) => ({
       ...stop,
       isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
-      routeColor: routeRow.color,
+      routeColor: routeStopColorById.get(stop.id) ?? routeRow.color,
     })),
   );
+  const routeChildDetailsByOrders = useMemo(() => mapRouteChildDetailsByOrders(childRouteDetails), [childRouteDetails]);
+  const routeGeometryRows = useMemo(
+    () => buildRouteGeometryRows(timelineRouteRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints),
+    [routeChildDetailsByOrders, routeGeometry, routeStopPoints, timelineRouteRows],
+  );
+  const routeGeometryStopPoints = routeGeometryRows.flatMap((routeRow) => routeRow.routeStopPoints);
   const visibleErrors = [
     ...(routeGroupClientError ? [{ message: routeGroupClientError }] : []),
     ...(routeActionFetcher.data?.errors ?? []),
     ...(errors ?? []),
   ];
   const routePathColor = softenRouteColor(routeLineColor);
-  const savedRouteGeometry = routeGeometry;
-  const savedRouteStopPoints = routeStopPoints;
+  const savedRouteGeometryRows = routeGeometryRows;
+  const savedRouteStopPoints = routeGeometryStopPoints;
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
 
@@ -2238,9 +2346,6 @@ export default function RouteDetailPage() {
 
   const submitRouteGroupAction = async (intent, fields = {}) => {
     if (!routeGroupId) {
-      if (import.meta.env.DEV) {
-        console.warn("routes.detail.action.submit.missing_route_group_id", { intent });
-      }
       setRouteGroupClientError("Route group id가 없어 작업을 실행할 수 없습니다.");
       return;
     }
@@ -2253,9 +2358,6 @@ export default function RouteDetailPage() {
       formData.set("routeGroupId", routeGroupId);
       formData.set("shopifySessionToken", sessionToken);
       for (const [key, value] of Object.entries(fields)) formData.set(key, value);
-      if (import.meta.env.DEV) {
-        console.info("routes.detail.action.submit", { fields, intent, routeGroupId });
-      }
       routeActionFetcher.submit(formData, { method: "post" });
     } catch {
       setRouteGroupClientError(
@@ -2394,6 +2496,7 @@ export default function RouteDetailPage() {
     };
   }, [mapRenderKey, scheduleMapRecovery]);
 
+
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return undefined;
 
@@ -2405,14 +2508,14 @@ export default function RouteDetailPage() {
       if (routeLineRetryTimer != null) return;
       routeLineRetryTimer = window.setTimeout(() => {
         routeLineRetryTimer = null;
-        syncRouteDetailRouteLine(map, savedRouteGeometry, routePathColor);
+        syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor);
       }, 80);
     };
 
     const syncRouteDetailMap = () => {
       const syncStartedAt = performance.now();
       const routeLineStartedAt = performance.now();
-      const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometry, routePathColor);
+      const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor);
       if (!didSyncRouteLine) {
         scheduleRouteLineRetry();
       }
@@ -2425,6 +2528,7 @@ export default function RouteDetailPage() {
         routeMapStops,
         savedRouteStopPoints,
         routeLineColor,
+        routeStopColorById,
       );
       const markerCreateMs = roundPerfDuration(performance.now() - markerStartedAt);
       const markerRemoveStartedAt = performance.now();
@@ -2439,11 +2543,11 @@ export default function RouteDetailPage() {
         markerCount: routeDetailMarkers.length,
         stopCount: routeMapStops.length,
         stopPointCount: savedRouteStopPoints.length,
-        hasRouteGeometry: Boolean(savedRouteGeometry),
+        hasRouteGeometry: savedRouteGeometryRows.some((routeRow) => Boolean(routeRow.routeGeometry)),
       });
     };
     const handleRouteDetailStyleData = () => {
-      if (!syncRouteDetailRouteLine(map, savedRouteGeometry, routePathColor)) {
+      if (!syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor)) {
         scheduleRouteLineRetry();
       }
     };
@@ -2464,19 +2568,39 @@ export default function RouteDetailPage() {
     isMapReady,
     routeMapStops,
     routeLineColor,
+    routeStopColorById,
     routePathColor,
-    savedRouteGeometry,
+    timelineRouteRows,
+    savedRouteGeometryRows,
     savedRouteStopPoints,
   ]);
+
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return undefined;
 
     const map = mapRef.current;
-    if (!isRoutePolygonEditMode) {
-      removeRouteEditPolygon(map);
-      return undefined;
-    }
+    const syncPolygon = () => {
+      if (!isRoutePolygonEditMode) {
+        removeRouteEditPolygon(map);
+        return;
+      }
+      syncRouteEditPolygon(map, routePolygonPoints, isRoutePolygonClosed);
+    };
+
+    syncPolygon();
+    map.on("styledata", syncPolygon);
+
+    return () => {
+      map.off("styledata", syncPolygon);
+    };
+  }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints]);
+
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current) return undefined;
+
+    const map = mapRef.current;
+    if (!isRoutePolygonEditMode) return undefined;
 
     const canvas = map.getCanvas?.();
     const previousCursor = canvas?.style.cursor ?? "";
@@ -2490,9 +2614,11 @@ export default function RouteDetailPage() {
       const lngLat = [event.lngLat.lng, event.lngLat.lat];
       routePolygonClickTimerRef.current = window.setTimeout(() => {
         routePolygonClickTimerRef.current = null;
-        setRoutePolygonPoints((currentPoints) => [...currentPoints, lngLat]);
+        const nextPoints = [...routePolygonPoints, lngLat];
+        setRoutePolygonPoints(nextPoints);
         setIsRoutePolygonClosed(false);
         setIsPolygonTargetPickerOpen(false);
+        syncRouteEditPolygon(map, nextPoints, false);
       }, ROUTE_POLYGON_CLICK_DELAY_MS);
     };
 
@@ -2500,7 +2626,15 @@ export default function RouteDetailPage() {
       event.preventDefault?.();
       event.originalEvent?.preventDefault?.();
       clearRoutePolygonClickTimer();
-      if (routePolygonPoints.length >= 3) setIsRoutePolygonClosed(true);
+      if (isRoutePolygonClosed) return;
+
+      const lngLat = [event.lngLat.lng, event.lngLat.lat];
+      const nextPoints = [...routePolygonPoints, lngLat];
+      const nextIsClosed = nextPoints.length >= 3;
+      setRoutePolygonPoints(nextPoints);
+      setIsRoutePolygonClosed(nextIsClosed);
+      setIsPolygonTargetPickerOpen(false);
+      syncRouteEditPolygon(map, nextPoints, nextIsClosed);
     };
 
     map.on("click", handleMapClick);
@@ -2523,12 +2657,8 @@ export default function RouteDetailPage() {
     polygonCornerMarkersRef.current.forEach((marker) => marker.remove());
     polygonCornerMarkersRef.current = [];
 
-    if (!isRoutePolygonEditMode) {
-      removeRouteEditPolygon(map);
-      return undefined;
-    }
+    if (!isRoutePolygonEditMode) return undefined;
 
-    syncRouteEditPolygon(map, routePolygonPoints, isRoutePolygonClosed);
     polygonCornerMarkersRef.current = routePolygonPoints.map((point, pointIndex) => {
       const marker = new maplibregl.Marker({
         draggable: true,
@@ -2537,14 +2667,22 @@ export default function RouteDetailPage() {
         .setLngLat(point)
         .addTo(map);
 
-      marker.on("dragend", () => {
+      const getDraggedPoints = () => {
         const lngLat = marker.getLngLat();
-        setRoutePolygonPoints((currentPoints) =>
-          currentPoints.map((currentPoint, currentIndex) =>
-            currentIndex === pointIndex ? [lngLat.lng, lngLat.lat] : currentPoint,
-          ),
+        return routePolygonPoints.map((currentPoint, currentIndex) =>
+          currentIndex === pointIndex ? [lngLat.lng, lngLat.lat] : currentPoint,
         );
+      };
+
+      marker.on("drag", () => {
+        syncRouteEditPolygon(map, getDraggedPoints(), isRoutePolygonClosed);
+      });
+
+      marker.on("dragend", () => {
+        const nextPoints = getDraggedPoints();
+        setRoutePolygonPoints(nextPoints);
         setIsPolygonTargetPickerOpen(false);
+        syncRouteEditPolygon(map, nextPoints, isRoutePolygonClosed);
       });
 
       return marker;
