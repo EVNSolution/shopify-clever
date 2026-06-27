@@ -5,9 +5,12 @@ import test from "node:test";
 import {
   createDeliveryRouteGroupBranch,
   createDeliveryRouteGroup,
+  deleteDeliveryRouteGroup,
   deleteDeliveryRouteGroupBranch,
   DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE,
   fetchDeliveryRouteGroups,
+  reOptimizeDeliveryRouteGroup,
+  saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupBranchOrders,
   updateDeliveryRouteGroupOrders,
 } from "../app/features/delivery/route-groups.server.js";
@@ -108,6 +111,35 @@ test("route group helper updates membership without child generation side effect
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
 });
 
+test("route group helper saves a batched draft allocation", async () => {
+  const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1", status: "CHANGED" } }, error: null });
+  const payload = { routes: [{ branchId: null, orderIds: ["order-1"] }, { branchId: "branch/1", orderIds: ["order-2"] }] };
+
+  const result = await saveDeliveryRouteGroupDraft(makeRequest(), "group/1", payload, {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { routeGroup: { id: "group/1", status: "CHANGED" }, errors: [] });
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/draft");
+  assert.equal(fakeFetch.calls[0].init.method, "PATCH");
+  assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
+});
+
+test("route group helper re-optimizes groups without child generation endpoint coupling", async () => {
+  const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1" }, warnings: [] }, error: null });
+
+  const result = await reOptimizeDeliveryRouteGroup(makeRequest(), "group/1", { confirmRisk: false }, {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { routeGroup: { id: "group/1" }, warnings: [], errors: [] });
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/re-optimize");
+  assert.equal(fakeFetch.calls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), { confirmRisk: false });
+});
+
 test("route group helper creates branch locks without child generation side effects", async () => {
   const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1", branches: [{ id: "branch/1" }] } }, error: null });
   const payload = { label: "Driver A", orderIds: ["order-1"] };
@@ -141,6 +173,21 @@ test("route group helper updates and deletes branch locks", async () => {
   assert.equal(deleteFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/branches/branch%2F1");
   assert.equal(deleteFetch.calls[0].init.method, "DELETE");
   assert.equal(deleteFetch.calls[0].init.body, undefined);
+});
+
+test("route group helper deletes parent groups through the Admin delivery API", async () => {
+  const fakeFetch = makeFetch({ data: { routeGroupId: "group/1" }, error: null });
+
+  const result = await deleteDeliveryRouteGroup(makeRequest(), "group/1", {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.equal(result.routeGroupId, "group/1");
+  assert.deepEqual(result.errors, []);
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1");
+  assert.equal(fakeFetch.calls[0].init.method, "DELETE");
+  assert.equal(fakeFetch.calls[0].init.body, undefined);
 });
 
 test("route group helper returns a local error when the route group id is missing", async () => {

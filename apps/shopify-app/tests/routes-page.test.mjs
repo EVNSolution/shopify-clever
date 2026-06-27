@@ -1,3 +1,4 @@
+/* eslint-env node */
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,7 +18,7 @@ const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.
 
 test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
   assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
-  assert.match(routesPageSource, /import \{ fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
+  assert.match(routesPageSource, /import \{ deleteDeliveryRouteGroup, fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
   assert.match(routesPageSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
   assert.match(routesPageSource, /import \{ Outlet, redirect,/);
   assert.match(routesPageSource, /export const loader = async \(\{ request \}\) => \{/);
@@ -31,10 +32,11 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.match(routesPageSource, /export const action = async \(\{ request \}\) => \{/);
   assert.match(routesPageSource, /await authenticate\.admin\(request\)/);
   assert.match(routesPageSource, /await request\.formData\(\)/);
-  assert.match(routesPageSource, /function parseRoutePlanIds\(value\) \{/);
-  assert.match(routesPageSource, /const routePlanIds = parseRoutePlanIds\(formData\.get\("routePlanIds"\)\)/);
-  assert.match(routesPageSource, /routePlanIds\.map\(\(routePlanId\) =>/);
-  assert.match(routesPageSource, /deleteDeliveryRoutePlan\(request, routePlanId, \{ sessionToken: shopifySessionToken \}\)/);
+  assert.match(routesPageSource, /function parseRouteDeleteTargets\(value\) \{/);
+  assert.match(routesPageSource, /const routeDeleteTargets = parseRouteDeleteTargets\(formData\.get\("routePlanIds"\)\)/);
+  assert.match(routesPageSource, /routeDeleteTargets\.map\(\(target\) =>/);
+  assert.match(routesPageSource, /deleteDeliveryRouteGroup\(request, target\.id, \{ sessionToken: shopifySessionToken \}\)/);
+  assert.match(routesPageSource, /deleteDeliveryRoutePlan\(request, target\.id, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(routesPageSource, /const \{ routeGroups = \[\], routePlans = \[\], errors = \[\] \} = useLoaderData\(\)/);
   assert.match(routesPageSource, /buildRouteRows\(routePlans, routeGroups\)/);
   assert.match(routesPageSource, /useSearchParams/);
@@ -178,8 +180,8 @@ test("Routes table selection column uses checkboxes and a single delete action",
   assert.match(routesPageSource, /routeDeleteFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(routesPageSource, /aria-label="Select all visible routes"/);
   assert.match(routesPageSource, /aria-label=\{`Select \$\{route\.route\} for deletion`\}/);
-  assert.match(routesPageSource, /checked=\{checkedRouteIdSet\.has\(route\.id\)\}/);
-  assert.match(routesPageSource, /onChange=\{\(\) => toggleRouteCheck\(route\.id\)\}/);
+  assert.match(routesPageSource, /checked=\{checkedRouteIdSet\.has\(route\.deleteKey\)\}/);
+  assert.match(routesPageSource, /onChange=\{\(\) => toggleRouteCheck\(route\.deleteKey\)\}/);
   assert.match(routesPageSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(routesPageSource, />Delete selected<\/button>/);
   assert.doesNotMatch(routesPageSource, />\{route\.routeIndex\}<\/button>/);
@@ -230,6 +232,8 @@ test("Route detail loader reads server-saved drivers for route driver labels", (
   assert.match(routeDetailSource, /import \{ fetchDeliveryDrivers \} from "\.\.\/features\/delivery\/drivers\.server"/);
   assert.match(routeDetailSource, /drivers = \[\]/);
   assert.match(routeDetailSource, /fetchDeliveryDrivers\(request, \{\}\)/);
+  assert.match(routeDetailSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
+  assert.match(routeDetailSource, /routeGroup: routeGroupData\.routeGroup/);
   assert.match(routeDetailSource, /driverData\.drivers/);
   assert.match(routeDetailSource, /driverData\.errors/);
 });
@@ -253,16 +257,34 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routeDetailSource, /createDeliveryRouteGroupBranch/);
-  assert.match(routeDetailSource, /generateDeliveryRouteGroupChildRoutes/);
+  assert.match(routeDetailSource, /reOptimizeDeliveryRouteGroup/);
+  assert.match(routeDetailSource, /updateDeliveryRouteGroupBranchOrders/);
+  assert.match(routeDetailSource, /fetchDeliveryRouteGroupDetail/);
+  assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.action"/);
+  assert.match(routeDetailSource, /logRouteGroupActionResult\("routes\.detail\.action\.reOptimizeRouteGroup"/);
+  assert.doesNotMatch(routeDetailSource, /getRouteGroupActionRedirectRouteId/);
+  assert.doesNotMatch(routeDetailSource, /return redirect\(`\/app\/routes/);
   assert.match(routeDetailSource, /intent === "reOptimizeRouteGroup"/);
   assert.match(routeDetailSource, /intent === "addEmptyRouteBranch"/);
+  assert.match(routeDetailSource, /intent === "assignPolygonToRoute"/);
   assert.match(routeDetailSource, /const shopify = useAppBridge\(\)/);
   assert.match(routeDetailSource, /const routeActionFetcher = useFetcher\(\)/);
   assert.match(routeDetailSource, /effectiveRoutePlan\?\.routeGroupingChild\?\.groupingId/);
   assert.match(routeDetailSource, /shopify\.idToken\(\)/);
+  assert.match(routeDetailSource, /console\.info\("routes\.detail\.action\.submit"/);
+  assert.match(routeDetailSource, /console\.warn\("routes\.detail\.action\.submit\.missing_route_group_id"/);
   assert.match(routeDetailSource, /routeActionFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(routeDetailSource, /const routeGroupActionIntent = routeActionFetcher\.formData\?\.get\("_intent"\)/);
+  assert.match(routeDetailSource, /const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "reOptimizeRouteGroup"/);
+  assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "addEmptyRouteBranch"/);
+  assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
+  assert.match(routeDetailSource, /\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("reOptimizeRouteGroup"\)/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("addEmptyRouteBranch", \{ label: "Route" \}\)/);
+  assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
+  assert.match(routeDetailSource, /setRouteTimelineOrderByRouteId\(\(currentOrderByRouteId\) =>/);
+  assert.match(routeDetailSource, /moveTimelineStop\(routeRows, nextOrderByRouteId, \{ stopId \}, targetRouteRow\.id\)/);
+  assert.doesNotMatch(routeDetailSource, /submitRouteGroupAction\("assignPolygonToRoute"/);
 });
 
 test("Routes list displays assigned route drivers from the server response", () => {
@@ -278,13 +300,13 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
-  assert.match(routeDetailSource, /drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
+  assert.match(routeDetailSource, /drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
   assert.match(routeDetailSource, /const savedRouteGeometry = routeGeometry/);
   assert.match(routeDetailSource, /const savedRouteStopPoints = routeStopPoints/);
   assert.match(routeDetailSource, /const routePathColor = softenRouteColor\(routeLineColor\)/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometry, routePathColor\)/);
-  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+orderedRouteStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+\)/);
+  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+\)/);
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan\)/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetail\.route\}<\/h1>/);
   assert.doesNotMatch(routeDetailSource, /parseRouteDetailDraft/);
@@ -304,6 +326,8 @@ test("Route detail loader reads the selected persisted route plan", () => {
   assert.match(routeDetailSource, /fetchDeliveryRoutePlanDetail\(request,\s*params\.routeId,\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\}\)/);
   assert.match(routeDetailSource, /fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/);
   assert.match(routeDetailSource, /fetchDeliveryDrivers\(request, \{\}\)/);
+  assert.match(routeDetailSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
+  assert.match(routeDetailSource, /routeGroup: routeGroupData\.routeGroup/);
   assert.doesNotMatch(routeDetailSource, /sameDateOrderData/);
   assert.match(routeDetailSource, /currentDepartureLocation: departureLocationData\.departureLocation/);
   assert.doesNotMatch(routeDetailSource, /fetchShopifyOrders\(admin\)/);
@@ -363,7 +387,32 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /aria-label="Route timing"/);
   assert.match(routeDetailSource, /aria-label="Driver route rows"/);
   assert.match(routeDetailSource, /aria-label="Route stop timeline"/);
-  assert.match(routeDetailSource, /orderedRouteStops\.map\(\(stop\) =>/);
+  assert.match(routeDetailSource, /borderRight: "1px solid #d6d6d6"/);
+  assert.match(routeDetailSource, /marginRight: "6px"/);
+  assert.match(routeDetailSource, /minWidth: "64px"/);
+  assert.match(routeDetailSource, /paddingRight: "6px"/);
+  assert.match(routeDetailSource, /const routeTimelineBottomSpacerStyle = \{/);
+  assert.match(routeDetailSource, /borderTop: "1px solid #d6d6d6"/);
+  assert.match(routeDetailSource, /height: "56px"/);
+  assert.match(routeDetailSource, /const routeTimelineRowsStyle = \{/);
+  assert.match(routeDetailSource, /overflowX: "auto"/);
+  assert.match(routeDetailSource, /const routeTimelineRowsMinHeight = `\$\{Math\.max\(1, timelineRouteRows\.length\) \* 24\}px`/);
+  assert.match(routeDetailSource, /style=\{\{ \.\.\.routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight \}\}/);
+  assert.match(routeDetailSource, /const routeTimelineDropHintStyle = \{/);
+  assert.match(routeDetailSource, /justifyContent: "center"/);
+  assert.match(routeDetailSource, /textAlign: "center"/);
+  assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
+  assert.match(routeDetailSource, /function moveTimelineStop\(routeRows, orderByRouteId, drag, targetRouteId/);
+  assert.match(routeDetailSource, /function buildTimelineRows\(routeRows, orderByRouteId\)/);
+  assert.match(routeDetailSource, /flushSync\(applyChange\)/);
+  assert.match(routeDetailSource, /flushSync\(\(\) => setRouteTimelineDrag\(null\)\)/);
+  assert.match(routeDetailSource, /pointerEvents: "none"/);
+  assert.match(routeDetailSource, /event\.dataTransfer\.setDragImage\(event\.currentTarget, 9, 9\)/);
+  assert.match(routeDetailSource, /afterStopId === "__start__"/);
+  assert.match(routeDetailSource, /draggable/);
+  assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
+  assert.match(routeDetailSource, /onDrop=\{handleRouteTimelineRemoveDrop\}/);
+  assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
   assert.doesNotMatch(routeDetailSource, /activeRouteDriverStops/);
   assert.match(routeDetailSource, /height: "440px"/);
   assert.match(routeDetailSource, /minHeight: "490px"/);
@@ -421,7 +470,7 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /map\.addLayer\(\{/);
   assert.match(routeDetailSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometry, routePathColor\)/);
-  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+orderedRouteStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+\)/);
+  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+\)/);
   assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Inventory|Start free trial/);
 });
 
@@ -434,7 +483,7 @@ test("Route detail does not let route-line style readiness block marker renderin
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometry, routePathColor\)/);
   assert.match(
     routeDetailSource,
-    /const routeDetailMarkers = createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+orderedRouteStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+\);/,
+    /const routeDetailMarkers = createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+\);/,
   );
   assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.map\.sync"/);
   assert.doesNotMatch(
@@ -632,6 +681,14 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
   assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
+  assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\]\) \{/);
+  assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
+  assert.match(routeDetailSource, /const editedRouteRows = \[/);
+  assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(editedRouteRows\)/);
+  assert.ok(
+    routeDetailSource.indexOf("const [routeCandidateTitle") < routeDetailSource.indexOf("const editedRouteRows = ["),
+    "routeRows reads route line state after the state is initialized",
+  );
   assert.match(routeDetailSource, /const ROUTE_EMPTY_LABEL = "–"/);
   assert.match(routeDetailSource, />Name<\/th>/);
   assert.match(routeDetailSource, />Status<\/th>/);
@@ -646,17 +703,52 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total distance<\/th>/);
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
-  assert.match(routeDetailSource, /function getRouteCandidateTitle\(routePlan\) \{/);
+  assert.match(routeDetailSource, /function getRouteCandidateTitle\(\) \{/);
+  assert.match(routeDetailSource, /return "Route 1"/);
+  assert.match(routeDetailSource, /title: `Route \$\{index \+ 2\}`/);
+  assert.doesNotMatch(routeDetailSource, /title: textOrUndefined\(branch\.label\)/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
-  assert.match(routeDetailSource, /aria-label="Edit route candidate name"/);
+  assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
+  assert.match(routeDetailSource, /src="\/icons\/route-polygon-edit\.png"/);
+  assert.match(routeDetailSource, /ariaLabel: isRoutePolygonEditMode \? "Stop editing route polygon" : "Edit route polygon"/);
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon"/);
+  assert.match(routeDetailSource, /function syncRouteEditPolygon\(map, points, isClosed\) \{/);
+  assert.match(routeDetailSource, /function isLngLatInPolygon\(point, polygon\) \{/);
+  assert.match(routeDetailSource, /Save polygon/);
+  assert.match(routeDetailSource, /aria-label="Polygon route target"/);
+  assert.match(routeDetailSource, /map\.doubleClickZoom\?\.disable\?\.\(\)/);
+  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s*draggable: true,/);
+  assert.doesNotMatch(routeDetailSource, />✏<\/span>/);
+  assert.doesNotMatch(routeDetailSource, /strokeWidth="2\.2"/);
+  assert.match(routeDetailSource, /function ensureUniqueRouteRowColors\(routeRows\) \{/);
+  assert.match(routeDetailSource, /function getUnusedRouteColor\(preferredColor, usedColors/);
+  assert.match(routeDetailSource, /aria-label="Route color picker"/);
+  assert.match(routeDetailSource, /type="color"/);
+  assert.match(routeDetailSource, /aria-label=\{`Edit \$\{routeRow\.title\} name`\}/);
+  assert.match(routeDetailSource, /const \[routeLineEdits, setRouteLineEdits\] = useState\(\{\}\)/);
+  assert.match(routeDetailSource, /setActiveRouteLineId\(routeRow\.id\)/);
+  assert.match(routeDetailSource, /setRouteLineEdits\(\(currentEdits\) => \(\{/);
   assert.match(routeDetailSource, /viewBox="0 0 10 10"/);
   assert.doesNotMatch(routeDetailSource, />⌄<\/span>/);
   assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);
-  assert.match(routeDetailSource, /orderedRouteStops\.map\(\(stop\) =>/);
+  assert.match(routeDetailSource, /borderRight: "1px solid #d6d6d6"/);
+  assert.match(routeDetailSource, /marginRight: "6px"/);
+  assert.match(routeDetailSource, /minWidth: "64px"/);
+  assert.match(routeDetailSource, /paddingRight: "6px"/);
+  assert.match(routeDetailSource, /const routeTimelineBottomSpacerStyle = \{/);
+  assert.match(routeDetailSource, /borderTop: "1px solid #d6d6d6"/);
+  assert.match(routeDetailSource, /height: "56px"/);
+  assert.match(routeDetailSource, /const routeTimelineRowsStyle = \{/);
+  assert.match(routeDetailSource, /overflowX: "auto"/);
+  assert.match(routeDetailSource, /const routeTimelineDropHintStyle = \{/);
+  assert.match(routeDetailSource, /justifyContent: "center"/);
+  assert.match(routeDetailSource, /textAlign: "center"/);
+  assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
+  assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
   assert.doesNotMatch(routeDetailSource, />Order<\/th>/);
   assert.doesNotMatch(routeDetailSource, />Recipient<\/th>/);
   assert.doesNotMatch(routeDetailSource, />Address<\/th>/);

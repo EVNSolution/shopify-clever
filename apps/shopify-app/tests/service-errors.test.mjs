@@ -42,6 +42,15 @@ test("order error notice gives protected-order guidance before generic errors", 
   );
 });
 
+test("route grouping delete blocked notice gives route group delete guidance", () => {
+  assert.equal(
+    getServiceErrorNotice([
+      { errors: [{ code: SERVICE_ERROR_CODES.ROUTE_GROUPING_DELETE_BLOCKED, message: "child route status no longer allows delete" }] },
+    ]),
+    SERVICE_ERROR_NOTICES.ROUTE_GROUPING_DELETE_BLOCKED,
+  );
+});
+
 test("service error notice logs internal diagnostics without changing user copy", () => {
   const logs = [];
   const notice = getServiceErrorNotice([

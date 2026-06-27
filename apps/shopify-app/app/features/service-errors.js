@@ -1,10 +1,13 @@
 export const SERVICE_ERROR_CODES = Object.freeze({
   PROTECTED_ORDER_ACCESS: "PROTECTED_ORDER_ACCESS",
+  ROUTE_GROUPING_DELETE_BLOCKED: "ROUTE_GROUPING_DELETE_BLOCKED",
 });
 
 export const SERVICE_ERROR_NOTICES = Object.freeze({
   PROTECTED_ORDER_ACCESS:
     "Shopify Order 보호 고객 데이터 접근이 아직 활성화되지 않았습니다. Dev Dashboard의 Protected customer data access에서 Protected customer data와 필요한 고객 필드(Name, Address, Phone)를 저장한 뒤 앱을 다시 열어주세요.",
+  ROUTE_GROUPING_DELETE_BLOCKED:
+    "이미 진행 중인 child route가 있어 이 route group은 삭제할 수 없습니다.",
 });
 
 const reportedServiceErrorKeys = new Set();
@@ -27,6 +30,10 @@ export function getServiceErrorNotice(payloads = [], options = {}) {
 
   if (errors.some((error) => error?.code === SERVICE_ERROR_CODES.PROTECTED_ORDER_ACCESS)) {
     return SERVICE_ERROR_NOTICES.PROTECTED_ORDER_ACCESS;
+  }
+
+  if (errors.some((error) => error?.code === SERVICE_ERROR_CODES.ROUTE_GROUPING_DELETE_BLOCKED)) {
+    return SERVICE_ERROR_NOTICES.ROUTE_GROUPING_DELETE_BLOCKED;
   }
 
   return errors[0]?.message ?? null;

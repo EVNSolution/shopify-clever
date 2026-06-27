@@ -807,7 +807,7 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(mapPanelSource, /MAPLIBRE_CONTROL_OFFSET_PX = 12/);
   assert.match(mapPanelSource, /MAPLIBRE_CONTROL_SIZE_PX = 30/);
   assert.match(mapPanelSource, /MAPLIBRE_CONTROL_BORDER_WIDTH_PX = 2/);
-  assert.match(mapPanelSource, /const toolbarGroups = \[actions\.slice\(0, 2\), actions\.slice\(2\)\]/);
+  assert.match(mapPanelSource, /const toolbarGroups = \[actions\.slice\(0, 2\), actions\.slice\(2, 4\), actions\.slice\(4\)\]/);
   assert.match(mapPanelSource, /MAP_TOOLBAR_BORDER_COLOR = "#8a8a8a"/);
   assert.match(mapPanelSource, /MAP_TOOLBAR_DIVIDER_COLOR = MAP_TOOLBAR_BORDER_COLOR/);
   assert.match(mapPanelSource, /border: `\$\{MAPLIBRE_CONTROL_BORDER_WIDTH_PX\}px solid \$\{MAP_TOOLBAR_BORDER_COLOR\}`/);

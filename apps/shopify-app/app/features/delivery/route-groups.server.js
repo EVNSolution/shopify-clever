@@ -54,6 +54,10 @@ export async function updateDeliveryRouteGroupOrders(request, routeGroupId, payl
   return mutateRouteGroup(request, routeGroupId, "/orders", payload, options, "수정할 route group ID가 없습니다.");
 }
 
+export async function saveDeliveryRouteGroupDraft(request, routeGroupId, payload, options = {}) {
+  return mutateRouteGroup(request, routeGroupId, "/draft", payload, options, "저장할 route group ID가 없습니다.");
+}
+
 export async function createDeliveryRouteGroupBranch(request, routeGroupId, payload, options = {}) {
   return mutateRouteGroup(request, routeGroupId, "/branches", payload, { ...options, method: "POST" }, "branch를 만들 route group ID가 없습니다.");
 }
@@ -70,12 +74,47 @@ export async function deleteDeliveryRouteGroupBranch(request, routeGroupId, bran
   return mutateRouteGroup(request, routeGroupId, `/branches/${safeBranchId}`, {}, { ...options, method: "DELETE" }, "삭제할 route group ID가 없습니다.");
 }
 
+export async function deleteDeliveryRouteGroup(request, routeGroupId, options = {}) {
+  const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
+  if (!safeRouteGroupId) return missingRouteGroupResult("삭제할 route group ID가 없습니다.");
+
+  const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}`, {
+    fetch: options.fetch,
+    method: "DELETE",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    routeGroup: result.data?.routeGroup ?? null,
+    routeGroupId: result.data?.routeGroupId ?? result.data?.id ?? routeGroupId,
+    errors: result.errors,
+  };
+}
+
 export async function saveDeliveryRouteGroupPolygons(request, routeGroupId, payload, options = {}) {
   return mutateRouteGroup(request, routeGroupId, "/polygons", payload, options, "수정할 route group ID가 없습니다.");
 }
 
 export async function resolveDeliveryRouteGroupAssignments(request, routeGroupId, payload, options = {}) {
   return mutateRouteGroup(request, routeGroupId, "/assignments", payload, options, "수정할 route group ID가 없습니다.");
+}
+
+export async function reOptimizeDeliveryRouteGroup(request, routeGroupId, payload = {}, options = {}) {
+  const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
+  if (!safeRouteGroupId) return missingRouteGroupResult("재최적화할 route group ID가 없습니다.");
+
+  const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}/re-optimize`, {
+    body: JSON.stringify(payload ?? {}),
+    fetch: options.fetch,
+    method: "POST",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    routeGroup: result.data?.routeGroup ?? null,
+    warnings: result.data?.warnings ?? [],
+    errors: result.errors,
+  };
 }
 
 export async function generateDeliveryRouteGroupChildRoutes(request, routeGroupId, payload = {}, options = {}) {

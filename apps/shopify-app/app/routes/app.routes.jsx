@@ -4,7 +4,7 @@ import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, us
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
-import { fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
+import { deleteDeliveryRouteGroup, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 
@@ -276,10 +276,10 @@ export const action = async ({ request }) => {
     };
   }
 
-  const routePlanIds = parseRoutePlanIds(formData.get("routePlanIds"));
+  const routeDeleteTargets = parseRouteDeleteTargets(formData.get("routePlanIds"));
   const shopifySessionToken = formData.get("shopifySessionToken");
 
-  if (!Array.isArray(routePlanIds) || routePlanIds.length === 0) {
+  if (routeDeleteTargets.length === 0) {
     return {
       routePlanIds: [],
       errors: [{ message: "삭제할 route를 선택해주세요." }],
@@ -287,27 +287,45 @@ export const action = async ({ request }) => {
   }
 
   const deleteResults = await Promise.all(
-    routePlanIds.map((routePlanId) =>
-      deleteDeliveryRoutePlan(request, routePlanId, { sessionToken: shopifySessionToken }),
+    routeDeleteTargets.map((target) =>
+      target.type === "routeGroup"
+        ? deleteDeliveryRouteGroup(request, target.id, { sessionToken: shopifySessionToken })
+        : deleteDeliveryRoutePlan(request, target.id, { sessionToken: shopifySessionToken }),
     ),
   );
 
   return {
-    routePlanIds: deleteResults.map((result) => result.routePlanId).filter(Boolean),
+    routePlanIds: deleteResults.map((result) => result.routePlanId ?? result.routeGroupId).filter(Boolean),
     errors: deleteResults.flatMap((result) => result.errors ?? []),
   };
 };
 
-function parseRoutePlanIds(value) {
+function parseRouteDeleteTargets(value) {
   try {
     const parsedRoutePlanIds = JSON.parse(value ?? "[]");
 
     return Array.isArray(parsedRoutePlanIds)
-      ? parsedRoutePlanIds.map((routePlanId) => String(routePlanId).trim()).filter(Boolean)
+      ? parsedRoutePlanIds
+          .map(parseRouteDeleteTarget)
+          .filter(Boolean)
       : [];
   } catch {
     return [];
   }
+}
+
+function parseRouteDeleteTarget(value) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (text.startsWith("routeGroup:")) return { type: "routeGroup", id: text.slice("routeGroup:".length) };
+  if (text.startsWith("routePlan:")) return { type: "routePlan", id: text.slice("routePlan:".length) };
+  return { type: "routePlan", id: text };
+}
+
+function getRouteDeleteKey(route) {
+  const routeGroupId = route?.routeGroupingChild?.groupingId;
+  if (routeGroupId) return `routeGroup:${routeGroupId}`;
+  return route?.isRouteGroup ? `routeGroup:${route.id}` : `routePlan:${route.id}`;
 }
 
 function formatRouteValues(values) {
@@ -409,8 +427,9 @@ function buildRouteRows(routePlans, routeGroups = []) {
   const routeGroupRows = safeRouteGroups.map((routeGroup) => ({
     id: routeGroup.id,
     isClickable: true,
-    isDeletable: false,
+    isDeletable: true,
     isRouteGroup: true,
+    deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
     route: routeGroup.name ?? routeGroup.id,
     status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
     orders: routeGroup.totalOrders ?? 0,
@@ -466,6 +485,7 @@ function buildRouteRows(routePlans, routeGroups = []) {
       id: routePlan.id,
       isClickable: true,
       isDeletable: true,
+      deleteKey: getRouteDeleteKey(routePlan),
       route: routePlan.name ?? routePlan.id,
       status: routePlan.status ?? "DRAFT",
       orders: stopsCount,
@@ -602,7 +622,7 @@ export default function RoutesPage() {
   const checkedRouteIdSet = new Set(checkedRouteIds);
   const allVisibleRoutesChecked =
     selectableRouteRows.length > 0 &&
-    selectableRouteRows.every((route) => checkedRouteIdSet.has(route.id));
+    selectableRouteRows.every((route) => checkedRouteIdSet.has(route.deleteKey));
   const routeDeleteDisabled =
     checkedRouteIds.length === 0 || routeDeleteFetcher.state !== "idle";
   const actionErrors = routeDeleteFetcher.data?.errors ?? [];
@@ -649,14 +669,14 @@ export default function RoutesPage() {
   function toggleAllVisibleRouteChecks() {
     setCheckedRouteIds((currentRouteIds) => {
       if (allVisibleRoutesChecked) {
-        const visibleRouteIds = new Set(selectableRouteRows.map((route) => route.id));
+        const visibleRouteIds = new Set(selectableRouteRows.map((route) => route.deleteKey));
         return currentRouteIds.filter((routeId) => !visibleRouteIds.has(routeId));
       }
 
       return Array.from(
         new Set([
           ...currentRouteIds,
-          ...selectableRouteRows.map((route) => route.id),
+          ...selectableRouteRows.map((route) => route.deleteKey),
         ]),
       );
     });
@@ -762,9 +782,9 @@ export default function RoutesPage() {
                         <input
                           type="checkbox"
                           aria-label={`Select ${route.route} for deletion`}
-                          checked={checkedRouteIdSet.has(route.id)}
+                          checked={checkedRouteIdSet.has(route.deleteKey)}
                           onClick={(event) => event.stopPropagation()}
-                          onChange={() => toggleRouteCheck(route.id)}
+                          onChange={() => toggleRouteCheck(route.deleteKey)}
                         />
                       ) : null}
                     </td>

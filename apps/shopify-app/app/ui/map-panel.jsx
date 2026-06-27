@@ -105,7 +105,7 @@ function getMapToolbarItemStyle(baseStyle, index) {
 export function MapToolbar({ actions = [], statusLabel, statusGlyph }) {
   if (actions.length === 0 && !statusLabel) return null;
 
-  const toolbarGroups = [actions.slice(0, 2), actions.slice(2)].filter(
+  const toolbarGroups = [actions.slice(0, 2), actions.slice(2, 4), actions.slice(4)].filter(
     (actionGroup) => actionGroup.length > 0,
   );
   if (statusLabel) {

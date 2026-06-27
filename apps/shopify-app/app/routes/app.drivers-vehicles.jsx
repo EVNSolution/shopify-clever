@@ -1,3 +1,4 @@
+/* global process */
 import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
