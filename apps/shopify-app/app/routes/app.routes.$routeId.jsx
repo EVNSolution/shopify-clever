@@ -847,7 +847,11 @@ export const action = async ({ params, request }) => {
     const result = await createDeliveryRouteGroupBranch(
       request,
       routeGroupId,
-      { label: textOrUndefined(formData.get("label")) ?? "Route", orderIds: [] },
+      {
+        color: textOrUndefined(formData.get("color")),
+        label: textOrUndefined(formData.get("label")) ?? "Route",
+        orderIds: [],
+      },
       { sessionToken: shopifySessionToken },
     );
     logRouteGroupActionResult("routes.detail.action.addEmptyRouteBranch", params.routeId, routeGroupId, result);
@@ -1772,6 +1776,15 @@ function ensureUniqueRouteRowColors(routeRows) {
   });
 }
 
+function getNextRouteBranchDraft(routeRows) {
+  const usedColors = new Set(routeRows.map((routeRow) => normalizeRouteColor(routeRow.color)).filter(Boolean));
+  const routeNumber = routeRows.length + 1;
+  return {
+    color: getUnusedRouteColor(null, usedColors, routeNumber - 1),
+    label: `Route ${routeNumber}`,
+  };
+}
+
 function getTimelineRouteStopIds(routeRows, orderByRouteId, routeId) {
   const savedOrder = orderByRouteId[routeId];
   if (Array.isArray(savedOrder)) return savedOrder;
@@ -2055,6 +2068,7 @@ export default function RouteDetailPage() {
     title: routeLineEdits[routeRow.id]?.title ?? routeRow.title,
   }));
   const routeRows = ensureUniqueRouteRowColors(editedRouteRows);
+  const nextRouteBranchDraft = getNextRouteBranchDraft(routeRows);
   const timelineRouteRows = buildTimelineRows(routeRows, routeTimelineOrderByRouteId);
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0;
@@ -2880,7 +2894,7 @@ export default function RouteDetailPage() {
               >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
               <button
                 disabled={routeGroupActionBusy || hasRouteAllocationDraft}
-                onClick={() => submitRouteGroupAction("addEmptyRouteBranch", { label: "Route" })}
+                onClick={() => submitRouteGroupAction("addEmptyRouteBranch", nextRouteBranchDraft)}
                 style={routeActionButtonStyle}
                 type="button"
               >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
