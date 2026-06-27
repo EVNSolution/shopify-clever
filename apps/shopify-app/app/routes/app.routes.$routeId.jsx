@@ -2386,10 +2386,26 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;
-    lastRouteActionIntentRef.current = null;
-    if ((routeActionFetcher.data?.errors ?? []).length === 0) resetRouteDraftChanges();
-  }, [resetRouteDraftChanges, routeActionFetcher.data, routeActionFetcher.state]);
+
+    const lastIntent = lastRouteActionIntentRef.current;
+    if (lastIntent === "saveRouteDraft") {
+      lastRouteActionIntentRef.current = null;
+      if ((routeActionFetcher.data?.errors ?? []).length === 0) resetRouteDraftChanges();
+      return;
+    }
+
+    if (lastIntent === "reOptimizeRouteGroup") {
+      lastRouteActionIntentRef.current = null;
+      if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+
+      const nextRoutePlanId = routeActionFetcher.data?.routeGroup?.children
+        ?.map((child) => textOrUndefined(child?.routePlanId))
+        .find(Boolean);
+      if (nextRoutePlanId && nextRoutePlanId !== routeId) {
+        navigate(`/app/routes/${nextRoutePlanId}`);
+      }
+    }
+  }, [navigate, resetRouteDraftChanges, routeActionFetcher.data, routeActionFetcher.state, routeId]);
 
   useEffect(() => {
     setRouteCandidateTitle(defaultRouteCandidateTitle);
