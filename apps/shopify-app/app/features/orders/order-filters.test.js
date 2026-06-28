@@ -382,7 +382,7 @@ test("builds sorted filter options from current orders", () => {
   assert.deepEqual(getOrderFilterOptions(orders), {
     deliveryAreas: ["Mississauga", "Scarborough", "Thornhill"],
     deliveryDates: ["2026-05-14", "2026-05-15", "2026-05-16"],
-    deliveryStates: ["assigned_overdue", "past_due"],
+    deliveryStates: ["past_due"],
     deliveryWeekdays: ["THURSDAY", "FRIDAY", "SATURDAY"],
     orderedDates: ["2026-05-08", "2026-05-09"],
     serviceTypes: [],

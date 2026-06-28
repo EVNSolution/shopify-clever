@@ -40,6 +40,7 @@ import {
   isOrderDeliveryComplete,
   isOrderRouteCreated,
   ORDER_DELIVERY_STATE_OPTIONS,
+  ORDER_HISTORY_SCOPE,
   ORDER_PLANNING_SCOPE,
   ORDER_WEEKDAY_OPTIONS,
   updateOrderFilterSearchParams,
@@ -1229,7 +1230,6 @@ function formatOrderTotal(order) {
 function formatOrderDeliveryState(order, referenceDate) {
   const stateValue = getOrderDeliveryStateFilterValue(order, referenceDate);
 
-  if (stateValue === "assigned_overdue") return "Assigned · overdue";
   if (stateValue === "past_due") return "Past due";
   if (stateValue === "delivered") return "Delivered";
   if (stateValue === "assigned_undelivered") return "Assigned · undelivered";
@@ -1812,11 +1812,18 @@ export default function OrdersPage() {
     () => hasActiveOrderFilters(orderFilters),
     [orderFilters],
   );
+  const effectiveOrderFilters = useMemo(
+    () =>
+      activeOrderFilters
+        ? { ...orderFilters, scope: ORDER_HISTORY_SCOPE }
+        : orderFilters,
+    [activeOrderFilters, orderFilters],
+  );
   const orderFilterOptionOrders = useMemo(
     () =>
       activeOrderFilters
         ? filterOrders(displayOrders, {
-            ...orderFilters,
+            ...effectiveOrderFilters,
             tab: "all",
             deliveryArea: "",
             deliveryState: "",
@@ -1827,47 +1834,47 @@ export default function OrdersPage() {
             referenceDate: orderFilterReferenceDate,
           })
         : displayOrders,
-    [activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate],
+    [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate],
   );
   const orderFilterOptions = useMemo(
     () => ({
       deliveryAreas: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...orderFilters,
+        ...effectiveOrderFilters,
         tab: "all",
         deliveryArea: "",
         referenceDate: orderFilterReferenceDate,
       })).deliveryAreas,
       deliveryWeekdays: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...orderFilters,
+        ...effectiveOrderFilters,
         tab: "all",
         deliveryWeekday: "",
         referenceDate: orderFilterReferenceDate,
       })).deliveryWeekdays,
       deliveryStates: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...orderFilters,
+        ...effectiveOrderFilters,
         tab: "all",
         deliveryState: "",
         referenceDate: orderFilterReferenceDate,
       })).deliveryStates,
       serviceTypes: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...orderFilters,
+        ...effectiveOrderFilters,
         tab: "all",
         serviceType: "",
         referenceDate: orderFilterReferenceDate,
       })).serviceTypes,
     }),
-    [orderFilterOptionOrders, orderFilters, orderFilterReferenceDate],
+    [orderFilterOptionOrders, effectiveOrderFilters, orderFilterReferenceDate],
   );
   const filteredOrders = useMemo(
     () =>
       activeOrderFilters
         ? filterOrders(displayOrders, {
-            ...orderFilters,
+            ...effectiveOrderFilters,
             tab: "all",
             referenceDate: orderFilterReferenceDate,
           })
         : displayOrders,
-    [activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate],
+    [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate],
   );
 
   useEffect(() => {

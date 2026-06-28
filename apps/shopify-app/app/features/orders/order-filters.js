@@ -41,7 +41,6 @@ export const ORDER_DELIVERY_STATE_OPTIONS = [
   { label: "Unplanned", value: "unplanned" },
   { label: "Planned", value: "planned" },
   { label: "Assigned", value: "assigned_undelivered" },
-  { label: "Assigned overdue", value: "assigned_overdue" },
   { label: "Past due", value: "past_due" },
   { label: "Delivered", value: "delivered" },
 ];
@@ -330,8 +329,9 @@ export function getOrderDeliveryWeekday(order) {
 export function getOrderDeliveryStateFilterValue(order, referenceDate = new Date()) {
   const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
 
-  if (exceptionState === "overdue_assigned") return "assigned_overdue";
-  if (exceptionState === "overdue_unassigned") return "past_due";
+  if (exceptionState === "overdue_assigned" || exceptionState === "overdue_unassigned") {
+    return "past_due";
+  }
   if (isOrderDeliveryComplete(order)) return "delivered";
   if (isOrderRouteAssigned(order)) return "assigned_undelivered";
   if (isOrderRouteCreated(order)) return "planned";

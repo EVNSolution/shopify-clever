@@ -614,7 +614,7 @@ test("Orders table focuses on ordered date, delivery scope, and area instead of 
   assert.match(ordersPageSource, /: "Date pending"/);
   assert.match(ordersPageSource, /function formatOrderDeliveryState\(order, referenceDate\) \{/);
   assert.match(ordersPageSource, /getOrderDeliveryExceptionState\(order, referenceDate\)/);
-  assert.match(ordersPageSource, /Assigned · overdue/);
+  assert.doesNotMatch(ordersPageSource, /Assigned · overdue/);
   assert.match(ordersPageSource, /Past due/);
   assert.doesNotMatch(ordersPageSource, /Past due · unassigned/);
   assert.match(ordersPageSource, /Assigned · undelivered/);
@@ -1033,7 +1033,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
 
 test("Orders page filters table rows by order date, delivery day, type, and area", () => {
   assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams \} from "react-router"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_WEEKDAY_OPTIONS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "\.\.\/features\/orders\/order-filters"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_HISTORY_SCOPE[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_WEEKDAY_OPTIONS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "\.\.\/features\/orders\/order-filters"/);
   assert.match(ordersPageSource, /const \[searchParams, setSearchParams\] = useSearchParams\(\)/);
   assert.match(ordersPageSource, /const \[optimisticOrderFilters, setOptimisticOrderFilters\] = useState\(null\)/);
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
@@ -1041,11 +1041,12 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
   assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation, perf, shopLocalDate \} = useLoaderData\(\)/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
-  assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
+  assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
+  assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /deliveryAreas: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryArea: ""/);
   assert.match(ordersPageSource, /deliveryWeekdays: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryWeekday: ""/);
   assert.match(ordersPageSource, /serviceTypes: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?serviceType: ""/);
-  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
+  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /getOrderSortValue\(leftOrder, sortConfig\.key, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return filteredOrders/);
   assert.match(ordersPageSource, /!orderedDateFilterActive \? <span style=\{orderFilterLabelStyle\}>Order date<\/span> : null/);
