@@ -857,8 +857,12 @@ export const action = async ({ params, request }) => {
       routeGroupId,
       routeId: params.routeId,
       routeCount: draft.routes.length,
+      existingRoutePlanCount: draft.routes.filter((route) => route.routePlanId).length,
+      optimizedExistingRoutePlanCount: draft.routes.filter((route) => route.routePlanId && route.optimized !== undefined).length,
+      optimizedRouteCount: draft.routes.filter((route) => route.optimized !== undefined).length,
       orderCounts: draft.routes.map((route) => route.orderIds.length),
       routeKeys: draft.routes.map((route) => route.routeKey).filter(Boolean),
+      tempRouteCount: draft.routes.filter((route) => route.tempId).length,
     });
     const result = await saveDeliveryRouteGroupDraft(
       request,
@@ -900,7 +904,7 @@ function readRouteDraftPayload(value) {
         branchId: textOrUndefined(route?.branchId) ?? null,
         color: textOrUndefined(route?.color) ?? null,
         label: textOrUndefined(route?.label) ?? null,
-        optimized: route?.optimized && typeof route.optimized === "object" ? route.optimized : null,
+        ...(route?.optimized === undefined ? {} : { optimized: route?.optimized && typeof route.optimized === "object" ? route.optimized : null }),
         orderIds: Array.isArray(route?.orderIds) ? route.orderIds.map(textOrUndefined).filter(Boolean) : [],
         routeKey: textOrUndefined(route?.routeKey),
         routePlanId: textOrUndefined(route?.routePlanId) ?? null,
@@ -1916,20 +1920,33 @@ function getRouteRowDraftKey(routeRow) {
   return routeRow.id;
 }
 
-function buildRouteDraftPayload(routeRows) {
+function getRouteDraftOptimized(routeRow, includeExistingOptimized) {
+  if (routeRow.routePlanId && !includeExistingOptimized) return undefined;
+  return routeRow.optimized ?? null;
+}
+
+function shouldIncludeRouteDraftRow(routeRow, includeEmptyTempRoutes) {
+  if (includeEmptyTempRoutes) return true;
+  return !(routeRow.tempId && !routeRow.routePlanId && routeRow.stops.length === 0);
+}
+
+function buildRouteDraftPayload(routeRows, { includeEmptyTempRoutes = true, includeExistingOptimized = true } = {}) {
   return {
     mode: "OPTIMIZE_ORDER",
-    routes: routeRows.map((routeRow, index) => ({
-      branchId: routeRow.branchId ?? null,
-      color: routeRow.color,
-      label: routeRow.title,
-      optimized: routeRow.optimized ?? null,
-      orderIds: routeRow.stops.map((stop) => stop.orderId).filter(Boolean),
-      routeKey: getRouteRowDraftKey(routeRow),
-      routePlanId: routeRow.routePlanId ?? null,
-      sortOrder: index + 1,
-      tempId: routeRow.tempId ?? null,
-    })),
+    routes: routeRows.filter((routeRow) => shouldIncludeRouteDraftRow(routeRow, includeEmptyTempRoutes)).map((routeRow, index) => {
+      const optimized = getRouteDraftOptimized(routeRow, includeExistingOptimized);
+      return {
+        branchId: routeRow.branchId ?? null,
+        color: routeRow.color,
+        label: routeRow.title,
+        ...(optimized === undefined ? {} : { optimized }),
+        orderIds: routeRow.stops.map((stop) => stop.orderId).filter(Boolean),
+        routeKey: getRouteRowDraftKey(routeRow),
+        routePlanId: routeRow.routePlanId ?? null,
+        sortOrder: index + 1,
+        tempId: routeRow.tempId ?? null,
+      };
+    }),
   };
 }
 
@@ -2478,14 +2495,14 @@ export default function RouteDetailPage() {
 
   const handlePreviewRouteOptimization = () => {
     submitRouteGroupAction("previewRouteOptimization", {
-      draft: JSON.stringify(buildRouteDraftPayload(timelineRouteRows)),
+      draft: JSON.stringify(buildRouteDraftPayload(timelineRouteRows, { includeExistingOptimized: true })),
     });
   };
 
   const handleSaveRouteDraft = () => {
     if (!canSaveRouteDraft) return;
     submitRouteGroupAction("saveRouteDraft", {
-      draft: JSON.stringify(buildRouteDraftPayload(timelineRouteRows)),
+      draft: JSON.stringify(buildRouteDraftPayload(timelineRouteRows, { includeEmptyTempRoutes: false, includeExistingOptimized: false })),
     });
   };
 

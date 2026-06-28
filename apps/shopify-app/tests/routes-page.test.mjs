@@ -282,7 +282,8 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = false/);
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
   assert.match(routeDetailSource, /\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(timelineRouteRows\)\),/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(timelineRouteRows, \{ includeExistingOptimized: true \}\)\),/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(timelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)\),/);
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
   assert.match(routeDetailSource, /setClientRouteRows\(\(rows\) => \[/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
@@ -689,6 +690,7 @@ test("Route detail marker rendering does not call MapLibre resize from map event
 test("Route detail renders route lines and a stop timeline below the map", () => {
   assert.match(routeDetailSource, /function logRouteDetailPerformance\(name, metric = \{\}\) \{/);
   assert.match(routeDetailSource, /routes\.detail\.action\.saveRouteDraft\.request/);
+  assert.match(routeDetailSource, /optimizedExistingRoutePlanCount: draft\.routes\.filter\(\(route\) => route\.routePlanId && route\.optimized !== undefined\)\.length/);
   assert.match(routeDetailSource, /orderCounts: draft\.routes\.map\(\(route\) => route\.orderIds\.length\)/);
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
   assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
@@ -706,6 +708,11 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
   assert.match(routeDetailSource, /const editedRouteRows = \[/);
   assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(editedRouteRows\)/);
+  assert.match(routeDetailSource, /function getRouteDraftOptimized\(routeRow, includeExistingOptimized\) \{/);
+  assert.match(routeDetailSource, /if \(routeRow\.routePlanId && !includeExistingOptimized\) return undefined/);
+  assert.match(routeDetailSource, /function shouldIncludeRouteDraftRow\(routeRow, includeEmptyTempRoutes\) \{/);
+  assert.match(routeDetailSource, /return !\(routeRow\.tempId && !routeRow\.routePlanId && routeRow\.stops\.length === 0\)/);
+  assert.match(routeDetailSource, /buildRouteDraftPayload\(timelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)/);
   assert.ok(
     routeDetailSource.indexOf("const [routeCandidateTitle") < routeDetailSource.indexOf("const editedRouteRows = ["),
     "routeRows reads route line state after the state is initialized",
