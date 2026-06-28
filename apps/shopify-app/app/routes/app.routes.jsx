@@ -445,8 +445,52 @@ function buildRouteRows(routePlans, routeGroups = []) {
     driver: "—",
     driverId: null,
   }));
+  const routeChildRows = safeRouteGroups.flatMap((routeGroup) =>
+    (routeGroup.children ?? [])
+      .filter((child) => child?.routePlanId)
+      .map((child) => {
+        const routePlan = child.routePlan ?? {};
+        const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
+        const missingCoordinates = routePlan.missingCoordinates ?? 0;
+        const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
 
-  if (standaloneRoutePlans.length === 0 && routeGroupRows.length === 0) {
+        return {
+          id: child.routePlanId,
+          isClickable: true,
+          isDeletable: false,
+          parentRouteGroupId: routeGroup.id,
+          route: routePlan.name ?? "Route",
+          status: child.displayStatus ?? routePlan.status ?? "DRAFT",
+          orders: stopsCount,
+          coordinates: `${locatedCount}/${stopsCount}`,
+          delivered: 0,
+          attempted: 0,
+          missingCoordinates,
+          date: formatRouteTableDate(routePlan),
+          deliveryArea: formatRouteValues(routePlan.deliveryAreas),
+          start: "Shopify departure location",
+          end: "Loop back to start",
+          driver: formatRouteDriver({ displayName: child.driverName }),
+          driverId: child.driverId ?? routePlan.driverId ?? null,
+          driveTimeMinutes: firstNumber(
+            routePlan.driveTimeMinutes,
+            routePlan.totalDriveTimeMinutes,
+            routePlan.durationMinutes,
+            routePlan.metrics?.driveTimeMinutes,
+            routePlan.metrics?.totalDriveTimeMinutes,
+          ),
+          distanceMiles: firstNumber(
+            routePlan.distanceMiles,
+            routePlan.totalDistanceMiles,
+            routePlan.distanceMi,
+            routePlan.metrics?.distanceMiles,
+            routePlan.metrics?.totalDistanceMiles,
+          ),
+        };
+      }),
+  );
+
+  if (standaloneRoutePlans.length === 0 && routeGroupRows.length === 0 && routeChildRows.length === 0) {
     return [
       {
         id: "empty-route-plans",
@@ -516,7 +560,7 @@ function buildRouteRows(routePlans, routeGroups = []) {
       ),
     };
   });
-  return [...routeGroupRows, ...routePlanRows];
+  return [...routeGroupRows, ...routeChildRows, ...routePlanRows];
 }
 
 function formatRouteGroupDate(routeGroup) {

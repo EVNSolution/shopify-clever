@@ -46,6 +46,14 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.doesNotMatch(routesPageSource, /searchParams\.get\("orderIds"\)/);
 });
 
+test("Routes page lists saved child routes below their parent route group", () => {
+  assert.match(routesPageSource, /const routeChildRows = safeRouteGroups\.flatMap/);
+  assert.match(routesPageSource, /\.filter\(\(child\) => child\?\.routePlanId\)/);
+  assert.match(routesPageSource, /parentRouteGroupId: routeGroup\.id/);
+  assert.match(routesPageSource, /isDeletable: false/);
+  assert.match(routesPageSource, /return \[\.\.\.routeGroupRows, \.\.\.routeChildRows, \.\.\.routePlanRows\]/);
+});
+
 test("Routes page renders a tab-consistent title header above the route table without info copy", () => {
   assert.match(routesPageSource, /const routesTablePageStyle = \{\s+padding: "8px 12px 12px"/);
   assert.match(routesPageSource, /const routesPageContentStyle = \{\s+display: "grid",\s+gap: "12px"/);
