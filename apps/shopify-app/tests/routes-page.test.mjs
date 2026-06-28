@@ -687,8 +687,16 @@ test("Route detail marker rendering does not call MapLibre resize from map event
 });
 
 test("Route detail renders route lines and a stop timeline below the map", () => {
+  assert.match(routeDetailSource, /function logRouteDetailPerformance\(name, metric = \{\}\) \{/);
+  assert.match(routeDetailSource, /routes\.detail\.action\.saveRouteDraft\.request/);
+  assert.match(routeDetailSource, /orderCounts: draft\.routes\.map\(\(route\) => route\.orderIds\.length\)/);
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
   assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
+  assert.match(routeDetailSource, /function buildRouteGroupStops\(routeGroup, childRouteDetails, currentRouteStops\) \{/);
+  assert.match(routeDetailSource, /\.\.\.buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
+  assert.match(routeDetailSource, /const allRouteGroupStops = useMemo/);
+  assert.match(routeDetailSource, /buildRouteBranchRows\(routeGroup, allRouteGroupStops, routeChildDetailsByOrders\)/);
+  assert.match(routeDetailSource, /allRouteGroupStops\.filter\(\(stop\) => !branchOrderIds\.has\(stop\.orderId\)\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
   assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\], childRouteDetailsByOrders = new Map\(\)\) \{/);
   assert.match(routeDetailSource, /routePlanId: childRouteDetailsByOrders\.get\(routeOrderKey\(branchStops\)\)\?\.routePlanId \?\? null/);

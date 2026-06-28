@@ -47,7 +47,14 @@ function getRouteDetailPerfNow() {
   return typeof performance === "undefined" ? 0 : performance.now();
 }
 
-function logRouteDetailPerformance() {}
+function logRouteDetailPerformance(name, metric = {}) {
+  if (typeof window !== "undefined") return;
+
+  console.info(name, {
+    measuredAt: new Date().toISOString(),
+    ...metric,
+  });
+}
 
 const routesDetailPageStyle = {
   padding: "8px 12px 12px",
@@ -831,10 +838,11 @@ export const action = async ({ params, request }) => {
   }
 
   if (intent === "previewRouteOptimization") {
+    const draft = readRouteDraftPayload(formData.get("draft"));
     const result = await previewDeliveryRouteGroupOptimization(
       request,
       routeGroupId,
-      readRouteDraftPayload(formData.get("draft")),
+      draft,
       { sessionToken: shopifySessionToken },
     );
     logRouteGroupActionResult("routes.detail.action.previewRouteOptimization", params.routeId, routeGroupId, result);
@@ -842,10 +850,18 @@ export const action = async ({ params, request }) => {
   }
 
   if (intent === "saveRouteDraft") {
+    const draft = readRouteDraftPayload(formData.get("draft"));
+    logRouteDetailPerformance("routes.detail.action.saveRouteDraft.request", {
+      routeGroupId,
+      routeId: params.routeId,
+      routeCount: draft.routes.length,
+      orderCounts: draft.routes.map((route) => route.orderIds.length),
+      routeKeys: draft.routes.map((route) => route.routeKey).filter(Boolean),
+    });
     const result = await saveDeliveryRouteGroupDraft(
       request,
       routeGroupId,
-      readRouteDraftPayload(formData.get("draft")),
+      draft,
       { sessionToken: shopifySessionToken },
     );
     logRouteGroupActionResult("routes.detail.action.saveRouteDraft", params.routeId, routeGroupId, result);
@@ -1060,7 +1076,7 @@ function normalizeRouteStopCoordinates(stop) {
 function buildRouteStops(stops) {
   return resequenceRouteStops(stops.map((stop, index) => {
     const coordinates = normalizeRouteStopCoordinates(stop);
-    const sequence = numberOrUndefined(stop.sequence);
+    const sequence = numberOrUndefined(stop.sequence ?? stop.sortOrder ?? stop.sourceSequence);
     const stopNumber = Number.isInteger(sequence) && sequence > 0
       ? sequence
       : index + 1;
@@ -1073,10 +1089,10 @@ function buildRouteStops(stops) {
       originalIndex: index,
       sortOrder: stopNumber,
       stop: stopNumber,
-      order: stop.orderName ?? stop.shopifyOrderGid,
+      order: stop.orderName ?? stop.sourceOrderId ?? stop.shopifyOrderGid,
       recipient: stop.recipientName ?? "Unknown recipient",
-      address: formatStopAddress(stop.address),
-      status: stop.fulfillmentStatus ?? stop.status ?? "PENDING",
+      address: textOrUndefined(stop.addressLabel) ?? formatStopAddress(stop.address),
+      status: stop.fulfillmentStatus ?? stop.status ?? stop.assignmentStatus ?? "PENDING",
       payment: stop.paymentStatus ?? stop.financialStatus ?? "—",
       attributes: formatStopAttributes(stop.attributes),
       itemCount: numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems),
@@ -1087,6 +1103,21 @@ function buildRouteStops(stops) {
   }).sort((firstStop, secondStop) => (
     firstStop.sortOrder - secondStop.sortOrder || firstStop.originalIndex - secondStop.originalIndex
   )));
+}
+
+function buildRouteGroupStops(routeGroup, childRouteDetails, currentRouteStops) {
+  const stopsByOrderId = new Map();
+
+  for (const stop of [
+    ...currentRouteStops,
+    ...childRouteDetails.flatMap((detail) => buildRouteStops(detail?.stops ?? [])),
+    ...buildRouteStops(routeGroup?.assignments ?? []),
+  ]) {
+    const orderId = textOrUndefined(stop.orderId);
+    if (orderId && !stopsByOrderId.has(orderId)) stopsByOrderId.set(orderId, stop);
+  }
+
+  return [...stopsByOrderId.values()];
 }
 
 function resequenceRouteStops(routeStops) {
@@ -1938,11 +1969,15 @@ export default function RouteDetailPage() {
     : "Unassigned";
   const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
   const routeChildDetailsByOrders = useMemo(() => mapRouteChildDetailsByOrders(childRouteDetails), [childRouteDetails]);
-  const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, orderedRouteStops, routeChildDetailsByOrders), [orderedRouteStops, routeChildDetailsByOrders, routeGroup]);
+  const allRouteGroupStops = useMemo(
+    () => buildRouteGroupStops(routeGroup, childRouteDetails, orderedRouteStops),
+    [childRouteDetails, orderedRouteStops, routeGroup],
+  );
+  const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, allRouteGroupStops, routeChildDetailsByOrders), [allRouteGroupStops, routeChildDetailsByOrders, routeGroup]);
   const branchOrderIds = useMemo(() => new Set(routeBranchRows.flatMap((routeRow) => routeRow.orderIds)), [routeBranchRows]);
   const rootRouteStops = useMemo(
-    () => orderedRouteStops.filter((stop) => !branchOrderIds.has(stop.orderId)),
-    [branchOrderIds, orderedRouteStops],
+    () => allRouteGroupStops.filter((stop) => !branchOrderIds.has(stop.orderId)),
+    [allRouteGroupStops, branchOrderIds],
   );
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
   const defaultRouteCandidateTitle = getRouteCandidateTitle(effectiveRoutePlan);
@@ -2057,13 +2092,13 @@ export default function RouteDetailPage() {
   const polygonHighlightedOrderIds = new Set(
     isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds,
   );
-  const routeStopColorById = new Map(timelineRouteRows.flatMap((routeRow) => (
+  const routeStopColorById = useMemo(() => new Map(timelineRouteRows.flatMap((routeRow) => (
     routeRow.stops.flatMap((stop) => [
       [stop.id, routeRow.color],
       ...(stop.deliveryStopId ? [[stop.deliveryStopId, routeRow.color]] : []),
       ...(stop.orderId ? [[stop.orderId, routeRow.color]] : []),
     ])
-  )));
+  ))), [timelineRouteRows]);
   const routeMapStops = timelineRouteRows.flatMap((routeRow) =>
     routeRow.stops.map((stop) => ({
       ...stop,
