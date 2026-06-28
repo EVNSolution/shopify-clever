@@ -319,7 +319,9 @@ export function getOrderDeliveryDateValue(order) {
 }
 
 export function getOrderDeliveryWeekday(order) {
-  const explicitWeekday = normalizeDeliveryWeekday(order?.deliveryWeekday);
+  const explicitWeekday = normalizeDeliveryWeekday(
+    order?.deliveryWeekday ?? order?.deliveryDay ?? order?.deliveryDayRaw,
+  );
   if (explicitWeekday) return explicitWeekday;
 
   return getWeekdayFromDate(getOrderDeliveryDateValue(order));

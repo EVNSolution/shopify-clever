@@ -111,6 +111,17 @@ test("filters orders by delivery weekday", () => {
     }).map((order) => order.id),
     ["order-2"],
   );
+
+  assert.deepEqual(
+    filterOrders([
+      { id: "day-label", deliveryDay: "Friday" },
+      { id: "other-day", deliveryDay: "Saturday" },
+    ], {
+      deliveryWeekday: "FRIDAY",
+      scope: "history",
+    }).map((order) => order.id),
+    ["day-label"],
+  );
 });
 
 test("filters orders by delivery state", () => {
