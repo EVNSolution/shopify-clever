@@ -4,6 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "../features/delivery/orders.server";
+import { fetchDeliveryInventories } from "../features/delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
   DELIVERY_API_ERROR_CODE,
@@ -187,6 +188,52 @@ const routePlanScrollAreaStyle = {
   minHeight: 0,
   overflow: "visible",
   paddingRight: 0,
+};
+
+const ordersViewTabBarStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "6px",
+  padding: "8px 10px",
+};
+
+const ordersViewTabButtonStyle = {
+  background: "#ffffff",
+  border: "1px solid #d4d4d4",
+  borderRadius: "8px",
+  color: "#303030",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "12px",
+  fontWeight: 600,
+  lineHeight: "18px",
+  padding: "4px 10px",
+};
+
+const activeOrdersViewTabButtonStyle = {
+  ...ordersViewTabButtonStyle,
+  background: "#303030",
+  borderColor: "#303030",
+  color: "#ffffff",
+};
+
+const inventoryListStyle = {
+  display: "grid",
+  gap: "8px",
+  padding: "8px 10px 12px",
+};
+
+const inventoryTableStyle = {
+  borderCollapse: "collapse",
+  fontSize: "13px",
+  lineHeight: "18px",
+  width: "100%",
+};
+
+const inventoryCellStyle = {
+  borderTop: "1px solid #ebebeb",
+  padding: "7px 8px",
+  textAlign: "left",
 };
 
 const routePlanHeaderStyle = {
@@ -1037,6 +1084,21 @@ function compareOrderSortValues(leftValue, rightValue) {
   });
 }
 
+function formatInventoryChangedAt(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "—";
+  return date.toISOString().slice(0, 16).replace("T", " ");
+}
+
+function formatInventoryDeltaSummary(inventory) {
+  const lastChange = Array.isArray(inventory?.lastChange) ? inventory.lastChange : [];
+  if (lastChange.length === 0) return "No changes";
+  const delta = lastChange.slice(0, 3).reduce((total, item) => total + (Number(item.quantityDelta) || 0), 0);
+  const prefix = delta > 0 ? "+" : "";
+  return `${prefix}${delta} items · ${lastChange.length} changes`;
+}
+
 function getUniqueRouteDraftValues(orders, key) {
   return Array.from(
     new Set(
@@ -1617,6 +1679,7 @@ export const loader = async ({ request }) => {
   }));
 
   const serverOrdersStartedAt = getSafePerformanceNow();
+  const inventoriesStartedAt = getSafePerformanceNow();
   const shopTimeZoneStartedAt = getSafePerformanceNow();
   const shopTimeZoneDataPromise = fetchShopifyShopTimeZone(admin).then((shopTimeZoneData) => ({
     data: shopTimeZoneData,
@@ -1646,20 +1709,38 @@ export const loader = async ({ request }) => {
     }),
   );
 
+  const inventoryDataPromise = fetchDeliveryInventories(
+    request,
+    {},
+    { cacheKey: shopifyShopCacheKey },
+  ).then(
+    (inventoryData) => ({
+      data: inventoryData,
+      durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
+    }),
+    () => ({
+      data: { inventories: [], errors: [{ code: DELIVERY_API_ERROR_CODE, message: "Inventory API 호출에 실패했습니다." }] },
+      durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
+    }),
+  );
+
   const [
     orderDataResult,
     departureLocationDataResult,
     serverOrderDataResult,
+    inventoryDataResult,
     shopTimeZoneDataResult,
   ] = await Promise.all([
     orderDataPromise,
     departureLocationDataPromise,
     serverOrderDataPromise,
+    inventoryDataPromise,
     shopTimeZoneDataPromise,
   ]);
   const orderData = orderDataResult.data;
   const departureLocationData = departureLocationDataResult.data;
   const serverOrderData = serverOrderDataResult.data;
+  const inventoryData = inventoryDataResult.data;
   const shopTimeZoneData = shopTimeZoneDataResult.data;
   const shopLocalDate = getShopLocalDate(shopTimeZoneData);
   const serverOrderRows = mapCanonicalOrdersToOrderRows(serverOrderData.orders);
@@ -1670,8 +1751,9 @@ export const loader = async ({ request }) => {
 
   return {
     orders: mergedOrders,
+    inventories: inventoryData.inventories,
     errors: collectServiceErrors(
-      [orderData, departureLocationData, serverOrderData],
+      [orderData, departureLocationData, serverOrderData, inventoryData],
       { ignoredCodes: [DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE] },
     ),
     departureLocation: departureLocationData.departureLocation,
@@ -1683,6 +1765,7 @@ export const loader = async ({ request }) => {
         shopifyOrdersMs: orderDataResult.durationMs,
         departureLocationMs: departureLocationDataResult.durationMs,
         serverOrdersMs: serverOrderDataResult.durationMs,
+        inventoriesMs: inventoryDataResult.durationMs,
         shopTimeZoneMs: shopTimeZoneDataResult.durationMs,
       },
     },
@@ -1695,11 +1778,15 @@ export default function OrdersPage() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, errors, departureLocation, perf, shopLocalDate } = useLoaderData();
+  const { orders, inventories, errors, departureLocation, perf, shopLocalDate } = useLoaderData();
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
     [orders],
+  );
+  const safeInventories = useMemo(
+    () => (Array.isArray(inventories) ? inventories : []),
+    [inventories],
   );
   const syncedOrders = useMemo(
     () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders),
@@ -1847,6 +1934,72 @@ export default function OrdersPage() {
     () => getCalendarDays(orderedDateCalendarMonth),
     [orderedDateCalendarMonth],
   );
+  const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
+  const handleOrdersViewChange = useCallback((nextView) => {
+    const nextSearchParams = new URLSearchParams(searchParams);
+    if (nextView === "inventory") {
+      nextSearchParams.set("view", "inventory");
+    } else {
+      nextSearchParams.delete("view");
+    }
+
+    setSearchParams(nextSearchParams, { preventScrollReset: true, replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const ordersViewTabs = (
+    <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
+      <button
+        type="button"
+        style={activeOrdersView === "orders" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
+        onClick={() => handleOrdersViewChange("orders")}
+      >Orders</button>
+      <button
+        type="button"
+        style={activeOrdersView === "inventory" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
+        onClick={() => handleOrdersViewChange("inventory")}
+      >Inventory</button>
+    </div>
+  );
+
+  const inventoryList = (
+    <div style={inventoryListStyle}>
+      <table aria-label="Inventory list" style={inventoryTableStyle}>
+        <thead>
+          <tr>
+            <th style={inventoryCellStyle}>Inventory</th>
+            <th style={inventoryCellStyle}>Order count</th>
+            <th style={inventoryCellStyle}>Item count</th>
+            <th style={inventoryCellStyle}>Delta summary</th>
+            <th style={inventoryCellStyle}>Changed time</th>
+            <th style={inventoryCellStyle}>Detail</th>
+          </tr>
+        </thead>
+        <tbody>
+          {safeInventories.length === 0 ? (
+            <tr>
+              <td colSpan={6} style={inventoryCellStyle}>Inventory가 없습니다.</td>
+            </tr>
+          ) : safeInventories.map((inventory) => (
+            <tr key={inventory.id}>
+              <td style={inventoryCellStyle}>{inventory.name}</td>
+              <td style={inventoryCellStyle}>{inventory.ordersCount ?? inventory.orderIds?.length ?? inventory.orders?.length ?? 0}</td>
+              <td style={inventoryCellStyle}>{inventory.itemSummary?.totalQuantity ?? 0}</td>
+              <td style={inventoryCellStyle}>{formatInventoryDeltaSummary(inventory)}</td>
+              <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt)}</td>
+              <td style={inventoryCellStyle}>
+                <button
+                  type="button"
+                  style={orderFilterButtonStyle}
+                  onClick={() => navigate(`/app/orders/inventory?id=${encodeURIComponent(inventory.id)}`)}
+                >Open</button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
 
   const sortedOrders = useMemo(() => {
     if (!sortConfig) return filteredOrders;
@@ -2772,6 +2925,28 @@ export default function OrdersPage() {
     };
   }, [isMapReady, isMapWide]);
 
+  if (activeOrdersView === "inventory") {
+    return (
+      <TabLayout
+        primaryExpanded={true}
+        notice={
+          orderPageNoticeMessage ? (
+            <div className="orders-error-filter" role="alert" style={orderPageNoticeStyle}>
+              {orderPageNoticeMessage}
+            </div>
+          ) : null
+        }
+        primary={
+          <div>
+            {ordersViewTabs}
+            {inventoryList}
+          </div>
+        }
+        lower={<div />}
+      />
+    );
+  }
+
   return (
     <TabLayout
       primaryExpanded={isMapWide}
@@ -2895,23 +3070,6 @@ export default function OrdersPage() {
             </div>
           </div>
 
-          <div style={routePlanDetailStyle}>
-            <div style={routePlanHeaderStyle}>
-              <s-heading>Inventory plan</s-heading>
-              <div style={routePlanHeaderActionsStyle}>
-                <button
-                  type="button"
-                  style={disabledPlanButtonStyle}
-                  disabled={true}
-                >Add</button>
-                <button
-                  type="button"
-                  style={disabledPlanButtonStyle}
-                  disabled={true}
-                >Create</button>
-              </div>
-            </div>
-          </div>
 
           <div style={routePlanScrollAreaStyle}>
             <div className="order-route-summary" style={routeReadinessStyle} aria-label="Order summary">
@@ -2960,6 +3118,7 @@ export default function OrdersPage() {
       }
       lower={
         <div style={orderTableLayoutStyle}>
+          {ordersViewTabs}
           <div style={orderControlsStyle}>
             <div style={orderFilterDateFieldStyle}>
               {!orderedDateFilterActive ? <span style={orderFilterLabelStyle}>Order date</span> : null}

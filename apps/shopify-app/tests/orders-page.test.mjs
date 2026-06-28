@@ -32,6 +32,14 @@ const mapMarkersSource = readFileSync(
   join(root, "app/features/maps/map-markers.js"),
   "utf8",
 );
+const appShellSource = readFileSync(
+  join(root, "app/routes/app.jsx"),
+  "utf8",
+);
+const inventoryDetailSource = readFileSync(
+  join(root, "app/routes/app.orders.inventory.jsx"),
+  "utf8",
+);
 const openFreeMapStyle = JSON.parse(
   readFileSync(join(root, "public/vendor/openfreemap-liberty.json"), "utf8"),
 );
@@ -289,7 +297,7 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.doesNotMatch(ordersPageSource, /<s-banner tone="critical">/);
   assert.match(ordersPageSource, /<div style=\{orderControlsStyle\}>/);
   assert.match(ordersPageSource, /getServiceErrorNotice\(\[/);
-  assert.match(ordersPageSource, /collectServiceErrors\(\s*\[orderData, departureLocationData, serverOrderData\]/);
+  assert.match(ordersPageSource, /collectServiceErrors\(\s*\[orderData, departureLocationData, serverOrderData, inventoryData\]/);
   assert.doesNotMatch(ordersPageSource, /style=\{orderFilterBarStyle\}/);
   assert.doesNotMatch(ordersPageSource, /style=\{planActionRowStyle\}/);
   assert.match(ordersPageSource, /<div style=\{tableWrapStyle\}>\s*<table/s);
@@ -683,8 +691,7 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Assign to route<\/button>[\s\S]*>Clear plan<\/button>/);
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Add to route<\/button>[\s\S]*>Create route<\/button>/);
-  assert.match(ordersPageSource, />Inventory plan<\/s-heading>/);
-  assert.match(ordersPageSource, />Add<\/button>[\s\S]*>Create<\/button>/);
+  assert.doesNotMatch(ordersPageSource, />Inventory plan<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Assign to inventory<\/button>/);
   assert.match(ordersPageSource, />Clear plan<\/button>/);
   assert.doesNotMatch(ordersPageSource, /Plan에서 추가\/제거합니다/);
@@ -897,7 +904,7 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
 });
 
 test("Orders map shows the Shopify departure location as the route start point", () => {
-  assert.match(ordersPageSource, /const \{ orders, errors, departureLocation/);
+  assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation/);
   assert.match(ordersPageSource, /import \{ createDepartureMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE \} from "\.\.\/features\/maps\/map-markers"/);
   assert.match(mapMarkersSource, /function createDepartureMarkerElement\(departureLocation, options = \{\}\)/);
   assert.match(mapMarkersSource, /function createDepartureMarkerIconElement\(\)/);
@@ -1032,7 +1039,7 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, errors, departureLocation, perf, shopLocalDate \} = useLoaderData\(\)/);
+  assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation, perf, shopLocalDate \} = useLoaderData\(\)/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.orderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, orderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /deliveryAreas: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryArea: ""/);
@@ -1149,4 +1156,27 @@ test("Shopify order mapping avoids Customer object and keeps coordinate metadata
   assert.doesNotMatch(shopifyOrdersSource, /customer\s*\{/);
   assert.match(shopifyOrdersSource, /shippingAddress\s*\{/);
   assert.match(shopifyOrdersSource, /coordinates: \[longitude, latitude\]/);
+});
+
+
+test("Orders page exposes inventory as an Orders subview without global nav or manual plan controls", () => {
+  assert.match(ordersPageSource, /fetchDeliveryInventories/);
+  assert.match(ordersPageSource, />Inventory<\/button>/);
+  assert.match(ordersPageSource, /aria-label="Inventory list"/);
+  assert.match(ordersPageSource, /Order count/);
+  assert.match(ordersPageSource, /Item count/);
+  assert.match(ordersPageSource, /Delta summary/);
+  assert.match(ordersPageSource, /Changed time/);
+  assert.match(ordersPageSource, /inventory\.ordersCount \?\? inventory\.orderIds\?\.length \?\? inventory\.orders\?\.length \?\? 0/);
+  assert.doesNotMatch(appShellSource, /nav\.inventory|Inventory plan/);
+  assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
+});
+
+test("Orders inventory detail shows totals, order-by-order items, and delta remarks", () => {
+  assert.match(inventoryDetailSource, /fetchDeliveryInventoryDetail/);
+  assert.match(inventoryDetailSource, /Total items/);
+  assert.match(inventoryDetailSource, /Order-by-order items/);
+  assert.match(inventoryDetailSource, /Delta remarks/);
+  assert.match(inventoryDetailSource, /const orderQuantity = \(order\) => \(order\.items \?\? \[\]\)\.reduce/);
+  assert.match(inventoryDetailSource, /const formatOptions = \(options\) => \(options \?\? \[\]\)\.map/);
 });
