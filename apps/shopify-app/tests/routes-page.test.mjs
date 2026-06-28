@@ -304,7 +304,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
-  assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
+  assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeMetrics = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
   assert.match(routeDetailSource, /const savedRouteGeometryRows = routeGeometryRows/);
   assert.match(routeDetailSource, /const savedRouteStopPoints = routeGeometryStopPoints/);
@@ -699,7 +699,10 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /allRouteGroupStops\.filter\(\(stop\) => !branchOrderIds\.has\(stop\.orderId\)\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
   assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\], childRouteDetailsByOrders = new Map\(\)\) \{/);
-  assert.match(routeDetailSource, /routePlanId: childRouteDetailsByOrders\.get\(routeOrderKey\(branchStops\)\)\?\.routePlanId \?\? null/);
+  assert.match(routeDetailSource, /readRouteOptimizedSnapshot\(branch\.optimized\)/);
+  assert.match(routeDetailSource, /formatRouteDurationSeconds\(optimized\?\.metrics\?\.durationSeconds\)/);
+  assert.match(routeDetailSource, /formatRouteDistanceMeters\(optimized\?\.metrics\?\.distanceMeters\)/);
+  assert.match(routeDetailSource, /const childDetail = childRouteDetailsByOrders\.get\(routeOrderKey\(branchStops\)\)[\s\S]*routePlanId: childDetail\?\.routePlanId \?\? null/);
   assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
   assert.match(routeDetailSource, /const editedRouteRows = \[/);
   assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(editedRouteRows\)/);

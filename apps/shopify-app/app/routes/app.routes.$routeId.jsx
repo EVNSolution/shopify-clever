@@ -768,6 +768,7 @@ export const loader = async ({ params, request }) => {
   const routeChildDetails = [
     {
       routeGeometry: routePlanData.routeGeometry,
+      routeMetrics: routePlanData.routeMetrics ?? null,
       routePlan: routePlanData.routePlan,
       routePlanId: routePlanData.routePlan?.id ?? params.routeId,
       routeStopPoints: routePlanData.routeStopPoints ?? [],
@@ -775,6 +776,7 @@ export const loader = async ({ params, request }) => {
     },
     ...childRouteDetailResults.map((detail) => ({
       routeGeometry: detail.routeGeometry,
+      routeMetrics: detail.routeMetrics ?? null,
       routePlan: detail.routePlan,
       routePlanId: detail.routePlan?.id,
       routeStopPoints: detail.routeStopPoints ?? [],
@@ -999,6 +1001,32 @@ function getRouteTotalItems(routePlan, routeStops) {
 
 function getRouteMetricLabel(...values) {
   return values.map(textOrUndefined).find(Boolean) ?? ROUTE_EMPTY_LABEL;
+}
+
+function formatRouteDurationSeconds(value) {
+  const seconds = numberOrUndefined(value);
+  if (seconds === undefined) return undefined;
+
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} min`;
+
+  const hours = Math.floor(minutes / 60);
+  const remainingMinutes = minutes % 60;
+  return remainingMinutes > 0 ? `${hours} hr ${remainingMinutes} min` : `${hours} hr`;
+}
+
+function formatRouteDistanceMeters(value) {
+  const meters = numberOrUndefined(value);
+  if (meters === undefined) return undefined;
+
+  if (meters < 1000) return `${Math.round(meters)} m`;
+
+  const kilometers = meters / 1000;
+  return `${kilometers >= 10 ? Math.round(kilometers) : kilometers.toFixed(1)} km`;
+}
+
+function readRouteOptimizedSnapshot(value) {
+  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
 function buildRouteDriverOptions(drivers, currentDriver) {
@@ -1700,26 +1728,35 @@ function buildRouteBranchRows(routeGroup, routeStops = [], childRouteDetailsByOr
   return branches.map((branch, index) => {
     const orderIds = Array.isArray(branch.orderIds) ? branch.orderIds.map(textOrUndefined).filter(Boolean) : [];
     const branchStops = orderIds.map((orderId) => stopByOrderId.get(orderId)).filter(Boolean);
+    const childDetail = childRouteDetailsByOrders.get(routeOrderKey(branchStops));
+    const optimized = readRouteOptimizedSnapshot(branch.optimized) ?? (childDetail
+      ? {
+        metrics: childDetail.routeMetrics ?? null,
+        routeGeometry: childDetail.routeGeometry ?? null,
+        routeStopPoints: childDetail.routeStopPoints ?? [],
+      }
+      : null);
     return {
       attemptedCount: 0,
       color: textOrUndefined(branch.color) ?? ROUTE_DEFAULT_COLORS[(index + 1) % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
       createdLabel: textOrUndefined(branch.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL,
       deliveredCount: 0,
       driverLabel: textOrUndefined(branch.driverName) ?? "Unassigned",
-      driveTimeLabel: ROUTE_EMPTY_LABEL,
+      driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(optimized?.metrics?.durationSeconds)),
       id: `branch-${branch.id ?? index}`,
       branchId: textOrUndefined(branch.id) ?? null,
       routeKey: `branch:${textOrUndefined(branch.id) ?? index}`,
-      routePlanId: childRouteDetailsByOrders.get(routeOrderKey(branchStops))?.routePlanId ?? null,
+      routePlanId: childDetail?.routePlanId ?? null,
       isCurrent: false,
       orderIds,
       stops: branchStops,
       stopsCount: branchStops.length,
       title: textOrUndefined(branch.label) ?? `Route ${index + 2}`,
-      totalDistanceLabel: ROUTE_EMPTY_LABEL,
+      totalDistanceLabel: getRouteMetricLabel(formatRouteDistanceMeters(optimized?.metrics?.distanceMeters)),
       totalItems: ROUTE_EMPTY_LABEL,
       totalWeightLabel: ROUTE_EMPTY_LABEL,
       vehicleLabel: ROUTE_EMPTY_LABEL,
+      optimized,
     };
   });
 }
@@ -1816,12 +1853,16 @@ function buildTimelineRows(routeRows, orderByRouteId) {
       total + (numberOrUndefined(stop.itemCount) ?? 0)
     ), 0);
 
+    const optimized = readRouteOptimizedSnapshot(routeRow.optimized);
+
     return {
       ...routeRow,
       attemptedCount: countRouteStopsByStatus(displayedStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
       deliveredCount: countRouteStopsByStatus(displayedStops, ["DELIVERED", "FULFILLED"]),
       stops: displayedStops,
       stopsCount: displayedStops.length,
+      driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(optimized?.metrics?.durationSeconds), routeRow.driveTimeLabel),
+      totalDistanceLabel: getRouteMetricLabel(formatRouteDistanceMeters(optimized?.metrics?.distanceMeters), routeRow.totalDistanceLabel),
       totalItems: displayedStops.length > 0 ? displayedTotalItems : 0,
     };
   });
@@ -1843,6 +1884,7 @@ function mapRouteChildDetailsByOrders(childRouteDetails = []) {
     if (!key) continue;
     detailsByOrderKey.set(key, {
       routeGeometry: detail.routeGeometry ?? null,
+      routeMetrics: detail.routeMetrics ?? null,
       routePlanId: textOrUndefined(detail.routePlanId ?? detail.routePlan?.id),
       routeStopPoints: Array.isArray(detail.routeStopPoints) ? detail.routeStopPoints : [],
       stops,
@@ -1948,6 +1990,7 @@ export default function RouteDetailPage() {
     routePlan,
     routeGeometry = null,
     routeGroup = null,
+    routeMetrics = null,
     routeStopPoints = [],
     stops = [],
     errors = [],
@@ -1986,8 +2029,8 @@ export default function RouteDetailPage() {
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
-  const routeTotalDriveTime = getRouteMetricLabel(effectiveRoutePlan?.totalDriveTime, effectiveRoutePlan?.driveTime);
-  const routeTotalDistance = getRouteMetricLabel(effectiveRoutePlan?.totalDistance, effectiveRoutePlan?.distance);
+  const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds), effectiveRoutePlan?.totalDriveTime, effectiveRoutePlan?.driveTime);
+  const routeTotalDistance = getRouteMetricLabel(formatRouteDistanceMeters(routeMetrics?.distanceMeters), effectiveRoutePlan?.totalDistance, effectiveRoutePlan?.distance);
   const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
@@ -2056,6 +2099,7 @@ export default function RouteDetailPage() {
       driveTimeLabel: routeTotalDriveTime,
       id: currentRouteLineId,
       isCurrent: true,
+      optimized: routeMetrics ? { metrics: routeMetrics, routeGeometry, routeStopPoints } : null,
       orderIds: rootRouteStops.map((stop) => stop.orderId).filter(Boolean),
       routeKey: "root",
       routePlanId: textOrUndefined(effectiveRoutePlan?.id) ?? null,

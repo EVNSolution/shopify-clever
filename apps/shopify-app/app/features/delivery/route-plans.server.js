@@ -151,6 +151,7 @@ export async function fetchDeliveryRoutePlanDetail(request, routePlanId, options
   return {
     routePlan: result.data?.routePlan ?? null,
     routeGeometry: result.data?.routeGeometry ?? null,
+    routeMetrics: result.data?.routeMetrics ?? null,
     routeStopPoints: result.data?.routeStopPoints ?? [],
     stops: result.data?.stops ?? [],
     errors: result.errors,
@@ -191,6 +192,7 @@ export async function updateDeliveryRoutePlanStops(request, routePlanId, payload
   return {
     routePlan: result.data?.routePlan ?? null,
     routeGeometry: result.data?.routeGeometry ?? null,
+    routeMetrics: result.data?.routeMetrics ?? null,
     routeStopPoints: result.data?.routeStopPoints ?? [],
     stops: result.data?.stops ?? [],
     errors: result.errors,
@@ -232,6 +234,7 @@ export async function assignDeliveryRoutePlanDriver(request, routePlanId, payloa
   return {
     routePlan: result.data?.routePlan ?? null,
     routeGeometry: result.data?.routeGeometry ?? null,
+    routeMetrics: result.data?.routeMetrics ?? null,
     routeStopPoints: result.data?.routeStopPoints ?? [],
     stops: result.data?.stops ?? [],
     errors: result.errors,
