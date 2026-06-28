@@ -3188,6 +3188,7 @@ export default function OrdersPage() {
                 value={orderFilters.deliveryWeekday}
                 onChange={(event) => handleOrderFilterChange("deliveryWeekday", event.currentTarget.value)}
               >
+                <option value="">Delivery day</option>
                 {ORDER_WEEKDAY_OPTIONS.map((weekday) => (
                   <option key={weekday.value} value={weekday.value}>
                     {weekday.label}
@@ -3216,6 +3217,7 @@ export default function OrdersPage() {
                 value={orderFilters.serviceType}
                 onChange={(event) => handleOrderFilterChange("serviceType", event.currentTarget.value)}
               >
+                <option value="">Type</option>
                 <option value="DELIVERY">Delivery</option>
                 <option value="PICKUP">Pickup</option>
               </select>
@@ -3241,6 +3243,7 @@ export default function OrdersPage() {
                 value={orderFilters.deliveryArea}
                 onChange={(event) => handleOrderFilterChange("deliveryArea", event.currentTarget.value)}
               >
+                <option value="">Area</option>
                 {orderFilterOptions.deliveryAreas.map((deliveryArea) => (
                   <option key={deliveryArea} value={deliveryArea}>
                     {deliveryArea}
@@ -3269,6 +3272,7 @@ export default function OrdersPage() {
                 value={orderFilters.deliveryState}
                 onChange={(event) => handleOrderFilterChange("deliveryState", event.currentTarget.value)}
               >
+                <option value="">State</option>
                 {ORDER_DELIVERY_STATE_OPTIONS.map((stateOption) => (
                   <option key={stateOption.value} value={stateOption.value}>
                     {stateOption.label}
