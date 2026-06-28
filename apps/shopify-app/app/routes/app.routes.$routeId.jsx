@@ -2015,6 +2015,7 @@ export default function RouteDetailPage() {
   const effectiveRoutePlan = routePlan;
   const routesListHref = "/app/routes";
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan), [effectiveRoutePlan]);
+  const routeDetailTitle = textOrUndefined(routeGroup?.name) ?? routeDetail.route;
   const departureLocation = useMemo(
     () => buildDepartureLocation(effectiveRoutePlan, currentDepartureLocation),
     [currentDepartureLocation, effectiveRoutePlan],
@@ -2930,7 +2931,7 @@ export default function RouteDetailPage() {
           <div className="route-overview-main">
             <div style={routeOverviewTitleBlockStyle}>
               <div style={routeOverviewTitleLineStyle}>
-                <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetail.route}</h1>
+                <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetailTitle}</h1>
                 <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
                 <div aria-label="Route summary" className="route-overview-summary">
                   {renderRouteHeaderMetric("Orders", routeDetail.orders)}

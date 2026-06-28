@@ -313,7 +313,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
   assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan\)/);
-  assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetail\.route\}<\/h1>/);
+  assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
   assert.doesNotMatch(routeDetailSource, /parseRouteDetailDraft/);
   assert.doesNotMatch(routeDetailSource, /useSearchParams/);
 });
@@ -347,6 +347,11 @@ test("Route detail summarizes delivery with the actual date label", () => {
   assert.match(routeDetailSource, /deliveryDate: formatRouteDeliveryScope\(routePlan\)/);
   assert.match(routeDetailSource, /renderRouteHeaderMetric\("Delivery date", routeDetail\.deliveryDate\)/);
   assert.doesNotMatch(routeDetailSource, /renderSummaryItem\("Delivery day", routeDetail\.deliveryDay\)/);
+});
+
+test("Route detail prefers the group title over the selected child route title", () => {
+  assert.match(routeDetailSource, /const routeDetailTitle = textOrUndefined\(routeGroup\?\.name\) \?\? routeDetail\.route/);
+  assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
 });
 
 test("Route detail renders a compact route overview panel with inline summary", () => {
