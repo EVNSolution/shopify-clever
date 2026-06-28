@@ -9,6 +9,7 @@ import {
   deleteDeliveryRouteGroupBranch,
   DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE,
   fetchDeliveryRouteGroups,
+  previewDeliveryRouteGroupOptimization,
   reOptimizeDeliveryRouteGroup,
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupBranchOrders,
@@ -123,6 +124,22 @@ test("route group helper saves a batched draft allocation", async () => {
   assert.deepEqual(result, { routeGroup: { id: "group/1", status: "CHANGED" }, errors: [] });
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/draft");
   assert.equal(fakeFetch.calls[0].init.method, "PATCH");
+  assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
+});
+
+test("route group helper previews optimization without saving the draft", async () => {
+  const preview = { routes: [{ orderIds: ["order-1"], routeKey: "root" }] };
+  const fakeFetch = makeFetch({ data: { preview }, error: null });
+  const payload = { mode: "OPTIMIZE_ORDER", routes: [{ branchId: null, orderIds: ["order-1"], routeKey: "root" }] };
+
+  const result = await previewDeliveryRouteGroupOptimization(makeRequest(), "group/1", payload, {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { preview, errors: [] });
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/optimize-preview");
+  assert.equal(fakeFetch.calls[0].init.method, "POST");
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
 });
 

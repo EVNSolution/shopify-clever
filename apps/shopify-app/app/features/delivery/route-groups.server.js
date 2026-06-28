@@ -99,6 +99,23 @@ export async function resolveDeliveryRouteGroupAssignments(request, routeGroupId
   return mutateRouteGroup(request, routeGroupId, "/assignments", payload, options, "수정할 route group ID가 없습니다.");
 }
 
+export async function previewDeliveryRouteGroupOptimization(request, routeGroupId, payload = {}, options = {}) {
+  const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
+  if (!safeRouteGroupId) return { preview: null, errors: missingRouteGroupResult("미리보기할 route group ID가 없습니다.").errors };
+
+  const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}/optimize-preview`, {
+    body: JSON.stringify(payload ?? {}),
+    fetch: options.fetch,
+    method: "POST",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    preview: result.data?.preview ?? null,
+    errors: result.errors,
+  };
+}
+
 export async function reOptimizeDeliveryRouteGroup(request, routeGroupId, payload = {}, options = {}) {
   const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
   if (!safeRouteGroupId) return missingRouteGroupResult("재최적화할 route group ID가 없습니다.");

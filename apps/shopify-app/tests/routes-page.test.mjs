@@ -254,33 +254,37 @@ test("Route detail keeps the server driver action but removes the header assignm
 
 
 test("Route detail wires route group action buttons through App Bridge", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /createDeliveryRouteGroupBranch/);
-  assert.match(routeDetailSource, /reOptimizeDeliveryRouteGroup/);
-  assert.match(routeDetailSource, /updateDeliveryRouteGroupBranchOrders/);
+  assert.match(routeDetailSource, /previewDeliveryRouteGroupOptimization/);
+  assert.doesNotMatch(routeDetailSource, /createDeliveryRouteGroupBranch/);
+  assert.doesNotMatch(routeDetailSource, /reOptimizeDeliveryRouteGroup/);
+  assert.doesNotMatch(routeDetailSource, /updateDeliveryRouteGroupBranchOrders/);
   assert.match(routeDetailSource, /fetchDeliveryRouteGroupDetail/);
   assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.action"/);
-  assert.match(routeDetailSource, /logRouteGroupActionResult\("routes\.detail\.action\.reOptimizeRouteGroup"/);
+  assert.match(routeDetailSource, /logRouteGroupActionResult\("routes\.detail\.action\.previewRouteOptimization"/);
   assert.doesNotMatch(routeDetailSource, /getRouteGroupActionRedirectRouteId/);
   assert.doesNotMatch(routeDetailSource, /return redirect\(`\/app\/routes/);
-  assert.match(routeDetailSource, /intent === "reOptimizeRouteGroup"/);
-  assert.match(routeDetailSource, /intent === "addEmptyRouteBranch"/);
-  assert.match(routeDetailSource, /intent === "assignPolygonToRoute"/);
+  assert.match(routeDetailSource, /intent === "previewRouteOptimization"/);
+  assert.match(routeDetailSource, /intent === "saveRouteDraft"/);
+  assert.doesNotMatch(routeDetailSource, /intent === "addEmptyRouteBranch"/);
+  assert.doesNotMatch(routeDetailSource, /intent === "assignPolygonToRoute"/);
   assert.match(routeDetailSource, /const shopify = useAppBridge\(\)/);
   assert.match(routeDetailSource, /const routeActionFetcher = useFetcher\(\)/);
+  assert.match(routeDetailSource, /const revalidator = useRevalidator\(\)/);
   assert.match(routeDetailSource, /effectiveRoutePlan\?\.routeGroupingChild\?\.groupingId/);
   assert.match(routeDetailSource, /shopify\.idToken\(\)/);
   assert.doesNotMatch(routeDetailSource, /console\.info\("routes\.detail\.action\.submit"/);
   assert.doesNotMatch(routeDetailSource, /console\.warn\("routes\.detail\.action\.submit\.missing_route_group_id"/);
   assert.match(routeDetailSource, /routeActionFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(routeDetailSource, /const routeGroupActionIntent = routeActionFetcher\.formData\?\.get\("_intent"\)/);
-  assert.match(routeDetailSource, /const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "reOptimizeRouteGroup"/);
-  assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "addEmptyRouteBranch"/);
+  assert.match(routeDetailSource, /const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization"/);
+  assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = false/);
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
   assert.match(routeDetailSource, /\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("reOptimizeRouteGroup"\)/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("addEmptyRouteBranch", \{ label: "Route" \}\)/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(timelineRouteRows\)\),/);
+  assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
+  assert.match(routeDetailSource, /setClientRouteRows\(\(rows\) => \[/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
   assert.match(routeDetailSource, /setRouteTimelineOrderByRouteId\(\(currentOrderByRouteId\) =>/);
   assert.match(routeDetailSource, /moveTimelineStop\(routeRows, nextOrderByRouteId, \{ stopId \}, targetRouteRow\.id\)/);
@@ -298,7 +302,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
@@ -686,7 +690,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
   assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
-  assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\]\) \{/);
+  assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\], childRouteDetailsByOrders = new Map\(\)\) \{/);
+  assert.match(routeDetailSource, /routePlanId: childRouteDetailsByOrders\.get\(routeOrderKey\(branchStops\)\)\?\.routePlanId \?\? null/);
   assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
   assert.match(routeDetailSource, /const editedRouteRows = \[/);
   assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(editedRouteRows\)/);
@@ -710,8 +715,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Created<\/th>/);
   assert.match(routeDetailSource, /function getRouteCandidateTitle\(\) \{/);
   assert.match(routeDetailSource, /return "Route 1"/);
-  assert.match(routeDetailSource, /title: `Route \$\{index \+ 2\}`/);
-  assert.doesNotMatch(routeDetailSource, /title: textOrUndefined\(branch\.label\)/);
+  assert.match(routeDetailSource, /title: textOrUndefined\(branch\.label\) \?\? `Route \$\{index \+ 2\}`/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
@@ -769,7 +773,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
 });
 
 test("Route detail page provides page navigation back to the route list", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = "\/app\/routes"/);
   assert.match(routeDetailSource, /onClick=\{\(\) => navigate\(routesListHref\)\}/);

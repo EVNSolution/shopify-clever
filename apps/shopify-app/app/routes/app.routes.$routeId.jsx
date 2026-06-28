@@ -1,16 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLoaderData, useNavigate, useRouteError } from "react-router";
+import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
 import { fetchDeliveryDrivers } from "../features/delivery/drivers.server";
 import {
-  createDeliveryRouteGroupBranch,
   fetchDeliveryRouteGroupDetail,
-  reOptimizeDeliveryRouteGroup,
+  previewDeliveryRouteGroupOptimization,
   saveDeliveryRouteGroupDraft,
-  updateDeliveryRouteGroupBranchOrders,
 } from "../features/delivery/route-groups.server";
 import {
   assignDeliveryRoutePlanDriver,
@@ -832,29 +830,14 @@ export const action = async ({ params, request }) => {
     );
   }
 
-  if (intent === "reOptimizeRouteGroup") {
-    const result = await reOptimizeDeliveryRouteGroup(
+  if (intent === "previewRouteOptimization") {
+    const result = await previewDeliveryRouteGroupOptimization(
       request,
       routeGroupId,
-      { confirmRisk: false },
+      readRouteDraftPayload(formData.get("draft")),
       { sessionToken: shopifySessionToken },
     );
-    logRouteGroupActionResult("routes.detail.action.reOptimizeRouteGroup", params.routeId, routeGroupId, result);
-    return result;
-  }
-
-  if (intent === "addEmptyRouteBranch") {
-    const result = await createDeliveryRouteGroupBranch(
-      request,
-      routeGroupId,
-      {
-        color: textOrUndefined(formData.get("color")),
-        label: textOrUndefined(formData.get("label")) ?? "Route",
-        orderIds: [],
-      },
-      { sessionToken: shopifySessionToken },
-    );
-    logRouteGroupActionResult("routes.detail.action.addEmptyRouteBranch", params.routeId, routeGroupId, result);
+    logRouteGroupActionResult("routes.detail.action.previewRouteOptimization", params.routeId, routeGroupId, result);
     return result;
   }
 
@@ -869,46 +852,7 @@ export const action = async ({ params, request }) => {
     return result;
   }
 
-  if (intent === "assignPolygonToRoute") {
-    const orderIds = readJsonStringArray(formData.get("orderIds"));
-    const removeBranchIds = readJsonStringArray(formData.get("removeBranchIds"));
-    const targetBranchId = textOrUndefined(formData.get("targetBranchId"));
 
-    if (orderIds.length === 0) {
-      return {
-        routeGroup: null,
-        errors: [{ message: "폴리곤 안에서 선택된 주문이 없습니다." }],
-      };
-    }
-
-    let result = { routeGroup: null, errors: [] };
-    for (const branchId of removeBranchIds.filter((branchId) => branchId !== targetBranchId)) {
-      result = await updateDeliveryRouteGroupBranchOrders(
-        request,
-        routeGroupId,
-        branchId,
-        { removeOrderIds: orderIds },
-        { sessionToken: shopifySessionToken },
-      );
-      if ((result.errors ?? []).length > 0) {
-        logRouteGroupActionResult("routes.detail.action.assignPolygonToRoute", params.routeId, routeGroupId, result);
-        return result;
-      }
-    }
-
-    if (targetBranchId) {
-      result = await updateDeliveryRouteGroupBranchOrders(
-        request,
-        routeGroupId,
-        targetBranchId,
-        { addOrderIds: orderIds },
-        { sessionToken: shopifySessionToken },
-      );
-    }
-
-    logRouteGroupActionResult("routes.detail.action.assignPolygonToRoute", params.routeId, routeGroupId, result);
-    return result;
-  }
 
   return {
     routePlan: null,
@@ -929,16 +873,6 @@ function logRouteGroupActionResult(name, routeId, routeGroupId, result) {
   });
 }
 
-function readJsonStringArray(value) {
-  try {
-    const parsed = JSON.parse(String(value ?? "[]"));
-    if (!Array.isArray(parsed)) return [];
-    return parsed.map(textOrUndefined).filter(Boolean);
-  } catch {
-    return [];
-  }
-}
-
 function readRouteDraftPayload(value) {
   try {
     const parsed = JSON.parse(String(value ?? "{}"));
@@ -946,8 +880,16 @@ function readRouteDraftPayload(value) {
     return {
       routes: parsed.routes.map((route) => ({
         branchId: textOrUndefined(route?.branchId) ?? null,
+        color: textOrUndefined(route?.color) ?? null,
+        label: textOrUndefined(route?.label) ?? null,
+        optimized: route?.optimized && typeof route.optimized === "object" ? route.optimized : null,
         orderIds: Array.isArray(route?.orderIds) ? route.orderIds.map(textOrUndefined).filter(Boolean) : [],
+        routeKey: textOrUndefined(route?.routeKey),
+        routePlanId: textOrUndefined(route?.routePlanId) ?? null,
+        sortOrder: Number.isFinite(Number(route?.sortOrder)) ? Number(route.sortOrder) : undefined,
+        tempId: textOrUndefined(route?.tempId) ?? null,
       })),
+      mode: textOrUndefined(parsed.mode),
     };
   } catch {
     return { routes: [] };
@@ -1718,7 +1660,7 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
   return markers;
 }
 
-function buildRouteBranchRows(routeGroup, routeStops = []) {
+function buildRouteBranchRows(routeGroup, routeStops = [], childRouteDetailsByOrders = new Map()) {
   const branches = [...(routeGroup?.branches ?? [])].sort((first, second) => {
     return (numberOrUndefined(first.sortOrder) ?? 0) - (numberOrUndefined(second.sortOrder) ?? 0);
   });
@@ -1736,11 +1678,13 @@ function buildRouteBranchRows(routeGroup, routeStops = []) {
       driveTimeLabel: ROUTE_EMPTY_LABEL,
       id: `branch-${branch.id ?? index}`,
       branchId: textOrUndefined(branch.id) ?? null,
+      routeKey: `branch:${textOrUndefined(branch.id) ?? index}`,
+      routePlanId: childRouteDetailsByOrders.get(routeOrderKey(branchStops))?.routePlanId ?? null,
       isCurrent: false,
       orderIds,
       stops: branchStops,
       stopsCount: branchStops.length,
-      title: `Route ${index + 2}`,
+      title: textOrUndefined(branch.label) ?? `Route ${index + 2}`,
       totalDistanceLabel: ROUTE_EMPTY_LABEL,
       totalItems: ROUTE_EMPTY_LABEL,
       totalWeightLabel: ROUTE_EMPTY_LABEL,
@@ -1884,18 +1828,34 @@ function buildRouteGeometryRows(routeRows, childRouteDetailsByOrders, fallbackRo
     const canUseFallback = !hasBranchRoutes && routeRow.isCurrent;
     return {
       routeColor: softenRouteColor(routeRow.color),
-      routeGeometry: childDetail?.routeGeometry ?? (canUseFallback ? fallbackRouteGeometry : null),
+      routeGeometry: routeRow.optimized?.routeGeometry ?? childDetail?.routeGeometry ?? (canUseFallback ? fallbackRouteGeometry : null),
       routeId: routeRow.id,
-      routeStopPoints: childDetail?.routeStopPoints ?? (canUseFallback ? fallbackRouteStopPoints : []),
+      routeStopPoints: routeRow.optimized?.routeStopPoints ?? childDetail?.routeStopPoints ?? (canUseFallback ? fallbackRouteStopPoints : []),
     };
   });
 }
 
+function getRouteRowDraftKey(routeRow) {
+  if (routeRow.routeKey) return routeRow.routeKey;
+  if (routeRow.isCurrent) return "root";
+  if (routeRow.branchId) return `branch:${routeRow.branchId}`;
+  if (routeRow.tempId) return routeRow.tempId;
+  return routeRow.id;
+}
+
 function buildRouteDraftPayload(routeRows) {
   return {
-    routes: routeRows.map((routeRow) => ({
+    mode: "OPTIMIZE_ORDER",
+    routes: routeRows.map((routeRow, index) => ({
       branchId: routeRow.branchId ?? null,
+      color: routeRow.color,
+      label: routeRow.title,
+      optimized: routeRow.optimized ?? null,
       orderIds: routeRow.stops.map((stop) => stop.orderId).filter(Boolean),
+      routeKey: getRouteRowDraftKey(routeRow),
+      routePlanId: routeRow.routePlanId ?? null,
+      sortOrder: index + 1,
+      tempId: routeRow.tempId ?? null,
     })),
   };
 }
@@ -1947,6 +1907,7 @@ function renderRouteTimelineStartIcon() {
 
 export default function RouteDetailPage() {
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const shopify = useAppBridge();
   const routeActionFetcher = useFetcher();
   const {
@@ -1976,7 +1937,8 @@ export default function RouteDetailPage() {
     ? routeDriverOptions.find((driverOption) => driverOption.id === routeDriverId)?.label ?? "Assigned"
     : "Unassigned";
   const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
-  const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, orderedRouteStops), [orderedRouteStops, routeGroup]);
+  const routeChildDetailsByOrders = useMemo(() => mapRouteChildDetailsByOrders(childRouteDetails), [childRouteDetails]);
+  const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, orderedRouteStops, routeChildDetailsByOrders), [orderedRouteStops, routeChildDetailsByOrders, routeGroup]);
   const branchOrderIds = useMemo(() => new Set(routeBranchRows.flatMap((routeRow) => routeRow.orderIds)), [routeBranchRows]);
   const rootRouteStops = useMemo(
     () => orderedRouteStops.filter((stop) => !branchOrderIds.has(stop.orderId)),
@@ -1995,10 +1957,15 @@ export default function RouteDetailPage() {
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId);
+  const currentRouteGroupChild = useMemo(() => {
+    const routePlanId = textOrUndefined(effectiveRoutePlan?.id);
+    return (routeGroup?.children ?? []).find((child) => textOrUndefined(child.routePlanId) === routePlanId) ?? null;
+  }, [effectiveRoutePlan?.id, routeGroup]);
+  const defaultRouteLineColor = normalizeRouteColor(currentRouteGroupChild?.color) ?? MAP_MARKER_PALETTE.plannedOrder.color;
   const routeGroupActionBusy = routeActionFetcher.state !== "idle";
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
-  const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "reOptimizeRouteGroup";
-  const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "addEmptyRouteBranch";
+  const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
+  const addEmptyRouteBranchBusy = false;
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, orderedRouteStops),
@@ -2026,15 +1993,17 @@ export default function RouteDetailPage() {
   const [mapStatus, setMapStatus] = useState("loading");
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const [routeCandidateTitle, setRouteCandidateTitle] = useState(defaultRouteCandidateTitle);
-  const [routeLineColor, setRouteLineColor] = useState(MAP_MARKER_PALETTE.plannedOrder.color);
+  const [routeLineColor, setRouteLineColor] = useState(defaultRouteLineColor);
   const [routeLineDraftTitle, setRouteLineDraftTitle] = useState(defaultRouteCandidateTitle);
-  const [routeLineDraftColor, setRouteLineDraftColor] = useState(MAP_MARKER_PALETTE.plannedOrder.color);
+  const [routeLineDraftColor, setRouteLineDraftColor] = useState(defaultRouteLineColor);
   const [activeRouteLineId, setActiveRouteLineId] = useState(null);
   const [routeLineEdits, setRouteLineEdits] = useState({});
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [routeGroupClientError, setRouteGroupClientError] = useState(null);
   const [isRoutePolygonEditMode, setIsRoutePolygonEditMode] = useState(false);
   const [routeTimelineOrderByRouteId, setRouteTimelineOrderByRouteId] = useState({});
+  const [clientRouteRows, setClientRouteRows] = useState([]);
+  const [routePreviewByKey, setRoutePreviewByKey] = useState({});
   const [routeTimelineDrag, setRouteTimelineDrag] = useState(null);
   const [routePolygonPoints, setRoutePolygonPoints] = useState([]);
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
@@ -2053,6 +2022,8 @@ export default function RouteDetailPage() {
       id: currentRouteLineId,
       isCurrent: true,
       orderIds: rootRouteStops.map((stop) => stop.orderId).filter(Boolean),
+      routeKey: "root",
+      routePlanId: textOrUndefined(effectiveRoutePlan?.id) ?? null,
       stops: rootRouteStops,
       stopsCount: rootRouteStops.length,
       title: routeCandidateTitle,
@@ -2062,16 +2033,20 @@ export default function RouteDetailPage() {
       vehicleLabel: routeVehicleLabel,
     },
     ...routeBranchRows,
+    ...clientRouteRows,
   ].map((routeRow) => ({
     ...routeRow,
     color: routeLineEdits[routeRow.id]?.color ?? routeRow.color,
+    optimized: routePreviewByKey[getRouteRowDraftKey(routeRow)] ?? routeRow.optimized ?? null,
     title: routeLineEdits[routeRow.id]?.title ?? routeRow.title,
   }));
   const routeRows = ensureUniqueRouteRowColors(editedRouteRows);
-  const nextRouteBranchDraft = getNextRouteBranchDraft(routeRows);
   const timelineRouteRows = buildTimelineRows(routeRows, routeTimelineOrderByRouteId);
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
-  const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0;
+  const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
+    || clientRouteRows.length > 0
+    || Object.keys(routeLineEdits).length > 0
+    || Object.keys(routePreviewByKey).length > 0;
   const canSaveRouteDraft = hasRouteAllocationDraft && !routeGroupActionBusy && !isRoutePolygonEditMode && !isRouteLineEditorOpen;
   const polygonCandidateStops = isRoutePolygonClosed && routePolygonPoints.length >= 3
     ? timelineRouteRows.flatMap((routeRow) => routeRow.stops)
@@ -2096,7 +2071,6 @@ export default function RouteDetailPage() {
       routeColor: routeStopColorById.get(stop.id) ?? routeRow.color,
     })),
   );
-  const routeChildDetailsByOrders = useMemo(() => mapRouteChildDetailsByOrders(childRouteDetails), [childRouteDetails]);
   const routeGeometryRows = useMemo(
     () => buildRouteGeometryRows(timelineRouteRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints),
     [routeChildDetailsByOrders, routeGeometry, routeStopPoints, timelineRouteRows],
@@ -2202,6 +2176,7 @@ export default function RouteDetailPage() {
       .filter((stop) => selectedOrderIdSet.has(stop.orderId))
       .map((stop) => stop.id);
 
+    setRoutePreviewByKey({});
     setRouteTimelineOrderByRouteId((currentOrderByRouteId) => {
       return selectedStopIds.reduce((nextOrderByRouteId, stopId) => (
         moveTimelineStop(routeRows, nextOrderByRouteId, { stopId }, targetRouteRow.id)
@@ -2281,6 +2256,7 @@ export default function RouteDetailPage() {
     const drag = routeTimelineDragRef.current;
     if (!drag) return;
 
+    setRoutePreviewByKey({});
     animateRouteTimelineChange(() => {
       setRouteTimelineOrderByRouteId((currentOrderByRouteId) => moveTimelineStop(
         routeRows,
@@ -2348,6 +2324,7 @@ export default function RouteDetailPage() {
     const drag = routeTimelineDragRef.current;
     if (!drag) return;
 
+    setRoutePreviewByKey({});
     animateRouteTimelineChange(() => {
       setRouteTimelineOrderByRouteId((currentOrderByRouteId) => removeTimelineStop(
         routeRows,
@@ -2384,8 +2361,47 @@ export default function RouteDetailPage() {
     routeTimelineDragRef.current = null;
     setRouteTimelineDrag(null);
     setRouteTimelineOrderByRouteId({});
+    setClientRouteRows([]);
+    setRouteLineEdits({});
+    setRoutePreviewByKey({});
     setRouteGroupClientError(null);
   }, []);
+
+  const handleAddEmptyRoute = () => {
+    const draft = getNextRouteBranchDraft(routeRows);
+    const tempId = `temp:${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    setClientRouteRows((rows) => [
+      ...rows,
+      {
+        attemptedCount: 0,
+        branchId: null,
+        color: draft.color,
+        createdLabel: ROUTE_EMPTY_LABEL,
+        deliveredCount: 0,
+        driverLabel: "Unassigned",
+        driveTimeLabel: ROUTE_EMPTY_LABEL,
+        id: tempId,
+        isCurrent: false,
+        orderIds: [],
+        routeKey: tempId,
+        routePlanId: null,
+        stops: [],
+        stopsCount: 0,
+        tempId,
+        title: draft.label,
+        totalDistanceLabel: ROUTE_EMPTY_LABEL,
+        totalItems: 0,
+        totalWeightLabel: ROUTE_EMPTY_LABEL,
+        vehicleLabel: ROUTE_EMPTY_LABEL,
+      },
+    ]);
+  };
+
+  const handlePreviewRouteOptimization = () => {
+    submitRouteGroupAction("previewRouteOptimization", {
+      draft: JSON.stringify(buildRouteDraftPayload(timelineRouteRows)),
+    });
+  };
 
   const handleSaveRouteDraft = () => {
     if (!canSaveRouteDraft) return;
@@ -2400,18 +2416,59 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "previewRouteOptimization") return;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+
+    const previewRoutes = routeActionFetcher.data?.preview?.routes ?? [];
+    const stopIdByOrderId = new Map(timelineRouteRows.flatMap((routeRow) => (
+      routeRow.stops.map((stop) => [stop.orderId, stop.id])
+    )));
+    const routeIdByKey = new Map(timelineRouteRows.map((routeRow) => [getRouteRowDraftKey(routeRow), routeRow.id]));
+    const nextOrderByRouteId = {};
+    const nextPreviewByKey = {};
+
+    for (const previewRoute of previewRoutes) {
+      const key = previewRoute.routeKey;
+      const routeId = routeIdByKey.get(key);
+      if (!key || !routeId) continue;
+      nextOrderByRouteId[routeId] = (previewRoute.orderIds ?? [])
+        .map((orderId) => stopIdByOrderId.get(orderId))
+        .filter(Boolean);
+      nextPreviewByKey[key] = {
+        metrics: previewRoute.metrics ?? null,
+        orderIds: previewRoute.orderIds ?? [],
+        routeGeometry: previewRoute.routeGeometry ?? null,
+        routeStopPoints: previewRoute.routeStopPoints ?? [],
+      };
+    }
+
+    lastRouteActionIntentRef.current = null;
+    setRouteTimelineOrderByRouteId(nextOrderByRouteId);
+    setRoutePreviewByKey(nextPreviewByKey);
+  }, [routeActionFetcher.data, routeActionFetcher.state, timelineRouteRows]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "saveRouteDraft") {
       lastRouteActionIntentRef.current = null;
       return;
     }
     lastRouteActionIntentRef.current = null;
-    if ((routeActionFetcher.data?.errors ?? []).length === 0) resetRouteDraftChanges();
-  }, [resetRouteDraftChanges, routeActionFetcher.data, routeActionFetcher.state]);
+    if ((routeActionFetcher.data?.errors ?? []).length === 0) {
+      resetRouteDraftChanges();
+      revalidator.revalidate();
+    }
+  }, [resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state]);
 
   useEffect(() => {
     setRouteCandidateTitle(defaultRouteCandidateTitle);
     setRouteLineDraftTitle(defaultRouteCandidateTitle);
   }, [defaultRouteCandidateTitle]);
+
+  useEffect(() => {
+    setRouteLineColor(defaultRouteLineColor);
+    setRouteLineDraftColor(defaultRouteLineColor);
+  }, [defaultRouteLineColor]);
 
   useEffect(() => {
     routeMapCenterRef.current = routeMapCenter;
@@ -2887,14 +2944,14 @@ export default function RouteDetailPage() {
             </section>
             <div aria-label="Route actions" style={routeActionColumnStyle}>
               <button
-                disabled={routeGroupActionBusy || hasRouteAllocationDraft}
-                onClick={() => submitRouteGroupAction("reOptimizeRouteGroup")}
+                disabled={routeGroupActionBusy}
+                onClick={handlePreviewRouteOptimization}
                 style={routeActionButtonStyle}
                 type="button"
               >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
               <button
-                disabled={routeGroupActionBusy || hasRouteAllocationDraft}
-                onClick={() => submitRouteGroupAction("addEmptyRouteBranch", nextRouteBranchDraft)}
+                disabled={routeGroupActionBusy}
+                onClick={handleAddEmptyRoute}
                 style={routeActionButtonStyle}
                 type="button"
               >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
