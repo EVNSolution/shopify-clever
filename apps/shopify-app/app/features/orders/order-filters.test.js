@@ -225,7 +225,7 @@ test("defaults the query-backed Orders view to Unplanned planning scope while Al
   assert.equal(isOrderRouteCreated(orders[0]), false);
 });
 
-test("treats route-assigned and later-stage orders as planned-stage orders", () => {
+test("treats published-route orders as planned-stage orders", () => {
   const stagedOrders = [
     ...orders,
     {
@@ -236,7 +236,7 @@ test("treats route-assigned and later-stage orders as planned-stage orders", () 
       deliveryArea: "Scarborough",
       deliveryDate: "2026-05-15",
       orderedDate: "2026-05-09",
-      planningStatus: "DISPATCHED",
+      routeStatus: "PUBLISHED",
     },
     {
       id: "order-5",
@@ -297,7 +297,7 @@ test("defaults Orders to current unplanned delivery dates and hides past due ord
       id: "past-assigned",
       deliveryDate: "2026-05-14",
       hasCoordinates: true,
-      routeStatus: "ASSIGNED",
+      routeStatus: "PUBLISHED",
       routeScopeKey: "past",
     },
   ];
@@ -334,7 +334,7 @@ test("classifies combined delivery-date and route-assignment states", () => {
   };
   const pastAssignedOrder = {
     deliveryDate: "2026-05-14",
-    routeStatus: "ASSIGNED",
+    routeStatus: "PUBLISHED",
   };
   const completedPastOrder = {
     deliveryDate: "2026-05-14",

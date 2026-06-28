@@ -98,7 +98,7 @@ test("route group helper treats a missing backend endpoint as optional while it 
 });
 
 test("route group helper updates membership without child generation side effects", async () => {
-  const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1", status: "CHANGED" } }, error: null });
+  const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1", status: "DRAFT" } }, error: null });
   const payload = { addOrderIds: ["order-2"], removeOrderIds: ["order-1"] };
 
   const result = await updateDeliveryRouteGroupOrders(makeRequest(), "group/1", payload, {
@@ -106,14 +106,14 @@ test("route group helper updates membership without child generation side effect
     sessionToken: "session-token",
   });
 
-  assert.deepEqual(result, { routeGroup: { id: "group/1", status: "CHANGED" }, errors: [] });
+  assert.deepEqual(result, { routeGroup: { id: "group/1", status: "DRAFT" }, errors: [] });
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/orders");
   assert.equal(fakeFetch.calls[0].init.method, "PATCH");
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
 });
 
 test("route group helper saves a batched draft allocation", async () => {
-  const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1", status: "CHANGED" } }, error: null });
+  const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1", status: "DRAFT" } }, error: null });
   const payload = { routes: [{ branchId: null, orderIds: ["order-1"] }, { branchId: "branch/1", orderIds: ["order-2"] }] };
 
   const result = await saveDeliveryRouteGroupDraft(makeRequest(), "group/1", payload, {
@@ -121,7 +121,7 @@ test("route group helper saves a batched draft allocation", async () => {
     sessionToken: "session-token",
   });
 
-  assert.deepEqual(result, { routeGroup: { id: "group/1", status: "CHANGED" }, errors: [] });
+  assert.deepEqual(result, { routeGroup: { id: "group/1", status: "DRAFT" }, errors: [] });
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/draft");
   assert.equal(fakeFetch.calls[0].init.method, "PATCH");
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);

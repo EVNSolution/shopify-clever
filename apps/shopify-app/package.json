@@ -2,7 +2,7 @@
   "name": "clever",
   "private": true,
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
+    "test": "node --test tests/*.test.mjs app/features/orders/order-filters.test.js",
     "build": "react-router build",
     "dev": "shopify app dev -c dev",
     "config:link": "echo \"Use npm run config:link:prod or npm run config:link:dev\" && exit 1",

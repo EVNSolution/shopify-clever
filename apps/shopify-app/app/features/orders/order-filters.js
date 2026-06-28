@@ -61,16 +61,8 @@ const POST_PLANNING_STATUSES = new Set([
   "route_planned",
   "route_created",
   "routed",
-  "assigned",
   "draft",
-  "unstarted",
-  "started",
-  "in_progress",
-  "out_for_delivery",
-  "dispatched",
-  "attempted",
-  "completed",
-  "delivered",
+  "published",
 ]);
 const DELIVERY_COMPLETE_STATUSES = new Set([
   "complete",
@@ -79,15 +71,7 @@ const DELIVERY_COMPLETE_STATUSES = new Set([
   "fulfilled",
 ]);
 const CANCELLED_STATUSES = new Set(["cancelled", "canceled", "voided"]);
-const ROUTE_ASSIGNED_STATUSES = new Set([
-  "assigned",
-  "unstarted",
-  "started",
-  "in_progress",
-  "out_for_delivery",
-  "dispatched",
-  "attempted",
-]);
+const ROUTE_ASSIGNED_STATUSES = new Set(["published"]);
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function filterOrders(orders, filters = {}) {
@@ -311,9 +295,6 @@ export function isOrderDeliveryComplete(order) {
     order?.fulfillmentStatus,
     order?.displayFulfillmentStatus,
     order?.deliveryStatus,
-    order?.planningStatus,
-    order?.routeStatus,
-    order?.routePlanStatus,
   ].map(normalizeComparableText);
 
   return statusValues.some((statusValue) =>
