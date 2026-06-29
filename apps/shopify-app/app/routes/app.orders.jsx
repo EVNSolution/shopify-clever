@@ -803,6 +803,24 @@ const deliveryOverdueUnassignedTabStyle = {
   color: "#b42318",
 };
 
+const paymentPaidTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(0, 128, 96, 0.12)",
+  color: "#006c48",
+};
+
+const paymentActionTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(180, 83, 9, 0.14)",
+  color: "#8a4b00",
+};
+
+const paymentIssueTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(209, 24, 24, 0.12)",
+  color: "#b42318",
+};
+
 const orderNumberButtonStyle = {
   alignItems: "center",
   border: 0,
@@ -1273,17 +1291,6 @@ function normalizePaymentStatus(value) {
   return textOrUndefined(value)?.replace(/\s+/g, "_").toUpperCase() ?? "";
 }
 
-function formatPaymentStatusLabel(value) {
-  const status = normalizePaymentStatus(value);
-  if (!status) return "";
-
-  return status
-    .split("_")
-    .filter(Boolean)
-    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
 function getPaymentGatewaySearchValue(value) {
   return String(value ?? "").toLowerCase();
 }
@@ -1302,35 +1309,23 @@ function hasETransferPaymentGateway(gatewayNames) {
   });
 }
 
-function formatPaymentGatewayName(value) {
-  const gatewayName = textOrUndefined(value);
-  if (!gatewayName) return undefined;
-
-  const searchValue = getPaymentGatewaySearchValue(gatewayName);
-  if (searchValue === "shopify_payments") return "Shopify Payments";
-  if (searchValue.replace(/[\s_-]+/g, "") === "etransfer") return "eTransfer";
-
-  return gatewayName;
-}
-
 function formatOrderPaymentState(order) {
   const status = normalizePaymentStatus(getOrderPaymentStatus(order));
   const gatewayNames = getOrderPaymentGatewayNames(order);
-  const gatewayLabel = gatewayNames.map(formatPaymentGatewayName).find(Boolean);
 
   if (status === "PAID") return "Paid";
+  if (hasCashPaymentGateway(gatewayNames)) return "Cash";
+  if (hasETransferPaymentGateway(gatewayNames)) return "eTransfer";
+  if (status === "PENDING") return "Pending";
 
-  if (status === "PENDING") {
-    if (hasCashPaymentGateway(gatewayNames)) return "Cash · collect";
-    if (hasETransferPaymentGateway(gatewayNames)) return "eTransfer · request";
+  return "Unknown";
+}
 
-    return gatewayLabel ? `Pending · ${gatewayLabel}` : "Pending";
-  }
-
-  if (!status) return gatewayLabel ? `Payment · ${gatewayLabel}` : "Payment unknown";
-
-  const statusLabel = formatPaymentStatusLabel(status);
-  return gatewayLabel ? `${statusLabel} · ${gatewayLabel}` : statusLabel;
+function getOrderPaymentTabStyle(order) {
+  const paymentState = formatOrderPaymentState(order);
+  if (paymentState === "Paid") return paymentPaidTabStyle;
+  if (paymentState === "Cash" || paymentState === "eTransfer") return paymentActionTabStyle;
+  return paymentIssueTabStyle;
 }
 
 function getOrderDeliveryStateTabStyle(order, referenceDate) {
@@ -3722,7 +3717,7 @@ export default function OrdersPage() {
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <span style={deliveryInfoTabStyle}>
+                        <span style={getOrderPaymentTabStyle(order)}>
                           {formatOrderPaymentState(order)}
                         </span>
                       </td>
