@@ -355,11 +355,21 @@ test("classifies combined delivery-date and route-assignment states", () => {
     deliveryDate: "2026-05-20",
     planningStatus: "UNPLANNED",
   };
+  const manuallyAssignedOrder = {
+    deliveryDate: "2026-05-20",
+    deliveryStopStatus: "ASSIGNED",
+  };
+  const manuallyDeliveredOrder = {
+    deliveryDate: "2026-05-20",
+    deliveryStopStatus: "DELIVERED",
+  };
 
   assert.equal(isOrderDeliveryDatePast(pastUnassignedOrder, "2026-05-18"), true);
   assert.equal(isOrderRouteAssigned(pastAssignedOrder), true);
+  assert.equal(isOrderRouteAssigned(manuallyAssignedOrder), true);
   assert.equal(isOrderRoutePlanningLocked(pastUnassignedOrder, "2026-05-18"), true);
   assert.equal(isOrderDeliveryComplete(completedPastOrder), true);
+  assert.equal(isOrderDeliveryComplete(manuallyDeliveredOrder), true);
   assert.equal(
     getOrderDeliveryExceptionState(pastUnassignedOrder, "2026-05-18"),
     "overdue_unassigned",

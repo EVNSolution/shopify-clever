@@ -405,7 +405,7 @@ test("Orders route-group payload sends delivery-api order UUIDs, not Shopify GID
 });
 
 test("Orders action separates background order sync from route creation", () => {
-  assert.match(ordersPageSource, /import \{[\s\S]*fetchDeliveryOrders[\s\S]*syncDeliveryOrders[\s\S]*\} from "\.\.\/features\/delivery\/orders\.server"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*bulkUpdateDeliveryOrders[\s\S]*fetchDeliveryOrders[\s\S]*syncDeliveryOrders[\s\S]*\} from "\.\.\/features\/delivery\/orders\.server"/);
   assert.match(ordersPageSource, /import \{[\s\S]*getOrderSyncSnapshots[\s\S]*mapCanonicalOrdersToOrderRows[\s\S]*mergeShopifyOrderRowsWithCanonicalRows[\s\S]*\} from "\.\.\/features\/orders\/canonical-orders"/);
   assert.match(ordersPageSource, /const intent = formData\.get\("_intent"\) \?\? "createRoutePlan"/);
   assert.match(ordersPageSource, /if \(intent === "syncOrders"\)/);
@@ -416,6 +416,32 @@ test("Orders action separates background order sync from route creation", () => 
     /syncDeliveryOrders\(\s*request,\s*\{[\s\S]*reason: "orders_page_open"[\s\S]*orders: orderSnapshots[\s\S]*\},\s*\{\s*cacheKey: shopifyShopCacheKey,\s*primeOrdersCache: true,\s*sessionToken: shopifySessionToken,?\s*\},?\s*\)/,
   );
   assert.match(ordersPageSource, /syncedOrders: syncedOrderData\.orders/);
+});
+
+test("Orders page bulk-changes selected server order state or payment", () => {
+  assert.match(ordersPageSource, /const ORDER_BULK_ACTION_OPTIONS = \[/);
+  assert.match(ordersPageSource, /\{ label: "State", value: "state" \}/);
+  assert.match(ordersPageSource, /\{ label: "Payment", value: "payment" \}/);
+  assert.match(ordersPageSource, /const ORDER_STATE_CHANGE_OPTIONS = \[/);
+  assert.match(ordersPageSource, /\{ label: "Delivered", value: "DELIVERED" \}/);
+  assert.match(ordersPageSource, /const ORDER_PAYMENT_CHANGE_OPTIONS = \[/);
+  assert.match(ordersPageSource, /\{ label: "Cash", value: "CASH" \}/);
+  assert.match(ordersPageSource, /\{ label: "eTransfer", value: "ETRANSFER" \}/);
+  assert.match(ordersPageSource, /const orderBulkUpdateFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /if \(intent === "bulkUpdateOrders"\)/);
+  assert.match(ordersPageSource, /bulkUpdateDeliveryOrders\(\s*request,\s*\{ field, orderIds, value \},\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
+  assert.match(ordersPageSource, /const bulkUpdatedOrders = useMemo\(/);
+  assert.match(ordersPageSource, /mergeShopifyOrderRowsWithCanonicalRows\(syncMergedOrders, bulkUpdatedOrders\)/);
+  assert.match(ordersPageSource, /const checkedServerOrderIds = useMemo\(/);
+  assert.match(ordersPageSource, /checkedOrders\.map\(\(order\) => order\.orderId\)\.filter\(Boolean\)/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "bulkUpdateOrders"\)/);
+  assert.match(ordersPageSource, /formData\.set\("orderIds", JSON\.stringify\(checkedServerOrderIds\)\)/);
+  assert.match(ordersPageSource, /orderBulkUpdateFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(ordersPageSource, />Action<\/button>/);
+  assert.match(ordersPageSource, /aria-modal="true" role="dialog"/);
+  assert.match(ordersPageSource, /Change \{option\.label\}/);
+  assert.match(ordersPageSource, />Save<\/button>/);
+  assert.match(ordersPageSource, />Cancel<\/button>/);
 });
 
 test("Orders loader merges delivery server planning state before background sync", () => {
@@ -637,6 +663,11 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /Past due/);
   assert.doesNotMatch(ordersPageSource, /Past due · unassigned/);
   assert.match(ordersPageSource, /Assigned · undelivered/);
+  assert.match(ordersPageSource, /En route/);
+  assert.match(ordersPageSource, /Arrived/);
+  assert.match(ordersPageSource, /Failed/);
+  assert.match(ordersPageSource, /Skipped/);
+  assert.match(ordersPageSource, /Cancelled/);
   assert.match(ordersPageSource, /formatDeliveryValue\(order\.orderedDate\)/);
   assert.match(ordersPageSource, /formatDeliveryValue\(order\.deliveryArea\)/);
   assert.match(ordersPageSource, /formatOrderDeliveryLabel\(order\)/);
@@ -651,6 +682,8 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /order\?\.rawPayload\?\.paymentGatewayNames/);
   assert.match(ordersPageSource, /order\?\.shopifyOrderSnapshot\?\.paymentGatewayNames/);
   assert.match(ordersPageSource, /if \(status === "PAID"\) return "Paid"/);
+  assert.match(ordersPageSource, /if \(status === "CASH"\) return "Cash"/);
+  assert.match(ordersPageSource, /if \(status === "ETRANSFER"\) return "eTransfer"/);
   assert.match(ordersPageSource, /return "Cash"/);
   assert.match(ordersPageSource, /return "eTransfer"/);
   assert.match(ordersPageSource, /if \(status === "PENDING"\) return "Pending"/);

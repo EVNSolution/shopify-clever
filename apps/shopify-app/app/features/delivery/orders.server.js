@@ -1,4 +1,5 @@
 import {
+  clearDeliveryApiResponseCache,
   deliveryApiRequest,
   primeDeliveryApiGetResponseCache,
 } from "./route-plans.server.js";
@@ -55,6 +56,26 @@ export async function fetchDeliveryOrders(request, filters = {}, options = {}) {
 
   return {
     orders: result.data?.orders ?? [],
+    errors: result.errors,
+  };
+}
+
+export async function bulkUpdateDeliveryOrders(request, payload = {}, options = {}) {
+  const result = await deliveryApiRequest(request, "/admin/orders/bulk-update", {
+    body: JSON.stringify({
+      field: payload.field,
+      orderIds: Array.isArray(payload.orderIds) ? payload.orderIds : [],
+      value: payload.value,
+    }),
+    fetch: options.fetch,
+    method: "PATCH",
+    sessionToken: options.sessionToken,
+  });
+  clearDeliveryApiResponseCache();
+
+  return {
+    orders: result.data?.orders ?? [],
+    updated: result.data?.updated ?? 0,
     errors: result.errors,
   };
 }

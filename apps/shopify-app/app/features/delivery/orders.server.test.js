@@ -2,6 +2,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
+  bulkUpdateDeliveryOrders,
   fetchDeliveryOrders,
   syncDeliveryOrders,
 } from "./orders.server.js";
@@ -54,6 +55,46 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
     orders: [{ id: "delivery-order-1", shopifyOrderGid: orders[0].id }],
     sync: { created: 1, updated: 0 },
     errors: [],
+  });
+});
+
+test("bulk-updates delivery orders through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  const calls = [];
+
+  const result = await bulkUpdateDeliveryOrders(
+    new Request("https://app.example/app/orders"),
+    { field: "payment", orderIds: ["order-id"], value: "CASH" },
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({
+          data: {
+            orders: [{ id: "order-id", financialStatus: "CASH" }],
+            updated: 1,
+          },
+          error: null,
+        });
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/orders/bulk-update");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    field: "payment",
+    orderIds: ["order-id"],
+    value: "CASH",
+  });
+  assert.deepEqual(result, {
+    errors: [],
+    orders: [{ id: "order-id", financialStatus: "CASH" }],
+    updated: 1,
   });
 });
 
