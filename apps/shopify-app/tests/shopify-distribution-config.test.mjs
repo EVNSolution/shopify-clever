@@ -69,7 +69,7 @@ test("Shopify app configs have explicit distinct production, dev, and KFood iden
     "https://clever-route-app.cleversystem.ai",
   );
 
-  assert.equal(readTomlString(kfoodShopifyAppConfig, "client_id"), "5f7c07b713690e947b48c0f00bb36c72");
+  assert.equal(readTomlString(kfoodShopifyAppConfig, "client_id"), "0f23bdf915ecb9f0f40383c13f8fa3e1");
   assert.equal(readTomlString(kfoodShopifyAppConfig, "name"), "CLEVER K-Food");
   assert.equal(readTomlString(kfoodShopifyAppConfig, "handle"), "clever-route-kfood");
   assert.equal(
