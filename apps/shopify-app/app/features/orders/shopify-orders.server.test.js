@@ -22,6 +22,7 @@ test("orders query reads Shopify orders without requiring customer scope", () =>
   assert.match(SHOPIFY_ORDERS_QUERY, /cancelledAt/);
   assert.match(SHOPIFY_ORDERS_QUERY, /note/);
   assert.match(SHOPIFY_ORDERS_QUERY, /processedAt/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /paymentGatewayNames/);
   assert.match(SHOPIFY_ORDERS_QUERY, /currentTotalPriceSet\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /customAttributes\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /lineItems\(first: 20\)\s*\{/);
@@ -95,6 +96,7 @@ test("maps Shopify orders into map-ready rows", () => {
               note: "Leave at reception",
               displayFulfillmentStatus: "UNFULFILLED",
               displayFinancialStatus: "PENDING",
+              paymentGatewayNames: ["Cash on Delivery (COD)"],
               phone: "+82 10-0000-0000",
               processedAt: "2026-05-07T12:00:00.000Z",
               currentTotalPriceSet: {
@@ -155,6 +157,17 @@ test("maps Shopify orders into map-ready rows", () => {
       processedAt: "2026-05-07T12:00:00.000Z",
       totalPriceAmount: "95.00",
       currencyCode: "CAD",
+      lineItems: {
+        nodes: [
+          {
+            title: "토마토노 밀키트 세트 5/7-5/9",
+            name: "CLEVER MEAL KIT SET",
+            variantTitle: "Premium",
+            quantity: 1,
+            sku: "MEALKIT",
+          },
+        ],
+      },
       shippingAddress: {
         address1: "Gangnam-daero 396",
         address2: "3F",
@@ -191,6 +204,7 @@ test("maps Shopify orders into map-ready rows", () => {
         note: "Leave at reception",
         displayFulfillmentStatus: "UNFULFILLED",
         displayFinancialStatus: "PENDING",
+        paymentGatewayNames: ["Cash on Delivery (COD)"],
         phone: "+82 10-0000-0000",
         processedAt: "2026-05-07T12:00:00.000Z",
         currentTotalPriceSet: {
@@ -237,6 +251,7 @@ test("maps Shopify orders into map-ready rows", () => {
         note: "Leave at reception",
         displayFulfillmentStatus: "UNFULFILLED",
         displayFinancialStatus: "PENDING",
+        paymentGatewayNames: ["Cash on Delivery (COD)"],
         phone: "+82 10-0000-0000",
         processedAt: "2026-05-07T12:00:00.000Z",
         currentTotalPriceSet: {

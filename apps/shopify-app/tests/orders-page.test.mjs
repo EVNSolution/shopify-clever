@@ -319,7 +319,7 @@ test("Orders table uses a compact centered layout", () => {
 test("Orders table has a compact checkbox column for route-plan candidates", () => {
   assert.match(ordersPageSource, /const \[checkedOrderIds, setCheckedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
-  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \["3%", "7%", "8%", "10%", "23%", "7%", "8%", "9%", "10%", "8%"\]/);
+  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \["3%", "7%", "8%", "10%", "18%", "7%", "8%", "9%", "10%", "8%", "8%"\]/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
   assert.match(ordersPageSource, /const checkboxChecked = orderIsPlanned \|\| checkedOrderIdSet\.has\(order\.id\)/);
@@ -611,11 +611,12 @@ test("Orders page keeps Add to map in the table controls", () => {
   assert.doesNotMatch(ordersPageSource, />Add to map<\/button>[\s\S]{0,400}>Assign to route<\/button>/);
 });
 
-test("Orders table focuses on ordered date, delivery scope, and area instead of fulfillment or payment text", () => {
+test("Orders table keeps delivery state operational and payment state separate", () => {
   assert.match(ordersPageSource, /\{ key: "deliveryArea", label: "Area" \}/);
   assert.match(ordersPageSource, /\{ key: "orderedDate", label: "Ordered" \}/);
   assert.match(ordersPageSource, /\{ key: "deliveryLabel", label: "Delivery" \}/);
   assert.match(ordersPageSource, /\{ key: "planningStatus", label: "State" \}/);
+  assert.match(ordersPageSource, /\{ key: "payment", label: "Payment" \}/);
   assert.match(ordersPageSource, /const deliveryInfoCellStyle = \{/);
   assert.match(ordersPageSource, /const deliveryInfoTabStyle = \{/);
   assert.match(ordersPageSource, /const routeCreatedTabStyle = \{/);
@@ -638,6 +639,19 @@ test("Orders table focuses on ordered date, delivery scope, and area instead of 
   assert.match(ordersPageSource, /formatOrderDeliveryLabel\(order\)/);
   assert.match(ordersPageSource, /formatOrderDeliveryState\(order, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /getOrderDeliveryStateTabStyle\(order, orderFilterReferenceDate\)/);
+  assert.match(ordersPageSource, /formatOrderPaymentState\(order\)/);
+  assert.match(ordersPageSource, /function getOrderPaymentStatus\(order\) \{/);
+  assert.match(ordersPageSource, /order\?\.paymentStatus/);
+  assert.match(ordersPageSource, /order\?\.rawPayload\?\.displayFinancialStatus/);
+  assert.match(ordersPageSource, /order\?\.shopifyOrderSnapshot\?\.displayFinancialStatus/);
+  assert.match(ordersPageSource, /function getOrderPaymentGatewayNames\(order\) \{/);
+  assert.match(ordersPageSource, /order\?\.rawPayload\?\.paymentGatewayNames/);
+  assert.match(ordersPageSource, /order\?\.shopifyOrderSnapshot\?\.paymentGatewayNames/);
+  assert.match(ordersPageSource, /if \(status === "PAID"\) return "Paid"/);
+  assert.match(ordersPageSource, /return "Cash · collect"/);
+  assert.match(ordersPageSource, /return "eTransfer · request"/);
+  assert.match(ordersPageSource, /`Pending · \$\{gatewayLabel\}`/);
+  assert.match(ordersPageSource, /Payment unknown/);
   assert.match(ordersPageSource, /function getOrderLineItems\(order\) \{/);
   assert.match(ordersPageSource, /const \[hoveredItemPopoverOrderId, setHoveredItemPopoverOrderId\] = useState\(null\)/);
   assert.match(ordersPageSource, /const \[pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId\] = useState\(null\)/);
@@ -1017,6 +1031,8 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) =>/);
   assert.match(ordersPageSource, /if \(columnKey === "deliveryLabel"\) \{/);
   assert.match(ordersPageSource, /return getOrderDeliveryDateValue\(order\) \|\| order\.deliveryLabel \|\| ""/);
+  assert.match(ordersPageSource, /if \(columnKey === "payment"\) \{/);
+  assert.match(ordersPageSource, /return formatOrderPaymentState\(order\)/);
   assert.match(ordersPageSource, /const tableOrders = sortedOrders/);
   assert.match(ordersPageSource, /handleSort\(column\.key\)/);
   assert.match(ordersPageSource, /return \{ key: columnKey, direction: "ascending" \}/);

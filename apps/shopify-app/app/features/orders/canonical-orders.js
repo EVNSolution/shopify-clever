@@ -163,6 +163,7 @@ function sanitizeShopifyOrderSyncSnapshot(snapshot) {
   copyStringField(output, snapshot, "email");
   copyStringField(output, snapshot, "note");
   copyStringField(output, snapshot, "phone");
+  copyStringArrayField(output, snapshot, "paymentGatewayNames");
 
   if (Object.hasOwn(snapshot, "currentTotalPriceSet")) {
     output.currentTotalPriceSet = sanitizeMoneySet(snapshot.currentTotalPriceSet);
@@ -192,6 +193,14 @@ function copyDateField(output, source, key) {
 function copyStringField(output, source, key) {
   if (Object.hasOwn(source, key)) {
     output[key] = stringOrNull(source[key]);
+  }
+}
+
+function copyStringArrayField(output, source, key) {
+  if (Object.hasOwn(source, key)) {
+    output[key] = Array.isArray(source[key])
+      ? source[key].flatMap((value) => (typeof value === "string" ? [value] : []))
+      : [];
   }
 }
 

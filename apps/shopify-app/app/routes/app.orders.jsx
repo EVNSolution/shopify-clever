@@ -664,7 +664,7 @@ const orderDateCalendarDayRangeStyle = {
   background: "#f1f1f1",
 };
 
-const DEFAULT_TABLE_COLUMN_WIDTHS = ["3%", "7%", "8%", "10%", "23%", "7%", "8%", "9%", "10%", "8%"];
+const DEFAULT_TABLE_COLUMN_WIDTHS = ["3%", "7%", "8%", "10%", "18%", "7%", "8%", "9%", "10%", "8%", "8%"];
 const MIN_TABLE_COLUMN_WIDTH = 44;
 
 const tableStyle = {
@@ -894,6 +894,7 @@ const SORTABLE_ORDER_COLUMNS = [
   { key: "deliveryArea", label: "Area" },
   { key: "deliveryLabel", label: "Delivery" },
   { key: "planningStatus", label: "State" },
+  { key: "payment", label: "Payment" },
   { key: "hasCoordinates", label: "Coordinates" },
 ];
 
@@ -1067,6 +1068,10 @@ function getOrderSortValue(order, columnKey, referenceDate) {
     return formatOrderDeliveryState(order, referenceDate);
   }
 
+  if (columnKey === "payment") {
+    return formatOrderPaymentState(order);
+  }
+
   if (columnKey === "deliveryLabel") {
     return getOrderDeliveryDateValue(order) || order.deliveryLabel || "";
   }
@@ -1236,6 +1241,96 @@ function formatOrderDeliveryState(order, referenceDate) {
   if (stateValue === "planned") return "Planned";
 
   return "Unplanned";
+}
+
+function getFirstTextValue(values) {
+  for (const value of values) {
+    const text = textOrUndefined(value);
+    if (text) return text;
+  }
+
+  return undefined;
+}
+
+function getOrderPaymentStatus(order) {
+  return getFirstTextValue([
+    order?.paymentStatus,
+    order?.rawPayload?.displayFinancialStatus,
+    order?.shopifyOrderSnapshot?.displayFinancialStatus,
+    order?.financialStatus,
+  ]);
+}
+
+function getOrderPaymentGatewayNames(order) {
+  const gatewayNames =
+    [order?.rawPayload?.paymentGatewayNames, order?.shopifyOrderSnapshot?.paymentGatewayNames, order?.paymentGatewayNames]
+      .find(Array.isArray) ?? [];
+
+  return gatewayNames.map(textOrUndefined).filter(Boolean);
+}
+
+function normalizePaymentStatus(value) {
+  return textOrUndefined(value)?.replace(/\s+/g, "_").toUpperCase() ?? "";
+}
+
+function formatPaymentStatusLabel(value) {
+  const status = normalizePaymentStatus(value);
+  if (!status) return "";
+
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getPaymentGatewaySearchValue(value) {
+  return String(value ?? "").toLowerCase();
+}
+
+function hasCashPaymentGateway(gatewayNames) {
+  return gatewayNames.some((gatewayName) => {
+    const searchValue = getPaymentGatewaySearchValue(gatewayName);
+    return searchValue.includes("cash") || searchValue.includes("cod") || searchValue.includes("현금");
+  });
+}
+
+function hasETransferPaymentGateway(gatewayNames) {
+  return gatewayNames.some((gatewayName) => {
+    const searchValue = getPaymentGatewaySearchValue(gatewayName).replace(/[\s_-]+/g, "");
+    return searchValue.includes("etransfer") || searchValue.includes("emailtransfer");
+  });
+}
+
+function formatPaymentGatewayName(value) {
+  const gatewayName = textOrUndefined(value);
+  if (!gatewayName) return undefined;
+
+  const searchValue = getPaymentGatewaySearchValue(gatewayName);
+  if (searchValue === "shopify_payments") return "Shopify Payments";
+  if (searchValue.replace(/[\s_-]+/g, "") === "etransfer") return "eTransfer";
+
+  return gatewayName;
+}
+
+function formatOrderPaymentState(order) {
+  const status = normalizePaymentStatus(getOrderPaymentStatus(order));
+  const gatewayNames = getOrderPaymentGatewayNames(order);
+  const gatewayLabel = gatewayNames.map(formatPaymentGatewayName).find(Boolean);
+
+  if (status === "PAID") return "Paid";
+
+  if (status === "PENDING") {
+    if (hasCashPaymentGateway(gatewayNames)) return "Cash · collect";
+    if (hasETransferPaymentGateway(gatewayNames)) return "eTransfer · request";
+
+    return gatewayLabel ? `Pending · ${gatewayLabel}` : "Pending";
+  }
+
+  if (!status) return gatewayLabel ? `Payment · ${gatewayLabel}` : "Payment unknown";
+
+  const statusLabel = formatPaymentStatusLabel(status);
+  return gatewayLabel ? `${statusLabel} · ${gatewayLabel}` : statusLabel;
 }
 
 function getOrderDeliveryStateTabStyle(order, referenceDate) {
@@ -3624,6 +3719,11 @@ export default function OrdersPage() {
                       <td style={deliveryInfoCellStyle}>
                         <span style={getOrderDeliveryStateTabStyle(order, orderFilterReferenceDate)}>
                           {formatOrderDeliveryState(order, orderFilterReferenceDate)}
+                        </span>
+                      </td>
+                      <td style={deliveryInfoCellStyle}>
+                        <span style={deliveryInfoTabStyle}>
+                          {formatOrderPaymentState(order)}
                         </span>
                       </td>
                       <td style={tableCellStyle}>

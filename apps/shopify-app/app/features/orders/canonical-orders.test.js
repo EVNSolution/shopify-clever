@@ -82,6 +82,7 @@ test("maps server canonical orders to existing Orders row shape", () => {
       cancelledAt: undefined,
       totalPriceAmount: "95.00",
       currencyCode: "CAD",
+      lineItems: undefined,
       attributes: "Delivery Area: Mississauga, Delivery Day: Friday",
       attributeList: [
         { key: "Delivery Area", value: "Mississauga" },
@@ -375,6 +376,7 @@ test("getOrderSyncSnapshots returns only server-acceptable Shopify snapshots", (
     legacyResourceId: "1002",
     name: "#1002",
     updatedAt: "2026-05-07T14:00:00.000Z",
+    paymentGatewayNames: ["Email Money Transfer"],
     note: "",
     phone: "",
     customAttributes: [{ key: "Delivery Area", value: "" }],
@@ -445,6 +447,7 @@ test("getOrderSyncSnapshots normalizes optional fields for the strict delivery p
               currencyCode: "CAD",
             },
           },
+          paymentGatewayNames: ["Cash on Delivery (COD)", 7, null],
           customAttributes: [
             { key: "Delivery Area", value: "Scarborough" },
             { key: "tomatono_lat", value: "" },
@@ -494,6 +497,7 @@ test("getOrderSyncSnapshots normalizes optional fields for the strict delivery p
             currencyCode: "CAD",
           },
         },
+        paymentGatewayNames: ["Cash on Delivery (COD)"],
         customAttributes: [{ key: "Delivery Area", value: "Scarborough" }],
         lineItems: {
           nodes: [

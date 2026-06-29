@@ -27,6 +27,7 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
           note
           processedAt
           displayFinancialStatus
+          paymentGatewayNames
           displayFulfillmentStatus
           currentTotalPriceSet {
             shopMoney {
