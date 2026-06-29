@@ -104,8 +104,9 @@ runs:
           set -euo pipefail
           cd '${{ inputs.deploy-path }}'
           test -f '${{ inputs.env-file }}'
-          mkdir -p \"\$(dirname '${{ inputs.sqlite-path }}')\"
-          touch '${{ inputs.sqlite-path }}'
+          sudo mkdir -p \"\$(dirname '${{ inputs.sqlite-path }}')\"
+          sudo touch '${{ inputs.sqlite-path }}'
+          sudo chown \"\$(id -u):\$(id -g)\" '${{ inputs.sqlite-path }}'
           chmod 600 '${{ inputs.env-file }}' '${{ inputs.sqlite-path }}'
           docker compose -f '${{ inputs.compose-file }}' config --quiet
           docker compose -f '${{ inputs.compose-file }}' build
