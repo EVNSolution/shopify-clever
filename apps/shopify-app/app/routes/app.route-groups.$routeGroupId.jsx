@@ -54,7 +54,7 @@ export const loader = async ({ params, request }) => {
     routeMetrics: null,
     routePlan: null,
     routeStopPoints: [],
-    stops: [],
+    stops: routeGroupData.routeGroup?.assignments ?? [],
   };
 };
 

@@ -2195,7 +2195,6 @@ export default function RouteDetailPage() {
   );
   const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, allRouteGroupStops, routeChildDetailsByOrders), [allRouteGroupStops, routeChildDetailsByOrders, routeGroup]);
   const routeGroupChildRows = useMemo(() => buildRouteGroupChildRows(routeGroup, childRouteDetails), [childRouteDetails, routeGroup]);
-  const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null;
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
   const defaultRouteCandidateTitle = routeDetailTitle;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
@@ -2208,6 +2207,7 @@ export default function RouteDetailPage() {
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
+  const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null;
   const currentRouteGroupChild = useMemo(() => {
     const routePlanId = textOrUndefined(effectiveRoutePlan?.id);
     return (routeGroup?.children ?? []).find((child) => textOrUndefined(child.routePlanId) === routePlanId) ?? null;
@@ -2341,16 +2341,15 @@ export default function RouteDetailPage() {
       ...(stop.orderId ? [[stop.orderId, routeRow.color]] : []),
     ])
   ))), [timelineRouteRows]);
-  const routeMapStops = currentRouteRows.flatMap((routeRow) =>
-    routeRow.stops.map((stop) => ({
-      ...stop,
-      isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
-      routeColor: routeStopColorById.get(stop.id) ?? routeRow.color,
-    })),
-  );
+  const routeMapStops = (isRouteGroupDetail ? orderedRouteStops : currentRouteRows.flatMap((routeRow) => routeRow.stops)).map((stop) => ({
+    ...stop,
+    isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
+    routeColor: routeStopColorById.get(stop.id) ?? stop.routeColor ?? routeLineColor,
+  }));
+  const routeGeometrySourceRows = isRouteGroupDetail ? timelineRouteRows : currentRouteRows;
   const routeGeometryRows = useMemo(
-    () => buildRouteGeometryRows(currentRouteRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints),
-    [currentRouteRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints],
+    () => buildRouteGeometryRows(routeGeometrySourceRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints),
+    [routeGeometrySourceRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints],
   );
   const routeGeometryStopPoints = routeGeometryRows.flatMap((routeRow) => routeRow.routeStopPoints);
   const visibleErrors = [
