@@ -707,7 +707,9 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Add to route<\/button>[\s\S]*>Create route<\/button>/);
   assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
-  assert.match(ordersPageSource, />Inventory<\/s-heading>[\s\S]*onClick=\{handleAddInventory\}[\s\S]*\{isCreatingInventory \? "Adding…" : "Add"\}<\/button>[\s\S]*onClick=\{handleAddInventory\}[\s\S]*>Create<\/button>/);
+  assert.match(ordersPageSource, /const \[inventorySubmitAction, setInventorySubmitAction\] = useState\(null\)/);
+  assert.match(ordersPageSource, /const handleAddInventory = async \(submitAction = "add"\) => \{/);
+  assert.match(ordersPageSource, />Inventory<\/s-heading>[\s\S]*onClick=\{\(\) => handleAddInventory\("add"\)\}[\s\S]*inventorySubmitAction === "add" \? "Adding…" : "Add"[\s\S]*onClick=\{\(\) => handleAddInventory\("create"\)\}[\s\S]*inventorySubmitAction === "create" \? "Creating…" : "Create"/);
   assert.doesNotMatch(ordersPageSource, />Inventory plan<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Assign to inventory<\/button>/);
   assert.doesNotMatch(ordersPageSource, />Create<\/button>[\s\S]{0,80}disabled=\{true\}/);

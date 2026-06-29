@@ -1956,6 +1956,7 @@ export default function OrdersPage() {
   ], { context: "orders_page" });
   const isCreatingRoute = routePlanFetcher.state !== "idle";
   const isCreatingInventory = inventoryFetcher.state !== "idle";
+  const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
   );
@@ -2684,11 +2685,12 @@ export default function OrdersPage() {
     }
   };
 
-  const handleAddInventory = async () => {
+  const handleAddInventory = async (submitAction = "add") => {
     if (createInventoryDisabled) return;
 
     try {
       setCreateInventoryClientError(null);
+      setInventorySubmitAction(submitAction);
       const sessionToken = await shopify.idToken();
       submittedInventorySessionTokenRef.current = sessionToken;
 
@@ -2702,6 +2704,7 @@ export default function OrdersPage() {
       inventoryFetcher.submit(formData, { method: "post" });
     } catch {
       submittedInventorySessionTokenRef.current = null;
+      setInventorySubmitAction(null);
       setCreateInventoryClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
@@ -3211,8 +3214,8 @@ export default function OrdersPage() {
                       : createRouteButtonStyle
                   }
                   disabled={createInventoryDisabled}
-                  onClick={handleAddInventory}
-                >{isCreatingInventory ? "Adding…" : "Add"}</button>
+                  onClick={() => handleAddInventory("add")}
+                >{isCreatingInventory && inventorySubmitAction === "add" ? "Adding…" : "Add"}</button>
                 <button
                   type="button"
                   style={
@@ -3221,8 +3224,8 @@ export default function OrdersPage() {
                       : createRouteButtonStyle
                   }
                   disabled={createInventoryDisabled}
-                  onClick={handleAddInventory}
-                >Create</button>
+                  onClick={() => handleAddInventory("create")}
+                >{isCreatingInventory && inventorySubmitAction === "create" ? "Creating…" : "Create"}</button>
               </div>
             </div>
           </div>
