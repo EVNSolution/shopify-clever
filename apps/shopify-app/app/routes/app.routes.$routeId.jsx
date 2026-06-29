@@ -2169,6 +2169,32 @@ function getRouteSessionRefreshHref(location, sessionToken) {
   return `${location.pathname}?${searchParams.toString()}${location.hash}`;
 }
 
+function getRouteMapMarkerDebug(map, container, markers) {
+  const containerRect = container.getBoundingClientRect();
+  return markers.slice(0, 5).map((marker) => {
+    const lngLat = marker.getLngLat?.();
+    const point = lngLat ? map.project([lngLat.lng, lngLat.lat]) : null;
+    const markerRect = marker.getElement?.()?.getBoundingClientRect?.();
+    const markerBottom = markerRect
+      ? {
+          x: Math.round((markerRect.left - containerRect.left + markerRect.width / 2) * 10) / 10,
+          y: Math.round((markerRect.top - containerRect.top + markerRect.height) * 10) / 10,
+        }
+      : null;
+    return {
+      bottomDelta: point && markerBottom
+        ? {
+            x: Math.round((markerBottom.x - point.x) * 10) / 10,
+            y: Math.round((markerBottom.y - point.y) * 10) / 10,
+          }
+        : null,
+      lngLat: lngLat ? { lat: lngLat.lat, lng: lngLat.lng } : null,
+      markerBottom,
+      projected: point ? { x: Math.round(point.x * 10) / 10, y: Math.round(point.y * 10) / 10 } : null,
+    };
+  });
+}
+
 export default function RouteDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -3158,12 +3184,27 @@ export default function RouteDetailPage() {
       if (!routeMapDebugEnabled) return;
 
       const containerRect = container.getBoundingClientRect();
-      const canvasRect = map.getCanvas?.()?.getBoundingClientRect?.();
+      const canvas = map.getCanvas?.();
+      const canvasRect = canvas?.getBoundingClientRect?.();
       const center = map.getCenter?.();
       console.info("routes.detail.map.resize", {
-        canvas: canvasRect ? { height: canvasRect.height, width: canvasRect.width } : null,
+        canvas: canvasRect ? {
+          clientHeight: canvas.clientHeight,
+          clientWidth: canvas.clientWidth,
+          height: canvasRect.height,
+          renderHeight: canvas.height,
+          renderWidth: canvas.width,
+          width: canvasRect.width,
+        } : null,
         center: center ? { lat: center.lat, lng: center.lng } : null,
-        container: { height: containerRect.height, width: containerRect.width },
+        container: {
+          clientHeight: container.clientHeight,
+          clientWidth: container.clientWidth,
+          height: containerRect.height,
+          width: containerRect.width,
+        },
+        devicePixelRatio: window.devicePixelRatio,
+        markerDebug: getRouteMapMarkerDebug(map, container, markersRef.current),
         markerCount: markersRef.current.length,
         reason,
         stopCount: routeMapStops.length,
