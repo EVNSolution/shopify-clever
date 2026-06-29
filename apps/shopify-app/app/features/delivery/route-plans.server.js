@@ -7,6 +7,8 @@ const DEFAULT_DELIVERY_API_GET_CACHE_TTL_MS = 15_000;
 const MAX_DELIVERY_API_GET_CACHE_ENTRIES = 100;
 export const DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE = "DELIVERY_SESSION_TOKEN_MISSING";
 export const DELIVERY_API_ERROR_CODE = "DELIVERY_API_ERROR";
+export const DELIVERY_API_ENDPOINT_NOT_FOUND_ERROR_CODE =
+  "DELIVERY_API_ENDPOINT_NOT_FOUND";
 export const DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND_ERROR_CODE =
   "DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND";
 export const DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_PLAN_ID_MISSING";
@@ -594,6 +596,15 @@ function normalizeDeliveryApiError(error, status, path, url) {
     };
   }
 
+  if (isMissingDeliveryApiEndpointError(error, status)) {
+    return {
+      code: DELIVERY_API_ENDPOINT_NOT_FOUND_ERROR_CODE,
+      message: "Delivery API endpoint를 찾지 못했습니다.",
+      path,
+      status,
+    };
+  }
+
   if (typeof error === "string") {
     return {
       code: DELIVERY_API_ERROR_CODE,
@@ -609,6 +620,12 @@ function normalizeDeliveryApiError(error, status, path, url) {
     path,
     status,
   };
+}
+
+function isMissingDeliveryApiEndpointError(error, status) {
+  if (status !== 404) return false;
+  const errorMessage = typeof error === "string" ? error : error?.message;
+  return errorMessage === undefined || errorMessage === "Not Found" || /^Route [A-Z]+:/u.test(errorMessage);
 }
 
 function isMissingRouteDriverEndpointError(error, status, path) {

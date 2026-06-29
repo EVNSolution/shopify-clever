@@ -7,6 +7,7 @@ import {
   buildCreateRoutePlanPayload,
   createDeliveryRoutePlan,
   deleteDeliveryRoutePlan,
+  DELIVERY_API_ENDPOINT_NOT_FOUND_ERROR_CODE,
   DELIVERY_API_ERROR_CODE,
   fetchDeliveryRoutePlanDetail,
   fetchDeliveryRoutePlans,
@@ -626,6 +627,33 @@ test("returns an actionable error when the delivery API driver endpoint is missi
       /https:\/\/delivery\.example\/admin\/route-plans\/route%201\/driver/,
     );
     assert.match(result.errors[0].message, /CLEVER_DELIVERY_API_URL/);
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.CLEVER_DELIVERY_API_URL;
+    } else {
+      process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    }
+  }
+});
+
+test("classifies generic delivery API 404 responses as endpoint-not-found", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+
+  try {
+    const result = await fetchDeliveryRoutePlans(
+      new Request("https://app.example/app/routes?id_token=session-token"),
+      {
+        fetch: async () =>
+          Response.json({ message: "Route GET:/admin/route-plans not found", error: "Not Found" }, { status: 404 }),
+      },
+    );
+
+    assert.equal(result.routePlans.length, 0);
+    assert.equal(result.errors[0].code, DELIVERY_API_ENDPOINT_NOT_FOUND_ERROR_CODE);
+    assert.equal(result.errors[0].message, "Delivery API endpoint를 찾지 못했습니다.");
+    assert.equal(result.errors[0].status, 404);
+    assert.equal(result.errors[0].path, "/admin/route-plans");
   } finally {
     if (previousBaseUrl === undefined) {
       delete process.env.CLEVER_DELIVERY_API_URL;
