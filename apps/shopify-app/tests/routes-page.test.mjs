@@ -406,6 +406,17 @@ test("Route detail preserves id_token on back and switch links", () => {
   assert.match(routeDetailSource, /to=\{`\$\{routeLink\.href\}\$\{routeSessionSearch\}`\}/);
 });
 
+test("Route detail refreshes expired Shopify session tokens in-place", () => {
+  assert.match(routeDetailSource, /function hasInvalidShopifySessionTokenError\(errors\) \{/);
+  assert.match(routeDetailSource, /Invalid Shopify session token/i);
+  assert.match(routeDetailSource, /function getRouteSessionRefreshHref\(location, sessionToken\) \{/);
+  assert.match(routeDetailSource, /searchParams\.set\("id_token", sessionToken\)/);
+  assert.match(routeDetailSource, /const sessionTokenRefreshSubmittedRef = useRef\(false\)/);
+  assert.match(routeDetailSource, /const needsSessionTokenRefresh = hasInvalidShopifySessionTokenError\(errors\)/);
+  assert.match(routeDetailSource, /shopify\s*\.\s*idToken\(\)/);
+  assert.match(routeDetailSource, /navigate\(getRouteSessionRefreshHref\(location, sessionToken\), \{\s*preventScrollReset: true,\s*replace: true,/);
+});
+
 test("Route detail uses the selected route title unless a group route supplies an override", () => {
   assert.match(routeDetailSource, /const routeDetailTitle = textOrUndefined\(routeDetailTitleOverride\) \?\? textOrUndefined\(routeDetail\.route\) \?\? textOrUndefined\(routeGroup\?\.name\) \?\? "Route"/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);

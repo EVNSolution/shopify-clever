@@ -2156,12 +2156,26 @@ function getRouteSessionSearch(locationSearch) {
   return idToken ? `?id_token=${encodeURIComponent(idToken)}` : "";
 }
 
+function hasInvalidShopifySessionTokenError(errors) {
+  return (errors ?? []).some((error) => (
+    error?.code === "UNAUTHORIZED" &&
+    /Invalid Shopify session token/i.test(error?.message ?? "")
+  ));
+}
+
+function getRouteSessionRefreshHref(location, sessionToken) {
+  const searchParams = new URLSearchParams(location.search);
+  searchParams.set("id_token", sessionToken);
+  return `${location.pathname}?${searchParams.toString()}${location.hash}`;
+}
+
 export default function RouteDetailPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
   const routeActionFetcher = useFetcher();
+  const sessionTokenRefreshSubmittedRef = useRef(false);
   const {
     childRouteDetails = [],
     currentDepartureLocation = null,
@@ -2178,6 +2192,7 @@ export default function RouteDetailPage() {
   const effectiveRoutePlan = routePlan;
   const routeSessionSearch = getRouteSessionSearch(location.search);
   const routeMapDebugEnabled = new URLSearchParams(location.search).get("mapDebug") === "1" || /(?:&|%26)mapDebug=1/.test(location.pathname);
+  const needsSessionTokenRefresh = hasInvalidShopifySessionTokenError(errors);
   const routesListHref = `/app/routes${routeSessionSearch}`;
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan), [effectiveRoutePlan]);
   const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? textOrUndefined(routeDetail.route) ?? textOrUndefined(routeGroup?.name) ?? "Route";
@@ -2752,6 +2767,29 @@ export default function RouteDetailPage() {
       draft: JSON.stringify(buildRouteDraftPayload(timelineRouteRows, { includeEmptyTempRoutes: false, includeExistingOptimized: false })),
     });
   };
+
+  useEffect(() => {
+    if (!needsSessionTokenRefresh || sessionTokenRefreshSubmittedRef.current) return;
+
+    let cancelled = false;
+    sessionTokenRefreshSubmittedRef.current = true;
+    shopify
+      .idToken()
+      .then((sessionToken) => {
+        if (cancelled || !sessionToken) return;
+        navigate(getRouteSessionRefreshHref(location, sessionToken), {
+          preventScrollReset: true,
+          replace: true,
+        });
+      })
+      .catch(() => {
+        sessionTokenRefreshSubmittedRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [location, navigate, needsSessionTokenRefresh, shopify]);
 
   useEffect(() => {
     if (routeGroupActionIntent) lastRouteActionIntentRef.current = routeGroupActionIntent;
