@@ -707,8 +707,10 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Add to route<\/button>[\s\S]*>Create route<\/button>/);
   assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
+  assert.match(ordersPageSource, />Inventory<\/s-heading>[\s\S]*onClick=\{handleAddInventory\}[\s\S]*\{isCreatingInventory \? "Adding…" : "Add"\}<\/button>[\s\S]*onClick=\{handleAddInventory\}[\s\S]*>Create<\/button>/);
   assert.doesNotMatch(ordersPageSource, />Inventory plan<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Assign to inventory<\/button>/);
+  assert.doesNotMatch(ordersPageSource, />Create<\/button>[\s\S]{0,80}disabled=\{true\}/);
   assert.match(ordersPageSource, />Clear<\/button>/);
   assert.doesNotMatch(ordersPageSource, /Plan에서 추가\/제거합니다/);
 });

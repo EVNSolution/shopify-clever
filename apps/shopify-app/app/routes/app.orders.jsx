@@ -3215,8 +3215,13 @@ export default function OrdersPage() {
                 >{isCreatingInventory ? "Adding…" : "Add"}</button>
                 <button
                   type="button"
-                  style={disabledPlanButtonStyle}
-                  disabled={true}
+                  style={
+                    createInventoryDisabled
+                      ? disabledPlanButtonStyle
+                      : createRouteButtonStyle
+                  }
+                  disabled={createInventoryDisabled}
+                  onClick={handleAddInventory}
                 >Create</button>
               </div>
             </div>
