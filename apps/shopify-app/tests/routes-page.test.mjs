@@ -721,6 +721,9 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
   assert.match(routeDetailSource, /const handleRefreshMap = \(\) => \{/);
   assert.match(routeDetailSource, /const handleFitRouteMap = \(\) => \{/);
   assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, mapLibraryRef\.current, routeMapLocations\)/);
+  assert.match(routeDetailSource, /new URLSearchParams\(location\.search\)\.get\("mapDebug"\) === "1"/);
+  assert.match(routeDetailSource, /new ResizeObserver\(\(\) => scheduleResize\("container"\)\)/);
+  assert.match(routeDetailSource, /console\.info\("routes\.detail\.map\.resize"/);
   assert.match(routeDetailSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
   assert.match(routeDetailSource, /scheduleMapRecovery\(\)/);
   assert.match(routeDetailSource, /ariaLabel: "Refresh route map"/);

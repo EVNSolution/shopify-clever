@@ -2172,6 +2172,7 @@ export default function RouteDetailPage() {
   } = useLoaderData();
   const effectiveRoutePlan = routePlan;
   const routeSessionSearch = getRouteSessionSearch(location.search);
+  const routeMapDebugEnabled = new URLSearchParams(location.search).get("mapDebug") === "1";
   const routesListHref = `/app/routes${routeSessionSearch}`;
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan), [effectiveRoutePlan]);
   const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? textOrUndefined(routeDetail.route) ?? textOrUndefined(routeGroup?.name) ?? "Route";
@@ -3103,6 +3104,52 @@ export default function RouteDetailPage() {
       polygonCornerMarkersRef.current = [];
     };
   }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints]);
+
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current || !mapContainerRef.current) return undefined;
+
+    const map = mapRef.current;
+    const container = mapContainerRef.current;
+    let resizeFrame = null;
+    const logMapSize = (reason) => {
+      if (!routeMapDebugEnabled) return;
+
+      const containerRect = container.getBoundingClientRect();
+      const canvasRect = map.getCanvas?.()?.getBoundingClientRect?.();
+      const center = map.getCenter?.();
+      console.info("routes.detail.map.resize", {
+        canvas: canvasRect ? { height: canvasRect.height, width: canvasRect.width } : null,
+        center: center ? { lat: center.lat, lng: center.lng } : null,
+        container: { height: containerRect.height, width: containerRect.width },
+        markerCount: markersRef.current.length,
+        reason,
+        stopCount: routeMapStops.length,
+        zoom: map.getZoom?.(),
+      });
+    };
+    const scheduleResize = (reason) => {
+      if (resizeFrame != null) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(() => {
+        resizeFrame = null;
+        map.resize();
+        logMapSize(reason);
+      });
+    };
+    const resizeObserver = typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver(() => scheduleResize("container"));
+    const handleWindowResize = () => scheduleResize("window");
+
+    scheduleResize("ready");
+    resizeObserver?.observe(container);
+    window.addEventListener("resize", handleWindowResize);
+
+    return () => {
+      if (resizeFrame != null) window.cancelAnimationFrame(resizeFrame);
+      resizeObserver?.disconnect();
+      window.removeEventListener("resize", handleWindowResize);
+    };
+  }, [isMapReady, routeMapDebugEnabled, routeMapStops.length]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return undefined;
