@@ -380,6 +380,8 @@ test("Orders page creates grouped child routes from scoped planned orders", () =
   assert.match(ordersPageSource, /formData\.set\("orderScope", orderFilters\.scope\)/);
   assert.match(ordersPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(ordersPageSource, /const createdRouteGroup = routePlanFetcher\.data\?\.routeGroup/);
+  assert.match(ordersPageSource, /navigate\(`\/app\/route-groups\/\$\{createdRouteGroup\.id\}\?id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
   assert.match(ordersPageSource, /navigate\(`\/app\/routes\/\$\{createdRoutePlan\.id\}\?id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
   assert.match(ordersPageSource, />Assign to route<\/button>/);
   assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);

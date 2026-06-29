@@ -18,6 +18,10 @@ const settingsPageSource = readFileSync(
   join(root, "app/routes/app.settings.jsx"),
   "utf8",
 );
+const mapLibreMapSource = readFileSync(
+  join(root, "app/features/maps/maplibre-map.js"),
+  "utf8",
+);
 
 test("build config treats MapLibre as an intentional lazy map chunk", () => {
   assert.match(ordersPageSource, /import\("maplibre-gl"\)/);
@@ -58,7 +62,12 @@ test("dev config keeps /app/routes document navigations out of Vite's route mani
   assert.match(viteConfigSource, /plugins:\s*\[routesDocumentFallbackPlugin\(\),\s*reactRouter\(\),\s*tsconfigPaths\(\)\]/);
 });
 
-test("MapLibre maps avoid symbol fade delays", () => {
+test("MapLibre maps share global interaction defaults", () => {
+  assert.match(mapLibreMapSource, /cooperativeGestures:\s*true/);
+  assert.match(mapLibreMapSource, /new maplibregl\.Map/);
+  assert.match(ordersPageSource, /createMapLibreMap\(maplibregl, \{/);
+  assert.match(routeDetailPageSource, /createMapLibreMap\(maplibregl, \{/);
+  assert.match(settingsPageSource, /createMapLibreMap\(maplibregl, \{/);
   assert.match(ordersPageSource, /fadeDuration:\s*0/);
   assert.match(routeDetailPageSource, /fadeDuration:\s*0/);
   assert.match(settingsPageSource, /fadeDuration:\s*0/);

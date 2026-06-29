@@ -10,6 +10,7 @@ import {
   fetchShopifyAppPreferences,
   saveShopifyAppPreferences,
 } from "../features/settings/app-preferences.server";
+import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { SUPPORTED_LANGUAGES, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
@@ -347,7 +348,7 @@ function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
       if (!isMounted || !mapContainerRef.current || mapRef.current) return;
 
       mapLibraryRef.current = maplibregl;
-      mapRef.current = new maplibregl.Map({
+      mapRef.current = createMapLibreMap(maplibregl, {
         attributionControl: { compact: true },
         center: initialCoordinateRef.current
           ? coordinateToLngLat(initialCoordinateRef.current)

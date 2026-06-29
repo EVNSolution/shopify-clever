@@ -38,16 +38,22 @@ const routesTitleStyle = {
 };
 
 const createRoutesButtonStyle = {
+  alignItems: "center",
   background: "#303030",
   border: "1px solid #303030",
   borderRadius: "8px",
   color: "#ffffff",
   cursor: "pointer",
+  display: "inline-flex",
+  flex: "0 0 auto",
   fontFamily: "inherit",
   fontSize: "13px",
   fontWeight: 650,
+  justifyContent: "center",
+  lineHeight: 1.2,
   minHeight: "30px",
   padding: "4px 12px",
+  whiteSpace: "nowrap",
 };
 
 const routesSummaryCardsStyle = {
@@ -88,25 +94,12 @@ const routesTableFrameStyle = {
   overflow: "hidden",
 };
 
-const routeControlsStyle = {
+const routesHeaderActionsStyle = {
   alignItems: "center",
-  background: "#ffffff",
-  borderBottom: "1px solid #ebebeb",
-  display: "flex",
-  flexWrap: "nowrap",
-  gap: "6px",
-  overflowX: "auto",
-  overflowY: "hidden",
-  padding: "6px 10px",
-  whiteSpace: "nowrap",
-};
-
-const routeControlsTrailingStyle = {
-  alignItems: "center",
+  alignSelf: "center",
   display: "flex",
   flex: "0 0 auto",
-  gap: "6px",
-  marginLeft: "auto",
+  gap: "8px",
 };
 
 const routeSelectionSummaryStyle = {
@@ -120,23 +113,37 @@ const routeTableScrollStyle = {
   overflow: "auto",
 };
 
-const routeColumnWidths = [
-  "44px",
-  "180px",
-  "108px",
-  "96px",
-  "70px",
-  "128px",
-  "90px",
-  "168px",
-  "156px",
-];
+const ROUTE_NAME_COLUMN_MIN_WIDTH = 112;
+const ROUTE_NAME_COLUMN_MAX_WIDTH = 220;
+
+function getRouteNameColumnWidth(routeRows) {
+  const longestRouteName = routeRows.reduce(
+    (longest, route) => Math.max(longest, String(route.route ?? "").length),
+    "Route".length,
+  );
+
+  return `${Math.min(ROUTE_NAME_COLUMN_MAX_WIDTH, Math.max(ROUTE_NAME_COLUMN_MIN_WIDTH, longestRouteName * 7 + 28))}px`;
+}
+
+function getRouteColumnWidths(routeRows) {
+  return [
+    "44px",
+    getRouteNameColumnWidth(routeRows),
+    "104px",
+    "84px",
+    "56px",
+    "1%",
+    "1%",
+    "128px",
+    "128px",
+  ];
+}
 
 const singleRouteTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1040px",
-  tableLayout: "fixed",
+  minWidth: "996px",
+  tableLayout: "auto",
   width: "100%",
 };
 
@@ -172,9 +179,14 @@ const routeNameCellStyle = {
   fontWeight: 650,
 };
 
+const routeNumberHeaderCellStyle = {
+  ...routeTableHeaderCellStyle,
+  textAlign: "center",
+};
+
 const routeNumberCellStyle = {
   ...routeTableCellStyle,
-  textAlign: "right",
+  textAlign: "center",
 };
 
 const routeCheckboxCellStyle = {
@@ -192,15 +204,18 @@ const routeCheckboxHeaderCellStyle = {
 };
 
 const routeActionButtonStyle = {
+  alignItems: "center",
   background: "#ffffff",
   border: "1px solid #c9c9c9",
   borderRadius: "8px",
   color: "#303030",
   cursor: "pointer",
+  display: "inline-flex",
   flex: "0 0 auto",
   fontFamily: "inherit",
-  fontSize: "12px",
+  fontSize: "13px",
   fontWeight: 650,
+  justifyContent: "center",
   lineHeight: 1.2,
   minHeight: "30px",
   padding: "4px 12px",
@@ -209,10 +224,8 @@ const routeActionButtonStyle = {
 
 const routeDisabledActionButtonStyle = {
   ...routeActionButtonStyle,
-  background: "#f1f1f1",
-  borderColor: "#d6d6d6",
-  color: "#8a8a8a",
   cursor: "not-allowed",
+  opacity: 0.55,
 };
 
 const routeStatusBadgeStyle = {
@@ -329,11 +342,11 @@ function getRouteDeleteKey(route) {
 }
 
 function formatRouteValues(values) {
-  return Array.isArray(values) && values.length > 0 ? values.join(", ") : "—";
+  return Array.isArray(values) && values.length > 0 ? values.join(", ") : "-";
 }
 
 function formatRouteDate(value) {
-  if (!value) return "—";
+  if (!value) return "-";
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) return String(value);
@@ -375,7 +388,7 @@ function sumOptionalNumbers(values) {
 
 function formatDriveTime(totalMinutes) {
   const minutes = numberOrNull(totalMinutes);
-  if (minutes == null) return "—";
+  if (minutes == null) return "-";
 
   const roundedMinutes = Math.max(Math.round(minutes), 0);
   const hours = Math.floor(roundedMinutes / 60);
@@ -388,7 +401,7 @@ function formatDriveTime(totalMinutes) {
 
 function formatDistanceMiles(totalDistanceMiles) {
   const distanceMiles = numberOrNull(totalDistanceMiles);
-  if (distanceMiles == null) return "—";
+  if (distanceMiles == null) return "-";
 
   const roundedDistanceMiles = Math.round(distanceMiles * 10) / 10;
   return `${Number.isInteger(roundedDistanceMiles) ? roundedDistanceMiles : roundedDistanceMiles.toFixed(1)}mi`;
@@ -399,19 +412,19 @@ function formatRouteDeliveryScope(routePlan) {
     deliveryDate: routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate,
     timeWindowEnd: routePlan?.routeScope?.timeWindowEnd ?? routePlan?.timeWindowEnd,
     timeWindowStart: routePlan?.routeScope?.timeWindowStart ?? routePlan?.timeWindowStart,
-  }) ?? "—";
+  }) ?? "-";
 }
 
 function formatRouteTableDate(routePlan) {
   const deliveryScope = formatRouteDeliveryScope(routePlan);
-  return deliveryScope !== "—" ? deliveryScope : formatRouteDate(routePlan?.planDate);
+  return deliveryScope !== "-" ? deliveryScope : formatRouteDate(routePlan?.planDate);
 }
 
 function formatRouteDriver(driver) {
   const displayName = String(driver?.displayName ?? "").trim();
   const phone = String(driver?.phone ?? "").trim();
 
-  return displayName || phone || "—";
+  return displayName || phone || "-";
 }
 
 function buildRouteRows(routePlans, routeGroups = []) {
@@ -426,7 +439,9 @@ function buildRouteRows(routePlans, routeGroups = []) {
     : [];
   const routeGroupRows = safeRouteGroups.map((routeGroup) => ({
     id: routeGroup.id,
-    detailRoutePlanId: routeGroup.children?.find((child) => child?.routePlanId)?.routePlanId ?? null,
+    rowKey: `routeGroup:${routeGroup.id}`,
+    routeGroupId: routeGroup.id,
+    href: `/app/route-groups/${routeGroup.id}`,
     isClickable: true,
     isDeletable: true,
     isRouteGroup: true,
@@ -434,15 +449,15 @@ function buildRouteRows(routePlans, routeGroups = []) {
     route: routeGroup.name ?? routeGroup.id,
     status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
     orders: routeGroup.totalOrders ?? 0,
-    coordinates: "—",
+    coordinates: "-",
     delivered: 0,
     attempted: 0,
     missingCoordinates: 0,
     date: formatRouteGroupDate(routeGroup),
-    deliveryArea: "—",
+    deliveryArea: "-",
     start: "Parent group",
     end: `${routeGroup.children?.length ?? 0} child routes`,
-    driver: "—",
+    driver: "-",
     driverId: null,
   }));
   const routeChildRows = safeRouteGroups.flatMap((routeGroup) =>
@@ -456,6 +471,8 @@ function buildRouteRows(routePlans, routeGroups = []) {
 
         return {
           id: child.routePlanId,
+          rowKey: `routePlan:${child.routePlanId}`,
+          href: `/app/routes/${child.routePlanId}`,
           isClickable: true,
           isDeletable: false,
           parentRouteGroupId: routeGroup.id,
@@ -499,11 +516,11 @@ function buildRouteRows(routePlans, routeGroups = []) {
         route: "No routes",
         status: "Waiting",
         orders: 0,
-        date: "—",
-        deliveryArea: "—",
+        date: "-",
+        deliveryArea: "-",
         start: "Shopify departure location",
         end: "Loop back to start",
-        driver: "—",
+        driver: "-",
         driverId: null,
       },
     ];
@@ -528,6 +545,8 @@ function buildRouteRows(routePlans, routeGroups = []) {
 
     return {
       id: routePlan.id,
+      rowKey: `routePlan:${routePlan.id}`,
+      href: `/app/routes/${routePlan.id}`,
       isClickable: true,
       isDeletable: true,
       deleteKey: getRouteDeleteKey(routePlan),
@@ -566,7 +585,7 @@ function buildRouteRows(routePlans, routeGroups = []) {
 function formatRouteGroupDate(routeGroup) {
   const start = routeGroup?.dateRangeStart ?? routeGroup?.planDate;
   const end = routeGroup?.dateRangeEnd ?? start;
-  if (!start) return "—";
+  if (!start) return "-";
   return start === end ? start : `${start} ~ ${end}`;
 }
 
@@ -631,14 +650,14 @@ function filterRouteRows(routeRows, routeFilters) {
         orders: 0,
         coordinates: "0/0",
         missingCoordinates: 0,
-        deliveryArea: "—",
-        deliveryDate: "—",
+        deliveryArea: "-",
+        deliveryDate: "-",
         start: "Shopify departure location",
         end: "Loop back to start",
-        driver: routeFilters.driverId ?? "—",
+        driver: routeFilters.driverId ?? "-",
         driverId: null,
-        plannedFor: "—",
-        created: "—",
+        plannedFor: "-",
+        created: "-",
       },
     ];
 }
@@ -647,9 +666,12 @@ function getStatusBadgeStyle(status) {
   return status === "DRAFT" ? routeStatusBadgeStyle : routeWaitingBadgeStyle;
 }
 
-function createRouteDetailHref(route) {
-  if (route.isRouteGroup && route.detailRoutePlanId) return `/app/routes/${route.detailRoutePlanId}`;
-  return route.isRouteGroup ? `/app/route-groups/${route.id}` : `/app/routes/${route.id}`;
+function getRouteDetailSearch(idToken) {
+  return idToken ? `?id_token=${encodeURIComponent(idToken)}` : "";
+}
+
+function createRouteDetailHref(route, idToken) {
+  return `${route.href}${getRouteDetailSearch(idToken)}`;
 }
 
 export default function RoutesPage() {
@@ -664,6 +686,7 @@ export default function RoutesPage() {
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
   const routeRows = filterRouteRows(allRouteRows, routeFilters);
+  const routeColumnWidths = getRouteColumnWidths(routeRows);
   const selectableRouteRows = routeRows.filter((route) => route.isClickable && route.isDeletable !== false);
   const checkedRouteIdSet = new Set(checkedRouteIds);
   const allVisibleRoutesChecked =
@@ -685,10 +708,18 @@ export default function RoutesPage() {
     setCheckedRouteIds([]);
   }, [routeDeleteFetcher.data, routeDeleteFetcher.state]);
 
+  function navigateRouteDetail(route) {
+    const fallbackIdToken = searchParams.get("id_token");
+
+    shopify.idToken()
+      .then((idToken) => navigate(createRouteDetailHref(route, idToken)))
+      .catch(() => navigate(createRouteDetailHref(route, fallbackIdToken)));
+  }
+
   function handleRouteRowClick(route) {
     if (!route.isClickable) return;
 
-    navigate(createRouteDetailHref(route));
+    navigateRouteDetail(route);
   }
 
   function handleRouteRowKeyDown(event, route) {
@@ -697,7 +728,7 @@ export default function RoutesPage() {
     if (event.key !== "Enter" && event.key !== " ") return;
 
     event.preventDefault();
-    navigate(createRouteDetailHref(route));
+    navigateRouteDetail(route);
   }
 
   function handleCreateRoutesClick() {
@@ -753,7 +784,18 @@ export default function RoutesPage() {
         <header className="tab-layout-header" style={routesHeaderStyle}>
           <div style={routesHeaderBarStyle}>
             <h1 style={routesTitleStyle}>Routes</h1>
-            <button type="button" style={createRoutesButtonStyle} onClick={handleCreateRoutesClick}>Create routes</button>
+            <div style={routesHeaderActionsStyle}>
+              <span style={routeSelectionSummaryStyle}>
+                {checkedRouteIds.length} selected
+              </span>
+              <button
+                type="button"
+                style={routeDeleteDisabled ? routeDisabledActionButtonStyle : routeActionButtonStyle}
+                disabled={routeDeleteDisabled}
+                onClick={handleDeleteSelectedRoutes}
+              >Delete</button>
+              <button type="button" style={createRoutesButtonStyle} onClick={handleCreateRoutesClick}>Create routes</button>
+            </div>
           </div>
         </header>
 
@@ -771,19 +813,6 @@ export default function RoutesPage() {
         </section>
 
         <div style={routesTableFrameStyle}>
-          <div style={routeControlsStyle}>
-            <div style={routeControlsTrailingStyle}>
-              <button
-                type="button"
-                style={routeDeleteDisabled ? routeDisabledActionButtonStyle : routeActionButtonStyle}
-                disabled={routeDeleteDisabled}
-                onClick={handleDeleteSelectedRoutes}
-              >Delete selected</button>
-              <span style={routeSelectionSummaryStyle}>
-                {checkedRouteIds.length} selected
-              </span>
-            </div>
-          </div>
           <div style={routeTableScrollStyle}>
             <table style={singleRouteTableStyle}>
               <colgroup>
@@ -805,7 +834,7 @@ export default function RoutesPage() {
                   <th style={routeTableHeaderCellStyle}>Route</th>
                   <th style={routeTableHeaderCellStyle}>Date</th>
                   <th style={routeTableHeaderCellStyle}>Status</th>
-                  <th style={routeTableHeaderCellStyle}>Orders</th>
+                  <th style={routeNumberHeaderCellStyle}>Orders</th>
                   <th style={routeTableHeaderCellStyle}>Area</th>
                   <th style={routeTableHeaderCellStyle}>Driver</th>
                   <th style={routeTableHeaderCellStyle}>Start</th>
@@ -815,7 +844,7 @@ export default function RoutesPage() {
               <tbody>
                 {routeRows.map((route) => (
                   <tr
-                    key={route.id}
+                    key={route.rowKey ?? route.id}
                     aria-label={route.isClickable ? `Open ${route.route} detail` : undefined}
                     className={route.isClickable ? "route-table-row" : undefined}
                     onClick={() => handleRouteRowClick(route)}

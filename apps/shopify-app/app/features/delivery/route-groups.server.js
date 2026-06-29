@@ -84,9 +84,11 @@ export async function deleteDeliveryRouteGroup(request, routeGroupId, options = 
     sessionToken: options.sessionToken,
   });
 
+  const routeGroup = result.data?.routeGroup ?? null;
+
   return {
-    routeGroup: result.data?.routeGroup ?? null,
-    routeGroupId: result.data?.routeGroupId ?? result.data?.id ?? routeGroupId,
+    routeGroup,
+    routeGroupId: result.data?.routeGroupId ?? routeGroup?.id ?? result.data?.id ?? routeGroupId,
     errors: result.errors,
   };
 }

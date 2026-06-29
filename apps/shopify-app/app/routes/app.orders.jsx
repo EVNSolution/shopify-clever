@@ -16,6 +16,7 @@ import {
 } from "../features/delivery/route-groups.server";
 import { buildRouteScopeFromOrders } from "../features/delivery/route-scope";
 import { createDepartureMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
+import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
@@ -2635,16 +2636,23 @@ export default function OrdersPage() {
   }, [ordersSyncFetcher, safeOrders, shopify]);
 
   useEffect(() => {
+    const createdRouteGroup = routePlanFetcher.data?.routeGroup;
     const createdRoutePlan = routePlanFetcher.data?.routePlan;
     const sessionToken = submittedRouteSessionTokenRef.current;
 
     if (!sessionToken) return;
 
+    if (createdRouteGroup?.id) {
+      submittedRouteSessionTokenRef.current = null;
+      navigate(`/app/route-groups/${createdRouteGroup.id}?id_token=${encodeURIComponent(sessionToken)}`);
+      return;
+    }
+
     if (!createdRoutePlan?.id) return;
 
     submittedRouteSessionTokenRef.current = null;
     navigate(`/app/routes/${createdRoutePlan.id}?id_token=${encodeURIComponent(sessionToken)}`);
-  }, [navigate, routePlanFetcher.data?.routePlan]);
+  }, [navigate, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
 
   useEffect(() => {
     if (initialPerfEmittedRef.current) return;
@@ -2698,7 +2706,7 @@ export default function OrdersPage() {
       installPmtilesProtocol(maplibregl, Protocol);
       mapLibraryRef.current = maplibregl;
       const mapConstructStartedAt = performance.now();
-      mapRef.current = new maplibregl.Map({
+      mapRef.current = createMapLibreMap(maplibregl, {
         container: mapContainerRef.current,
         style: OPENFREEMAP_STYLE_URL,
         center: initialMapCenterRef.current,

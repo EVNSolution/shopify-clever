@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { flushSync } from "react-dom";
-import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError } from "react-router";
+import { Link, useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
@@ -15,6 +15,7 @@ import {
   fetchDeliveryRoutePlanDetail,
 } from "../features/delivery/route-plans.server";
 import { createDepartureMarkerElement, createDotMarkerElement, MAP_MARKER_PALETTE, MAP_PIN_PATH } from "../features/maps/map-markers";
+import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
@@ -32,7 +33,7 @@ const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
 const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon";
 const ROUTE_DETAIL_POLYGON_FILL_LAYER_ID = "route-detail-edit-polygon-fill";
 const ROUTE_DETAIL_POLYGON_LINE_LAYER_ID = "route-detail-edit-polygon-line";
-const ROUTE_EMPTY_LABEL = "–";
+const ROUTE_EMPTY_LABEL = "-";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 const ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM = 7;
 const ROUTE_POLYGON_CLICK_DELAY_MS = 220;
@@ -78,8 +79,10 @@ const routeOverviewHeaderStyle = {
 const routeOverviewTopBarStyle = {
   alignItems: "center",
   display: "flex",
+  gap: "8px",
   justifyContent: "space-between",
 };
+
 
 const routeOverviewTitleBlockStyle = {
   display: "grid",
@@ -229,28 +232,97 @@ const routeActionButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const routeGroupSwitchStyle = {
+  flex: "0 1 auto",
+  maxWidth: "100%",
+  position: "relative",
+};
+
+const routeGroupSwitchButtonStyle = {
+  ...routeActionButtonStyle,
+  minHeight: "28px",
+};
+
+const routeGroupSwitchMenuStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxShadow: "0 10px 24px rgba(0, 0, 0, 0.14)",
+  boxSizing: "border-box",
+  display: "grid",
+  gap: "4px",
+  maxWidth: "100vw",
+  width: "min(260px, calc(100vw - 32px))",
+  padding: "6px",
+  position: "absolute",
+  right: 0,
+  top: "34px",
+  zIndex: 20,
+};
+
+const routeGroupSwitchItemStyle = {
+  ...routeActionButtonStyle,
+  alignItems: "center",
+  boxSizing: "border-box",
+  display: "flex",
+  gap: "8px",
+  justifyContent: "space-between",
+  minHeight: "28px",
+  overflow: "hidden",
+  textAlign: "left",
+  textDecoration: "none",
+  textOverflow: "ellipsis",
+  width: "100%",
+};
+
+const routeGroupSwitchCurrentItemStyle = {
+  ...routeGroupSwitchItemStyle,
+  background: "#f7f7f7",
+  cursor: "default",
+};
+
+const routeGroupSwitchLabelStyle = {
+  flex: "1 1 auto",
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const routeGroupSwitchCurrentBadgeStyle = {
+  background: "#303030",
+  borderRadius: "999px",
+  color: "#ffffff",
+  flex: "0 0 auto",
+  fontSize: "10px",
+  fontWeight: 700,
+  lineHeight: 1,
+  padding: "3px 6px",
+};
+
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1216px",
+  maxWidth: "100%",
+  minWidth: "1152px",
   tableLayout: "fixed",
   width: "100%",
 };
 
 const routePlanRowsColumnWidths = [
-  "112px",
-  "82px",
-  "116px",
-  "74px",
-  "128px",
-  "52px",
-  "74px",
+  "106px",
   "76px",
-  "82px",
-  "104px",
-  "104px",
-  "96px",
-  "116px",
+  "106px",
+  "68px",
+  "136px",
+  "48px",
+  "68px",
+  "70px",
+  "76px",
+  "102px",
+  "100px",
+  "90px",
+  "106px",
 ];
 
 const routeLineNameStyle = {
@@ -312,12 +384,12 @@ const routeDepartureStatusStyle = {
   boxSizing: "border-box",
   color: "#5f4b00",
   display: "inline-flex",
-  fontSize: "12px",
+  fontSize: "11px",
   fontWeight: 650,
   justifyContent: "center",
   lineHeight: 1,
-  minHeight: "17px",
-  padding: "0 5px",
+  minHeight: "16px",
+  padding: "0 4px",
 };
 
 const routeEditableValueStyle = {
@@ -328,7 +400,7 @@ const routeEditableValueStyle = {
   cursor: "pointer",
   display: "inline-flex",
   fontFamily: "inherit",
-  fontSize: "13px",
+  fontSize: "12px",
   fontWeight: 600,
   gap: "2px",
   lineHeight: 1.1,
@@ -640,9 +712,10 @@ const routeDraftBarStyle = {
   display: "flex",
   gap: "8px",
   padding: "8px 10px",
+  left: "50%",
   position: "fixed",
-  right: "24px",
-  top: "24px",
+  top: "12px",
+  transform: "translateX(-50%)",
   zIndex: 9999,
 };
 
@@ -678,11 +751,11 @@ const routesDetailHeaderCellStyle = {
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#616161",
-  fontSize: "13px",
+  fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1.15,
   overflow: "hidden",
-  padding: "4px",
+  padding: "3px",
   textAlign: "left",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -703,10 +776,10 @@ const routesDetailCellStyle = {
   borderBottomStyle: "solid",
   borderBottomWidth: "1px",
   color: "#303030",
-  fontSize: "14px",
+  fontSize: "13px",
   lineHeight: 1.2,
   overflow: "hidden",
-  padding: "4px",
+  padding: "3px",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
@@ -714,7 +787,7 @@ const routesDetailCellStyle = {
 
 const routeStatusCellStyle = {
   ...routesDetailCellStyle,
-  padding: "4px 2px",
+  padding: "3px 2px",
   textAlign: "center",
 };
 
@@ -736,13 +809,15 @@ const routeDetailErrorStyle = {
 };
 
 
-export const loader = async ({ params, request }) => {
+export const loader = async ({ params, request }) => loadRoutePlanDetail(request, params.routeId);
+
+async function loadRoutePlanDetail(request, routeId) {
   const loaderStartedAt = getRouteDetailPerfNow();
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
   const primaryDataStartedAt = getRouteDetailPerfNow();
   const [routePlanData, departureLocationData, driverData] = await Promise.all([
-    fetchDeliveryRoutePlanDetail(request, params.routeId, {
+    fetchDeliveryRoutePlanDetail(request, routeId, {
       cacheKey: shopifyShopCacheKey,
     }),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
@@ -762,7 +837,7 @@ export const loader = async ({ params, request }) => {
   ];
   const childRouteDetailResults = await Promise.all(
     childRoutePlanIds
-      .filter((routePlanId) => routePlanId !== params.routeId)
+      .filter((routePlanId) => routePlanId !== routeId)
       .map((routePlanId) => fetchDeliveryRoutePlanDetail(request, routePlanId, { cacheKey: shopifyShopCacheKey })),
   );
   const routeChildDetails = [
@@ -770,7 +845,7 @@ export const loader = async ({ params, request }) => {
       routeGeometry: routePlanData.routeGeometry,
       routeMetrics: routePlanData.routeMetrics ?? null,
       routePlan: routePlanData.routePlan,
-      routePlanId: routePlanData.routePlan?.id ?? params.routeId,
+      routePlanId: routePlanData.routePlan?.id ?? routeId,
       routeStopPoints: routePlanData.routeStopPoints ?? [],
       stops: routePlanData.stops ?? [],
     },
@@ -787,7 +862,7 @@ export const loader = async ({ params, request }) => {
   logRouteDetailPerformance("routes.detail.loader", {
     totalMs: roundPerfDuration(getRouteDetailPerfNow() - loaderStartedAt),
     primaryDataMs,
-    routeId: params.routeId,
+    routeId,
     routeGroupId,
     routeGroupBranchCount: routeGroupData.routeGroup?.branches?.length ?? 0,
     routeGroupChildCount: routeGroupData.routeGroup?.children?.length ?? 0,
@@ -813,7 +888,7 @@ export const loader = async ({ params, request }) => {
     drivers: driverData.drivers,
     routeGroup: routeGroupData.routeGroup,
   };
-};
+}
 
 export const action = async ({ params, request }) => {
   await authenticate.admin(request);
@@ -855,7 +930,7 @@ export const action = async ({ params, request }) => {
     const draft = readRouteDraftPayload(formData.get("draft"));
     logRouteDetailPerformance("routes.detail.action.saveRouteDraft.request", {
       routeGroupId,
-      routeId: params.routeId,
+      routeId: params.routeId ?? null,
       routeCount: draft.routes.length,
       existingRoutePlanCount: draft.routes.filter((route) => route.routePlanId).length,
       optimizedExistingRoutePlanCount: draft.routes.filter((route) => route.routePlanId && route.optimized !== undefined).length,
@@ -975,7 +1050,7 @@ function getRouteStartDateTimeValue(routePlan) {
 
 function getRouteStartTimeLabel(value) {
   if (!value) return ROUTE_EMPTY_LABEL;
-  return value.replace("T", " ");
+  return value.replace("T", " ").replace(/^(\d{4})-(\d{2})-(\d{2})/, "$1.$2.$3");
 }
 
 function getRouteCandidateTitle() {
@@ -1125,7 +1200,7 @@ function buildRouteStops(stops) {
       recipient: stop.recipientName ?? "Unknown recipient",
       address: textOrUndefined(stop.addressLabel) ?? formatStopAddress(stop.address),
       status: stop.fulfillmentStatus ?? stop.status ?? stop.assignmentStatus ?? "PENDING",
-      payment: stop.paymentStatus ?? stop.financialStatus ?? "—",
+      payment: stop.paymentStatus ?? stop.financialStatus ?? "-",
       attributes: formatStopAttributes(stop.attributes),
       itemCount: numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems),
       coordinatesLabel: coordinates != null ? "Yes" : "No",
@@ -1179,7 +1254,7 @@ function formatStopAttributes(attributes) {
     return attributes;
   }
 
-  if (!Array.isArray(attributes) || attributes.length === 0) return "—";
+  if (!Array.isArray(attributes) || attributes.length === 0) return "-";
 
   return attributes
     .map((attribute) => {
@@ -1188,7 +1263,7 @@ function formatStopAttributes(attributes) {
       return key && value ? `${key}: ${value}` : null;
     })
     .filter(Boolean)
-    .join(", ") || "—";
+    .join(", ") || "-";
 }
 
 function textOrUndefined(value) {
@@ -1723,6 +1798,38 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
   return markers;
 }
 
+function buildRouteGroupRouteLinks(routeRows, childRouteDetails, routeGroup, currentRoutePlanId, currentLabel, currentRouteGroupId = null) {
+  const currentPlanId = textOrUndefined(currentRoutePlanId);
+  const currentGroupId = textOrUndefined(currentRouteGroupId);
+  const groupId = textOrUndefined(routeGroup?.id);
+  const groupLabel = textOrUndefined(routeGroup?.name);
+  const seenIds = new Set();
+  const seenLabels = new Set();
+  const links = [];
+  const addLink = ({ routePlanId = null, routeGroupId = null, label, isCurrent = false }) => {
+    const safeGroupId = textOrUndefined(routeGroupId);
+    const safePlanId = safeGroupId ? null : textOrUndefined(routePlanId);
+    const id = safeGroupId ? `group:${safeGroupId}` : safePlanId ? `route:${safePlanId}` : null;
+    const safeLabel = textOrUndefined(label) ?? "Route";
+    const labelKey = safeLabel.toLowerCase();
+    if (!id || seenIds.has(id) || (!isCurrent && seenLabels.has(labelKey))) return;
+    seenIds.add(id);
+    seenLabels.add(labelKey);
+    links.push({ href: safeGroupId ? `/app/route-groups/${safeGroupId}` : `/app/routes/${safePlanId}`, id, isCurrent, label: safeLabel, routeGroupId: safeGroupId, routePlanId: safePlanId });
+  };
+
+  addLink({ isCurrent: true, label: currentLabel, routeGroupId: currentGroupId, routePlanId: currentPlanId });
+  (routeGroup?.switchRoutes ?? []).forEach((routeLink) => {
+    const routeGroupId = textOrUndefined(routeLink?.routeGroupId) ?? (textOrUndefined(routeLink?.label) === groupLabel ? groupId : null);
+    addLink({ label: routeLink?.label, routeGroupId, routePlanId: routeLink?.routePlanId });
+  });
+  (routeRows ?? []).forEach((routeRow) => addLink({ label: routeRow?.title, routePlanId: routeRow?.routePlanId }));
+  (childRouteDetails ?? []).forEach((detail) => addLink({ label: detail?.routePlan?.name, routePlanId: detail?.routePlanId ?? detail?.routePlan?.id }));
+  (routeGroup?.children ?? []).forEach((child) => addLink({ label: child?.routePlan?.name ?? child?.label, routePlanId: child?.routePlanId ?? child?.routePlan?.id }));
+
+  return links;
+}
+
 function buildRouteBranchRows(routeGroup, routeStops = [], childRouteDetailsByOrders = new Map()) {
   const branches = [...(routeGroup?.branches ?? [])].sort((first, second) => {
     return (numberOrUndefined(first.sortOrder) ?? 0) - (numberOrUndefined(second.sortOrder) ?? 0);
@@ -1761,6 +1868,50 @@ function buildRouteBranchRows(routeGroup, routeStops = [], childRouteDetailsByOr
       totalWeightLabel: ROUTE_EMPTY_LABEL,
       vehicleLabel: ROUTE_EMPTY_LABEL,
       optimized,
+    };
+  });
+}
+
+function buildRouteGroupChildRows(routeGroup, childRouteDetails = []) {
+  const childMetaByRoutePlanId = new Map((routeGroup?.children ?? []).map((child, index) => [
+    textOrUndefined(child?.routePlanId ?? child?.routePlan?.id),
+    { child, index },
+  ]).filter(([routePlanId]) => routePlanId));
+
+  return childRouteDetails.map((detail, index) => {
+    const routePlanId = textOrUndefined(detail?.routePlanId ?? detail?.routePlan?.id);
+    const meta = childMetaByRoutePlanId.get(routePlanId);
+    const child = meta?.child ?? {};
+    const childIndex = meta?.index ?? index;
+    const stops = buildRouteStops(detail?.stops ?? []);
+    const optimized = {
+      metrics: detail?.routeMetrics ?? null,
+      routeGeometry: detail?.routeGeometry ?? null,
+      routeStopPoints: detail?.routeStopPoints ?? [],
+    };
+
+    return {
+      attemptedCount: countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
+      branchId: null,
+      color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[childIndex % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
+      createdLabel: textOrUndefined(detail?.routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL,
+      deliveredCount: countRouteStopsByStatus(stops, ["DELIVERED", "FULFILLED"]),
+      driverLabel: textOrUndefined(child?.driverName ?? detail?.routePlan?.driver?.displayName) ?? "Unassigned",
+      driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(detail?.routeMetrics?.durationSeconds)),
+      id: routePlanId ?? `group-route-${index}`,
+      isCurrent: false,
+      optimized,
+      orderIds: stops.map((stop) => stop.orderId).filter(Boolean),
+      routeKey: routePlanId ? `routePlan:${routePlanId}` : `group-route:${index}`,
+      routePlanId: routePlanId ?? null,
+      startTimeValue: getRouteStartDateTimeValue(detail?.routePlan),
+      stops,
+      stopsCount: stops.length,
+      title: textOrUndefined(detail?.routePlan?.name ?? child?.routePlan?.name ?? child?.label) ?? `Route ${childIndex + 1}`,
+      totalDistanceLabel: getRouteMetricLabel(formatRouteDistanceMeters(detail?.routeMetrics?.distanceMeters)),
+      totalItems: getRouteTotalItems(detail?.routePlan, stops),
+      totalWeightLabel: getRouteMetricLabel(detail?.routePlan?.totalWeight, detail?.routePlan?.weight),
+      vehicleLabel: getRouteVehicleLabel(detail?.routePlan),
     };
   });
 }
@@ -1995,7 +2146,13 @@ function renderRouteTimelineStartIcon() {
   );
 }
 
+function getRouteSessionSearch(locationSearch) {
+  const idToken = new URLSearchParams(locationSearch).get("id_token");
+  return idToken ? `?id_token=${encodeURIComponent(idToken)}` : "";
+}
+
 export default function RouteDetailPage() {
+  const location = useLocation();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
@@ -2007,15 +2164,17 @@ export default function RouteDetailPage() {
     routePlan,
     routeGeometry = null,
     routeGroup = null,
+    routeDetailTitleOverride = null,
     routeMetrics = null,
     routeStopPoints = [],
     stops = [],
     errors = [],
   } = useLoaderData();
   const effectiveRoutePlan = routePlan;
-  const routesListHref = "/app/routes";
+  const routeSessionSearch = getRouteSessionSearch(location.search);
+  const routesListHref = `/app/routes${routeSessionSearch}`;
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan), [effectiveRoutePlan]);
-  const routeDetailTitle = textOrUndefined(routeGroup?.name) ?? routeDetail.route;
+  const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? textOrUndefined(routeDetail.route) ?? textOrUndefined(routeGroup?.name) ?? "Route";
   const departureLocation = useMemo(
     () => buildDepartureLocation(effectiveRoutePlan, currentDepartureLocation),
     [currentDepartureLocation, effectiveRoutePlan],
@@ -2035,15 +2194,11 @@ export default function RouteDetailPage() {
     [childRouteDetails, orderedRouteStops, routeGroup],
   );
   const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, allRouteGroupStops, routeChildDetailsByOrders), [allRouteGroupStops, routeChildDetailsByOrders, routeGroup]);
-  const branchOrderIds = useMemo(() => new Set(routeBranchRows.flatMap((routeRow) => routeRow.orderIds)), [routeBranchRows]);
-  const rootRouteStops = useMemo(
-    () => allRouteGroupStops.filter((stop) => !branchOrderIds.has(stop.orderId)),
-    [allRouteGroupStops, branchOrderIds],
-  );
+  const routeGroupChildRows = useMemo(() => buildRouteGroupChildRows(routeGroup, childRouteDetails), [childRouteDetails, routeGroup]);
+  const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null;
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
-  const defaultRouteCandidateTitle = getRouteCandidateTitle(effectiveRoutePlan);
+  const defaultRouteCandidateTitle = routeDetailTitle;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
-  const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
@@ -2052,7 +2207,7 @@ export default function RouteDetailPage() {
   const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
-  const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId);
+  const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
   const currentRouteGroupChild = useMemo(() => {
     const routePlanId = textOrUndefined(effectiveRoutePlan?.id);
     return (routeGroup?.children ?? []).find((child) => textOrUndefined(child.routePlanId) === routePlanId) ?? null;
@@ -2092,11 +2247,17 @@ export default function RouteDetailPage() {
   const [routeLineColor, setRouteLineColor] = useState(defaultRouteLineColor);
   const [routeLineDraftTitle, setRouteLineDraftTitle] = useState(defaultRouteCandidateTitle);
   const [routeLineDraftColor, setRouteLineDraftColor] = useState(defaultRouteLineColor);
+  const [routeStartDraftDate, setRouteStartDraftDate] = useState(routeStartDateTimeValue.slice(0, 10));
+  const [routeStartDraftTime, setRouteStartDraftTime] = useState(routeStartDateTimeValue.slice(11, 16) || "09:00");
   const [activeRouteLineId, setActiveRouteLineId] = useState(null);
+  const [activeStartTimeRouteId, setActiveStartTimeRouteId] = useState(null);
+  const [routeStartTimeByRouteId, setRouteStartTimeByRouteId] = useState({});
   const [routeLineEdits, setRouteLineEdits] = useState({});
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
+  const [isRouteStartTimeEditorOpen, setIsRouteStartTimeEditorOpen] = useState(false);
   const [routeGroupClientError, setRouteGroupClientError] = useState(null);
   const [isRoutePolygonEditMode, setIsRoutePolygonEditMode] = useState(false);
+  const [isRouteGroupSwitchOpen, setIsRouteGroupSwitchOpen] = useState(false);
   const [routeTimelineOrderByRouteId, setRouteTimelineOrderByRouteId] = useState({});
   const [clientRouteRows, setClientRouteRows] = useState([]);
   const [routePreviewByKey, setRoutePreviewByKey] = useState({});
@@ -2105,40 +2266,59 @@ export default function RouteDetailPage() {
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
-  const currentRouteLineId = effectiveRoutePlan?.id ?? "current-route";
+  const currentRouteLineId = effectiveRoutePlan?.id ?? null;
+  const currentRouteRowsSource = isRouteGroupDetail || !currentRouteLineId
+    ? []
+    : [
+      {
+        attemptedCount: routeAttemptedCount,
+        branchId: null,
+        color: routeLineColor,
+        createdLabel: routeCreatedLabel,
+        deliveredCount: routeDeliveredCount,
+        driverLabel: routeDriverSummary,
+        driveTimeLabel: routeTotalDriveTime,
+        id: currentRouteLineId,
+        isCurrent: true,
+        optimized: routeMetrics ? { metrics: routeMetrics, routeGeometry, routeStopPoints } : null,
+        orderIds: orderedRouteStops.map((stop) => stop.orderId).filter(Boolean),
+        routeKey: "root",
+        routePlanId: textOrUndefined(effectiveRoutePlan?.id) ?? null,
+        startTimeValue: routeStartDateTimeValue,
+        stops: orderedRouteStops,
+        stopsCount: orderedRouteStops.length,
+        title: routeCandidateTitle,
+        totalDistanceLabel: routeTotalDistance,
+        totalItems: routeTotalItems,
+        totalWeightLabel: routeTotalWeight,
+        vehicleLabel: routeVehicleLabel,
+      },
+    ];
+  const groupRouteRowsSource = isRouteGroupDetail
+    ? (routeBranchRows.length > 0 ? routeBranchRows : routeGroupChildRows)
+    : routeBranchRows;
   const editedRouteRows = [
-    {
-      attemptedCount: routeAttemptedCount,
-      branchId: null,
-      color: routeLineColor,
-      createdLabel: routeCreatedLabel,
-      deliveredCount: routeDeliveredCount,
-      driverLabel: routeDriverSummary,
-      driveTimeLabel: routeTotalDriveTime,
-      id: currentRouteLineId,
-      isCurrent: true,
-      optimized: routeMetrics ? { metrics: routeMetrics, routeGeometry, routeStopPoints } : null,
-      orderIds: rootRouteStops.map((stop) => stop.orderId).filter(Boolean),
-      routeKey: "root",
-      routePlanId: textOrUndefined(effectiveRoutePlan?.id) ?? null,
-      stops: rootRouteStops,
-      stopsCount: rootRouteStops.length,
-      title: routeCandidateTitle,
-      totalDistanceLabel: routeTotalDistance,
-      totalItems: routeTotalItems,
-      totalWeightLabel: routeTotalWeight,
-      vehicleLabel: routeVehicleLabel,
-    },
-    ...routeBranchRows,
+    ...currentRouteRowsSource,
+    ...groupRouteRowsSource,
     ...clientRouteRows,
-  ].map((routeRow) => ({
-    ...routeRow,
-    color: routeLineEdits[routeRow.id]?.color ?? routeRow.color,
-    optimized: routePreviewByKey[getRouteRowDraftKey(routeRow)] ?? routeRow.optimized ?? null,
-    title: routeLineEdits[routeRow.id]?.title ?? routeRow.title,
-  }));
+  ].map((routeRow) => {
+    const startTimeValue = routeStartTimeByRouteId[routeRow.id] ?? routeRow.startTimeValue ?? routeStartDateTimeValue;
+    return {
+      ...routeRow,
+      color: routeLineEdits[routeRow.id]?.color ?? routeRow.color,
+      optimized: routePreviewByKey[getRouteRowDraftKey(routeRow)] ?? routeRow.optimized ?? null,
+      startTimeLabel: getRouteStartTimeLabel(startTimeValue),
+      startTimeValue,
+      title: routeLineEdits[routeRow.id]?.title ?? routeRow.title,
+    };
+  });
   const routeRows = ensureUniqueRouteRowColors(editedRouteRows);
   const timelineRouteRows = buildTimelineRows(routeRows, routeTimelineOrderByRouteId);
+  const routeGroupRouteLinks = useMemo(
+    () => buildRouteGroupRouteLinks(timelineRouteRows, childRouteDetails, routeGroup, effectiveRoutePlan?.id ?? null, routeDetailTitle, isRouteGroupDetail ? routeGroup?.id : null),
+    [childRouteDetails, effectiveRoutePlan?.id, isRouteGroupDetail, routeDetailTitle, routeGroup, timelineRouteRows],
+  );
+  const currentRouteRows = timelineRouteRows.filter((routeRow) => routeRow.isCurrent);
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || clientRouteRows.length > 0
@@ -2161,7 +2341,7 @@ export default function RouteDetailPage() {
       ...(stop.orderId ? [[stop.orderId, routeRow.color]] : []),
     ])
   ))), [timelineRouteRows]);
-  const routeMapStops = timelineRouteRows.flatMap((routeRow) =>
+  const routeMapStops = currentRouteRows.flatMap((routeRow) =>
     routeRow.stops.map((stop) => ({
       ...stop,
       isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
@@ -2169,8 +2349,8 @@ export default function RouteDetailPage() {
     })),
   );
   const routeGeometryRows = useMemo(
-    () => buildRouteGeometryRows(timelineRouteRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints),
-    [routeChildDetailsByOrders, routeGeometry, routeStopPoints, timelineRouteRows],
+    () => buildRouteGeometryRows(currentRouteRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints),
+    [currentRouteRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints],
   );
   const routeGeometryStopPoints = routeGeometryRows.flatMap((routeRow) => routeRow.routeStopPoints);
   const visibleErrors = [
@@ -2297,17 +2477,40 @@ export default function RouteDetailPage() {
       .map((routeRow) => normalizeRouteColor(routeRow.color))
       .filter(Boolean));
     const color = getUnusedRouteColor(routeLineDraftColor, usedColors, routeRows.findIndex((routeRow) => routeRow.id === activeRouteLineId));
-    if (activeRouteLineId === currentRouteLineId) {
+    if (currentRouteLineId && activeRouteLineId === currentRouteLineId) {
       setRouteCandidateTitle(title);
       setRouteLineColor(color);
     }
     if (activeRouteLineId) {
       setRouteLineEdits((currentEdits) => ({
         ...currentEdits,
-        [activeRouteLineId]: { color, title },
+        [activeRouteLineId]: {
+          ...(currentEdits[activeRouteLineId] ?? {}),
+          color,
+          title,
+        },
       }));
     }
     setIsRouteLineEditorOpen(false);
+  };
+
+  const handleOpenRouteStartTimeEditor = (routeRow) => {
+    const value = routeRow.startTimeValue || routeStartDateTimeValue;
+    const [date = "", time = "09:00"] = value.split("T");
+    setActiveStartTimeRouteId(routeRow.id);
+    setRouteStartDraftDate(date);
+    setRouteStartDraftTime(time.slice(0, 5));
+    setIsRouteStartTimeEditorOpen(true);
+  };
+
+  const handleSaveRouteStartTimeEditor = () => {
+    if (!activeStartTimeRouteId || !routeStartDraftDate) return;
+    const startTimeValue = `${routeStartDraftDate}T${routeStartDraftTime || "09:00"}`;
+    setRouteStartTimeByRouteId((currentStartTimes) => ({
+      ...currentStartTimes,
+      [activeStartTimeRouteId]: startTimeValue,
+    }));
+    setIsRouteStartTimeEditorOpen(false);
   };
 
   const setRouteTimelineStopRef = useCallback((stopId, node) => {
@@ -2460,6 +2663,7 @@ export default function RouteDetailPage() {
     setRouteTimelineOrderByRouteId({});
     setClientRouteRows([]);
     setRouteLineEdits({});
+    setRouteStartTimeByRouteId({});
     setRoutePreviewByKey({});
     setRouteGroupClientError(null);
   }, []);
@@ -2598,7 +2802,7 @@ export default function RouteDetailPage() {
         installPmtilesProtocol(maplibregl, Protocol);
         mapLibraryRef.current = maplibregl;
         const constructStartedAt = performance.now();
-        mapRef.current = new maplibregl.Map({
+        mapRef.current = createMapLibreMap(maplibregl, {
           attributionControl: { compact: true },
           center: routeMapCenterRef.current,
           container: mapContainerElement,
@@ -2741,7 +2945,6 @@ export default function RouteDetailPage() {
     routeLineColor,
     routeStopColorById,
     routePathColor,
-    timelineRouteRows,
     savedRouteGeometryRows,
     savedRouteStopPoints,
   ]);
@@ -2926,6 +3129,49 @@ export default function RouteDetailPage() {
               </span>
               <span>Back to routes</span>
             </button>
+            {routeGroupRouteLinks.length > 0 ? (
+              <div style={routeGroupSwitchStyle}>
+                <button
+                  aria-expanded={isRouteGroupSwitchOpen}
+                  aria-haspopup="menu"
+                  onClick={() => setIsRouteGroupSwitchOpen((isOpen) => !isOpen)}
+                  style={routeGroupSwitchButtonStyle}
+                  type="button"
+                >
+                  Switch route
+                </button>
+                {isRouteGroupSwitchOpen ? (
+                  <div role="menu" style={routeGroupSwitchMenuStyle}>
+                    {routeGroupRouteLinks.map((routeLink) => (
+                      routeLink.isCurrent ? (
+                        <button
+                          aria-current="page"
+                          disabled
+                          key={routeLink.id}
+                          role="menuitem"
+                          style={routeGroupSwitchCurrentItemStyle}
+                          type="button"
+                        >
+                          <span style={routeGroupSwitchLabelStyle}>{routeLink.label}</span>
+                          <span style={routeGroupSwitchCurrentBadgeStyle}>Current</span>
+                        </button>
+                      ) : (
+                        <Link
+                          key={routeLink.id}
+                          onClick={() => setIsRouteGroupSwitchOpen(false)}
+                          prefetch="intent"
+                          role="menuitem"
+                          style={routeGroupSwitchItemStyle}
+                          to={`${routeLink.href}${routeSessionSearch}`}
+                        >
+                          <span style={routeGroupSwitchLabelStyle}>{routeLink.label}</span>
+                        </Link>
+                      )
+                    ))}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
           </div>
 
           <div className="route-overview-main">
@@ -3110,8 +3356,8 @@ export default function RouteDetailPage() {
                       </button>
                     </td>
                     <td style={routesDetailCellStyle}>
-                      <button aria-label="Change route start time" style={routeEditableValueStyle} type="button">
-                        <span style={routeEditableValueTextStyle}>{routeStartTimeLabel}</span>
+                      <button aria-label="Change route start time" onClick={() => handleOpenRouteStartTimeEditor(routeRow)} style={routeEditableValueStyle} type="button">
+                        <span style={routeEditableValueTextStyle}>{routeRow.startTimeLabel}</span>
                         {renderRouteEditableChevron()}
                       </button>
                     </td>
@@ -3180,6 +3426,45 @@ export default function RouteDetailPage() {
             </div>
           </section>
         </section>
+
+
+        {isRouteStartTimeEditorOpen ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Close start time editor"
+              onClick={() => setIsRouteStartTimeEditorOpen(false)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div aria-label="Edit route start time" role="dialog" style={routeLineEditorDialogStyle}>
+              <h2 style={routeLineEditorTitleStyle}>Start time</h2>
+              <div style={routeLineEditorFieldStyle}>
+                <label htmlFor="route-start-date" style={routeLineEditorLabelStyle}>Date</label>
+                <input
+                  id="route-start-date"
+                  onChange={(event) => setRouteStartDraftDate(event.target.value)}
+                  style={routeLineEditorInputStyle}
+                  type="date"
+                  value={routeStartDraftDate}
+                />
+              </div>
+              <div style={routeLineEditorFieldStyle}>
+                <label htmlFor="route-start-time" style={routeLineEditorLabelStyle}>Time</label>
+                <input
+                  id="route-start-time"
+                  onChange={(event) => setRouteStartDraftTime(event.target.value)}
+                  style={routeLineEditorInputStyle}
+                  type="time"
+                  value={routeStartDraftTime}
+                />
+              </div>
+              <div style={routeLineEditorActionsStyle}>
+                <button onClick={() => setIsRouteStartTimeEditorOpen(false)} style={routeActionButtonStyle} type="button">Cancel</button>
+                <button onClick={handleSaveRouteStartTimeEditor} style={routeLineEditorPrimaryButtonStyle} type="button">Save</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {isRouteLineEditorOpen ? (
           <div style={routeLineEditorOverlayStyle}>
