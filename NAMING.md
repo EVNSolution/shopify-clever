@@ -4,16 +4,16 @@ This document is the source of truth for CLEVER Shopify app naming. Shopify uses
 
 ## Current identities
 
-| Category | Production | Dev / Custom-store | What it means |
-| --- | --- | --- | --- |
-| Brand / merchant-facing name | `CLEVER` | `CleverRoute Dev` | The name merchants should recognize in Shopify surfaces. |
-| Shopify app config `name` | `CLEVER` | `CleverRoute Dev` | The name in `shopify.app.toml` / `shopify.app.dev.toml` released by Shopify CLI. |
-| Shopify app `handle` | `clever-route` | `clever-route-dev` | Unique Shopify Admin URL slug. Handles are globally constrained and can be rejected if already taken. |
-| Shopify Admin app path | `/apps/clever-route/...` | `/apps/clever-route-dev/...` | The path visible inside `admin.shopify.com` when opening the embedded app. |
-| Hosted app URL | `https://clever-admin.cleversystem.ai` | `https://clever-route-app.cleversystem.ai` | The web app host Shopify loads in the embedded app iframe. |
-| Delivery API URL | `https://clever-route.cleversystem.ai` | `https://clever-route.cleversystem.ai` | The delivery backend paired with each app runtime. |
-| Shopify config file | `apps/shopify-app/shopify.app.toml` | `apps/shopify-app/shopify.app.dev.toml` | Local CLI configuration file. |
-| Runtime distribution | `app_store` | `single_merchant` | Runtime value for `SHOPIFY_APP_DISTRIBUTION`. |
+| Category | Production | Dev / Custom-store | KFood Custom-store | What it means |
+| --- | --- | --- | --- | --- |
+| Brand / merchant-facing name | `CLEVER` | `CleverRoute Dev` | `CLEVER K-Food` | The name merchants should recognize in Shopify surfaces. |
+| Shopify app config `name` | `CLEVER` | `CleverRoute Dev` | `CLEVER K-Food` | The name in Shopify app TOML files released by Shopify CLI. |
+| Shopify app `handle` | `clever-route` | `clever-route-dev` | `clever-route-kfood` | Unique Shopify Admin URL slug. Handles are globally constrained and can be rejected if already taken. |
+| Shopify Admin app path | `/apps/clever-route/...` | `/apps/clever-route-dev/...` | `/apps/clever-route-kfood/...` | The path visible inside `admin.shopify.com` when opening the embedded app. |
+| Hosted app URL | `https://clever-admin.cleversystem.ai` | `https://clever-route-app.cleversystem.ai` | `https://clever-kfood-app.cleversystem.ai` | The web app host Shopify loads in the embedded app iframe. |
+| Delivery API URL | `https://clever-route.cleversystem.ai` | `https://clever-route.cleversystem.ai` | `https://clever-route.cleversystem.ai` | The delivery backend paired with each app runtime. |
+| Shopify config file | `apps/shopify-app/shopify.app.toml` | `apps/shopify-app/shopify.app.dev.toml` | `apps/shopify-app/shopify.app.kfood.toml` | Local CLI configuration file. |
+| Runtime distribution | `app_store` | `single_merchant` | `single_merchant` | Runtime value for `SHOPIFY_APP_DISTRIBUTION`. |
 
 ## Plain-English rule
 
@@ -21,6 +21,7 @@ This document is the source of truth for CLEVER Shopify app naming. Shopify uses
 - `clever-route` is the production Shopify URL handle.
 - `clever-admin...` is our hosted production app URL.
 - `CleverRoute Dev` / `clever-route-dev` are only for the dev/custom-store app.
+- `CLEVER K-Food` / `clever-route-kfood` are only for the KFood custom-store app.
 
 In other words, this is intentional:
 
@@ -97,6 +98,13 @@ cd apps/shopify-app
 npm run deploy:dev -- --allow-updates --message "<release message>"
 ```
 
+- KFood Shopify app config release should also be explicit:
+
+```bash
+cd apps/shopify-app
+npm run deploy:kfood -- --allow-updates --message "<release message>"
+```
+
 - Do not run `shopify app dev --reset`, `shopify app config link`, `shopify app config use`, or Dashboard mutations unless the release target is clear.
 
 ## Last known Shopify config releases
@@ -104,3 +112,4 @@ npm run deploy:dev -- --allow-updates --message "<release message>"
 - Dev/custom handle split release: `clever-route-dev-3`
 - Production fallback handle release: `clever-route-7`
 - Production display-name release to `CLEVER`: `clever-route-8`
+- KFood initial config release: pending

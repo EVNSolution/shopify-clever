@@ -13,8 +13,10 @@ const devEnvExample = readFileSync(
   join(root, "../../infra/env/shopify-app-clever-route.env.example"),
   "utf8",
 );
+const kfoodEnvExample = readFileSync(join(root, "../../infra/env/shopify-app-kfood.env.example"), "utf8");
 const publicShopifyAppConfig = readFileSync(join(root, "shopify.app.toml"), "utf8");
 const devShopifyAppConfig = readFileSync(join(root, "shopify.app.dev.toml"), "utf8");
+const kfoodShopifyAppConfig = readFileSync(join(root, "shopify.app.kfood.toml"), "utf8");
 
 function readTomlString(source, key) {
   const match = source.match(new RegExp(`^${key} = "([^"]+)"$`, "m"));
@@ -43,12 +45,14 @@ test("shopify.server uses env-selected distribution instead of a hard-coded runt
   assert.doesNotMatch(shopifyServerSource, /distribution:\s*AppDistribution\.SingleMerchant/);
 });
 
-test("public and dev/custom-store env examples declare their intended distributions", () => {
+test("public, dev/custom-store, and KFood env examples declare their intended distributions", () => {
   assert.match(publicEnvExample, /^SHOPIFY_APP_DISTRIBUTION=app_store$/m);
   assert.match(devEnvExample, /^SHOPIFY_APP_DISTRIBUTION=single_merchant$/m);
+  assert.match(kfoodEnvExample, /^SHOPIFY_APP_DISTRIBUTION=single_merchant$/m);
+  assert.match(kfoodEnvExample, /^CLEVER_APP_ID=clever-route-kfood$/m);
 });
 
-test("Shopify app configs have explicit distinct production and dev identities", () => {
+test("Shopify app configs have explicit distinct production, dev, and KFood identities", () => {
   assert.equal(readTomlString(publicShopifyAppConfig, "client_id"), "6994f8bd771cebdac03a800f20e1de86");
   assert.equal(readTomlString(publicShopifyAppConfig, "name"), "CLEVER");
   assert.equal(readTomlString(publicShopifyAppConfig, "handle"), "clever-route");
@@ -65,6 +69,14 @@ test("Shopify app configs have explicit distinct production and dev identities",
     "https://clever-route-app.cleversystem.ai",
   );
 
+  assert.equal(readTomlString(kfoodShopifyAppConfig, "client_id"), "5f7c07b713690e947b48c0f00bb36c72");
+  assert.equal(readTomlString(kfoodShopifyAppConfig, "name"), "CLEVER K-Food");
+  assert.equal(readTomlString(kfoodShopifyAppConfig, "handle"), "clever-route-kfood");
+  assert.equal(
+    readTomlString(kfoodShopifyAppConfig, "application_url"),
+    "https://clever-kfood-app.cleversystem.ai",
+  );
+
   assert.notEqual(
     readTomlString(publicShopifyAppConfig, "client_id"),
     readTomlString(devShopifyAppConfig, "client_id"),
@@ -73,12 +85,17 @@ test("Shopify app configs have explicit distinct production and dev identities",
     readTomlString(publicShopifyAppConfig, "handle"),
     readTomlString(devShopifyAppConfig, "handle"),
   );
+  assert.notEqual(
+    readTomlString(kfoodShopifyAppConfig, "handle"),
+    readTomlString(devShopifyAppConfig, "handle"),
+  );
 });
 
 test("Shopify app URLs stay domain-rooted with only auth callback redirect URLs", () => {
   [
     publicShopifyAppConfig,
     devShopifyAppConfig,
+    kfoodShopifyAppConfig,
   ].forEach((configSource) => {
     assert.match(configSource, /^embedded = true$/m);
     assert.match(configSource, /^application_url = "https:\/\/[^/"]+"$/m);
@@ -93,10 +110,13 @@ test("Shopify CLI scripts select explicit dev and production app configs", () =>
   assert.equal(packageJson.scripts.deploy, "npm run deploy:prod");
   assert.equal(packageJson.scripts["deploy:prod"], "shopify app deploy -c shopify.app.toml");
   assert.equal(packageJson.scripts["deploy:dev"], "shopify app deploy -c dev");
+  assert.equal(packageJson.scripts["deploy:kfood"], "shopify app deploy -c shopify.app.kfood.toml");
   assert.equal(packageJson.scripts["config:validate:prod"], "shopify app config validate -c shopify.app.toml");
   assert.equal(packageJson.scripts["config:validate:dev"], "shopify app config validate -c dev");
-  assert.match(packageJson.scripts["config:link"], /config:link:prod or npm run config:link:dev/);
+  assert.equal(packageJson.scripts["config:validate:kfood"], "shopify app config validate -c shopify.app.kfood.toml");
+  assert.match(packageJson.scripts["config:link"], /config:link:prod, npm run config:link:dev, or npm run config:link:kfood/);
   assert.equal(packageJson.scripts["config:link:prod"], "shopify app config link -c shopify.app.toml");
   assert.equal(packageJson.scripts["config:link:dev"], "shopify app config link -c dev");
+  assert.equal(packageJson.scripts["config:link:kfood"], "shopify app config link -c shopify.app.kfood.toml");
   assert.notEqual(packageJson.scripts.deploy, "shopify app deploy");
 });

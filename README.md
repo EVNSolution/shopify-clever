@@ -7,7 +7,7 @@ Shopify embedded admin app for CLEVER. The delivery backend now lives in the sep
 - `apps/shopify-app` — React Router Shopify embedded app.
 
 The Shopify app calls the operating delivery API through `CLEVER_DELIVERY_API_URL`.
-On EC2 compose, both Shopify app containers join the external route-server Docker network and call `http://delivery-api:3000`.
+On EC2 compose, Shopify app containers join the external route-server Docker network and call `http://delivery-api:3000`.
 
 ## Public and dev endpoints
 
@@ -24,6 +24,13 @@ Dev preview/runtime:
 - Redirect URL: `https://clever-route-app.cleversystem.ai/auth/callback`
 - Delivery API: `https://clever-route.cleversystem.ai`
 - App scope: `CLEVER_APP_ID=clever-route-dev`
+
+KFood custom/runtime:
+
+- App URL: `https://clever-kfood-app.cleversystem.ai`
+- Redirect URL: `https://clever-kfood-app.cleversystem.ai/auth/callback`
+- Delivery API: `https://clever-route.cleversystem.ai`
+- App scope: `CLEVER_APP_ID=clever-route-kfood`
 
 Public URL hostnames must not contain `shopify` or `example`.
 
@@ -42,29 +49,32 @@ Compose validation:
 ```bash
 docker compose -f infra/compose/docker-compose.shopify-main.yml config --quiet
 docker compose -f infra/compose/docker-compose.shopify-dev.yml config --quiet
+docker compose -f infra/compose/docker-compose.shopify-kfood.yml config --quiet
 ```
 
 ## Runtime identities
 
 See [`NAMING.md`](NAMING.md) for the canonical distinction between brand/display name, Shopify handle, Admin path, and hosted app URLs.
 
-The repo contains two Shopify app config files:
+The repo contains three Shopify app config files:
 
 - `apps/shopify-app/shopify.app.toml` — production/public app config (`CLEVER`, handle `clever-route`).
 - `apps/shopify-app/shopify.app.dev.toml` — dev/custom-store app config (`CleverRoute Dev`, handle `clever-route-dev`).
+- `apps/shopify-app/shopify.app.kfood.toml` — KFood custom-store app config (`CLEVER K-Food`, handle `clever-route-kfood`).
 
 Use explicit Shopify CLI config selection:
 
 - `npm --prefix apps/shopify-app run dev` → `shopify app dev -c dev`
 - `npm --prefix apps/shopify-app run deploy:prod` → production config
 - `npm --prefix apps/shopify-app run deploy:dev` → dev/custom config
+- `npm --prefix apps/shopify-app run deploy:kfood` → KFood custom config
 
 Do not run Shopify Dashboard mutations, `shopify app deploy`, `shopify app config link/use`, or `shopify app dev --reset` against a live app without an explicit release decision.
 
 The runtime distribution is selected with `SHOPIFY_APP_DISTRIBUTION`:
 
 - `app_store` for the public runtime.
-- `single_merchant` for the dev/custom runtime.
+- `single_merchant` for the dev/custom and KFood custom runtimes.
 
 ## GitHub Actions strategy
 
@@ -73,6 +83,7 @@ The repository is intended to stay private under the `EVNSolution` GitHub Free o
 - PR and `main` pushes run lightweight CI: install, build, typecheck, tests, public URL hostname guard, Shopify submission readiness, and compose config validation.
 - Production deploy is manual only: run the `CI/CD` workflow on `main` with `deploy_production=true`.
 - Dev app deploy is manual only: run the same workflow on `main` with `deploy_clever_route=true`.
+- KFood app deploy is manual only: run the same workflow on `main` with `deploy_kfood=true`.
 - Production image builds happen on the EC2 host during deploy instead of on a GitHub-hosted runner.
 
 ## EC2 deployment
@@ -81,11 +92,13 @@ Shopify app containers run on the existing route server EC2 and attach to the ro
 
 - `docker-compose.shopify-main.yml` → `shopify-clever-main-shopify-app-1`
 - `docker-compose.shopify-dev.yml` → `shopify-clever-dev-shopify-app-clever-route-1`
+- `docker-compose.shopify-kfood.yml` → `shopify-clever-kfood-shopify-app-kfood-1`
 
 Runtime env files are intentionally not committed:
 
 - `infra/env/shopify-app.env`
 - `infra/env/shopify-app-clever-route.env`
+- `infra/env/shopify-app-kfood.env`
 
 Required GitHub repository variables for deployment:
 

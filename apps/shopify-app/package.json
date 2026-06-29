@@ -5,7 +5,7 @@
     "test": "node --test tests/*.test.mjs app/features/orders/order-filters.test.js",
     "build": "react-router build",
     "dev": "shopify app dev -c dev",
-    "config:link": "echo \"Use npm run config:link:prod or npm run config:link:dev\" && exit 1",
+    "config:link": "echo \"Use npm run config:link:prod, npm run config:link:dev, or npm run config:link:kfood\" && exit 1",
     "generate": "shopify app generate",
     "deploy": "npm run deploy:prod",
     "env": "shopify app env",
@@ -26,7 +26,11 @@
     "config:use:dev": "shopify app config use dev",
     "config:use:prod": "shopify app config use shopify.app.toml",
     "config:link:prod": "shopify app config link -c shopify.app.toml",
-    "config:link:dev": "shopify app config link -c dev"
+    "config:link:dev": "shopify app config link -c dev",
+    "config:validate:kfood": "shopify app config validate -c shopify.app.kfood.toml",
+    "deploy:kfood": "shopify app deploy -c shopify.app.kfood.toml",
+    "config:use:kfood": "shopify app config use shopify.app.kfood.toml",
+    "config:link:kfood": "shopify app config link -c shopify.app.kfood.toml"
   },
   "type": "module",
   "engines": {

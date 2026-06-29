@@ -30,6 +30,11 @@ on:
         required: true
         default: false
         type: boolean
+      deploy_kfood:
+        description: "Deploy the CLEVER K-Food Shopify app container"
+        required: true
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -75,11 +80,13 @@ jobs:
         run: |
           cp infra/env/shopify-app.env.example infra/env/shopify-app.env
           cp infra/env/shopify-app-clever-route.env.example infra/env/shopify-app-clever-route.env
+          cp infra/env/shopify-app-kfood.env.example infra/env/shopify-app-kfood.env
 
       - name: Validate Shopify app compose files
         run: |
           docker compose -f infra/compose/docker-compose.shopify-main.yml config --quiet
           docker compose -f infra/compose/docker-compose.shopify-dev.yml config --quiet
+          docker compose -f infra/compose/docker-compose.shopify-kfood.yml config --quiet
 
   deploy-production:
     name: Deploy CLEVER Shopify app to EC2
@@ -152,3 +159,40 @@ jobs:
           sqlite-path: /srv/shopify-clever-dev/data/shopify/dev.sqlite
           env-file: infra/env/shopify-app-clever-route.env
           smoke-url: https://clever-route-app.cleversystem.ai/auth/login
+
+
+  deploy-kfood:
+    name: Deploy CLEVER K-Food Shopify app to EC2
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_kfood == true && github.ref == 'refs/heads/main' }}
+    concurrency:
+      group: shopify-clever-ec2-deploy
+      cancel-in-progress: false
+
+    env:
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      EC2_SSH_SECURITY_GROUP_ID: ${{ vars.EC2_SSH_SECURITY_GROUP_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - uses: actions/checkout@v6.0.2
+      - uses: ./.github/actions/ec2-shopify-deploy
+        with:
+          ec2-host: ${{ env.EC2_HOST }}
+          ec2-user: ${{ env.EC2_USER }}
+          deploy-path: ${{ env.DEPLOY_PATH }}
+          ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
+          security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
+          compose-file: infra/compose/docker-compose.shopify-kfood.yml
+          service: shopify-app-kfood
+          sqlite-path: /srv/shopify-clever-kfood/data/shopify/dev.sqlite
+          env-file: infra/env/shopify-app-kfood.env
+          smoke-url: https://clever-kfood-app.cleversystem.ai/auth/login

@@ -1,0 +1,29 @@
+name: shopify-clever-kfood
+
+services:
+  shopify-app-kfood:
+    build:
+      context: ../../apps/shopify-app
+      dockerfile: Dockerfile
+    image: shopify-clever-kfood-shopify-app:local
+    env_file:
+      - ../env/shopify-app-kfood.env
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      SHOPIFY_APP_DISTRIBUTION: single_merchant
+      SHOPIFY_APP_URL: https://clever-kfood-app.cleversystem.ai
+      CLEVER_DELIVERY_API_URL: http://delivery-api:3000
+      CLEVER_APP_ID: clever-route-kfood
+      GEOCODING_SEARCH_URL: https://nominatim.openstreetmap.org/search
+      CLEVER_DRIVER_DOWNLOAD_URL: https://clever.delivery/driver/download
+    restart: unless-stopped
+    volumes:
+      - /srv/shopify-clever-kfood/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
+    networks:
+      - route-server
+
+networks:
+  route-server:
+    external: true
+    name: ${ROUTE_SERVER_NETWORK:-clever-route_default}
