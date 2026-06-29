@@ -350,10 +350,10 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /const routeMapStops = routeMapRows\.flatMap/);
   assert.match(routeDetailSource, /buildRouteGeometryRows\(routeGeometrySourceRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints\)/);
   assert.match(routeDetailSource, /const savedRouteGeometryRows = routeGeometryRows/);
-  assert.match(routeDetailSource, /const savedRouteStopPoints = routeGeometryStopPoints/);
+  assert.match(routeDetailSource, /const savedRouteMarkerStopPoints = routeMarkerStopPoints/);
   assert.match(routeDetailSource, /const routePathColor = softenRouteColor\(routeLineColor\)/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
-  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
+  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteMarkerStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan\)/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
   assert.doesNotMatch(routeDetailSource, /parseRouteDetailDraft/);
@@ -532,7 +532,7 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /map\.addLayer\(\{/);
   assert.match(routeDetailSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
-  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
+  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteMarkerStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
   assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Inventory|Start free trial/);
 });
 
@@ -545,12 +545,12 @@ test("Route detail does not let route-line style readiness block marker renderin
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
   assert.match(
     routeDetailSource,
-    /const routeDetailMarkers = createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\);/,
+    /const routeDetailMarkers = createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+departureLocation,\s+routeMapStops,\s+savedRouteMarkerStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\);/,
   );
   assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.map\.sync"/);
   assert.doesNotMatch(
     routeDetailSource,
-    /syncRouteDetailRouteLine\(map, savedRouteGeometry, routePathColor\)\s+&&\s+syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteStopPoints\)/,
+    /syncRouteDetailRouteLine\(map, savedRouteGeometry, routePathColor\)\s+&&\s+syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteMarkerStopPoints\)/,
   );
   assert.doesNotMatch(routeDetailSource, /if \(!didSyncRouteLine\) return|return;\s+if \(departureLocation\?\.hasCoordinates\)/);
   assert.match(routeDetailSource, /const handleRouteDetailStyleData = \(\) => \{/);
@@ -757,7 +757,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /function buildRouteGroupStops\(routeGroup, childRouteDetails, currentRouteStops\) \{/);
   assert.match(routeDetailSource, /\.\.\.buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
   assert.match(routeDetailSource, /const allRouteGroupStops = useMemo/);
-  assert.match(routeDetailSource, /buildRouteBranchRows\(routeGroup, allRouteGroupStops, routeChildDetailsByOrders\)/);
+  assert.match(routeDetailSource, /const routeGroupStopsSource = isRouteGroupDetail \? orderedRouteStops : allRouteGroupStops/);
+  assert.match(routeDetailSource, /buildRouteBranchRows\(routeGroup, routeGroupStopsSource, routeChildDetailsByOrders\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
   assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\], childRouteDetailsByOrders = new Map\(\)\) \{/);
   assert.match(routeDetailSource, /readRouteOptimizedSnapshot\(branch\.optimized\)/);
@@ -868,7 +869,10 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routeDetailSource, /const currentRouteRowsSource = isRouteGroupDetail \|\| !currentRouteLineId[\s\S]*\? \[\]/);
   assert.match(routeDetailSource, /const routeMapRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
   assert.match(routeDetailSource, /const routeMapStops = routeMapRows\.flatMap/);
+  assert.match(routeDetailSource, /const routeGroupStopsSource = isRouteGroupDetail \? orderedRouteStops : allRouteGroupStops/);
   assert.match(routeDetailSource, /const routeGeometrySourceRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
+  assert.match(routeDetailSource, /const routeMarkerStopPoints = isRouteGroupDetail \? \[\] : routeGeometryStopPoints/);
+  assert.match(routeDetailSource, /savedRouteMarkerStopPoints/);
 });
 
 test("Route detail page provides page navigation back to the route list", () => {

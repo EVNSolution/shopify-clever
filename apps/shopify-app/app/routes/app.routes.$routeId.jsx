@@ -2191,16 +2191,18 @@ export default function RouteDetailPage() {
     ? routeDriverOptions.find((driverOption) => driverOption.id === routeDriverId)?.label ?? "Assigned"
     : "Unassigned";
   const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
+  const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null;
   const routeChildDetailsByOrders = useMemo(() => mapRouteChildDetailsByOrders(childRouteDetails), [childRouteDetails]);
   const allRouteGroupStops = useMemo(
     () => buildRouteGroupStops(routeGroup, childRouteDetails, orderedRouteStops),
     [childRouteDetails, orderedRouteStops, routeGroup],
   );
-  const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, allRouteGroupStops, routeChildDetailsByOrders), [allRouteGroupStops, routeChildDetailsByOrders, routeGroup]);
+  const routeGroupStopsSource = isRouteGroupDetail ? orderedRouteStops : allRouteGroupStops;
+  const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, routeGroupStopsSource, routeChildDetailsByOrders), [routeGroupStopsSource, routeChildDetailsByOrders, routeGroup]);
   const branchOrderIds = useMemo(() => new Set(routeBranchRows.flatMap((routeRow) => routeRow.orderIds)), [routeBranchRows]);
   const rootRouteStops = useMemo(
-    () => allRouteGroupStops.filter((stop) => !branchOrderIds.has(stop.orderId)),
-    [allRouteGroupStops, branchOrderIds],
+    () => routeGroupStopsSource.filter((stop) => !branchOrderIds.has(stop.orderId)),
+    [routeGroupStopsSource, branchOrderIds],
   );
   const routeGroupChildRows = useMemo(() => buildRouteGroupChildRows(routeGroup, childRouteDetails), [childRouteDetails, routeGroup]);
   const routeDepartureStatus = getRouteDepartureStatus(effectiveRoutePlan);
@@ -2215,7 +2217,6 @@ export default function RouteDetailPage() {
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
-  const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null;
   const currentRouteGroupChild = useMemo(() => {
     const routePlanId = textOrUndefined(effectiveRoutePlan?.id);
     return (routeGroup?.children ?? []).find((child) => textOrUndefined(child.routePlanId) === routePlanId) ?? null;
@@ -2390,6 +2391,7 @@ export default function RouteDetailPage() {
     [routeGeometrySourceRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints],
   );
   const routeGeometryStopPoints = routeGeometryRows.flatMap((routeRow) => routeRow.routeStopPoints);
+  const routeMarkerStopPoints = isRouteGroupDetail ? [] : routeGeometryStopPoints;
   const visibleErrors = [
     ...(routeGroupClientError ? [{ message: routeGroupClientError }] : []),
     ...(routeActionFetcher.data?.errors ?? []),
@@ -2397,7 +2399,7 @@ export default function RouteDetailPage() {
   ];
   const routePathColor = softenRouteColor(routeLineColor);
   const savedRouteGeometryRows = routeGeometryRows;
-  const savedRouteStopPoints = routeGeometryStopPoints;
+  const savedRouteMarkerStopPoints = routeMarkerStopPoints;
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
 
@@ -2938,7 +2940,7 @@ export default function RouteDetailPage() {
         maplibregl,
         departureLocation,
         routeMapStops,
-        savedRouteStopPoints,
+        savedRouteMarkerStopPoints,
         routeLineColor,
         routeStopColorById,
       );
@@ -2954,7 +2956,7 @@ export default function RouteDetailPage() {
         markerRemoveMs,
         markerCount: routeDetailMarkers.length,
         stopCount: routeMapStops.length,
-        stopPointCount: savedRouteStopPoints.length,
+        stopPointCount: savedRouteMarkerStopPoints.length,
         hasRouteGeometry: savedRouteGeometryRows.some((routeRow) => Boolean(routeRow.routeGeometry)),
       });
     };
@@ -2983,7 +2985,7 @@ export default function RouteDetailPage() {
     routeStopColorById,
     routePathColor,
     savedRouteGeometryRows,
-    savedRouteStopPoints,
+    savedRouteMarkerStopPoints,
   ]);
 
 
