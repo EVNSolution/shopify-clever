@@ -599,10 +599,12 @@ test("Route detail places centered DOM stop markers and the departure marker on 
   assert.match(mapMarkersSource, /departure-map-marker__icon/);
   assert.match(mapMarkersSource, /markerPinElement\.append\(createDepartureMarkerIconElement\(\)\)/);
   assert.doesNotMatch(routeDetailSource, /markerPinElement\.textContent = "Start"/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: createDepartureMarkerElement\(departureLocation\),\s+\}\)/);
+  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: createDepartureMarkerElement\(departureLocation\),\s+offset: ROUTE_DEPARTURE_MARKER_OFFSET,\s+\}\)/);
   assert.match(routeDetailSource, /function createRouteStopMarkerElement\(stop, routeColor\) \{/);
   assert.match(routeDetailSource, /markerElement\.className = "order-map-marker order-map-marker--planned"/);
   assert.match(routeDetailSource, /markerElement\.style\.setProperty\("--marker-color", routeColor\)/);
+  assert.match(routeDetailSource, /const ROUTE_DEPARTURE_MARKER_OFFSET = \[0, 3\]/);
+  assert.match(routeDetailSource, /const ROUTE_STOP_MARKER_OFFSET = \[0, 1\]/);
   assert.match(globalCssSource, /--marker-border-width: 2px/);
   assert.match(globalCssSource, /paint-order: fill stroke/);
   assert.match(globalCssSource, /vector-effect: non-scaling-stroke/);
@@ -614,7 +616,7 @@ test("Route detail places centered DOM stop markers and the departure marker on 
   assert.match(routeDetailSource, /pathElement\.setAttribute\("d", MAP_PIN_PATH\)/);
   assert.match(routeDetailSource, /labelElement\.className = "order-map-marker__label"/);
   assert.match(routeDetailSource, /labelElement\.textContent = String\(stop\.stop\)/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: markerElement,\s+\}\)/);
+  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: markerElement,\s+offset: ROUTE_STOP_MARKER_OFFSET,\s+\}\)/);
   assert.doesNotMatch(globalCssSource, /\.route-detail-stop-marker/);
   assert.match(routeDetailSource, /markerElement\.addEventListener\("dblclick", handleStopMarkerDoubleClick\)/);
   assert.match(routeDetailSource, /event\.preventDefault\?\.\(\)/);
@@ -695,7 +697,7 @@ test("Route detail renders every stop as a route-colored teardrop marker without
   assert.match(routeDetailSource, /function getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\) \{/);
   assert.match(routeDetailSource, /markerElement\.setAttribute\("aria-label", `Stop \$\{stop\.stop\}: \$\{stop\.order\}`\)/);
   assert.match(routeDetailSource, /labelElement\.textContent = String\(stop\.stop\)/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: markerElement,\s+\}\)/);
+  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: markerElement,\s+offset: ROUTE_STOP_MARKER_OFFSET,\s+\}\)/);
   assert.doesNotMatch(routeDetailSource, /expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|route-stop-precision-point|Show stop|Show \$\{group\.stops\.length\} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS/);
 });
 

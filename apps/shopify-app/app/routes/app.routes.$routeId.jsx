@@ -37,6 +37,8 @@ const ROUTE_EMPTY_LABEL = "-";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 const ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM = 7;
 const ROUTE_POLYGON_CLICK_DELAY_MS = 220;
+const ROUTE_DEPARTURE_MARKER_OFFSET = [0, 3];
+const ROUTE_STOP_MARKER_OFFSET = [0, 1];
 const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
 
@@ -1752,6 +1754,7 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
     const startMarker = new maplibregl.Marker({
       anchor: "bottom",
       element: createDepartureMarkerElement(departureLocation),
+      offset: ROUTE_DEPARTURE_MARKER_OFFSET,
     })
       .setLngLat(departureLocation.coordinates)
       .addTo(map);
@@ -1781,6 +1784,7 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
     const stopMarker = new maplibregl.Marker({
       anchor: "bottom",
       element: markerElement,
+      offset: ROUTE_STOP_MARKER_OFFSET,
     })
       .setLngLat(markerCoordinates)
       .addTo(map);
