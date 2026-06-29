@@ -606,9 +606,11 @@ test("Route detail renders route stop pins through a MapLibre source layer and t
   assert.match(routeDetailSource, /createMapPinImageData\(routeColor, \{/);
   assert.match(routeDetailSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID/);
   assert.match(routeDetailSource, /id: ROUTE_DETAIL_STOPS_LAYER_ID/);
-  assert.match(routeDetailSource, /type: "symbol"/);
-  assert.match(routeDetailSource, /"icon-anchor": "bottom"/);
-  assert.match(routeDetailSource, /"icon-image": \["get", "pinImage"\]/);
+  assert.match(mapMarkersSource, /type: "symbol"/);
+  assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
+  assert.match(mapMarkersSource, /"icon-image": iconImage/);
+  assert.match(routeDetailSource, /createMapPinSymbolLayer\(\{\s+id: ROUTE_DETAIL_STOPS_LAYER_ID,\s+minzoom: ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM,\s+source: ROUTE_DETAIL_STOPS_SOURCE_ID,\s+\}\)/);
+  assert.doesNotMatch(routeDetailSource, /"icon-size"|const ROUTE_DETAIL_STOP_PIN_ICON_SIZE/);
   assert.match(routeDetailSource, /map\.queryRenderedFeatures\(event\.point, \{ layers: \[ROUTE_DETAIL_STOPS_LAYER_ID\] \}\)/);
   assert.match(routeDetailSource, /event\.preventDefault\?\.\(\)/);
   assert.match(routeDetailSource, /event\.originalEvent\?\.preventDefault\?\.\(\)/);
@@ -689,8 +691,9 @@ test("Route detail renders every stop as a route-colored MapLibre pin without cl
   assert.match(routeDetailSource, /pinImage: getRouteDetailStopPinImageId\(stopColor, stop\.stop\)/);
   assert.match(routeDetailSource, /sortKey: stop\.stop/);
   assert.match(routeDetailSource, /stopId: stop\.id/);
-  assert.match(routeDetailSource, /"icon-anchor": "bottom"/);
-  assert.match(routeDetailSource, /"symbol-sort-key": \["get", "sortKey"\]/);
+  assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
+  assert.match(routeDetailSource, /createMapPinSymbolLayer\(\{/);
+  assert.match(mapMarkersSource, /"symbol-sort-key": sortKey/);
   assert.doesNotMatch(routeDetailSource, /function createRouteStopMarkerElement|expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|route-stop-precision-point|Show stop|Show \$\{group\.stops\.length\} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS/);
 });
 
@@ -720,6 +723,9 @@ test("Route detail keeps route stop source markers synced after style readiness"
   assert.match(routeDetailSource, /existingSource\.setData\(markerData\)/);
   assert.match(routeDetailSource, /map\.on\("styledata", handleRouteDetailStyleData\)/);
   assert.match(routeDetailSource, /removeRouteDetailStopMarkers\(map\)/);
+  assert.match(routeDetailSource, /function removeRouteDetailStopMarkers\(map\) \{\s+try \{/);
+  assert.match(routeDetailSource, /if \(!isRouteDetailMapStyleReady\(map\)\) return/);
+  assert.match(routeDetailSource, /catch \{/);
   assert.doesNotMatch(routeDetailSource, /function syncRouteDetailStopLayers|function ensureRouteDetailStopLayerOrder|map\.moveLayer\(layerId\)/);
   assert.doesNotMatch(routeDetailSource, /featureType: "routeStop"|featureType: "snappedStopPoint"/);
 });

@@ -1,5 +1,19 @@
 import { deliveryApiRequest } from "./route-plans.server.js";
 
+export async function createDeliveryInventory(request, payload, options = {}) {
+  const result = await deliveryApiRequest(request, "/admin/inventories", {
+    body: JSON.stringify(payload ?? {}),
+    fetch: options.fetch,
+    method: "POST",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    inventory: result.data?.inventory ?? null,
+    errors: result.errors,
+  };
+}
+
 export async function fetchDeliveryInventories(request, query = {}, options = {}) {
   const result = await deliveryApiRequest(request, `/admin/inventories${buildQueryString(query)}`, {
     cacheKey: options.cacheKey,

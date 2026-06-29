@@ -14,7 +14,7 @@ import {
   assignDeliveryRoutePlanDriver,
   fetchDeliveryRoutePlanDetail,
 } from "../features/delivery/route-plans.server";
-import { createDepartureMarkerElement, createDotMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
+import { addMapPinImage, createDepartureMarkerElement, createDotMarkerElement, createMapPinImageData, createMapPinSymbolLayer, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
@@ -1704,19 +1704,12 @@ function getRouteDetailStopPinImageId(routeColor, stopNumber) {
 }
 
 function ensureRouteDetailStopPinImage(map, routeColor, stopNumber) {
-  if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") return false;
-
   const imageId = getRouteDetailStopPinImageId(routeColor, stopNumber);
-  if (map.hasImage(imageId)) return true;
-
   const imageData = createMapPinImageData(routeColor, {
     label: stopNumber,
     shadowColor: "rgba(0, 0, 0, 0.36)",
   });
-  if (!imageData) return false;
-
-  map.addImage(imageId, imageData, { pixelRatio: 2 });
-  return true;
+  return addMapPinImage(map, imageId, imageData);
 }
 
 function buildRouteDetailStopMarkerFeatureCollection(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map()) {
@@ -1746,8 +1739,13 @@ function buildRouteDetailStopMarkerFeatureCollection(map, routeStops, routeStopP
 }
 
 function removeRouteDetailStopMarkers(map) {
-  if (map.getLayer?.(ROUTE_DETAIL_STOPS_LAYER_ID)) map.removeLayer(ROUTE_DETAIL_STOPS_LAYER_ID);
-  if (map.getSource?.(ROUTE_DETAIL_STOPS_SOURCE_ID)) map.removeSource(ROUTE_DETAIL_STOPS_SOURCE_ID);
+  try {
+    if (!isRouteDetailMapStyleReady(map)) return;
+    if (map.getLayer?.(ROUTE_DETAIL_STOPS_LAYER_ID)) map.removeLayer(ROUTE_DETAIL_STOPS_LAYER_ID);
+    if (map.getSource?.(ROUTE_DETAIL_STOPS_SOURCE_ID)) map.removeSource(ROUTE_DETAIL_STOPS_SOURCE_ID);
+  } catch {
+    // MapLibre can throw while React is unmounting an already-removed map.
+  }
 }
 
 function syncRouteDetailStopMarkers(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map()) {
@@ -1767,19 +1765,11 @@ function syncRouteDetailStopMarkers(map, routeStops, routeStopPoints, routeColor
   }
 
   if (!map.getLayer?.(ROUTE_DETAIL_STOPS_LAYER_ID)) {
-    map.addLayer({
+    map.addLayer(createMapPinSymbolLayer({
       id: ROUTE_DETAIL_STOPS_LAYER_ID,
       minzoom: ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM,
-      type: "symbol",
       source: ROUTE_DETAIL_STOPS_SOURCE_ID,
-      layout: {
-        "icon-allow-overlap": true,
-        "icon-anchor": "bottom",
-        "icon-ignore-placement": true,
-        "icon-image": ["get", "pinImage"],
-        "symbol-sort-key": ["get", "sortKey"],
-      },
-    });
+    }));
   }
 
   return true;

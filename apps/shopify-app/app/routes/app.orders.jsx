@@ -4,7 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "../features/delivery/orders.server";
-import { fetchDeliveryInventories } from "../features/delivery/inventories.server";
+import { createDeliveryInventory, fetchDeliveryInventories } from "../features/delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
   DELIVERY_API_ERROR_CODE,
@@ -15,7 +15,7 @@ import {
   generateDeliveryRouteGroupChildRoutes,
 } from "../features/delivery/route-groups.server";
 import { buildRouteScopeFromOrders } from "../features/delivery/route-scope";
-import { createDepartureMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
+import { addMapPinImage, createDepartureMarkerElement, createMapPinSymbolLayer, createPaletteMapPinImageData } from "../features/maps/map-markers";
 import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
@@ -65,8 +65,6 @@ const ORDERS_MAP_SOURCE_ID = "orders-map-orders";
 const ORDERS_MAP_ORDER_LAYER_ID = "orders-map-order-pins";
 const ORDER_PIN_IMAGE_ID = "orders-map-pin";
 const ORDER_PIN_PLANNED_IMAGE_ID = "orders-map-pin-planned";
-const ORDER_PIN_PIXEL_RATIO = 2;
-const ORDER_PIN_ICON_SIZE = 0.54;
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft";
@@ -198,7 +196,6 @@ const ordersViewTabBarStyle = {
   alignItems: "center",
   display: "flex",
   gap: "6px",
-  padding: "8px 10px",
 };
 
 const ordersViewTabButtonStyle = {
@@ -1343,36 +1340,24 @@ function getPlannedOrderPinImageId(plannedIndex) {
 }
 
 function ensureOrdersMapPinImages(map, plannedOrderIds = []) {
-  if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") {
-    return false;
-  }
-
   const images = [
     {
       id: ORDER_PIN_IMAGE_ID,
-      imageData: createMapPinImageData(MAP_MARKER_PALETTE.order.color, {
-        pixelRatio: ORDER_PIN_PIXEL_RATIO,
-        shadowColor: MAP_MARKER_PALETTE.order.shadowColor,
-      }),
+      imageData: createPaletteMapPinImageData("order"),
     },
     ...plannedOrderIds.map((_, index) => {
       const plannedIndex = index + 1;
       return {
         id: getPlannedOrderPinImageId(plannedIndex),
-        imageData: createMapPinImageData(MAP_MARKER_PALETTE.plannedOrder.color, {
+        imageData: createPaletteMapPinImageData("plannedOrder", {
           label: plannedIndex,
-          pixelRatio: ORDER_PIN_PIXEL_RATIO,
-          shadowColor: MAP_MARKER_PALETTE.plannedOrder.shadowColor,
         }),
       };
     }),
   ];
 
   for (const image of images) {
-    if (!image.imageData) return false;
-    if (map.hasImage(image.id)) continue;
-
-    map.addImage(image.id, image.imageData, { pixelRatio: ORDER_PIN_PIXEL_RATIO });
+    if (!addMapPinImage(map, image.id, image.imageData)) return false;
   }
 
   return true;
@@ -1426,20 +1411,11 @@ function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
   }
 
   if (!map.getLayer?.(ORDERS_MAP_ORDER_LAYER_ID)) {
-    map.addLayer({
+    map.addLayer(createMapPinSymbolLayer({
       id: ORDERS_MAP_ORDER_LAYER_ID,
       minzoom: ORDER_MARKER_MIN_ZOOM,
-      type: "symbol",
       source: ORDERS_MAP_SOURCE_ID,
-      layout: {
-        "icon-allow-overlap": true,
-        "icon-anchor": "bottom",
-        "icon-ignore-placement": true,
-        "icon-image": ["get", "pinImage"],
-        "icon-size": ORDER_PIN_ICON_SIZE,
-        "symbol-sort-key": ["get", "sortKey"],
-      },
-    });
+    }));
   }
 
   return true;
@@ -1507,8 +1483,8 @@ async function handleOrdersAction(request) {
     };
   }
 
-  const routeCreateStartedAt = getSafePerformanceNow();
-  const routeCreateTimings = {};
+  const createStartedAt = getSafePerformanceNow();
+  const createTimings = {};
   const plannedOrderIds = JSON.parse(formData.get("plannedOrderIds") ?? "[]");
   const routeName = textOrUndefined(formData.get("routeName"));
   const routeScope = JSON.parse(formData.get("routeScope") ?? "null");
@@ -1517,12 +1493,125 @@ async function handleOrdersAction(request) {
     return { errors: [{ message: "Route plan에 추가된 주문이 없습니다." }] };
   }
 
+  const plannedOrderData = await resolvePlannedOrdersForAction({
+    admin,
+    request,
+    shopifySessionToken,
+    shopifyShopCacheKey,
+    plannedOrderIds,
+    reason: "route_create_preflight",
+    timings: createTimings,
+  });
+
+  if (plannedOrderData.errors) {
+    return { errors: plannedOrderData.errors };
+  }
+
+  const { canonicalOrderCount, departureLocationData, plannedOrders, syncedOrderCount } = plannedOrderData;
+
+  const routePlanPayload = buildCreateRoutePlanPayload({
+    departureLocation: departureLocationData.departureLocation,
+    plannedOrders,
+    routeName,
+    routeScope,
+  });
+
+  if (intent === "createInventory") {
+    const createInventoryStartedAt = getSafePerformanceNow();
+    const { inventory, errors: inventoryErrors } = await createDeliveryInventory(
+      request,
+      {
+        name: routePlanPayload.name,
+        orderIds: plannedOrders.map((order) => order.orderId),
+      },
+      { sessionToken: shopifySessionToken },
+    );
+    const safeInventoryErrors = inventoryErrors ?? [];
+    createTimings.createInventoryMs = roundPerfDuration(getSafePerformanceNow() - createInventoryStartedAt);
+    logDevPerformanceMetric("orders.create_inventory.action", {
+      ...createTimings,
+      totalMs: roundPerfDuration(getSafePerformanceNow() - createStartedAt),
+      plannedOrderCount: plannedOrders.length,
+      syncedOrderCount,
+      canonicalOrderCount,
+      inventoryId: inventory?.id ?? null,
+      errorCount: safeInventoryErrors.length,
+    });
+
+    if (inventory?.id && safeInventoryErrors.length === 0) {
+      return { inventory, errors: [] };
+    }
+
+    return {
+      errors: safeInventoryErrors.length > 0
+        ? safeInventoryErrors
+        : [{ message: "Inventory를 만들지 못했습니다." }],
+    };
+  }
+
+  const createRoutePlanStartedAt = getSafePerformanceNow();
+  const { routeGroup, errors: routeGroupErrors } = await createDeliveryRouteGroup(
+    request,
+    buildCreateRouteGroupPayload({
+      depot: routePlanPayload.depot,
+      plannedOrders,
+      routeName: routePlanPayload.name,
+      routeScope,
+    }),
+    { sessionToken: shopifySessionToken },
+  );
+
+  const generatedRouteGroupData = routeGroup?.id
+    ? await generateDeliveryRouteGroupChildRoutes(
+        request,
+        routeGroup.id,
+        { confirmRisk: false },
+        { sessionToken: shopifySessionToken },
+      )
+    : { routeGroup: null, errors: [] };
+  const generatedRouteGroup = generatedRouteGroupData.routeGroup ?? routeGroup;
+  const routePlan = getFirstRouteGroupRoutePlan(generatedRouteGroup);
+  const routePlanErrors = [
+    ...(routeGroupErrors ?? []),
+    ...(generatedRouteGroupData.errors ?? []),
+  ];
+  createTimings.createRoutePlanMs = roundPerfDuration(getSafePerformanceNow() - createRoutePlanStartedAt);
+  logDevPerformanceMetric("orders.create_route.action", {
+    ...createTimings,
+    totalMs: roundPerfDuration(getSafePerformanceNow() - createStartedAt),
+    plannedOrderCount: plannedOrders.length,
+    syncedOrderCount,
+    canonicalOrderCount,
+    routeGroupId: generatedRouteGroup?.id ?? null,
+    routePlanId: routePlan?.id ?? null,
+    errorCount: routePlanErrors.length,
+  });
+
+  if (routePlan?.id) {
+    return { routePlan, routeGroup: generatedRouteGroup, errors: [] };
+  }
+
+  return {
+    errors: routePlanErrors,
+  };
+}
+
+async function resolvePlannedOrdersForAction({
+  admin,
+  request,
+  shopifySessionToken,
+  shopifyShopCacheKey,
+  plannedOrderIds,
+  reason,
+  timings,
+}) {
   const shopifyDataStartedAt = getSafePerformanceNow();
   const [orderData, departureLocationData] = await Promise.all([
     fetchShopifyOrders(admin),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
   ]);
-  routeCreateTimings.shopifyDataMs = roundPerfDuration(getSafePerformanceNow() - shopifyDataStartedAt);
+  timings.shopifyDataMs = roundPerfDuration(getSafePerformanceNow() - shopifyDataStartedAt);
+
   const plannedOrderIdSet = new Set(plannedOrderIds);
   const plannedShopifyOrders = orderData.orders.filter((order) =>
     plannedOrderIdSet.has(order.id),
@@ -1534,13 +1623,13 @@ async function handleOrdersAction(request) {
       ? await syncDeliveryOrders(
           request,
           {
-            reason: "route_create_preflight",
+            reason,
             orders: plannedShopifyOrderSnapshots,
           },
           { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
         )
       : { orders: [], errors: [] };
-  routeCreateTimings.syncOrdersMs = roundPerfDuration(getSafePerformanceNow() - syncOrdersStartedAt);
+  timings.syncOrdersMs = roundPerfDuration(getSafePerformanceNow() - syncOrdersStartedAt);
 
   if ((syncedOrderData.errors ?? []).length > 0) {
     return {
@@ -1558,7 +1647,7 @@ async function handleOrdersAction(request) {
     {},
     { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
   );
-  routeCreateTimings.canonicalOrdersMs = roundPerfDuration(getSafePerformanceNow() - canonicalOrdersStartedAt);
+  timings.canonicalOrdersMs = roundPerfDuration(getSafePerformanceNow() - canonicalOrdersStartedAt);
 
   if ((canonicalOrderData.errors ?? []).length > 0) {
     return {
@@ -1602,60 +1691,11 @@ async function handleOrdersAction(request) {
     };
   }
 
-  const routePlanPayload = buildCreateRoutePlanPayload({
-    departureLocation: departureLocationData.departureLocation,
-    plannedOrders,
-    routeName,
-    routeScope,
-  });
-  const createRoutePlanStartedAt = getSafePerformanceNow();
-  const { routeGroup, errors: routeGroupErrors } = await createDeliveryRouteGroup(
-    request,
-    buildCreateRouteGroupPayload({
-      depot: routePlanPayload.depot,
-      plannedOrders,
-      routeName: routePlanPayload.name,
-      routeScope,
-    }),
-    { sessionToken: shopifySessionToken },
-  );
-  const generatedRouteGroupData = routeGroup?.id
-    ? await generateDeliveryRouteGroupChildRoutes(
-        request,
-        routeGroup.id,
-        { confirmRisk: false },
-        { sessionToken: shopifySessionToken },
-      )
-    : { routeGroup: null, errors: [] };
-  const generatedRouteGroup = generatedRouteGroupData.routeGroup ?? routeGroup;
-  const routePlan = getFirstRouteGroupRoutePlan(generatedRouteGroup);
-  const routePlanErrors = [
-    ...(routeGroupErrors ?? []),
-    ...(generatedRouteGroupData.errors ?? []),
-  ];
-  routeCreateTimings.createRoutePlanMs = roundPerfDuration(getSafePerformanceNow() - createRoutePlanStartedAt);
-  logDevPerformanceMetric("orders.create_route.action", {
-    ...routeCreateTimings,
-    totalMs: roundPerfDuration(getSafePerformanceNow() - routeCreateStartedAt),
-    plannedOrderCount: plannedOrders.length,
-    syncedOrderCount: syncedOrderData.orders?.length ?? 0,
-    canonicalOrderCount: canonicalOrderData.orders?.length ?? 0,
-    routeGroupId: generatedRouteGroup?.id ?? null,
-    routePlanId: routePlan?.id ?? null,
-    errorCount: routePlanErrors.length,
-  });
-
-  if (routePlan?.id) {
-    return { routePlan, routeGroup: generatedRouteGroup, errors: [] };
-  }
-
   return {
-    errors: [
-      ...(orderData.errors ?? []),
-      ...(syncedOrderData.errors ?? []),
-      ...(departureLocationData.errors ?? []),
-      ...routePlanErrors,
-    ],
+    canonicalOrderCount: canonicalOrderData.orders?.length ?? 0,
+    departureLocationData,
+    plannedOrders,
+    syncedOrderCount: syncedOrderData.orders?.length ?? 0,
   };
 }
 
@@ -1790,6 +1830,7 @@ function hasSessionTokenRefreshError(results) {
 
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();
+  const inventoryFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
@@ -1901,14 +1942,20 @@ export default function OrdersPage() {
     [filteredOrders],
   );
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
+  const [createInventoryClientError, setCreateInventoryClientError] = useState(null);
   const actionErrors = createRouteClientError
     ? [{ message: createRouteClientError }]
-    : routePlanFetcher.data;
+    : createInventoryClientError
+      ? [{ message: createInventoryClientError }]
+      : routePlanFetcher.data?.errors?.length
+        ? routePlanFetcher.data
+        : inventoryFetcher.data;
   const orderPageNoticeMessage = getServiceErrorNotice([
     actionErrors,
     { errors },
   ], { context: "orders_page" });
   const isCreatingRoute = routePlanFetcher.state !== "idle";
+  const isCreatingInventory = inventoryFetcher.state !== "idle";
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
   );
@@ -1932,6 +1979,7 @@ export default function OrdersPage() {
   const initialMapCenterRef = useRef(DEFAULT_CENTER);
   const initialPerfEmittedRef = useRef(false);
   const submittedRouteSessionTokenRef = useRef(null);
+  const submittedInventorySessionTokenRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
@@ -1982,6 +2030,17 @@ export default function OrdersPage() {
         style={activeOrdersView === "inventory" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
         onClick={() => handleOrdersViewChange("inventory")}
       >Inventory</button>
+    </div>
+  );
+
+  const ordersLayoutNotice = (
+    <div style={{ display: "grid", gap: "8px" }}>
+      {orderPageNoticeMessage ? (
+        <div className="orders-error-filter" role="alert" style={orderPageNoticeStyle}>
+          {orderPageNoticeMessage}
+        </div>
+      ) : null}
+      {ordersViewTabs}
     </div>
   );
 
@@ -2102,6 +2161,7 @@ export default function OrdersPage() {
     selectableTableOrders.length > 0 &&
     selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
   const createRouteDisabled = plannedOrders.length === 0 || routePlanFetcher.state !== "idle";
+  const createInventoryDisabled = plannedOrders.length === 0 || isCreatingInventory;
 
   useEffect(() => {
     if (filteredOrders.length === 0) {
@@ -2577,6 +2637,7 @@ export default function OrdersPage() {
     setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setCheckedOrderIds([]);
     setCreateRouteClientError(null);
+    setCreateInventoryClientError(null);
     setPlanFitRequest((requestCount) => requestCount + 1);
   };
 
@@ -2584,6 +2645,7 @@ export default function OrdersPage() {
     setPlannedOrderIds([]);
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
     setRouteAssignActionsOpen(false);
+    setCreateInventoryClientError(null);
   };
 
   const handleZoomToPlanned = () => {
@@ -2617,6 +2679,30 @@ export default function OrdersPage() {
     } catch {
       submittedRouteSessionTokenRef.current = null;
       setCreateRouteClientError(
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      );
+    }
+  };
+
+  const handleAddInventory = async () => {
+    if (createInventoryDisabled) return;
+
+    try {
+      setCreateInventoryClientError(null);
+      const sessionToken = await shopify.idToken();
+      submittedInventorySessionTokenRef.current = sessionToken;
+
+      const routeDraftScope = buildRouteScopeFromOrders(plannedOrders);
+      const formData = new FormData();
+      formData.set("_intent", "createInventory");
+      formData.set("plannedOrderIds", JSON.stringify(plannedOrders.map((order) => order.id)));
+      formData.set("routeScope", JSON.stringify(routeDraftScope));
+      formData.set("routeName", routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE);
+      formData.set("shopifySessionToken", sessionToken);
+      inventoryFetcher.submit(formData, { method: "post" });
+    } catch {
+      submittedInventorySessionTokenRef.current = null;
+      setCreateInventoryClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
     }
@@ -2698,6 +2784,16 @@ export default function OrdersPage() {
     submittedRouteSessionTokenRef.current = null;
     navigate(`/app/routes/${createdRoutePlan.id}?id_token=${encodeURIComponent(sessionToken)}`);
   }, [navigate, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
+
+  useEffect(() => {
+    const createdInventory = inventoryFetcher.data?.inventory;
+    const sessionToken = submittedInventorySessionTokenRef.current;
+
+    if (!sessionToken || !createdInventory?.id) return;
+
+    submittedInventorySessionTokenRef.current = null;
+    navigate(`/app/orders/inventory?id=${encodeURIComponent(createdInventory.id)}&id_token=${encodeURIComponent(sessionToken)}`);
+  }, [inventoryFetcher.data?.inventory, navigate]);
 
   useEffect(() => {
     if (initialPerfEmittedRef.current) return;
@@ -2989,19 +3085,8 @@ export default function OrdersPage() {
     return (
       <TabLayout
         primaryExpanded={true}
-        notice={
-          orderPageNoticeMessage ? (
-            <div className="orders-error-filter" role="alert" style={orderPageNoticeStyle}>
-              {orderPageNoticeMessage}
-            </div>
-          ) : null
-        }
-        primary={
-          <div>
-            {ordersViewTabs}
-            {inventoryList}
-          </div>
-        }
+        notice={ordersLayoutNotice}
+        primary={inventoryList}
         lower={<div />}
       />
     );
@@ -3010,60 +3095,54 @@ export default function OrdersPage() {
   return (
     <TabLayout
       primaryExpanded={isMapWide}
-      notice={
-        orderPageNoticeMessage ? (
-          <div className="orders-error-filter" role="alert" style={orderPageNoticeStyle}>
-            {orderPageNoticeMessage}
-          </div>
-        ) : null
-      }
+      notice={ordersLayoutNotice}
       primary={
         <MapPanel
-          ariaLabel="Shopify delivery order map"
-          canvasRef={mapContainerRef}
-          canvasStyle={ordersMapCanvasStyle}
-          id="orders-map"
-          toolbar={
-            <MapToolbar
-              actions={[
-                {
-                  ariaLabel: "Zoom map in",
-                  icon: renderMapZoomInIcon(),
-                  onClick: handleZoomInMap,
-                },
-                {
-                  ariaLabel: "Zoom map out",
-                  icon: renderMapZoomOutIcon(),
-                  onClick: handleZoomOutMap,
-                },
-                {
-                  ariaLabel: isMapWide ? "Restore map width" : "Expand map width",
-                  icon: renderMapWidthIcon(isMapWide),
-                  onClick: handleToggleMapWide,
-                },
-                {
-                  ariaLabel: "Fit highlighted map markers",
-                  disabled: routeFitLocations.length === 0,
-                  icon: renderMapFitIcon(),
-                  onClick: handleZoomToPlanned,
-                },
-                {
-                  ariaLabel: "Refresh map",
-                  icon: renderMapRefreshIcon(),
-                  onClick: handleRefreshMap,
-                },
-              ]}
-              statusGlyph={mapStatus === "recovering" ? "…" : "!"}
-              statusLabel={
-                mapStatus !== "idle"
-                  ? mapStatus === "recovering"
-                    ? "Map is refreshing"
-                    : "Map refresh failed"
-                  : null
-              }
-            />
-          }
-        />
+            ariaLabel="Shopify delivery order map"
+            canvasRef={mapContainerRef}
+            canvasStyle={ordersMapCanvasStyle}
+            id="orders-map"
+            toolbar={
+              <MapToolbar
+                actions={[
+                  {
+                    ariaLabel: "Zoom map in",
+                    icon: renderMapZoomInIcon(),
+                    onClick: handleZoomInMap,
+                  },
+                  {
+                    ariaLabel: "Zoom map out",
+                    icon: renderMapZoomOutIcon(),
+                    onClick: handleZoomOutMap,
+                  },
+                  {
+                    ariaLabel: isMapWide ? "Restore map width" : "Expand map width",
+                    icon: renderMapWidthIcon(isMapWide),
+                    onClick: handleToggleMapWide,
+                  },
+                  {
+                    ariaLabel: "Fit highlighted map markers",
+                    disabled: routeFitLocations.length === 0,
+                    icon: renderMapFitIcon(),
+                    onClick: handleZoomToPlanned,
+                  },
+                  {
+                    ariaLabel: "Refresh map",
+                    icon: renderMapRefreshIcon(),
+                    onClick: handleRefreshMap,
+                  },
+                ]}
+                statusGlyph={mapStatus === "recovering" ? "…" : "!"}
+                statusLabel={
+                  mapStatus !== "idle"
+                    ? mapStatus === "recovering"
+                      ? "Map is refreshing"
+                      : "Map refresh failed"
+                    : null
+                }
+              />
+            }
+          />
       }
       secondary={
         <div className="order-route-plan" style={routePlanPanelStyle}>
@@ -3092,16 +3171,6 @@ export default function OrdersPage() {
                   disabled={createRouteDisabled}
                   onClick={handleToggleRouteAssignActions}
                 >Assign to route</button>
-                <button
-                  type="button"
-                  style={
-                    plannedOrders.length === 0
-                      ? disabledPlanButtonStyle
-                      : removeFromPlanButtonStyle
-                  }
-                  disabled={plannedOrders.length === 0}
-                  onClick={handleClearPlan}
-                >Clear plan</button>
               </div>
             </div>
             <div
@@ -3130,6 +3199,28 @@ export default function OrdersPage() {
             </div>
           </div>
 
+          <div style={routePlanDetailStyle}>
+            <div style={routePlanHeaderStyle}>
+              <s-heading>Inventory</s-heading>
+              <div style={routePlanHeaderActionsStyle}>
+                <button
+                  type="button"
+                  style={
+                    createInventoryDisabled
+                      ? disabledPlanButtonStyle
+                      : createRouteButtonStyle
+                  }
+                  disabled={createInventoryDisabled}
+                  onClick={handleAddInventory}
+                >{isCreatingInventory ? "Adding…" : "Add"}</button>
+                <button
+                  type="button"
+                  style={disabledPlanButtonStyle}
+                  disabled={true}
+                >Create</button>
+              </div>
+            </div>
+          </div>
 
           <div style={routePlanScrollAreaStyle}>
             <div className="order-route-summary" style={routeReadinessStyle} aria-label="Order summary">
@@ -3138,14 +3229,13 @@ export default function OrdersPage() {
                 <button
                   type="button"
                   style={
-                    plannedLocatedOrders.length === 0
+                    plannedOrders.length === 0
                       ? disabledPlanButtonStyle
                       : removeFromPlanButtonStyle
                   }
-                  disabled={plannedLocatedOrders.length === 0}
-                  aria-label="Zoom to planned route"
-                  onClick={handleZoomToPlanned}
-                >Zoom to planned</button>
+                  disabled={plannedOrders.length === 0}
+                  onClick={handleClearPlan}
+                >Clear</button>
               </div>
               <div className="order-route-summary-grid" style={routeReadinessGridStyle}>
                 <div style={routeReadinessItemStyle}>
@@ -3178,7 +3268,6 @@ export default function OrdersPage() {
       }
       lower={
         <div style={orderTableLayoutStyle}>
-          {ordersViewTabs}
           <div style={orderControlsStyle}>
             <div style={orderFilterDateFieldStyle}>
               {!orderedDateFilterActive ? <span style={orderFilterLabelStyle}>Order date</span> : null}

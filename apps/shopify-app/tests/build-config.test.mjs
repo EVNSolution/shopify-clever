@@ -22,6 +22,10 @@ const mapLibreMapSource = readFileSync(
   join(root, "app/features/maps/maplibre-map.js"),
   "utf8",
 );
+const mapMarkersSource = readFileSync(
+  join(root, "app/features/maps/map-markers.js"),
+  "utf8",
+);
 
 test("build config treats MapLibre as an intentional lazy map chunk", () => {
   assert.match(ordersPageSource, /import\("maplibre-gl"\)/);
@@ -84,7 +88,8 @@ test("orders map renders order pins through a MapLibre source layer", () => {
   assert.match(ordersPageSource, /ORDERS_MAP_SOURCE_ID/);
   assert.match(ordersPageSource, /ORDERS_MAP_ORDER_LAYER_ID/);
   assert.match(ordersPageSource, /map\.addSource\(ORDERS_MAP_SOURCE_ID/);
-  assert.match(ordersPageSource, /type:\s*"symbol"/);
+  assert.match(ordersPageSource, /createMapPinSymbolLayer\(\{/);
+  assert.match(mapMarkersSource, /type: "symbol"/);
   assert.match(ordersPageSource, /const ORDER_MARKER_MIN_ZOOM = 7/);
   assert.match(ordersPageSource, /minzoom: ORDER_MARKER_MIN_ZOOM/);
   assert.match(ordersPageSource, /map\.on\("click",\s*ORDERS_MAP_ORDER_LAYER_ID/);
@@ -95,8 +100,10 @@ test("route detail map renders route stops through a MapLibre source layer", () 
   assert.match(routeDetailPageSource, /ROUTE_DETAIL_STOPS_SOURCE_ID/);
   assert.match(routeDetailPageSource, /ROUTE_DETAIL_STOPS_LAYER_ID/);
   assert.match(routeDetailPageSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID/);
-  assert.match(routeDetailPageSource, /type: "symbol"/);
-  assert.match(routeDetailPageSource, /"icon-anchor": "bottom"/);
+  assert.match(mapMarkersSource, /type: "symbol"/);
+  assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
+  assert.match(routeDetailPageSource, /createMapPinSymbolLayer\(\{/);
+  assert.doesNotMatch(routeDetailPageSource, /"icon-size"|const ROUTE_DETAIL_STOP_PIN_ICON_SIZE/);
   assert.match(routeDetailPageSource, /createMapPinImageData\(routeColor, \{/);
   assert.match(routeDetailPageSource, /map\.queryRenderedFeatures\(event\.point, \{ layers: \[ROUTE_DETAIL_STOPS_LAYER_ID\] \}\)/);
   assert.doesNotMatch(routeDetailPageSource, /function createRouteStopMarkerElement/);

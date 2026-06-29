@@ -14,6 +14,14 @@ export const MAP_MARKER_PALETTE = {
 
 export const MAP_PIN_PATH =
   "M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z";
+export const MAP_PIN_PIXEL_RATIO = 2;
+export const MAP_PIN_ICON_SIZE = 0.54;
+export const MAP_PIN_SYMBOL_LAYOUT = {
+  "icon-allow-overlap": true,
+  "icon-anchor": "bottom",
+  "icon-ignore-placement": true,
+  "icon-size": MAP_PIN_ICON_SIZE,
+};
 
 export function createDepartureMarkerElement(departureLocation, options = {}) {
   const markerElement = document.createElement("button");
@@ -58,7 +66,7 @@ export function createDotMarkerElement({ ariaHidden = true, className, color, zI
 }
 
 export function createMapPinImageData(color, options = {}) {
-  const pixelRatio = options.pixelRatio ?? 2;
+  const pixelRatio = options.pixelRatio ?? MAP_PIN_PIXEL_RATIO;
   const width = (options.width ?? 40) * pixelRatio;
   const height = (options.height ?? 52) * pixelRatio;
   const canvas = document.createElement("canvas");
@@ -90,4 +98,38 @@ export function createMapPinImageData(color, options = {}) {
   }
 
   return context.getImageData(0, 0, width, height);
+}
+
+export function createPaletteMapPinImageData(markerType, options = {}) {
+  const paletteEntry = MAP_MARKER_PALETTE[markerType];
+  if (!paletteEntry) return null;
+
+  return createMapPinImageData(paletteEntry.color, {
+    shadowColor: paletteEntry.shadowColor,
+    ...options,
+  });
+}
+
+export function addMapPinImage(map, imageId, imageData) {
+  if (!imageData || typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") {
+    return false;
+  }
+  if (map.hasImage(imageId)) return true;
+
+  map.addImage(imageId, imageData, { pixelRatio: MAP_PIN_PIXEL_RATIO });
+  return true;
+}
+
+export function createMapPinSymbolLayer({ id, source, minzoom, iconImage = ["get", "pinImage"], sortKey = ["get", "sortKey"] }) {
+  return {
+    id,
+    minzoom,
+    type: "symbol",
+    source,
+    layout: {
+      ...MAP_PIN_SYMBOL_LAYOUT,
+      "icon-image": iconImage,
+      "symbol-sort-key": sortKey,
+    },
+  };
 }

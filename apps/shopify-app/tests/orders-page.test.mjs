@@ -589,13 +589,12 @@ test("Orders page shows a route summary before moving to Routes", () => {
   assert.doesNotMatch(ordersPageSource, /Next: optimize → assign → schedule/);
 });
 
-test("Orders route readiness provides a manual zoom to planned route fit", () => {
+test("Orders route summary keeps Clear in the former zoom action slot", () => {
   assert.match(ordersPageSource, /const handleZoomToPlanned = \(\) => \{/);
   assert.match(ordersPageSource, /fitMapToOrders\(routeFitLocations\)/);
-  assert.match(ordersPageSource, /disabled=\{plannedLocatedOrders\.length === 0\}/);
-  assert.match(ordersPageSource, /aria-label="Zoom to planned route"/);
-  assert.match(ordersPageSource, />Zoom to planned<\/button>/);
-  assert.match(ordersPageSource, /onClick=\{handleZoomToPlanned\}/);
+  assert.match(ordersPageSource, />Order summary<\/s-heading>[\s\S]*onClick=\{handleClearPlan\}[\s\S]*>Clear<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /aria-label="Zoom to planned route"/);
+  assert.doesNotMatch(ordersPageSource, />Zoom to planned<\/button>/);
 });
 
 test("Orders page keeps Add to map in the table controls", () => {
@@ -704,12 +703,13 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.doesNotMatch(ordersPageSource, /plannedOrders\.map\(\(order, orderIndex\) =>/);
   assert.doesNotMatch(ordersPageSource, /aria-label=\{`Remove \${order\.name} from route plan`\}/);
   assert.doesNotMatch(ordersPageSource, />Remove<\/button>/);
-  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Assign to route<\/button>[\s\S]*>Clear plan<\/button>/);
+  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Assign to route<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Add to route<\/button>[\s\S]*>Create route<\/button>/);
+  assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Inventory plan<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Assign to inventory<\/button>/);
-  assert.match(ordersPageSource, />Clear plan<\/button>/);
+  assert.match(ordersPageSource, />Clear<\/button>/);
   assert.doesNotMatch(ordersPageSource, /Plan에서 추가\/제거합니다/);
 });
 
@@ -769,17 +769,24 @@ test("Orders map highlights markers that were added to the plan", () => {
   assert.match(mapMarkersSource, /export const MAP_MARKER_PALETTE = \{/);
   assert.match(mapMarkersSource, /order: \{[\s\S]*color: "#006fbb"/);
   assert.match(mapMarkersSource, /plannedOrder: \{[\s\S]*color: "#006fbb"/);
+  assert.match(mapMarkersSource, /function createPaletteMapPinImageData\(markerType, options = \{\}\) \{/);
+  assert.match(mapMarkersSource, /const paletteEntry = MAP_MARKER_PALETTE\[markerType\]/);
+  assert.match(ordersPageSource, /createPaletteMapPinImageData\("order"\)/);
+  assert.match(ordersPageSource, /createPaletteMapPinImageData\("plannedOrder", \{/);
+  assert.doesNotMatch(ordersPageSource, /MAP_MARKER_PALETTE\.order\.color|MAP_MARKER_PALETTE\.plannedOrder\.color/);
   assert.match(ordersPageSource, /const ORDER_PIN_IMAGE_ID = "orders-map-pin"/);
   assert.match(ordersPageSource, /const ORDER_PIN_PLANNED_IMAGE_ID = "orders-map-pin-planned"/);
   assert.match(ordersPageSource, /function getPlannedOrderPinImageId\(plannedIndex\) \{/);
   assert.match(ordersPageSource, /id: getPlannedOrderPinImageId\(plannedIndex\)/);
   assert.match(ordersPageSource, /label: plannedIndex/);
-  assert.match(ordersPageSource, /map\.addImage\(image\.id, image\.imageData, \{ pixelRatio: ORDER_PIN_PIXEL_RATIO \}\)/);
+  assert.match(mapMarkersSource, /function addMapPinImage\(map, imageId, imageData\) \{/);
+  assert.match(mapMarkersSource, /map\.addImage\(imageId, imageData, \{ pixelRatio: MAP_PIN_PIXEL_RATIO \}\)/);
+  assert.match(ordersPageSource, /addMapPinImage\(map, image\.id, image\.imageData\)/);
   assert.match(ordersPageSource, /function buildOrdersMapFeatureCollection\(orders, plannedOrderIds\) \{/);
   assert.match(ordersPageSource, /const plannedIndex = plannedOrderIds\.indexOf\(order\.id\) \+ 1/);
   assert.match(ordersPageSource, /pinImage: isPlanned \? getPlannedOrderPinImageId\(plannedIndex\) : ORDER_PIN_IMAGE_ID/);
   assert.match(ordersPageSource, /const isPlanned = true/);
-  assert.match(ordersPageSource, /"icon-image": \["get", "pinImage"\]/);
+  assert.match(mapMarkersSource, /"icon-image": iconImage/);
   assert.doesNotMatch(ordersPageSource, /"text-field": \["get", "plannedLabel"\]/);
   assert.doesNotMatch(ordersPageSource, /function createOrderMarkerElement\(order, plannedIndex\)/);
 });
@@ -807,8 +814,9 @@ test("Orders map marker popup can add the clicked order to the route plan", () =
 });
 
 test("Orders map popup content stays above all map markers", () => {
-  assert.match(ordersPageSource, /map\.addLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID,[\s\S]*?type: "symbol"/);
-  assert.match(ordersPageSource, /"symbol-sort-key": \["get", "sortKey"\]/);
+  assert.match(ordersPageSource, /map\.addLayer\(createMapPinSymbolLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID/);
+  assert.match(mapMarkersSource, /type: "symbol"/);
+  assert.match(mapMarkersSource, /"symbol-sort-key": sortKey/);
   assert.match(mapMarkersSource, /markerElement\.style\.zIndex = options\.zIndex \?\? "3000"/);
   assert.match(globalCssSource, /\.maplibregl-popup\s*\{/);
   assert.match(globalCssSource, /z-index:\s*5000/);
@@ -921,7 +929,7 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
 
 test("Orders map shows the Shopify departure location as the route start point", () => {
   assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation/);
-  assert.match(ordersPageSource, /import \{ createDepartureMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE \} from "\.\.\/features\/maps\/map-markers"/);
+  assert.match(ordersPageSource, /import \{ addMapPinImage, createDepartureMarkerElement, createMapPinSymbolLayer, createPaletteMapPinImageData \} from "\.\.\/features\/maps\/map-markers"/);
   assert.match(mapMarkersSource, /function createDepartureMarkerElement\(departureLocation, options = \{\}\)/);
   assert.match(mapMarkersSource, /function createDepartureMarkerIconElement\(\)/);
   assert.match(mapMarkersSource, /departure-map-marker/);
@@ -973,19 +981,21 @@ test("Orders marker click only nudges zoom when the map is farther out than city
 
 test("Orders map renders planned markers above overlapping unplanned markers", () => {
   assert.match(ordersPageSource, /sortKey: isPlanned \? 1000 - plannedIndex : 1/);
-  assert.match(ordersPageSource, /"symbol-sort-key": \["get", "sortKey"\]/);
-  assert.match(ordersPageSource, /"icon-allow-overlap": true/);
-  assert.match(ordersPageSource, /"icon-ignore-placement": true/);
+  assert.match(mapMarkersSource, /"symbol-sort-key": sortKey/);
+  assert.match(mapMarkersSource, /"icon-allow-overlap": true/);
+  assert.match(mapMarkersSource, /"icon-ignore-placement": true/);
   assert.doesNotMatch(ordersPageSource, /ORDERS_MAP_ORDER_TEXT_LAYER_ID/);
   assert.doesNotMatch(ordersPageSource, /sortedLocatedOrders/);
 });
 
 test("Orders map keeps planned pins the same size and centers the planned number", () => {
-  assert.match(ordersPageSource, /const ORDER_PIN_PIXEL_RATIO = 2/);
+  assert.match(mapMarkersSource, /export const MAP_PIN_PIXEL_RATIO = 2/);
   assert.match(mapMarkersSource, /const width = \(options\.width \?\? 40\) \* pixelRatio/);
   assert.match(mapMarkersSource, /const height = \(options\.height \?\? 52\) \* pixelRatio/);
-  assert.match(ordersPageSource, /const ORDER_PIN_ICON_SIZE = 0\.54/);
-  assert.match(ordersPageSource, /"icon-size": ORDER_PIN_ICON_SIZE/);
+  assert.match(mapMarkersSource, /export const MAP_PIN_ICON_SIZE = 0\.54/);
+  assert.match(mapMarkersSource, /"icon-size": MAP_PIN_ICON_SIZE/);
+  assert.match(mapMarkersSource, /function createMapPinSymbolLayer\(\{ id, source, minzoom/);
+  assert.match(ordersPageSource, /createMapPinSymbolLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID,\s+minzoom: ORDER_MARKER_MIN_ZOOM,\s+source: ORDERS_MAP_SOURCE_ID,\s+\}\)/);
   assert.doesNotMatch(ordersPageSource, /"icon-size": \[\s+"case"/);
   assert.match(mapMarkersSource, /context\.fillText\(String\(options\.label\), 20, 18\)/);
   assert.doesNotMatch(ordersPageSource, /"text-size": 9\.5/);
@@ -1123,7 +1133,7 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(nextFilters\);\s*setSearchParams\(/);
   assert.match(ordersPageSource, />Clear filters<\/button>/);
   assert.doesNotMatch(ordersPageSource, />Clear selection<\/button>/);
-  assert.match(ordersPageSource, />Clear plan<\/button>/);
+  assert.match(ordersPageSource, />Clear<\/button>/);
   assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0\}/);
   assert.match(ordersPageSource, /deliveryWeekday: ""/);
   assert.match(ordersPageSource, /orderedDateFrom: ""/);
@@ -1151,7 +1161,6 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.doesNotMatch(ordersPageSource, /Include past and planned orders/);
   assert.doesNotMatch(ordersPageSource, />\s*Un-routed\s*<\/button>/);
   assert.doesNotMatch(ordersPageSource, /Show routed orders/);
-  assert.doesNotMatch(ordersPageSource, />\s*Clear\s*<\/button>/);
 });
 
 test("Orders map only renders orders after Add to map", () => {
@@ -1177,7 +1186,7 @@ test("Shopify order mapping avoids Customer object and keeps coordinate metadata
 });
 
 
-test("Orders page exposes inventory as an Orders subview without global nav or manual plan controls", () => {
+test("Orders page exposes inventory as an Orders subview with the side-card shortcut", () => {
   assert.match(ordersPageSource, /fetchDeliveryInventories/);
   assert.match(ordersPageSource, />Inventory<\/button>/);
   assert.match(ordersPageSource, /aria-label="Inventory list"/);
@@ -1188,6 +1197,20 @@ test("Orders page exposes inventory as an Orders subview without global nav or m
   assert.match(ordersPageSource, /inventory\.ordersCount \?\? inventory\.orderIds\?\.length \?\? inventory\.orders\?\.length \?\? 0/);
   assert.doesNotMatch(appShellSource, /nav\.inventory|Inventory plan/);
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
+});
+
+test("Orders inventory side-card Add creates standalone inventory without route ownership checks", () => {
+  assert.match(ordersPageSource, /import \{ createDeliveryInventory, fetchDeliveryInventories \}/);
+  assert.match(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "createInventory"\)/);
+  assert.match(ordersPageSource, /inventoryFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(ordersPageSource, /reason: "route_create_preflight"/);
+  assert.match(ordersPageSource, /if \(intent === "createInventory"\) \{/);
+  assert.match(ordersPageSource, /createDeliveryInventory\(\s*request,/);
+  assert.match(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.orderId\)/);
+  assert.match(ordersPageSource, /return \{ inventory, errors: \[\] \}/);
+  assert.match(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(createdInventory\.id\)\}&id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
+  assert.doesNotMatch(ordersPageSource, /inventoryRouteGroup/);
 });
 
 test("Orders inventory detail shows totals, order-by-order items, and delta remarks", () => {

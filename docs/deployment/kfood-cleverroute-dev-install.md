@@ -99,3 +99,9 @@ npm run dev -- --store clever-test-syhae28n.myshopify.com
 cd apps/shopify-app
 npm run deploy:kfood -- --allow-updates --message "CLEVER K-Food initial custom config"
 ```
+
+## CLEVER-test KFood JSON import note
+
+- 2026-06-29: `/Users/jiin/Downloads/Kfood-orders.json` was imported into the CLEVER dev store only: `clever-test-syhae28n.myshopify.com`.
+- Import marker: Shopify tag `clever-kfood-import`, custom attribute `CLEVER Import Source Order`.
+- Current limitation: deleting orders/products in Shopify does **not** automatically remove or reconcile existing Clever delivery-api records. Treat Shopify deletion sync as a future explicit reconciliation feature, not current behavior.

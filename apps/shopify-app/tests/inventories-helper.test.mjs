@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  createDeliveryInventory,
   fetchDeliveryInventories,
   fetchDeliveryInventoryDetail,
 } from "../app/features/delivery/inventories.server.js";
@@ -47,6 +48,21 @@ test("inventory helper lists inventories through the Admin delivery API", async 
   assert.equal(fakeFetch.calls[0].init.method, "GET");
   assert.equal(fakeFetch.calls[0].init.headers.authorization, "Bearer session-token");
   assert.equal(fakeFetch.calls[0].init.headers["x-clever-app-id"], "clever-route-dev");
+});
+
+test("inventory helper creates standalone inventories through the Admin delivery API", async () => {
+  const fakeFetch = makeFetch({ data: { inventory: { id: "inventory-1" } }, error: null }, 201);
+
+  const result = await createDeliveryInventory(
+    makeRequest(),
+    { name: "Prep batch", orderIds: ["order-1"] },
+    { fetch: fakeFetch, sessionToken: "session-token" },
+  );
+
+  assert.deepEqual(result, { inventory: { id: "inventory-1" }, errors: [] });
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/inventories");
+  assert.equal(fakeFetch.calls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), { name: "Prep batch", orderIds: ["order-1"] });
 });
 
 test("inventory helper fetches an encoded inventory detail", async () => {
