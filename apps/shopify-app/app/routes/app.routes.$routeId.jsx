@@ -14,7 +14,7 @@ import {
   assignDeliveryRoutePlanDriver,
   fetchDeliveryRoutePlanDetail,
 } from "../features/delivery/route-plans.server";
-import { createDepartureMarkerElement, createDotMarkerElement, MAP_MARKER_PALETTE, MAP_PIN_PATH } from "../features/maps/map-markers";
+import { createDepartureMarkerElement, createDotMarkerElement, createMapPinImageData, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
@@ -31,6 +31,9 @@ const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
 const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
 const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon";
+const ROUTE_DETAIL_STOPS_SOURCE_ID = "route-detail-stops";
+const ROUTE_DETAIL_STOPS_LAYER_ID = "route-detail-stop-markers";
+const ROUTE_DETAIL_STOP_PIN_IMAGE_PREFIX = "route-detail-stop-pin";
 const ROUTE_DETAIL_POLYGON_FILL_LAYER_ID = "route-detail-edit-polygon-fill";
 const ROUTE_DETAIL_POLYGON_LINE_LAYER_ID = "route-detail-edit-polygon-line";
 const ROUTE_EMPTY_LABEL = "-";
@@ -38,7 +41,6 @@ const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 const ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM = 7;
 const ROUTE_POLYGON_CLICK_DELAY_MS = 220;
 const ROUTE_DEPARTURE_MARKER_OFFSET = [0, 3];
-const ROUTE_STOP_MARKER_OFFSET = [0, 1];
 const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
 
@@ -1696,37 +1698,92 @@ function fitRouteStopAndSnappedPoint(map, maplibregl, stop, routeStopPoint) {
   });
 }
 
-function createRouteStopMarkerElement(stop, routeColor) {
-  const markerElement = document.createElement("button");
-  const svgElement = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  const pathElement = document.createElementNS("http://www.w3.org/2000/svg", "path");
-  const labelElement = document.createElement("span");
-
-  markerElement.type = "button";
-  markerElement.className = "order-map-marker order-map-marker--planned";
-  markerElement.style.zIndex = stop.isPolygonSelected ? "3700" : "3200";
-  if (stop.isPolygonSelected) {
-    markerElement.style.filter = "drop-shadow(0 0 7px rgba(79, 124, 255, 0.95)) drop-shadow(0 0 2px #ffffff)";
-  }
-  markerElement.style.setProperty("--marker-color", routeColor);
-  markerElement.style.setProperty("--map-marker-color", routeColor);
-  markerElement.setAttribute("aria-label", `Stop ${stop.stop}: ${stop.order}`);
-
-  svgElement.classList.add("order-map-marker__svg");
-  svgElement.setAttribute("viewBox", "0 0 40 52");
-  svgElement.setAttribute("aria-hidden", "true");
-  pathElement.classList.add("order-map-marker__shape");
-  pathElement.style.fill = routeColor;
-  pathElement.setAttribute("d", MAP_PIN_PATH);
-  svgElement.append(pathElement);
-
-  labelElement.className = "order-map-marker__label";
-  labelElement.textContent = String(stop.stop);
-  markerElement.append(svgElement, labelElement);
-
-  return markerElement;
+function getRouteDetailStopPinImageId(routeColor, stopNumber) {
+  const colorKey = normalizeRouteColor(routeColor)?.slice(1) ?? "default";
+  return `${ROUTE_DETAIL_STOP_PIN_IMAGE_PREFIX}-${colorKey}-${stopNumber}`;
 }
 
+function ensureRouteDetailStopPinImage(map, routeColor, stopNumber) {
+  if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") return false;
+
+  const imageId = getRouteDetailStopPinImageId(routeColor, stopNumber);
+  if (map.hasImage(imageId)) return true;
+
+  const imageData = createMapPinImageData(routeColor, {
+    label: stopNumber,
+    shadowColor: "rgba(0, 0, 0, 0.36)",
+  });
+  if (!imageData) return false;
+
+  map.addImage(imageId, imageData, { pixelRatio: 2 });
+  return true;
+}
+
+function buildRouteDetailStopMarkerFeatureCollection(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map()) {
+  const features = [];
+
+  for (const stop of routeStops) {
+    const routeStopPoint = findRouteStopPoint(stop, routeStopPoints);
+    const markerCoordinates = getRouteStopPointerCoordinates(stop, routeStopPoint);
+    if (!markerCoordinates) continue;
+
+    const stopColor = getRouteStopDisplayColor(stop, routeColor, routeStopColorById);
+    if (!ensureRouteDetailStopPinImage(map, stopColor, stop.stop)) return null;
+
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: markerCoordinates },
+      properties: {
+        orderId: stop.orderId ?? "",
+        pinImage: getRouteDetailStopPinImageId(stopColor, stop.stop),
+        sortKey: stop.stop,
+        stopId: stop.id,
+      },
+    });
+  }
+
+  return { type: "FeatureCollection", features };
+}
+
+function removeRouteDetailStopMarkers(map) {
+  if (map.getLayer?.(ROUTE_DETAIL_STOPS_LAYER_ID)) map.removeLayer(ROUTE_DETAIL_STOPS_LAYER_ID);
+  if (map.getSource?.(ROUTE_DETAIL_STOPS_SOURCE_ID)) map.removeSource(ROUTE_DETAIL_STOPS_SOURCE_ID);
+}
+
+function syncRouteDetailStopMarkers(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map()) {
+  if (!isRouteDetailMapStyleReady(map)) return false;
+
+  const markerData = buildRouteDetailStopMarkerFeatureCollection(map, routeStops, routeStopPoints, routeColor, routeStopColorById);
+  if (!markerData) return false;
+
+  const existingSource = map.getSource?.(ROUTE_DETAIL_STOPS_SOURCE_ID);
+  if (existingSource?.setData) {
+    existingSource.setData(markerData);
+  } else {
+    map.addSource(ROUTE_DETAIL_STOPS_SOURCE_ID, {
+      type: "geojson",
+      data: markerData,
+    });
+  }
+
+  if (!map.getLayer?.(ROUTE_DETAIL_STOPS_LAYER_ID)) {
+    map.addLayer({
+      id: ROUTE_DETAIL_STOPS_LAYER_ID,
+      minzoom: ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM,
+      type: "symbol",
+      source: ROUTE_DETAIL_STOPS_SOURCE_ID,
+      layout: {
+        "icon-allow-overlap": true,
+        "icon-anchor": "bottom",
+        "icon-ignore-placement": true,
+        "icon-image": ["get", "pinImage"],
+        "symbol-sort-key": ["get", "sortKey"],
+      },
+    });
+  }
+
+  return true;
+}
 function createRouteStopPointMarkerElement(routeColor) {
   const markerElement = createDotMarkerElement({
     className: "route-detail-snapped-stop-point",
@@ -1764,36 +1821,10 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
 
   for (const stop of routeStops) {
     const routeStopPoint = findRouteStopPoint(stop, routeStopPoints);
-    const markerCoordinates = getRouteStopPointerCoordinates(stop, routeStopPoint);
-    if (!markerCoordinates) continue;
-
-    const handleStopMarkerDoubleClick = (event) => {
-      event.preventDefault?.();
-      event.stopPropagation?.();
-      fitRouteStopAndSnappedPoint(
-        map,
-        maplibregl,
-        stop,
-        routeStopPoint,
-      );
-    };
-    const stopColor = getRouteStopDisplayColor(stop, routeColor, routeStopColorById);
-    const markerElement = createRouteStopMarkerElement(stop, stopColor);
-    markerElement.addEventListener("dblclick", handleStopMarkerDoubleClick);
-
-    const stopMarker = new maplibregl.Marker({
-      anchor: "bottom",
-      element: markerElement,
-      offset: ROUTE_STOP_MARKER_OFFSET,
-    })
-      .setLngLat(markerCoordinates)
-      .addTo(map);
-
-    markers.push(stopMarker);
-
     const stopPointMarker = buildRouteStopPointMarker(stop, routeStopPoint);
     if (!stopPointMarker) continue;
 
+    const stopColor = getRouteStopDisplayColor(stop, routeColor, routeStopColorById);
     const snappedStopPointMarker = new maplibregl.Marker({
       anchor: "center",
       element: createRouteStopPointMarkerElement(stopColor),
@@ -1806,7 +1837,6 @@ function createRouteDetailMapMarkers(map, maplibregl, departureLocation, routeSt
 
   return markers;
 }
-
 function buildRouteGroupRouteLinks(routeRows, childRouteDetails, routeGroup, currentRoutePlanId, currentLabel, currentRouteGroupId = null) {
   const currentPlanId = textOrUndefined(currentRoutePlanId);
   const currentGroupId = textOrUndefined(currentRouteGroupId);
@@ -2994,6 +3024,7 @@ export default function RouteDetailPage() {
       routeLineRetryTimer = window.setTimeout(() => {
         routeLineRetryTimer = null;
         syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor);
+        syncRouteDetailStopMarkers(map, routeMapStops, savedRouteMarkerStopPoints, routeLineColor, routeStopColorById);
       }, 80);
     };
 
@@ -3001,7 +3032,8 @@ export default function RouteDetailPage() {
       const syncStartedAt = performance.now();
       const routeLineStartedAt = performance.now();
       const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor);
-      if (!didSyncRouteLine) {
+      const didSyncStopMarkers = syncRouteDetailStopMarkers(map, routeMapStops, savedRouteMarkerStopPoints, routeLineColor, routeStopColorById);
+      if (!didSyncRouteLine || !didSyncStopMarkers) {
         scheduleRouteLineRetry();
       }
       const routeLineMs = roundPerfDuration(performance.now() - routeLineStartedAt);
@@ -3023,6 +3055,7 @@ export default function RouteDetailPage() {
       logRouteDetailPerformance("routes.detail.map.sync", {
         totalMs: roundPerfDuration(performance.now() - syncStartedAt),
         routeLineMs,
+        stopMarkerSourceSynced: didSyncStopMarkers,
         markerCreateMs,
         markerRemoveMs,
         markerCount: routeDetailMarkers.length,
@@ -3032,19 +3065,37 @@ export default function RouteDetailPage() {
       });
     };
     const handleRouteDetailStyleData = () => {
-      if (!syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor)) {
-        scheduleRouteLineRetry();
-      }
+      const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor);
+      const didSyncStopMarkers = syncRouteDetailStopMarkers(map, routeMapStops, savedRouteMarkerStopPoints, routeLineColor, routeStopColorById);
+      if (!didSyncRouteLine || !didSyncStopMarkers) scheduleRouteLineRetry();
+    };
+
+    const handleRouteStopDoubleClick = (event) => {
+      const features = map.getLayer?.(ROUTE_DETAIL_STOPS_LAYER_ID)
+        ? map.queryRenderedFeatures(event.point, { layers: [ROUTE_DETAIL_STOPS_LAYER_ID] })
+        : [];
+      const stopId = textOrUndefined(features[0]?.properties?.stopId);
+      if (!stopId) return;
+
+      const stop = routeMapStops.find((candidate) => candidate.id === stopId);
+      if (!stop) return;
+
+      event.preventDefault?.();
+      event.originalEvent?.preventDefault?.();
+      fitRouteStopAndSnappedPoint(map, maplibregl, stop, findRouteStopPoint(stop, savedRouteMarkerStopPoints));
     };
 
     syncRouteDetailMap();
+    map.on("dblclick", handleRouteStopDoubleClick);
     map.on("styledata", handleRouteDetailStyleData);
 
     return () => {
       if (routeLineRetryTimer != null) {
         window.clearTimeout(routeLineRetryTimer);
       }
+      map.off("dblclick", handleRouteStopDoubleClick);
       map.off("styledata", handleRouteDetailStyleData);
+      removeRouteDetailStopMarkers(map);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };

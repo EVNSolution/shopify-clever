@@ -593,42 +593,33 @@ test("Route detail keeps marker coordinates validated and ordered for MapLibre",
   assert.match(routeDetailSource, /hasCoordinates: coordinates != null/);
 });
 
-test("Route detail places centered DOM stop markers and the departure marker on the map", () => {
+test("Route detail renders route stop pins through a MapLibre source layer and the departure marker on the map", () => {
   assert.match(mapMarkersSource, /markerElement\.style\.zIndex = options\.zIndex \?\? "3000"/);
   assert.match(mapMarkersSource, /function createDepartureMarkerIconElement\(\)/);
   assert.match(mapMarkersSource, /departure-map-marker__icon/);
   assert.match(mapMarkersSource, /markerPinElement\.append\(createDepartureMarkerIconElement\(\)\)/);
   assert.doesNotMatch(routeDetailSource, /markerPinElement\.textContent = "Start"/);
   assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: createDepartureMarkerElement\(departureLocation\),\s+offset: ROUTE_DEPARTURE_MARKER_OFFSET,\s+\}\)/);
-  assert.match(routeDetailSource, /function createRouteStopMarkerElement\(stop, routeColor\) \{/);
-  assert.match(routeDetailSource, /markerElement\.className = "order-map-marker order-map-marker--planned"/);
-  assert.match(routeDetailSource, /markerElement\.style\.setProperty\("--marker-color", routeColor\)/);
   assert.match(routeDetailSource, /const ROUTE_DEPARTURE_MARKER_OFFSET = \[0, 3\]/);
-  assert.match(routeDetailSource, /const ROUTE_STOP_MARKER_OFFSET = \[0, 1\]/);
-  assert.match(globalCssSource, /--marker-border-width: 2px/);
-  assert.match(globalCssSource, /paint-order: fill stroke/);
-  assert.match(globalCssSource, /vector-effect: non-scaling-stroke/);
-  assert.match(globalCssSource, /--marker-height: 30px/);
-  assert.match(globalCssSource, /--marker-width: 23px/);
-  assert.match(globalCssSource, /font-size: 11px/);
-  assert.match(globalCssSource, /font-weight: 800/);
-  assert.match(globalCssSource, /\.maplibregl-marker\.order-map-marker,[\s\S]*\.maplibregl-marker\.departure-map-marker,[\s\S]*\.maplibregl-marker\.route-detail-snapped-stop-point \{[\s\S]*position: absolute;/);
-  assert.match(routeDetailSource, /pathElement\.setAttribute\("d", MAP_PIN_PATH\)/);
-  assert.match(routeDetailSource, /labelElement\.className = "order-map-marker__label"/);
-  assert.match(routeDetailSource, /labelElement\.textContent = String\(stop\.stop\)/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: markerElement,\s+offset: ROUTE_STOP_MARKER_OFFSET,\s+\}\)/);
-  assert.doesNotMatch(globalCssSource, /\.route-detail-stop-marker/);
-  assert.match(routeDetailSource, /markerElement\.addEventListener\("dblclick", handleStopMarkerDoubleClick\)/);
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_STOPS_SOURCE_ID = "route-detail-stops"/);
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_STOPS_LAYER_ID = "route-detail-stop-markers"/);
+  assert.match(routeDetailSource, /createMapPinImageData\(routeColor, \{/);
+  assert.match(routeDetailSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID/);
+  assert.match(routeDetailSource, /id: ROUTE_DETAIL_STOPS_LAYER_ID/);
+  assert.match(routeDetailSource, /type: "symbol"/);
+  assert.match(routeDetailSource, /"icon-anchor": "bottom"/);
+  assert.match(routeDetailSource, /"icon-image": \["get", "pinImage"\]/);
+  assert.match(routeDetailSource, /map\.queryRenderedFeatures\(event\.point, \{ layers: \[ROUTE_DETAIL_STOPS_LAYER_ID\] \}\)/);
   assert.match(routeDetailSource, /event\.preventDefault\?\.\(\)/);
-  assert.match(routeDetailSource, /event\.stopPropagation\?\.\(\)/);
-  assert.match(routeDetailSource, /fitRouteStopAndSnappedPoint\(\s+map,\s+maplibregl,\s+stop,\s+routeStopPoint,\s+\)/);
+  assert.match(routeDetailSource, /event\.originalEvent\?\.preventDefault\?\.\(\)/);
+  assert.match(routeDetailSource, /fitRouteStopAndSnappedPoint\(map, maplibregl, stop, findRouteStopPoint\(stop, savedRouteMarkerStopPoints\)\)/);
   assert.match(routeDetailSource, /\.setLngLat\(departureLocation\.coordinates\)/);
   assert.match(routeDetailSource, /const markerCoordinates = getRouteStopPointerCoordinates\(stop, routeStopPoint\)/);
-  assert.match(routeDetailSource, /\.setLngLat\(markerCoordinates\)/);
+  assert.match(routeDetailSource, /geometry: \{ type: "Point", coordinates: markerCoordinates \}/);
   assert.match(routeDetailSource, /requestAnimationFrame\(\(\) => \{/);
   assert.match(routeDetailSource, /map\.resize\(\)/);
   assert.match(routeDetailSource, /fitRouteDetailMap\(map, maplibregl, routeMapLocations\)/);
-  assert.doesNotMatch(routeDetailSource, /createRouteStopPopupElement|new maplibregl\.Popup|setPopup/);
+  assert.doesNotMatch(routeDetailSource, /function createRouteStopMarkerElement|ROUTE_STOP_MARKER_OFFSET|createRouteStopPopupElement|new maplibregl\.Popup|setPopup/);
 });
 
 test("Route detail falls back to route stop point coordinates before dropping stop markers", () => {
@@ -684,25 +675,27 @@ test("Route detail only auto-fits the map on initial map readiness", () => {
   assert.match(routeDetailSource, /duration,/);
 });
 
-test("Route detail renders every stop as a route-colored teardrop marker without click expansion", () => {
-  assert.match(routeDetailSource, /function createRouteStopMarkerElement\(stop, routeColor\) \{/);
-  assert.match(routeDetailSource, /markerElement\.className = "order-map-marker order-map-marker--planned"/);
+test("Route detail renders every stop as a route-colored MapLibre pin without click expansion", () => {
   assert.match(routeDetailSource, /const ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM = 7/);
+  assert.match(routeDetailSource, /minzoom: ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM/);
   assert.match(routeDetailSource, /function syncRouteDetailMarkerZoomVisibility\(map, container\) \{/);
   assert.match(routeDetailSource, /route-detail-map--hide-order-markers/);
   assert.match(globalCssSource, /\.route-detail-map--hide-order-markers \.order-map-marker,[\s\S]*\.route-detail-map--hide-order-markers \.route-detail-snapped-stop-point \{[\s\S]*display: none;/);
-  assert.match(routeDetailSource, /markerElement\.style\.setProperty\("--marker-color", routeColor\)/);
-  assert.match(routeDetailSource, /markerElement\.style\.setProperty\("--map-marker-color", routeColor\)/);
-  assert.match(routeDetailSource, /pathElement\.style\.fill = routeColor/);
   assert.match(routeDetailSource, /function getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\) \{/);
-  assert.match(routeDetailSource, /markerElement\.setAttribute\("aria-label", `Stop \$\{stop\.stop\}: \$\{stop\.order\}`\)/);
-  assert.match(routeDetailSource, /labelElement\.textContent = String\(stop\.stop\)/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "bottom",\s+element: markerElement,\s+offset: ROUTE_STOP_MARKER_OFFSET,\s+\}\)/);
-  assert.doesNotMatch(routeDetailSource, /expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|route-stop-precision-point|Show stop|Show \$\{group\.stops\.length\} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS/);
+  assert.match(routeDetailSource, /function buildRouteDetailStopMarkerFeatureCollection\(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
+  assert.match(routeDetailSource, /const stopColor = getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\)/);
+  assert.match(routeDetailSource, /if \(!ensureRouteDetailStopPinImage\(map, stopColor, stop\.stop\)\) return null/);
+  assert.match(routeDetailSource, /geometry: \{ type: "Point", coordinates: markerCoordinates \}/);
+  assert.match(routeDetailSource, /pinImage: getRouteDetailStopPinImageId\(stopColor, stop\.stop\)/);
+  assert.match(routeDetailSource, /sortKey: stop\.stop/);
+  assert.match(routeDetailSource, /stopId: stop\.id/);
+  assert.match(routeDetailSource, /"icon-anchor": "bottom"/);
+  assert.match(routeDetailSource, /"symbol-sort-key": \["get", "sortKey"\]/);
+  assert.doesNotMatch(routeDetailSource, /function createRouteStopMarkerElement|expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|route-stop-precision-point|Show stop|Show \$\{group\.stops\.length\} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS/);
 });
 
-test("Route detail renders OSRM snapped stop points as small route-colored DOM points without zoom gating", () => {
-  assert.doesNotMatch(routeDetailSource, /ROUTE_STOP_POINT_MARKER_MIN_ZOOM|minzoom:/);
+test("Route detail renders OSRM snapped stop points as small route-colored DOM points without their own zoom gate", () => {
+  assert.doesNotMatch(routeDetailSource, /ROUTE_STOP_POINT_MARKER_MIN_ZOOM/);
   assert.match(routeDetailSource, /const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1/);
   assert.match(routeDetailSource, /function buildRouteStopPointMarker\(stop, routeStopPoint\) \{/);
   assert.match(routeDetailSource, /const snappedCoordinates = normalizeLngLatPair\(routeStopPoint\?\.snappedCoordinates\)/);
@@ -720,9 +713,13 @@ test("Route detail renders OSRM snapped stop points as small route-colored DOM p
   assert.doesNotMatch(routeDetailSource, /function shouldRenderRouteStopPoints|zoomend/);
 });
 
-test("Route detail avoids WebGL stop layers so marker visibility is not style-layer dependent", () => {
+test("Route detail keeps route stop source markers synced after style readiness", () => {
   assert.match(routeDetailSource, /function createRouteDetailMapMarkers\(map, maplibregl, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
-  assert.doesNotMatch(routeDetailSource, /ROUTE_DETAIL_STOPS_SOURCE_ID|ROUTE_DETAIL_STOP_POINTER_LAYER_ID|ROUTE_DETAIL_STOP_POINTER_LABEL_LAYER_ID|ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
+  assert.match(routeDetailSource, /function syncRouteDetailStopMarkers\(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
+  assert.match(routeDetailSource, /if \(!isRouteDetailMapStyleReady\(map\)\) return false/);
+  assert.match(routeDetailSource, /existingSource\.setData\(markerData\)/);
+  assert.match(routeDetailSource, /map\.on\("styledata", handleRouteDetailStyleData\)/);
+  assert.match(routeDetailSource, /removeRouteDetailStopMarkers\(map\)/);
   assert.doesNotMatch(routeDetailSource, /function syncRouteDetailStopLayers|function ensureRouteDetailStopLayerOrder|map\.moveLayer\(layerId\)/);
   assert.doesNotMatch(routeDetailSource, /featureType: "routeStop"|featureType: "snappedStopPoint"/);
 });
@@ -771,7 +768,7 @@ test("Route detail marker rendering does not call MapLibre resize from map event
 
   assert.doesNotMatch(layerSyncBody, /\.resize\(\)/);
   assert.match(routeDetailSource, /map\.on\("styledata", handleRouteDetailStyleData\)/);
-  assert.match(routeDetailSource, /markerElement\.addEventListener\("dblclick", handleStopMarkerDoubleClick\)/);
+  assert.match(routeDetailSource, /map\.on\("dblclick", handleRouteStopDoubleClick\)/);
   assert.doesNotMatch(routeDetailSource, /\.on\("moveend", syncRouteDetailMapLayers\)/);
   assert.doesNotMatch(routeDetailSource, /\.on\("zoomend", syncRouteDetailMapLayers\)/);
 });
