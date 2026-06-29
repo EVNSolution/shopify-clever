@@ -476,7 +476,8 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
   assert.doesNotMatch(routeDetailSource, /activeRouteDriverStops/);
   assert.match(routeDetailSource, /height: "440px"/);
-  assert.match(routeDetailSource, /minHeight: "490px"/);
+  assert.match(routeDetailSource, /height: "100%"/);
+  assert.doesNotMatch(routeDetailSource, /minHeight: "490px"/);
   assert.doesNotMatch(routeDetailSource, /routeDetailHeaderInfoCardStyle/);
   assert.doesNotMatch(routeDetailSource, /routeDetailPageNavStyle/);
   assert.doesNotMatch(routeDetailSource, /routeDetailTitleMetricsStyle/);
@@ -603,7 +604,9 @@ test("Route detail places centered DOM stop markers and the departure marker on 
   assert.match(routeDetailSource, /\.setLngLat\(departureLocation\.coordinates\)/);
   assert.match(routeDetailSource, /const markerCoordinates = getRouteStopPointerCoordinates\(stop, routeStopPoint\)/);
   assert.match(routeDetailSource, /\.setLngLat\(markerCoordinates\)/);
-  assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, maplibregl, routeMapLocations\)/);
+  assert.match(routeDetailSource, /requestAnimationFrame\(\(\) => \{/);
+  assert.match(routeDetailSource, /map\.resize\(\)/);
+  assert.match(routeDetailSource, /fitRouteDetailMap\(map, maplibregl, routeMapLocations\)/);
   assert.doesNotMatch(routeDetailSource, /createRouteStopPopupElement|new maplibregl\.Popup|setPopup/);
 });
 
@@ -792,8 +795,6 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total distance<\/th>/);
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
-  assert.match(routeDetailSource, /function getRouteCandidateTitle\(\) \{/);
-  assert.match(routeDetailSource, /return "Route 1"/);
   assert.match(routeDetailSource, /title: textOrUndefined\(branch\.label\) \?\? `Route \$\{index \+ 2\}`/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);

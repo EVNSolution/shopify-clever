@@ -182,7 +182,7 @@ const routeDetailMapFrameStyle = {
 };
 
 const routeDetailMapCanvasStyle = {
-  minHeight: "490px",
+  height: "100%",
 };
 
 const routeMetaActionsStyle = {
@@ -1053,9 +1053,6 @@ function getRouteStartTimeLabel(value) {
   return value.replace("T", " ").replace(/^(\d{4})-(\d{2})-(\d{2})/, "$1.$2.$3");
 }
 
-function getRouteCandidateTitle() {
-  return "Route 1";
-}
 
 function getRouteCreatedLabel(routePlan) {
   return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL;
@@ -3108,13 +3105,24 @@ export default function RouteDetailPage() {
   }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints]);
 
   useEffect(() => {
-    if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return;
-    if (hasInitialRouteMapFitRef.current) return;
+    if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return undefined;
+    if (hasInitialRouteMapFitRef.current) return undefined;
 
+    const map = mapRef.current;
     const maplibregl = mapLibraryRef.current;
+    let secondResizeFrame;
     hasInitialRouteMapFitRef.current = true;
-    mapRef.current.resize();
-    fitRouteDetailMap(mapRef.current, maplibregl, routeMapLocations);
+    const firstResizeFrame = window.requestAnimationFrame(() => {
+      secondResizeFrame = window.requestAnimationFrame(() => {
+        map.resize();
+        fitRouteDetailMap(map, maplibregl, routeMapLocations);
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstResizeFrame);
+      window.cancelAnimationFrame(secondResizeFrame);
+    };
   }, [isMapReady, routeMapLocations]);
 
   return (
