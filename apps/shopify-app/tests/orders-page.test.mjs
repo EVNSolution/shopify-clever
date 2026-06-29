@@ -425,7 +425,21 @@ test("Orders loader merges delivery server planning state before background sync
   assert.match(ordersPageSource, /const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\)/);
   assert.match(ordersPageSource, /orders: mergedOrders/);
   assert.match(ordersPageSource, /serverOrdersMs: serverOrderDataResult\.durationMs/);
+  assert.match(ordersPageSource, /needsSessionTokenRefresh: hasSessionTokenRefreshError\(\[serverOrderData, inventoryData\]\)/);
   assert.match(ordersPageSource, /DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE/);
+  assert.match(ordersPageSource, /INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token"/);
+  assert.match(ordersPageSource, /error\?\.code === "UNAUTHORIZED"[\s\S]*error\?\.message === INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE/);
+});
+
+test("Orders page refreshes once with a Shopify id_token after a loader token auth error", () => {
+  assert.match(ordersPageSource, /const sessionTokenRefreshSubmittedRef = useRef\(false\)/);
+  assert.match(ordersPageSource, /const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed"/);
+  assert.match(ordersPageSource, /if \(!needsSessionTokenRefresh \|\| searchParams\.get\(SESSION_TOKEN_REFRESH_PARAM\)\) return/);
+  assert.match(ordersPageSource, /if \(sessionTokenRefreshSubmittedRef\.current\) return/);
+  assert.match(ordersPageSource, /const nextSearchParams = new URLSearchParams\(searchParams\)/);
+  assert.match(ordersPageSource, /nextSearchParams\.set\("id_token", sessionToken\)/);
+  assert.match(ordersPageSource, /nextSearchParams\.set\(SESSION_TOKEN_REFRESH_PARAM, "1"\)/);
+  assert.match(ordersPageSource, /setSearchParams\(nextSearchParams, \{\s*preventScrollReset: true,\s*replace: true,\s*\}\)/);
 });
 
 test("Orders page uses the Shopify shop timezone as today's delivery cutoff", () => {
@@ -1041,7 +1055,7 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation, perf, shopLocalDate \} = useLoaderData\(\)/);
+  assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate \} = useLoaderData\(\)/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);

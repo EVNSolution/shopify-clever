@@ -70,6 +70,8 @@ const ORDER_PIN_ICON_SIZE = 0.54;
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft";
+const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
+const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
 const SHOP_TIME_ZONE_QUERY = `#graphql
   query CleverShopTimeZone {
     shop {
@@ -1753,6 +1755,7 @@ export const loader = async ({ request }) => {
   return {
     orders: mergedOrders,
     inventories: inventoryData.inventories,
+    needsSessionTokenRefresh: hasSessionTokenRefreshError([serverOrderData, inventoryData]),
     errors: collectServiceErrors(
       [orderData, departureLocationData, serverOrderData, inventoryData],
       { ignoredCodes: [DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE] },
@@ -1773,13 +1776,25 @@ export const loader = async ({ request }) => {
   };
 };
 
+function hasSessionTokenRefreshError(results) {
+  return results.some((result) =>
+    (result?.errors ?? []).some((error) =>
+      error?.code === DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE ||
+      (
+        error?.code === "UNAUTHORIZED" &&
+        error?.message === INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE
+      ),
+    ),
+  );
+}
+
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, inventories, errors, departureLocation, perf, shopLocalDate } = useLoaderData();
+  const { orders, inventories, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = useLoaderData();
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
@@ -1918,6 +1933,7 @@ export default function OrdersPage() {
   const initialPerfEmittedRef = useRef(false);
   const submittedRouteSessionTokenRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
+  const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
   const orderedDateButtonRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -2605,6 +2621,35 @@ export default function OrdersPage() {
       );
     }
   };
+
+  useEffect(() => {
+    if (!needsSessionTokenRefresh || searchParams.get(SESSION_TOKEN_REFRESH_PARAM)) return;
+    if (sessionTokenRefreshSubmittedRef.current) return;
+
+    let cancelled = false;
+    sessionTokenRefreshSubmittedRef.current = true;
+
+    shopify
+      .idToken()
+      .then((sessionToken) => {
+        if (cancelled || !sessionToken) return;
+
+        const nextSearchParams = new URLSearchParams(searchParams);
+        nextSearchParams.set("id_token", sessionToken);
+        nextSearchParams.set(SESSION_TOKEN_REFRESH_PARAM, "1");
+        setSearchParams(nextSearchParams, {
+          preventScrollReset: true,
+          replace: true,
+        });
+      })
+      .catch(() => {
+        sessionTokenRefreshSubmittedRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [needsSessionTokenRefresh, searchParams, setSearchParams, shopify]);
 
   useEffect(() => {
     if (orderSyncSubmittedRef.current) return;
