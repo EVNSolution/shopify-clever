@@ -346,7 +346,8 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeDetailTitleOverride = null,\s+routeMetrics = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
-  assert.match(routeDetailSource, /const routeMapStops = \(isRouteGroupDetail \? orderedRouteStops : currentRouteRows\.flatMap/);
+  assert.match(routeDetailSource, /const routeMapRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
+  assert.match(routeDetailSource, /const routeMapStops = routeMapRows\.flatMap/);
   assert.match(routeDetailSource, /buildRouteGeometryRows\(routeGeometrySourceRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints\)/);
   assert.match(routeDetailSource, /const savedRouteGeometryRows = routeGeometryRows/);
   assert.match(routeDetailSource, /const savedRouteStopPoints = routeGeometryStopPoints/);
@@ -865,7 +866,8 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routeGroupDetailSource, /fetchDeliveryRouteGroupDetail\(request, params\.routeGroupId, \{ cacheKey \}\)/);
   assert.match(routeGroupDetailSource, /stops: routeGroupData\.routeGroup\?\.assignments \?\? \[\]/);
   assert.match(routeDetailSource, /const currentRouteRowsSource = isRouteGroupDetail \|\| !currentRouteLineId[\s\S]*\? \[\]/);
-  assert.match(routeDetailSource, /const routeMapStops = \(isRouteGroupDetail \? orderedRouteStops : currentRouteRows\.flatMap/);
+  assert.match(routeDetailSource, /const routeMapRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
+  assert.match(routeDetailSource, /const routeMapStops = routeMapRows\.flatMap/);
   assert.match(routeDetailSource, /const routeGeometrySourceRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
 });
 
