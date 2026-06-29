@@ -117,6 +117,12 @@ s-badge {
   display: none;
 }
 
+.maplibregl-marker.order-map-marker,
+.maplibregl-marker.departure-map-marker,
+.maplibregl-marker.route-detail-snapped-stop-point {
+  position: absolute;
+}
+
 .route-stop-overlap-pointer {
   align-items: center;
   appearance: none;

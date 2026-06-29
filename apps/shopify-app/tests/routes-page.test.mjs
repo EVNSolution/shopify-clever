@@ -610,6 +610,7 @@ test("Route detail places centered DOM stop markers and the departure marker on 
   assert.match(globalCssSource, /--marker-width: 23px/);
   assert.match(globalCssSource, /font-size: 11px/);
   assert.match(globalCssSource, /font-weight: 800/);
+  assert.match(globalCssSource, /\.maplibregl-marker\.order-map-marker,[\s\S]*\.maplibregl-marker\.departure-map-marker,[\s\S]*\.maplibregl-marker\.route-detail-snapped-stop-point \{[\s\S]*position: absolute;/);
   assert.match(routeDetailSource, /pathElement\.setAttribute\("d", MAP_PIN_PATH\)/);
   assert.match(routeDetailSource, /labelElement\.className = "order-map-marker__label"/);
   assert.match(routeDetailSource, /labelElement\.textContent = String\(stop\.stop\)/);
