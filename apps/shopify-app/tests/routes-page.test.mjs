@@ -280,7 +280,7 @@ test("Route detail keeps the server driver action but removes the header assignm
   assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver/);
   assert.match(routeDetailSource, /intent === "saveRouteDriver"/);
   assert.match(routeDetailSource, /formData\.get\("driverId"\)/);
-  assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+params\.routeId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
+  assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+routeId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
   assert.match(routeDetailSource, /buildRouteDriverOptions\(drivers, effectiveRoutePlan\?\.driver\)/);
   assert.match(routeDetailSource, /Invite pending/);
   assert.doesNotMatch(routeDetailSource, /const routeDriverSaveFetcher = useFetcher\(\)/);
@@ -338,6 +338,13 @@ test("Routes list displays assigned route drivers from the server response", () 
   assert.match(routesPageSource, /routeFilters\.driverId && route\.driverId !== routeFilters\.driverId/);
 });
 
+test("Route path params ignore accidentally appended query flags", () => {
+  assert.match(routeDetailSource, /export function cleanRoutePathParam\(value\) \{/);
+  assert.match(routeDetailSource, /textOrUndefined\(value\)\?\.split\(\/\[\?&\]\/\)\[0\]/);
+  assert.match(routeDetailSource, /loadRoutePlanDetail\(request, cleanRoutePathParam\(params\.routeId\)\)/);
+  assert.match(routeGroupDetailSource, /cleanRoutePathParam\(params\.routeGroupId\)/);
+});
+
 test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
@@ -366,7 +373,7 @@ test("Route detail loader reads the selected persisted route plan", () => {
   assert.doesNotMatch(routeDetailSource, /updateDeliveryRoutePlanStops/);
   assert.match(routeDetailSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/features\/locations\/shopify-locations\.server"/);
   assert.match(routeDetailSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
-  assert.match(routeDetailSource, /export const loader = async \(\{ params, request \}\) => loadRoutePlanDetail\(request, params\.routeId\)/);
+  assert.match(routeDetailSource, /export const loader = async \(\{ params, request \}\) => loadRoutePlanDetail\(request, cleanRoutePathParam\(params\.routeId\)\)/);
   assert.match(routeDetailSource, /const \{ admin, session \} = await authenticate\.admin\(request\)/);
   assert.match(routeDetailSource, /const shopifyShopCacheKey = session\?\.shop/);
   assert.match(routeDetailSource, /Promise\.all\(\[/);
@@ -722,6 +729,7 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
   assert.match(routeDetailSource, /const handleFitRouteMap = \(\) => \{/);
   assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, mapLibraryRef\.current, routeMapLocations\)/);
   assert.match(routeDetailSource, /new URLSearchParams\(location\.search\)\.get\("mapDebug"\) === "1"/);
+  assert.match(routeDetailSource, /location\.pathname/);
   assert.match(routeDetailSource, /new ResizeObserver\(\(\) => scheduleResize\("container"\)\)/);
   assert.match(routeDetailSource, /console\.info\("routes\.detail\.map\.resize"/);
   assert.match(routeDetailSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
@@ -868,7 +876,8 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routeDetailSource, /const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null/);
   assert.match(routeDetailSource, /const currentRouteRowsSource = isRouteGroupDetail \|\| !currentRouteLineId[\s\S]*\? \[\]/);
   assert.match(routeDetailSource, /const groupRouteRowsSource = isRouteGroupDetail[\s\S]*routeBranchRows\.length > 0 \? routeBranchRows : routeGroupChildRows/);
-  assert.match(routeGroupDetailSource, /fetchDeliveryRouteGroupDetail\(request, params\.routeGroupId, \{ cacheKey \}\)/);
+  assert.match(routeGroupDetailSource, /cleanRoutePathParam\(params\.routeGroupId\)/);
+  assert.match(routeGroupDetailSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey \}\)/);
   assert.match(routeGroupDetailSource, /stops: routeGroupData\.routeGroup\?\.assignments \?\? \[\]/);
   assert.match(routeDetailSource, /const currentRouteRowsSource = isRouteGroupDetail \|\| !currentRouteLineId[\s\S]*\? \[\]/);
   assert.match(routeDetailSource, /const routeMapRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
@@ -892,7 +901,7 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /const routeOverviewTopBarStyle = \{/);
   assert.match(routeDetailSource, /buildRouteGroupRouteLinks\(timelineRouteRows, childRouteDetails, routeGroup, effectiveRoutePlan\?\.id \?\? null, routeDetailTitle, isRouteGroupDetail \? routeGroup\?\.id : null\)/);
   assert.match(routeGroupDetailSource, /export const loader = async \(\{ params, request \}\) => \{/);
-  assert.ok(routeGroupDetailSource.includes("fetchDeliveryRouteGroupDetail(request, params.routeGroupId, { cacheKey })"));
+  assert.ok(routeGroupDetailSource.includes("fetchDeliveryRouteGroupDetail(request, routeGroupId, { cacheKey })"));
   assert.doesNotMatch(routeGroupDetailSource, /redirect\(childRoutePlanId/);
   assert.match(routeDetailSource, /const seenIds = new Set\(\)/);
   assert.match(routeDetailSource, /const seenLabels = new Set\(\)/);

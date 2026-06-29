@@ -6,7 +6,7 @@ import { fetchDeliveryRouteGroupDetail } from "../features/delivery/route-groups
 import { fetchDeliveryRoutePlanDetail } from "../features/delivery/route-plans.server";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
 import { authenticate } from "../shopify.server";
-import RouteDetailPage, { action } from "./app.routes.$routeId";
+import RouteDetailPage, { action, cleanRoutePathParam } from "./app.routes.$routeId";
 
 function textOrUndefined(value) {
   if (value == null) return undefined;
@@ -17,8 +17,9 @@ function textOrUndefined(value) {
 export const loader = async ({ params, request }) => {
   const { admin, session } = await authenticate.admin(request);
   const cacheKey = session?.shop;
+  const routeGroupId = cleanRoutePathParam(params.routeGroupId);
   const [routeGroupData, departureLocationData, driverData] = await Promise.all([
-    fetchDeliveryRouteGroupDetail(request, params.routeGroupId, { cacheKey }),
+    fetchDeliveryRouteGroupDetail(request, routeGroupId, { cacheKey }),
     fetchShopifyDepartureLocation(admin, { cacheKey }),
     fetchDeliveryDrivers(request, {}),
   ]);

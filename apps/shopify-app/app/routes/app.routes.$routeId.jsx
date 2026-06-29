@@ -809,7 +809,11 @@ const routeDetailErrorStyle = {
 };
 
 
-export const loader = async ({ params, request }) => loadRoutePlanDetail(request, params.routeId);
+export function cleanRoutePathParam(value) {
+  return textOrUndefined(value)?.split(/[?&]/)[0];
+}
+
+export const loader = async ({ params, request }) => loadRoutePlanDetail(request, cleanRoutePathParam(params.routeId));
 
 async function loadRoutePlanDetail(request, routeId) {
   const loaderStartedAt = getRouteDetailPerfNow();
@@ -893,6 +897,7 @@ async function loadRoutePlanDetail(request, routeId) {
 export const action = async ({ params, request }) => {
   await authenticate.admin(request);
   const formData = await request.formData();
+  const routeId = cleanRoutePathParam(params.routeId);
   const intent = formData.get("_intent");
   const routeGroupId = textOrUndefined(formData.get("routeGroupId"));
   const shopifySessionToken = formData.get("shopifySessionToken");
@@ -900,7 +905,7 @@ export const action = async ({ params, request }) => {
   logRouteDetailPerformance("routes.detail.action", {
     intent,
     routeGroupId,
-    routeId: params.routeId,
+    routeId,
   });
 
   if (intent === "saveRouteDriver") {
@@ -908,7 +913,7 @@ export const action = async ({ params, request }) => {
 
     return assignDeliveryRoutePlanDriver(
       request,
-      params.routeId,
+      routeId,
       { driverId },
       { sessionToken: shopifySessionToken },
     );
@@ -922,7 +927,7 @@ export const action = async ({ params, request }) => {
       draft,
       { sessionToken: shopifySessionToken },
     );
-    logRouteGroupActionResult("routes.detail.action.previewRouteOptimization", params.routeId, routeGroupId, result);
+    logRouteGroupActionResult("routes.detail.action.previewRouteOptimization", routeId, routeGroupId, result);
     return result;
   }
 
@@ -930,7 +935,7 @@ export const action = async ({ params, request }) => {
     const draft = readRouteDraftPayload(formData.get("draft"));
     logRouteDetailPerformance("routes.detail.action.saveRouteDraft.request", {
       routeGroupId,
-      routeId: params.routeId ?? null,
+      routeId: routeId ?? null,
       routeCount: draft.routes.length,
       existingRoutePlanCount: draft.routes.filter((route) => route.routePlanId).length,
       optimizedExistingRoutePlanCount: draft.routes.filter((route) => route.routePlanId && route.optimized !== undefined).length,
@@ -945,7 +950,7 @@ export const action = async ({ params, request }) => {
       draft,
       { sessionToken: shopifySessionToken },
     );
-    logRouteGroupActionResult("routes.detail.action.saveRouteDraft", params.routeId, routeGroupId, result);
+    logRouteGroupActionResult("routes.detail.action.saveRouteDraft", routeId, routeGroupId, result);
     return result;
   }
 
@@ -2172,7 +2177,7 @@ export default function RouteDetailPage() {
   } = useLoaderData();
   const effectiveRoutePlan = routePlan;
   const routeSessionSearch = getRouteSessionSearch(location.search);
-  const routeMapDebugEnabled = new URLSearchParams(location.search).get("mapDebug") === "1";
+  const routeMapDebugEnabled = new URLSearchParams(location.search).get("mapDebug") === "1" || /(?:&|%26)mapDebug=1/.test(location.pathname);
   const routesListHref = `/app/routes${routeSessionSearch}`;
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan), [effectiveRoutePlan]);
   const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? textOrUndefined(routeDetail.route) ?? textOrUndefined(routeGroup?.name) ?? "Route";
