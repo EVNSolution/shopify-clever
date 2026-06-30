@@ -1288,7 +1288,9 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /const inventoryDeleteFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "deleteInventory"\)/);
   assert.match(ordersPageSource, /formData\.set\("inventoryIds", JSON\.stringify\(checkedInventoryIds\)\)/);
-  assert.match(ordersPageSource, />Delete<\/button>/);
+  assert.match(ordersPageSource, /const ordersViewTabsRowStyle = \{[\s\S]*justifyContent:\s*"space-between"/);
+  assert.match(ordersPageSource, /activeOrdersView === "inventory" \? \([\s\S]*>Delete<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /inventoryToolbarStyle/);
   assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
   assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);
   assert.doesNotMatch(ordersPageSource, /lower=\{<div \/>}/);
