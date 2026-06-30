@@ -30,6 +30,7 @@ test("performance evaluator captures real browser Orders navigation timings", ()
   assert.match(perfScriptSource, /shopify\.admin\.iframe/);
   assert.match(perfScriptSource, /app\.document\.navigation/);
   assert.match(perfScriptSource, /orders\.loader/);
+  assert.match(perfScriptSource, /orders\.render\.commit/);
   assert.match(perfScriptSource, /orders\.maplibre\.init/);
   assert.match(perfScriptSource, /orders\.maplibre\.remove/);
   assert.match(perfScriptSource, /orders\.maplibre\.source_update/);
@@ -74,6 +75,7 @@ test("Orders page emits loader, iframe, document, and MapLibre timing metrics", 
   assert.match(ordersPageSource, /name: "shopify\.admin\.iframe"/);
   assert.match(ordersPageSource, /name: "app\.document\.navigation"/);
   assert.match(ordersPageSource, /name: "orders\.loader"/);
+  assert.match(ordersPageSource, /name: "orders\.render\.commit"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.init"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.remove"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.source_update"/);
@@ -83,6 +85,8 @@ test("Orders page emits loader, iframe, document, and MapLibre timing metrics", 
   assert.match(ordersPageSource, /mapRemoveMs/);
   assert.match(ordersPageSource, /sourceUpdateMs/);
   assert.match(ordersPageSource, /plannedOrderCount/);
+  assert.doesNotMatch(ordersPageSource, /durationMs: roundPerfDuration\(performance\.now\(\)\)/);
+  assert.match(ordersPageSource, /durationMs: roundPerfDuration\(navigationEntry\.duration\)/);
 });
 
 test("root document preconnects to map tile infrastructure before MapLibre loads", () => {
