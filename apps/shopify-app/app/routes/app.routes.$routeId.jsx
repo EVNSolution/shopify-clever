@@ -1018,51 +1018,6 @@ function formatStopAttributes(attributes) {
     .join(", ") || "—";
 }
 
-function buildRouteBranchRows(routeGroup, routeStops = [], childDetailsByRoutePlanId = new Map()) {
-  const branches = [...(routeGroup?.branches ?? [])].sort((first, second) => {
-    return (numberOrUndefined(first.sortOrder) ?? 0) - (numberOrUndefined(second.sortOrder) ?? 0);
-  });
-  const stopByOrderId = new Map(routeStops.map((stop) => [stop.orderId, stop]));
-
-  return branches.map((branch, index) => {
-    const routeIndex = Math.max(numberOrUndefined(branch.sortOrder) ?? index + 2, index + 2);
-    const orderIds = Array.isArray(branch.orderIds) ? branch.orderIds.map(textOrUndefined).filter(Boolean) : [];
-    const branchStops = orderIds.map((orderId) => stopByOrderId.get(orderId)).filter(Boolean);
-    const childDetail = childDetailsByRoutePlanId.get(textOrUndefined(branch.routePlanId));
-    const optimized = readRouteOptimizedSnapshot(branch.optimized) ?? (childDetail
-      ? {
-        metrics: childDetail.routeMetrics ?? null,
-        routeGeometry: childDetail.routeGeometry ?? null,
-        routeStopPoints: childDetail.routeStopPoints ?? [],
-      }
-      : null);
-    return {
-      attemptedCount: 0,
-      color: textOrUndefined(branch.color) ?? ROUTE_DEFAULT_COLORS[(index + 1) % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
-      createdLabel: textOrUndefined(branch.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL,
-      deliveredCount: 0,
-      driverLabel: textOrUndefined(branch.driverName) ?? "Unassigned",
-      driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(optimized?.metrics?.durationSeconds)),
-      id: `branch-${branch.id ?? index}`,
-      branchId: textOrUndefined(branch.id) ?? null,
-      routeKey: `branch:${textOrUndefined(branch.id) ?? index}`,
-      routePlanId: childDetail?.routePlanId ?? null,
-      isCurrent: false,
-      orderIds,
-      routeIndex,
-      status: formatRouteStatus(branch.status ?? childDetail?.routePlan?.status),
-      stops: branchStops,
-      stopsCount: branchStops.length,
-      title: textOrUndefined(branch.label) ?? `Route ${routeIndex}`,
-      totalDistanceLabel: getRouteMetricLabel(formatRouteDistanceMeters(optimized?.metrics?.distanceMeters)),
-      totalItems: ROUTE_EMPTY_LABEL,
-      totalWeightLabel: ROUTE_EMPTY_LABEL,
-      vehicleLabel: ROUTE_EMPTY_LABEL,
-      optimized,
-    };
-  });
-}
-
 function getRouteGroupChildOrderIds(child, detailStops, routeStops) {
   const explicitOrderIds = firstArray(
     child?.orderIds,
@@ -1104,8 +1059,9 @@ function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
 }
 
 function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = []) {
-  return getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
-    const routeIndex = numberOrUndefined(child?.sortOrder) ?? index + 1;
+  const routeGroupChildRows = getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
+    const routeIdx = numberOrUndefined(child?.routeIdx);
+    const routeIndex = routeIdx ?? numberOrUndefined(child?.sortOrder) ?? index + 1;
     const routePlanId = getRouteGroupChildRoutePlanId(child);
     const detail = childDetailsByRoutePlanId.get(routePlanId);
     const detailStops = detail?.stops ?? [];
@@ -1122,7 +1078,6 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
 
     return {
       attemptedCount: countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
-      branchId: null,
       color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[index % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
       createdLabel: textOrUndefined(detail?.routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL,
       deliveredCount: countRouteStopsByStatus(stops, ["DELIVERED", "FULFILLED"]),
@@ -1132,7 +1087,8 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       isCurrent: false,
       optimized,
       orderIds: orderIds.length > 0 ? orderIds : stops.map((stop) => stop.orderId).filter(Boolean),
-      routeKey: routePlanId ? `routePlan:${routePlanId}` : `group-route:${index}`,
+      routeIdx: routeIdx ?? null,
+      routeKey: routePlanId ? `routePlan:${routePlanId}` : `routeIdx:${routeIndex}`,
       routeIndex,
       routePlanId: routePlanId ?? null,
       status: formatRouteStatus(detail?.routePlan?.status ?? child?.displayStatus ?? child?.status),
@@ -1145,6 +1101,11 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       vehicleLabel: getRouteVehicleLabel(detail?.routePlan),
     };
   }).filter((routeRow) => routeRow.routePlanId);
+  routeGroupChildRows.sort((first, second) => (
+    (numberOrUndefined(first.routeIdx) ?? numberOrUndefined(first.routeIndex) ?? 0)
+    - (numberOrUndefined(second.routeIdx) ?? numberOrUndefined(second.routeIndex) ?? 0)
+  ));
+  return routeGroupChildRows;
 }
 
 function applyRouteRowDraftState(routeRows, routeLineEdits, routePreviewByKey) {
@@ -1196,13 +1157,14 @@ function ensureUniqueRouteRowColors(routeRows) {
   });
 }
 
-function getNextRouteBranchDraft(routeRows) {
+function getNextChildRouteDraft(routeRows) {
   const usedColors = new Set(routeRows.map((routeRow) => normalizeRouteColor(routeRow.color)).filter(Boolean));
-  const maxRouteIndex = routeRows.reduce((max, routeRow) => Math.max(max, numberOrUndefined(routeRow.routeIndex) ?? 0), 0);
-  const routeNumber = (maxRouteIndex || routeRows.length) + 1;
+  const maxRouteIdx = routeRows.reduce((max, routeRow) => Math.max(max, numberOrUndefined(routeRow.routeIdx) ?? numberOrUndefined(routeRow.routeIndex) ?? 0), 0);
+  const routeNumber = (maxRouteIdx || routeRows.length) + 1;
   return {
     color: getUnusedRouteColor(null, usedColors, routeNumber - 1),
     label: `Route ${routeNumber}`,
+    routeIdx: routeNumber,
     routeIndex: routeNumber,
   };
 }
@@ -1295,9 +1257,9 @@ function buildRouteGeometryRows(routeRows, childDetailsByRoutePlanId, fallbackRo
 
 function getRouteRowDraftKey(routeRow) {
   if (routeRow.routeKey) return routeRow.routeKey;
-  if (routeRow.isCurrent) return "root";
-  if (routeRow.branchId) return `branch:${routeRow.branchId}`;
+  if (routeRow.routePlanId) return `routePlan:${routeRow.routePlanId}`;
   if (routeRow.tempId) return routeRow.tempId;
+  if (numberOrUndefined(routeRow.routeIdx) !== undefined) return `routeIdx:${routeRow.routeIdx}`;
   return routeRow.id;
 }
 
@@ -1317,12 +1279,12 @@ function buildRouteDraftPayload(routeRows, { includeEmptyTempRoutes = true, incl
     routes: routeRows.filter((routeRow) => shouldIncludeRouteDraftRow(routeRow, includeEmptyTempRoutes)).map((routeRow, index) => {
       const optimized = getRouteDraftOptimized(routeRow, includeExistingOptimized);
       return {
-        branchId: routeRow.branchId ?? null,
         color: routeRow.color,
         label: routeRow.title,
         ...(optimized === undefined ? {} : { optimized }),
         orderIds: routeRow.stops.map((stop) => stop.orderId).filter(Boolean),
         routeKey: getRouteRowDraftKey(routeRow),
+        routeIdx: numberOrUndefined(routeRow.routeIdx) ?? numberOrUndefined(routeRow.routeIndex) ?? index + 1,
         routePlanId: routeRow.routePlanId ?? null,
         sortOrder: numberOrUndefined(routeRow.routeIndex) ?? index + 1,
         tempId: routeRow.tempId ?? null,
@@ -1418,12 +1380,6 @@ export default function RouteDetailPage() {
     [childRouteDetails, orderedRouteStops, routeGroup],
   );
   const routeGroupStopsSource = routeGroup ? allRouteGroupStops : orderedRouteStops;
-  const routeBranchRows = useMemo(() => buildRouteBranchRows(routeGroup, routeGroupStopsSource, routeChildDetailsByRoutePlanId), [routeGroupStopsSource, routeChildDetailsByRoutePlanId, routeGroup]);
-  const branchOrderIds = useMemo(() => new Set(routeBranchRows.flatMap((routeRow) => routeRow.orderIds)), [routeBranchRows]);
-  const rootRouteStops = useMemo(
-    () => routeGroupStopsSource.filter((stop) => !branchOrderIds.has(stop.orderId)),
-    [routeGroupStopsSource, branchOrderIds],
-  );
   const routeGroupChildRows = useMemo(() => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource), [routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource]);
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "Route 1" : routeDetailTitle;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
@@ -1490,7 +1446,6 @@ export default function RouteDetailPage() {
     : [
       {
         attemptedCount: routeAttemptedCount,
-        branchId: null,
         color: routeLineColor,
         createdLabel: routeCreatedLabel,
         deliveredCount: routeDeliveredCount,
@@ -1500,8 +1455,9 @@ export default function RouteDetailPage() {
         isCurrent: true,
         optimized: routeMetrics ? { metrics: routeMetrics, routeGeometry, routeStopPoints } : null,
         orderIds: orderedRouteStops.map((stop) => stop.orderId).filter(Boolean),
-        routeIndex: 1,
-        routeKey: "root",
+        routeIdx: numberOrUndefined(currentRouteGroupChild?.routeIdx) ?? 1,
+        routeIndex: numberOrUndefined(currentRouteGroupChild?.routeIdx) ?? 1,
+        routeKey: `routePlan:${textOrUndefined(effectiveRoutePlan?.id) ?? currentRouteLineId}`,
         routePlanId: textOrUndefined(effectiveRoutePlan?.id) ?? null,
         status: formatRouteStatus(effectiveRoutePlan?.status),
         stops: orderedRouteStops,
@@ -1513,42 +1469,7 @@ export default function RouteDetailPage() {
         vehicleLabel: routeVehicleLabel,
       },
     ];
-  const groupRootRouteRows = isRouteGroupDetail
-    && rootRouteStops.length > 0
-    ? [
-      {
-        attemptedCount: countRouteStopsByStatus(rootRouteStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
-        branchId: null,
-        color: routeLineColor,
-        createdLabel: ROUTE_EMPTY_LABEL,
-        deliveredCount: countRouteStopsByStatus(rootRouteStops, ["DELIVERED", "FULFILLED"]),
-        driverLabel: "Unassigned",
-        driveTimeLabel: ROUTE_EMPTY_LABEL,
-        id: "group-root-route",
-        isCurrent: false,
-        optimized: null,
-        orderIds: rootRouteStops.map((stop) => stop.orderId).filter(Boolean),
-        routeIndex: 1,
-        routeKey: "root",
-        routePlanId: null,
-        status: formatRouteStatus(routeGroup?.displayStatus ?? routeGroup?.status),
-        stops: rootRouteStops,
-        stopsCount: rootRouteStops.length,
-        title: "Route 1",
-        totalDistanceLabel: ROUTE_EMPTY_LABEL,
-        totalItems: getRouteTotalItems(null, rootRouteStops),
-        totalWeightLabel: ROUTE_EMPTY_LABEL,
-        vehicleLabel: ROUTE_EMPTY_LABEL,
-      },
-    ]
-    : [];
-  const groupRouteRowsSource = isRouteGroupDetail
-    ? routeGroupChildRows.length > 0
-      ? routeGroupChildRows
-      : [...groupRootRouteRows, ...routeBranchRows]
-    : routeGroupChildRows.length > 0
-      ? routeGroupChildRows
-      : routeBranchRows;
+  const groupRouteRowsSource = routeGroupChildRows;
   const displayRouteRowsSource = isRouteGroupDetail ? groupRouteRowsSource : currentRouteRowsSource;
   const contextRouteRowsSource = isRouteGroupDetail
     ? groupRouteRowsSource
@@ -1929,13 +1850,12 @@ export default function RouteDetailPage() {
   }, []);
 
   const handleAddEmptyRoute = () => {
-    const draft = getNextRouteBranchDraft(routeRows);
+    const draft = getNextChildRouteDraft(contextRouteRows);
     const tempId = `temp:${Date.now()}-${Math.random().toString(16).slice(2)}`;
     setClientRouteRows((rows) => [
       ...rows,
       {
         attemptedCount: 0,
-        branchId: null,
         color: draft.color,
         createdLabel: ROUTE_EMPTY_LABEL,
         deliveredCount: 0,
@@ -1945,6 +1865,7 @@ export default function RouteDetailPage() {
         isCurrent: false,
         orderIds: [],
         routeKey: tempId,
+        routeIdx: draft.routeIdx,
         routeIndex: draft.routeIndex,
         routePlanId: null,
         stops: [],
@@ -1968,7 +1889,7 @@ export default function RouteDetailPage() {
   const handleSaveRouteDraft = () => {
     if (!canSaveRouteDraft) return;
     submitRouteGroupAction("saveRouteDraft", {
-      draft: JSON.stringify(buildRouteDraftPayload(contextTimelineRouteRows, { includeEmptyTempRoutes: false, includeExistingOptimized: false })),
+      draft: JSON.stringify(buildRouteDraftPayload(contextTimelineRouteRows, { includeExistingOptimized: false })),
     });
   };
 

@@ -316,11 +316,11 @@ function readRouteDraftPayload(value) {
     if (!Array.isArray(parsed?.routes)) return { routes: [] };
     return {
       routes: parsed.routes.map((route) => ({
-        branchId: textOrUndefined(route?.branchId) ?? null,
         color: textOrUndefined(route?.color) ?? null,
         label: textOrUndefined(route?.label) ?? null,
         ...(route?.optimized === undefined ? {} : { optimized: route?.optimized && typeof route.optimized === "object" ? route.optimized : null }),
         orderIds: Array.isArray(route?.orderIds) ? route.orderIds.map(textOrUndefined).filter(Boolean) : [],
+        routeIdx: Number.isFinite(Number(route?.routeIdx)) ? Number(route.routeIdx) : undefined,
         routeKey: textOrUndefined(route?.routeKey),
         routePlanId: textOrUndefined(route?.routePlanId) ?? null,
         sortOrder: Number.isFinite(Number(route?.sortOrder)) ? Number(route.sortOrder) : undefined,
