@@ -1420,6 +1420,9 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /aria-hidden="true"/);
   assert.match(inventoryDetailSource, /width: "70px"/);
   assert.match(inventoryDetailSource, /width: "76px"/);
+  assert.match(inventoryDetailSource, /const tableWrapStyle = \{/);
+  assert.match(inventoryDetailSource, /overflow: "visible"/);
+  assert.doesNotMatch(inventoryDetailSource, /overflowX: "auto"/);
   assert.match(inventoryDetailSource, /\.inventory-detail-total-col \{ width: 64px !important; \}/);
   assert.match(inventoryDetailSource, /function DateCellLabel/);
   assert.match(inventoryDetailSource, /gridTemplateColumns: "22px 34px"/);
