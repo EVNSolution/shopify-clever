@@ -24,6 +24,15 @@ import {
 } from "./orders-map";
 import { getServiceErrorNotice } from "../service-errors";
 import {
+  DEFAULT_TABLE_COLUMN_WIDTHS,
+  MIN_TABLE_COLUMN_WIDTH,
+  SORTABLE_ORDER_COLUMNS,
+  getTableColumnFitWidth,
+  getTableColumnMinWidth,
+  getTableColumnMinWidths,
+  getTableColumnPixelState,
+} from "./orders-table-columns";
+import {
   filterOrders,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
@@ -73,83 +82,6 @@ const ORDER_PAYMENT_CHANGE_OPTIONS = [
   { label: "Unknown", value: "UNKNOWN" },
 ];
 const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
-
-function getTableColumnPixelState(tableElement) {
-  const widths = Array.from(
-    tableElement.querySelectorAll("thead th"),
-    (headerCell) => Math.round(headerCell.getBoundingClientRect().width),
-  );
-  const tableWidth = Math.round(tableElement.getBoundingClientRect().width);
-  const roundingDiff = tableWidth - widths.reduce((total, width) => total + width, 0);
-
-  if (widths.length > 0 && roundingDiff !== 0) {
-    widths[widths.length - 1] += roundingDiff;
-  }
-
-  return { tableWidth, widths };
-}
-
-function getTableColumnFitWidth(tableElement, columnIndex) {
-  const cells = tableElement.querySelectorAll(
-    `thead th:nth-child(${columnIndex + 1}), tbody td:nth-child(${columnIndex + 1})`,
-  );
-
-  return Math.max(
-    MIN_TABLE_COLUMN_WIDTH,
-    ...Array.from(cells, (cell) => {
-      const clone = cell.cloneNode(true);
-
-      Object.assign(clone.style, {
-        display: "inline-block",
-        height: "auto",
-        left: "-10000px",
-        maxWidth: "none",
-        minWidth: "0",
-        overflow: "visible",
-        pointerEvents: "none",
-        position: "fixed",
-        textOverflow: "clip",
-        top: "-10000px",
-        visibility: "hidden",
-        whiteSpace: "nowrap",
-        width: "max-content",
-        zIndex: "-1",
-      });
-
-      clone.querySelectorAll("*").forEach((element) => {
-        Object.assign(element.style, {
-          maxWidth: "none",
-          overflow: "visible",
-          textOverflow: "clip",
-          width: "auto",
-        });
-      });
-
-      document.body.append(clone);
-      const width = Math.ceil(clone.getBoundingClientRect().width);
-      clone.remove();
-
-      return width + 2;
-    }),
-  );
-}
-
-function getTableColumnMinWidth(tableElement, columnIndex) {
-  const header = tableElement.querySelector(`thead th:nth-child(${columnIndex + 1})`);
-  const pills = tableElement.querySelectorAll(`tbody td:nth-child(${columnIndex + 1}) .info-pill`);
-
-  return Math.max(
-    MIN_TABLE_COLUMN_WIDTH,
-    header ? Math.ceil(header.scrollWidth) : 0,
-    ...Array.from(pills, (pill) => Math.ceil(pill.scrollWidth) + TABLE_CELL_HORIZONTAL_PADDING_PX),
-  );
-}
-
-function getTableColumnMinWidths(tableElement, columnCount) {
-  return Array.from({ length: columnCount }, (_, columnIndex) =>
-    getTableColumnMinWidth(tableElement, columnIndex),
-  );
-}
 
 const ordersMapCanvasStyle = {
   minHeight: "420px",
@@ -695,22 +627,6 @@ const orderActionSelectStyle = {
   width: "100%",
 };
 
-const ORDER_TABLE_COLUMN_WIDTHS = {
-  select: "3%",
-  name: "7%",
-  orderedDate: "8%",
-  customer: "10%",
-  address: "24%",
-  itemCount: "6%",
-  deliveryArea: "8%",
-  deliveryLabel: "9%",
-  planningStatus: "7%",
-  payment: "8%",
-  hasCoordinates: "6%",
-};
-const MIN_TABLE_COLUMN_WIDTH = 44;
-const TABLE_CELL_HORIZONTAL_PADDING_PX = 16;
-
 const tableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
@@ -887,24 +803,6 @@ const itemPopoverQtyCellStyle = {
   fontWeight: 700,
   textAlign: "right",
 };
-
-const SORTABLE_ORDER_COLUMNS = [
-  { key: "name", label: "Order" },
-  { key: "orderedDate", label: "Ordered" },
-  { key: "customer", label: "Recipient" },
-  { key: "address", label: "Address" },
-  { key: "itemCount", label: "Items" },
-  { key: "deliveryArea", label: "Area" },
-  { key: "deliveryLabel", label: "Delivery" },
-  { key: "planningStatus", label: "State" },
-  { key: "payment", label: "Payment" },
-  { key: "hasCoordinates", label: "Coordinates" },
-];
-
-const DEFAULT_TABLE_COLUMN_WIDTHS = [
-  ORDER_TABLE_COLUMN_WIDTHS.select,
-  ...SORTABLE_ORDER_COLUMNS.map((column) => ORDER_TABLE_COLUMN_WIDTHS[column.key]),
-];
 
 function scheduleIdleTask(callback) {
   if (window.requestIdleCallback) {
