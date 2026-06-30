@@ -91,12 +91,12 @@ const routePlanPanelStyle = {
   boxSizing: "border-box",
   display: "flex",
   flexDirection: "column",
-  gap: "10px",
+  gap: "8px",
   height: "420px",
   maxHeight: "420px",
   overflowX: "hidden",
   overflowY: "auto",
-  padding: "12px",
+  padding: "10px",
 };
 
 const routePlanScrollAreaStyle = {
@@ -140,22 +140,15 @@ const activeOrdersViewTabButtonStyle = {
 };
 
 const inventoryListStyle = {
-  display: "grid",
-  gap: "8px",
-  padding: "8px 10px 12px",
+  display: "flex",
+  flexDirection: "column",
+  minHeight: "420px",
 };
 
-const inventoryTableStyle = {
-  borderCollapse: "collapse",
-  fontSize: "13px",
-  lineHeight: "18px",
-  width: "100%",
-};
-
-const inventoryCellStyle = {
-  borderTop: "1px solid #ebebeb",
-  padding: "7px 8px",
-  textAlign: "left",
+const inventoryToolbarStyle = {
+  display: "flex",
+  justifyContent: "flex-end",
+  padding: "6px 10px",
 };
 
 const routePlanHeaderStyle = {
@@ -323,16 +316,16 @@ const routePlanTitleLabelStyle = {
 const routePlanTitleFieldStyle = {
   background: "#ffffff",
   border: "1px solid #d6d6d6",
-  borderRadius: "10px",
+  borderRadius: "8px",
   boxSizing: "border-box",
   color: "#1f1f1f",
   fontFamily: "inherit",
-  fontSize: "16px",
-  fontWeight: 750,
+  fontSize: "13px",
+  fontWeight: 650,
   letterSpacing: "-0.01em",
   lineHeight: 1.2,
-  minHeight: "40px",
-  padding: "8px 10px",
+  minHeight: "32px",
+  padding: "5px 8px",
   width: "100%",
 };
 
@@ -340,7 +333,7 @@ const routePlanDetailStyle = {
   background: "#f7f7f7",
   borderRadius: "8px",
   flex: "0 0 auto",
-  padding: "10px",
+  padding: "8px",
 };
 
 const routeAssignActionButtonStyle = {
@@ -708,6 +701,45 @@ const tableCellStyle = {
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
+};
+
+const INVENTORY_TABLE_COLUMN_WIDTHS = ["32px", "220px", "88px", "82px", "150px", "128px"];
+
+const inventoryTableWrapStyle = {
+  maxHeight: "min(520px, 58vh)",
+  overflowX: "auto",
+  overflowY: "auto",
+};
+
+const inventoryTableStyle = {
+  ...tableStyle,
+  minWidth: "700px",
+};
+
+const inventoryHeaderCellStyle = tableHeaderCellStyle;
+const inventoryCellStyle = tableCellStyle;
+const inventoryCheckboxHeaderCellStyle = {
+  ...checkboxHeaderCellStyle,
+  padding: "6px 2px",
+};
+const inventoryCheckboxCellStyle = {
+  ...tableCellStyle,
+  padding: "6px 2px",
+};
+const inventoryCheckboxStyle = {
+  margin: 0,
+};
+
+const inventoryDeleteButtonStyle = {
+  ...removeFromPlanButtonStyle,
+  borderColor: "#d72c0d",
+  color: "#d72c0d",
+};
+
+const inventoryNameCellStyle = {
+  ...tableCellStyle,
+  fontWeight: 650,
+  textAlign: "left",
 };
 
 const checkboxCellStyle = {
@@ -1287,6 +1319,7 @@ function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
+  const inventoryDeleteFetcher = useFetcher();
   const orderBulkUpdateFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
   const shopify = useAppBridge();
@@ -1436,13 +1469,16 @@ export default function OrdersPage() {
           ? orderBulkUpdateFetcher.data
           : routePlanFetcher.data?.errors?.length
         ? routePlanFetcher.data
-        : inventoryFetcher.data;
+        : inventoryDeleteFetcher.data?.errors?.length
+          ? inventoryDeleteFetcher.data
+          : inventoryFetcher.data;
   const orderPageNoticeMessage = getServiceErrorNotice([
     actionErrors,
     { errors },
   ], { context: "orders_page" });
   const isCreatingRoute = routePlanFetcher.state !== "idle";
   const isCreatingInventory = inventoryFetcher.state !== "idle";
+  const isDeletingInventory = inventoryDeleteFetcher.state !== "idle";
   const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
   const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
@@ -1450,6 +1486,7 @@ export default function OrdersPage() {
   );
   const [hoveredItemPopoverOrderId, setHoveredItemPopoverOrderId] = useState(null);
   const [pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId] = useState(null);
+  const [checkedInventoryIds, setCheckedInventoryIds] = useState([]);
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
   const [orderActionModalOpen, setOrderActionModalOpen] = useState(false);
@@ -1498,6 +1535,18 @@ export default function OrdersPage() {
     () => getCalendarDays(orderedDateCalendarMonth),
     [orderedDateCalendarMonth],
   );
+  const checkedInventoryIdSet = useMemo(
+    () => new Set(checkedInventoryIds),
+    [checkedInventoryIds],
+  );
+  const visibleInventoryIds = useMemo(
+    () => safeInventories.map((inventory) => inventory.id).filter(Boolean),
+    [safeInventories],
+  );
+  const allVisibleInventoriesChecked =
+    visibleInventoryIds.length > 0 &&
+    visibleInventoryIds.every((inventoryId) => checkedInventoryIdSet.has(inventoryId));
+  const inventoryDeleteDisabled = checkedInventoryIds.length === 0 || isDeletingInventory;
   const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
   const handleOrdersViewChange = useCallback((nextView) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -1509,6 +1558,50 @@ export default function OrdersPage() {
 
     setSearchParams(nextSearchParams, { preventScrollReset: true, replace: true });
   }, [searchParams, setSearchParams]);
+  const openInventoryDetail = useCallback((inventoryId) => {
+    if (!inventoryId) return;
+    navigate(`/app/orders/inventory?id=${encodeURIComponent(inventoryId)}`);
+  }, [navigate]);
+  const handleInventoryRowKeyDown = useCallback((event, inventory) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openInventoryDetail(inventory.id);
+  }, [openInventoryDetail]);
+  const toggleInventoryCheck = useCallback((inventoryId) => {
+    if (!inventoryId) return;
+    setCheckedInventoryIds((currentInventoryIds) =>
+      currentInventoryIds.includes(inventoryId)
+        ? currentInventoryIds.filter((currentInventoryId) => currentInventoryId !== inventoryId)
+        : [...currentInventoryIds, inventoryId],
+    );
+  }, []);
+  const toggleAllVisibleInventoryChecks = useCallback(() => {
+    setCheckedInventoryIds((currentInventoryIds) => {
+      const visibleInventoryIdSet = new Set(visibleInventoryIds);
+      if (visibleInventoryIdSet.size === 0) return currentInventoryIds;
+
+      const allChecked = visibleInventoryIds.every((inventoryId) => currentInventoryIds.includes(inventoryId));
+      return allChecked
+        ? currentInventoryIds.filter((inventoryId) => !visibleInventoryIdSet.has(inventoryId))
+        : [...new Set([...currentInventoryIds, ...visibleInventoryIds])];
+    });
+  }, [visibleInventoryIds]);
+
+  const handleDeleteSelectedInventories = useCallback(async () => {
+    if (inventoryDeleteDisabled) return;
+
+    const formData = new FormData();
+    formData.set("_intent", "deleteInventory");
+    formData.set("inventoryIds", JSON.stringify(checkedInventoryIds));
+
+    try {
+      formData.set("shopifySessionToken", await shopify.idToken());
+    } catch {
+      // The server action still returns an auth error when the token cannot be fetched.
+    }
+
+    inventoryDeleteFetcher.submit(formData, { method: "post" });
+  }, [checkedInventoryIds, inventoryDeleteDisabled, inventoryDeleteFetcher, shopify]);
 
   const ordersViewTabs = (
     <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
@@ -1538,40 +1631,77 @@ export default function OrdersPage() {
 
   const inventoryList = (
     <div style={inventoryListStyle}>
-      <table aria-label="Inventory list" style={inventoryTableStyle}>
-        <thead>
-          <tr>
-            <th style={inventoryCellStyle}>Inventory</th>
-            <th style={inventoryCellStyle}>Order count</th>
-            <th style={inventoryCellStyle}>Item count</th>
-            <th style={inventoryCellStyle}>Delta summary</th>
-            <th style={inventoryCellStyle}>Changed time</th>
-            <th style={inventoryCellStyle}>Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {safeInventories.length === 0 ? (
+      <div style={inventoryToolbarStyle}>
+        <button
+          type="button"
+          style={inventoryDeleteDisabled ? disabledPlanButtonStyle : inventoryDeleteButtonStyle}
+          disabled={inventoryDeleteDisabled}
+          onClick={handleDeleteSelectedInventories}
+        >Delete</button>
+      </div>
+      <div style={inventoryTableWrapStyle}>
+        <table aria-label="Inventory list" style={inventoryTableStyle}>
+          <colgroup>
+            {INVENTORY_TABLE_COLUMN_WIDTHS.map((width, columnIndex) => (
+              <col key={columnIndex} style={{ width }} />
+            ))}
+          </colgroup>
+          <thead>
             <tr>
-              <td colSpan={6} style={inventoryCellStyle}>Inventory가 없습니다.</td>
+              <th scope="col" style={inventoryCheckboxHeaderCellStyle}>
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible inventories"
+                  checked={allVisibleInventoriesChecked}
+                  disabled={visibleInventoryIds.length === 0}
+                  style={inventoryCheckboxStyle}
+                  onChange={toggleAllVisibleInventoryChecks}
+                />
+              </th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Inventory</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Order count</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Item count</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Delta summary</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Changed time</th>
             </tr>
-          ) : safeInventories.map((inventory) => (
-            <tr key={inventory.id}>
-              <td style={inventoryCellStyle}>{inventory.name}</td>
-              <td style={inventoryCellStyle}>{inventory.ordersCount ?? inventory.orderIds?.length ?? inventory.orders?.length ?? 0}</td>
-              <td style={inventoryCellStyle}>{inventory.itemSummary?.totalQuantity ?? 0}</td>
-              <td style={inventoryCellStyle}>{formatInventoryDeltaSummary(inventory)}</td>
-              <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt)}</td>
-              <td style={inventoryCellStyle}>
-                <button
-                  type="button"
-                  style={orderFilterButtonStyle}
-                  onClick={() => navigate(`/app/orders/inventory?id=${encodeURIComponent(inventory.id)}`)}
-                >Open</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {safeInventories.length === 0 ? (
+              <tr>
+                <td colSpan={INVENTORY_TABLE_COLUMN_WIDTHS.length} style={inventoryCellStyle}>Inventory가 없습니다.</td>
+              </tr>
+            ) : safeInventories.map((inventory) => (
+              <tr
+                key={inventory.id}
+                aria-label={`Open ${inventory.name ?? "inventory"} detail`}
+                className="route-table-row"
+                onClick={() => openInventoryDetail(inventory.id)}
+                onKeyDown={(event) => handleInventoryRowKeyDown(event, inventory)}
+                role="link"
+                tabIndex={0}
+              >
+                <td style={inventoryCheckboxCellStyle}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${inventory.name ?? "inventory"} for deletion`}
+                    checked={Boolean(inventory.id && checkedInventoryIdSet.has(inventory.id))}
+                    disabled={!inventory.id}
+                    style={inventoryCheckboxStyle}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onChange={() => toggleInventoryCheck(inventory.id)}
+                  />
+                </td>
+                <td style={inventoryNameCellStyle}>{inventory.name}</td>
+                <td style={inventoryCellStyle}>{inventory.ordersCount ?? inventory.orderIds?.length ?? inventory.orders?.length ?? 0}</td>
+                <td style={inventoryCellStyle}>{inventory.itemSummary?.totalQuantity ?? 0}</td>
+                <td style={inventoryCellStyle}>{formatInventoryDeltaSummary(inventory)}</td>
+                <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 
@@ -2354,6 +2484,13 @@ export default function OrdersPage() {
   }, [inventoryFetcher.data?.inventory, navigate]);
 
   useEffect(() => {
+    if (inventoryDeleteFetcher.state !== "idle" || !inventoryDeleteFetcher.data) return;
+    if ((inventoryDeleteFetcher.data.errors ?? []).length > 0) return;
+
+    setCheckedInventoryIds([]);
+  }, [inventoryDeleteFetcher.data, inventoryDeleteFetcher.state]);
+
+  useEffect(() => {
     if (initialPerfEmittedRef.current) return;
 
     initialPerfEmittedRef.current = true;
@@ -2645,7 +2782,6 @@ export default function OrdersPage() {
         primaryExpanded={true}
         notice={ordersLayoutNotice}
         primary={inventoryList}
-        lower={<div />}
       />
     );
   }

@@ -110,6 +110,16 @@ export function formatSavedDriverPhone(phone) {
   return rawPhone.startsWith("+") ? `+${digits}` : rawPhone;
 }
 
+const DRIVER_RELEASE_FOLDER_URL = "https://drive.google.com/drive/folders/15Am4CFvcp2szOuuKpGnWgJEB22H96rwZ";
+const DEFAULT_DRIVER_DOWNLOAD_URL = "https://drive.google.com/file/d/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2/view?usp=sharing";
+const LEGACY_DRIVER_DOWNLOAD_URLS = new Set([
+  "https://clever.delivery/driver/download",
+  DRIVER_RELEASE_FOLDER_URL,
+]);
+
 export function getDriverDownloadLink(downloadLink) {
-  return downloadLink;
+  const normalizedLink = String(downloadLink ?? "").trim();
+  return !normalizedLink || LEGACY_DRIVER_DOWNLOAD_URLS.has(normalizedLink)
+    ? DEFAULT_DRIVER_DOWNLOAD_URL
+    : normalizedLink;
 }

@@ -37,9 +37,11 @@ test("Orders can still use TabLayout without moving new page responsibilities in
   assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
   assert.doesNotMatch(ordersSource, /title="Orders"/);
   assert.match(tabLayoutSource, /className="tab-layout"/);
+  assert.match(tabLayoutSource, /gridTemplateColumns: "minmax\(0, 1fr\) minmax\(260px, 300px\)"/);
   assert.match(tabLayoutSource, /primary, secondary, lower/);
   assert.match(tabLayoutSource, /notice/);
   assert.match(tabLayoutSource, /title \|\| description/);
+  assert.match(tabLayoutSource, /lower \? <section className="tab-layout-lower"/);
   assert.doesNotMatch(tabLayoutSource, /Analytics|Workflows|Drivers|Settings|User variables|Runtime\/system values/);
 });
 

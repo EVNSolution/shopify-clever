@@ -1278,6 +1278,20 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /Delta summary/);
   assert.match(ordersPageSource, /Changed time/);
   assert.match(ordersPageSource, /inventory\.ordersCount \?\? inventory\.orderIds\?\.length \?\? inventory\.orders\?\.length \?\? 0/);
+  assert.match(ordersPageSource, /const INVENTORY_TABLE_COLUMN_WIDTHS = \["32px", "220px", "88px", "82px", "150px", "128px"\]/);
+  assert.match(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*\.\.\.tableStyle[\s\S]*minWidth:\s*"700px"/);
+  assert.doesNotMatch(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*width:\s*"700px"/);
+  assert.match(ordersPageSource, /<colgroup>[\s\S]*INVENTORY_TABLE_COLUMN_WIDTHS/);
+  assert.match(ordersPageSource, /const inventoryCheckboxStyle = \{[\s\S]*margin:\s*0/);
+  assert.match(ordersPageSource, /aria-label="Select all visible inventories"/);
+  assert.match(ordersPageSource, /aria-label=\{`Select \$\{inventory\.name \?\? "inventory"\} for deletion`\}/);
+  assert.match(ordersPageSource, /const inventoryDeleteFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "deleteInventory"\)/);
+  assert.match(ordersPageSource, /formData\.set\("inventoryIds", JSON\.stringify\(checkedInventoryIds\)\)/);
+  assert.match(ordersPageSource, />Delete<\/button>/);
+  assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
+  assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /lower=\{<div \/>}/);
   assert.doesNotMatch(appShellSource, /nav\.inventory|Inventory plan/);
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
 });
@@ -1294,13 +1308,14 @@ test("Orders inventory tabs avoid border shorthand style collisions", () => {
 });
 
 test("Orders inventory side-card Add creates standalone inventory without route ownership checks", () => {
-  assert.match(ordersPageSource, /import \{ createDeliveryInventory, fetchDeliveryInventories \}/);
+  assert.match(ordersPageSource, /import \{ createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories \}/);
   assert.match(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "createInventory"\)/);
   assert.match(ordersPageSource, /inventoryFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /reason: "route_create_preflight"/);
   assert.match(ordersPageSource, /if \(intent === "createInventory"\) \{/);
   assert.match(ordersPageSource, /createDeliveryInventory\(\s*request,/);
+  assert.match(ordersPageSource, /deleteDeliveryInventory\(request, inventoryId, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.orderId\)/);
   assert.match(ordersPageSource, /return \{ inventory, errors: \[\] \}/);
   assert.match(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(createdInventory\.id\)\}&id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
