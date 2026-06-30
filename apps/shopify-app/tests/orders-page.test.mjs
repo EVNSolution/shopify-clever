@@ -1346,11 +1346,13 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /textAlign: "center"/);
   assert.match(inventoryDetailSource, /aria-hidden="true"/);
   assert.match(inventoryDetailSource, /width: "70px"/);
-  assert.match(inventoryDetailSource, /width: "64px"/);
+  assert.match(inventoryDetailSource, /width: "76px"/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-total-col \{ width: 64px !important; \}/);
   assert.match(inventoryDetailSource, /function DateCellLabel/);
   assert.match(inventoryDetailSource, /gridTemplateColumns: "22px 34px"/);
-  assert.match(inventoryDetailSource, /style=\{groupTotalHeadCellStyle\}>Group total/);
-  assert.match(inventoryDetailSource, /fontSize: "11px"/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-group-total-head" style=\{groupTotalHeadCellStyle\}>Group total/);
+  assert.match(inventoryDetailSource, /fontSize: "12px"/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-group-total-head \{ font-size: 11px !important; \}/);
   assert.match(inventoryDetailSource, /maxHeight: "28px"/);
   assert.match(inventoryDetailSource, /totalRowCellStyle/);
   assert.match(inventoryDetailSource, /borderTop: "1px solid #ebebeb"/);
