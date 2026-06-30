@@ -805,6 +805,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
   assert.match(routeDetailSource, /src="\/icons\/route-polygon-edit\.png"/);
   assert.match(routeDetailSource, /ariaLabel: isRoutePolygonEditMode \? "Stop editing route polygon" : "Edit route polygon"/);
+  assert.match(routeDetailSource, /wheelHintEnabled=\{!isRoutePolygonEditMode\}/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon"/);
   assert.match(routeDetailMapSource, /function syncRouteEditPolygon\(map, points, isClosed\) \{/);
   assert.match(routeDetailMapSource, /function buildRouteDetailRouteLineData\(routeLines, fallbackRouteColor\) \{/);

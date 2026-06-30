@@ -104,6 +104,7 @@ export function MapPanel({
   frameStyle,
   id,
   toolbar,
+  wheelHintEnabled = true,
 }) {
   const [wheelHintVisible, setWheelHintVisible] = useState(false);
   const wheelHintTimerRef = useRef(null);
@@ -114,7 +115,14 @@ export function MapPanel({
 
   useEffect(() => {
     const mapCanvasElement = canvasRef?.current;
-    if (!mapCanvasElement) return undefined;
+    if (!wheelHintEnabled || !mapCanvasElement) {
+      setWheelHintVisible(false);
+      if (wheelHintTimerRef.current) {
+        window.clearTimeout(wheelHintTimerRef.current);
+        wheelHintTimerRef.current = null;
+      }
+      return undefined;
+    }
 
     const showWheelHint = () => {
       setWheelHintVisible(true);
@@ -135,7 +143,7 @@ export function MapPanel({
 
     mapCanvasElement.addEventListener("wheel", handleMapWheel, { capture: true, passive: true });
     return () => mapCanvasElement.removeEventListener("wheel", handleMapWheel, { capture: true });
-  }, [canvasKey, canvasRef]);
+  }, [canvasKey, canvasRef, wheelHintEnabled]);
 
   return (
     <div aria-label={ariaLabel} role="region" style={{ ...mapPanelStyle, ...frameStyle }}>
@@ -144,8 +152,8 @@ export function MapPanel({
         aria-hidden="true"
         style={{
           ...mapWheelHintStyle,
-          opacity: wheelHintVisible ? 1 : 0,
-          transition: wheelHintVisible ? "opacity 80ms ease-out" : "opacity 260ms ease-in",
+          opacity: wheelHintEnabled && wheelHintVisible ? 1 : 0,
+          transition: wheelHintEnabled && wheelHintVisible ? "opacity 80ms ease-out" : "opacity 260ms ease-in",
         }}
       >
         {MAP_WHEEL_HINT_TEXT}

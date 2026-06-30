@@ -2417,6 +2417,7 @@ export default function RouteDetailPage() {
             canvasRef={mapContainerRef}
             canvasStyle={routeDetailMapCanvasStyle}
             frameStyle={routeDetailMapFrameStyle}
+            wheelHintEnabled={!isRoutePolygonEditMode}
             toolbar={
               <>
                 {isRoutePolygonEditMode ? (

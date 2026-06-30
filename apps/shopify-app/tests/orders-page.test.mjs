@@ -940,8 +940,10 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(mapPanelSource, /top: `\$\{MAPLIBRE_CONTROL_OFFSET_PX\}px`/);
   assert.match(mapPanelSource, /MAP_WHEEL_HINT_TEXT = "Hold Ctrl or ⌘ while scrolling to zoom the map\."/);
   assert.match(mapPanelSource, /background: "rgba\(0, 0, 0, 0\.38\)"/);
-  assert.match(mapPanelSource, /opacity: wheelHintVisible \? 1 : 0/);
-  assert.match(mapPanelSource, /transition: wheelHintVisible \? "opacity 80ms ease-out" : "opacity 260ms ease-in"/);
+  assert.match(mapPanelSource, /wheelHintEnabled = true/);
+  assert.match(mapPanelSource, /if \(!wheelHintEnabled \|\| !mapCanvasElement\) \{/);
+  assert.match(mapPanelSource, /opacity: wheelHintEnabled && wheelHintVisible \? 1 : 0/);
+  assert.match(mapPanelSource, /transition: wheelHintEnabled && wheelHintVisible \? "opacity 80ms ease-out" : "opacity 260ms ease-in"/);
   assert.match(mapPanelSource, /addEventListener\("wheel", handleMapWheel, \{ capture: true, passive: true \}\)/);
   assert.match(mapPanelSource, /event\.ctrlKey \|\| event\.metaKey/);
   assert.match(ordersPageSource, /renderMapZoomInIcon\(\)/);
