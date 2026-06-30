@@ -1341,12 +1341,11 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /className="inventory-detail-history inventory-detail-no-print"/);
   assert.match(inventoryDetailSource, /const HISTORY_ITEMS = \[/);
   assert.match(inventoryDetailSource, /Hardcoded delta preview/);
-  assert.match(inventoryDetailSource, /useState\(HISTORY_ITEMS\[1\]\?\.title/);
+  assert.doesNotMatch(inventoryDetailSource, /openHistoryTitle/);
   assert.match(inventoryDetailSource, /const historyCardContentStyle = \{/);
   assert.match(inventoryDetailSource, /maxHeight: "300px"/);
   assert.match(inventoryDetailSource, /overflowY: "auto"/);
-  assert.match(inventoryDetailSource, /open=\{openHistoryTitle === item\.title\}/);
-  assert.match(inventoryDetailSource, /setOpenHistoryTitle\(item\.title\)/);
+  assert.match(inventoryDetailSource, /open=\{index === 1\}/);
   assert.match(inventoryDetailSource, /gridTemplateColumns: "70px minmax\(0, 1fr\) 54px"/);
   assert.doesNotMatch(inventoryDetailSource, /<span>Order<\/span>/);
   assert.doesNotMatch(inventoryDetailSource, /<span>Customer<\/span>/);
