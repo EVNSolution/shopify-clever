@@ -288,7 +288,9 @@ export default function InventoryDetailPage() {
                   <tr>
                     <th className="inventory-detail-row-header" style={headRowHeaderStyle}>Date</th>
                     {products.map((product) => (
-                      <th key={product.key} style={productHeadCellStyle} title={product.label}>{product.label}</th>
+                      <th key={product.key} style={productHeadCellStyle} title={product.label}>
+                        {product.displayLabel ?? product.label}
+                      </th>
                     ))}
                     <th style={headCellStyle}>Group total</th>
                   </tr>

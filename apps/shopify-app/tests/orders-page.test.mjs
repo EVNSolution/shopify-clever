@@ -1335,6 +1335,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /getProductChunks\(matrix\.products\)/);
   assert.match(inventoryDetailSource, /Group total/);
   assert.match(inventoryDetailSource, /Overall total: \{matrix\.totalQuantity\}/);
+  assert.match(inventoryDetailSource, /product\.displayLabel \?\? product\.label/);
   assert.match(inventoryDetailSource, /const backLinkStyle = \{/);
   assert.match(inventoryDetailSource, /<Link[\s\S]*className="inventory-detail-no-print"[\s\S]*style=\{backLinkStyle\}/);
   assert.doesNotMatch(inventoryDetailSource, /width:\s*"max-content"/);
