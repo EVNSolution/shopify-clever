@@ -9,6 +9,7 @@ import {
   createDeliveryRouteGroup,
   generateDeliveryRouteGroupChildRoutes,
 } from "../delivery/route-groups.server";
+import { getRouteGroupChildRoutePlanId } from "../delivery/route-helpers";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
 import {
   getOrderSyncSnapshots,
@@ -64,9 +65,9 @@ function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, routeSc
 }
 
 function getFirstRouteGroupRoutePlan(routeGroup) {
-  const firstChild = routeGroup?.children?.find((child) => child?.routePlan?.id || child?.routePlanId);
+  const firstChild = routeGroup?.children?.find(getRouteGroupChildRoutePlanId);
   if (!firstChild) return null;
-  return firstChild.routePlan ?? { id: firstChild.routePlanId };
+  return firstChild.routePlan ?? { id: getRouteGroupChildRoutePlanId(firstChild) };
 }
 
 async function fetchShopifyShopTimeZone(admin) {

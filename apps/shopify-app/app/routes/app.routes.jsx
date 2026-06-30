@@ -5,6 +5,7 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   formatRouteDeliveryScope,
   formatRouteStatus,
+  getRouteGroupChildRoutePlanId,
   getRouteGroupChildRouteName,
   getRouteGroupChildren,
   getVisibleRouteGroupChildren,
@@ -434,50 +435,54 @@ function buildRouteRows(routePlans, routeGroups = []) {
   const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
   const childRoutePlanIds = new Set(
     safeRouteGroups.flatMap((routeGroup) =>
-      getRouteGroupChildren(routeGroup).map((child) => child.routePlanId).filter(Boolean),
+      getRouteGroupChildren(routeGroup).map(getRouteGroupChildRoutePlanId).filter(Boolean),
     ),
   );
   const standaloneRoutePlans = Array.isArray(routePlans)
     ? routePlans.filter((routePlan) => !childRoutePlanIds.has(routePlan.id))
     : [];
-  const routeGroupRows = safeRouteGroups.map((routeGroup) => ({
-    id: routeGroup.id,
-    rowKey: `routeGroup:${routeGroup.id}`,
-    routeGroupId: routeGroup.id,
-    href: routeGroupPath(routeGroup.id),
-    isClickable: true,
-    isDeletable: true,
-    isRouteGroup: true,
-    deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
-    route: routeGroup.name ?? routeGroup.id,
-    status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
-    orders: getRouteGroupTotalOrders(routeGroup),
-    coordinates: "-",
-    delivered: 0,
-    attempted: 0,
-    missingCoordinates: 0,
-    date: formatRouteGroupDate(routeGroup),
-    deliveryArea: "-",
-    start: "Parent group",
-    end: getVisibleRouteGroupChildren(routeGroup).length > 0 ? `${getVisibleRouteGroupChildren(routeGroup).length} child routes` : "No split",
-    driver: "-",
-    driverId: null,
-  }));
+  const routeGroupRows = safeRouteGroups.map((routeGroup) => {
+    const childCount = getVisibleRouteGroupChildren(routeGroup).length;
+    return {
+      id: routeGroup.id,
+      rowKey: `routeGroup:${routeGroup.id}`,
+      routeGroupId: routeGroup.id,
+      href: routeGroupPath(routeGroup.id),
+      isClickable: true,
+      isDeletable: true,
+      isRouteGroup: true,
+      deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
+      route: routeGroup.name ?? routeGroup.id,
+      status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
+      orders: getRouteGroupTotalOrders(routeGroup),
+      coordinates: "-",
+      delivered: 0,
+      attempted: 0,
+      missingCoordinates: 0,
+      date: formatRouteGroupDate(routeGroup),
+      deliveryArea: "-",
+      start: "Parent group",
+      end: childCount > 0 ? `${childCount} child routes` : "No split",
+      driver: "-",
+      driverId: null,
+    };
+  });
   const routeChildRows = safeRouteGroups.flatMap((routeGroup) =>
     getVisibleRouteGroupChildren(routeGroup)
       .map((child, index) => {
+        const routePlanId = getRouteGroupChildRoutePlanId(child);
         const routePlan = child.routePlan ?? {};
         const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
         const missingCoordinates = routePlan.missingCoordinates ?? 0;
         const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
 
         return {
-          id: child.routePlanId,
-          rowKey: `routePlan:${child.routePlanId}`,
-          href: routeGroupChildPath(routeGroup.id, child.routePlanId),
+          id: routePlanId,
+          rowKey: `routePlan:${routePlanId}`,
+          href: routeGroupChildPath(routeGroup.id, routePlanId),
           isClickable: true,
           isDeletable: true,
-          deleteKey: `routePlan:${child.routePlanId}`,
+          deleteKey: `routePlan:${routePlanId}`,
           parentRouteGroupId: routeGroup.id,
           route: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
           status: child.displayStatus ?? routePlan.status ?? "DRAFT",

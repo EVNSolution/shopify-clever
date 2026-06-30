@@ -7,8 +7,9 @@ import {
   firstArray,
   formatRouteDeliveryScope,
   formatRouteStatus,
+  getRouteGroupChildRoutePlanId,
   getRouteGroupChildRouteName,
-  getVisibleRouteGroupChildrenWithRoutePlanFallback,
+  getVisibleRouteGroupChildren,
   numberOrUndefined,
   readRouteOptimizedSnapshot,
   textOrUndefined,
@@ -1669,7 +1670,7 @@ function getRouteGroupChildOrderIds(child, detailStops, routeStops) {
   ).map(textOrUndefined).filter(Boolean);
   if (explicitOrderIds.length > 0) return explicitOrderIds;
 
-  const routePlanId = textOrUndefined(child?.routePlanId ?? child?.routePlan?.id);
+  const routePlanId = getRouteGroupChildRoutePlanId(child);
   const assignedOrderIds = routePlanId
     ? routeStops
       .filter((stop) => textOrUndefined(stop.routePlanId) === routePlanId)
@@ -1685,7 +1686,7 @@ function getRouteGroupChildOrderIds(child, detailStops, routeStops) {
 function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
   const detailsByRoutePlanId = new Map();
   for (const detail of childRouteDetails) {
-    const routePlanId = textOrUndefined(detail?.routePlanId ?? detail?.routePlan?.id);
+    const routePlanId = getRouteGroupChildRoutePlanId(detail);
     if (!routePlanId) continue;
     const stops = buildRouteStops(detail?.stops ?? []);
     detailsByRoutePlanId.set(routePlanId, {
@@ -1701,8 +1702,8 @@ function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
 }
 
 function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = []) {
-  return getVisibleRouteGroupChildrenWithRoutePlanFallback(routeGroup).map((child, index) => {
-    const routePlanId = textOrUndefined(child?.routePlanId ?? child?.routePlan?.id);
+  return getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
+    const routePlanId = getRouteGroupChildRoutePlanId(child);
     const detail = childDetailsByRoutePlanId.get(routePlanId);
     const detailStops = detail?.stops ?? [];
     const orderIds = getRouteGroupChildOrderIds(child, detailStops, routeStops);
@@ -2032,7 +2033,7 @@ export default function RouteDetailPage() {
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
   const currentRouteGroupChild = useMemo(() => {
     const routePlanId = textOrUndefined(effectiveRoutePlan?.id);
-    return (routeGroup?.children ?? []).find((child) => textOrUndefined(child.routePlanId ?? child.routePlan?.id) === routePlanId) ?? null;
+    return (routeGroup?.children ?? []).find((child) => getRouteGroupChildRoutePlanId(child) === routePlanId) ?? null;
   }, [effectiveRoutePlan?.id, routeGroup]);
   const defaultRouteLineColor = normalizeRouteColor(currentRouteGroupChild?.color) ?? MAP_MARKER_PALETTE.plannedOrder.color;
   const routeGroupActionBusy = routeActionFetcher.state !== "idle";

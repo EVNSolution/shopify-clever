@@ -64,16 +64,17 @@ test("Routes page lists saved child routes below their parent route group", () =
   assert.match(routesPageSource, /from "\.\.\/features\/delivery\/route-helpers"/);
   assert.match(routesPageSource, /const routeChildRows = safeRouteGroups\.flatMap/);
   assert.match(routeHelpersSource, /function getRouteGroupChildren\(routeGroup\) \{/);
-  assert.match(routeHelpersSource, /\(child\) => child\?\.routePlanId/);
-  assert.match(routeHelpersSource, /function getVisibleRouteGroupChildrenWithRoutePlanFallback\(routeGroup\) \{/);
-  assert.match(routeHelpersSource, /child\?\.routePlanId \|\| child\?\.routePlan\?\.id/);
-  assert.match(routesPageSource, /href: routeGroupChildPath\(routeGroup\.id, child\.routePlanId\)/);
+  assert.match(routeHelpersSource, /function getRouteGroupChildRoutePlanId\(child\) \{/);
+  assert.match(routeHelpersSource, /textOrUndefined\(child\?\.routePlanId\) \?\? textOrUndefined\(child\?\.routePlan\?\.id\)/);
+  assert.match(routeHelpersSource, /filter\(\(child\) => getRouteGroupChildRoutePlanId\(child\)\)/);
+  assert.match(routesPageSource, /const routePlanId = getRouteGroupChildRoutePlanId\(child\)/);
+  assert.match(routesPageSource, /href: routeGroupChildPath\(routeGroup\.id, routePlanId\)/);
   assert.match(routeHelpersSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
   assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
   assert.match(routesPageSource, /route: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
   assert.match(routesPageSource, /parentRouteGroupId: routeGroup\.id/);
   assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
-  assert.match(routesPageSource, /isDeletable: true,[\s\S]*deleteKey: `routePlan:\$\{child\.routePlanId\}`/);
+  assert.match(routesPageSource, /isDeletable: true,[\s\S]*deleteKey: `routePlan:\$\{routePlanId\}`/);
   assert.match(routesPageSource, /return \[\.\.\.routeGroupRows, \.\.\.routeChildRows, \.\.\.routePlanRows\]/);
 });
 
@@ -171,7 +172,8 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routesPageSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
   assert.match(routesPageSource, /return Number\(routeGroup\?\.totalOrders \?\? routeGroup\?\.ordersCount \?\? routeGroup\?\.assignments\?\.length \?\? 0\) \|\| 0/);
   assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
-  assert.match(routesPageSource, /end: getVisibleRouteGroupChildren\(routeGroup\)\.length > 0 \? `\$\{getVisibleRouteGroupChildren\(routeGroup\)\.length\} child routes` : "No split"/);
+  assert.match(routesPageSource, /const childCount = getVisibleRouteGroupChildren\(routeGroup\)\.length/);
+  assert.match(routesPageSource, /end: childCount > 0 \? `\$\{childCount\} child routes` : "No split"/);
   assert.match(routesPageSource, /isRouteGroup: true/);
   assert.match(routesPageSource, /isDeletable: false/);
   assert.match(routesPageSource, /formatRouteGroupDate\(routeGroup\)/);

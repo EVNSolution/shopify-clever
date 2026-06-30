@@ -1,4 +1,4 @@
-import { formatDeliveryScopeLabel } from "./delivery-labels";
+import { formatDeliveryScopeLabel } from "./delivery-labels.js";
 
 export function textOrUndefined(value) {
   if (value == null) return undefined;
@@ -32,17 +32,16 @@ export function getRouteGroupChildRouteName(routeGroup, child, routePlan, index)
   return name ?? fallback;
 }
 
+export function getRouteGroupChildRoutePlanId(child) {
+  return textOrUndefined(child?.routePlanId) ?? textOrUndefined(child?.routePlan?.id);
+}
+
 export function getRouteGroupChildren(routeGroup) {
-  return (routeGroup?.children ?? []).filter((child) => child?.routePlanId);
+  return (routeGroup?.children ?? []).filter((child) => getRouteGroupChildRoutePlanId(child));
 }
 
 export function getVisibleRouteGroupChildren(routeGroup) {
   const children = getRouteGroupChildren(routeGroup);
-  return children.length >= 2 ? children : [];
-}
-
-export function getVisibleRouteGroupChildrenWithRoutePlanFallback(routeGroup) {
-  const children = (routeGroup?.children ?? []).filter((child) => child?.routePlanId || child?.routePlan?.id);
   return children.length >= 2 ? children : [];
 }
 

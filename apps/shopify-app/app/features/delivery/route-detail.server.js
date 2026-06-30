@@ -12,6 +12,7 @@ import {
 } from "./route-plans.server";
 import {
   firstArray,
+  getRouteGroupChildRoutePlanId,
   getRouteGroupChildRouteName,
   numberOrUndefined,
   readRouteOptimizedSnapshot,
@@ -70,7 +71,7 @@ function getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stop
 export function buildRouteGroupChildDetails(routeGroup) {
   return (routeGroup?.children ?? [])
     .map((child, index) => {
-      const routePlanId = textOrUndefined(child?.routePlanId ?? child?.routePlan?.id);
+      const routePlanId = getRouteGroupChildRoutePlanId(child);
       if (!routePlanId) return null;
 
       const routePlan = child?.routePlan ?? {};
@@ -89,12 +90,12 @@ export function buildRouteGroupChildDetails(routeGroup) {
 }
 
 function mergeRouteGroupChildDetail(childDetails, currentDetail) {
-  const routePlanId = textOrUndefined(currentDetail?.routePlanId ?? currentDetail?.routePlan?.id);
+  const routePlanId = getRouteGroupChildRoutePlanId(currentDetail);
   if (!routePlanId) return childDetails;
 
   let didReplace = false;
   const mergedDetails = childDetails.map((detail) => {
-    if (textOrUndefined(detail?.routePlanId ?? detail?.routePlan?.id) !== routePlanId) return detail;
+    if (getRouteGroupChildRoutePlanId(detail) !== routePlanId) return detail;
     didReplace = true;
     const routePlan = {
       ...(detail.routePlan ?? {}),
@@ -304,7 +305,7 @@ function logRouteGroupActionResult(name, routeId, routeGroupId, result) {
     routeGroupId,
     branchCount: routeGroup?.branches?.length ?? 0,
     childCount: routeGroup?.children?.length ?? 0,
-    childRoutePlanIds: (routeGroup?.children ?? []).map((child) => child.routePlanId).filter(Boolean),
+    childRoutePlanIds: (routeGroup?.children ?? []).map(getRouteGroupChildRoutePlanId).filter(Boolean),
     errorCount: result?.errors?.length ?? 0,
   });
 }
