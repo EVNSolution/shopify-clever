@@ -8,11 +8,21 @@ import { getServiceErrorNotice } from "../features/service-errors";
 const pageStyle = {
   boxSizing: "border-box",
   display: "grid",
-  gap: "8px",
+  gap: "12px",
+  gridTemplateColumns: "minmax(0, 210mm) 280px",
+  justifyContent: "center",
   margin: "0 auto",
+  maxWidth: "calc(210mm + 300px)",
+  padding: "4px 12px 12px",
+  width: "100%",
+};
+
+const sheetStyle = {
+  boxSizing: "border-box",
+  display: "grid",
+  gap: "8px",
   maxWidth: "210mm",
   minHeight: "297mm",
-  padding: "4px 12px 12px",
   width: "100%",
 };
 
@@ -21,6 +31,13 @@ const panelStyle = {
   border: "1px solid #d6d6d6",
   borderRadius: "12px",
   overflow: "hidden",
+};
+
+const historyPanelStyle = {
+  ...panelStyle,
+  alignSelf: "start",
+  position: "sticky",
+  top: "8px",
 };
 
 const sectionStyle = {
@@ -82,6 +99,25 @@ const summaryStyle = {
 const outputTimeStyle = {
   color: "#616161",
   fontSize: "11px",
+};
+
+const historyCardStyle = {
+  border: "1px solid #e5e7eb",
+  borderRadius: "10px",
+  padding: "9px 10px",
+};
+
+const historyMetaStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  margin: "4px 0 0",
+};
+
+const historyListStyle = {
+  display: "grid",
+  gap: "6px",
+  margin: "8px 0 0",
+  paddingLeft: "18px",
 };
 
 const tableWrapStyle = {
@@ -206,6 +242,19 @@ const totalColumnStyle = {
 
 const PRODUCT_COLUMNS_PER_TABLE = 6;
 
+const HISTORY_ITEMS = [
+  {
+    details: ["Thu 07/02: 7 orders · 35 items", "Fri 07/03: 9 orders · 29 items", "Sat 07/04: 39 orders · 206 items"],
+    meta: "55 orders · 270 items",
+    title: "Initial snapshot",
+  },
+  {
+    details: ["Order #1057: 두툼 삼겹살 ×1, 오마고등 ×2", "Order #1061: 육개장 완조리 ×3, 명란젓 ×1"],
+    meta: "+2 orders · +7 items",
+    title: "2026-06-30 14:12 update",
+  },
+];
+
 const noticeStyle = {
   background: "#fff4f4",
   borderBottom: "1px solid #fed7d7",
@@ -218,7 +267,9 @@ const printCss = `
 @media print {
   html, body { margin: 0 !important; }
   .inventory-detail-no-print { display: none !important; }
-  .inventory-detail-page { box-sizing: border-box !important; font-size: 11px !important; justify-content: center !important; margin: 0 auto !important; max-width: none !important; min-height: 297mm !important; padding: 5mm 8mm 8mm !important; width: 210mm !important; }
+  .inventory-detail-page { display: block !important; margin: 0 auto !important; max-width: none !important; padding: 5mm 8mm 8mm !important; width: 210mm !important; }
+  .inventory-detail-sheet { box-sizing: border-box !important; font-size: 11px !important; max-width: none !important; min-height: 297mm !important; width: 100% !important; }
+  .inventory-detail-history { display: none !important; }
   .inventory-detail-panel { border: 0 !important; border-radius: 0 !important; }
   .inventory-detail-table-wrap { overflow: visible !important; }
   .inventory-detail-table { font-size: 11px !important; width: 100% !important; }
@@ -329,111 +380,133 @@ export default function InventoryDetailPage() {
   return (
     <main className="inventory-detail-page" style={pageStyle}>
       <style>{printCss}</style>
-      <section className="inventory-detail-panel" style={panelStyle}>
-        {notice ? <div role="alert" style={noticeStyle}>{notice}</div> : null}
-        <div style={sectionStyle}>
-          <div style={headerTopBarStyle}>
-            <Link className="inventory-detail-no-print" style={backLinkStyle} to="/app/orders?view=inventory">
-              ← Back to Inventory
-            </Link>
-            <div style={headerActionStyle}>
-              <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt)}</span>
-              <button className="inventory-detail-no-print" type="button" onClick={() => window.print()}>Print</button>
+      <div className="inventory-detail-sheet" style={sheetStyle}>
+        <section className="inventory-detail-panel" style={panelStyle}>
+          {notice ? <div role="alert" style={noticeStyle}>{notice}</div> : null}
+          <div style={sectionStyle}>
+            <div style={headerTopBarStyle}>
+              <Link className="inventory-detail-no-print" style={backLinkStyle} to="/app/orders?view=inventory">
+                ← Back to Inventory
+              </Link>
+              <div style={headerActionStyle}>
+                <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt)}</span>
+                <button className="inventory-detail-no-print" type="button" onClick={() => window.print()}>Print</button>
+              </div>
             </div>
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section className="inventory-detail-panel" style={panelStyle}>
-        <div style={sectionStyle}>
-          <div style={sectionTitleRowStyle}>
-            <h1 style={titleStyle}>{inventory?.name ?? "Inventory"}</h1>
-            {hasMatrix ? <span style={summaryStyle}>Overall total: {matrix.totalQuantity}</span> : null}
-          </div>
-          <div className="inventory-detail-table-wrap" style={tableWrapStyle}>
-            {!hasMatrix ? (
-              <table aria-label="Inventory product matrix" className="inventory-detail-table" style={tableStyle}>
-                <tbody>
-                  <tr><td style={cellStyle}>No items</td></tr>
-                </tbody>
-              </table>
-            ) : productChunks.map((products, chunkIndex) => {
-              const productSlots = getProductSlots(products);
-              return (
-                <table
-                  aria-label={
-                    productChunks.length === 1
-                      ? "Inventory product matrix"
-                      : `Inventory product matrix group ${chunkIndex + 1}`
-                  }
-                  className="inventory-detail-table"
-                  key={products.map((product) => product.key).join("|")}
-                  style={tableStyle}
-                >
-                  <colgroup>
-                    <col style={dateColumnStyle} />
-                    {productSlots.map((product, index) => <col key={product?.key ?? `empty-${index}`} />)}
-                    <col className="inventory-detail-total-col" style={totalColumnStyle} />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th className="inventory-detail-row-header" style={headRowHeaderStyle}>Date</th>
-                      {productSlots.map((product, index) => (
-                        product ? (
-                          <th key={product.key} style={productHeadCellStyle} title={product.label}>
-                            <span className="inventory-detail-product-label" style={productHeadLabelStyle}>{product.displayLabel ?? product.label}</span>
-                          </th>
-                        ) : (
-                          <th aria-hidden="true" key={`empty-${index}`} style={productHeadCellStyle} />
-                        )
-                      ))}
-                      <th className="inventory-detail-group-total-head" style={groupTotalHeadCellStyle}>Group total</th>
-                    </tr>
-                  </thead>
+        <section className="inventory-detail-panel" style={panelStyle}>
+          <div style={sectionStyle}>
+            <div style={sectionTitleRowStyle}>
+              <h1 style={titleStyle}>{inventory?.name ?? "Inventory"}</h1>
+              {hasMatrix ? <span style={summaryStyle}>Overall total: {matrix.totalQuantity}</span> : null}
+            </div>
+            <div className="inventory-detail-table-wrap" style={tableWrapStyle}>
+              {!hasMatrix ? (
+                <table aria-label="Inventory product matrix" className="inventory-detail-table" style={tableStyle}>
                   <tbody>
-                    {matrix.rows.map((row) => {
-                      const groupTotal = products.reduce(
-                        (total, product) => total + (row.quantities[product.key] ?? 0),
-                        0,
-                      );
-                      return (
-                        <tr key={row.date}>
-                          <th className="inventory-detail-row-header" scope="row" style={rowHeaderStyle}>
-                            <DateCellLabel label={row.label} />
-                          </th>
-                          {productSlots.map((product, index) => (
-                            product ? (
-                              <td key={product.key} style={cellStyle}>{row.quantities[product.key] ?? 0}</td>
-                            ) : (
-                              <td aria-hidden="true" key={`empty-${index}`} style={cellStyle} />
-                            )
-                          ))}
-                          <td style={totalColumnCellStyle}>{groupTotal}</td>
-                        </tr>
-                      );
-                    })}
+                    <tr><td style={cellStyle}>No items</td></tr>
                   </tbody>
-                  <tfoot>
-                    <tr>
-                      <th className="inventory-detail-row-header" scope="row" style={totalRowHeaderStyle}>Total</th>
-                      {productSlots.map((product, index) => (
-                        product ? (
-                          <td key={product.key} style={totalRowCellStyle}>{matrix.productTotals[product.key] ?? 0}</td>
-                        ) : (
-                          <td aria-hidden="true" key={`empty-${index}`} style={totalRowCellStyle} />
-                        )
-                      ))}
-                      <td style={totalRowCellStyle}>
-                        {products.reduce((total, product) => total + (matrix.productTotals[product.key] ?? 0), 0)}
-                      </td>
-                    </tr>
-                  </tfoot>
                 </table>
-              );
-            })}
+              ) : productChunks.map((products, chunkIndex) => {
+                const productSlots = getProductSlots(products);
+                return (
+                  <table
+                    aria-label={
+                      productChunks.length === 1
+                        ? "Inventory product matrix"
+                        : `Inventory product matrix group ${chunkIndex + 1}`
+                    }
+                    className="inventory-detail-table"
+                    key={products.map((product) => product.key).join("|")}
+                    style={tableStyle}
+                  >
+                    <colgroup>
+                      <col style={dateColumnStyle} />
+                      {productSlots.map((product, index) => <col key={product?.key ?? `empty-${index}`} />)}
+                      <col className="inventory-detail-total-col" style={totalColumnStyle} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th className="inventory-detail-row-header" style={headRowHeaderStyle}>Date</th>
+                        {productSlots.map((product, index) => (
+                          product ? (
+                            <th key={product.key} style={productHeadCellStyle} title={product.label}>
+                              <span className="inventory-detail-product-label" style={productHeadLabelStyle}>{product.displayLabel ?? product.label}</span>
+                            </th>
+                          ) : (
+                            <th aria-hidden="true" key={`empty-${index}`} style={productHeadCellStyle} />
+                          )
+                        ))}
+                        <th className="inventory-detail-group-total-head" style={groupTotalHeadCellStyle}>Group total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {matrix.rows.map((row) => {
+                        const groupTotal = products.reduce(
+                          (total, product) => total + (row.quantities[product.key] ?? 0),
+                          0,
+                        );
+                        return (
+                          <tr key={row.date}>
+                            <th className="inventory-detail-row-header" scope="row" style={rowHeaderStyle}>
+                              <DateCellLabel label={row.label} />
+                            </th>
+                            {productSlots.map((product, index) => (
+                              product ? (
+                                <td key={product.key} style={cellStyle}>{row.quantities[product.key] ?? 0}</td>
+                              ) : (
+                                <td aria-hidden="true" key={`empty-${index}`} style={cellStyle} />
+                              )
+                            ))}
+                            <td style={totalColumnCellStyle}>{groupTotal}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                    <tfoot>
+                      <tr>
+                        <th className="inventory-detail-row-header" scope="row" style={totalRowHeaderStyle}>Total</th>
+                        {productSlots.map((product, index) => (
+                          product ? (
+                            <td key={product.key} style={totalRowCellStyle}>{matrix.productTotals[product.key] ?? 0}</td>
+                          ) : (
+                            <td aria-hidden="true" key={`empty-${index}`} style={totalRowCellStyle} />
+                          )
+                        ))}
+                        <td style={totalRowCellStyle}>
+                          {products.reduce((total, product) => total + (matrix.productTotals[product.key] ?? 0), 0)}
+                        </td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                );
+              })}
+            </div>
           </div>
+        </section>
+      </div>
+
+      <aside className="inventory-detail-history inventory-detail-no-print" style={historyPanelStyle}>
+        <div style={sectionStyle}>
+          <div>
+            <h2 style={titleStyle}>History</h2>
+            <p style={historyMetaStyle}>Hardcoded delta preview</p>
+          </div>
+          {HISTORY_ITEMS.map((item, index) => (
+            <details key={item.title} open={index === 1} style={historyCardStyle}>
+              <summary>
+                <strong>{item.title}</strong>
+                <p style={historyMetaStyle}>{item.meta}</p>
+              </summary>
+              <ul style={historyListStyle}>
+                {item.details.map((detail) => <li key={detail}>{detail}</li>)}
+              </ul>
+            </details>
+          ))}
         </div>
-      </section>
+      </aside>
     </main>
   );
 }
