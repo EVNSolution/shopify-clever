@@ -1278,8 +1278,11 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /Delta summary/);
   assert.match(ordersPageSource, /Changed time/);
   assert.match(ordersPageSource, /inventory\.ordersCount \?\? inventory\.orderIds\?\.length \?\? inventory\.orders\?\.length \?\? 0/);
-  assert.match(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*\.\.\.tableStyle[\s\S]*minWidth:\s*"840px"/);
+  assert.match(ordersPageSource, /const INVENTORY_TABLE_COLUMN_WIDTHS = \["32px", "220px", "88px", "82px", "150px", "128px"\]/);
+  assert.match(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*\.\.\.tableStyle[\s\S]*minWidth:\s*"700px"/);
+  assert.doesNotMatch(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*width:\s*"700px"/);
   assert.match(ordersPageSource, /<colgroup>[\s\S]*INVENTORY_TABLE_COLUMN_WIDTHS/);
+  assert.match(ordersPageSource, /const inventoryCheckboxStyle = \{[\s\S]*margin:\s*0/);
   assert.match(ordersPageSource, /aria-label="Select all visible inventories"/);
   assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
   assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);

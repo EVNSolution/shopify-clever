@@ -91,12 +91,12 @@ const routePlanPanelStyle = {
   boxSizing: "border-box",
   display: "flex",
   flexDirection: "column",
-  gap: "10px",
+  gap: "8px",
   height: "420px",
   maxHeight: "420px",
   overflowX: "hidden",
   overflowY: "auto",
-  padding: "12px",
+  padding: "10px",
 };
 
 const routePlanScrollAreaStyle = {
@@ -310,16 +310,16 @@ const routePlanTitleLabelStyle = {
 const routePlanTitleFieldStyle = {
   background: "#ffffff",
   border: "1px solid #d6d6d6",
-  borderRadius: "10px",
+  borderRadius: "8px",
   boxSizing: "border-box",
   color: "#1f1f1f",
   fontFamily: "inherit",
-  fontSize: "16px",
-  fontWeight: 750,
+  fontSize: "13px",
+  fontWeight: 650,
   letterSpacing: "-0.01em",
   lineHeight: 1.2,
-  minHeight: "40px",
-  padding: "8px 10px",
+  minHeight: "32px",
+  padding: "5px 8px",
   width: "100%",
 };
 
@@ -327,7 +327,7 @@ const routePlanDetailStyle = {
   background: "#f7f7f7",
   borderRadius: "8px",
   flex: "0 0 auto",
-  padding: "10px",
+  padding: "8px",
 };
 
 const routeAssignActionButtonStyle = {
@@ -697,7 +697,7 @@ const tableCellStyle = {
   whiteSpace: "nowrap",
 };
 
-const INVENTORY_TABLE_COLUMN_WIDTHS = ["4%", "30%", "12%", "12%", "24%", "18%"];
+const INVENTORY_TABLE_COLUMN_WIDTHS = ["32px", "220px", "88px", "82px", "150px", "128px"];
 
 const inventoryTableWrapStyle = {
   maxHeight: "min(520px, 58vh)",
@@ -707,15 +707,21 @@ const inventoryTableWrapStyle = {
 
 const inventoryTableStyle = {
   ...tableStyle,
-  minWidth: "840px",
+  minWidth: "700px",
 };
 
 const inventoryHeaderCellStyle = tableHeaderCellStyle;
 const inventoryCellStyle = tableCellStyle;
-const inventoryCheckboxHeaderCellStyle = checkboxHeaderCellStyle;
+const inventoryCheckboxHeaderCellStyle = {
+  ...checkboxHeaderCellStyle,
+  padding: "6px 2px",
+};
 const inventoryCheckboxCellStyle = {
   ...tableCellStyle,
-  padding: "6px 4px",
+  padding: "6px 2px",
+};
+const inventoryCheckboxStyle = {
+  margin: 0,
 };
 
 const inventoryNameCellStyle = {
@@ -1607,6 +1613,7 @@ export default function OrdersPage() {
                   aria-label="Select all visible inventories"
                   checked={allVisibleInventoriesChecked}
                   disabled={visibleInventoryIds.length === 0}
+                  style={inventoryCheckboxStyle}
                   onChange={toggleAllVisibleInventoryChecks}
                 />
               </th>
@@ -1638,6 +1645,7 @@ export default function OrdersPage() {
                     aria-label={`Select ${inventory.name ?? "inventory"} inventory`}
                     checked={Boolean(inventory.id && checkedInventoryIdSet.has(inventory.id))}
                     disabled={!inventory.id}
+                    style={inventoryCheckboxStyle}
                     onClick={(event) => event.stopPropagation()}
                     onKeyDown={(event) => event.stopPropagation()}
                     onChange={() => toggleInventoryCheck(inventory.id)}

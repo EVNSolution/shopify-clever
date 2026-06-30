@@ -30,7 +30,7 @@ const descriptionStyle = {
 
 const gridStyle = {
   display: "grid",
-  gridTemplateColumns: "minmax(0, 1.4fr) minmax(320px, 0.6fr)",
+  gridTemplateColumns: "minmax(0, 1fr) minmax(260px, 300px)",
   gap: "12px",
   alignItems: "stretch",
 };
