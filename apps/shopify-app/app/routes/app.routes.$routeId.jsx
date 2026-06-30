@@ -1564,8 +1564,9 @@ export default function RouteDetailPage() {
     : [];
   const polygonCandidateOrderIds = polygonCandidateStops.map((stop) => stop.orderId);
   const canSaveRoutePolygon = polygonCandidateOrderIds.length > 0;
-  const polygonHighlightedOrderIds = new Set(
-    isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds,
+  const polygonHighlightedOrderIds = useMemo(
+    () => new Set(isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds),
+    [isPolygonTargetPickerOpen, polygonCandidateOrderIds, polygonSelectedOrderIds],
   );
   const routeStopColorById = useMemo(() => new Map(timelineRouteRows.flatMap((routeRow) => (
     routeRow.stops.flatMap((stop) => [
@@ -1574,21 +1575,25 @@ export default function RouteDetailPage() {
       ...(stop.orderId ? [[stop.orderId, routeRow.color]] : []),
     ])
   ))), [timelineRouteRows]);
-  const routeMapStops = timelineRouteRows.length > 0
-    ? timelineRouteRows.flatMap((routeRow) =>
-      routeRow.stops.map((stop) => ({
-        ...stop,
-        isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
-        routeColor: routeStopColorById.get(stop.id) ?? routeRow.color,
-      })),
-    )
-    : isRouteGroupDetail
+  const routeMapStops = useMemo(() => {
+    if (timelineRouteRows.length > 0) {
+      return timelineRouteRows.flatMap((routeRow) =>
+        routeRow.stops.map((stop) => ({
+          ...stop,
+          isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
+          routeColor: routeStopColorById.get(stop.id) ?? routeRow.color,
+        })),
+      );
+    }
+
+    return isRouteGroupDetail
       ? routeGroupStopsSource.map((stop) => ({
         ...stop,
         isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
         routeColor: routeLineColor,
       }))
       : [];
+  }, [isRouteGroupDetail, polygonHighlightedOrderIds, routeGroupStopsSource, routeLineColor, routeStopColorById, timelineRouteRows]);
   const routeMapLocationsSource = routeMapStops.length > 0 ? routeMapStops : orderedRouteStops;
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, routeMapLocationsSource),

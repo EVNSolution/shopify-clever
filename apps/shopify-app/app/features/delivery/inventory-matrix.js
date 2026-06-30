@@ -122,5 +122,5 @@ function hasHangul(value) {
 }
 
 function cleanDisplayName(value) {
-  return value.replace(/\s+/g, " ").trim().replace(/^[,./·•\-]+|[,./·•\-]+$/g, "");
+  return value.replace(/\s+/g, " ").trim().replace(/^[,./·•-]+|[,./·•-]+$/g, "");
 }

@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { Link, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryDetail } from "../features/delivery/inventories.server";

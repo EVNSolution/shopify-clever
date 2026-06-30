@@ -1,4 +1,3 @@
-/* global process */
 import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
@@ -555,7 +554,7 @@ export const loader = async ({ request }) => {
   const result = await fetchDeliveryDrivers(request);
   return {
     ...result,
-    driverDownloadLink: process.env.CLEVER_DRIVER_DOWNLOAD_URL?.trim() ?? "",
+    driverDownloadLink: getDriverDownloadLink(),
   };
 };
 
@@ -685,7 +684,7 @@ export default function DriversVehiclesPage() {
   const savePendingDriver = async () => {
     const { downloadLink, normalizedPhone } = getCurrentInvite();
     if (!downloadLink) {
-      setCopyStatus("배송원 앱 다운로드 링크가 설정되지 않았습니다. CLEVER_DRIVER_DOWNLOAD_URL을 확인해주세요.");
+      setCopyStatus("배송원 앱 다운로드 링크가 설정되지 않았습니다. 기본 APK 링크를 확인해주세요.");
       return;
     }
 

@@ -761,7 +761,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /const hasVisibleRouteSplit = routeBranchRows\.length > 0 \|\| routeGroupChildRows\.length > 0 \|\| clientRouteRows\.length > 0/);
   assert.match(routeDetailSource, /\? \[\.\.\.groupRootRouteRows, \.\.\.routeGroupChildRows, \.\.\.routeBranchRows\]/);
   assert.match(routeDetailSource, /const routePolygonSourceStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail \? routeGroupStopsSource : \[\]/);
-  assert.match(routeDetailSource, /const routeMapStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail[\s\S]*routeGroupStopsSource\.map/);
+  assert.match(routeDetailSource, /const routeMapStops = useMemo\(\(\) => \{[\s\S]*timelineRouteRows\.length > 0[\s\S]*return isRouteGroupDetail[\s\S]*routeGroupStopsSource\.map/);
   assert.match(routeDetailSource, /const displayRouteRowsSource = isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
   assert.match(routeDetailSource, /const contextRouteRowsSource = isRouteGroupDetail/);
   assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(applyRouteRowDraftState\(\[\.\.\.displayRouteRowsSource, \.\.\.clientRouteRows\]/);
