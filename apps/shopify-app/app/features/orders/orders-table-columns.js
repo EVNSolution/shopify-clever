@@ -92,19 +92,22 @@ export function getTableColumnFitWidth(tableElement, columnIndex) {
   );
 }
 
-export function getTableColumnMinWidth(tableElement, columnIndex) {
-  const header = tableElement.querySelector(`thead th:nth-child(${columnIndex + 1})`);
+export function getTableColumnPillMinWidth(tableElement, columnIndex) {
   const pills = tableElement.querySelectorAll(`tbody td:nth-child(${columnIndex + 1}) .info-pill`);
+  if (pills.length === 0) return null;
 
   return Math.max(
     MIN_TABLE_COLUMN_WIDTH,
-    header ? Math.ceil(header.scrollWidth) : 0,
     ...Array.from(pills, (pill) => Math.ceil(pill.scrollWidth) + TABLE_CELL_HORIZONTAL_PADDING_PX),
   );
 }
 
-export function getTableColumnMinWidths(tableElement, columnCount) {
+export function getTableColumnMinWidth(tableElement, columnIndex) {
+  return getTableColumnPillMinWidth(tableElement, columnIndex) ?? MIN_TABLE_COLUMN_WIDTH;
+}
+
+export function getTableColumnPillMinWidths(tableElement, columnCount) {
   return Array.from({ length: columnCount }, (_, columnIndex) =>
-    getTableColumnMinWidth(tableElement, columnIndex),
+    getTableColumnPillMinWidth(tableElement, columnIndex),
   );
 }

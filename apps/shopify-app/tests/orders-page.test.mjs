@@ -656,11 +656,13 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(globalCssSource, /\.info-pill \{[\s\S]*?border-radius: 999px/);
   assert.match(globalCssSource, /\.info-pill \{[\s\S]*?min-width: max-content/);
   assert.match(globalCssSource, /\.info-pill \{[\s\S]*?width: max-content/);
+  assert.match(ordersPageSource, /function getTableColumnPillMinWidth\(tableElement, columnIndex\) \{/);
+  assert.match(ordersPageSource, /if \(pills\.length === 0\) return null/);
   assert.match(ordersPageSource, /function getTableColumnMinWidth\(tableElement, columnIndex\) \{/);
-  assert.match(ordersPageSource, /header \? Math\.ceil\(header\.scrollWidth\) : 0/);
-  assert.match(ordersPageSource, /\.info-pill/);
-  assert.match(ordersPageSource, /function getTableColumnMinWidths\(tableElement, columnCount\) \{/);
-  assert.match(ordersPageSource, /Math\.max\(width, minWidths\[columnIndex\] \?\? MIN_TABLE_COLUMN_WIDTH\)/);
+  assert.match(ordersPageSource, /return getTableColumnPillMinWidth\(tableElement, columnIndex\) \?\? MIN_TABLE_COLUMN_WIDTH/);
+  assert.match(ordersPageSource, /function getTableColumnPillMinWidths\(tableElement, columnCount\) \{/);
+  assert.match(ordersPageSource, /return pillMinWidth == null \? width : Math\.max\(width, pillMinWidth\)/);
+  assert.doesNotMatch(ordersPageSource, /header \? Math\.ceil\(header\.scrollWidth\) : 0/);
   assert.match(ordersPageSource, /setLockedTableWidth\(nextTableWidth\)/);
   assert.match(ordersPageSource, /getTableColumnMinWidth\(tableElement, columnIndex\) - leftStartWidth/);
   assert.match(ordersPageSource, /rightStartWidth - getTableColumnMinWidth\(tableElement, rightColumnIndex\)/);

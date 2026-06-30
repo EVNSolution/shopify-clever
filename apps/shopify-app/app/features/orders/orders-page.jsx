@@ -25,11 +25,10 @@ import {
 import { getServiceErrorNotice } from "../service-errors";
 import {
   DEFAULT_TABLE_COLUMN_WIDTHS,
-  MIN_TABLE_COLUMN_WIDTH,
   SORTABLE_ORDER_COLUMNS,
   getTableColumnFitWidth,
   getTableColumnMinWidth,
-  getTableColumnMinWidths,
+  getTableColumnPillMinWidths,
   getTableColumnPixelState,
 } from "./orders-table-columns";
 import {
@@ -1972,10 +1971,11 @@ export default function OrdersPage() {
     if (!tableElement) return;
 
     const { tableWidth: measuredTableWidth, widths } = getTableColumnPixelState(tableElement);
-    const minWidths = getTableColumnMinWidths(tableElement, widths.length);
-    const nextWidths = widths.map((width, columnIndex) =>
-      Math.max(width, minWidths[columnIndex] ?? MIN_TABLE_COLUMN_WIDTH),
-    );
+    const pillMinWidths = getTableColumnPillMinWidths(tableElement, widths.length);
+    const nextWidths = widths.map((width, columnIndex) => {
+      const pillMinWidth = pillMinWidths[columnIndex];
+      return pillMinWidth == null ? width : Math.max(width, pillMinWidth);
+    });
     const nextTableWidth = Math.max(
       measuredTableWidth,
       nextWidths.reduce((total, width) => total + width, 0),
