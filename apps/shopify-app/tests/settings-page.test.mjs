@@ -8,6 +8,10 @@ const settingsPageSource = readFileSync(
   join(root, "app/routes/app.settings.jsx"),
   "utf8",
 );
+const settingsDepartureMapSource = readFileSync(
+  join(root, "app/features/settings/settings-departure-map.jsx"),
+  "utf8",
+);
 
 test("Settings tab reads the Shopify departure location", () => {
   assert.match(settingsPageSource, /import \{ useCallback, useEffect, useRef, useState \} from "react"/);
@@ -79,7 +83,7 @@ test("Settings renders language as a General fieldset without card sections", ()
 
 test("Settings tab lets operators preview geocoding and adjust the pin on a map", () => {
   assert.match(settingsPageSource, /export const links = \(\) => \[\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}\]/);
-  assert.match(settingsPageSource, /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-liberty\.json"/);
+  assert.match(settingsDepartureMapSource, /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-liberty\.json"/);
   assert.match(settingsPageSource, /const geocodeFetcher = useFetcher\(\)/);
   assert.match(settingsPageSource, /const \[lastOperation, setLastOperation\] = useState\(null\)/);
   assert.match(settingsPageSource, /lastOperation === "geocode"/);
@@ -91,18 +95,19 @@ test("Settings tab lets operators preview geocoding and adjust the pin on a map"
   assert.match(settingsPageSource, /onClick=\{checkAddressOnMap\}/);
   assert.match(settingsPageSource, /type="button"/);
   assert.match(settingsPageSource, />\{copy\("settings\.departureLocation\.checkAddress"\)\}<\/button>/);
+  assert.match(settingsPageSource, /import \{ SettingsDepartureMap \} from "\.\.\/features\/settings\/settings-departure-map"/);
   assert.match(settingsPageSource, /<SettingsDepartureMap/);
-  assert.match(settingsPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
-  assert.match(settingsPageSource, /ariaLabel="Departure location map"/);
-  assert.match(settingsPageSource, /ariaLabel: "Fit highlighted map markers"/);
-  assert.match(settingsPageSource, /renderMapZoomInIcon\(\)/);
-  assert.match(settingsPageSource, /renderMapZoomOutIcon\(\)/);
-  assert.doesNotMatch(settingsPageSource, /NavigationControl/);
-  assert.match(settingsPageSource, /const handleFitHighlightedMapMarkers = useCallback\(\(\) => \{/);
-  assert.match(settingsPageSource, /await import\("maplibre-gl"\)/);
-  assert.match(settingsPageSource, /new maplibregl\.Marker\(\{\s*color: "#008060",\s*draggable: true,\s*\}\)/);
-  assert.match(settingsPageSource, /markerRef\.current\.on\("dragend"/);
-  assert.match(settingsPageSource, /onCoordinateChangeRef\.current\(\{/);
+  assert.match(settingsDepartureMapSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/\.\.\/ui\/map-panel"/);
+  assert.match(settingsDepartureMapSource, /ariaLabel="Departure location map"/);
+  assert.match(settingsDepartureMapSource, /ariaLabel: "Fit highlighted map markers"/);
+  assert.match(settingsDepartureMapSource, /renderMapZoomInIcon\(\)/);
+  assert.match(settingsDepartureMapSource, /renderMapZoomOutIcon\(\)/);
+  assert.doesNotMatch(settingsDepartureMapSource, /NavigationControl/);
+  assert.match(settingsDepartureMapSource, /const handleFitHighlightedMapMarkers = useCallback\(\(\) => \{/);
+  assert.match(settingsDepartureMapSource, /await import\("maplibre-gl"\)/);
+  assert.match(settingsDepartureMapSource, /new maplibregl\.Marker\(\{\s*color: "#008060",\s*draggable: true,\s*\}\)/);
+  assert.match(settingsDepartureMapSource, /markerRef\.current\.on\("dragend"/);
+  assert.match(settingsDepartureMapSource, /onCoordinateChangeRef\.current\(\{/);
   assert.match(settingsPageSource, /setCoordinateAddress\(formText\(departureAddress\)\)/);
 });
 

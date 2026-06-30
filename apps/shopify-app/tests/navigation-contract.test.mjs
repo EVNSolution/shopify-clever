@@ -235,6 +235,7 @@ test("Drivers is a single operational driver list without vehicle or assignment 
 
 test("Settings is a single plain form without navigation-only setting sections", () => {
   const source = readAppFile("app/routes/app.settings.jsx");
+  const settingsDepartureMapSource = readAppFile("app/features/settings/settings-departure-map.jsx");
 
   assert.match(source, /<PageShell\s+title=\{copy\("settings\.title"\)\}/);
   assert.match(source, /method="post"/);
@@ -243,7 +244,7 @@ test("Settings is a single plain form without navigation-only setting sections",
   assert.match(source, /SUPPORTED_LANGUAGES\.map/);
   assert.match(source, /geocodeAddress/);
   assert.match(source, /name="departureAddress"/);
-  assert.match(source, /ariaLabel="Departure location map"/);
+  assert.match(settingsDepartureMapSource, /ariaLabel="Departure location map"/);
   assert.match(source, /name="departureLatitude"|name="departureLongitude"/);
   assert.match(source, /type="hidden"/);
   assert.match(source, />\{copy\("settings\.departureLocation\.latitude"\)\}<\/span>/);

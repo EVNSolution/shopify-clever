@@ -21,6 +21,10 @@ const settingsPageSource = readFileSync(
   join(root, "app/routes/app.settings.jsx"),
   "utf8",
 );
+const settingsDepartureMapSource = readFileSync(
+  join(root, "app/features/settings/settings-departure-map.jsx"),
+  "utf8",
+);
 const mapLibreMapSource = readFileSync(
   join(root, "app/features/maps/maplibre-map.js"),
   "utf8",
@@ -33,7 +37,7 @@ const mapMarkersSource = readFileSync(
 test("build config treats MapLibre as an intentional lazy map chunk", () => {
   assert.match(ordersPageSource, /import\("maplibre-gl"\)/);
   assert.match(routeDetailPageSource, /import\("maplibre-gl"\)/);
-  assert.match(settingsPageSource, /await import\("maplibre-gl"\)/);
+  assert.match(settingsDepartureMapSource, /await import\("maplibre-gl"\)/);
   assert.match(ordersPageSource, /import\("pmtiles"\)/);
   assert.match(routeDetailPageSource, /import\("pmtiles"\)/);
   assert.match(viteConfigSource, /chunkSizeWarningLimit:\s*1200/);
@@ -73,10 +77,10 @@ test("MapLibre maps share global interaction defaults", () => {
   assert.match(mapLibreMapSource, /cooperativeGestures:\s*true/);
   assert.match(mapLibreMapSource, /new maplibregl\.Map/);
   assert.match(ordersPageSource, /createMapLibreMap\(maplibregl, \{/);
-  assert.match(settingsPageSource, /createMapLibreMap\(maplibregl, \{/);
+  assert.match(settingsDepartureMapSource, /createMapLibreMap\(maplibregl, \{/);
   assert.match(ordersPageSource, /fadeDuration:\s*0/);
   assert.match(routeDetailPageSource, /fadeDuration:\s*0/);
-  assert.match(settingsPageSource, /fadeDuration:\s*0/);
+  assert.match(settingsDepartureMapSource, /fadeDuration:\s*0/);
 });
 
 test("route detail map does not rebuild DOM markers after pan or zoom", () => {
