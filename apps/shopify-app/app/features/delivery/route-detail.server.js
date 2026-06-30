@@ -10,6 +10,14 @@ import {
   assignDeliveryRoutePlanDriver,
   fetchDeliveryRoutePlanDetail,
 } from "./route-plans.server";
+import {
+  firstArray,
+  getRouteGroupChildRoutePlanId,
+  getRouteGroupChildRouteName,
+  numberOrUndefined,
+  readRouteOptimizedSnapshot,
+  textOrUndefined,
+} from "./route-helpers";
 import { routeGroupChildPath } from "./route-paths";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
 import { authenticate } from "../../shopify.server";
@@ -31,26 +39,6 @@ function logRouteDetailPerformance(name, metric = {}) {
   });
 }
 
-function textOrUndefined(value) {
-  if (value == null) return undefined;
-  const text = String(value).trim();
-  return text || undefined;
-}
-
-function numberOrUndefined(value) {
-  if (value == null) return undefined;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : undefined;
-}
-
-function firstArray(...values) {
-  return values.find((value) => Array.isArray(value)) ?? [];
-}
-
-function readRouteOptimizedSnapshot(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-
 export function cleanRoutePathParam(value) {
   return textOrUndefined(value)?.split(/[?&]/)[0];
 }
@@ -58,18 +46,6 @@ export function cleanRoutePathParam(value) {
 function getRouteGroupIdHint(request) {
   const url = new URL(request.url);
   return cleanRoutePathParam(url.searchParams.get("routeGroupId") ?? url.searchParams.get("groupId"));
-}
-
-function getDefaultRouteGroupChildName(index) {
-  return `Route ${index + 1}`;
-}
-
-function getRouteGroupChildRouteName(routeGroup, child, routePlan, index) {
-  const fallback = getDefaultRouteGroupChildName(index);
-  const name = textOrUndefined(routePlan?.name ?? child?.routePlan?.name ?? child?.label);
-  const groupName = textOrUndefined(routeGroup?.name);
-  if (name && groupName && name.startsWith(`${groupName} — `)) return fallback;
-  return name ?? fallback;
 }
 
 function getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stops) {
@@ -95,7 +71,7 @@ function getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stop
 export function buildRouteGroupChildDetails(routeGroup) {
   return (routeGroup?.children ?? [])
     .map((child, index) => {
-      const routePlanId = textOrUndefined(child?.routePlanId ?? child?.routePlan?.id);
+      const routePlanId = getRouteGroupChildRoutePlanId(child);
       if (!routePlanId) return null;
 
       const routePlan = child?.routePlan ?? {};
@@ -114,12 +90,12 @@ export function buildRouteGroupChildDetails(routeGroup) {
 }
 
 function mergeRouteGroupChildDetail(childDetails, currentDetail) {
-  const routePlanId = textOrUndefined(currentDetail?.routePlanId ?? currentDetail?.routePlan?.id);
+  const routePlanId = getRouteGroupChildRoutePlanId(currentDetail);
   if (!routePlanId) return childDetails;
 
   let didReplace = false;
   const mergedDetails = childDetails.map((detail) => {
-    if (textOrUndefined(detail?.routePlanId ?? detail?.routePlan?.id) !== routePlanId) return detail;
+    if (getRouteGroupChildRoutePlanId(detail) !== routePlanId) return detail;
     didReplace = true;
     const routePlan = {
       ...(detail.routePlan ?? {}),
@@ -329,7 +305,7 @@ function logRouteGroupActionResult(name, routeId, routeGroupId, result) {
     routeGroupId,
     branchCount: routeGroup?.branches?.length ?? 0,
     childCount: routeGroup?.children?.length ?? 0,
-    childRoutePlanIds: (routeGroup?.children ?? []).map((child) => child.routePlanId).filter(Boolean),
+    childRoutePlanIds: (routeGroup?.children ?? []).map(getRouteGroupChildRoutePlanId).filter(Boolean),
     errorCount: result?.errors?.length ?? 0,
   });
 }

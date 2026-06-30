@@ -2,10 +2,13 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
 
+
 function readAppFile(path) {
+  if (path === "app/routes/app.orders.jsx") return readOrdersPageSource();
   return readFileSync(join(root, path), "utf8");
 }
 

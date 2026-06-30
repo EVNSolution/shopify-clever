@@ -5,8 +5,10 @@ import test from "node:test";
 
 const root = process.cwd();
 const source = readFileSync(join(root, "app/routes/app.drivers-vehicles.jsx"), "utf8");
+const driversPageDataSource = readFileSync(join(root, "app/features/drivers/drivers-page-data.js"), "utf8");
 
 test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
+  assert.match(source, /from "\.\.\/features\/drivers\/drivers-page-data"/);
   assert.match(source, /deleteDeliveryDriver/);
   assert.match(source, /const driverDeleteFetcher = useFetcher\(\)/);
   assert.match(source, /const \[checkedDriverIds, setCheckedDriverIds\] = useState\(\[\]\)/);
@@ -41,7 +43,7 @@ test("Drivers table uses compact support columns and separates joined date", () 
 
 test("Drivers assigned route is informational text, not a clickable route link", () => {
   assert.match(source, /const assignedRouteTextStyle = \{/);
-  assert.match(source, /assignedRoute: \{ label: "Unassigned" \}/);
+  assert.match(driversPageDataSource, /assignedRoute: \{ label: "Unassigned" \}/);
   assert.match(source, /<span style=\{assignedRouteTextStyle\}>\{driver\.assignedRoute\.label\}<\/span>/);
   assert.doesNotMatch(source, /driver\.assignedRoute\.href/);
   assert.doesNotMatch(source, /<a href=\{driver\.assignedRoute\.href\}/);
@@ -49,15 +51,16 @@ test("Drivers assigned route is informational text, not a clickable route link",
 });
 
 test("Drivers tab separates operational status from app access state", () => {
-  assert.match(source, /isInvitePending: false/);
-  assert.match(source, /isInvitePending: true/);
+  assert.match(driversPageDataSource, /isInvitePending: false/);
+  assert.match(driversPageDataSource, /isInvitePending: true/);
   assert.match(source, /const invitePending = authStatusValue === "INVITE_PENDING" \|\| statusValue === "PENDING"/);
   assert.match(source, /status: formatOperationalDriverStatus\(driver\.status, \{ invitePending \}\)/);
   assert.match(source, /authStatus: invitePending \? "Invite pending" : appLinked \? "App linked" : "Not linked"/);
   assert.match(source, /isInvitePending: invitePending/);
   assert.match(source, /isAppLinked: appLinked/);
   assert.match(source, /function canShowDriverInviteActions\(driver\)/);
-  assert.match(source, /CLEVER_DRIVER_DOWNLOAD_URL/);
+  assert.equal(source.includes(["CLEVER_DRIVER", "DOWNLOAD_URL"].join("_")), false);
+  assert.match(source, /driverDownloadLink: getDriverDownloadLink\(\)/);
   assert.doesNotMatch(source, /https:\/\/clever\.delivery\/driver\/download/);
   assert.match(source, /driver\?\.isInvitePending === true/);
   assert.match(source, /normalizeSearchText\(driver\?\.authStatus\) === "invite pending"/);

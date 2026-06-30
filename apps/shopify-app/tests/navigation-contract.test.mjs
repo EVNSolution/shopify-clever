@@ -2,11 +2,14 @@ import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
 const routesDir = join(root, "app/routes");
 
+
 function readAppFile(path) {
+  if (path === "app/routes/app.orders.jsx") return readOrdersPageSource();
   return readFileSync(join(root, path), "utf8");
 }
 
@@ -164,6 +167,7 @@ test("Workflows is temporarily removed from the app surface", () => {
 
 test("Drivers is a single operational driver list without vehicle or assignment sub-tabs", () => {
   const source = readAppFile("app/routes/app.drivers-vehicles.jsx");
+  const driversPageDataSource = readAppFile("app/features/drivers/drivers-page-data.js");
 
   for (const label of ["Drivers", "Invite driver", "Search drivers", "Driver list", "Assigned route", "Recent events"]) {
     assert.match(source, new RegExp(label));
@@ -207,17 +211,17 @@ test("Drivers is a single operational driver list without vehicle or assignment 
   assert.doesNotMatch(source, /Copy download link<\/button>.*disabled=\{driverInviteFetcher\.state !== "idle"\}/);
   assert.match(source, /boxSizing: "border-box"/);
   assert.match(source, /overflow: "visible"/);
-  assert.match(source, /Canada \/ United States/);
-  assert.match(source, /South Korea/);
-  assert.match(source, /Mexico/);
-  assert.match(source, /United Kingdom/);
-  assert.match(source, /Australia/);
-  assert.match(source, /Germany/);
-  assert.match(source, /France/);
-  assert.match(source, /India/);
-  assert.match(source, /Brazil/);
-  assert.match(source, /South Africa/);
-  assert.match(source, /010 1234 5678/);
+  assert.match(driversPageDataSource, /Canada \/ United States/);
+  assert.match(driversPageDataSource, /South Korea/);
+  assert.match(driversPageDataSource, /Mexico/);
+  assert.match(driversPageDataSource, /United Kingdom/);
+  assert.match(driversPageDataSource, /Australia/);
+  assert.match(driversPageDataSource, /Germany/);
+  assert.match(driversPageDataSource, /France/);
+  assert.match(driversPageDataSource, /India/);
+  assert.match(driversPageDataSource, /Brazil/);
+  assert.match(driversPageDataSource, /South Africa/);
+  assert.match(driversPageDataSource, /010 1234 5678/);
   assert.match(source, /placeholder=\{`\$\{selectedCountryCode\.dialCode\} \$\{selectedCountryCode\.example\}`\}/);
   assert.match(source, /setInvitePhone\(formatInvitePhoneInput\(selectedCountryCode\.dialCode, event\.currentTarget\.value\)\)/);
   assert.match(source, /setInvitePhone\(formatInvitePhoneInput\(option\.dialCode, invitePhone\)\)/);
@@ -231,6 +235,7 @@ test("Drivers is a single operational driver list without vehicle or assignment 
 
 test("Settings is a single plain form without navigation-only setting sections", () => {
   const source = readAppFile("app/routes/app.settings.jsx");
+  const settingsDepartureMapSource = readAppFile("app/features/settings/settings-departure-map.jsx");
 
   assert.match(source, /<PageShell\s+title=\{copy\("settings\.title"\)\}/);
   assert.match(source, /method="post"/);
@@ -239,7 +244,7 @@ test("Settings is a single plain form without navigation-only setting sections",
   assert.match(source, /SUPPORTED_LANGUAGES\.map/);
   assert.match(source, /geocodeAddress/);
   assert.match(source, /name="departureAddress"/);
-  assert.match(source, /ariaLabel="Departure location map"/);
+  assert.match(settingsDepartureMapSource, /ariaLabel="Departure location map"/);
   assert.match(source, /name="departureLatitude"|name="departureLongitude"/);
   assert.match(source, /type="hidden"/);
   assert.match(source, />\{copy\("settings\.departureLocation\.latitude"\)\}<\/span>/);

@@ -49,3 +49,15 @@ test("keeps driver download links free of invite phone data", () => {
     "https://driver-download.example.test/app",
   );
 });
+
+test("falls back to the stable latest APK link without env churn", () => {
+  const latestApkLink = "https://drive.google.com/file/d/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2/view?usp=sharing";
+
+  assert.equal(getDriverDownloadLink(""), latestApkLink);
+  assert.equal(getDriverDownloadLink("   "), latestApkLink);
+  assert.equal(getDriverDownloadLink("https://clever.delivery/driver/download"), latestApkLink);
+  assert.equal(
+    getDriverDownloadLink("https://drive.google.com/drive/folders/15Am4CFvcp2szOuuKpGnWgJEB22H96rwZ"),
+    latestApkLink,
+  );
+});

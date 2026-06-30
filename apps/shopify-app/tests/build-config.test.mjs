@@ -2,20 +2,27 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
+
 const viteConfigSource = readFileSync(join(root, "vite.config.js"), "utf8");
 const tsConfig = JSON.parse(readFileSync(join(root, "tsconfig.json"), "utf8"));
-const ordersPageSource = readFileSync(
-  join(root, "app/routes/app.orders.jsx"),
-  "utf8",
-);
+const ordersPageSource = readOrdersPageSource();
 const routeDetailPageSource = readFileSync(
   join(root, "app/routes/app.routes.$routeId.jsx"),
   "utf8",
 );
+const routeDetailMapSource = readFileSync(
+  join(root, "app/features/delivery/route-detail-map.js"),
+  "utf8",
+);
 const settingsPageSource = readFileSync(
   join(root, "app/routes/app.settings.jsx"),
+  "utf8",
+);
+const settingsDepartureMapSource = readFileSync(
+  join(root, "app/features/settings/settings-departure-map.jsx"),
   "utf8",
 );
 const mapLibreMapSource = readFileSync(
@@ -30,7 +37,7 @@ const mapMarkersSource = readFileSync(
 test("build config treats MapLibre as an intentional lazy map chunk", () => {
   assert.match(ordersPageSource, /import\("maplibre-gl"\)/);
   assert.match(routeDetailPageSource, /import\("maplibre-gl"\)/);
-  assert.match(settingsPageSource, /await import\("maplibre-gl"\)/);
+  assert.match(settingsDepartureMapSource, /await import\("maplibre-gl"\)/);
   assert.match(ordersPageSource, /import\("pmtiles"\)/);
   assert.match(routeDetailPageSource, /import\("pmtiles"\)/);
   assert.match(viteConfigSource, /chunkSizeWarningLimit:\s*1200/);
@@ -70,10 +77,10 @@ test("MapLibre maps share global interaction defaults", () => {
   assert.match(mapLibreMapSource, /cooperativeGestures:\s*true/);
   assert.match(mapLibreMapSource, /new maplibregl\.Map/);
   assert.match(ordersPageSource, /createMapLibreMap\(maplibregl, \{/);
-  assert.match(settingsPageSource, /createMapLibreMap\(maplibregl, \{/);
+  assert.match(settingsDepartureMapSource, /createMapLibreMap\(maplibregl, \{/);
   assert.match(ordersPageSource, /fadeDuration:\s*0/);
   assert.match(routeDetailPageSource, /fadeDuration:\s*0/);
-  assert.match(settingsPageSource, /fadeDuration:\s*0/);
+  assert.match(settingsDepartureMapSource, /fadeDuration:\s*0/);
 });
 
 test("route detail map does not rebuild DOM markers after pan or zoom", () => {
@@ -96,12 +103,14 @@ test("orders map renders order pins through a MapLibre source layer", () => {
 });
 
 test("route detail map renders route stops through MapLibre source layers", () => {
-  assert.match(routeDetailPageSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops/);
-  assert.match(routeDetailPageSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
-  assert.match(routeDetailPageSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
-  assert.match(routeDetailPageSource, /createMapPinSymbolLayer\(\{/);
+  assert.match(routeDetailMapSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
+  assert.match(routeDetailMapSource, /createMapPinSymbolLayer\(\{/);
   assert.doesNotMatch(routeDetailPageSource, /const stopMarker = new maplibregl\.Marker/);
   assert.doesNotMatch(routeDetailPageSource, /const snappedStopPointMarker = new maplibregl\.Marker/);
+  assert.doesNotMatch(routeDetailMapSource, /const stopMarker = new maplibregl\.Marker/);
+  assert.doesNotMatch(routeDetailMapSource, /const snappedStopPointMarker = new maplibregl\.Marker/);
 });
 
 test("TypeScript config avoids deprecated baseUrl", () => {

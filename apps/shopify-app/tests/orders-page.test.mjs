@@ -3,12 +3,11 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
-const ordersPageSource = readFileSync(
-  join(root, "app/routes/app.orders.jsx"),
-  "utf8",
-);
+
+const ordersPageSource = readOrdersPageSource();
 const shopifyOrdersSource = readFileSync(
   join(root, "app/features/orders/shopify-orders.server.js"),
   "utf8",
@@ -40,6 +39,7 @@ const inventoryDetailSource = readFileSync(
   join(root, "app/routes/app.orders_.inventory.jsx"),
   "utf8",
 );
+const infoPillSource = readFileSync(join(root, "app/ui/info-pill.jsx"), "utf8");
 const openFreeMapStyle = JSON.parse(
   readFileSync(join(root, "public/vendor/openfreemap-liberty.json"), "utf8"),
 );
@@ -261,8 +261,9 @@ test("Orders map stays visible when Shopify has no orders with coordinates", () 
   assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds\)/);
 });
 
-test("Orders table container has a capped height and scrolls internally", () => {
-  assert.match(ordersPageSource, /maxHeight:\s*"min\(320px,\s*36vh\)"/);
+test("Orders table container uses viewport height and scrolls internally", () => {
+  assert.match(ordersPageSource, /height:\s*"calc\(100vh - 150px\)"/);
+  assert.match(ordersPageSource, /minHeight:\s*"320px"/);
   assert.match(ordersPageSource, /overflowY:\s*"auto"/);
 });
 
@@ -319,7 +320,12 @@ test("Orders table uses a compact centered layout", () => {
 test("Orders table has a compact checkbox column for route-plan candidates", () => {
   assert.match(ordersPageSource, /const \[checkedOrderIds, setCheckedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
-  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \["3%", "7%", "8%", "10%", "18%", "7%", "8%", "9%", "10%", "8%", "8%"\]/);
+  assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
+  assert.match(ordersPageSource, /address: "24%"/);
+  assert.match(ordersPageSource, /itemCount: "6%"/);
+  assert.match(ordersPageSource, /planningStatus: "7%"/);
+  assert.match(ordersPageSource, /hasCoordinates: "6%"/);
+  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.map\(\(column\) => ORDER_TABLE_COLUMN_WIDTHS\[column\.key\]\)/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
   assert.match(ordersPageSource, /const checkboxChecked = orderIsPlanned \|\| checkedOrderIdSet\.has\(order\.id\)/);
@@ -352,10 +358,10 @@ test("Orders order-number button shows a subtle rounded hover state", () => {
 
 test("Orders page creates grouped child routes from scoped planned orders", () => {
   assert.match(ordersPageSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams \} from "react-router"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*\} from "\.\.\/features\/delivery\/route-plans\.server"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*createDeliveryRouteGroup[\s\S]*generateDeliveryRouteGroupChildRoutes[\s\S]*\} from "\.\.\/features\/delivery\/route-groups\.server"/);
-  assert.match(ordersPageSource, /import \{ buildRouteScopeFromOrders \} from "\.\.\/features\/delivery\/route-scope"/);
+  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useSearchParams \} from "react-router"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-plans\.server"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*createDeliveryRouteGroup[\s\S]*generateDeliveryRouteGroupChildRoutes[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-groups\.server"/);
+  assert.match(ordersPageSource, /import \{ buildRouteScopeFromOrders \} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-scope"/);
   assert.match(ordersPageSource, /export const action = async \(\{ request \}\) => \{/);
   assert.match(ordersPageSource, /const formData = await request\.formData\(\)/);
   assert.match(ordersPageSource, /JSON\.parse\(formData\.get\("plannedOrderIds"\) \?\? "\[\]"\)/);
@@ -405,8 +411,8 @@ test("Orders route-group payload sends delivery-api order UUIDs, not Shopify GID
 });
 
 test("Orders action separates background order sync from route creation", () => {
-  assert.match(ordersPageSource, /import \{[\s\S]*bulkUpdateDeliveryOrders[\s\S]*fetchDeliveryOrders[\s\S]*syncDeliveryOrders[\s\S]*\} from "\.\.\/features\/delivery\/orders\.server"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*getOrderSyncSnapshots[\s\S]*mapCanonicalOrdersToOrderRows[\s\S]*mergeShopifyOrderRowsWithCanonicalRows[\s\S]*\} from "\.\.\/features\/orders\/canonical-orders"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*bulkUpdateDeliveryOrders[\s\S]*fetchDeliveryOrders[\s\S]*syncDeliveryOrders[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/orders\.server"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*getOrderSyncSnapshots[\s\S]*mapCanonicalOrdersToOrderRows[\s\S]*mergeShopifyOrderRowsWithCanonicalRows[\s\S]*\} from "(?:\.\.\/features\/orders|\.)\/canonical-orders"/);
   assert.match(ordersPageSource, /const intent = formData\.get\("_intent"\) \?\? "createRoutePlan"/);
   assert.match(ordersPageSource, /if \(intent === "syncOrders"\)/);
   assert.match(ordersPageSource, /JSON\.parse\(formData\.get\("orders"\) \?\? "\[\]"\)/);
@@ -564,7 +570,7 @@ test("Orders table keeps route-created orders visible and relies on State labels
   assert.match(ordersPageSource, /filterOrders\(displayOrders, \{[\s\S]*tab: "all",[\s\S]*referenceDate: orderFilterReferenceDate/);
   assert.match(ordersPageSource, /const stateValue = getOrderDeliveryStateFilterValue\(order, referenceDate\)/);
   assert.match(ordersPageSource, /if \(stateValue === "planned"\) return "Planned"/);
-  assert.match(ordersPageSource, /getOrderDeliveryStateTabStyle\(order, orderFilterReferenceDate\)/);
+  assert.match(ordersPageSource, /getOrderDeliveryStatePillTone\(order, orderFilterReferenceDate\)/);
 });
 
 
@@ -647,17 +653,26 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /\{ key: "deliveryLabel", label: "Delivery" \}/);
   assert.match(ordersPageSource, /\{ key: "planningStatus", label: "State" \}/);
   assert.match(ordersPageSource, /\{ key: "payment", label: "Payment" \}/);
+  assert.match(ordersPageSource, /import \{ InfoPill \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/info-pill"/);
   assert.match(ordersPageSource, /const deliveryInfoCellStyle = \{/);
-  assert.match(ordersPageSource, /const deliveryInfoTabStyle = \{/);
-  assert.match(ordersPageSource, /const routeCreatedTabStyle = \{/);
-  assert.match(ordersPageSource, /const deliveryCompleteTabStyle = \{/);
-  assert.match(ordersPageSource, /const deliveryOverdueAssignedTabStyle = \{/);
-  assert.match(ordersPageSource, /const deliveryOverdueUnassignedTabStyle = \{/);
-  assert.match(ordersPageSource, /const paymentPaidTabStyle = \{/);
-  assert.match(ordersPageSource, /const paymentActionTabStyle = \{/);
-  assert.match(ordersPageSource, /const paymentIssueTabStyle = \{/);
-  assert.match(ordersPageSource, /background:\s*"rgba\(0, 0, 0, 0\.04\)"/);
-  assert.match(ordersPageSource, /color:\s*"#303030"/);
+  assert.match(infoPillSource, /className=\{`info-pill info-pill--\$\{normalizeInfoPillTone\(tone\)\}`\}/);
+  assert.match(infoPillSource, /title=\{title \?\? fallbackTitle\}/);
+  assert.match(globalCssSource, /\.info-pill \{[\s\S]*?border-radius: 999px/);
+  assert.match(globalCssSource, /\.info-pill \{[\s\S]*?min-width: max-content/);
+  assert.match(globalCssSource, /\.info-pill \{[\s\S]*?width: max-content/);
+  assert.match(ordersPageSource, /function getTableColumnPillMinWidth\(tableElement, columnIndex\) \{/);
+  assert.match(ordersPageSource, /if \(pills\.length === 0\) return null/);
+  assert.match(ordersPageSource, /function getTableColumnMinWidth\(tableElement, columnIndex\) \{/);
+  assert.match(ordersPageSource, /return getTableColumnPillMinWidth\(tableElement, columnIndex\) \?\? MIN_TABLE_COLUMN_WIDTH/);
+  assert.match(ordersPageSource, /function getTableColumnPillMinWidths\(tableElement, columnCount\) \{/);
+  assert.match(ordersPageSource, /return pillMinWidth == null \? width : Math\.max\(width, pillMinWidth\)/);
+  assert.doesNotMatch(ordersPageSource, /header \? Math\.ceil\(header\.scrollWidth\) : 0/);
+  assert.match(ordersPageSource, /setLockedTableWidth\(nextTableWidth\)/);
+  assert.match(ordersPageSource, /getTableColumnMinWidth\(tableElement, columnIndex\) - leftStartWidth/);
+  assert.match(ordersPageSource, /rightStartWidth - getTableColumnMinWidth\(tableElement, rightColumnIndex\)/);
+  assert.match(globalCssSource, /\.info-pill--success \{[\s\S]*?color: #006c48/);
+  assert.match(globalCssSource, /\.info-pill--warning \{[\s\S]*?color: #8a4b00/);
+  assert.match(globalCssSource, /\.info-pill--critical \{[\s\S]*?color: #b42318/);
   assert.match(ordersPageSource, /function formatOrderDeliveryLabel\(order\) \{/);
   assert.match(ordersPageSource, /if \(!order\) return "—"/);
   assert.match(ordersPageSource, /: "Date pending"/);
@@ -675,10 +690,12 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /formatDeliveryValue\(order\.orderedDate\)/);
   assert.match(ordersPageSource, /function formatAreaValue\(order\)/);
   assert.match(ordersPageSource, /order\?\.serviceType === "PICKUP" \? "Pickup" : "Null"/);
-  assert.match(ordersPageSource, /formatAreaValue\(order\)/);
-  assert.match(ordersPageSource, /formatOrderDeliveryLabel\(order\)/);
-  assert.match(ordersPageSource, /formatOrderDeliveryState\(order, orderFilterReferenceDate\)/);
-  assert.match(ordersPageSource, /getOrderDeliveryStateTabStyle\(order, orderFilterReferenceDate\)/);
+  assert.match(ordersPageSource, /title=\{getOrderAreaPillTitle\(order\)\}/);
+  assert.match(ordersPageSource, /title=\{getOrderDeliveryPillTitle\(order\)\}/);
+  assert.match(ordersPageSource, /title=\{getOrderDeliveryStatePillTitle\(order, orderFilterReferenceDate\)\}/);
+  assert.match(ordersPageSource, /tone=\{getOrderDeliveryStatePillTone\(order, orderFilterReferenceDate\)\}/);
+  assert.match(ordersPageSource, /title=\{getOrderPaymentPillTitle\(order\)\}/);
+  assert.match(ordersPageSource, /tone=\{getOrderPaymentPillTone\(order\)\}/);
   assert.match(ordersPageSource, /formatOrderPaymentState\(order\)/);
   assert.match(ordersPageSource, /function getOrderPaymentStatus\(order\) \{/);
   assert.match(ordersPageSource, /order\?\.paymentStatus/);
@@ -694,11 +711,10 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /return "eTransfer"/);
   assert.match(ordersPageSource, /if \(status === "PENDING"\) return "Pending"/);
   assert.match(ordersPageSource, /return "Unknown"/);
-  assert.match(ordersPageSource, /function getOrderPaymentTabStyle\(order\) \{/);
-  assert.match(ordersPageSource, /if \(paymentState === "Paid"\) return paymentPaidTabStyle/);
-  assert.match(ordersPageSource, /if \(paymentState === "Cash" \|\| paymentState === "eTransfer"\) return paymentActionTabStyle/);
-  assert.match(ordersPageSource, /return paymentIssueTabStyle/);
-  assert.match(ordersPageSource, /style=\{getOrderPaymentTabStyle\(order\)\}/);
+  assert.match(ordersPageSource, /function getOrderPaymentPillTone\(order\) \{/);
+  assert.match(ordersPageSource, /if \(paymentState === "Paid"\) return "success"/);
+  assert.match(ordersPageSource, /if \(paymentState === "Cash" \|\| paymentState === "eTransfer"\) return "warning"/);
+  assert.match(ordersPageSource, /return "critical"/);
   assert.doesNotMatch(ordersPageSource, /formatPaymentStatusLabel/);
   assert.doesNotMatch(ordersPageSource, /formatPaymentGatewayName/);
   assert.doesNotMatch(ordersPageSource, /Payment unknown/);
@@ -899,7 +915,7 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(ordersPageSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
   assert.match(ordersPageSource, /\}, \[mapRenderKey, scheduleMapRecovery\]\)/);
   assert.match(ordersPageSource, /ariaLabel: "Refresh map"/);
-  assert.match(ordersPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
+  assert.match(ordersPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/map-panel"/);
   assert.match(ordersPageSource, /<MapPanel/);
   assert.match(ordersPageSource, /<MapToolbar/);
   assert.match(mapPanelSource, /flexDirection: "column"/);
@@ -963,7 +979,7 @@ test("Orders map captures MapLibre tile errors without long visible copy", () =>
   assert.match(ordersPageSource, /MAP_RECOVERY_DELAY_MS/);
   assert.match(ordersPageSource, /window\.setTimeout\(\(\) => \{/);
   assert.match(ordersPageSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
-  assert.match(ordersPageSource, /import \{ installMissingMapImageFallback \} from "\.\.\/features\/maps\/maplibre-missing-images"/);
+  assert.match(ordersPageSource, /import \{ installMissingMapImageFallback \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/maplibre-missing-images"/);
   assert.match(ordersPageSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(ordersPageSource, /mapRef\.current\.on\("error", \(event\) => \{/);
   assert.match(ordersPageSource, /tiles\.openfreemap\.org/);
@@ -998,7 +1014,8 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
 
 test("Orders map shows the Shopify departure location as the route start point", () => {
   assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation/);
-  assert.match(ordersPageSource, /import \{ addMapPinImage, createDepartureMarkerElement, createMapPinSymbolLayer, createPaletteMapPinImageData \} from "\.\.\/features\/maps\/map-markers"/);
+  assert.match(ordersPageSource, /import \{ createDepartureMarkerElement \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
+  assert.match(ordersPageSource, /import \{ addMapPinImage, createMapPinSymbolLayer, createPaletteMapPinImageData \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
   assert.match(mapMarkersSource, /function createDepartureMarkerElement\(departureLocation, options = \{\}\)/);
   assert.match(mapMarkersSource, /function createDepartureMarkerIconElement\(\)/);
   assert.match(mapMarkersSource, /departure-map-marker/);
@@ -1097,7 +1114,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /const roundingDiff = tableWidth - widths\.reduce/);
   assert.match(ordersPageSource, /setLockedTableWidth\(measuredTableWidth\)/);
   assert.match(ordersPageSource, /const rightColumnIndex = columnIndex \+ 1/);
-  assert.match(ordersPageSource, /const delta = Math\.max\(minDelta, Math\.min\(rawDelta, maxDelta\)\)/);
+  assert.match(ordersPageSource, /const delta = Math\.min\(Math\.max\(rawDelta, minDelta\), maxDelta\)/);
   assert.match(ordersPageSource, /widthIndex === rightColumnIndex\) return rightStartWidth - delta/);
   assert.match(ordersPageSource, /style=\{\{ \.\.\.tableStyle, width: tableWidth \}\}/);
   assert.match(ordersPageSource, /querySelectorAll\("thead th"\)/);
@@ -1122,16 +1139,16 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.doesNotMatch(ordersPageSource, /handleColumnResizeStart\(0, event\)/);
   assert.match(ordersPageSource, /const tableHeaderButtonStyle = \{[\s\S]*?padding:\s*0/);
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{[\s\S]*?padding:\s*0/);
-  assert.match(ordersPageSource, /const deliveryInfoTabStyle = \{[\s\S]*?justifyContent:\s*"center"/);
-  assert.match(ordersPageSource, /const deliveryInfoTabStyle = \{[\s\S]*?boxSizing:\s*"border-box"/);
+  assert.match(globalCssSource, /\.info-pill \{[\s\S]*?justify-content: center/);
+  assert.match(globalCssSource, /\.info-pill \{[\s\S]*?box-sizing: border-box/);
   assert.match(ordersPageSource, /aria-sort=\{/);
   assert.match(ordersPageSource, /tableOrders\.map\(\(order\) =>/);
   assert.doesNotMatch(ordersPageSource, /safeOrders\.map\(\(order\) =>\s*\(\s*<tr/);
 });
 
 test("Orders page filters table rows by order date, delivery day, type, and area", () => {
-  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams \} from "react-router"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_HISTORY_SCOPE[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_WEEKDAY_OPTIONS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "\.\.\/features\/orders\/order-filters"/);
+  assert.match(ordersPageSource, /import \{ useFetcher, useLoaderData, useNavigate, useSearchParams \} from "react-router"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_HISTORY_SCOPE[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_WEEKDAY_OPTIONS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "(?:\.\.\/features\/orders|\.)\/order-filters"/);
   assert.match(ordersPageSource, /const \[searchParams, setSearchParams\] = useSearchParams\(\)/);
   assert.match(ordersPageSource, /const \[optimisticOrderFilters, setOptimisticOrderFilters\] = useState\(null\)/);
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
@@ -1267,6 +1284,22 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /Delta summary/);
   assert.match(ordersPageSource, /Changed time/);
   assert.match(ordersPageSource, /inventory\.ordersCount \?\? inventory\.orderIds\?\.length \?\? inventory\.orders\?\.length \?\? 0/);
+  assert.match(ordersPageSource, /const INVENTORY_TABLE_COLUMN_WIDTHS = \["32px", "220px", "88px", "82px", "150px", "128px"\]/);
+  assert.match(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*\.\.\.tableStyle[\s\S]*minWidth:\s*"700px"/);
+  assert.doesNotMatch(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*width:\s*"700px"/);
+  assert.match(ordersPageSource, /<colgroup>[\s\S]*INVENTORY_TABLE_COLUMN_WIDTHS/);
+  assert.match(ordersPageSource, /const inventoryCheckboxStyle = \{[\s\S]*margin:\s*0/);
+  assert.match(ordersPageSource, /aria-label="Select all visible inventories"/);
+  assert.match(ordersPageSource, /aria-label=\{`Select \$\{inventory\.name \?\? "inventory"\} for deletion`\}/);
+  assert.match(ordersPageSource, /const inventoryDeleteFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "deleteInventory"\)/);
+  assert.match(ordersPageSource, /formData\.set\("inventoryIds", JSON\.stringify\(checkedInventoryIds\)\)/);
+  assert.match(ordersPageSource, /const ordersViewTabsRowStyle = \{[\s\S]*justifyContent:\s*"space-between"/);
+  assert.match(ordersPageSource, /activeOrdersView === "inventory" \? \([\s\S]*>Delete<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /inventoryToolbarStyle/);
+  assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
+  assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /lower=\{<div \/>}/);
   assert.doesNotMatch(appShellSource, /nav\.inventory|Inventory plan/);
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
 });
@@ -1283,13 +1316,14 @@ test("Orders inventory tabs avoid border shorthand style collisions", () => {
 });
 
 test("Orders inventory side-card Add creates standalone inventory without route ownership checks", () => {
-  assert.match(ordersPageSource, /import \{ createDeliveryInventory, fetchDeliveryInventories \}/);
+  assert.match(ordersPageSource, /import \{ createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories \}/);
   assert.match(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "createInventory"\)/);
   assert.match(ordersPageSource, /inventoryFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /reason: "route_create_preflight"/);
   assert.match(ordersPageSource, /if \(intent === "createInventory"\) \{/);
   assert.match(ordersPageSource, /createDeliveryInventory\(\s*request,/);
+  assert.match(ordersPageSource, /deleteDeliveryInventory\(request, inventoryId, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.orderId\)/);
   assert.match(ordersPageSource, /return \{ inventory, errors: \[\] \}/);
   assert.match(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(createdInventory\.id\)\}&id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
@@ -1300,9 +1334,59 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /fetchDeliveryInventoryDetail/);
   assert.match(inventoryDetailSource, /buildInventoryProductMatrix/);
   assert.match(inventoryDetailSource, /Inventory product matrix/);
-  assert.match(inventoryDetailSource, /Product quantities by date/);
+  assert.doesNotMatch(inventoryDetailSource, /Product quantities by date/);
+  assert.match(inventoryDetailSource, /generatedAt: new Date\(\)\.toISOString\(\)/);
+  assert.match(inventoryDetailSource, /gridTemplateColumns: "minmax\(0, 210mm\) 360px"/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-sheet"/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-history inventory-detail-no-print"/);
+  assert.match(inventoryDetailSource, /const HISTORY_ITEMS = \[/);
+  assert.match(inventoryDetailSource, /Hardcoded delta preview/);
+  assert.match(inventoryDetailSource, /historyOrderHeaderStyle/);
+  assert.match(inventoryDetailSource, /gridTemplateColumns: "70px minmax\(0, 1fr\) 54px"/);
+  assert.match(inventoryDetailSource, /<span>Order<\/span>/);
+  assert.match(inventoryDetailSource, /<span>Customer<\/span>/);
+  assert.match(inventoryDetailSource, /<span>Items<\/span>/);
+  assert.match(inventoryDetailSource, /customer: "Lee Hana"/);
+  assert.match(inventoryDetailSource, /itemCount: 3/);
+  assert.match(inventoryDetailSource, /order\.items\.map/);
+  assert.match(inventoryDetailSource, /\+2 orders · \+7 items/);
+  assert.match(inventoryDetailSource, /order: "#1057"/);
+  assert.match(inventoryDetailSource, /const headerActionStyle = \{/);
+  assert.match(inventoryDetailSource, /marginLeft: "auto"/);
+  assert.match(inventoryDetailSource, /Output: \{formatOutputTime\(generatedAt\)\}/);
+  assert.match(inventoryDetailSource, /const PRODUCT_COLUMNS_PER_TABLE = 6/);
+  assert.match(inventoryDetailSource, /getProductChunks\(matrix\.products\)/);
+  assert.match(inventoryDetailSource, /getProductSlots\(products\)/);
+  assert.match(inventoryDetailSource, /Group total/);
+  assert.match(inventoryDetailSource, /Overall total: \{matrix\.totalQuantity\}/);
+  assert.match(inventoryDetailSource, /product\.displayLabel \?\? product\.label/);
+  assert.match(inventoryDetailSource, /WebkitLineClamp: 2/);
+  assert.match(inventoryDetailSource, /borderRight: "1px solid #e5e7eb"/);
+  assert.match(inventoryDetailSource, /textAlign: "center"/);
+  assert.match(inventoryDetailSource, /aria-hidden="true"/);
+  assert.match(inventoryDetailSource, /width: "70px"/);
+  assert.match(inventoryDetailSource, /width: "76px"/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-total-col \{ width: 64px !important; \}/);
+  assert.match(inventoryDetailSource, /function DateCellLabel/);
+  assert.match(inventoryDetailSource, /gridTemplateColumns: "22px 34px"/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-group-total-head" style=\{groupTotalHeadCellStyle\}>Group total/);
+  assert.match(inventoryDetailSource, /fontSize: "12px"/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-group-total-head \{ font-size: 11px !important; \}/);
+  assert.match(inventoryDetailSource, /maxHeight: "28px"/);
+  assert.match(inventoryDetailSource, /totalRowCellStyle/);
+  assert.match(inventoryDetailSource, /borderTop: "1px solid #ebebeb"/);
+  assert.doesNotMatch(inventoryDetailSource, /borderTop: "2px solid #d4d4d4"/);
+  assert.match(inventoryDetailSource, /const backLinkStyle = \{/);
+  assert.match(inventoryDetailSource, /<Link[\s\S]*className="inventory-detail-no-print"[\s\S]*style=\{backLinkStyle\}/);
+  assert.doesNotMatch(inventoryDetailSource, /width:\s*"max-content"/);
   assert.match(inventoryDetailSource, /window\.print\(\)/);
   assert.match(inventoryDetailSource, /@media print/);
+  assert.match(inventoryDetailSource, /maxWidth: "210mm"/);
+  assert.match(inventoryDetailSource, /minHeight: "297mm"/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-history \{ display: none !important; \}/);
+  assert.match(inventoryDetailSource, /@page \{ size: A4 portrait; margin: 0; \}/);
+  assert.match(inventoryDetailSource, /width: 210mm !important/);
+  assert.match(inventoryDetailSource, /inventory-detail-product-label/);
   assert.doesNotMatch(inventoryDetailSource, /Delta remarks|Order-by-order items|lastChange/);
 });
 

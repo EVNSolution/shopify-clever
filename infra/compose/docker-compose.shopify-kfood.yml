@@ -16,7 +16,6 @@ services:
       CLEVER_DELIVERY_API_URL: http://delivery-api:3000
       CLEVER_APP_ID: clever-route-kfood
       GEOCODING_SEARCH_URL: https://nominatim.openstreetmap.org/search
-      CLEVER_DRIVER_DOWNLOAD_URL: https://clever.delivery/driver/download
     restart: unless-stopped
     volumes:
       - /srv/shopify-clever-kfood/data/shopify/dev.sqlite:/app/prisma/dev.sqlite

@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
+
+
 const tabLayoutPath = join(root, "app/ui/tab-layout.jsx");
 const pageShellPath = join(root, "app/ui/page-shell.jsx");
 
@@ -27,16 +30,18 @@ test("old one-size tab layout rule is removed from purpose-led tabs", () => {
 });
 
 test("Orders can still use TabLayout without moving new page responsibilities into it", () => {
-  const ordersSource = readFileSync(join(root, "app/routes/app.orders.jsx"), "utf8");
+  const ordersSource = readOrdersPageSource();
   const tabLayoutSource = readFileSync(tabLayoutPath, "utf8");
 
-  assert.match(ordersSource, /import \{ TabLayout \} from "\.\.\/ui\/tab-layout";/);
+  assert.match(ordersSource, /import \{ TabLayout \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/tab-layout";/);
   assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
   assert.doesNotMatch(ordersSource, /title="Orders"/);
   assert.match(tabLayoutSource, /className="tab-layout"/);
+  assert.match(tabLayoutSource, /gridTemplateColumns: "minmax\(0, 1fr\) minmax\(260px, 300px\)"/);
   assert.match(tabLayoutSource, /primary, secondary, lower/);
   assert.match(tabLayoutSource, /notice/);
   assert.match(tabLayoutSource, /title \|\| description/);
+  assert.match(tabLayoutSource, /lower \? <section className="tab-layout-lower"/);
   assert.doesNotMatch(tabLayoutSource, /Analytics|Workflows|Drivers|Settings|User variables|Runtime\/system values/);
 });
 

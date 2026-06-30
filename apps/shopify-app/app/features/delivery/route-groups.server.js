@@ -1,4 +1,5 @@
 import { deliveryApiRequest } from "./route-plans.server.js";
+import { getRouteGroupChildRoutePlanId } from "./route-helpers.js";
 
 export const DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_GROUP_ID_MISSING";
 
@@ -11,7 +12,7 @@ export async function createDeliveryRouteGroup(request, payload, options = {}) {
   });
 
   return {
-    routeGroup: result.data?.routeGroup ?? null,
+    routeGroup: normalizeRouteGroup(result.data?.routeGroup),
     errors: result.errors,
   };
 }
@@ -28,7 +29,7 @@ export async function fetchDeliveryRouteGroups(request, query = {}, options = {}
   const errors = (result.errors ?? []).filter((error) => error?.status !== 404);
 
   return {
-    routeGroups: result.data?.routeGroups ?? [],
+    routeGroups: normalizeRouteGroups(result.data?.routeGroups),
     errors,
   };
 }
@@ -45,7 +46,7 @@ export async function fetchDeliveryRouteGroupDetail(request, routeGroupId, optio
   });
 
   return {
-    routeGroup: result.data?.routeGroup ?? null,
+    routeGroup: normalizeRouteGroup(result.data?.routeGroup),
     errors: result.errors,
   };
 }
@@ -68,7 +69,7 @@ export async function deleteDeliveryRouteGroup(request, routeGroupId, options = 
     sessionToken: options.sessionToken,
   });
 
-  const routeGroup = result.data?.routeGroup ?? null;
+  const routeGroup = normalizeRouteGroup(result.data?.routeGroup);
 
   return {
     routeGroup,
@@ -110,7 +111,7 @@ export async function generateDeliveryRouteGroupChildRoutes(request, routeGroupI
   );
 
   return {
-    routeGroup: result.data?.routeGroup ?? null,
+    routeGroup: normalizeRouteGroup(result.data?.routeGroup),
     warnings: result.data?.warnings ?? [],
     errors: result.errors,
   };
@@ -128,9 +129,29 @@ async function mutateRouteGroup(request, routeGroupId, suffix, payload, options,
   });
 
   return {
-    routeGroup: result.data?.routeGroup ?? null,
+    routeGroup: normalizeRouteGroup(result.data?.routeGroup),
     errors: result.errors,
   };
+}
+
+function normalizeRouteGroups(routeGroups) {
+  return Array.isArray(routeGroups) ? routeGroups.map(normalizeRouteGroup) : [];
+}
+
+function normalizeRouteGroup(routeGroup) {
+  if (!routeGroup || typeof routeGroup !== "object") return null;
+  if (!Array.isArray(routeGroup.children)) return routeGroup;
+
+  return {
+    ...routeGroup,
+    children: routeGroup.children.map(normalizeRouteGroupChild),
+  };
+}
+
+function normalizeRouteGroupChild(child) {
+  if (!child || typeof child !== "object") return child;
+  const routePlanId = getRouteGroupChildRoutePlanId(child);
+  return routePlanId && child.routePlanId !== routePlanId ? { ...child, routePlanId } : child;
 }
 
 function buildQueryString(query) {

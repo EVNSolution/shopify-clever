@@ -7,6 +7,7 @@ import {
   deleteDeliveryRouteGroup,
   DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE,
   fetchDeliveryRouteGroups,
+  generateDeliveryRouteGroupChildRoutes,
   previewDeliveryRouteGroupOptimization,
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupOrders,
@@ -70,6 +71,26 @@ test("route group helper lists groups with range query params only when present"
   assert.equal(fakeFetch.calls[0].init.method, "GET");
 });
 
+test("route group helper normalizes nested child route plan ids", async () => {
+  const fakeFetch = makeFetch({
+    data: {
+      routeGroups: [
+        {
+          id: "group-1",
+          children: [{ routePlan: { id: "route-1" } }],
+        },
+      ],
+    },
+    error: null,
+  });
+
+  const result = await fetchDeliveryRouteGroups(makeRequest(), {}, {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.equal(result.routeGroups[0].children[0].routePlanId, "route-1");
+});
 
 test("route group helper treats a missing backend endpoint as optional while it is rolling out", async () => {
   const fakeFetch = makeFetch({ data: null, error: { message: "Not Found" } }, 404);
@@ -137,6 +158,27 @@ test("route group helper previews optimization without saving the draft", async 
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/optimize-preview");
   assert.equal(fakeFetch.calls[0].init.method, "POST");
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
+});
+
+test("route group helper normalizes generated child routes", async () => {
+  const fakeFetch = makeFetch({
+    data: {
+      routeGroup: {
+        id: "group/1",
+        children: [{ routePlan: { id: "route/1" } }],
+      },
+    },
+    error: null,
+  });
+
+  const result = await generateDeliveryRouteGroupChildRoutes(makeRequest(), "group/1", {}, {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.equal(result.routeGroup.children[0].routePlanId, "route/1");
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/generate-child-routes");
+  assert.equal(fakeFetch.calls[0].init.method, "POST");
 });
 
 test("route group helper deletes parent groups through the Admin delivery API", async () => {

@@ -2,7 +2,14 @@ import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
+import {
+  formatRouteDeliveryScope,
+  formatRouteStatus,
+  getRouteGroupChildRoutePlanId,
+  getRouteGroupChildRouteName,
+  getRouteGroupChildren,
+  getVisibleRouteGroupChildren,
+} from "../features/delivery/route-helpers";
 import { appendIdToken, routeGroupChildPath, routeGroupPath, routePlanPath } from "../features/delivery/route-paths";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { deleteDeliveryRouteGroup, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
@@ -408,14 +415,6 @@ function formatDistanceMiles(totalDistanceMiles) {
   return `${Number.isInteger(roundedDistanceMiles) ? roundedDistanceMiles : roundedDistanceMiles.toFixed(1)}mi`;
 }
 
-function formatRouteDeliveryScope(routePlan) {
-  return formatDeliveryScopeLabel({
-    deliveryDate: routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate,
-    timeWindowEnd: routePlan?.routeScope?.timeWindowEnd ?? routePlan?.timeWindowEnd,
-    timeWindowStart: routePlan?.routeScope?.timeWindowStart ?? routePlan?.timeWindowStart,
-  }) ?? "-";
-}
-
 function formatRouteTableDate(routePlan) {
   const deliveryScope = formatRouteDeliveryScope(routePlan);
   return deliveryScope !== "-" ? deliveryScope : formatRouteDate(routePlan?.planDate);
@@ -428,83 +427,64 @@ function formatRouteDriver(driver) {
   return displayName || phone || "-";
 }
 
-function routeText(value) {
-  const text = String(value ?? "").trim();
-  return text || null;
-}
-
-function getRouteGroupChildRouteName(routeGroup, child, index) {
-  const fallback = `Route ${index + 1}`;
-  const routePlan = child?.routePlan ?? {};
-  const name = routeText(routePlan.name ?? child?.label);
-  const groupName = routeText(routeGroup?.name);
-  if (name && groupName && name.startsWith(`${groupName} — `)) return fallback;
-  return name ?? fallback;
-}
-
-function getRouteGroupChildren(routeGroup) {
-  return (routeGroup?.children ?? []).filter((child) => child?.routePlanId);
-}
-
 function getRouteGroupTotalOrders(routeGroup) {
   return Number(routeGroup?.totalOrders ?? routeGroup?.ordersCount ?? routeGroup?.assignments?.length ?? 0) || 0;
-}
-
-function getVisibleRouteGroupChildren(routeGroup) {
-  const children = getRouteGroupChildren(routeGroup);
-  return children.length >= 2 ? children : [];
 }
 
 function buildRouteRows(routePlans, routeGroups = []) {
   const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
   const childRoutePlanIds = new Set(
     safeRouteGroups.flatMap((routeGroup) =>
-      getRouteGroupChildren(routeGroup).map((child) => child.routePlanId).filter(Boolean),
+      getRouteGroupChildren(routeGroup).map(getRouteGroupChildRoutePlanId).filter(Boolean),
     ),
   );
   const standaloneRoutePlans = Array.isArray(routePlans)
     ? routePlans.filter((routePlan) => !childRoutePlanIds.has(routePlan.id))
     : [];
-  const routeGroupRows = safeRouteGroups.map((routeGroup) => ({
-    id: routeGroup.id,
-    rowKey: `routeGroup:${routeGroup.id}`,
-    routeGroupId: routeGroup.id,
-    href: routeGroupPath(routeGroup.id),
-    isClickable: true,
-    isDeletable: true,
-    isRouteGroup: true,
-    deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
-    route: routeGroup.name ?? routeGroup.id,
-    status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
-    orders: getRouteGroupTotalOrders(routeGroup),
-    coordinates: "-",
-    delivered: 0,
-    attempted: 0,
-    missingCoordinates: 0,
-    date: formatRouteGroupDate(routeGroup),
-    deliveryArea: "-",
-    start: "Parent group",
-    end: getVisibleRouteGroupChildren(routeGroup).length > 0 ? `${getVisibleRouteGroupChildren(routeGroup).length} child routes` : "No split",
-    driver: "-",
-    driverId: null,
-  }));
+  const routeGroupRows = safeRouteGroups.map((routeGroup) => {
+    const childCount = getVisibleRouteGroupChildren(routeGroup).length;
+    return {
+      id: routeGroup.id,
+      rowKey: `routeGroup:${routeGroup.id}`,
+      routeGroupId: routeGroup.id,
+      href: routeGroupPath(routeGroup.id),
+      isClickable: true,
+      isDeletable: true,
+      isRouteGroup: true,
+      deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
+      route: routeGroup.name ?? routeGroup.id,
+      status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
+      orders: getRouteGroupTotalOrders(routeGroup),
+      coordinates: "-",
+      delivered: 0,
+      attempted: 0,
+      missingCoordinates: 0,
+      date: formatRouteGroupDate(routeGroup),
+      deliveryArea: "-",
+      start: "Parent group",
+      end: childCount > 0 ? `${childCount} child routes` : "No split",
+      driver: "-",
+      driverId: null,
+    };
+  });
   const routeChildRows = safeRouteGroups.flatMap((routeGroup) =>
     getVisibleRouteGroupChildren(routeGroup)
       .map((child, index) => {
+        const routePlanId = getRouteGroupChildRoutePlanId(child);
         const routePlan = child.routePlan ?? {};
         const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
         const missingCoordinates = routePlan.missingCoordinates ?? 0;
         const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
 
         return {
-          id: child.routePlanId,
-          rowKey: `routePlan:${child.routePlanId}`,
-          href: routeGroupChildPath(routeGroup.id, child.routePlanId),
+          id: routePlanId,
+          rowKey: `routePlan:${routePlanId}`,
+          href: routeGroupChildPath(routeGroup.id, routePlanId),
           isClickable: true,
           isDeletable: true,
-          deleteKey: `routePlan:${child.routePlanId}`,
+          deleteKey: `routePlan:${routePlanId}`,
           parentRouteGroupId: routeGroup.id,
-          route: getRouteGroupChildRouteName(routeGroup, child, index),
+          route: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
           status: child.displayStatus ?? routePlan.status ?? "DRAFT",
           orders: stopsCount,
           coordinates: `${locatedCount}/${stopsCount}`,
@@ -688,11 +668,6 @@ function filterRouteRows(routeRows, routeFilters) {
         created: "-",
       },
     ];
-}
-
-function formatRouteStatus(status) {
-  const value = routeText(status)?.toUpperCase();
-  return value && value !== "UNAVAILABLE" && value !== "UNSTARTED" ? value : "DRAFT";
 }
 
 function getStatusBadgeStyle(status) {

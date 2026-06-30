@@ -64,12 +64,30 @@ function getInventoryProduct(item) {
   const realSku = isRealInventorySku(item?.sku) ? normalizeText(item.sku) : null;
   const name = normalizeText(item?.name) ?? "Item";
   const options = formatInventoryOptions(item?.options);
+  const displayName = formatInventoryDisplayName(name);
   const fallbackKey = `${name.toLowerCase()}|${options.toLowerCase()}`;
   return {
     key: realSku ? `sku:${realSku.toLowerCase()}` : `item:${fallbackKey}`,
     label: options && !realSku ? `${name} (${options})` : name,
+    displayLabel: options && !realSku ? `${displayName} (${options})` : displayName,
     sku: realSku,
   };
+}
+
+function formatInventoryDisplayName(value) {
+  const koreanFeat = value.match(/[\p{Script=Hangul}0-9\s]+feat\.\s*[\p{Script=Hangul}0-9\s]+/u);
+  if (koreanFeat && hasHangul(koreanFeat[0])) return cleanDisplayName(koreanFeat[0]);
+  if (/\bfeat\./i.test(value)) return value;
+
+  const parts = value.split(/\s*(?:\/|\||·|•|–|—)\s*/).map(cleanDisplayName).filter(Boolean);
+  const koreanParts = parts.filter(hasHangul);
+  if (parts.length > 1 && koreanParts.length) return koreanParts.join(" ");
+
+  const korean = value.match(/[\p{Script=Hangul}\s]+/gu)?.map(cleanDisplayName).filter(Boolean);
+  if (korean?.length) return korean.join(" ");
+
+  const english = value.match(/[A-Za-z][A-Za-z0-9&'’.,\-\s]*/g)?.map(cleanDisplayName).filter(Boolean);
+  return english?.length ? english.join(" ") : value;
 }
 
 function normalizeInventoryDate(value) {
@@ -97,4 +115,12 @@ function normalizeText(value) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed === "" ? null : trimmed;
+}
+
+function hasHangul(value) {
+  return /\p{Script=Hangul}/u.test(value);
+}
+
+function cleanDisplayName(value) {
+  return value.replace(/\s+/g, " ").trim().replace(/^[,./·•-]+|[,./·•-]+$/g, "");
 }

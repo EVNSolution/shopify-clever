@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
+
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
-const ordersPageSource = readFileSync(join(root, "app/routes/app.orders.jsx"), "utf8");
+const ordersPageSource = readOrdersPageSource();
 const appRouteSource = readFileSync(join(root, "app/routes/app.jsx"), "utf8");
 const routeDetailPageSource = readFileSync(
   join(root, "app/routes/app.routes.$routeId.jsx"),
