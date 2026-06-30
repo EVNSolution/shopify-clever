@@ -9,10 +9,11 @@ const pageStyle = {
   boxSizing: "border-box",
   display: "grid",
   gap: "12px",
-  gridTemplateColumns: "minmax(0, 210mm) 360px",
+  gridTemplateColumns: "210mm 360px",
   justifyContent: "center",
   margin: "0 auto",
   maxWidth: "calc(210mm + 380px)",
+  minWidth: "calc(210mm + 380px)",
   padding: "4px 12px 12px",
   width: "100%",
 };
@@ -23,7 +24,7 @@ const sheetStyle = {
   gap: "8px",
   maxWidth: "210mm",
   minHeight: "297mm",
-  width: "100%",
+  width: "210mm",
 };
 
 const panelStyle = {
