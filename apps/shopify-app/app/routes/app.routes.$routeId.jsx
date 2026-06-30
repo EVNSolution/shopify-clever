@@ -474,11 +474,6 @@ const routeTimelineStopDraggingStyle = {
   transform: "scale(1.12)",
 };
 
-const routeTimelineStopSelectedStyle = {
-  boxShadow: "0 0 0 2px #ffffff, 0 0 0 4px rgba(79, 124, 255, 0.95)",
-  transform: "scale(1.08)",
-};
-
 const routeLineEditorOverlayStyle = {
   alignItems: "center",
   background: "rgba(0, 0, 0, 0.18)",
@@ -2625,7 +2620,6 @@ export default function RouteDetailPage() {
                         onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
                         style={{
                           ...routeTimelineStopStyle,
-                          ...(polygonHighlightedOrderIds.has(stop.orderId) ? routeTimelineStopSelectedStyle : null),
                           ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
                         }}
                         type="button"
