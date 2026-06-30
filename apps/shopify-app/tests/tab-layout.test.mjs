@@ -2,17 +2,10 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
 
-function readOrdersPageSource() {
-  return [
-    "app/routes/app.orders.jsx",
-    "app/features/orders/orders-page.shared.js",
-    "app/features/orders/orders-page.server.js",
-    "app/features/orders/orders-page.jsx",
-  ].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
-}
 
 const tabLayoutPath = join(root, "app/ui/tab-layout.jsx");
 const pageShellPath = join(root, "app/ui/page-shell.jsx");

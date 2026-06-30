@@ -3,22 +3,10 @@ import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
 
-function readOptionalFile(relativePath) {
-  const path = join(root, relativePath);
-  return existsSync(path) ? readFileSync(path, "utf8") : "";
-}
-
-function readOrdersPageSource() {
-  return [
-    "app/routes/app.orders.jsx",
-    "app/features/orders/orders-page.shared.js",
-    "app/features/orders/orders-page.server.js",
-    "app/features/orders/orders-page.jsx",
-  ].map(readOptionalFile).join("\n");
-}
 const ordersPageSource = readOrdersPageSource();
 const shopifyOrdersSource = readFileSync(
   join(root, "app/features/orders/shopify-orders.server.js"),
