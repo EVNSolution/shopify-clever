@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildInventoryProductMatrix, isRealInventorySku } from "../app/features/delivery/inventory-matrix.js";
+import { buildInventoryHistoryItems, buildInventoryProductMatrix, isRealInventorySku } from "../app/features/delivery/inventory-matrix.js";
 
 test("inventory matrix groups by real SKU and falls back for product-id-like SKU", () => {
   const matrix = buildInventoryProductMatrix([
@@ -68,4 +68,43 @@ test("inventory matrix keeps source labels while selecting display language", ()
     ],
   );
   assert.equal(matrix.totalQuantity, 21);
+});
+
+
+test("inventory history summarizes real inventory orders", () => {
+  const history = buildInventoryHistoryItems({
+    createdAt: "2026-06-30T05:12:00.000Z",
+    orders: [
+      {
+        customer: "Lee Hana",
+        items: [
+          { name: "두툼 삼겹살", quantity: 1 },
+          { name: "오마고등", options: [{ key: "Size", value: "L" }], quantity: 2 },
+        ],
+        name: "#1057",
+      },
+      {
+        recipientName: "Choi Daniel",
+        items: [{ name: "명란젓", quantityDelta: -2 }],
+        orderNumber: 1061,
+      },
+    ],
+  });
+
+  assert.equal(history[0].title, "Initial snapshot · 2026-06-30 05:12");
+  assert.equal(history[0].meta, "2 orders · 5 items");
+  assert.deepEqual(history[0].orders, [
+    {
+      customer: "Lee Hana",
+      itemDelta: 3,
+      items: ["두툼 삼겹살 ×1", "오마고등 (Size: L) ×2"],
+      order: "#1057",
+    },
+    {
+      customer: "Choi Daniel",
+      itemDelta: -2,
+      items: ["명란젓 ×2"],
+      order: "1061",
+    },
+  ]);
 });

@@ -81,8 +81,11 @@ test("Orders page emits loader, iframe, document, and MapLibre timing metrics", 
   assert.match(ordersPageSource, /name: "orders\.maplibre\.init"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.remove"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.source_update"/);
+  assert.match(ordersPageSource, /activeOrdersView/);
   assert.match(ordersPageSource, /shopifyOrdersMs/);
   assert.match(ordersPageSource, /departureLocationMs/);
+  assert.match(ordersPageSource, /inventoriesMs/);
+  assert.match(ordersPageSource, /shopTimeZoneMs/);
   assert.match(ordersPageSource, /mapLibreImportMs/);
   assert.match(ordersPageSource, /mapRemoveMs/);
   assert.match(ordersPageSource, /sourceUpdateMs/);

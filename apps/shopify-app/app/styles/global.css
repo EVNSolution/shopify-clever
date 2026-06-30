@@ -327,6 +327,10 @@ s-badge {
   z-index: 5000;
 }
 
+.maplibregl-map .maplibregl-cooperative-gesture-screen {
+  display: none !important;
+}
+
 .route-table-row {
   cursor: pointer;
   transition: background-color 120ms ease;

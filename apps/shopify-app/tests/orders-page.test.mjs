@@ -81,6 +81,8 @@ test("Orders map defers MapLibre initialization until after initial navigation p
   assert.match(ordersPageSource, /window\.cancelIdleCallback/);
   assert.match(ordersPageSource, /const cancelMapInitialization = scheduleIdleTask\(initializeMap\)/);
   assert.match(ordersPageSource, /cancelMapInitialization\(\)/);
+  assert.match(ordersPageSource, /try \{\s*const mapLibreImportStartedAt = performance\.now\(\)/);
+  assert.match(ordersPageSource, /catch \{\s*if \(!isMounted\) return;\s*scheduleMapRecovery\(\);/);
 });
 
 test("Orders map assets use stable local URLs to avoid dev console load warnings", () => {
@@ -265,6 +267,9 @@ test("Orders table container uses viewport height and scrolls internally", () =>
   assert.match(ordersPageSource, /height:\s*"calc\(100vh - 150px\)"/);
   assert.match(ordersPageSource, /minHeight:\s*"320px"/);
   assert.match(ordersPageSource, /overflowY:\s*"auto"/);
+  assert.match(ordersPageSource, /paddingRight:\s*"10px"/);
+  assert.match(ordersPageSource, /paddingBottom:\s*"10px"/);
+  assert.match(ordersPageSource, /scrollbarGutter:\s*"stable"/);
 });
 
 test("Orders table keeps the title row sticky outside Shopify table internals", () => {
@@ -451,11 +456,15 @@ test("Orders page bulk-changes selected server order state or payment", () => {
 });
 
 test("Orders loader merges delivery server planning state before background sync", () => {
+  assert.match(ordersPageSource, /const activeOrdersView = new URL\(request\.url\)\.searchParams\.get\("view"\) === "inventory"/);
+  assert.match(ordersPageSource, /const shouldLoadOrders = activeOrdersView !== "inventory"/);
   assert.match(ordersPageSource, /const serverOrdersStartedAt = getSafePerformanceNow\(\)/);
-  assert.match(ordersPageSource, /const serverOrderDataPromise = fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\.then/);
+  assert.match(ordersPageSource, /const serverOrderDataPromise = shouldLoadOrders\s*\?\s*fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\.then/);
+  assert.match(ordersPageSource, /Promise\.resolve\(\{ data: \{ orders: \[\], errors: \[\] \}, durationMs: 0 \}\)/);
   assert.match(ordersPageSource, /const serverOrderRows = mapCanonicalOrdersToOrderRows\(serverOrderData\.orders\)/);
   assert.match(ordersPageSource, /const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\)/);
   assert.match(ordersPageSource, /orders: mergedOrders/);
+  assert.match(ordersPageSource, /activeOrdersView,/);
   assert.match(ordersPageSource, /serverOrdersMs: serverOrderDataResult\.durationMs/);
   assert.match(ordersPageSource, /needsSessionTokenRefresh: hasSessionTokenRefreshError\(\[serverOrderData, inventoryData\]\)/);
   assert.match(ordersPageSource, /DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE/);
@@ -905,15 +914,18 @@ test("Orders map popup content stays above all map markers", () => {
   assert.match(mapMarkersSource, /markerElement\.style\.zIndex = options\.zIndex \?\? "3000"/);
   assert.match(globalCssSource, /\.maplibregl-popup\s*\{/);
   assert.match(globalCssSource, /z-index:\s*5000/);
+  assert.match(globalCssSource, /\.maplibregl-map \.maplibregl-cooperative-gesture-screen\s*\{[\s\S]*display:\s*none !important/);
 });
 
 test("Orders map has a compact refresh control for recovering failed tile loads", () => {
   assert.match(ordersPageSource, /const \[mapRenderKey, setMapRenderKey\] = useState\(0\)/);
+  assert.match(ordersPageSource, /const mapLoadedRef = useRef\(false\)/);
   assert.match(ordersPageSource, /const handleRefreshMap = \(\) => \{/);
   assert.match(ordersPageSource, /setIsMapReady\(false\)/);
   assert.match(ordersPageSource, /setMapStatus\("idle"\)/);
   assert.match(ordersPageSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
-  assert.match(ordersPageSource, /\}, \[mapRenderKey, scheduleMapRecovery\]\)/);
+  assert.match(ordersPageSource, /\}, \[activeOrdersView, mapRenderKey, scheduleMapRecovery\]\)/);
+  assert.match(ordersPageSource, /canvasKey=\{mapRenderKey\}/);
   assert.match(ordersPageSource, /ariaLabel: "Refresh map"/);
   assert.match(ordersPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/map-panel"/);
   assert.match(ordersPageSource, /<MapPanel/);
@@ -929,6 +941,14 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(mapPanelSource, /border: `\$\{MAPLIBRE_CONTROL_BORDER_WIDTH_PX\}px solid \$\{MAP_TOOLBAR_BORDER_COLOR\}`/);
   assert.match(mapPanelSource, /borderTop: `\$\{MAPLIBRE_CONTROL_BORDER_WIDTH_PX\}px solid \$\{MAP_TOOLBAR_DIVIDER_COLOR\}`/);
   assert.match(mapPanelSource, /top: `\$\{MAPLIBRE_CONTROL_OFFSET_PX\}px`/);
+  assert.match(mapPanelSource, /MAP_WHEEL_HINT_TEXT = "Hold Ctrl or ⌘ while scrolling to zoom the map\."/);
+  assert.match(mapPanelSource, /background: "rgba\(0, 0, 0, 0\.38\)"/);
+  assert.match(mapPanelSource, /wheelHintEnabled = true/);
+  assert.match(mapPanelSource, /if \(!wheelHintEnabled \|\| !mapCanvasElement\) \{/);
+  assert.match(mapPanelSource, /opacity: wheelHintEnabled && wheelHintVisible \? 1 : 0/);
+  assert.match(mapPanelSource, /transition: wheelHintEnabled && wheelHintVisible \? "opacity 80ms ease-out" : "opacity 260ms ease-in"/);
+  assert.match(mapPanelSource, /addEventListener\("wheel", handleMapWheel, \{ capture: true, passive: true \}\)/);
+  assert.match(mapPanelSource, /event\.ctrlKey \|\| event\.metaKey/);
   assert.match(ordersPageSource, /renderMapZoomInIcon\(\)/);
   assert.match(ordersPageSource, /renderMapZoomOutIcon\(\)/);
   assert.doesNotMatch(ordersPageSource, /NavigationControl/);
@@ -982,6 +1002,7 @@ test("Orders map captures MapLibre tile errors without long visible copy", () =>
   assert.match(ordersPageSource, /import \{ installMissingMapImageFallback \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/maplibre-missing-images"/);
   assert.match(ordersPageSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(ordersPageSource, /mapRef\.current\.on\("error", \(event\) => \{/);
+  assert.match(ordersPageSource, /if \(mapLoadedRef\.current\) return/);
   assert.match(ordersPageSource, /tiles\.openfreemap\.org/);
   assert.match(ordersPageSource, /AJAXError/);
   assert.match(ordersPageSource, /setMapStatus\("recovering"\)/);
@@ -1041,8 +1062,8 @@ test("Orders map initially centers on the departure home with a wide zoom", () =
   assert.match(ordersPageSource, /departureLocation\?\.hasCoordinates \? departureLocation\.coordinates : DEFAULT_CENTER/);
   assert.match(ordersPageSource, /center: initialMapCenterRef\.current/);
   assert.match(ordersPageSource, /zoom: INITIAL_HOME_ZOOM/);
-  assert.doesNotMatch(ordersPageSource, /\}, \[initialMapCenter, mapRenderKey, scheduleMapRecovery\]\);/);
-  assert.match(ordersPageSource, /\}, \[mapRenderKey, scheduleMapRecovery\]\);/);
+  assert.doesNotMatch(ordersPageSource, /\}, \[initialMapCenter, activeOrdersView, mapRenderKey, scheduleMapRecovery\]\);/);
+  assert.match(ordersPageSource, /\}, \[activeOrdersView, mapRenderKey, scheduleMapRecovery\]\);/);
   assert.match(ordersPageSource, /const initialMapFitAppliedRef = useRef\(false\)/);
   assert.match(ordersPageSource, /initialMapFitAppliedRef\.current = false/);
   assert.match(ordersPageSource, /mapRef\.current\.flyTo\(\{\s*center: initialMapCenter,\s*zoom: INITIAL_HOME_ZOOM,\s*essential: true,\s*\}\)/);
@@ -1300,6 +1321,7 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
   assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);
   assert.doesNotMatch(ordersPageSource, /lower=\{<div \/>}/);
+  assert.match(ordersPageSource, /if \(activeOrdersView !== "orders" \|\| !mapContainerElement \|\| mapRef\.current\)/);
   assert.doesNotMatch(appShellSource, /nav\.inventory|Inventory plan/);
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
 });
@@ -1333,33 +1355,37 @@ test("Orders inventory side-card Add creates standalone inventory without route 
 test("Orders inventory detail shows a printable product matrix without delta", () => {
   assert.match(inventoryDetailSource, /fetchDeliveryInventoryDetail/);
   assert.match(inventoryDetailSource, /buildInventoryProductMatrix/);
+  assert.match(inventoryDetailSource, /buildInventoryHistoryItems/);
   assert.match(inventoryDetailSource, /Inventory product matrix/);
   assert.doesNotMatch(inventoryDetailSource, /Product quantities by date/);
   assert.match(inventoryDetailSource, /generatedAt: new Date\(\)\.toISOString\(\)/);
   assert.match(inventoryDetailSource, /gridTemplateColumns: "minmax\(0, 210mm\) 360px"/);
   assert.match(inventoryDetailSource, /className="inventory-detail-sheet"/);
   assert.match(inventoryDetailSource, /className="inventory-detail-history inventory-detail-no-print"/);
-  assert.match(inventoryDetailSource, /const HISTORY_ITEMS = \[/);
-  assert.match(inventoryDetailSource, /Hardcoded delta preview/);
+  assert.doesNotMatch(inventoryDetailSource, /const HISTORY_ITEMS = \[/);
+  assert.doesNotMatch(inventoryDetailSource, /Hardcoded delta preview/);
+  assert.match(inventoryDetailSource, /Orders in this inventory/);
+  assert.match(inventoryDetailSource, /No order history/);
+  assert.match(inventoryDetailSource, /const historyPanelStyle = \{/);
+  assert.match(inventoryDetailSource, /maxHeight: "calc\(100vh - 24px\)"/);
+  assert.match(inventoryDetailSource, /top: "12px"/);
+  assert.match(inventoryDetailSource, /paddingRight: "6px"/);
+  assert.match(inventoryDetailSource, /scrollbarGutter: "stable"/);
   assert.doesNotMatch(inventoryDetailSource, /openHistoryTitle/);
   assert.match(inventoryDetailSource, /const historyCardContentStyle = \{/);
   assert.match(inventoryDetailSource, /maxHeight: "300px"/);
   assert.match(inventoryDetailSource, /overflowY: "auto"/);
-  assert.match(inventoryDetailSource, /open=\{index === 1\}/);
+  assert.match(inventoryDetailSource, /paddingRight: "8px"/);
+  assert.match(inventoryDetailSource, /open=\{index === 0\}/);
   assert.match(inventoryDetailSource, /gridTemplateColumns: "70px minmax\(0, 1fr\) 54px"/);
   assert.doesNotMatch(inventoryDetailSource, /<span>Order<\/span>/);
   assert.doesNotMatch(inventoryDetailSource, /<span>Customer<\/span>/);
   assert.doesNotMatch(inventoryDetailSource, /<span>Items<\/span>/);
-  assert.match(inventoryDetailSource, /customer: "Lee Hana"/);
-  assert.match(inventoryDetailSource, /itemDelta: 3/);
-  assert.match(inventoryDetailSource, /itemDelta: -2/);
   assert.match(inventoryDetailSource, /const historyOrderAddStyle = \{/);
   assert.match(inventoryDetailSource, /const historyOrderRemoveStyle = \{/);
   assert.match(inventoryDetailSource, /order\.itemDelta < 0 \? historyOrderRemoveStyle : historyOrderAddStyle/);
   assert.match(inventoryDetailSource, /`\+\$\{order\.itemDelta\}`/);
   assert.match(inventoryDetailSource, /order\.items\.map/);
-  assert.match(inventoryDetailSource, /\+2 orders · \+7 items/);
-  assert.match(inventoryDetailSource, /order: "#1057"/);
   assert.match(inventoryDetailSource, /const headerActionStyle = \{/);
   assert.match(inventoryDetailSource, /marginLeft: "auto"/);
   assert.match(inventoryDetailSource, /Output: \{formatOutputTime\(generatedAt\)\}/);

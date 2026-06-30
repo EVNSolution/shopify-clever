@@ -325,6 +325,7 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
   assert.match(routeDetailSource, /setClientRouteRows\(\(rows\) => \[/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
+  assert.doesNotMatch(routeDetailSource, /routeTimelineStopSelectedStyle/);
   assert.match(routeDetailSource, /setRouteTimelineOrderByRouteId\(\(currentOrderByRouteId\) =>/);
   assert.match(routeDetailSource, /moveTimelineStop\(routeRows, nextOrderByRouteId, \{ stopId \}, targetRouteRow\.id\)/);
   assert.doesNotMatch(routeDetailSource, /submitRouteGroupAction\("assignPolygonToRoute"/);
@@ -526,17 +527,19 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   );
   assert.match(routeDetailSource, /import\("maplibre-gl"\)/);
   assert.match(routeDetailSource, /import\("pmtiles"\)/);
+  assert.match(routeDetailSource, /import \{ createMapLibreMap \} from "\.\.\/features\/maps\/maplibre-map"/);
   assert.match(routeDetailSource, /import \{ installMissingMapImageFallback \} from "\.\.\/features\/maps\/maplibre-missing-images"/);
   assert.match(routeDetailSource, /import \{ installPmtilesProtocol \} from "\.\.\/features\/maps\/pmtiles-protocol"/);
   assert.match(routeDetailSource, /installPmtilesProtocol\(maplibregl, Protocol\)/);
   assert.match(routeDetailSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(routeDetailSource, /style: OPENFREEMAP_STYLE_URL/);
-  assert.match(routeDetailSource, /new maplibregl\.Map\(\{/);
+  assert.match(routeDetailSource, /createMapLibreMap\(maplibregl, \{/);
   assert.doesNotMatch(routeDetailSource, /new maplibregl\.NavigationControl/);
   assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
   assert.match(routeDetailSource, /const routeDetailMapFrameStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailMapCanvasStyle = \{/);
   assert.match(routeDetailSource, /canvasRef=\{mapContainerRef\}/);
+  assert.doesNotMatch(routeDetailSource, /routeMapWheelHintVisible|handleRouteDetailMapWheel|routeDetailMapWheelHintStyle/);
   assert.match(routeDetailMapSource, /createDepartureMarkerImageData\(\)/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route"/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line"/);
@@ -803,23 +806,40 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
   assert.match(routeDetailSource, /src="\/icons\/route-polygon-edit\.png"/);
   assert.match(routeDetailSource, /ariaLabel: isRoutePolygonEditMode \? "Stop editing route polygon" : "Edit route polygon"/);
+  assert.match(routeDetailSource, /wheelHintEnabled=\{!isRoutePolygonEditMode\}/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon"/);
   assert.match(routeDetailMapSource, /function syncRouteEditPolygon\(map, points, isClosed\) \{/);
+  assert.ok(
+    routeDetailMapSource.indexOf("const existingSource = map.getSource?.(ROUTE_DETAIL_POLYGON_SOURCE_ID)") <
+      routeDetailMapSource.indexOf("if (!isRouteDetailMapStyleReady(map))", routeDetailMapSource.indexOf("function syncRouteEditPolygon")),
+    "route polygon source updates before transient style readiness can block double-click close",
+  );
   assert.match(routeDetailMapSource, /function buildRouteDetailRouteLineData\(routeLines, fallbackRouteColor\) \{/);
   assert.match(routeDetailMapSource, /\["coalesce", \["get", "routeColor"\], routeColor\]/);
   assert.match(routeDetailMapSource, /ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
   assert.match(routeDetailSource, /map\.on\("styledata", syncPolygon\)/);
   assert.match(routeDetailMapSource, /function isLngLatInPolygon\(point, polygon\) \{/);
-  assert.match(routeDetailMapSource, /function createRoutePolygonCornerElement\(index\) \{/);
-  assert.match(routeDetailMapSource, /className = "route-polygon-corner-marker"/);
-  assert.match(routeDetailMapSource, /zIndex: "4500"/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID = "route-detail-edit-polygon-corners"/);
+  assert.match(routeDetailMapSource, /filter: \["==", \["geometry-type"\], "Point"\]/);
+  assert.match(routeDetailMapSource, /"circle-color": "#ffffff"/);
+  assert.match(routeDetailMapSource, /"circle-radius": 7/);
+  assert.match(routeDetailMapSource, /"circle-stroke-color": "#2563eb"/);
+  assert.match(routeDetailMapSource, /properties: \{ pointIndex \}/);
   assert.match(routeDetailSource, /const routePolygonPointsRef = useRef\(\[\]\)/);
+  assert.match(routeDetailSource, /const routePolygonCornerDragIndexRef = useRef\(null\)/);
+  assert.match(routeDetailSource, /const routePolygonSkipNextMapClickRef = useRef\(false\)/);
+  assert.match(routeDetailSource, /const routePolygonClosedRef = useRef\(false\)/);
+  assert.match(routeDetailSource, /routePolygonClosedRef\.current = nextIsClosed/);
   assert.match(routeDetailSource, /if \(\(event\.originalEvent\?\.detail \?\? 1\) > 1\) return/);
   assert.doesNotMatch(routeDetailSource, /ROUTE_POLYGON_CLICK_DELAY_MS|routePolygonClickTimerRef/);
   assert.match(routeDetailSource, /Save polygon/);
   assert.match(routeDetailSource, /aria-label="Polygon route target"/);
   assert.match(routeDetailSource, /map\.doubleClickZoom\?\.disable\?\.\(\)/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s*draggable: true,/);
+  assert.match(routeDetailSource, /map\.on\("mousedown", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerDragStart\)/);
+  assert.match(routeDetailSource, /map\.on\("mousemove", handlePolygonCornerDragMove\)/);
+  assert.match(routeDetailSource, /map\.on\("mouseup", handlePolygonCornerDragEnd\)/);
+  assert.doesNotMatch(routeDetailMapSource, /createRoutePolygonCornerElement|route-polygon-corner-marker|zIndex: "4500"/);
+  assert.doesNotMatch(routeDetailSource, /polygonCornerMarkersRef|new maplibregl\.Marker\(\{\s*draggable: true,/);
   assert.doesNotMatch(routeDetailSource, />✏<\/span>/);
   assert.doesNotMatch(routeDetailSource, /strokeWidth="2\.2"/);
   assert.match(routeDetailSource, /function ensureUniqueRouteRowColors\(routeRows\) \{/);

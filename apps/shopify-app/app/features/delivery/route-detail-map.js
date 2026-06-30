@@ -13,6 +13,7 @@ const ROUTE_DETAIL_DEPARTURE_IMAGE_ID = "route-detail-departure-pin";
 const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon";
 const ROUTE_DETAIL_POLYGON_FILL_LAYER_ID = "route-detail-edit-polygon-fill";
 const ROUTE_DETAIL_POLYGON_LINE_LAYER_ID = "route-detail-edit-polygon-line";
+const ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID = "route-detail-edit-polygon-corners";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 
 function isValidLatitude(latitude) {
@@ -190,6 +191,9 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900") {
 }
 
 function removeRouteEditPolygon(map) {
+  if (map.getLayer?.(ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID)) {
+    map.removeLayer(ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID);
+  }
   if (map.getLayer?.(ROUTE_DETAIL_POLYGON_LINE_LAYER_ID)) {
     map.removeLayer(ROUTE_DETAIL_POLYGON_LINE_LAYER_ID);
   }
@@ -202,7 +206,15 @@ function removeRouteEditPolygon(map) {
 }
 
 function buildRouteEditPolygonData(points, isClosed) {
-  const features = [];
+  const features = points.map((point, pointIndex) => ({
+    type: "Feature",
+    geometry: {
+      type: "Point",
+      coordinates: point,
+    },
+    properties: { pointIndex },
+  }));
+
   if (points.length >= 2) {
     features.push({
       type: "Feature",
@@ -231,9 +243,6 @@ function buildRouteEditPolygonData(points, isClosed) {
 }
 
 function syncRouteEditPolygon(map, points, isClosed) {
-  if (!isRouteDetailMapStyleReady(map)) {
-    return false;
-  }
   if (points.length === 0) {
     removeRouteEditPolygon(map);
     return true;
@@ -244,14 +253,22 @@ function syncRouteEditPolygon(map, points, isClosed) {
   const didUpdateExistingSource = Boolean(existingSource?.setData);
   if (didUpdateExistingSource) {
     existingSource.setData(data);
-  } else {
+  }
+
+  const didHaveFillLayer = Boolean(map.getLayer?.(ROUTE_DETAIL_POLYGON_FILL_LAYER_ID));
+  const didHaveLineLayer = Boolean(map.getLayer?.(ROUTE_DETAIL_POLYGON_LINE_LAYER_ID));
+  const didHaveCornerLayer = Boolean(map.getLayer?.(ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID));
+  if (!isRouteDetailMapStyleReady(map)) {
+    return didUpdateExistingSource && didHaveFillLayer && didHaveLineLayer && didHaveCornerLayer;
+  }
+
+  if (!didUpdateExistingSource) {
     map.addSource(ROUTE_DETAIL_POLYGON_SOURCE_ID, {
       type: "geojson",
       data,
     });
   }
 
-  const didHaveFillLayer = Boolean(map.getLayer?.(ROUTE_DETAIL_POLYGON_FILL_LAYER_ID));
   if (!didHaveFillLayer) {
     map.addLayer({
       id: ROUTE_DETAIL_POLYGON_FILL_LAYER_ID,
@@ -264,7 +281,6 @@ function syncRouteEditPolygon(map, points, isClosed) {
       },
     });
   }
-  const didHaveLineLayer = Boolean(map.getLayer?.(ROUTE_DETAIL_POLYGON_LINE_LAYER_ID));
   if (!didHaveLineLayer) {
     map.addLayer({
       id: ROUTE_DETAIL_POLYGON_LINE_LAYER_ID,
@@ -281,32 +297,22 @@ function syncRouteEditPolygon(map, points, isClosed) {
       },
     });
   }
+  if (!didHaveCornerLayer) {
+    map.addLayer({
+      id: ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
+      type: "circle",
+      source: ROUTE_DETAIL_POLYGON_SOURCE_ID,
+      filter: ["==", ["geometry-type"], "Point"],
+      paint: {
+        "circle-color": "#ffffff",
+        "circle-radius": 7,
+        "circle-stroke-color": "#2563eb",
+        "circle-stroke-width": 2,
+      },
+    });
+  }
 
   return true;
-}
-
-function createRoutePolygonCornerElement(index) {
-  const markerElement = document.createElement("button");
-  markerElement.type = "button";
-  markerElement.className = "route-polygon-corner-marker";
-  markerElement.setAttribute("aria-label", `Polygon corner ${index + 1}`);
-  Object.assign(markerElement.style, {
-    background: "#ffffff",
-    border: "2px solid #2563eb",
-    borderRadius: "999px",
-    boxShadow: "0 1px 4px rgba(0, 0, 0, 0.24)",
-    boxSizing: "border-box",
-    cursor: "grab",
-    height: "14px",
-    padding: 0,
-    pointerEvents: "auto",
-    position: "absolute",
-    touchAction: "none",
-    willChange: "transform",
-    width: "14px",
-    zIndex: "4500",
-  });
-  return markerElement;
 }
 
 function isLngLatInPolygon(point, polygon) {
@@ -618,8 +624,8 @@ function getRouteStopFromMapFeature(feature, routeStops) {
 
 export {
   DEFAULT_CENTER,
+  ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
-  createRoutePolygonCornerElement,
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,

@@ -75,8 +75,10 @@ test("dev config keeps /app/routes document navigations out of Vite's route mani
 
 test("MapLibre maps share global interaction defaults", () => {
   assert.match(mapLibreMapSource, /cooperativeGestures:\s*true/);
+  assert.match(mapLibreMapSource, /scrollZoom:\s*true/);
   assert.match(mapLibreMapSource, /new maplibregl\.Map/);
   assert.match(ordersPageSource, /createMapLibreMap\(maplibregl, \{/);
+  assert.match(routeDetailPageSource, /createMapLibreMap\(maplibregl, \{/);
   assert.match(settingsDepartureMapSource, /createMapLibreMap\(maplibregl, \{/);
   assert.match(ordersPageSource, /fadeDuration:\s*0/);
   assert.match(routeDetailPageSource, /fadeDuration:\s*0/);

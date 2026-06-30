@@ -2,7 +2,7 @@
 import { Link, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryDetail } from "../features/delivery/inventories.server";
-import { buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
+import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
 import { getServiceErrorNotice } from "../features/service-errors";
 
 const pageStyle = {
@@ -36,8 +36,13 @@ const panelStyle = {
 const historyPanelStyle = {
   ...panelStyle,
   alignSelf: "start",
+  boxSizing: "border-box",
+  maxHeight: "calc(100vh - 24px)",
+  overflowY: "auto",
+  paddingRight: "6px",
   position: "sticky",
-  top: "8px",
+  scrollbarGutter: "stable",
+  top: "12px",
 };
 
 const sectionStyle = {
@@ -108,8 +113,11 @@ const historyCardStyle = {
 };
 
 const historyCardContentStyle = {
+  boxSizing: "border-box",
   maxHeight: "300px",
   overflowY: "auto",
+  paddingRight: "8px",
+  scrollbarGutter: "stable",
 };
 
 const historyMetaStyle = {
@@ -297,32 +305,6 @@ const totalColumnStyle = {
 
 const PRODUCT_COLUMNS_PER_TABLE = 6;
 
-const HISTORY_ITEMS = [
-  {
-    meta: "55 orders · 270 items",
-    orders: [
-      { customer: "Kim Minji", itemDelta: 35, items: ["두툼 삼겹살 ×5", "유채 순 나물무침 ×6", "육개장 완조리 ×3"], order: "#1048" },
-      { customer: "Park Jiwon", itemDelta: 29, items: ["오마고등 ×2", "소고기 사태수육 feat. 도가니 ×3", "소불고기 덮밥 완조리 ×2"], order: "#1051" },
-    ],
-    title: "Initial snapshot",
-  },
-  {
-    meta: "+2 orders · +7 items",
-    orders: [
-      { customer: "Lee Hana", itemDelta: 3, items: ["두툼 삼겹살 ×1", "오마고등 ×2"], order: "#1057" },
-      { customer: "Choi Daniel", itemDelta: 4, items: ["육개장 완조리 ×3", "명란젓 ×1"], order: "#1061" },
-    ],
-    title: "2026-06-30 14:12 update",
-  },
-  {
-    meta: "-1 order · -2 items",
-    orders: [
-      { customer: "Morgan Yu", itemDelta: -2, items: ["고기마파두부 완조리 ×1", "간장 돼지불고기 ×1"], order: "#1053" },
-    ],
-    title: "2026-06-30 14:32 update",
-  },
-];
-
 const noticeStyle = {
   background: "#fff4f4",
   borderBottom: "1px solid #fed7d7",
@@ -444,6 +426,7 @@ export default function InventoryDetailPage() {
   const matrix = buildInventoryProductMatrix(orders);
   const hasMatrix = matrix.rows.length > 0 && matrix.products.length > 0;
   const productChunks = hasMatrix ? getProductChunks(matrix.products) : [];
+  const historyItems = buildInventoryHistoryItems(inventory);
 
   return (
     <main className="inventory-detail-page" style={pageStyle}>
@@ -560,10 +543,12 @@ export default function InventoryDetailPage() {
         <div style={sectionStyle}>
           <div>
             <h2 style={titleStyle}>History</h2>
-            <p style={historyMetaStyle}>Hardcoded delta preview</p>
+            <p style={historyMetaStyle}>Orders in this inventory</p>
           </div>
-          {HISTORY_ITEMS.map((item, index) => (
-            <details key={item.title} open={index === 1} style={historyCardStyle}>
+          {historyItems.length === 0 ? (
+            <p style={historyMetaStyle}>No order history</p>
+          ) : historyItems.map((item, index) => (
+            <details key={item.title} open={index === 0} style={historyCardStyle}>
               <summary>
                 <strong>{item.title}</strong>
                 <p style={historyMetaStyle}>{item.meta}</p>
@@ -580,7 +565,7 @@ export default function InventoryDetailPage() {
                         </span>
                       </summary>
                       <ul style={historyItemListStyle}>
-                        {order.items.map((historyItem) => <li key={historyItem}>{historyItem}</li>)}
+                        {order.items.map((historyItem, itemIndex) => <li key={`${historyItem}-${itemIndex}`}>{historyItem}</li>)}
                       </ul>
                     </details>
                   ))}
