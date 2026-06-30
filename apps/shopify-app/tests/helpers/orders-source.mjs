@@ -5,6 +5,7 @@ export const ordersPageSourceFiles = [
   "app/routes/app.orders.jsx",
   "app/features/orders/orders-page.shared.js",
   "app/features/orders/orders-page.server.js",
+  "app/features/orders/orders-map.js",
   "app/features/orders/orders-page.jsx",
 ];
 

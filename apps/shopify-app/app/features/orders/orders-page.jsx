@@ -4,11 +4,24 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { appendIdToken, routeGroupPath, routePlanPath } from "../delivery/route-paths";
-import { addMapPinImage, createDepartureMarkerElement, createMapPinSymbolLayer, createPaletteMapPinImageData } from "../maps/map-markers";
+import { createDepartureMarkerElement } from "../maps/map-markers";
 import { createMapLibreMap } from "../maps/maplibre-map";
 import { installMissingMapImageFallback } from "../maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../maps/pmtiles-protocol";
 import { getOrderSyncSnapshots, mapCanonicalOrdersToOrderRows, mergeShopifyOrderRowsWithCanonicalRows } from "./canonical-orders";
+import {
+  DEFAULT_CENTER,
+  INITIAL_HOME_ZOOM,
+  MAP_RECOVERY_DELAY_MS,
+  MARKER_CLICK_TARGET_ZOOM,
+  MARKER_CLICK_ZOOM_OUT_THRESHOLD,
+  MAX_MAP_RECOVERY_ATTEMPTS,
+  OPENFREEMAP_STYLE_URL,
+  ORDERS_MAP_ORDER_LAYER_ID,
+  ORDERS_MAP_SOURCE_ID,
+  getOrderIdFromMapFeature,
+  syncOrdersMapMarkerLayer,
+} from "./orders-map";
 import { getServiceErrorNotice } from "../service-errors";
 import {
   filterOrders,
@@ -35,17 +48,6 @@ import {
   textOrUndefined,
 } from "./orders-page.shared";
 
-const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-clever-lite.json";
-const DEFAULT_CENTER = [-79.4163, 43.787];
-const INITIAL_HOME_ZOOM = 10;
-const MAP_RECOVERY_DELAY_MS = 2500;
-const MAX_MAP_RECOVERY_ATTEMPTS = 3;
-const MARKER_CLICK_ZOOM_OUT_THRESHOLD = 8;
-const MARKER_CLICK_TARGET_ZOOM = 10;
-const ORDERS_MAP_SOURCE_ID = "orders-map-orders";
-const ORDERS_MAP_ORDER_LAYER_ID = "orders-map-order-pins";
-const ORDER_PIN_IMAGE_ID = "orders-map-pin";
-const ORDER_PIN_PLANNED_IMAGE_ID = "orders-map-pin-planned";
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
@@ -1383,105 +1385,6 @@ function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
   return popupElement;
 }
 
-function isOrdersMapStyleReady(map) {
-  if (typeof map?.isStyleLoaded !== "function") return true;
-
-  try {
-    return map.isStyleLoaded();
-  } catch {
-    return false;
-  }
-}
-
-function getPlannedOrderPinImageId(plannedIndex) {
-  return `${ORDER_PIN_PLANNED_IMAGE_ID}-${plannedIndex}`;
-}
-
-function ensureOrdersMapPinImages(map, plannedOrderIds = []) {
-  const images = [
-    {
-      id: ORDER_PIN_IMAGE_ID,
-      imageData: createPaletteMapPinImageData("order"),
-    },
-    ...plannedOrderIds.map((_, index) => {
-      const plannedIndex = index + 1;
-      return {
-        id: getPlannedOrderPinImageId(plannedIndex),
-        imageData: createPaletteMapPinImageData("plannedOrder", {
-          label: plannedIndex,
-        }),
-      };
-    }),
-  ];
-
-  for (const image of images) {
-    if (!addMapPinImage(map, image.id, image.imageData)) return false;
-  }
-
-  return true;
-}
-
-function buildOrdersMapFeatureCollection(orders, plannedOrderIds) {
-  const plannedIndexByOrderId = new Map(
-    plannedOrderIds.map((orderId, index) => [orderId, index + 1]),
-  );
-
-  return {
-    type: "FeatureCollection",
-    features: orders
-      .filter((order) => order.hasCoordinates && plannedIndexByOrderId.has(order.id))
-      .map((order) => {
-        const plannedIndex = plannedIndexByOrderId.get(order.id) ?? 0;
-        const isPlanned = true;
-
-        return {
-          type: "Feature",
-          geometry: {
-            type: "Point",
-            coordinates: order.coordinates,
-          },
-          properties: {
-            isPlanned,
-            orderId: order.id,
-            orderName: order.name,
-            pinImage: isPlanned ? getPlannedOrderPinImageId(plannedIndex) : ORDER_PIN_IMAGE_ID,
-            plannedIndex,
-            sortKey: isPlanned ? 1000 - plannedIndex : 1,
-          },
-        };
-      }),
-  };
-}
-
-function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
-  if (!isOrdersMapStyleReady(map)) return false;
-  if (!ensureOrdersMapPinImages(map, plannedOrderIds)) return false;
-
-  const featureCollection = buildOrdersMapFeatureCollection(orders, plannedOrderIds);
-  const existingSource = map.getSource?.(ORDERS_MAP_SOURCE_ID);
-  if (existingSource?.setData) {
-    existingSource.setData(featureCollection);
-  } else {
-    map.addSource(ORDERS_MAP_SOURCE_ID, {
-      type: "geojson",
-      data: featureCollection,
-    });
-  }
-
-  if (!map.getLayer?.(ORDERS_MAP_ORDER_LAYER_ID)) {
-    map.addLayer(createMapPinSymbolLayer({
-      id: ORDERS_MAP_ORDER_LAYER_ID,
-      source: ORDERS_MAP_SOURCE_ID,
-    }));
-  }
-
-  return true;
-}
-
-function getOrderIdFromMapFeature(feature) {
-  const orderId = feature?.properties?.orderId;
-  return typeof orderId === "string" && orderId.length > 0 ? orderId : null;
-}
 
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();

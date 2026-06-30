@@ -1008,7 +1008,8 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
 
 test("Orders map shows the Shopify departure location as the route start point", () => {
   assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation/);
-  assert.match(ordersPageSource, /import \{ addMapPinImage, createDepartureMarkerElement, createMapPinSymbolLayer, createPaletteMapPinImageData \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
+  assert.match(ordersPageSource, /import \{ createDepartureMarkerElement \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
+  assert.match(ordersPageSource, /import \{ addMapPinImage, createMapPinSymbolLayer, createPaletteMapPinImageData \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
   assert.match(mapMarkersSource, /function createDepartureMarkerElement\(departureLocation, options = \{\}\)/);
   assert.match(mapMarkersSource, /function createDepartureMarkerIconElement\(\)/);
   assert.match(mapMarkersSource, /departure-map-marker/);
