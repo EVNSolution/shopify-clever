@@ -36,6 +36,8 @@ const SHOP_TIME_ZONE_QUERY = `#graphql
     }
   }
 `;
+const DEFAULT_SHOP_TIME_ZONE_CACHE_TTL_MS = 30_000;
+const shopTimeZoneCache = new Map();
 
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
@@ -70,7 +72,32 @@ function getFirstRouteGroupRoutePlan(routeGroup) {
   return firstChild.routePlan ?? { id: getRouteGroupChildRoutePlanId(firstChild) };
 }
 
-async function fetchShopifyShopTimeZone(admin) {
+async function fetchShopifyShopTimeZone(admin, options = {}) {
+  const cacheKey = textOrUndefined(options.cacheKey);
+  if (!cacheKey) return loadShopifyShopTimeZone(admin);
+
+  const now = Date.now();
+  const cached = shopTimeZoneCache.get(cacheKey);
+  if (cached && cached.expiresAt > now) {
+    return cached.promise.then(cloneShopTimeZoneResult);
+  }
+
+  const cacheEntry = {
+    expiresAt: now + DEFAULT_SHOP_TIME_ZONE_CACHE_TTL_MS,
+    promise: loadShopifyShopTimeZone(admin).then((result) => {
+      if (!result.ianaTimezone && !result.timezoneAbbreviation) {
+        shopTimeZoneCache.delete(cacheKey);
+      }
+
+      return result;
+    }),
+  };
+  shopTimeZoneCache.set(cacheKey, cacheEntry);
+
+  return cloneShopTimeZoneResult(await cacheEntry.promise);
+}
+
+async function loadShopifyShopTimeZone(admin) {
   try {
     const response = await admin.graphql(SHOP_TIME_ZONE_QUERY);
     const payload = await response.json();
@@ -86,6 +113,10 @@ async function fetchShopifyShopTimeZone(admin) {
       timezoneAbbreviation: undefined,
     };
   }
+}
+
+function cloneShopTimeZoneResult(result) {
+  return { ...result };
 }
 
 function getLocalDateForTimeZone(date, timeZone) {
@@ -485,7 +516,10 @@ export const loader = async ({ request }) => {
   const serverOrdersStartedAt = getSafePerformanceNow();
   const inventoriesStartedAt = getSafePerformanceNow();
   const shopTimeZoneStartedAt = getSafePerformanceNow();
-  const shopTimeZoneDataPromise = fetchShopifyShopTimeZone(admin).then((shopTimeZoneData) => ({
+  const shopTimeZoneDataPromise = fetchShopifyShopTimeZone(
+    admin,
+    { cacheKey: shopifyShopCacheKey },
+  ).then((shopTimeZoneData) => ({
     data: shopTimeZoneData,
     durationMs: roundPerfDuration(getSafePerformanceNow() - shopTimeZoneStartedAt),
   }));
