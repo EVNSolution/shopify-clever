@@ -20,12 +20,13 @@ export function readRouteOptimizedSnapshot(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
-export function getDefaultRouteGroupChildName(index) {
-  return `Route ${index + 1}`;
+export function getDefaultRouteGroupChildName(index, child) {
+  const sortOrder = numberOrUndefined(child?.sortOrder);
+  return `Route ${sortOrder ?? index + 1}`;
 }
 
 export function getRouteGroupChildRouteName(routeGroup, child, routePlan, index) {
-  const fallback = getDefaultRouteGroupChildName(index);
+  const fallback = getDefaultRouteGroupChildName(index, child);
   const name = textOrUndefined(routePlan?.name ?? child?.routePlan?.name ?? child?.label);
   const groupName = textOrUndefined(routeGroup?.name);
   if (name && groupName && name.startsWith(`${groupName} — `)) return fallback;

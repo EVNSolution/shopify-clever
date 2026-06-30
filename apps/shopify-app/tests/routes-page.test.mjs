@@ -758,8 +758,11 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /const childDetail = childDetailsByRoutePlanId\.get\(textOrUndefined\(branch\.routePlanId\)\)/);
   assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
   assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
-  assert.match(routeDetailSource, /const hasVisibleRouteSplit = routeBranchRows\.length > 0 \|\| routeGroupChildRows\.length > 0 \|\| clientRouteRows\.length > 0/);
-  assert.match(routeDetailSource, /\? \[\.\.\.groupRootRouteRows, \.\.\.routeGroupChildRows, \.\.\.routeBranchRows\]/);
+  assert.match(routeDetailSource, /const groupRootRouteRows = isRouteGroupDetail\s*&& rootRouteStops\.length > 0/);
+  assert.match(routeDetailSource, /\? routeGroupChildRows\.length > 0[\s\S]*\? routeGroupChildRows[\s\S]*: \[\.\.\.groupRootRouteRows, \.\.\.routeBranchRows\]/);
+  assert.match(routeDetailSource, /const maxRouteIndex = routeRows\.reduce/);
+  assert.match(routeDetailSource, /routeIndex: draft\.routeIndex/);
+  assert.match(routeHelpersSource, /getDefaultRouteGroupChildName\(index, child\)/);
   assert.match(routeDetailSource, /const routePolygonSourceStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail \? routeGroupStopsSource : \[\]/);
   assert.match(routeDetailSource, /const routeMapStops = useMemo\(\(\) => \{[\s\S]*timelineRouteRows\.length > 0[\s\S]*return isRouteGroupDetail[\s\S]*routeGroupStopsSource\.map/);
   assert.match(routeDetailSource, /const displayRouteRowsSource = isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
@@ -790,7 +793,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
   assert.match(routeDetailSource, /const defaultRouteCandidateTitle = isRouteGroupDetail \? "Route 1" : routeDetailTitle/);
-  assert.match(routeDetailSource, /title: textOrUndefined\(branch\.label\) \?\? `Route \$\{index \+ 2\}`/);
+  assert.match(routeDetailSource, /const routeIndex = Math\.max\(numberOrUndefined\(branch\.sortOrder\) \?\? index \+ 2, index \+ 2\)/);
+  assert.match(routeDetailSource, /title: textOrUndefined\(branch\.label\) \?\? `Route \$\{routeIndex\}`/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
