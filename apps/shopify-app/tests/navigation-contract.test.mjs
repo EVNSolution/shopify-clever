@@ -6,7 +6,22 @@ import test from "node:test";
 const root = process.cwd();
 const routesDir = join(root, "app/routes");
 
+function readOptionalFile(relativePath) {
+  const path = join(root, relativePath);
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+function readOrdersPageSource() {
+  return [
+    "app/routes/app.orders.jsx",
+    "app/features/orders/orders-page.shared.js",
+    "app/features/orders/orders-page.server.js",
+    "app/features/orders/orders-page.jsx",
+  ].map(readOptionalFile).join("\n");
+}
+
 function readAppFile(path) {
+  if (path === "app/routes/app.orders.jsx") return readOrdersPageSource();
   return readFileSync(join(root, path), "utf8");
 }
 

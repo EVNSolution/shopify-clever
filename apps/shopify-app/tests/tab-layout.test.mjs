@@ -4,6 +4,16 @@ import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
+
+function readOrdersPageSource() {
+  return [
+    "app/routes/app.orders.jsx",
+    "app/features/orders/orders-page.shared.js",
+    "app/features/orders/orders-page.server.js",
+    "app/features/orders/orders-page.jsx",
+  ].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
+}
+
 const tabLayoutPath = join(root, "app/ui/tab-layout.jsx");
 const pageShellPath = join(root, "app/ui/page-shell.jsx");
 
@@ -27,10 +37,10 @@ test("old one-size tab layout rule is removed from purpose-led tabs", () => {
 });
 
 test("Orders can still use TabLayout without moving new page responsibilities into it", () => {
-  const ordersSource = readFileSync(join(root, "app/routes/app.orders.jsx"), "utf8");
+  const ordersSource = readOrdersPageSource();
   const tabLayoutSource = readFileSync(tabLayoutPath, "utf8");
 
-  assert.match(ordersSource, /import \{ TabLayout \} from "\.\.\/ui\/tab-layout";/);
+  assert.match(ordersSource, /import \{ TabLayout \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/tab-layout";/);
   assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
   assert.doesNotMatch(ordersSource, /title="Orders"/);
   assert.match(tabLayoutSource, /className="tab-layout"/);

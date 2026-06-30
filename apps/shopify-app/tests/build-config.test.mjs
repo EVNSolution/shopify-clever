@@ -1,15 +1,26 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
+
+function readOptionalFile(relativePath) {
+  const path = join(root, relativePath);
+  return existsSync(path) ? readFileSync(path, "utf8") : "";
+}
+
+function readOrdersPageSource() {
+  return [
+    "app/routes/app.orders.jsx",
+    "app/features/orders/orders-page.shared.js",
+    "app/features/orders/orders-page.server.js",
+    "app/features/orders/orders-page.jsx",
+  ].map(readOptionalFile).join("\n");
+}
 const viteConfigSource = readFileSync(join(root, "vite.config.js"), "utf8");
 const tsConfig = JSON.parse(readFileSync(join(root, "tsconfig.json"), "utf8"));
-const ordersPageSource = readFileSync(
-  join(root, "app/routes/app.orders.jsx"),
-  "utf8",
-);
+const ordersPageSource = readOrdersPageSource();
 const routeDetailPageSource = readFileSync(
   join(root, "app/routes/app.routes.$routeId.jsx"),
   "utf8",

@@ -4,6 +4,16 @@ import { join } from "node:path";
 import test from "node:test";
 
 const root = process.cwd();
+
+function readOrdersPageSource() {
+  return [
+    "app/routes/app.orders.jsx",
+    "app/features/orders/orders-page.shared.js",
+    "app/features/orders/orders-page.server.js",
+    "app/features/orders/orders-page.jsx",
+  ].map((path) => readFileSync(join(root, path), "utf8")).join("\n");
+}
+
 const appConfigSource = readFileSync(join(root, "shopify.app.toml"), "utf8");
 const pageShellRouteFiles = [
   "app/routes/app.analytics.jsx",
@@ -32,7 +42,7 @@ test("sidebar pages use tab titles instead of duplicating the app name", () => {
     );
   }
 
-  const ordersSource = readFileSync(join(root, "app/routes/app.orders.jsx"), "utf8");
+  const ordersSource = readOrdersPageSource();
   assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
   assert.doesNotMatch(ordersSource, /title="Orders"/);
 

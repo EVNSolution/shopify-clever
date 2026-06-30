@@ -47,6 +47,41 @@ s-badge {
   outline-offset: 2px;
 }
 
+.info-pill {
+  background: rgba(0, 0, 0, 0.04);
+  border-radius: 999px;
+  box-sizing: border-box;
+  color: #303030;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  justify-content: center;
+  line-height: 1.2;
+  max-width: none;
+  min-inline-size: 0;
+  min-width: max-content;
+  overflow: hidden;
+  padding: 3px 8px;
+  width: max-content;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.info-pill--success {
+  background: rgba(0, 128, 96, 0.12);
+  color: #006c48;
+}
+
+.info-pill--warning {
+  background: rgba(180, 83, 9, 0.14);
+  color: #8a4b00;
+}
+
+.info-pill--critical {
+  background: rgba(209, 24, 24, 0.12);
+  color: #b42318;
+}
+
 .route-plan-address-button {
   font-size: 12px !important;
   line-height: 1.35 !important;
