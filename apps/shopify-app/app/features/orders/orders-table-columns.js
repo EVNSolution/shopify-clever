@@ -1,15 +1,15 @@
 export const ORDER_TABLE_COLUMN_WIDTHS = {
   select: "3%",
-  name: "7%",
-  orderedDate: "8%",
-  customer: "10%",
-  address: "24%",
-  itemCount: "6%",
-  deliveryArea: "8%",
-  deliveryLabel: "9%",
-  planningStatus: "7%",
-  payment: "8%",
-  hasCoordinates: "6%",
+  name: "7.4%",
+  orderedDate: "8.4%",
+  customer: "10.4%",
+  address: "24.4%",
+  itemCount: "6.4%",
+  deliveryArea: "8.4%",
+  deliveryLabel: "9.4%",
+  planningStatus: "7.4%",
+  payment: "8.4%",
+  hasCoordinates: "6.4%",
 };
 export const MIN_TABLE_COLUMN_WIDTH = 44;
 const TABLE_CELL_HORIZONTAL_PADDING_PX = 16;

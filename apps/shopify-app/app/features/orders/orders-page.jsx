@@ -1755,7 +1755,7 @@ export default function OrdersPage() {
   );
 
   const tableOrders = sortedOrders;
-  const tableWidth = lockedTableWidth ? `${lockedTableWidth}px` : "100%";
+  const tableWidth = lockedTableWidth ? `max(100%, ${lockedTableWidth}px)` : "100%";
   const checkedOrders = useMemo(
     () => checkedOrderIds.map((orderId) => displayOrderById.get(orderId)).filter(Boolean),
     [checkedOrderIds, displayOrderById],

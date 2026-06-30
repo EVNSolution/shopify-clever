@@ -326,10 +326,10 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const \[checkedOrderIds, setCheckedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
-  assert.match(ordersPageSource, /address: "24%"/);
-  assert.match(ordersPageSource, /itemCount: "6%"/);
-  assert.match(ordersPageSource, /planningStatus: "7%"/);
-  assert.match(ordersPageSource, /hasCoordinates: "6%"/);
+  assert.match(ordersPageSource, /address: "24\.4%"/);
+  assert.match(ordersPageSource, /itemCount: "6\.4%"/);
+  assert.match(ordersPageSource, /planningStatus: "7\.4%"/);
+  assert.match(ordersPageSource, /hasCoordinates: "6\.4%"/);
   assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.map\(\(column\) => ORDER_TABLE_COLUMN_WIDTHS\[column\.key\]\)/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
@@ -1145,7 +1145,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /return \{ key: columnKey, direction: "descending" \}/);
   assert.match(ordersPageSource, /return null/);
   assert.match(ordersPageSource, /const \[lockedTableWidth, setLockedTableWidth\] = useState\(null\)/);
-  assert.match(ordersPageSource, /const tableWidth = lockedTableWidth \? `\$\{lockedTableWidth\}px` : "100%"/);
+  assert.match(ordersPageSource, /const tableWidth = lockedTableWidth \? `max\(100%, \$\{lockedTableWidth\}px\)` : "100%"/);
   assert.match(ordersPageSource, /const handleColumnResizeStart = \(columnIndex, event\) => \{/);
   assert.match(ordersPageSource, /function getTableColumnPixelState\(tableElement\) \{/);
   assert.match(ordersPageSource, /const roundingDiff = tableWidth - widths\.reduce/);
