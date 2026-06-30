@@ -8,6 +8,7 @@ const root = process.cwd();
 
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const ordersPageSource = readOrdersPageSource();
+const appRouteSource = readFileSync(join(root, "app/routes/app.jsx"), "utf8");
 const routeDetailPageSource = readFileSync(
   join(root, "app/routes/app.routes.$routeId.jsx"),
   "utf8",
@@ -51,6 +52,21 @@ test("performance capture endpoint stores browser metrics outside app data", () 
   assert.match(perfRouteSource, /orders-navigation\.jsonl/);
   assert.match(perfRouteSource, /appendFile/);
   assert.doesNotMatch(perfRouteSource, /prisma|migrate|Session/);
+});
+
+test("app shell records page navigation metrics by target page", () => {
+  assert.match(appRouteSource, /useAppNavigationPerformance/);
+  assert.match(appRouteSource, /name: "app\.page\.navigation"/);
+  assert.match(appRouteSource, /fromPage: getAppPageName\(fromPath\)/);
+  assert.match(appRouteSource, /toPage: getAppPageName\(currentPath\)/);
+  assert.match(appRouteSource, /durationMs/);
+  assert.match(appRouteSource, /markNavigationStart\(href, "sidebar-click"\)/);
+  assert.match(appRouteSource, /navigation\.location\?\.pathname/);
+  assert.match(appRouteSource, /trigger: "router"/);
+
+  const perfRouteSource = readFileSync(perfRoutePath, "utf8");
+  assert.match(perfRouteSource, /app-page-navigation\.jsonl/);
+  assert.match(perfRouteSource, /metric\?\.name === "app\.page\.navigation"/);
 });
 
 test("Orders page emits loader, iframe, document, and MapLibre timing metrics", () => {
