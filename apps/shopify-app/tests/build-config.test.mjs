@@ -13,6 +13,10 @@ const routeDetailPageSource = readFileSync(
   join(root, "app/routes/app.routes.$routeId.jsx"),
   "utf8",
 );
+const routeDetailMapSource = readFileSync(
+  join(root, "app/features/delivery/route-detail-map.js"),
+  "utf8",
+);
 const settingsPageSource = readFileSync(
   join(root, "app/routes/app.settings.jsx"),
   "utf8",
@@ -95,12 +99,14 @@ test("orders map renders order pins through a MapLibre source layer", () => {
 });
 
 test("route detail map renders route stops through MapLibre source layers", () => {
-  assert.match(routeDetailPageSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops/);
-  assert.match(routeDetailPageSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
-  assert.match(routeDetailPageSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
-  assert.match(routeDetailPageSource, /createMapPinSymbolLayer\(\{/);
+  assert.match(routeDetailMapSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
+  assert.match(routeDetailMapSource, /createMapPinSymbolLayer\(\{/);
   assert.doesNotMatch(routeDetailPageSource, /const stopMarker = new maplibregl\.Marker/);
   assert.doesNotMatch(routeDetailPageSource, /const snappedStopPointMarker = new maplibregl\.Marker/);
+  assert.doesNotMatch(routeDetailMapSource, /const stopMarker = new maplibregl\.Marker/);
+  assert.doesNotMatch(routeDetailMapSource, /const snappedStopPointMarker = new maplibregl\.Marker/);
 });
 
 test("TypeScript config avoids deprecated baseUrl", () => {
