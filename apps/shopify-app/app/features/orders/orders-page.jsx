@@ -111,6 +111,13 @@ const routePlanScrollAreaStyle = {
   paddingRight: 0,
 };
 
+const ordersViewTabsRowStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "8px",
+  justifyContent: "space-between",
+};
+
 const ordersViewTabBarStyle = {
   alignItems: "center",
   display: "flex",
@@ -145,11 +152,6 @@ const inventoryListStyle = {
   minHeight: "420px",
 };
 
-const inventoryToolbarStyle = {
-  display: "flex",
-  justifyContent: "flex-end",
-  padding: "6px 10px",
-};
 
 const routePlanHeaderStyle = {
   alignItems: "center",
@@ -1604,17 +1606,27 @@ export default function OrdersPage() {
   }, [checkedInventoryIds, inventoryDeleteDisabled, inventoryDeleteFetcher, shopify]);
 
   const ordersViewTabs = (
-    <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
-      <button
-        type="button"
-        style={activeOrdersView === "orders" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
-        onClick={() => handleOrdersViewChange("orders")}
-      >Orders</button>
-      <button
-        type="button"
-        style={activeOrdersView === "inventory" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
-        onClick={() => handleOrdersViewChange("inventory")}
-      >Inventory</button>
+    <div style={ordersViewTabsRowStyle}>
+      <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
+        <button
+          type="button"
+          style={activeOrdersView === "orders" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
+          onClick={() => handleOrdersViewChange("orders")}
+        >Orders</button>
+        <button
+          type="button"
+          style={activeOrdersView === "inventory" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
+          onClick={() => handleOrdersViewChange("inventory")}
+        >Inventory</button>
+      </div>
+      {activeOrdersView === "inventory" ? (
+        <button
+          type="button"
+          style={inventoryDeleteDisabled ? disabledPlanButtonStyle : inventoryDeleteButtonStyle}
+          disabled={inventoryDeleteDisabled}
+          onClick={handleDeleteSelectedInventories}
+        >Delete</button>
+      ) : null}
     </div>
   );
 
@@ -1631,14 +1643,6 @@ export default function OrdersPage() {
 
   const inventoryList = (
     <div style={inventoryListStyle}>
-      <div style={inventoryToolbarStyle}>
-        <button
-          type="button"
-          style={inventoryDeleteDisabled ? disabledPlanButtonStyle : inventoryDeleteButtonStyle}
-          disabled={inventoryDeleteDisabled}
-          onClick={handleDeleteSelectedInventories}
-        >Delete</button>
-      </div>
       <div style={inventoryTableWrapStyle}>
         <table aria-label="Inventory list" style={inventoryTableStyle}>
           <colgroup>
