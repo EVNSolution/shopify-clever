@@ -374,10 +374,14 @@ const orderControlsStyle = {
 };
 
 const tableWrapStyle = {
+  boxSizing: "border-box",
   height: "calc(100vh - 150px)",
   minHeight: "320px",
   overflowX: "auto",
   overflowY: "auto",
+  paddingBottom: "10px",
+  paddingRight: "10px",
+  scrollbarGutter: "stable",
 };
 
 const orderFilterControlStyle = {
@@ -708,9 +712,13 @@ const tableCellStyle = {
 const INVENTORY_TABLE_COLUMN_WIDTHS = ["32px", "220px", "88px", "82px", "150px", "128px"];
 
 const inventoryTableWrapStyle = {
+  boxSizing: "border-box",
   maxHeight: "min(520px, 58vh)",
   overflowX: "auto",
   overflowY: "auto",
+  paddingBottom: "10px",
+  paddingRight: "10px",
+  scrollbarGutter: "stable",
 };
 
 const inventoryTableStyle = {

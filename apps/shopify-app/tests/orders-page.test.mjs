@@ -265,6 +265,9 @@ test("Orders table container uses viewport height and scrolls internally", () =>
   assert.match(ordersPageSource, /height:\s*"calc\(100vh - 150px\)"/);
   assert.match(ordersPageSource, /minHeight:\s*"320px"/);
   assert.match(ordersPageSource, /overflowY:\s*"auto"/);
+  assert.match(ordersPageSource, /paddingRight:\s*"10px"/);
+  assert.match(ordersPageSource, /paddingBottom:\s*"10px"/);
+  assert.match(ordersPageSource, /scrollbarGutter:\s*"stable"/);
 });
 
 test("Orders table keeps the title row sticky outside Shopify table internals", () => {
@@ -1347,10 +1350,13 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /const historyPanelStyle = \{/);
   assert.match(inventoryDetailSource, /maxHeight: "calc\(100vh - 24px\)"/);
   assert.match(inventoryDetailSource, /top: "12px"/);
+  assert.match(inventoryDetailSource, /paddingRight: "6px"/);
+  assert.match(inventoryDetailSource, /scrollbarGutter: "stable"/);
   assert.doesNotMatch(inventoryDetailSource, /openHistoryTitle/);
   assert.match(inventoryDetailSource, /const historyCardContentStyle = \{/);
   assert.match(inventoryDetailSource, /maxHeight: "300px"/);
   assert.match(inventoryDetailSource, /overflowY: "auto"/);
+  assert.match(inventoryDetailSource, /paddingRight: "8px"/);
   assert.match(inventoryDetailSource, /open=\{index === 0\}/);
   assert.match(inventoryDetailSource, /gridTemplateColumns: "70px minmax\(0, 1fr\) 54px"/);
   assert.doesNotMatch(inventoryDetailSource, /<span>Order<\/span>/);
