@@ -8,10 +8,10 @@ const pageStyle = {
   boxSizing: "border-box",
   display: "grid",
   gap: "12px",
-  gridTemplateColumns: "minmax(0, 210mm) 280px",
+  gridTemplateColumns: "minmax(0, 210mm) 360px",
   justifyContent: "center",
   margin: "0 auto",
-  maxWidth: "calc(210mm + 300px)",
+  maxWidth: "calc(210mm + 380px)",
   padding: "4px 12px 12px",
   width: "100%",
 };
@@ -112,11 +112,58 @@ const historyMetaStyle = {
   margin: "4px 0 0",
 };
 
-const historyListStyle = {
+const historyOrderListStyle = {
   display: "grid",
   gap: "6px",
-  margin: "8px 0 0",
-  paddingLeft: "18px",
+  marginTop: "8px",
+};
+
+const historyOrderHeaderStyle = {
+  color: "#616161",
+  display: "grid",
+  fontSize: "11px",
+  fontWeight: 750,
+  gap: "6px",
+  gridTemplateColumns: "70px minmax(0, 1fr) 54px",
+  padding: "0 8px",
+  textTransform: "uppercase",
+};
+
+const historyOrderStyle = {
+  border: "1px solid #ebebeb",
+  borderRadius: "8px",
+  overflow: "hidden",
+};
+
+const historyOrderSummaryStyle = {
+  alignItems: "center",
+  cursor: "pointer",
+  display: "grid",
+  fontSize: "12px",
+  gap: "6px",
+  gridTemplateColumns: "70px minmax(0, 1fr) 54px",
+  padding: "7px 8px",
+};
+
+const historyOrderCustomerStyle = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const historyOrderItemCountStyle = {
+  fontWeight: 750,
+  textAlign: "right",
+};
+
+const historyItemListStyle = {
+  background: "#fafafa",
+  borderTop: "1px solid #ebebeb",
+  display: "grid",
+  fontSize: "12px",
+  gap: "4px",
+  margin: 0,
+  padding: "7px 8px 7px 24px",
 };
 
 const tableWrapStyle = {
@@ -243,13 +290,19 @@ const PRODUCT_COLUMNS_PER_TABLE = 6;
 
 const HISTORY_ITEMS = [
   {
-    details: ["Thu 07/02: 7 orders · 35 items", "Fri 07/03: 9 orders · 29 items", "Sat 07/04: 39 orders · 206 items"],
     meta: "55 orders · 270 items",
+    orders: [
+      { customer: "Kim Minji", itemCount: 35, items: ["두툼 삼겹살 ×5", "유채 순 나물무침 ×6", "육개장 완조리 ×3"], order: "#1048" },
+      { customer: "Park Jiwon", itemCount: 29, items: ["오마고등 ×2", "소고기 사태수육 feat. 도가니 ×3", "소불고기 덮밥 완조리 ×2"], order: "#1051" },
+    ],
     title: "Initial snapshot",
   },
   {
-    details: ["Order #1057: 두툼 삼겹살 ×1, 오마고등 ×2", "Order #1061: 육개장 완조리 ×3, 명란젓 ×1"],
     meta: "+2 orders · +7 items",
+    orders: [
+      { customer: "Lee Hana", itemCount: 3, items: ["두툼 삼겹살 ×1", "오마고등 ×2"], order: "#1057" },
+      { customer: "Choi Daniel", itemCount: 4, items: ["육개장 완조리 ×3", "명란젓 ×1"], order: "#1061" },
+    ],
     title: "2026-06-30 14:12 update",
   },
 ];
@@ -499,9 +552,25 @@ export default function InventoryDetailPage() {
                 <strong>{item.title}</strong>
                 <p style={historyMetaStyle}>{item.meta}</p>
               </summary>
-              <ul style={historyListStyle}>
-                {item.details.map((detail) => <li key={detail}>{detail}</li>)}
-              </ul>
+              <div style={historyOrderListStyle}>
+                <div aria-hidden="true" style={historyOrderHeaderStyle}>
+                  <span>Order</span>
+                  <span>Customer</span>
+                  <span>Items</span>
+                </div>
+                {item.orders.map((order) => (
+                  <details key={order.order} style={historyOrderStyle}>
+                    <summary style={historyOrderSummaryStyle}>
+                      <strong>{order.order}</strong>
+                      <span style={historyOrderCustomerStyle}>{order.customer}</span>
+                      <span style={historyOrderItemCountStyle}>{order.itemCount}</span>
+                    </summary>
+                    <ul style={historyItemListStyle}>
+                      {order.items.map((historyItem) => <li key={historyItem}>{historyItem}</li>)}
+                    </ul>
+                  </details>
+                ))}
+              </div>
             </details>
           ))}
         </div>
