@@ -36,9 +36,12 @@ const panelStyle = {
 const historyPanelStyle = {
   ...panelStyle,
   alignSelf: "start",
+  boxSizing: "border-box",
   maxHeight: "calc(100vh - 24px)",
   overflowY: "auto",
+  paddingRight: "6px",
   position: "sticky",
+  scrollbarGutter: "stable",
   top: "12px",
 };
 
@@ -110,8 +113,11 @@ const historyCardStyle = {
 };
 
 const historyCardContentStyle = {
+  boxSizing: "border-box",
   maxHeight: "300px",
   overflowY: "auto",
+  paddingRight: "8px",
+  scrollbarGutter: "stable",
 };
 
 const historyMetaStyle = {
