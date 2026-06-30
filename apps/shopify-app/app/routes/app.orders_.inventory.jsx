@@ -6,8 +6,8 @@ import { getServiceErrorNotice } from "../features/service-errors";
 
 const pageStyle = {
   display: "grid",
-  gap: "12px",
-  padding: "8px 12px 12px",
+  gap: "8px",
+  padding: "4px 12px 12px",
 };
 
 const panelStyle = {
@@ -19,13 +19,8 @@ const panelStyle = {
 
 const sectionStyle = {
   display: "grid",
-  gap: "10px",
-  padding: "14px 16px",
-};
-
-const headerStyle = {
-  display: "grid",
-  gap: "12px",
+  gap: "8px",
+  padding: "10px 14px",
 };
 
 const headerTopBarStyle = {
@@ -49,8 +44,8 @@ const backLinkStyle = {
 
 const titleStyle = {
   margin: 0,
-  fontSize: "20px",
-  lineHeight: "28px",
+  fontSize: "16px",
+  lineHeight: "22px",
   minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
@@ -65,21 +60,20 @@ const sectionTitleRowStyle = {
   justifyContent: "space-between",
 };
 
-const sectionTitleStyle = {
-  fontSize: "16px",
-  lineHeight: "22px",
-  margin: 0,
-};
-
 const summaryStyle = {
   color: "#616161",
   fontSize: "12px",
   fontWeight: 650,
 };
 
+const outputTimeStyle = {
+  color: "#616161",
+  fontSize: "11px",
+};
+
 const tableWrapStyle = {
   display: "grid",
-  gap: "10px",
+  gap: "8px",
   overflowX: "auto",
 };
 
@@ -150,14 +144,14 @@ const totalColumnCellStyle = {
 const totalRowCellStyle = {
   ...cellStyle,
   background: "#f3f4f6",
-  borderTop: "2px solid #d4d4d4",
+  borderTop: "1px solid #ebebeb",
   fontWeight: 700,
 };
 
 const totalRowHeaderStyle = {
   ...rowHeaderStyle,
   background: "#f3f4f6",
-  borderTop: "2px solid #d4d4d4",
+  borderTop: "1px solid #ebebeb",
   fontWeight: 700,
 };
 
@@ -181,13 +175,14 @@ const noticeStyle = {
 
 const printCss = `
 @media print {
+  html, body { margin: 0 !important; }
   .inventory-detail-no-print { display: none !important; }
-  .inventory-detail-page { padding: 0 !important; }
+  .inventory-detail-page { justify-content: center !important; margin: 0 auto !important; max-width: 190mm !important; padding: 5mm 8mm 8mm !important; }
   .inventory-detail-panel { border: 0 !important; border-radius: 0 !important; }
   .inventory-detail-table-wrap { overflow: visible !important; }
   .inventory-detail-table { font-size: 11px !important; width: 100% !important; }
   .inventory-detail-row-header { position: static !important; }
-  @page { margin: 12mm; }
+  @page { margin: 0; }
 }
 `;
 
@@ -197,6 +192,7 @@ export const loader = async ({ request }) => {
   logInventoryDetailPayload(inventoryId, result, buildInventoryDetailApiPath(inventoryId));
   return {
     errors: result.errors ?? [],
+    generatedAt: new Date().toISOString(),
     inventory: result.inventory,
   };
 };
@@ -258,8 +254,15 @@ function getProductSlots(products) {
   return Array.from({ length: PRODUCT_COLUMNS_PER_TABLE }, (_, index) => products[index] ?? null);
 }
 
+function formatOutputTime(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  const pad = (part) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function InventoryDetailPage() {
-  const { errors, inventory } = useLoaderData();
+  const { errors, generatedAt, inventory } = useLoaderData();
   const notice = getServiceErrorNotice([{ errors }], { context: "inventory_detail" });
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
   const matrix = buildInventoryProductMatrix(orders);
@@ -272,14 +275,12 @@ export default function InventoryDetailPage() {
       <section className="inventory-detail-panel" style={panelStyle}>
         {notice ? <div role="alert" style={noticeStyle}>{notice}</div> : null}
         <div style={sectionStyle}>
-          <div style={headerStyle}>
-            <div style={headerTopBarStyle}>
-              <Link className="inventory-detail-no-print" style={backLinkStyle} to="/app/orders?view=inventory">
-                ← Back to Inventory
-              </Link>
-              <button className="inventory-detail-no-print" type="button" onClick={() => window.print()}>Print</button>
-            </div>
-            <h1 style={titleStyle}>{inventory?.name ?? "Inventory"}</h1>
+          <div style={headerTopBarStyle}>
+            <Link className="inventory-detail-no-print" style={backLinkStyle} to="/app/orders?view=inventory">
+              ← Back to Inventory
+            </Link>
+            <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt)}</span>
+            <button className="inventory-detail-no-print" type="button" onClick={() => window.print()}>Print</button>
           </div>
         </div>
       </section>
@@ -287,7 +288,7 @@ export default function InventoryDetailPage() {
       <section className="inventory-detail-panel" style={panelStyle}>
         <div style={sectionStyle}>
           <div style={sectionTitleRowStyle}>
-            <h2 style={sectionTitleStyle}>Product quantities by date</h2>
+            <h1 style={titleStyle}>{inventory?.name ?? "Inventory"}</h1>
             {hasMatrix ? <span style={summaryStyle}>Overall total: {matrix.totalQuantity}</span> : null}
           </div>
           <div className="inventory-detail-table-wrap" style={tableWrapStyle}>

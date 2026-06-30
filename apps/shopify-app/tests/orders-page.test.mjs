@@ -1330,7 +1330,9 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /fetchDeliveryInventoryDetail/);
   assert.match(inventoryDetailSource, /buildInventoryProductMatrix/);
   assert.match(inventoryDetailSource, /Inventory product matrix/);
-  assert.match(inventoryDetailSource, /Product quantities by date/);
+  assert.doesNotMatch(inventoryDetailSource, /Product quantities by date/);
+  assert.match(inventoryDetailSource, /generatedAt: new Date\(\)\.toISOString\(\)/);
+  assert.match(inventoryDetailSource, /Output: \{formatOutputTime\(generatedAt\)\}/);
   assert.match(inventoryDetailSource, /const PRODUCT_COLUMNS_PER_TABLE = 6/);
   assert.match(inventoryDetailSource, /getProductChunks\(matrix\.products\)/);
   assert.match(inventoryDetailSource, /getProductSlots\(products\)/);
@@ -1342,11 +1344,15 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /textAlign: "center"/);
   assert.match(inventoryDetailSource, /aria-hidden="true"/);
   assert.match(inventoryDetailSource, /totalRowCellStyle/);
+  assert.match(inventoryDetailSource, /borderTop: "1px solid #ebebeb"/);
+  assert.doesNotMatch(inventoryDetailSource, /borderTop: "2px solid #d4d4d4"/);
   assert.match(inventoryDetailSource, /const backLinkStyle = \{/);
   assert.match(inventoryDetailSource, /<Link[\s\S]*className="inventory-detail-no-print"[\s\S]*style=\{backLinkStyle\}/);
   assert.doesNotMatch(inventoryDetailSource, /width:\s*"max-content"/);
   assert.match(inventoryDetailSource, /window\.print\(\)/);
   assert.match(inventoryDetailSource, /@media print/);
+  assert.match(inventoryDetailSource, /@page \{ margin: 0; \}/);
+  assert.match(inventoryDetailSource, /max-width: 190mm/);
   assert.doesNotMatch(inventoryDetailSource, /Delta remarks|Order-by-order items|lastChange/);
 });
 
