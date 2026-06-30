@@ -90,7 +90,7 @@ export function TabLayout({ title, description, notice, primary, secondary, lowe
           ) : null}
         </div>
 
-        <section className="tab-layout-lower" style={lowerStyle}>{lower}</section>
+        {lower ? <section className="tab-layout-lower" style={lowerStyle}>{lower}</section> : null}
       </div>
     </main>
   );

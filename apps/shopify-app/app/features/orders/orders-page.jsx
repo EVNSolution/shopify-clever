@@ -140,22 +140,9 @@ const activeOrdersViewTabButtonStyle = {
 };
 
 const inventoryListStyle = {
-  display: "grid",
-  gap: "8px",
-  padding: "8px 10px 12px",
-};
-
-const inventoryTableStyle = {
-  borderCollapse: "collapse",
-  fontSize: "13px",
-  lineHeight: "18px",
-  width: "100%",
-};
-
-const inventoryCellStyle = {
-  borderTop: "1px solid #ebebeb",
-  padding: "7px 8px",
-  textAlign: "left",
+  display: "flex",
+  flexDirection: "column",
+  minHeight: "420px",
 };
 
 const routePlanHeaderStyle = {
@@ -708,6 +695,33 @@ const tableCellStyle = {
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
+};
+
+const INVENTORY_TABLE_COLUMN_WIDTHS = ["28%", "12%", "12%", "22%", "18%", "8%"];
+
+const inventoryTableWrapStyle = {
+  maxHeight: "min(520px, 58vh)",
+  overflowX: "auto",
+  overflowY: "auto",
+};
+
+const inventoryTableStyle = {
+  ...tableStyle,
+  minWidth: "840px",
+};
+
+const inventoryHeaderCellStyle = tableHeaderCellStyle;
+const inventoryCellStyle = tableCellStyle;
+
+const inventoryNameCellStyle = {
+  ...tableCellStyle,
+  fontWeight: 650,
+  textAlign: "left",
+};
+
+const inventoryActionCellStyle = {
+  ...tableCellStyle,
+  overflow: "visible",
 };
 
 const checkboxCellStyle = {
@@ -1538,40 +1552,47 @@ export default function OrdersPage() {
 
   const inventoryList = (
     <div style={inventoryListStyle}>
-      <table aria-label="Inventory list" style={inventoryTableStyle}>
-        <thead>
-          <tr>
-            <th style={inventoryCellStyle}>Inventory</th>
-            <th style={inventoryCellStyle}>Order count</th>
-            <th style={inventoryCellStyle}>Item count</th>
-            <th style={inventoryCellStyle}>Delta summary</th>
-            <th style={inventoryCellStyle}>Changed time</th>
-            <th style={inventoryCellStyle}>Detail</th>
-          </tr>
-        </thead>
-        <tbody>
-          {safeInventories.length === 0 ? (
+      <div style={inventoryTableWrapStyle}>
+        <table aria-label="Inventory list" style={inventoryTableStyle}>
+          <colgroup>
+            {INVENTORY_TABLE_COLUMN_WIDTHS.map((width, columnIndex) => (
+              <col key={columnIndex} style={{ width }} />
+            ))}
+          </colgroup>
+          <thead>
             <tr>
-              <td colSpan={6} style={inventoryCellStyle}>Inventory가 없습니다.</td>
+              <th scope="col" style={inventoryHeaderCellStyle}>Inventory</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Order count</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Item count</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Delta summary</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Changed time</th>
+              <th scope="col" style={inventoryHeaderCellStyle}>Detail</th>
             </tr>
-          ) : safeInventories.map((inventory) => (
-            <tr key={inventory.id}>
-              <td style={inventoryCellStyle}>{inventory.name}</td>
-              <td style={inventoryCellStyle}>{inventory.ordersCount ?? inventory.orderIds?.length ?? inventory.orders?.length ?? 0}</td>
-              <td style={inventoryCellStyle}>{inventory.itemSummary?.totalQuantity ?? 0}</td>
-              <td style={inventoryCellStyle}>{formatInventoryDeltaSummary(inventory)}</td>
-              <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt)}</td>
-              <td style={inventoryCellStyle}>
-                <button
-                  type="button"
-                  style={orderFilterButtonStyle}
-                  onClick={() => navigate(`/app/orders/inventory?id=${encodeURIComponent(inventory.id)}`)}
-                >Open</button>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {safeInventories.length === 0 ? (
+              <tr>
+                <td colSpan={INVENTORY_TABLE_COLUMN_WIDTHS.length} style={inventoryCellStyle}>Inventory가 없습니다.</td>
+              </tr>
+            ) : safeInventories.map((inventory) => (
+              <tr key={inventory.id}>
+                <td style={inventoryNameCellStyle}>{inventory.name}</td>
+                <td style={inventoryCellStyle}>{inventory.ordersCount ?? inventory.orderIds?.length ?? inventory.orders?.length ?? 0}</td>
+                <td style={inventoryCellStyle}>{inventory.itemSummary?.totalQuantity ?? 0}</td>
+                <td style={inventoryCellStyle}>{formatInventoryDeltaSummary(inventory)}</td>
+                <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt)}</td>
+                <td style={inventoryActionCellStyle}>
+                  <button
+                    type="button"
+                    style={orderFilterButtonStyle}
+                    onClick={() => navigate(`/app/orders/inventory?id=${encodeURIComponent(inventory.id)}`)}
+                  >Open</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 
@@ -2645,7 +2666,6 @@ export default function OrdersPage() {
         primaryExpanded={true}
         notice={ordersLayoutNotice}
         primary={inventoryList}
-        lower={<div />}
       />
     );
   }
