@@ -1332,6 +1332,13 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /Inventory product matrix/);
   assert.doesNotMatch(inventoryDetailSource, /Product quantities by date/);
   assert.match(inventoryDetailSource, /generatedAt: new Date\(\)\.toISOString\(\)/);
+  assert.match(inventoryDetailSource, /gridTemplateColumns: "minmax\(0, 210mm\) 280px"/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-sheet"/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-history inventory-detail-no-print"/);
+  assert.match(inventoryDetailSource, /const HISTORY_ITEMS = \[/);
+  assert.match(inventoryDetailSource, /Hardcoded delta preview/);
+  assert.match(inventoryDetailSource, /\+2 orders · \+7 items/);
+  assert.match(inventoryDetailSource, /Order #1057/);
   assert.match(inventoryDetailSource, /const headerActionStyle = \{/);
   assert.match(inventoryDetailSource, /marginLeft: "auto"/);
   assert.match(inventoryDetailSource, /Output: \{formatOutputTime\(generatedAt\)\}/);
@@ -1364,6 +1371,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /@media print/);
   assert.match(inventoryDetailSource, /maxWidth: "210mm"/);
   assert.match(inventoryDetailSource, /minHeight: "297mm"/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-history \{ display: none !important; \}/);
   assert.match(inventoryDetailSource, /@page \{ size: A4 portrait; margin: 0; \}/);
   assert.match(inventoryDetailSource, /width: 210mm !important/);
   assert.match(inventoryDetailSource, /inventory-detail-product-label/);
