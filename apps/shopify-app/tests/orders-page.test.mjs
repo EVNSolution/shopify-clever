@@ -924,7 +924,7 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(ordersPageSource, /setIsMapReady\(false\)/);
   assert.match(ordersPageSource, /setMapStatus\("idle"\)/);
   assert.match(ordersPageSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
-  assert.match(ordersPageSource, /\}, \[activeOrdersView, mapRenderKey, scheduleMapRecovery\]\)/);
+  assert.match(ordersPageSource, /\}, \[activeOrdersView, clearMapSourceSyncRetryTimer, mapRenderKey, scheduleMapRecovery\]\)/);
   assert.match(ordersPageSource, /canvasKey=\{mapRenderKey\}/);
   assert.match(ordersPageSource, /ariaLabel: "Refresh map"/);
   assert.match(ordersPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/map-panel"/);
@@ -994,14 +994,22 @@ test("Orders map captures MapLibre tile errors without long visible copy", () =>
   assert.match(ordersPageSource, /const \[mapStatus, setMapStatus\] = useState\("idle"\)/);
   assert.match(ordersPageSource, /const mapRecoveryTimerRef = useRef\(null\)/);
   assert.match(ordersPageSource, /const mapRecoveryAttemptsRef = useRef\(0\)/);
+  assert.match(ordersPageSource, /const mapSourceSyncRetryTimerRef = useRef\(null\)/);
+  assert.match(ordersPageSource, /const mapSourceSyncRetryAttemptsRef = useRef\(0\)/);
+  assert.match(ordersPageSource, /const \[mapSourceSyncRequest, setMapSourceSyncRequest\] = useState\(0\)/);
   assert.match(ordersPageSource, /const scheduleMapRecovery = useCallback\(\(\) => \{/);
+  assert.match(ordersPageSource, /const scheduleMapSourceSyncRetry = useCallback\(\(\) => \{/);
   assert.match(ordersPageSource, /MAX_MAP_RECOVERY_ATTEMPTS/);
   assert.match(ordersPageSource, /MAP_RECOVERY_DELAY_MS/);
+  assert.match(ordersPageSource, /MAX_MAP_SOURCE_SYNC_RETRY_ATTEMPTS/);
+  assert.match(ordersPageSource, /MAP_SOURCE_SYNC_RETRY_DELAY_MS/);
   assert.match(ordersPageSource, /window\.setTimeout\(\(\) => \{/);
   assert.match(ordersPageSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
+  assert.match(ordersPageSource, /setMapSourceSyncRequest\(\(requestCount\) => requestCount \+ 1\)/);
   assert.match(ordersPageSource, /import \{ installMissingMapImageFallback \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/maplibre-missing-images"/);
-  assert.match(ordersPageSource, /installMissingMapImageFallback\(mapRef\.current\)/);
-  assert.match(ordersPageSource, /mapRef\.current\.on\("error", \(event\) => \{/);
+  assert.match(ordersPageSource, /installMissingMapImageFallback\(map\)/);
+  assert.match(ordersPageSource, /map\.on\("error", \(event\) => \{/);
+  assert.match(ordersPageSource, /if \(!isMounted \|\| mapRef\.current !== map\) return/);
   assert.match(ordersPageSource, /if \(mapLoadedRef\.current\) return/);
   assert.match(ordersPageSource, /tiles\.openfreemap\.org/);
   assert.match(ordersPageSource, /AJAXError/);
@@ -1063,7 +1071,7 @@ test("Orders map initially centers on the departure home with a wide zoom", () =
   assert.match(ordersPageSource, /center: initialMapCenterRef\.current/);
   assert.match(ordersPageSource, /zoom: INITIAL_HOME_ZOOM/);
   assert.doesNotMatch(ordersPageSource, /\}, \[initialMapCenter, activeOrdersView, mapRenderKey, scheduleMapRecovery\]\);/);
-  assert.match(ordersPageSource, /\}, \[activeOrdersView, mapRenderKey, scheduleMapRecovery\]\);/);
+  assert.match(ordersPageSource, /\}, \[activeOrdersView, clearMapSourceSyncRetryTimer, mapRenderKey, scheduleMapRecovery\]\);/);
   assert.match(ordersPageSource, /const initialMapFitAppliedRef = useRef\(false\)/);
   assert.match(ordersPageSource, /initialMapFitAppliedRef\.current = false/);
   assert.match(ordersPageSource, /mapRef\.current\.flyTo\(\{\s*center: initialMapCenter,\s*zoom: INITIAL_HOME_ZOOM,\s*essential: true,\s*\}\)/);
@@ -1276,6 +1284,8 @@ test("Orders page filters table rows by order date, delivery day, type, and area
 test("Orders map only renders orders after Add to map", () => {
   assert.match(ordersPageSource, /const locatedOrders = useMemo\(\s*\(\) => filteredOrders\.filter\(\(order\) => order\.hasCoordinates\),\s*\[filteredOrders\],\s*\)/);
   assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds\)/);
+  assert.match(ordersPageSource, /if \(!ordersLayerSynced\) \{\s*scheduleMapSourceSyncRetry\(\);\s*return undefined;\s*\}/);
+  assert.match(ordersPageSource, /clearMapSourceSyncRetryTimer\(\)/);
   assert.match(ordersPageSource, /\.filter\(\(order\) => order\.hasCoordinates && plannedIndexByOrderId\.has\(order\.id\)\)/);
   assert.match(ordersPageSource, /existingSource\.setData\(featureCollection\)/);
   assert.match(ordersPageSource, /map\.addSource\(ORDERS_MAP_SOURCE_ID/);

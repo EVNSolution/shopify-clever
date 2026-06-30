@@ -13,8 +13,10 @@ import {
   DEFAULT_CENTER,
   INITIAL_HOME_ZOOM,
   MAP_RECOVERY_DELAY_MS,
+  MAP_SOURCE_SYNC_RETRY_DELAY_MS,
   MARKER_CLICK_TARGET_ZOOM,
   MARKER_CLICK_ZOOM_OUT_THRESHOLD,
+  MAX_MAP_SOURCE_SYNC_RETRY_ATTEMPTS,
   MAX_MAP_RECOVERY_ATTEMPTS,
   OPENFREEMAP_STYLE_URL,
   ORDERS_MAP_ORDER_LAYER_ID,
@@ -1515,6 +1517,8 @@ export default function OrdersPage() {
   const markersRef = useRef([]);
   const mapRecoveryTimerRef = useRef(null);
   const mapRecoveryAttemptsRef = useRef(0);
+  const mapSourceSyncRetryTimerRef = useRef(null);
+  const mapSourceSyncRetryAttemptsRef = useRef(0);
   const initialMapFitAppliedRef = useRef(false);
   const initialMapCenterRef = useRef(DEFAULT_CENTER);
   const initialPerfEmittedRef = useRef(false);
@@ -1527,6 +1531,7 @@ export default function OrdersPage() {
   const orderedDateButtonRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapRenderKey, setMapRenderKey] = useState(0);
+  const [mapSourceSyncRequest, setMapSourceSyncRequest] = useState(0);
   const [mapStatus, setMapStatus] = useState("idle");
   const [isMapWide, setIsMapWide] = useState(false);
   const [planFitRequest, setPlanFitRequest] = useState(0);
@@ -2167,6 +2172,27 @@ export default function OrdersPage() {
     mapRecoveryTimerRef.current = null;
   }, []);
 
+  const clearMapSourceSyncRetryTimer = useCallback(() => {
+    if (!mapSourceSyncRetryTimerRef.current) return;
+
+    window.clearTimeout(mapSourceSyncRetryTimerRef.current);
+    mapSourceSyncRetryTimerRef.current = null;
+  }, []);
+
+  const scheduleMapSourceSyncRetry = useCallback(() => {
+    if (mapSourceSyncRetryTimerRef.current) return;
+
+    if (mapSourceSyncRetryAttemptsRef.current >= MAX_MAP_SOURCE_SYNC_RETRY_ATTEMPTS) {
+      return;
+    }
+
+    mapSourceSyncRetryTimerRef.current = window.setTimeout(() => {
+      mapSourceSyncRetryTimerRef.current = null;
+      mapSourceSyncRetryAttemptsRef.current += 1;
+      setMapSourceSyncRequest((requestCount) => requestCount + 1);
+    }, MAP_SOURCE_SYNC_RETRY_DELAY_MS);
+  }, []);
+
   const scheduleMapRecovery = useCallback(() => {
     if (mapRecoveryTimerRef.current) return;
 
@@ -2186,7 +2212,9 @@ export default function OrdersPage() {
 
   const handleRefreshMap = () => {
     clearMapRecoveryTimer();
+    clearMapSourceSyncRetryTimer();
     mapRecoveryAttemptsRef.current = 0;
+    mapSourceSyncRetryAttemptsRef.current = 0;
     setIsMapReady(false);
     setMapStatus("idle");
     setMapRenderKey((currentRenderKey) => currentRenderKey + 1);
@@ -2541,7 +2569,10 @@ export default function OrdersPage() {
     });
   }, [activeOrdersView, perf, safeInventories.length, safeOrders.length]);
 
-  useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
+  useEffect(() => () => {
+    clearMapRecoveryTimer();
+    clearMapSourceSyncRetryTimer();
+  }, [clearMapRecoveryTimer, clearMapSourceSyncRetryTimer]);
 
   useEffect(() => {
     const mapContainerElement = mapContainerRef.current;
@@ -2554,6 +2585,7 @@ export default function OrdersPage() {
 
     const initializeMap = async () => {
       initialMapFitAppliedRef.current = false;
+      mapLoadedRef.current = false;
       const mapInitStartedAt = performance.now();
       try {
         const mapLibreImportStartedAt = performance.now();
@@ -2570,7 +2602,7 @@ export default function OrdersPage() {
         installPmtilesProtocol(maplibregl, Protocol);
         mapLibraryRef.current = maplibregl;
         const mapConstructStartedAt = performance.now();
-        mapRef.current = createMapLibreMap(maplibregl, {
+        const map = createMapLibreMap(maplibregl, {
           container: mapContainerElement,
           style: OPENFREEMAP_STYLE_URL,
           center: initialMapCenterRef.current,
@@ -2578,7 +2610,8 @@ export default function OrdersPage() {
           attributionControl: { compact: true },
           fadeDuration: 0,
         });
-        installMissingMapImageFallback(mapRef.current);
+        mapRef.current = map;
+        installMissingMapImageFallback(map);
 
         const mapConstructMs = roundPerfDuration(
           performance.now() - mapConstructStartedAt,
@@ -2591,9 +2624,12 @@ export default function OrdersPage() {
           mapConstructMs,
         });
 
-        mapRef.current.on("load", () => {
+        map.on("load", () => {
+          if (!isMounted || mapRef.current !== map) return;
+
           mapLoadedRef.current = true;
           mapRecoveryAttemptsRef.current = 0;
+          mapSourceSyncRetryAttemptsRef.current = 0;
           setMapStatus("idle");
           setIsMapReady(true);
           emitPerformanceMetric({
@@ -2606,7 +2642,9 @@ export default function OrdersPage() {
           });
         });
 
-        mapRef.current.on("error", (event) => {
+        map.on("error", (event) => {
+          if (!isMounted || mapRef.current !== map) return;
+
           const errorMessage = event?.error?.message ?? "";
 
           if (
@@ -2633,6 +2671,7 @@ export default function OrdersPage() {
 
     return () => {
       cancelMapInitialization();
+      clearMapSourceSyncRetryTimer();
       isMounted = false;
       const mapRemoveStartedAt = performance.now();
       const markerCount = markersRef.current.length;
@@ -2659,7 +2698,7 @@ export default function OrdersPage() {
       mapLibraryRef.current = null;
       mapLoadedRef.current = false;
     };
-  }, [activeOrdersView, mapRenderKey, scheduleMapRecovery]);
+  }, [activeOrdersView, clearMapSourceSyncRetryTimer, mapRenderKey, scheduleMapRecovery]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !mapLibraryRef.current) {
@@ -2697,7 +2736,13 @@ export default function OrdersPage() {
       sourceSynced: ordersLayerSynced,
     });
 
-    if (!ordersLayerSynced) return undefined;
+    if (!ordersLayerSynced) {
+      scheduleMapSourceSyncRetry();
+      return undefined;
+    }
+
+    clearMapSourceSyncRetryTimer();
+    mapSourceSyncRetryAttemptsRef.current = 0;
 
     const handleOrderMarkerClick = (event) => {
       const orderId = getOrderIdFromMapFeature(event.features?.[0]);
@@ -2757,7 +2802,10 @@ export default function OrdersPage() {
     handleSelectOrder,
     isMapReady,
     locatedOrders,
+    mapSourceSyncRequest,
     plannedOrderIds,
+    scheduleMapSourceSyncRetry,
+    clearMapSourceSyncRetryTimer,
   ]);
 
   useEffect(() => {
