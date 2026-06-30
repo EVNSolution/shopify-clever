@@ -101,6 +101,7 @@ const rowHeaderStyle = {
   ...cellStyle,
   background: "#ffffff",
   left: 0,
+  padding: "6px 5px",
   position: "sticky",
   textAlign: "left",
   zIndex: 1,
@@ -112,6 +113,12 @@ const headCellStyle = {
   borderBottom: "1px solid #dcdfe4",
   fontWeight: 600,
   textAlign: "center",
+};
+
+const groupTotalHeadCellStyle = {
+  ...headCellStyle,
+  lineHeight: "14px",
+  whiteSpace: "normal",
 };
 
 const productHeadCellStyle = {
@@ -155,12 +162,29 @@ const totalRowHeaderStyle = {
   fontWeight: 700,
 };
 
+const dateLabelStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "3px",
+  gridTemplateColumns: "24px 38px",
+  justifyContent: "center",
+};
+
+const dateWeekdayStyle = {
+  textAlign: "left",
+};
+
+const dateValueStyle = {
+  fontVariantNumeric: "tabular-nums",
+  textAlign: "right",
+};
+
 const dateColumnStyle = {
-  width: "92px",
+  width: "78px",
 };
 
 const totalColumnStyle = {
-  width: "92px",
+  width: "68px",
 };
 
 const PRODUCT_COLUMNS_PER_TABLE = 6;
@@ -261,6 +285,17 @@ function formatOutputTime(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+function DateCellLabel({ label }) {
+  const match = String(label).match(/^([A-Za-z]{3}),\s*(\d{2}\/\d{2})$/);
+  if (!match) return label;
+  return (
+    <span style={dateLabelStyle}>
+      <span style={dateWeekdayStyle}>{match[1]}</span>
+      <span style={dateValueStyle}>{match[2]}</span>
+    </span>
+  );
+}
+
 export default function InventoryDetailPage() {
   const { errors, generatedAt, inventory } = useLoaderData();
   const notice = getServiceErrorNotice([{ errors }], { context: "inventory_detail" });
@@ -328,7 +363,7 @@ export default function InventoryDetailPage() {
                           <th aria-hidden="true" key={`empty-${index}`} style={productHeadCellStyle} />
                         )
                       ))}
-                      <th style={headCellStyle}>Group total</th>
+                      <th style={groupTotalHeadCellStyle}>Group total</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -339,7 +374,9 @@ export default function InventoryDetailPage() {
                       );
                       return (
                         <tr key={row.date}>
-                          <th className="inventory-detail-row-header" scope="row" style={rowHeaderStyle}>{row.label}</th>
+                          <th className="inventory-detail-row-header" scope="row" style={rowHeaderStyle}>
+                            <DateCellLabel label={row.label} />
+                          </th>
                           {productSlots.map((product, index) => (
                             product ? (
                               <td key={product.key} style={cellStyle}>{row.quantities[product.key] ?? 0}</td>
