@@ -471,8 +471,12 @@ test("Orders page refreshes once with a Shopify id_token after a loader token au
 test("Orders page uses the Shopify shop timezone as today's delivery cutoff", () => {
   assert.match(ordersPageSource, /const SHOP_TIME_ZONE_QUERY = `#graphql/);
   assert.match(ordersPageSource, /shop \{[\s\S]*ianaTimezone[\s\S]*timezoneAbbreviation[\s\S]*\}/);
-  assert.match(ordersPageSource, /async function fetchShopifyShopTimeZone\(admin\) \{/);
+  assert.match(ordersPageSource, /const shopTimeZoneCache = new Map\(\)/);
+  assert.match(ordersPageSource, /async function fetchShopifyShopTimeZone\(admin, options = \{\}\) \{/);
+  assert.match(ordersPageSource, /const cacheKey = textOrUndefined\(options\.cacheKey\)/);
+  assert.match(ordersPageSource, /return cached\.promise\.then\(cloneShopTimeZoneResult\)/);
   assert.match(ordersPageSource, /admin\.graphql\(SHOP_TIME_ZONE_QUERY\)/);
+  assert.match(ordersPageSource, /fetchShopifyShopTimeZone\(\s*admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\},?\s*\)/);
   assert.match(ordersPageSource, /function getShopLocalDate\(shopTimeZoneData, date = new Date\(\)\) \{/);
   assert.match(ordersPageSource, /getLocalDateForTimeZone\(date, shopTimeZoneData\?\.ianaTimezone\)/);
   assert.match(ordersPageSource, /const shopLocalDate = getShopLocalDate\(shopTimeZoneData\)/);
