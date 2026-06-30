@@ -1224,9 +1224,23 @@ function getOrderPaymentPillTone(order) {
   return "critical";
 }
 
+function getOrderPaymentHint(order) {
+  const paymentState = formatOrderPaymentState(order);
+  const total = formatOrderTotal(order);
+  const collectText = total === "—" ? "order total" : total;
+
+  if (paymentState === "Cash") return `Cash: collect ${collectText}`;
+  if (paymentState === "eTransfer") return `eTransfer: collect ${collectText}`;
+  if (paymentState === "Pending") return `Pending: collect ${collectText}`;
+  if (paymentState === "Unknown") return "Unknown payment: check raw status/gateway";
+
+  return null;
+}
+
 function getOrderPaymentPillTitle(order) {
   return formatInfoPillTitle("Payment", [
     formatOrderPaymentState(order),
+    getOrderPaymentHint(order),
     getOrderPaymentStatus(order),
     getOrderPaymentGatewayNames(order),
   ]);
@@ -1243,10 +1257,22 @@ function getOrderDeliveryStatePillTone(order, referenceDate) {
   return "neutral";
 }
 
+function getOrderDeliveryStateHint(order, referenceDate) {
+  const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
+
+  if (exceptionState === "overdue_assigned") return "Past due: assigned route is not delivered";
+  if (exceptionState === "overdue_unassigned") return "Past due: no route assigned";
+
+  return null;
+}
+
 function getOrderDeliveryStatePillTitle(order, referenceDate) {
   return formatInfoPillTitle("State", [
     formatOrderDeliveryState(order, referenceDate),
+    getOrderDeliveryStateHint(order, referenceDate),
     order?.deliveryStopStatus,
+    order?.planningStatus,
+    order?.status,
     getOrderDeliveryStateFilterValue(order, referenceDate),
   ]);
 }

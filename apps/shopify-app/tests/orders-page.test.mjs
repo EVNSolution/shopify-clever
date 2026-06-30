@@ -702,8 +702,15 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /title=\{getOrderAreaPillTitle\(order\)\}/);
   assert.match(ordersPageSource, /title=\{getOrderDeliveryPillTitle\(order\)\}/);
   assert.match(ordersPageSource, /title=\{getOrderDeliveryStatePillTitle\(order, orderFilterReferenceDate\)\}/);
+  assert.match(ordersPageSource, /function getOrderDeliveryStateHint\(order, referenceDate\) \{/);
+  assert.match(ordersPageSource, /Past due: assigned route is not delivered/);
+  assert.match(ordersPageSource, /Past due: no route assigned/);
   assert.match(ordersPageSource, /tone=\{getOrderDeliveryStatePillTone\(order, orderFilterReferenceDate\)\}/);
   assert.match(ordersPageSource, /title=\{getOrderPaymentPillTitle\(order\)\}/);
+  assert.match(ordersPageSource, /function getOrderPaymentHint\(order\) \{/);
+  assert.match(ordersPageSource, /Cash: collect/);
+  assert.match(ordersPageSource, /eTransfer: collect/);
+  assert.match(ordersPageSource, /Unknown payment: check raw status\/gateway/);
   assert.match(ordersPageSource, /tone=\{getOrderPaymentPillTone\(order\)\}/);
   assert.match(ordersPageSource, /formatOrderPaymentState\(order\)/);
   assert.match(ordersPageSource, /function getOrderPaymentStatus\(order\) \{/);
