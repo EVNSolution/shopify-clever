@@ -18,8 +18,8 @@ import { routeDetailAction, routeDetailLoader } from "../features/delivery/route
 import { ROUTES_ROOT_PATH } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
+  ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
-  createRoutePolygonCornerElement,
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
@@ -1455,8 +1455,11 @@ export default function RouteDetailPage() {
   const routeTimelineStopRefs = useRef(new Map());
   const routeTimelineDragRef = useRef(null);
   const lastRouteActionIntentRef = useRef(null);
-  const polygonCornerMarkersRef = useRef([]);
+  const routePolygonCornerDragIndexRef = useRef(null);
+  const routePolygonSkipNextMapClickRef = useRef(false);
+  const routePolygonSkipNextMapClickTimerRef = useRef(null);
   const routePolygonPointsRef = useRef([]);
+  const routePolygonClosedRef = useRef(false);
   const mapLoadedRef = useRef(false);
   const mapRecoveryAttemptsRef = useRef(0);
   const mapRecoveryTimerRef = useRef(null);
@@ -1668,14 +1671,38 @@ export default function RouteDetailPage() {
     mapRef.current?.zoomOut({ duration: 250 });
   };
 
+  const clearRoutePolygonMapClickSuppression = () => {
+    routePolygonSkipNextMapClickRef.current = false;
+    if (routePolygonSkipNextMapClickTimerRef.current) {
+      window.clearTimeout(routePolygonSkipNextMapClickTimerRef.current);
+      routePolygonSkipNextMapClickTimerRef.current = null;
+    }
+  };
+
+  const suppressNextRoutePolygonMapClick = () => {
+    routePolygonSkipNextMapClickRef.current = true;
+    if (routePolygonSkipNextMapClickTimerRef.current) {
+      window.clearTimeout(routePolygonSkipNextMapClickTimerRef.current);
+    }
+    routePolygonSkipNextMapClickTimerRef.current = window.setTimeout(() => {
+      routePolygonSkipNextMapClickRef.current = false;
+      routePolygonSkipNextMapClickTimerRef.current = null;
+    }, 250);
+  };
+
   const setRoutePolygonDraftPoints = (nextPoints) => {
     routePolygonPointsRef.current = nextPoints;
     setRoutePolygonPoints(nextPoints);
   };
 
+  const setRoutePolygonClosed = (nextIsClosed) => {
+    routePolygonClosedRef.current = nextIsClosed;
+    setIsRoutePolygonClosed(nextIsClosed);
+  };
+
   const resetRoutePolygonDraft = () => {
     setRoutePolygonDraftPoints([]);
-    setIsRoutePolygonClosed(false);
+    setRoutePolygonClosed(false);
     setIsPolygonTargetPickerOpen(false);
     setPolygonSelectedOrderIds([]);
   };
@@ -2089,8 +2116,7 @@ export default function RouteDetailPage() {
       isMounted = false;
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
-      polygonCornerMarkersRef.current.forEach((marker) => marker.remove());
-      polygonCornerMarkersRef.current = [];
+      clearRoutePolygonMapClickSuppression();
       mapRef.current?.remove();
       mapRef.current = null;
       mapLibraryRef.current = null;
@@ -2242,12 +2268,16 @@ export default function RouteDetailPage() {
     map.doubleClickZoom?.disable?.();
 
     const handleMapClick = (event) => {
-      if (isRoutePolygonClosed) return;
+      if (routePolygonSkipNextMapClickRef.current) {
+        clearRoutePolygonMapClickSuppression();
+        return;
+      }
+      if (routePolygonClosedRef.current) return;
       if ((event.originalEvent?.detail ?? 1) > 1) return;
       const lngLat = [event.lngLat.lng, event.lngLat.lat];
       const nextPoints = [...routePolygonPointsRef.current, lngLat];
       setRoutePolygonDraftPoints(nextPoints);
-      setIsRoutePolygonClosed(false);
+      setRoutePolygonClosed(false);
       setIsPolygonTargetPickerOpen(false);
       syncRouteEditPolygon(map, nextPoints, false);
     };
@@ -2255,14 +2285,14 @@ export default function RouteDetailPage() {
     const handleMapDoubleClick = (event) => {
       event.preventDefault?.();
       event.originalEvent?.preventDefault?.();
-      if (isRoutePolygonClosed) return;
+      if (routePolygonClosedRef.current) return;
 
       const lngLat = [event.lngLat.lng, event.lngLat.lat];
       const currentPoints = routePolygonPointsRef.current;
       const nextPoints = currentPoints.length >= 3 ? currentPoints : [...currentPoints, lngLat];
       const nextIsClosed = nextPoints.length >= 3;
       setRoutePolygonDraftPoints(nextPoints);
-      setIsRoutePolygonClosed(nextIsClosed);
+      setRoutePolygonClosed(nextIsClosed);
       setIsPolygonTargetPickerOpen(false);
       syncRouteEditPolygon(map, nextPoints, nextIsClosed);
     };
@@ -2279,49 +2309,113 @@ export default function RouteDetailPage() {
   }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints]);
 
   useEffect(() => {
-    if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return undefined;
+    if (!isMapReady || !mapRef.current) return undefined;
 
     const map = mapRef.current;
-    const maplibregl = mapLibraryRef.current;
-    polygonCornerMarkersRef.current.forEach((marker) => marker.remove());
-    polygonCornerMarkersRef.current = [];
+    if (!isRoutePolygonEditMode || routePolygonPoints.length === 0) return undefined;
+    if (!map.getLayer?.(ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID)) return undefined;
 
-    if (!isRoutePolygonEditMode) return undefined;
+    const canvas = map.getCanvas?.();
+    let wasDragPanEnabled = null;
 
-    polygonCornerMarkersRef.current = routePolygonPoints.map((point, pointIndex) => {
-      const marker = new maplibregl.Marker({
-        draggable: true,
-        element: createRoutePolygonCornerElement(pointIndex),
-      })
-        .setLngLat(point)
-        .addTo(map);
+    const getFeaturePointIndex = (feature) => {
+      const pointIndex = numberOrUndefined(feature?.properties?.pointIndex);
+      return Number.isInteger(pointIndex) ? pointIndex : null;
+    };
 
-      const getDraggedPoints = () => {
-        const lngLat = marker.getLngLat();
-        return routePolygonPoints.map((currentPoint, currentIndex) =>
-          currentIndex === pointIndex ? [lngLat.lng, lngLat.lat] : currentPoint,
-        );
-      };
+    const preventMapGesture = (event) => {
+      event.preventDefault?.();
+      event.originalEvent?.preventDefault?.();
+      event.originalEvent?.stopPropagation?.();
+    };
 
-      marker.on("drag", () => {
-        syncRouteEditPolygon(map, getDraggedPoints(), isRoutePolygonClosed);
-      });
+    const syncDraggedPolygonPoint = (event) => {
+      const pointIndex = routePolygonCornerDragIndexRef.current;
+      if (!Number.isInteger(pointIndex) || !event.lngLat) return null;
 
-      marker.on("dragend", () => {
-        const nextPoints = getDraggedPoints();
-        setRoutePolygonDraftPoints(nextPoints);
-        setIsPolygonTargetPickerOpen(false);
-        syncRouteEditPolygon(map, nextPoints, isRoutePolygonClosed);
-      });
+      const draggedPoint = [event.lngLat.lng, event.lngLat.lat];
+      const nextPoints = routePolygonPointsRef.current.map((point, currentIndex) =>
+        currentIndex === pointIndex ? draggedPoint : point,
+      );
+      routePolygonPointsRef.current = nextPoints;
+      syncRouteEditPolygon(map, nextPoints, routePolygonClosedRef.current);
+      return nextPoints;
+    };
 
-      return marker;
-    });
+    const restoreDragPan = () => {
+      if (wasDragPanEnabled !== false) {
+        map.dragPan?.enable?.();
+      }
+      wasDragPanEnabled = null;
+    };
+
+    const handlePolygonCornerMouseEnter = () => {
+      if (canvas && routePolygonCornerDragIndexRef.current == null) {
+        canvas.style.cursor = "grab";
+      }
+    };
+
+    const handlePolygonCornerMouseLeave = () => {
+      if (canvas && routePolygonCornerDragIndexRef.current == null) {
+        canvas.style.cursor = "crosshair";
+      }
+    };
+
+    const handlePolygonCornerDragStart = (event) => {
+      const pointIndex = getFeaturePointIndex(event.features?.[0]);
+      if (pointIndex == null) return;
+
+      preventMapGesture(event);
+      routePolygonCornerDragIndexRef.current = pointIndex;
+      suppressNextRoutePolygonMapClick();
+      wasDragPanEnabled = typeof map.dragPan?.isEnabled === "function" ? map.dragPan.isEnabled() : true;
+      map.dragPan?.disable?.();
+      if (canvas) canvas.style.cursor = "grabbing";
+    };
+
+    const handlePolygonCornerDragMove = (event) => {
+      if (routePolygonCornerDragIndexRef.current == null) return;
+
+      preventMapGesture(event);
+      syncDraggedPolygonPoint(event);
+    };
+
+    const handlePolygonCornerDragEnd = (event) => {
+      if (routePolygonCornerDragIndexRef.current == null) return;
+
+      preventMapGesture(event);
+      const nextPoints = syncDraggedPolygonPoint(event) ?? routePolygonPointsRef.current;
+      routePolygonCornerDragIndexRef.current = null;
+      restoreDragPan();
+      if (canvas) canvas.style.cursor = "crosshair";
+      setRoutePolygonDraftPoints(nextPoints);
+      setIsPolygonTargetPickerOpen(false);
+      syncRouteEditPolygon(map, nextPoints, routePolygonClosedRef.current);
+    };
+
+    map.on("mouseenter", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerMouseEnter);
+    map.on("mouseleave", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerMouseLeave);
+    map.on("mousedown", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerDragStart);
+    map.on("touchstart", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerDragStart);
+    map.on("mousemove", handlePolygonCornerDragMove);
+    map.on("touchmove", handlePolygonCornerDragMove);
+    map.on("mouseup", handlePolygonCornerDragEnd);
+    map.on("touchend", handlePolygonCornerDragEnd);
 
     return () => {
-      polygonCornerMarkersRef.current.forEach((marker) => marker.remove());
-      polygonCornerMarkersRef.current = [];
+      map.off("mouseenter", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerMouseEnter);
+      map.off("mouseleave", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerMouseLeave);
+      map.off("mousedown", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerDragStart);
+      map.off("touchstart", ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID, handlePolygonCornerDragStart);
+      map.off("mousemove", handlePolygonCornerDragMove);
+      map.off("touchmove", handlePolygonCornerDragMove);
+      map.off("mouseup", handlePolygonCornerDragEnd);
+      map.off("touchend", handlePolygonCornerDragEnd);
+      routePolygonCornerDragIndexRef.current = null;
+      restoreDragPan();
+      if (canvas) canvas.style.cursor = "crosshair";
     };
-  }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints]);
+  }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints.length]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return;
