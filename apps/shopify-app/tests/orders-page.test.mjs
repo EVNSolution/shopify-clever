@@ -1341,7 +1341,6 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /className="inventory-detail-history inventory-detail-no-print"/);
   assert.match(inventoryDetailSource, /const HISTORY_ITEMS = \[/);
   assert.match(inventoryDetailSource, /Hardcoded delta preview/);
-  assert.match(inventoryDetailSource, /historyOrderHeaderStyle/);
   assert.match(inventoryDetailSource, /useState\(HISTORY_ITEMS\[1\]\?\.title/);
   assert.match(inventoryDetailSource, /const historyCardContentStyle = \{/);
   assert.match(inventoryDetailSource, /maxHeight: "300px"/);
@@ -1349,11 +1348,16 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /open=\{openHistoryTitle === item\.title\}/);
   assert.match(inventoryDetailSource, /setOpenHistoryTitle\(item\.title\)/);
   assert.match(inventoryDetailSource, /gridTemplateColumns: "70px minmax\(0, 1fr\) 54px"/);
-  assert.match(inventoryDetailSource, /<span>Order<\/span>/);
-  assert.match(inventoryDetailSource, /<span>Customer<\/span>/);
-  assert.match(inventoryDetailSource, /<span>Items<\/span>/);
+  assert.doesNotMatch(inventoryDetailSource, /<span>Order<\/span>/);
+  assert.doesNotMatch(inventoryDetailSource, /<span>Customer<\/span>/);
+  assert.doesNotMatch(inventoryDetailSource, /<span>Items<\/span>/);
   assert.match(inventoryDetailSource, /customer: "Lee Hana"/);
-  assert.match(inventoryDetailSource, /itemCount: 3/);
+  assert.match(inventoryDetailSource, /itemDelta: 3/);
+  assert.match(inventoryDetailSource, /itemDelta: -2/);
+  assert.match(inventoryDetailSource, /const historyOrderAddStyle = \{/);
+  assert.match(inventoryDetailSource, /const historyOrderRemoveStyle = \{/);
+  assert.match(inventoryDetailSource, /order\.itemDelta < 0 \? historyOrderRemoveStyle : historyOrderAddStyle/);
+  assert.match(inventoryDetailSource, /`\+\$\{order\.itemDelta\}`/);
   assert.match(inventoryDetailSource, /order\.items\.map/);
   assert.match(inventoryDetailSource, /\+2 orders · \+7 items/);
   assert.match(inventoryDetailSource, /order: "#1057"/);
