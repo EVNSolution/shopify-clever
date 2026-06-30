@@ -129,9 +129,9 @@ const headCellStyle = {
 
 const groupTotalHeadCellStyle = {
   ...headCellStyle,
-  fontSize: "11px",
+  fontSize: "12px",
   lineHeight: "14px",
-  padding: "5px 3px",
+  padding: "5px 5px",
   whiteSpace: "nowrap",
 };
 
@@ -200,7 +200,7 @@ const dateColumnStyle = {
 };
 
 const totalColumnStyle = {
-  width: "64px",
+  width: "76px",
 };
 
 const PRODUCT_COLUMNS_PER_TABLE = 6;
@@ -222,6 +222,8 @@ const printCss = `
   .inventory-detail-table-wrap { overflow: visible !important; }
   .inventory-detail-table { font-size: 11px !important; width: 100% !important; }
   .inventory-detail-table th, .inventory-detail-table td { line-height: 14px !important; padding: 4px 5px !important; }
+  .inventory-detail-group-total-head { font-size: 11px !important; }
+  .inventory-detail-total-col { width: 64px !important; }
   .inventory-detail-page h1 { font-size: 13px !important; line-height: 17px !important; }
   .inventory-detail-product-label { max-height: 28px !important; }
   .inventory-detail-row-header { position: static !important; }
@@ -370,7 +372,7 @@ export default function InventoryDetailPage() {
                   <colgroup>
                     <col style={dateColumnStyle} />
                     {productSlots.map((product, index) => <col key={product?.key ?? `empty-${index}`} />)}
-                    <col style={totalColumnStyle} />
+                    <col className="inventory-detail-total-col" style={totalColumnStyle} />
                   </colgroup>
                   <thead>
                     <tr>
@@ -384,7 +386,7 @@ export default function InventoryDetailPage() {
                           <th aria-hidden="true" key={`empty-${index}`} style={productHeadCellStyle} />
                         )
                       ))}
-                      <th style={groupTotalHeadCellStyle}>Group total</th>
+                      <th className="inventory-detail-group-total-head" style={groupTotalHeadCellStyle}>Group total</th>
                     </tr>
                   </thead>
                   <tbody>
