@@ -113,7 +113,7 @@ const rowHeaderStyle = {
   ...cellStyle,
   background: "#ffffff",
   left: 0,
-  padding: "6px 5px",
+  padding: "6px 4px",
   position: "sticky",
   textAlign: "left",
   zIndex: 1,
@@ -129,21 +129,25 @@ const headCellStyle = {
 
 const groupTotalHeadCellStyle = {
   ...headCellStyle,
+  fontSize: "11px",
   lineHeight: "14px",
-  whiteSpace: "normal",
+  padding: "5px 3px",
+  whiteSpace: "nowrap",
 };
 
 const productHeadCellStyle = {
   ...headCellStyle,
-  lineHeight: "16px",
+  fontSize: "12px",
+  lineHeight: "14px",
   overflowWrap: "anywhere",
+  padding: "5px 6px",
   whiteSpace: "normal",
   wordBreak: "keep-all",
 };
 
 const productHeadLabelStyle = {
   display: "-webkit-box",
-  maxHeight: "32px",
+  maxHeight: "28px",
   overflow: "hidden",
   WebkitBoxOrient: "vertical",
   WebkitLineClamp: 2,
@@ -177,8 +181,8 @@ const totalRowHeaderStyle = {
 const dateLabelStyle = {
   alignItems: "center",
   display: "grid",
-  gap: "3px",
-  gridTemplateColumns: "24px 38px",
+  gap: "1px",
+  gridTemplateColumns: "22px 34px",
   justifyContent: "center",
 };
 
@@ -192,11 +196,11 @@ const dateValueStyle = {
 };
 
 const dateColumnStyle = {
-  width: "78px",
+  width: "70px",
 };
 
 const totalColumnStyle = {
-  width: "68px",
+  width: "64px",
 };
 
 const PRODUCT_COLUMNS_PER_TABLE = 6;
