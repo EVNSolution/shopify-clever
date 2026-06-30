@@ -51,6 +51,12 @@ const sectionStyle = {
   padding: "10px 14px",
 };
 
+const tableSectionStyle = {
+  ...sectionStyle,
+  overflow: "auto",
+  scrollbarGutter: "stable",
+};
+
 const headerTopBarStyle = {
   alignItems: "center",
   display: "flex",
@@ -448,7 +454,7 @@ export default function InventoryDetailPage() {
         </section>
 
         <section className="inventory-detail-panel" style={panelStyle}>
-          <div style={sectionStyle}>
+          <div style={tableSectionStyle}>
             <div style={sectionTitleRowStyle}>
               <h1 style={titleStyle}>{inventory?.name ?? "Inventory"}</h1>
               {hasMatrix ? <span style={summaryStyle}>Overall total: {matrix.totalQuantity}</span> : null}
