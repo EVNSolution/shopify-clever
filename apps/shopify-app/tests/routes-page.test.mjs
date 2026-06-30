@@ -74,7 +74,8 @@ test("Routes page lists saved child routes below their parent route group", () =
   assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
   assert.match(routesPageSource, /route: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
   assert.match(routesPageSource, /parentRouteGroupId: routeGroup\.id/);
-  assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.doesNotMatch(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeHelpersSource, /leftRouteIdx = numberOrUndefined\(left\.child\?\.routeIdx\)/);
   assert.match(routesPageSource, /isDeletable: true,[\s\S]*deleteKey: `routePlan:\$\{routePlanId\}`/);
   assert.match(routesPageSource, /return \[\.\.\.routeGroupRows, \.\.\.routeChildRows, \.\.\.routePlanRows\]/);
 });
@@ -172,7 +173,8 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routesPageSource, /const routeGroupRows = safeRouteGroups\.map\(\(routeGroup\) =>/);
   assert.match(routesPageSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
   assert.match(routesPageSource, /return Number\(routeGroup\?\.totalOrders \?\? routeGroup\?\.ordersCount \?\? routeGroup\?\.assignments\?\.length \?\? 0\) \|\| 0/);
-  assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.doesNotMatch(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeHelpersSource, /rightRouteIdx = numberOrUndefined\(right\.child\?\.routeIdx\)/);
   assert.match(routesPageSource, /const childCount = getVisibleRouteGroupChildren\(routeGroup\)\.length/);
   assert.match(routesPageSource, /end: childCount > 0 \? `\$\{childCount\} child routes` : "No split"/);
   assert.match(routesPageSource, /isRouteGroup: true/);
@@ -321,7 +323,7 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
   assert.match(routeDetailSource, /\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeExistingOptimized: true \}\)\),/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)\),/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeExistingOptimized: false \}\)\),/);
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
   assert.match(routeDetailSource, /setClientRouteRows\(\(rows\) => \[/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
@@ -741,6 +743,32 @@ test("Route detail marker rendering does not call MapLibre resize from map event
   assert.doesNotMatch(routeDetailSource, /\.on\("zoomend", syncRouteDetailMapLayers\)/);
 });
 
+
+test("Route detail uses child-only rows and global routeIdx save assertions", () => {
+  assert.doesNotMatch(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeHelpersSource, /routeIdx/);
+  assert.doesNotMatch(routeDetailSource, /function buildRouteBranchRows\(/);
+  assert.doesNotMatch(routeDetailSource, /buildRouteBranchRows\(routeGroup/);
+  assert.doesNotMatch(routeDetailSource, /groupRootRouteRows/);
+  assert.doesNotMatch(routeDetailSource, /branchOrderIds/);
+  assert.doesNotMatch(routeDetailSource, /rootRouteStops/);
+  assert.match(routeDetailSource, /routeGroupChildRows\.sort/);
+  assert.match(routeDetailSource, /routeIdx/);
+});
+
+test("Route detail draft payload is child-only and treats routeIdx as server assertion", () => {
+  const start = routeDetailSource.indexOf("function buildRouteDraftPayload(");
+  const end = routeDetailSource.indexOf("function renderRouteHeaderMetric", start);
+  const payloadBuilder = routeDetailSource.slice(start, end);
+
+  assert.match(payloadBuilder, /routeIdx:/);
+  assert.match(payloadBuilder, /routePlanId: routeRow\.routePlanId \?\? null/);
+  assert.match(payloadBuilder, /tempId: routeRow\.tempId \?\? null/);
+  assert.doesNotMatch(payloadBuilder, /branchId:/);
+  assert.doesNotMatch(routeDetailSource, /routeKey: "root"/);
+  assert.doesNotMatch(routeDetailSource, /if \(routeRow\.isCurrent\) return "root"/);
+});
+
 test("Route detail renders route lines and a stop timeline below the map", () => {
   assert.match(routeDetailSource, /function logRouteDetailPerformance\(name, metric = \{\}\) \{/);
   assert.match(routeDetailServerSource, /routes\.detail\.action\.saveRouteDraft\.request/);
@@ -751,19 +779,21 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /function buildRouteGroupStops\(routeGroup, childRouteDetails, currentRouteStops\) \{/);
   assert.match(routeDetailSource, /const assignmentStops = buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
   assert.match(routeDetailSource, /const allRouteGroupStops = useMemo/);
-  assert.match(routeDetailSource, /buildRouteBranchRows\(routeGroup, routeGroupStopsSource, routeChildDetailsByRoutePlanId\)/);
-  assert.match(routeDetailSource, /routeGroupStopsSource\.filter\(\(stop\) => !branchOrderIds\.has\(stop\.orderId\)\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
-  assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\], childDetailsByRoutePlanId = new Map\(\)\) \{/);
-  assert.match(routeDetailSource, /readRouteOptimizedSnapshot\(branch\.optimized\)/);
+  assert.match(routeDetailSource, /function buildRouteGroupChildRows\(routeGroup, childDetailsByRoutePlanId = new Map\(\), routeStops = \[\]\) \{/);
+  assert.match(routeDetailSource, /getVisibleRouteGroupChildren\(routeGroup\)\.map/);
+  assert.match(routeDetailSource, /const routeIdx = numberOrUndefined\(child\?\.routeIdx\)/);
+  assert.match(routeDetailSource, /routeIdx: routeIdx \?\? null/);
+  assert.match(routeDetailSource, /routeGroupChildRows\.sort/);
+  assert.doesNotMatch(routeDetailSource, /function buildRouteBranchRows\(/);
+  assert.doesNotMatch(routeDetailSource, /rootRouteStops/);
+  assert.doesNotMatch(routeDetailSource, /groupRootRouteRows/);
+  assert.doesNotMatch(routeDetailSource, /routeBranchRows/);
   assert.match(routeDetailSource, /formatRouteDurationSeconds\(optimized\?\.metrics\?\.durationSeconds\)/);
   assert.match(routeDetailSource, /formatRouteDistanceMeters\(optimized\?\.metrics\?\.distanceMeters\)/);
-  assert.match(routeDetailSource, /const childDetail = childDetailsByRoutePlanId\.get\(textOrUndefined\(branch\.routePlanId\)\)/);
-  assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
-  assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
-  assert.match(routeDetailSource, /const groupRootRouteRows = isRouteGroupDetail\s*&& rootRouteStops\.length > 0/);
-  assert.match(routeDetailSource, /\? routeGroupChildRows\.length > 0[\s\S]*\? routeGroupChildRows[\s\S]*: \[\.\.\.groupRootRouteRows, \.\.\.routeBranchRows\]/);
-  assert.match(routeDetailSource, /const maxRouteIndex = routeRows\.reduce/);
+  assert.match(routeDetailSource, /const maxRouteIdx = routeRows\.reduce/);
+  assert.match(routeDetailSource, /const draft = getNextChildRouteDraft\(contextRouteRows\)/);
+  assert.match(routeDetailSource, /routeIdx: draft\.routeIdx/);
   assert.match(routeDetailSource, /routeIndex: draft\.routeIndex/);
   assert.match(routeHelpersSource, /getDefaultRouteGroupChildName\(index, child\)/);
   assert.match(routeDetailSource, /const routePolygonSourceStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail \? routeGroupStopsSource : \[\]/);
@@ -776,7 +806,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /if \(routeRow\.routePlanId && !includeExistingOptimized\) return undefined/);
   assert.match(routeDetailSource, /function shouldIncludeRouteDraftRow\(routeRow, includeEmptyTempRoutes\) \{/);
   assert.match(routeDetailSource, /return !\(routeRow\.tempId && !routeRow\.routePlanId && routeRow\.stops\.length === 0\)/);
-  assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)/);
+  assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeExistingOptimized: false \}\)/);
   assert.ok(
     routeDetailSource.indexOf("const [routeCandidateTitle") < routeDetailSource.indexOf("const currentRouteRowsSource ="),
     "routeRows reads route line state after the state is initialized",
@@ -796,8 +826,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
   assert.match(routeDetailSource, /const defaultRouteCandidateTitle = isRouteGroupDetail \? "Route 1" : routeDetailTitle/);
-  assert.match(routeDetailSource, /const routeIndex = Math\.max\(numberOrUndefined\(branch\.sortOrder\) \?\? index \+ 2, index \+ 2\)/);
-  assert.match(routeDetailSource, /title: textOrUndefined\(branch\.label\) \?\? `Route \$\{routeIndex\}`/);
+  assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, detail\?\.routePlan \?\? child\?\.routePlan, index\)/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
@@ -844,7 +873,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.doesNotMatch(routeDetailSource, /strokeWidth="2\.2"/);
   assert.match(routeDetailSource, /function ensureUniqueRouteRowColors\(routeRows\) \{/);
   assert.match(routeDetailSource, /const ROUTE_DEFAULT_COLORS = \[MAP_MARKER_PALETTE\.plannedOrder\.color/);
-  assert.match(routeDetailSource, /ROUTE_DEFAULT_COLORS\[\(index \+ 1\) % ROUTE_DEFAULT_COLORS\.length\]/);
+  assert.match(routeDetailSource, /ROUTE_DEFAULT_COLORS\[index % ROUTE_DEFAULT_COLORS\.length\]/);
   assert.match(routeDetailSource, /ROUTE_COLOR_OPTIONS\.map\(\(color\) =>/);
   assert.match(routeDetailSource, /function getUnusedRouteColor\(preferredColor, usedColors/);
   assert.match(routeDetailSource, /aria-label="Route color picker"/);

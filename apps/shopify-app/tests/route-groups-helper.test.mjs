@@ -131,7 +131,7 @@ test("route group helper updates membership without child generation side effect
 
 test("route group helper saves a batched draft allocation", async () => {
   const fakeFetch = makeFetch({ data: { routeGroup: { id: "group/1", status: "DRAFT" } }, error: null });
-  const payload = { routes: [{ branchId: null, orderIds: ["order-1"] }, { branchId: "branch/1", orderIds: ["order-2"] }] };
+  const payload = { routes: [{ orderIds: ["order-1"], routeIdx: 1, routePlanId: "route/1" }, { orderIds: ["order-2"], routeIdx: 2, tempId: "temp/2" }] };
 
   const result = await saveDeliveryRouteGroupDraft(makeRequest(), "group/1", payload, {
     fetch: fakeFetch,
@@ -145,9 +145,9 @@ test("route group helper saves a batched draft allocation", async () => {
 });
 
 test("route group helper previews optimization without saving the draft", async () => {
-  const preview = { routes: [{ orderIds: ["order-1"], routeKey: "root" }] };
+  const preview = { routes: [{ orderIds: ["order-1"], routeIdx: 1, routeKey: "routeIdx:1" }] };
   const fakeFetch = makeFetch({ data: { preview }, error: null });
-  const payload = { mode: "OPTIMIZE_ORDER", routes: [{ branchId: null, orderIds: ["order-1"], routeKey: "root" }] };
+  const payload = { mode: "OPTIMIZE_ORDER", routes: [{ orderIds: ["order-1"], routeIdx: 1, routeKey: "routeIdx:1" }] };
 
   const result = await previewDeliveryRouteGroupOptimization(makeRequest(), "group/1", payload, {
     fetch: fakeFetch,
