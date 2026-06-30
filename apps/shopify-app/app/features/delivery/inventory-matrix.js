@@ -118,6 +118,9 @@ function getInventoryHistoryCustomer(order) {
     ?? textOrNumber(order?.recipientName)
     ?? textOrNumber(order?.shippingAddress?.name)
     ?? textOrNumber(order?.deliveryAddress?.name)
+    ?? textOrNumber(order?.shopifyOrderSnapshot?.shippingAddress?.name)
+    ?? textOrNumber(order?.rawPayload?.recipientName)
+    ?? textOrNumber(order?.rawPayload?.shippingAddress?.name)
     ?? "Unknown customer";
 }
 

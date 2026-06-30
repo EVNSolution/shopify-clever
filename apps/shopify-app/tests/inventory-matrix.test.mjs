@@ -88,11 +88,18 @@ test("inventory history summarizes real inventory orders", () => {
         items: [{ name: "명란젓", quantityDelta: -2 }],
         orderNumber: 1061,
       },
+      {
+        shopifyOrderName: "#1062",
+        shopifyOrderSnapshot: {
+          lineItems: [{ title: "갈비탕", quantity: 4 }],
+          shippingAddress: { name: "Park Mina" },
+        },
+      },
     ],
   });
 
   assert.equal(history[0].title, "Initial snapshot · 2026-06-30 05:12");
-  assert.equal(history[0].meta, "2 orders · 5 items");
+  assert.equal(history[0].meta, "3 orders · 9 items");
   assert.deepEqual(history[0].orders, [
     {
       customer: "Lee Hana",
@@ -105,6 +112,12 @@ test("inventory history summarizes real inventory orders", () => {
       itemDelta: -2,
       items: ["명란젓 ×2"],
       order: "1061",
+    },
+    {
+      customer: "Park Mina",
+      itemDelta: 4,
+      items: ["갈비탕 ×4"],
+      order: "#1062",
     },
   ]);
 });
