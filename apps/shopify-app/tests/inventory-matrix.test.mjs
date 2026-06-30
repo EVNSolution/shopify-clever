@@ -76,12 +76,13 @@ test("inventory history summarizes real inventory orders", () => {
     createdAt: "2026-06-30T05:12:00.000Z",
     orders: [
       {
-        customer: "Lee Hana",
+        customer: "Legacy customer",
         items: [
           { name: "두툼 삼겹살", quantity: 1 },
           { name: "오마고등", options: [{ key: "Size", value: "L" }], quantity: 2 },
         ],
         name: "#1057",
+        recipientName: "Lee Hana",
       },
       {
         recipientName: "Choi Daniel",
@@ -118,6 +119,65 @@ test("inventory history summarizes real inventory orders", () => {
       itemDelta: 4,
       items: ["갈비탕 ×4"],
       order: "#1062",
+    },
+  ]);
+});
+
+test("inventory history groups API-owned change events after the initial snapshot", () => {
+  const history = buildInventoryHistoryItems({
+    createdAt: "2026-06-30T05:12:00.000Z",
+    lastChange: [
+      {
+        createdAt: "2026-06-30T14:12:00.000Z",
+        name: "두툼 삼겹살",
+        orderId: "order-1057",
+        orderName: "#1057",
+        quantityDelta: 1,
+        recipientName: "Lee Hana",
+      },
+      {
+        createdAt: "2026-06-30T14:12:00.000Z",
+        name: "오마고등",
+        options: [{ key: "Size", value: "L" }],
+        orderId: "order-1057",
+        orderName: "#1057",
+        quantityDelta: 2,
+        recipientName: "Lee Hana",
+      },
+      {
+        createdAt: "2026-06-30T14:12:00.000Z",
+        customer: "Legacy customer",
+        name: "명란젓",
+        orderId: "order-1061",
+        orderName: "#1061",
+        quantityDelta: -2,
+        recipientName: "Choi Daniel",
+      },
+    ],
+    orders: [
+      {
+        items: [{ name: "두툼 삼겹살", quantity: 1 }],
+        name: "#1057",
+        recipientName: "Lee Hana",
+      },
+    ],
+  });
+
+  assert.equal(history.length, 2);
+  assert.equal(history[1].title, "Inventory update · 2026-06-30 14:12");
+  assert.equal(history[1].meta, "2 orders · 5 items");
+  assert.deepEqual(history[1].orders, [
+    {
+      customer: "Lee Hana",
+      itemDelta: 3,
+      items: ["두툼 삼겹살 ×1", "오마고등 (Size: L) ×2"],
+      order: "#1057",
+    },
+    {
+      customer: "Choi Daniel",
+      itemDelta: -2,
+      items: ["명란젓 ×2"],
+      order: "#1061",
     },
   ]);
 });

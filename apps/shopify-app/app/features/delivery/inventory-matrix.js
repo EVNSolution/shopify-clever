@@ -45,16 +45,18 @@ export function buildInventoryProductMatrix(orders) {
 
 export function buildInventoryHistoryItems(inventory) {
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
-  if (orders.length === 0) return [];
+  const history = [];
 
-  const historyOrders = orders.map((order, index) => buildInventoryHistoryOrder(order, index));
-  const itemTotal = historyOrders.reduce((total, order) => total + Math.abs(order.itemDelta), 0);
+  if (orders.length > 0) {
+    const historyOrders = orders.map((order, index) => buildInventoryHistoryOrder(order, index));
+    history.push(buildInventoryHistoryItem({
+      orders: historyOrders,
+      title: formatInventoryHistoryTitle(inventory),
+    }));
+  }
 
-  return [{
-    meta: `${orders.length} orders · ${itemTotal} items`,
-    orders: historyOrders,
-    title: formatInventoryHistoryTitle(inventory),
-  }];
+  history.push(...buildInventoryChangeHistoryItems(inventory?.lastChange));
+  return history;
 }
 
 export function isRealInventorySku(value) {
@@ -91,6 +93,52 @@ function buildInventoryHistoryOrder(order, index) {
   };
 }
 
+function buildInventoryChangeHistoryItems(lastChange) {
+  if (!Array.isArray(lastChange) || lastChange.length === 0) return [];
+
+  const groups = new Map();
+  for (const event of lastChange) {
+    const groupKey = textOrNumber(event?.createdAt) ?? "unknown";
+    let group = groups.get(groupKey);
+    if (!group) {
+      group = { events: [], title: formatInventoryHistoryChangeTitle(event?.createdAt) };
+      groups.set(groupKey, group);
+    }
+    group.events.push(event);
+  }
+
+  return [...groups.values()].map((group) => {
+    const byOrder = new Map();
+    for (const event of group.events) {
+      const orderKey = textOrNumber(event?.orderId) ?? getInventoryHistoryOrderName(event, byOrder.size);
+      let order = byOrder.get(orderKey);
+      if (!order) {
+        order = { items: [], order: event };
+        byOrder.set(orderKey, order);
+      }
+      order.items.push(event);
+    }
+
+    return buildInventoryHistoryItem({
+      orders: [...byOrder.values()].map((order, index) => buildInventoryHistoryOrder({
+        ...order.order,
+        itemDelta: order.items.reduce((total, item) => total + getInventoryHistoryItemDelta(item), 0),
+        items: order.items,
+      }, index)),
+      title: group.title,
+    });
+  });
+}
+
+function buildInventoryHistoryItem({ orders, title }) {
+  const itemTotal = orders.reduce((total, order) => total + Math.abs(order.itemDelta), 0);
+  return {
+    meta: `${orders.length} orders · ${itemTotal} items`,
+    orders,
+    title,
+  };
+}
+
 function getInventoryHistoryLineItems(order) {
   if (Array.isArray(order?.items)) return order.items;
 
@@ -103,8 +151,8 @@ function getInventoryHistoryLineItems(order) {
 
 function getInventoryHistoryOrderName(order, index) {
   const id = textOrNumber(order?.id);
-  return textOrNumber(order?.name)
-    ?? textOrNumber(order?.orderName)
+  return textOrNumber(order?.orderName)
+    ?? textOrNumber(order?.name)
     ?? textOrNumber(order?.shopifyOrderName)
     ?? textOrNumber(order?.orderNumber)
     ?? textOrNumber(order?.shopifyOrderNumber)
@@ -113,9 +161,9 @@ function getInventoryHistoryOrderName(order, index) {
 }
 
 function getInventoryHistoryCustomer(order) {
-  return textOrNumber(order?.customer)
+  return textOrNumber(order?.recipientName)
+    ?? textOrNumber(order?.customer)
     ?? textOrNumber(order?.customerName)
-    ?? textOrNumber(order?.recipientName)
     ?? textOrNumber(order?.shippingAddress?.name)
     ?? textOrNumber(order?.deliveryAddress?.name)
     ?? textOrNumber(order?.shopifyOrderSnapshot?.shippingAddress?.name)
@@ -138,6 +186,11 @@ function getInventoryHistoryItemDelta(item) {
 function formatInventoryHistoryTitle(inventory) {
   const time = formatInventoryHistoryTime(inventory?.createdAt ?? inventory?.created_at);
   return time ? `Initial snapshot · ${time}` : "Initial snapshot";
+}
+
+function formatInventoryHistoryChangeTitle(value) {
+  const time = formatInventoryHistoryTime(value);
+  return time ? `Inventory update · ${time}` : "Inventory update";
 }
 
 function formatInventoryHistoryTime(value) {
