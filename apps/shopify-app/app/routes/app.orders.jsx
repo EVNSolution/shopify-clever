@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useNavigate, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { fetchDeliveryOrders, syncDeliveryOrders } from "../features/delivery/orders.server";
+import { bulkUpdateDeliveryOrders, fetchDeliveryOrders, syncDeliveryOrders } from "../features/delivery/orders.server";
 import { createDeliveryInventory, fetchDeliveryInventories } from "../features/delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
@@ -70,6 +70,27 @@ const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft";
 const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
+const ORDER_BULK_ACTION_OPTIONS = [
+  { label: "State", value: "state" },
+  { label: "Payment", value: "payment" },
+];
+const ORDER_STATE_CHANGE_OPTIONS = [
+  { label: "Pending", value: "PENDING" },
+  { label: "Assigned", value: "ASSIGNED" },
+  { label: "En route", value: "EN_ROUTE" },
+  { label: "Arrived", value: "ARRIVED" },
+  { label: "Delivered", value: "DELIVERED" },
+  { label: "Failed", value: "FAILED" },
+  { label: "Skipped", value: "SKIPPED" },
+  { label: "Cancelled", value: "CANCELLED" },
+];
+const ORDER_PAYMENT_CHANGE_OPTIONS = [
+  { label: "Paid", value: "PAID" },
+  { label: "Cash", value: "CASH" },
+  { label: "eTransfer", value: "ETRANSFER" },
+  { label: "Pending", value: "PENDING" },
+  { label: "Unknown", value: "UNKNOWN" },
+];
 const SHOP_TIME_ZONE_QUERY = `#graphql
   query CleverShopTimeZone {
     shop {
@@ -666,6 +687,49 @@ const orderDateCalendarDayRangeStyle = {
   background: "#f1f1f1",
 };
 
+const orderActionOverlayStyle = {
+  alignItems: "center",
+  background: "rgba(0, 0, 0, 0.34)",
+  bottom: 0,
+  display: "flex",
+  justifyContent: "center",
+  left: 0,
+  position: "fixed",
+  right: 0,
+  top: 0,
+  zIndex: 2147483647,
+};
+
+const orderActionDialogStyle = {
+  background: "#ffffff",
+  borderRadius: "14px",
+  boxShadow: "0 18px 48px rgba(0, 0, 0, 0.24)",
+  display: "grid",
+  gap: "12px",
+  maxWidth: "min(420px, calc(100vw - 32px))",
+  padding: "16px",
+  width: "420px",
+};
+
+const orderActionToggleStyle = {
+  display: "grid",
+  gap: "8px",
+  gridTemplateColumns: "1fr 1fr",
+};
+
+const orderActionSelectStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "8px",
+  boxSizing: "border-box",
+  color: "#303030",
+  fontSize: "13px",
+  height: "30px",
+  padding: "0 8px",
+  flex: "none",
+  width: "100%",
+};
+
 const DEFAULT_TABLE_COLUMN_WIDTHS = ["3%", "7%", "8%", "10%", "18%", "7%", "8%", "9%", "10%", "8%", "8%"];
 const MIN_TABLE_COLUMN_WIDTH = 44;
 
@@ -800,6 +864,24 @@ const deliveryOverdueAssignedTabStyle = {
 };
 
 const deliveryOverdueUnassignedTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(209, 24, 24, 0.12)",
+  color: "#b42318",
+};
+
+const paymentPaidTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(0, 128, 96, 0.12)",
+  color: "#006c48",
+};
+
+const paymentActionTabStyle = {
+  ...deliveryInfoTabStyle,
+  background: "rgba(180, 83, 9, 0.14)",
+  color: "#8a4b00",
+};
+
+const paymentIssueTabStyle = {
   ...deliveryInfoTabStyle,
   background: "rgba(209, 24, 24, 0.12)",
   color: "#b42318",
@@ -1242,6 +1324,14 @@ function formatOrderDeliveryState(order, referenceDate) {
   const stateValue = getOrderDeliveryStateFilterValue(order, referenceDate);
 
   if (stateValue === "past_due") return "Past due";
+
+  const deliveryStopStatus = normalizePaymentStatus(order?.deliveryStopStatus);
+  if (deliveryStopStatus === "EN_ROUTE") return "En route";
+  if (deliveryStopStatus === "ARRIVED") return "Arrived";
+  if (deliveryStopStatus === "FAILED") return "Failed";
+  if (deliveryStopStatus === "SKIPPED") return "Skipped";
+  if (deliveryStopStatus === "CANCELLED") return "Cancelled";
+
   if (stateValue === "delivered") return "Delivered";
   if (stateValue === "assigned_undelivered") return "Assigned · undelivered";
   if (stateValue === "planned") return "Planned";
@@ -1279,17 +1369,6 @@ function normalizePaymentStatus(value) {
   return textOrUndefined(value)?.replace(/\s+/g, "_").toUpperCase() ?? "";
 }
 
-function formatPaymentStatusLabel(value) {
-  const status = normalizePaymentStatus(value);
-  if (!status) return "";
-
-  return status
-    .split("_")
-    .filter(Boolean)
-    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
-    .join(" ");
-}
-
 function getPaymentGatewaySearchValue(value) {
   return String(value ?? "").toLowerCase();
 }
@@ -1308,35 +1387,25 @@ function hasETransferPaymentGateway(gatewayNames) {
   });
 }
 
-function formatPaymentGatewayName(value) {
-  const gatewayName = textOrUndefined(value);
-  if (!gatewayName) return undefined;
-
-  const searchValue = getPaymentGatewaySearchValue(gatewayName);
-  if (searchValue === "shopify_payments") return "Shopify Payments";
-  if (searchValue.replace(/[\s_-]+/g, "") === "etransfer") return "eTransfer";
-
-  return gatewayName;
-}
-
 function formatOrderPaymentState(order) {
   const status = normalizePaymentStatus(getOrderPaymentStatus(order));
   const gatewayNames = getOrderPaymentGatewayNames(order);
-  const gatewayLabel = gatewayNames.map(formatPaymentGatewayName).find(Boolean);
 
   if (status === "PAID") return "Paid";
+  if (status === "CASH") return "Cash";
+  if (status === "ETRANSFER") return "eTransfer";
+  if (hasCashPaymentGateway(gatewayNames)) return "Cash";
+  if (hasETransferPaymentGateway(gatewayNames)) return "eTransfer";
+  if (status === "PENDING") return "Pending";
 
-  if (status === "PENDING") {
-    if (hasCashPaymentGateway(gatewayNames)) return "Cash · collect";
-    if (hasETransferPaymentGateway(gatewayNames)) return "eTransfer · request";
+  return "Unknown";
+}
 
-    return gatewayLabel ? `Pending · ${gatewayLabel}` : "Pending";
-  }
-
-  if (!status) return gatewayLabel ? `Payment · ${gatewayLabel}` : "Payment unknown";
-
-  const statusLabel = formatPaymentStatusLabel(status);
-  return gatewayLabel ? `${statusLabel} · ${gatewayLabel}` : statusLabel;
+function getOrderPaymentTabStyle(order) {
+  const paymentState = formatOrderPaymentState(order);
+  if (paymentState === "Paid") return paymentPaidTabStyle;
+  if (paymentState === "Cash" || paymentState === "eTransfer") return paymentActionTabStyle;
+  return paymentIssueTabStyle;
 }
 
 function getOrderDeliveryStateTabStyle(order, referenceDate) {
@@ -1580,6 +1649,44 @@ async function handleOrdersAction(request) {
       syncedOrders: syncedOrderData.orders,
       sync: syncedOrderData.sync,
       errors: syncedOrderData.errors,
+    };
+  }
+
+  if (intent === "bulkUpdateOrders") {
+    let orderIds = [];
+
+    try {
+      orderIds = JSON.parse(formData.get("orderIds") ?? "[]");
+    } catch {
+      return {
+        bulkUpdate: null,
+        errors: [{ message: "선택한 주문 정보가 올바르지 않습니다." }],
+      };
+    }
+
+    const field = textOrUndefined(formData.get("field"));
+    const value = textOrUndefined(formData.get("value"));
+    if (!Array.isArray(orderIds) || orderIds.length === 0 || !field || !value) {
+      return {
+        bulkUpdate: null,
+        errors: [{ message: "변경할 주문과 값을 선택해주세요." }],
+      };
+    }
+
+    const bulkUpdateData = await bulkUpdateDeliveryOrders(
+      request,
+      { field, orderIds, value },
+      { sessionToken: shopifySessionToken },
+    );
+
+    return {
+      bulkUpdate: {
+        field,
+        value,
+        updated: bulkUpdateData.updated,
+      },
+      updatedOrders: bulkUpdateData.orders,
+      errors: bulkUpdateData.errors,
     };
   }
 
@@ -1931,6 +2038,7 @@ function hasSessionTokenRefreshError(results) {
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
+  const orderBulkUpdateFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
@@ -1949,12 +2057,22 @@ export default function OrdersPage() {
     () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders),
     [ordersSyncFetcher.data?.syncedOrders],
   );
+  const bulkUpdatedOrders = useMemo(
+    () => mapCanonicalOrdersToOrderRows(orderBulkUpdateFetcher.data?.updatedOrders),
+    [orderBulkUpdateFetcher.data?.updatedOrders],
+  );
   const displayOrders = useMemo(
-    () =>
-      syncedOrders.length > 0
-        ? mergeShopifyOrderRowsWithCanonicalRows(safeOrders, syncedOrders)
-        : safeOrders,
-    [safeOrders, syncedOrders],
+    () => {
+      const syncMergedOrders =
+        syncedOrders.length > 0
+          ? mergeShopifyOrderRowsWithCanonicalRows(safeOrders, syncedOrders)
+          : safeOrders;
+
+      return bulkUpdatedOrders.length > 0
+        ? mergeShopifyOrderRowsWithCanonicalRows(syncMergedOrders, bulkUpdatedOrders)
+        : syncMergedOrders;
+    },
+    [bulkUpdatedOrders, safeOrders, syncedOrders],
   );
   const urlOrderFilters = useMemo(
     () => getOrderFiltersFromSearchParams(searchParams),
@@ -2037,17 +2155,37 @@ export default function OrdersPage() {
   useEffect(() => {
     setOptimisticOrderFilters(null);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (
+      orderBulkUpdateFetcher.state !== "idle" ||
+      !orderBulkUpdateFetcher.data?.bulkUpdate ||
+      (orderBulkUpdateFetcher.data?.errors ?? []).length > 0
+    ) {
+      return;
+    }
+
+    setOrderActionModalOpen(false);
+    setBulkUpdateClientError(null);
+    setCheckedOrderIds([]);
+  }, [orderBulkUpdateFetcher.data, orderBulkUpdateFetcher.state]);
+
   const locatedOrders = useMemo(
     () => filteredOrders.filter((order) => order.hasCoordinates),
     [filteredOrders],
   );
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
   const [createInventoryClientError, setCreateInventoryClientError] = useState(null);
+  const [bulkUpdateClientError, setBulkUpdateClientError] = useState(null);
   const actionErrors = createRouteClientError
     ? [{ message: createRouteClientError }]
     : createInventoryClientError
       ? [{ message: createInventoryClientError }]
-      : routePlanFetcher.data?.errors?.length
+      : bulkUpdateClientError
+        ? [{ message: bulkUpdateClientError }]
+        : orderBulkUpdateFetcher.data?.errors?.length
+          ? orderBulkUpdateFetcher.data
+          : routePlanFetcher.data?.errors?.length
         ? routePlanFetcher.data
         : inventoryFetcher.data;
   const orderPageNoticeMessage = getServiceErrorNotice([
@@ -2056,6 +2194,7 @@ export default function OrdersPage() {
   ], { context: "orders_page" });
   const isCreatingRoute = routePlanFetcher.state !== "idle";
   const isCreatingInventory = inventoryFetcher.state !== "idle";
+  const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
   const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
@@ -2064,6 +2203,9 @@ export default function OrdersPage() {
   const [pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId] = useState(null);
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
+  const [orderActionModalOpen, setOrderActionModalOpen] = useState(false);
+  const [orderActionField, setOrderActionField] = useState("state");
+  const [orderActionValue, setOrderActionValue] = useState(ORDER_STATE_CHANGE_OPTIONS[0].value);
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [sortConfig, setSortConfig] = useState(null);
@@ -2215,6 +2357,16 @@ export default function OrdersPage() {
 
   const tableOrders = sortedOrders;
   const tableWidth = lockedTableWidth ? `${lockedTableWidth}px` : "100%";
+  const checkedOrders = useMemo(
+    () => checkedOrderIds.map((orderId) => displayOrderById.get(orderId)).filter(Boolean),
+    [checkedOrderIds, displayOrderById],
+  );
+  const checkedServerOrderIds = useMemo(
+    () => checkedOrders.map((order) => order.orderId).filter(Boolean),
+    [checkedOrders],
+  );
+  const orderActionValueOptions =
+    orderActionField === "state" ? ORDER_STATE_CHANGE_OPTIONS : ORDER_PAYMENT_CHANGE_OPTIONS;
 
   const plannedOrders = useMemo(() => {
     return plannedOrderIds
@@ -2740,6 +2892,37 @@ export default function OrdersPage() {
     setCreateRouteClientError(null);
     setCreateInventoryClientError(null);
     setPlanFitRequest((requestCount) => requestCount + 1);
+  };
+
+  const handleOrderActionFieldChange = (field) => {
+    setOrderActionField(field);
+    setOrderActionValue(
+      field === "state"
+        ? ORDER_STATE_CHANGE_OPTIONS[0].value
+        : ORDER_PAYMENT_CHANGE_OPTIONS[0].value,
+    );
+  };
+
+  const handleOpenOrderAction = () => {
+    if (checkedOrderIds.length === 0) return;
+    setBulkUpdateClientError(null);
+    setOrderActionModalOpen(true);
+  };
+
+  const handleSaveOrderAction = async () => {
+    if (checkedServerOrderIds.length === 0 || isBulkUpdatingOrders) {
+      setBulkUpdateClientError("서버에 저장된 주문만 변경할 수 있습니다. 주문 동기화 후 다시 시도해주세요.");
+      return;
+    }
+
+    const formData = new FormData();
+    const sessionToken = await shopify.idToken();
+    formData.set("_intent", "bulkUpdateOrders");
+    formData.set("field", orderActionField);
+    formData.set("value", orderActionValue);
+    formData.set("orderIds", JSON.stringify(checkedServerOrderIds));
+    formData.set("shopifySessionToken", sessionToken);
+    orderBulkUpdateFetcher.submit(formData, { method: "post" });
   };
 
   const handleClearPlan = () => {
@@ -3570,8 +3753,75 @@ export default function OrdersPage() {
                 disabled={checkedOrderIds.length === 0}
                 onClick={handleAddToPlan}
               >Add to map</button>
+              <button
+                type="button"
+                style={
+                  checkedOrderIds.length === 0 || isBulkUpdatingOrders
+                    ? disabledCreateRouteButtonStyle
+                    : addToPlanButtonStyle
+                }
+                disabled={checkedOrderIds.length === 0 || isBulkUpdatingOrders}
+                onClick={handleOpenOrderAction}
+              >Action</button>
             </div>
           </div>
+          {orderActionModalOpen
+            ? createPortal(
+                <div
+                  role="presentation"
+                  style={orderActionOverlayStyle}
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) setOrderActionModalOpen(false);
+                  }}
+                >
+                  <div aria-modal="true" role="dialog" style={orderActionDialogStyle}>
+                    <strong>Action</strong>
+                    <span style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
+                    <div style={orderActionToggleStyle}>
+                      {ORDER_BULK_ACTION_OPTIONS.map((option) => (
+                        <button
+                          key={option.value}
+                          type="button"
+                          style={orderActionField === option.value ? createRouteButtonStyle : addToPlanButtonStyle}
+                          onClick={() => handleOrderActionFieldChange(option.value)}
+                        >
+                          Change {option.label}
+                        </button>
+                      ))}
+                    </div>
+                    <label style={routePlanTitleLabelStyle}>
+                      Change to
+                      <select
+                        aria-label="Change selected orders to"
+                        style={orderActionSelectStyle}
+                        value={orderActionValue}
+                        onChange={(event) => setOrderActionValue(event.currentTarget.value)}
+                      >
+                        {orderActionValueOptions.map((option) => (
+                          <option key={option.value} value={option.value}>
+                            {option.label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div style={orderControlsTrailingStyle}>
+                      <button
+                        type="button"
+                        style={orderFilterButtonStyle}
+                        onClick={() => setOrderActionModalOpen(false)}
+                      >Cancel</button>
+                      <button
+                        type="button"
+                        style={isBulkUpdatingOrders ? disabledCreateRouteButtonStyle : createRouteButtonStyle}
+                        disabled={isBulkUpdatingOrders}
+                        onClick={handleSaveOrderAction}
+                      >Save</button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
           <div style={tableWrapStyle}>
             <table
               ref={tableRef}
@@ -3727,7 +3977,7 @@ export default function OrdersPage() {
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <span style={deliveryInfoTabStyle}>
+                        <span style={getOrderPaymentTabStyle(order)}>
                           {formatOrderPaymentState(order)}
                         </span>
                       </td>

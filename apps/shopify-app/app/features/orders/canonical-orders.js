@@ -43,6 +43,8 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       customer: textOrUndefined(order?.recipientName) ?? "Unknown recipient",
       address: formatShippingAddress(shippingAddress),
       status: textOrUndefined(order?.fulfillmentStatus) ?? "UNKNOWN",
+      deliveryStatus: textOrUndefined(order?.deliveryStatus),
+      deliveryStopStatus: textOrUndefined(order?.deliveryStopStatus),
       paymentStatus: textOrUndefined(order?.financialStatus) ?? "UNKNOWN",
       eta: "—",
       email: textOrUndefined(order?.email),
