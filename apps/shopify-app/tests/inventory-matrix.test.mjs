@@ -40,6 +40,7 @@ test("inventory matrix keeps source labels while selecting display language", ()
         { name: "寿司 Sushi", options: [], quantity: 3, sku: "SUSHI-1" },
         { name: "소고기 사태수육 feat. 도가니", options: [], quantity: 4, sku: "BEEF-1" },
         { name: "Boiled Beef Shank Sliced feat. Beef Tendon", options: [], quantity: 5, sku: "BEEF-2" },
+        { name: "소고기 사태수육 feat. 도가니 Boiled Beef Shank Sliced feat. Beef Tendon", options: [], quantity: 6, sku: "BEEF-3" },
       ],
     },
   ]);
@@ -52,6 +53,7 @@ test("inventory matrix keeps source labels while selecting display language", ()
       "寿司 Sushi",
       "소고기 사태수육 feat. 도가니",
       "Boiled Beef Shank Sliced feat. Beef Tendon",
+      "소고기 사태수육 feat. 도가니 Boiled Beef Shank Sliced feat. Beef Tendon",
     ],
   );
   assert.deepEqual(
@@ -62,7 +64,8 @@ test("inventory matrix keeps source labels while selecting display language", ()
       "Sushi",
       "소고기 사태수육 feat. 도가니",
       "Boiled Beef Shank Sliced feat. Beef Tendon",
+      "소고기 사태수육 feat. 도가니",
     ],
   );
-  assert.equal(matrix.totalQuantity, 15);
+  assert.equal(matrix.totalQuantity, 21);
 });

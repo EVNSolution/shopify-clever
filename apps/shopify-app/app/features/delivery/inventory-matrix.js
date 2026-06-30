@@ -75,6 +75,8 @@ function getInventoryProduct(item) {
 }
 
 function formatInventoryDisplayName(value) {
+  const koreanFeat = value.match(/[\p{Script=Hangul}0-9\s]+feat\.\s*[\p{Script=Hangul}0-9\s]+/u);
+  if (koreanFeat && hasHangul(koreanFeat[0])) return cleanDisplayName(koreanFeat[0]);
   if (/\bfeat\./i.test(value)) return value;
 
   const parts = value.split(/\s*(?:\/|\||·|•|–|—)\s*/).map(cleanDisplayName).filter(Boolean);

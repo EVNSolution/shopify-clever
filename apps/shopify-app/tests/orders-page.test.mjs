@@ -1331,11 +1331,13 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /buildInventoryProductMatrix/);
   assert.match(inventoryDetailSource, /Inventory product matrix/);
   assert.match(inventoryDetailSource, /Product quantities by date/);
-  assert.match(inventoryDetailSource, /const PRODUCT_COLUMNS_PER_TABLE = 3/);
+  assert.match(inventoryDetailSource, /const PRODUCT_COLUMNS_PER_TABLE = 5/);
   assert.match(inventoryDetailSource, /getProductChunks\(matrix\.products\)/);
   assert.match(inventoryDetailSource, /Group total/);
   assert.match(inventoryDetailSource, /Overall total: \{matrix\.totalQuantity\}/);
   assert.match(inventoryDetailSource, /product\.displayLabel \?\? product\.label/);
+  assert.match(inventoryDetailSource, /WebkitLineClamp: 2/);
+  assert.match(inventoryDetailSource, /totalRowCellStyle/);
   assert.match(inventoryDetailSource, /const backLinkStyle = \{/);
   assert.match(inventoryDetailSource, /<Link[\s\S]*className="inventory-detail-no-print"[\s\S]*style=\{backLinkStyle\}/);
   assert.doesNotMatch(inventoryDetailSource, /width:\s*"max-content"/);

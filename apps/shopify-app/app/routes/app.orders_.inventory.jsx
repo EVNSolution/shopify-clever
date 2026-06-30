@@ -125,15 +125,37 @@ const productHeadCellStyle = {
   wordBreak: "keep-all",
 };
 
+const productHeadLabelStyle = {
+  display: "-webkit-box",
+  maxHeight: "32px",
+  overflow: "hidden",
+  WebkitBoxOrient: "vertical",
+  WebkitLineClamp: 2,
+};
+
 const headRowHeaderStyle = {
   ...rowHeaderStyle,
   ...headCellStyle,
   zIndex: 2,
 };
 
-const totalCellStyle = {
+const totalColumnCellStyle = {
   ...cellStyle,
   fontWeight: 600,
+};
+
+const totalRowCellStyle = {
+  ...cellStyle,
+  background: "#f3f4f6",
+  borderTop: "2px solid #d4d4d4",
+  fontWeight: 700,
+};
+
+const totalRowHeaderStyle = {
+  ...rowHeaderStyle,
+  background: "#f3f4f6",
+  borderTop: "2px solid #d4d4d4",
+  fontWeight: 700,
 };
 
 const dateColumnStyle = {
@@ -144,7 +166,7 @@ const totalColumnStyle = {
   width: "92px",
 };
 
-const PRODUCT_COLUMNS_PER_TABLE = 3;
+const PRODUCT_COLUMNS_PER_TABLE = 5;
 
 const noticeStyle = {
   background: "#fff4f4",
@@ -289,7 +311,7 @@ export default function InventoryDetailPage() {
                     <th className="inventory-detail-row-header" style={headRowHeaderStyle}>Date</th>
                     {products.map((product) => (
                       <th key={product.key} style={productHeadCellStyle} title={product.label}>
-                        {product.displayLabel ?? product.label}
+                        <span style={productHeadLabelStyle}>{product.displayLabel ?? product.label}</span>
                       </th>
                     ))}
                     <th style={headCellStyle}>Group total</th>
@@ -307,18 +329,18 @@ export default function InventoryDetailPage() {
                         {products.map((product) => (
                           <td key={product.key} style={cellStyle}>{row.quantities[product.key] ?? 0}</td>
                         ))}
-                        <td style={totalCellStyle}>{groupTotal}</td>
+                        <td style={totalColumnCellStyle}>{groupTotal}</td>
                       </tr>
                     );
                   })}
                 </tbody>
                 <tfoot>
                   <tr>
-                    <th className="inventory-detail-row-header" scope="row" style={headRowHeaderStyle}>Total</th>
+                    <th className="inventory-detail-row-header" scope="row" style={totalRowHeaderStyle}>Total</th>
                     {products.map((product) => (
-                      <td key={product.key} style={totalCellStyle}>{matrix.productTotals[product.key] ?? 0}</td>
+                      <td key={product.key} style={totalRowCellStyle}>{matrix.productTotals[product.key] ?? 0}</td>
                     ))}
-                    <td style={totalCellStyle}>
+                    <td style={totalRowCellStyle}>
                       {products.reduce((total, product) => total + (matrix.productTotals[product.key] ?? 0), 0)}
                     </td>
                   </tr>
