@@ -167,6 +167,7 @@ test("Workflows is temporarily removed from the app surface", () => {
 
 test("Drivers is a single operational driver list without vehicle or assignment sub-tabs", () => {
   const source = readAppFile("app/routes/app.drivers-vehicles.jsx");
+  const driversPageDataSource = readAppFile("app/features/drivers/drivers-page-data.js");
 
   for (const label of ["Drivers", "Invite driver", "Search drivers", "Driver list", "Assigned route", "Recent events"]) {
     assert.match(source, new RegExp(label));
@@ -210,17 +211,17 @@ test("Drivers is a single operational driver list without vehicle or assignment 
   assert.doesNotMatch(source, /Copy download link<\/button>.*disabled=\{driverInviteFetcher\.state !== "idle"\}/);
   assert.match(source, /boxSizing: "border-box"/);
   assert.match(source, /overflow: "visible"/);
-  assert.match(source, /Canada \/ United States/);
-  assert.match(source, /South Korea/);
-  assert.match(source, /Mexico/);
-  assert.match(source, /United Kingdom/);
-  assert.match(source, /Australia/);
-  assert.match(source, /Germany/);
-  assert.match(source, /France/);
-  assert.match(source, /India/);
-  assert.match(source, /Brazil/);
-  assert.match(source, /South Africa/);
-  assert.match(source, /010 1234 5678/);
+  assert.match(driversPageDataSource, /Canada \/ United States/);
+  assert.match(driversPageDataSource, /South Korea/);
+  assert.match(driversPageDataSource, /Mexico/);
+  assert.match(driversPageDataSource, /United Kingdom/);
+  assert.match(driversPageDataSource, /Australia/);
+  assert.match(driversPageDataSource, /Germany/);
+  assert.match(driversPageDataSource, /France/);
+  assert.match(driversPageDataSource, /India/);
+  assert.match(driversPageDataSource, /Brazil/);
+  assert.match(driversPageDataSource, /South Africa/);
+  assert.match(driversPageDataSource, /010 1234 5678/);
   assert.match(source, /placeholder=\{`\$\{selectedCountryCode\.dialCode\} \$\{selectedCountryCode\.example\}`\}/);
   assert.match(source, /setInvitePhone\(formatInvitePhoneInput\(selectedCountryCode\.dialCode, event\.currentTarget\.value\)\)/);
   assert.match(source, /setInvitePhone\(formatInvitePhoneInput\(option\.dialCode, invitePhone\)\)/);
