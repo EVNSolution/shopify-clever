@@ -451,11 +451,15 @@ test("Orders page bulk-changes selected server order state or payment", () => {
 });
 
 test("Orders loader merges delivery server planning state before background sync", () => {
+  assert.match(ordersPageSource, /const activeOrdersView = new URL\(request\.url\)\.searchParams\.get\("view"\) === "inventory"/);
+  assert.match(ordersPageSource, /const shouldLoadOrders = activeOrdersView !== "inventory"/);
   assert.match(ordersPageSource, /const serverOrdersStartedAt = getSafePerformanceNow\(\)/);
-  assert.match(ordersPageSource, /const serverOrderDataPromise = fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\.then/);
+  assert.match(ordersPageSource, /const serverOrderDataPromise = shouldLoadOrders\s*\?\s*fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\.then/);
+  assert.match(ordersPageSource, /Promise\.resolve\(\{ data: \{ orders: \[\], errors: \[\] \}, durationMs: 0 \}\)/);
   assert.match(ordersPageSource, /const serverOrderRows = mapCanonicalOrdersToOrderRows\(serverOrderData\.orders\)/);
   assert.match(ordersPageSource, /const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\)/);
   assert.match(ordersPageSource, /orders: mergedOrders/);
+  assert.match(ordersPageSource, /activeOrdersView,/);
   assert.match(ordersPageSource, /serverOrdersMs: serverOrderDataResult\.durationMs/);
   assert.match(ordersPageSource, /needsSessionTokenRefresh: hasSessionTokenRefreshError\(\[serverOrderData, inventoryData\]\)/);
   assert.match(ordersPageSource, /DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE/);

@@ -495,57 +495,72 @@ export const loader = async ({ request }) => {
   const loaderStartedAt = getSafePerformanceNow();
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
+  const activeOrdersView = new URL(request.url).searchParams.get("view") === "inventory"
+    ? "inventory"
+    : "orders";
+  const shouldLoadOrders = activeOrdersView !== "inventory";
 
   const ordersStartedAt = getSafePerformanceNow();
-  const orderDataPromise = fetchShopifyOrders(admin, {
-    cacheKey: shopifyShopCacheKey,
-  }).then((orderData) => ({
-    data: orderData,
-    durationMs: roundPerfDuration(getSafePerformanceNow() - ordersStartedAt),
-  }));
+  const orderDataPromise = shouldLoadOrders
+    ? fetchShopifyOrders(admin, {
+        cacheKey: shopifyShopCacheKey,
+      }).then((orderData) => ({
+        data: orderData,
+        durationMs: roundPerfDuration(getSafePerformanceNow() - ordersStartedAt),
+      }))
+    : Promise.resolve({ data: { orders: [], errors: [] }, durationMs: 0 });
 
   const departureLocationStartedAt = getSafePerformanceNow();
-  const departureLocationDataPromise = fetchShopifyDepartureLocation(
-    admin,
-    { cacheKey: shopifyShopCacheKey },
-  ).then((departureLocationData) => ({
-    data: departureLocationData,
-    durationMs: roundPerfDuration(getSafePerformanceNow() - departureLocationStartedAt),
-  }));
+  const departureLocationDataPromise = shouldLoadOrders
+    ? fetchShopifyDepartureLocation(
+        admin,
+        { cacheKey: shopifyShopCacheKey },
+      ).then((departureLocationData) => ({
+        data: departureLocationData,
+        durationMs: roundPerfDuration(getSafePerformanceNow() - departureLocationStartedAt),
+      }))
+    : Promise.resolve({ data: { departureLocation: null, errors: [] }, durationMs: 0 });
 
   const serverOrdersStartedAt = getSafePerformanceNow();
   const inventoriesStartedAt = getSafePerformanceNow();
   const shopTimeZoneStartedAt = getSafePerformanceNow();
-  const shopTimeZoneDataPromise = fetchShopifyShopTimeZone(
-    admin,
-    { cacheKey: shopifyShopCacheKey },
-  ).then((shopTimeZoneData) => ({
-    data: shopTimeZoneData,
-    durationMs: roundPerfDuration(getSafePerformanceNow() - shopTimeZoneStartedAt),
-  }));
+  const shopTimeZoneDataPromise = shouldLoadOrders
+    ? fetchShopifyShopTimeZone(
+        admin,
+        { cacheKey: shopifyShopCacheKey },
+      ).then((shopTimeZoneData) => ({
+        data: shopTimeZoneData,
+        durationMs: roundPerfDuration(getSafePerformanceNow() - shopTimeZoneStartedAt),
+      }))
+    : Promise.resolve({
+        data: { ianaTimezone: undefined, timezoneAbbreviation: undefined },
+        durationMs: 0,
+      });
 
-  const serverOrderDataPromise = fetchDeliveryOrders(
-    request,
-    {},
-    { cacheKey: shopifyShopCacheKey },
-  ).then(
-    (serverOrderData) => ({
-      data: serverOrderData,
-      durationMs: roundPerfDuration(getSafePerformanceNow() - serverOrdersStartedAt),
-    }),
-    () => ({
-      data: {
-        orders: [],
-        errors: [
-          {
-            code: DELIVERY_API_ERROR_CODE,
-            message: "Delivery orders API 호출에 실패해 Shopify 주문만 먼저 표시합니다.",
+  const serverOrderDataPromise = shouldLoadOrders
+    ? fetchDeliveryOrders(
+        request,
+        {},
+        { cacheKey: shopifyShopCacheKey },
+      ).then(
+        (serverOrderData) => ({
+          data: serverOrderData,
+          durationMs: roundPerfDuration(getSafePerformanceNow() - serverOrdersStartedAt),
+        }),
+        () => ({
+          data: {
+            orders: [],
+            errors: [
+              {
+                code: DELIVERY_API_ERROR_CODE,
+                message: "Delivery orders API 호출에 실패해 Shopify 주문만 먼저 표시합니다.",
+              },
+            ],
           },
-        ],
-      },
-      durationMs: roundPerfDuration(getSafePerformanceNow() - serverOrdersStartedAt),
-    }),
-  );
+          durationMs: roundPerfDuration(getSafePerformanceNow() - serverOrdersStartedAt),
+        }),
+      )
+    : Promise.resolve({ data: { orders: [], errors: [] }, durationMs: 0 });
 
   const inventoryDataPromise = fetchDeliveryInventories(
     request,
@@ -600,6 +615,7 @@ export const loader = async ({ request }) => {
     shopTimeZone: shopTimeZoneData.ianaTimezone ?? null,
     perf: {
       loader: {
+        activeOrdersView,
         totalMs: roundPerfDuration(getSafePerformanceNow() - loaderStartedAt),
         shopifyOrdersMs: orderDataResult.durationMs,
         departureLocationMs: departureLocationDataResult.durationMs,

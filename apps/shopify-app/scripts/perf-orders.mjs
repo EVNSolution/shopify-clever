@@ -151,10 +151,13 @@ function metricsByName(events, name) {
 function summarizeOrdersLoader(metric) {
   return metric
     ? {
+        activeOrdersView: metric.activeOrdersView,
         totalMs: metric.totalMs,
         shopifyOrdersMs: metric.shopifyOrdersMs,
         departureLocationMs: metric.departureLocationMs,
         serverOrdersMs: metric.serverOrdersMs,
+        inventoriesMs: metric.inventoriesMs,
+        shopTimeZoneMs: metric.shopTimeZoneMs,
       }
     : null;
 }
