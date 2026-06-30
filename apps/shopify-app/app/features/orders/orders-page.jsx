@@ -52,6 +52,7 @@ import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMap
 import { TabLayout } from "../../ui/tab-layout";
 import {
   DEFAULT_ROUTE_PLAN_TITLE,
+  getSafePerformanceNow,
   roundPerfDuration,
   textOrUndefined,
 } from "./orders-page.shared";
@@ -866,7 +867,7 @@ function getNavigationTimingMetric() {
     name: "app.document.navigation",
     category: "dev-tunnel-document",
     host: window.location.host,
-    durationMs: roundPerfDuration(performance.now()),
+    durationMs: roundPerfDuration(navigationEntry.duration),
     ttfbMs: roundPerfDuration(navigationEntry.responseStart - navigationEntry.requestStart),
     responseEndMs: roundPerfDuration(navigationEntry.responseEnd - navigationEntry.startTime),
     domContentLoadedMs: roundPerfDuration(
@@ -1508,6 +1509,7 @@ export default function OrdersPage() {
   const initialMapFitAppliedRef = useRef(false);
   const initialMapCenterRef = useRef(DEFAULT_CENTER);
   const initialPerfEmittedRef = useRef(false);
+  const initialRenderStartedAtRef = useRef(getSafePerformanceNow());
   const submittedRouteSessionTokenRef = useRef(null);
   const submittedInventorySessionTokenRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
@@ -2498,15 +2500,16 @@ export default function OrdersPage() {
     if (initialPerfEmittedRef.current) return;
 
     initialPerfEmittedRef.current = true;
+    const navigationTimingMetric = getNavigationTimingMetric();
     emitPerformanceMetric({
       name: "shopify.admin.iframe",
       category: "shopify-admin-iframe",
-      durationMs: roundPerfDuration(performance.now()),
+      durationMs: navigationTimingMetric?.durationMs ?? null,
+      observedAtMs: roundPerfDuration(performance.now()),
       isEmbeddedIframe: getEmbeddedIframeState(),
       isShopifyAdminReferrer: document.referrer.includes("admin.shopify.com"),
     });
 
-    const navigationTimingMetric = getNavigationTimingMetric();
     if (navigationTimingMetric) {
       emitPerformanceMetric(navigationTimingMetric);
     }
@@ -2518,7 +2521,16 @@ export default function OrdersPage() {
         ...perf.loader,
       });
     }
-  }, [perf]);
+
+    emitPerformanceMetric({
+      name: "orders.render.commit",
+      category: "orders-render",
+      durationMs: roundPerfDuration(getSafePerformanceNow() - initialRenderStartedAtRef.current),
+      activeOrdersView,
+      inventoryCount: safeInventories.length,
+      orderCount: safeOrders.length,
+    });
+  }, [activeOrdersView, perf, safeInventories.length, safeOrders.length]);
 
   useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
 

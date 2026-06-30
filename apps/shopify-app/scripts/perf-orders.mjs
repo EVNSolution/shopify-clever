@@ -14,6 +14,7 @@ const requiredMetricNames = [
   "shopify.admin.iframe",
   "app.document.navigation",
   "orders.loader",
+  "orders.render.commit",
   "orders.maplibre.init",
   "orders.maplibre.remove",
 ];
@@ -158,6 +159,17 @@ function summarizeOrdersLoader(metric) {
     : null;
 }
 
+function summarizeOrdersRenderCommit(metric) {
+  return metric
+    ? {
+        totalMs: metric.durationMs,
+        activeOrdersView: metric.activeOrdersView,
+        orderCount: metric.orderCount,
+        inventoryCount: metric.inventoryCount,
+      }
+    : null;
+}
+
 function summarizeMapLibreInit(mapInit, mapLoad) {
   return mapInit
     ? {
@@ -187,6 +199,7 @@ function summarizeEvents(events) {
   const shopifyIframe = latestMetric(events, "shopify.admin.iframe");
   const documentNavigation = latestMetric(events, "app.document.navigation");
   const ordersLoaders = metricsByName(events, "orders.loader");
+  const ordersRenderCommit = latestMetric(events, "orders.render.commit");
   const mapInits = metricsByName(events, "orders.maplibre.init");
   const mapLoads = metricsByName(events, "orders.maplibre.load");
   const mapRemove = latestMetric(events, "orders.maplibre.remove");
@@ -211,6 +224,7 @@ function summarizeEvents(events) {
     ordersLoader: summarizeOrdersLoader(ordersLoader),
     ordersLoaderCold: summarizeOrdersLoader(ordersLoaders[0]),
     ordersLoaderWarm: summarizeOrdersLoader(ordersLoaders[1]),
+    ordersRenderCommit: summarizeOrdersRenderCommit(ordersRenderCommit),
     mapLibreInit: summarizeMapLibreInit(mapInit, mapLoad),
     mapLibreCold: summarizeMapLibreInit(mapInits[0], mapLoads[0]),
     mapLibreWarm: summarizeMapLibreInit(mapInits[1], mapLoads[1]),
