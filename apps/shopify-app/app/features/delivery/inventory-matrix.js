@@ -75,6 +75,8 @@ function getInventoryProduct(item) {
 }
 
 function formatInventoryDisplayName(value) {
+  if (hasHangul(value) && /\bfeat\./i.test(value)) return value;
+
   const parts = value.split(/\s*(?:\/|\||·|•|–|—)\s*/).map(cleanDisplayName).filter(Boolean);
   const koreanParts = parts.filter(hasHangul);
   if (parts.length > 1 && koreanParts.length) return koreanParts.join(" ");
