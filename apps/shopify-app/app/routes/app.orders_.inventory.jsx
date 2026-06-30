@@ -36,8 +36,10 @@ const panelStyle = {
 const historyPanelStyle = {
   ...panelStyle,
   alignSelf: "start",
+  maxHeight: "calc(100vh - 24px)",
+  overflowY: "auto",
   position: "sticky",
-  top: "8px",
+  top: "12px",
 };
 
 const sectionStyle = {
