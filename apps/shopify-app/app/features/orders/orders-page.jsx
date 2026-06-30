@@ -1503,6 +1503,7 @@ export default function OrdersPage() {
   const mapContainerRef = useRef(null);
   const mapLibraryRef = useRef(null);
   const mapRef = useRef(null);
+  const mapLoadedRef = useRef(false);
   const markersRef = useRef([]);
   const mapRecoveryTimerRef = useRef(null);
   const mapRecoveryAttemptsRef = useRef(0);
@@ -2535,79 +2536,89 @@ export default function OrdersPage() {
   useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
 
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) {
+    const mapContainerElement = mapContainerRef.current;
+    if (activeOrdersView !== "orders" || !mapContainerElement || mapRef.current) {
       return undefined;
     }
 
     let isMounted = true;
+    setIsMapReady(false);
 
     const initializeMap = async () => {
       initialMapFitAppliedRef.current = false;
       const mapInitStartedAt = performance.now();
-      const mapLibreImportStartedAt = performance.now();
-      const [{ default: maplibregl }, { Protocol }] = await Promise.all([
-        import("maplibre-gl"),
-        import("pmtiles"),
-      ]);
-      const mapLibreImportMs = roundPerfDuration(
-        performance.now() - mapLibreImportStartedAt,
-      );
+      try {
+        const mapLibreImportStartedAt = performance.now();
+        const [{ default: maplibregl }, { Protocol }] = await Promise.all([
+          import("maplibre-gl"),
+          import("pmtiles"),
+        ]);
+        const mapLibreImportMs = roundPerfDuration(
+          performance.now() - mapLibreImportStartedAt,
+        );
 
-      if (!isMounted || !mapContainerRef.current || mapRef.current) return;
+        if (!isMounted || mapRef.current) return;
 
-      installPmtilesProtocol(maplibregl, Protocol);
-      mapLibraryRef.current = maplibregl;
-      const mapConstructStartedAt = performance.now();
-      mapRef.current = createMapLibreMap(maplibregl, {
-        container: mapContainerRef.current,
-        style: OPENFREEMAP_STYLE_URL,
-        center: initialMapCenterRef.current,
-        zoom: INITIAL_HOME_ZOOM,
-        attributionControl: { compact: true },
-        fadeDuration: 0,
-      });
-      installMissingMapImageFallback(mapRef.current);
-
-      const mapConstructMs = roundPerfDuration(
-        performance.now() - mapConstructStartedAt,
-      );
-      emitPerformanceMetric({
-        name: "orders.maplibre.init",
-        category: "maplibre-init",
-        durationMs: roundPerfDuration(performance.now() - mapInitStartedAt),
-        mapLibreImportMs,
-        mapConstructMs,
-      });
-
-      mapRef.current.on("load", () => {
-        mapRecoveryAttemptsRef.current = 0;
-        setMapStatus("idle");
-        setIsMapReady(true);
-        emitPerformanceMetric({
-          name: "orders.maplibre.load",
-          category: "maplibre-load",
-          durationMs: roundPerfDuration(performance.now() - mapInitStartedAt),
-          mapLoadWaitMs: roundPerfDuration(
-            performance.now() - mapInitStartedAt - mapLibreImportMs - mapConstructMs,
-          ),
+        installPmtilesProtocol(maplibregl, Protocol);
+        mapLibraryRef.current = maplibregl;
+        const mapConstructStartedAt = performance.now();
+        mapRef.current = createMapLibreMap(maplibregl, {
+          container: mapContainerElement,
+          style: OPENFREEMAP_STYLE_URL,
+          center: initialMapCenterRef.current,
+          zoom: INITIAL_HOME_ZOOM,
+          attributionControl: { compact: true },
+          fadeDuration: 0,
         });
-      });
+        installMissingMapImageFallback(mapRef.current);
 
-      mapRef.current.on("error", (event) => {
-        const errorMessage = event?.error?.message ?? "";
+        const mapConstructMs = roundPerfDuration(
+          performance.now() - mapConstructStartedAt,
+        );
+        emitPerformanceMetric({
+          name: "orders.maplibre.init",
+          category: "maplibre-init",
+          durationMs: roundPerfDuration(performance.now() - mapInitStartedAt),
+          mapLibreImportMs,
+          mapConstructMs,
+        });
 
-        if (
-          errorMessage.includes("tiles.openfreemap.org") ||
-          errorMessage.includes("overturemaps-tiles-us-west-2-beta.s3.amazonaws.com") ||
-          errorMessage.includes("pmtiles") ||
-          errorMessage.includes("AJAXError")
-        ) {
-          scheduleMapRecovery();
-          return;
-        }
+        mapRef.current.on("load", () => {
+          mapLoadedRef.current = true;
+          mapRecoveryAttemptsRef.current = 0;
+          setMapStatus("idle");
+          setIsMapReady(true);
+          emitPerformanceMetric({
+            name: "orders.maplibre.load",
+            category: "maplibre-load",
+            durationMs: roundPerfDuration(performance.now() - mapInitStartedAt),
+            mapLoadWaitMs: roundPerfDuration(
+              performance.now() - mapInitStartedAt - mapLibreImportMs - mapConstructMs,
+            ),
+          });
+        });
 
-        setMapStatus("failed");
-      });
+        mapRef.current.on("error", (event) => {
+          const errorMessage = event?.error?.message ?? "";
+
+          if (
+            errorMessage.includes("tiles.openfreemap.org") ||
+            errorMessage.includes("overturemaps-tiles-us-west-2-beta.s3.amazonaws.com") ||
+            errorMessage.includes("pmtiles") ||
+            errorMessage.includes("AJAXError")
+          ) {
+            scheduleMapRecovery();
+            return;
+          }
+
+          if (mapLoadedRef.current) return;
+
+          setMapStatus("failed");
+        });
+      } catch {
+        if (!isMounted) return;
+        scheduleMapRecovery();
+      }
     };
 
     const cancelMapInitialization = scheduleIdleTask(initializeMap);
@@ -2638,8 +2649,9 @@ export default function OrdersPage() {
       });
       mapRef.current = null;
       mapLibraryRef.current = null;
+      mapLoadedRef.current = false;
     };
-  }, [mapRenderKey, scheduleMapRecovery]);
+  }, [activeOrdersView, mapRenderKey, scheduleMapRecovery]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current || !mapLibraryRef.current) {
@@ -2809,6 +2821,7 @@ export default function OrdersPage() {
       primary={
         <MapPanel
             ariaLabel="Shopify delivery order map"
+            canvasKey={mapRenderKey}
             canvasRef={mapContainerRef}
             canvasStyle={ordersMapCanvasStyle}
             id="orders-map"
