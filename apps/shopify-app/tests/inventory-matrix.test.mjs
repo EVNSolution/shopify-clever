@@ -39,17 +39,30 @@ test("inventory matrix keeps source labels while selecting display language", ()
         { name: "만두 Dumplings", options: [{ key: "Size", value: "L" }], quantity: 2, sku: null },
         { name: "寿司 Sushi", options: [], quantity: 3, sku: "SUSHI-1" },
         { name: "소고기 사태수육 feat. 도가니", options: [], quantity: 4, sku: "BEEF-1" },
+        { name: "Boiled Beef Shank Sliced feat. Beef Tendon", options: [], quantity: 5, sku: "BEEF-2" },
       ],
     },
   ]);
 
   assert.deepEqual(
     matrix.products.map((product) => product.label),
-    ["Kimchi Stew / 김치찌개 500g", "만두 Dumplings (Size: L)", "寿司 Sushi", "소고기 사태수육 feat. 도가니"],
+    [
+      "Kimchi Stew / 김치찌개 500g",
+      "만두 Dumplings (Size: L)",
+      "寿司 Sushi",
+      "소고기 사태수육 feat. 도가니",
+      "Boiled Beef Shank Sliced feat. Beef Tendon",
+    ],
   );
   assert.deepEqual(
     matrix.products.map((product) => product.displayLabel),
-    ["김치찌개 500g", "만두 (Size: L)", "Sushi", "소고기 사태수육 feat. 도가니"],
+    [
+      "김치찌개 500g",
+      "만두 (Size: L)",
+      "Sushi",
+      "소고기 사태수육 feat. 도가니",
+      "Boiled Beef Shank Sliced feat. Beef Tendon",
+    ],
   );
-  assert.equal(matrix.totalQuantity, 10);
+  assert.equal(matrix.totalQuantity, 15);
 });
