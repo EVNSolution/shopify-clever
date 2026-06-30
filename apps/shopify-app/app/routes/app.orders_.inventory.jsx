@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+import { useState } from "react";
 import { Link, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryDetail } from "../features/delivery/inventories.server";
@@ -105,6 +106,11 @@ const historyCardStyle = {
   border: "1px solid #e5e7eb",
   borderRadius: "10px",
   padding: "9px 10px",
+};
+
+const historyCardContentStyle = {
+  maxHeight: "300px",
+  overflowY: "auto",
 };
 
 const historyMetaStyle = {
@@ -429,6 +435,7 @@ export default function InventoryDetailPage() {
   const matrix = buildInventoryProductMatrix(orders);
   const hasMatrix = matrix.rows.length > 0 && matrix.products.length > 0;
   const productChunks = hasMatrix ? getProductChunks(matrix.products) : [];
+  const [openHistoryTitle, setOpenHistoryTitle] = useState(HISTORY_ITEMS[1]?.title ?? HISTORY_ITEMS[0]?.title);
 
   return (
     <main className="inventory-detail-page" style={pageStyle}>
@@ -547,30 +554,39 @@ export default function InventoryDetailPage() {
             <h2 style={titleStyle}>History</h2>
             <p style={historyMetaStyle}>Hardcoded delta preview</p>
           </div>
-          {HISTORY_ITEMS.map((item, index) => (
-            <details key={item.title} open={index === 1} style={historyCardStyle}>
+          {HISTORY_ITEMS.map((item) => (
+            <details
+              key={item.title}
+              open={openHistoryTitle === item.title}
+              onToggle={(event) => {
+                if (event.currentTarget.open) setOpenHistoryTitle(item.title);
+              }}
+              style={historyCardStyle}
+            >
               <summary>
                 <strong>{item.title}</strong>
                 <p style={historyMetaStyle}>{item.meta}</p>
               </summary>
-              <div style={historyOrderListStyle}>
-                <div aria-hidden="true" style={historyOrderHeaderStyle}>
-                  <span>Order</span>
-                  <span>Customer</span>
-                  <span>Items</span>
+              <div style={historyCardContentStyle}>
+                <div style={historyOrderListStyle}>
+                  <div aria-hidden="true" style={historyOrderHeaderStyle}>
+                    <span>Order</span>
+                    <span>Customer</span>
+                    <span>Items</span>
+                  </div>
+                  {item.orders.map((order) => (
+                    <details key={order.order} style={historyOrderStyle}>
+                      <summary style={historyOrderSummaryStyle}>
+                        <strong>{order.order}</strong>
+                        <span style={historyOrderCustomerStyle}>{order.customer}</span>
+                        <span style={historyOrderItemCountStyle}>{order.itemCount}</span>
+                      </summary>
+                      <ul style={historyItemListStyle}>
+                        {order.items.map((historyItem) => <li key={historyItem}>{historyItem}</li>)}
+                      </ul>
+                    </details>
+                  ))}
                 </div>
-                {item.orders.map((order) => (
-                  <details key={order.order} style={historyOrderStyle}>
-                    <summary style={historyOrderSummaryStyle}>
-                      <strong>{order.order}</strong>
-                      <span style={historyOrderCustomerStyle}>{order.customer}</span>
-                      <span style={historyOrderItemCountStyle}>{order.itemCount}</span>
-                    </summary>
-                    <ul style={historyItemListStyle}>
-                      {order.items.map((historyItem) => <li key={historyItem}>{historyItem}</li>)}
-                    </ul>
-                  </details>
-                ))}
               </div>
             </details>
           ))}
