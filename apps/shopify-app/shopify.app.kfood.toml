@@ -1,7 +1,7 @@
 # Shopify app configuration for the KFood custom-store app.
 # This file is safe to commit: it contains the KFood app client ID, not the API secret.
 
-client_id = "0f23bdf915ecb9f0f40383c13f8fa3e1"
+client_id = "2d233345d33cc0a9c41d0074419e3137"
 name = "CLEVER K-Food"
 handle = "clever-route-kfood"
 application_url = "https://clever-kfood-app.cleversystem.ai"

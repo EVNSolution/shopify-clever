@@ -22,6 +22,7 @@ export const MAP_PIN_SYMBOL_LAYOUT = {
   "icon-ignore-placement": true,
   "icon-size": MAP_PIN_ICON_SIZE,
 };
+const DEPARTURE_HOUSE_ICON_PATH = "M10 3.2 3.5 8.4v8.1h4v-5h5v5h4V8.4L10 3.2Z";
 
 export function createDepartureMarkerElement(departureLocation, options = {}) {
   const markerElement = document.createElement("button");
@@ -100,6 +101,48 @@ export function createMapPinImageData(color, options = {}) {
   return context.getImageData(0, 0, width, height);
 }
 
+export function createDepartureMarkerImageData(options = {}) {
+  const pixelRatio = options.pixelRatio ?? MAP_PIN_PIXEL_RATIO;
+  const width = 26 * pixelRatio;
+  const height = 34 * pixelRatio;
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.scale(pixelRatio, pixelRatio);
+  context.fillStyle = options.color ?? MAP_MARKER_PALETTE.departure.color;
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 2;
+  context.shadowBlur = 9;
+  context.shadowColor = "rgba(0, 0, 0, 0.3)";
+  context.shadowOffsetY = 3;
+
+  context.save();
+  context.translate(13, 25);
+  context.rotate(Math.PI / 4);
+  context.fillRect(-4.5, -4.5, 9, 9);
+  context.strokeRect(-4.5, -4.5, 9, 9);
+  context.restore();
+
+  context.beginPath();
+  context.arc(13, 13, 12, 0, Math.PI * 2);
+  context.fill();
+  context.shadowColor = "transparent";
+  context.stroke();
+
+  context.fillStyle = "#ffffff";
+  context.save();
+  context.translate(6.5, 6);
+  context.scale(0.65, 0.65);
+  context.fill(new Path2D(DEPARTURE_HOUSE_ICON_PATH));
+  context.restore();
+
+  return context.getImageData(0, 0, width, height);
+}
+
 export function createPaletteMapPinImageData(markerType, options = {}) {
   const paletteEntry = MAP_MARKER_PALETTE[markerType];
   if (!paletteEntry) return null;
@@ -120,15 +163,15 @@ export function addMapPinImage(map, imageId, imageData) {
   return true;
 }
 
-export function createMapPinSymbolLayer({ id, source, minzoom, iconImage = ["get", "pinImage"], sortKey = ["get", "sortKey"] }) {
+export function createMapPinSymbolLayer({ id, source, iconImage = ["get", "pinImage"], iconSize = MAP_PIN_ICON_SIZE, sortKey = ["get", "sortKey"] }) {
   return {
     id,
-    minzoom,
     type: "symbol",
     source,
     layout: {
       ...MAP_PIN_SYMBOL_LAYOUT,
       "icon-image": iconImage,
+      "icon-size": iconSize,
       "symbol-sort-key": sortKey,
     },
   };

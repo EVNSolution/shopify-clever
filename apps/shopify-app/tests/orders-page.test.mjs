@@ -37,7 +37,7 @@ const appShellSource = readFileSync(
   "utf8",
 );
 const inventoryDetailSource = readFileSync(
-  join(root, "app/routes/app.orders.inventory.jsx"),
+  join(root, "app/routes/app.orders_.inventory.jsx"),
   "utf8",
 );
 const openFreeMapStyle = JSON.parse(
@@ -319,7 +319,7 @@ test("Orders table uses a compact centered layout", () => {
 test("Orders table has a compact checkbox column for route-plan candidates", () => {
   assert.match(ordersPageSource, /const \[checkedOrderIds, setCheckedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
-  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \["3%", "7%", "8%", "10%", "23%", "7%", "8%", "9%", "10%", "8%"\]/);
+  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \["3%", "7%", "8%", "10%", "18%", "7%", "8%", "9%", "10%", "8%", "8%"\]/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
   assert.match(ordersPageSource, /const checkboxChecked = orderIsPlanned \|\| checkedOrderIdSet\.has\(order\.id\)/);
@@ -381,8 +381,8 @@ test("Orders page creates grouped child routes from scoped planned orders", () =
   assert.match(ordersPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /const createdRouteGroup = routePlanFetcher\.data\?\.routeGroup/);
-  assert.match(ordersPageSource, /navigate\(`\/app\/route-groups\/\$\{createdRouteGroup\.id\}\?id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
-  assert.match(ordersPageSource, /navigate\(`\/app\/routes\/\$\{createdRoutePlan\.id\}\?id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
+  assert.match(ordersPageSource, /navigate\(appendIdToken\(routeGroupPath\(createdRouteGroup\.id\), sessionToken\)\)/);
+  assert.match(ordersPageSource, /navigate\(appendIdToken\(routePlanPath\(createdRoutePlan\.id\), sessionToken\)\)/);
   assert.match(ordersPageSource, />Assign to route<\/button>/);
   assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);
   assert.match(ordersPageSource, /disabled=\{createRouteDisabled\}/);
@@ -611,11 +611,12 @@ test("Orders page keeps Add to map in the table controls", () => {
   assert.doesNotMatch(ordersPageSource, />Add to map<\/button>[\s\S]{0,400}>Assign to route<\/button>/);
 });
 
-test("Orders table focuses on ordered date, delivery scope, and area instead of fulfillment or payment text", () => {
+test("Orders table keeps delivery state operational and payment state separate", () => {
   assert.match(ordersPageSource, /\{ key: "deliveryArea", label: "Area" \}/);
   assert.match(ordersPageSource, /\{ key: "orderedDate", label: "Ordered" \}/);
   assert.match(ordersPageSource, /\{ key: "deliveryLabel", label: "Delivery" \}/);
   assert.match(ordersPageSource, /\{ key: "planningStatus", label: "State" \}/);
+  assert.match(ordersPageSource, /\{ key: "payment", label: "Payment" \}/);
   assert.match(ordersPageSource, /const deliveryInfoCellStyle = \{/);
   assert.match(ordersPageSource, /const deliveryInfoTabStyle = \{/);
   assert.match(ordersPageSource, /const routeCreatedTabStyle = \{/);
@@ -634,10 +635,25 @@ test("Orders table focuses on ordered date, delivery scope, and area instead of 
   assert.doesNotMatch(ordersPageSource, /Past due · unassigned/);
   assert.match(ordersPageSource, /Assigned · undelivered/);
   assert.match(ordersPageSource, /formatDeliveryValue\(order\.orderedDate\)/);
-  assert.match(ordersPageSource, /formatDeliveryValue\(order\.deliveryArea\)/);
+  assert.match(ordersPageSource, /function formatAreaValue\(order\)/);
+  assert.match(ordersPageSource, /order\?\.serviceType === "PICKUP" \? "Pickup" : "Null"/);
+  assert.match(ordersPageSource, /formatAreaValue\(order\)/);
   assert.match(ordersPageSource, /formatOrderDeliveryLabel\(order\)/);
   assert.match(ordersPageSource, /formatOrderDeliveryState\(order, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /getOrderDeliveryStateTabStyle\(order, orderFilterReferenceDate\)/);
+  assert.match(ordersPageSource, /formatOrderPaymentState\(order\)/);
+  assert.match(ordersPageSource, /function getOrderPaymentStatus\(order\) \{/);
+  assert.match(ordersPageSource, /order\?\.paymentStatus/);
+  assert.match(ordersPageSource, /order\?\.rawPayload\?\.displayFinancialStatus/);
+  assert.match(ordersPageSource, /order\?\.shopifyOrderSnapshot\?\.displayFinancialStatus/);
+  assert.match(ordersPageSource, /function getOrderPaymentGatewayNames\(order\) \{/);
+  assert.match(ordersPageSource, /order\?\.rawPayload\?\.paymentGatewayNames/);
+  assert.match(ordersPageSource, /order\?\.shopifyOrderSnapshot\?\.paymentGatewayNames/);
+  assert.match(ordersPageSource, /if \(status === "PAID"\) return "Paid"/);
+  assert.match(ordersPageSource, /return "Cash · collect"/);
+  assert.match(ordersPageSource, /return "eTransfer · request"/);
+  assert.match(ordersPageSource, /`Pending · \$\{gatewayLabel\}`/);
+  assert.match(ordersPageSource, /Payment unknown/);
   assert.match(ordersPageSource, /function getOrderLineItems\(order\) \{/);
   assert.match(ordersPageSource, /const \[hoveredItemPopoverOrderId, setHoveredItemPopoverOrderId\] = useState\(null\)/);
   assert.match(ordersPageSource, /const \[pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId\] = useState\(null\)/);
@@ -998,8 +1014,9 @@ test("Orders map keeps planned pins the same size and centers the planned number
   assert.match(mapMarkersSource, /const height = \(options\.height \?\? 52\) \* pixelRatio/);
   assert.match(mapMarkersSource, /export const MAP_PIN_ICON_SIZE = 0\.54/);
   assert.match(mapMarkersSource, /"icon-size": MAP_PIN_ICON_SIZE/);
-  assert.match(mapMarkersSource, /function createMapPinSymbolLayer\(\{ id, source, minzoom/);
-  assert.match(ordersPageSource, /createMapPinSymbolLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID,\s+minzoom: ORDER_MARKER_MIN_ZOOM,\s+source: ORDERS_MAP_SOURCE_ID,\s+\}\)/);
+  assert.match(mapMarkersSource, /function createMapPinSymbolLayer\(\{ id, source, iconImage/);
+  assert.match(ordersPageSource, /createMapPinSymbolLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID,\s+source: ORDERS_MAP_SOURCE_ID,\s+\}\)/);
+  assert.doesNotMatch(mapMarkersSource, /minzoom/);
   assert.doesNotMatch(ordersPageSource, /"icon-size": \[\s+"case"/);
   assert.match(mapMarkersSource, /context\.fillText\(String\(options\.label\), 20, 18\)/);
   assert.doesNotMatch(ordersPageSource, /"text-size": 9\.5/);
@@ -1017,6 +1034,8 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) =>/);
   assert.match(ordersPageSource, /if \(columnKey === "deliveryLabel"\) \{/);
   assert.match(ordersPageSource, /return getOrderDeliveryDateValue\(order\) \|\| order\.deliveryLabel \|\| ""/);
+  assert.match(ordersPageSource, /if \(columnKey === "payment"\) \{/);
+  assert.match(ordersPageSource, /return formatOrderPaymentState\(order\)/);
   assert.match(ordersPageSource, /const tableOrders = sortedOrders/);
   assert.match(ordersPageSource, /handleSort\(column\.key\)/);
   assert.match(ordersPageSource, /return \{ key: columnKey, direction: "ascending" \}/);
@@ -1203,6 +1222,17 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
 });
 
+test("Orders inventory tabs avoid border shorthand style collisions", () => {
+  assert.match(
+    ordersPageSource,
+    /const ordersViewTabButtonStyle = \{[\s\S]*borderColor:\s*"#d4d4d4"[\s\S]*borderStyle:\s*"solid"[\s\S]*borderWidth:\s*"1px"/,
+  );
+  assert.doesNotMatch(
+    ordersPageSource,
+    /const ordersViewTabButtonStyle = \{[\s\S]*border:\s*"1px solid #d4d4d4"/,
+  );
+});
+
 test("Orders inventory side-card Add creates standalone inventory without route ownership checks", () => {
   assert.match(ordersPageSource, /import \{ createDeliveryInventory, fetchDeliveryInventories \}/);
   assert.match(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
@@ -1217,11 +1247,23 @@ test("Orders inventory side-card Add creates standalone inventory without route 
   assert.doesNotMatch(ordersPageSource, /inventoryRouteGroup/);
 });
 
-test("Orders inventory detail shows totals, order-by-order items, and delta remarks", () => {
+test("Orders inventory detail shows a printable product matrix without delta", () => {
   assert.match(inventoryDetailSource, /fetchDeliveryInventoryDetail/);
-  assert.match(inventoryDetailSource, /Total items/);
-  assert.match(inventoryDetailSource, /Order-by-order items/);
-  assert.match(inventoryDetailSource, /Delta remarks/);
-  assert.match(inventoryDetailSource, /const orderQuantity = \(order\) => \(order\.items \?\? \[\]\)\.reduce/);
-  assert.match(inventoryDetailSource, /const formatOptions = \(options\) => \(options \?\? \[\]\)\.map/);
+  assert.match(inventoryDetailSource, /buildInventoryProductMatrix/);
+  assert.match(inventoryDetailSource, /Inventory product matrix/);
+  assert.match(inventoryDetailSource, /Product quantities by date/);
+  assert.match(inventoryDetailSource, /window\.print\(\)/);
+  assert.match(inventoryDetailSource, /@media print/);
+  assert.doesNotMatch(inventoryDetailSource, /Delta remarks|Order-by-order items|lastChange/);
+});
+
+test("Orders inventory detail logs API payload counts on the server", () => {
+  assert.match(inventoryDetailSource, /console\.info\("orders\.inventory\.detail\.api"/);
+  assert.match(inventoryDetailSource, /apiPath/);
+  assert.match(inventoryDetailSource, /emptyItemReason/);
+  assert.match(inventoryDetailSource, /orders_present_without_items/);
+  assert.match(inventoryDetailSource, /ordersCountField/);
+  assert.match(inventoryDetailSource, /orderItemQuantity/);
+  assert.match(inventoryDetailSource, /summaryItemQuantity/);
+  assert.match(inventoryDetailSource, /firstOrderItemKeys/);
 });

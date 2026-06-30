@@ -15,6 +15,7 @@ import {
   generateDeliveryRouteGroupChildRoutes,
 } from "../features/delivery/route-groups.server";
 import { buildRouteScopeFromOrders } from "../features/delivery/route-scope";
+import { appendIdToken, routeGroupPath, routePlanPath } from "../features/delivery/route-paths";
 import { addMapPinImage, createDepartureMarkerElement, createMapPinSymbolLayer, createPaletteMapPinImageData } from "../features/maps/map-markers";
 import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
@@ -60,7 +61,6 @@ const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const MARKER_CLICK_ZOOM_OUT_THRESHOLD = 8;
 const MARKER_CLICK_TARGET_ZOOM = 10;
-const ORDER_MARKER_MIN_ZOOM = 7;
 const ORDERS_MAP_SOURCE_ID = "orders-map-orders";
 const ORDERS_MAP_ORDER_LAYER_ID = "orders-map-order-pins";
 const ORDER_PIN_IMAGE_ID = "orders-map-pin";
@@ -200,8 +200,10 @@ const ordersViewTabBarStyle = {
 
 const ordersViewTabButtonStyle = {
   background: "#ffffff",
-  border: "1px solid #d4d4d4",
+  borderColor: "#d4d4d4",
   borderRadius: "8px",
+  borderStyle: "solid",
+  borderWidth: "1px",
   color: "#303030",
   cursor: "pointer",
   font: "inherit",
@@ -664,7 +666,7 @@ const orderDateCalendarDayRangeStyle = {
   background: "#f1f1f1",
 };
 
-const DEFAULT_TABLE_COLUMN_WIDTHS = ["3%", "7%", "8%", "10%", "23%", "7%", "8%", "9%", "10%", "8%"];
+const DEFAULT_TABLE_COLUMN_WIDTHS = ["3%", "7%", "8%", "10%", "18%", "7%", "8%", "9%", "10%", "8%", "8%"];
 const MIN_TABLE_COLUMN_WIDTH = 44;
 
 const tableStyle = {
@@ -894,6 +896,7 @@ const SORTABLE_ORDER_COLUMNS = [
   { key: "deliveryArea", label: "Area" },
   { key: "deliveryLabel", label: "Delivery" },
   { key: "planningStatus", label: "State" },
+  { key: "payment", label: "Payment" },
   { key: "hasCoordinates", label: "Coordinates" },
 ];
 
@@ -1067,6 +1070,10 @@ function getOrderSortValue(order, columnKey, referenceDate) {
     return formatOrderDeliveryState(order, referenceDate);
   }
 
+  if (columnKey === "payment") {
+    return formatOrderPaymentState(order);
+  }
+
   if (columnKey === "deliveryLabel") {
     return getOrderDeliveryDateValue(order) || order.deliveryLabel || "";
   }
@@ -1197,6 +1204,10 @@ function formatDeliveryValue(value) {
   return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
 
+function formatAreaValue(order) {
+  return textOrUndefined(order?.deliveryArea) ?? (order?.serviceType === "PICKUP" ? "Pickup" : "Null");
+}
+
 function getOrderLineItems(order) {
   const lineItems = order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
   const nodes = Array.isArray(lineItems?.nodes)
@@ -1236,6 +1247,96 @@ function formatOrderDeliveryState(order, referenceDate) {
   if (stateValue === "planned") return "Planned";
 
   return "Unplanned";
+}
+
+function getFirstTextValue(values) {
+  for (const value of values) {
+    const text = textOrUndefined(value);
+    if (text) return text;
+  }
+
+  return undefined;
+}
+
+function getOrderPaymentStatus(order) {
+  return getFirstTextValue([
+    order?.paymentStatus,
+    order?.rawPayload?.displayFinancialStatus,
+    order?.shopifyOrderSnapshot?.displayFinancialStatus,
+    order?.financialStatus,
+  ]);
+}
+
+function getOrderPaymentGatewayNames(order) {
+  const gatewayNames =
+    [order?.rawPayload?.paymentGatewayNames, order?.shopifyOrderSnapshot?.paymentGatewayNames, order?.paymentGatewayNames]
+      .find(Array.isArray) ?? [];
+
+  return gatewayNames.map(textOrUndefined).filter(Boolean);
+}
+
+function normalizePaymentStatus(value) {
+  return textOrUndefined(value)?.replace(/\s+/g, "_").toUpperCase() ?? "";
+}
+
+function formatPaymentStatusLabel(value) {
+  const status = normalizePaymentStatus(value);
+  if (!status) return "";
+
+  return status
+    .split("_")
+    .filter(Boolean)
+    .map((word) => word.charAt(0) + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function getPaymentGatewaySearchValue(value) {
+  return String(value ?? "").toLowerCase();
+}
+
+function hasCashPaymentGateway(gatewayNames) {
+  return gatewayNames.some((gatewayName) => {
+    const searchValue = getPaymentGatewaySearchValue(gatewayName);
+    return searchValue.includes("cash") || searchValue.includes("cod") || searchValue.includes("현금");
+  });
+}
+
+function hasETransferPaymentGateway(gatewayNames) {
+  return gatewayNames.some((gatewayName) => {
+    const searchValue = getPaymentGatewaySearchValue(gatewayName).replace(/[\s_-]+/g, "");
+    return searchValue.includes("etransfer") || searchValue.includes("emailtransfer");
+  });
+}
+
+function formatPaymentGatewayName(value) {
+  const gatewayName = textOrUndefined(value);
+  if (!gatewayName) return undefined;
+
+  const searchValue = getPaymentGatewaySearchValue(gatewayName);
+  if (searchValue === "shopify_payments") return "Shopify Payments";
+  if (searchValue.replace(/[\s_-]+/g, "") === "etransfer") return "eTransfer";
+
+  return gatewayName;
+}
+
+function formatOrderPaymentState(order) {
+  const status = normalizePaymentStatus(getOrderPaymentStatus(order));
+  const gatewayNames = getOrderPaymentGatewayNames(order);
+  const gatewayLabel = gatewayNames.map(formatPaymentGatewayName).find(Boolean);
+
+  if (status === "PAID") return "Paid";
+
+  if (status === "PENDING") {
+    if (hasCashPaymentGateway(gatewayNames)) return "Cash · collect";
+    if (hasETransferPaymentGateway(gatewayNames)) return "eTransfer · request";
+
+    return gatewayLabel ? `Pending · ${gatewayLabel}` : "Pending";
+  }
+
+  if (!status) return gatewayLabel ? `Payment · ${gatewayLabel}` : "Payment unknown";
+
+  const statusLabel = formatPaymentStatusLabel(status);
+  return gatewayLabel ? `${statusLabel} · ${gatewayLabel}` : statusLabel;
 }
 
 function getOrderDeliveryStateTabStyle(order, referenceDate) {
@@ -1413,7 +1514,6 @@ function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
   if (!map.getLayer?.(ORDERS_MAP_ORDER_LAYER_ID)) {
     map.addLayer(createMapPinSymbolLayer({
       id: ORDERS_MAP_ORDER_LAYER_ID,
-      minzoom: ORDER_MARKER_MIN_ZOOM,
       source: ORDERS_MAP_SOURCE_ID,
     }));
   }
@@ -1587,7 +1687,7 @@ async function handleOrdersAction(request) {
     errorCount: routePlanErrors.length,
   });
 
-  if (routePlan?.id) {
+  if (generatedRouteGroup?.id) {
     return { routePlan, routeGroup: generatedRouteGroup, errors: [] };
   }
 
@@ -2778,14 +2878,14 @@ export default function OrdersPage() {
 
     if (createdRouteGroup?.id) {
       submittedRouteSessionTokenRef.current = null;
-      navigate(`/app/route-groups/${createdRouteGroup.id}?id_token=${encodeURIComponent(sessionToken)}`);
+      navigate(appendIdToken(routeGroupPath(createdRouteGroup.id), sessionToken));
       return;
     }
 
     if (!createdRoutePlan?.id) return;
 
     submittedRouteSessionTokenRef.current = null;
-    navigate(`/app/routes/${createdRoutePlan.id}?id_token=${encodeURIComponent(sessionToken)}`);
+    navigate(appendIdToken(routePlanPath(createdRoutePlan.id), sessionToken));
   }, [navigate, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
 
   useEffect(() => {
@@ -3613,7 +3713,7 @@ export default function OrdersPage() {
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         <span style={deliveryInfoTabStyle}>
-                          {formatDeliveryValue(order.deliveryArea)}
+                          {formatAreaValue(order)}
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
@@ -3624,6 +3724,11 @@ export default function OrdersPage() {
                       <td style={deliveryInfoCellStyle}>
                         <span style={getOrderDeliveryStateTabStyle(order, orderFilterReferenceDate)}>
                           {formatOrderDeliveryState(order, orderFilterReferenceDate)}
+                        </span>
+                      </td>
+                      <td style={deliveryInfoCellStyle}>
+                        <span style={deliveryInfoTabStyle}>
+                          {formatOrderPaymentState(order)}
                         </span>
                       </td>
                       <td style={tableCellStyle}>

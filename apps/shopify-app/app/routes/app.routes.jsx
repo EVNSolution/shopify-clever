@@ -3,6 +3,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
+import { appendIdToken, routeGroupChildPath, routeGroupPath, routePlanPath } from "../features/delivery/route-paths";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { deleteDeliveryRouteGroup, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { getServiceErrorNotice } from "../features/service-errors";
@@ -427,11 +428,38 @@ function formatRouteDriver(driver) {
   return displayName || phone || "-";
 }
 
+function routeText(value) {
+  const text = String(value ?? "").trim();
+  return text || null;
+}
+
+function getRouteGroupChildRouteName(routeGroup, child, index) {
+  const fallback = `Route ${index + 1}`;
+  const routePlan = child?.routePlan ?? {};
+  const name = routeText(routePlan.name ?? child?.label);
+  const groupName = routeText(routeGroup?.name);
+  if (name && groupName && name.startsWith(`${groupName} — `)) return fallback;
+  return name ?? fallback;
+}
+
+function getRouteGroupChildren(routeGroup) {
+  return (routeGroup?.children ?? []).filter((child) => child?.routePlanId);
+}
+
+function getRouteGroupTotalOrders(routeGroup) {
+  return Number(routeGroup?.totalOrders ?? routeGroup?.ordersCount ?? routeGroup?.assignments?.length ?? 0) || 0;
+}
+
+function getVisibleRouteGroupChildren(routeGroup) {
+  const children = getRouteGroupChildren(routeGroup);
+  return children.length >= 2 ? children : [];
+}
+
 function buildRouteRows(routePlans, routeGroups = []) {
   const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
   const childRoutePlanIds = new Set(
     safeRouteGroups.flatMap((routeGroup) =>
-      (routeGroup.children ?? []).map((child) => child.routePlanId).filter(Boolean),
+      getRouteGroupChildren(routeGroup).map((child) => child.routePlanId).filter(Boolean),
     ),
   );
   const standaloneRoutePlans = Array.isArray(routePlans)
@@ -441,14 +469,14 @@ function buildRouteRows(routePlans, routeGroups = []) {
     id: routeGroup.id,
     rowKey: `routeGroup:${routeGroup.id}`,
     routeGroupId: routeGroup.id,
-    href: `/app/route-groups/${routeGroup.id}`,
+    href: routeGroupPath(routeGroup.id),
     isClickable: true,
     isDeletable: true,
     isRouteGroup: true,
     deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
     route: routeGroup.name ?? routeGroup.id,
     status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
-    orders: routeGroup.totalOrders ?? 0,
+    orders: getRouteGroupTotalOrders(routeGroup),
     coordinates: "-",
     delivered: 0,
     attempted: 0,
@@ -456,14 +484,13 @@ function buildRouteRows(routePlans, routeGroups = []) {
     date: formatRouteGroupDate(routeGroup),
     deliveryArea: "-",
     start: "Parent group",
-    end: `${routeGroup.children?.length ?? 0} child routes`,
+    end: getVisibleRouteGroupChildren(routeGroup).length > 0 ? `${getVisibleRouteGroupChildren(routeGroup).length} child routes` : "No split",
     driver: "-",
     driverId: null,
   }));
   const routeChildRows = safeRouteGroups.flatMap((routeGroup) =>
-    (routeGroup.children ?? [])
-      .filter((child) => child?.routePlanId)
-      .map((child) => {
+    getVisibleRouteGroupChildren(routeGroup)
+      .map((child, index) => {
         const routePlan = child.routePlan ?? {};
         const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
         const missingCoordinates = routePlan.missingCoordinates ?? 0;
@@ -472,11 +499,12 @@ function buildRouteRows(routePlans, routeGroups = []) {
         return {
           id: child.routePlanId,
           rowKey: `routePlan:${child.routePlanId}`,
-          href: `/app/routes/${child.routePlanId}`,
+          href: routeGroupChildPath(routeGroup.id, child.routePlanId),
           isClickable: true,
-          isDeletable: false,
+          isDeletable: true,
+          deleteKey: `routePlan:${child.routePlanId}`,
           parentRouteGroupId: routeGroup.id,
-          route: routePlan.name ?? "Route",
+          route: getRouteGroupChildRouteName(routeGroup, child, index),
           status: child.displayStatus ?? routePlan.status ?? "DRAFT",
           orders: stopsCount,
           coordinates: `${locatedCount}/${stopsCount}`,
@@ -546,7 +574,7 @@ function buildRouteRows(routePlans, routeGroups = []) {
     return {
       id: routePlan.id,
       rowKey: `routePlan:${routePlan.id}`,
-      href: `/app/routes/${routePlan.id}`,
+      href: routePlanPath(routePlan.id),
       isClickable: true,
       isDeletable: true,
       deleteKey: getRouteDeleteKey(routePlan),
@@ -662,21 +690,22 @@ function filterRouteRows(routeRows, routeFilters) {
     ];
 }
 
-function getStatusBadgeStyle(status) {
-  return status === "DRAFT" ? routeStatusBadgeStyle : routeWaitingBadgeStyle;
+function formatRouteStatus(status) {
+  const value = routeText(status)?.toUpperCase();
+  return value && value !== "UNAVAILABLE" && value !== "UNSTARTED" ? value : "DRAFT";
 }
 
-function getRouteDetailSearch(idToken) {
-  return idToken ? `?id_token=${encodeURIComponent(idToken)}` : "";
+function getStatusBadgeStyle(status) {
+  return formatRouteStatus(status) === "DRAFT" ? routeStatusBadgeStyle : routeWaitingBadgeStyle;
 }
 
 function createRouteDetailHref(route, idToken) {
-  return `${route.href}${getRouteDetailSearch(idToken)}`;
+  return appendIdToken(route.href, idToken);
 }
 
 export default function RoutesPage() {
   const navigate = useNavigate();
-  const { routeId } = useParams();
+  const { routeId, routeGroupId } = useParams();
   const [searchParams] = useSearchParams();
   const { routeGroups = [], routePlans = [], errors = [] } = useLoaderData();
   const shopify = useAppBridge();
@@ -776,7 +805,7 @@ export default function RoutesPage() {
     routeDeleteFetcher.submit(formData, { method: "post" });
   }
 
-  if (routeId) return <Outlet />;
+  if (routeId || routeGroupId) return <Outlet />;
 
   return (
     <main style={routesTablePageStyle}>
@@ -866,11 +895,7 @@ export default function RoutesPage() {
                     <td style={routeNameCellStyle}>{route.route}</td>
                     <td style={routeTableCellStyle}>{route.date}</td>
                     <td style={routeTableCellStyle}>
-                      {route.status === "DRAFT" ? (
-                        <span style={getStatusBadgeStyle(route.status)}>DRAFT</span>
-                      ) : (
-                        <span style={getStatusBadgeStyle(route.status)}>{route.status}</span>
-                      )}
+                      <span style={getStatusBadgeStyle(route.status)}>{formatRouteStatus(route.status)}</span>
                     </td>
                     <td style={routeNumberCellStyle}>{route.orders}</td>
                     <td style={routeTableCellStyle}>{route.deliveryArea}</td>

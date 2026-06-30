@@ -112,11 +112,6 @@ s-badge {
   --marker-color: #006fbb;
 }
 
-.route-detail-map--hide-order-markers .order-map-marker,
-.route-detail-map--hide-order-markers .route-detail-snapped-stop-point {
-  display: none;
-}
-
 .maplibregl-marker.order-map-marker,
 .maplibregl-marker.departure-map-marker,
 .maplibregl-marker.route-detail-snapped-stop-point {

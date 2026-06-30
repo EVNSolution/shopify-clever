@@ -27,6 +27,7 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
           note
           processedAt
           displayFinancialStatus
+          paymentGatewayNames
           displayFulfillmentStatus
           currentTotalPriceSet {
             shopMoney {
@@ -242,13 +243,15 @@ function mapOrderNode(order) {
     lineItems: order.lineItems,
     orderCreatedAt: order.createdAt ?? order.processedAt,
   });
+  const pickupOrder = isPickupAttributes(attributes);
   const deliverySession = deliveryDate ? "DAY" : undefined;
-  const serviceType = deliveryDate ? "DELIVERY" : undefined;
+  const serviceType = pickupOrder ? "PICKUP" : deliveryDate ? "DELIVERY" : undefined;
   const routeScopeKey = buildRouteScopeKey({
     deliveryDate,
     serviceType,
   });
-  const deliveryArea = textOrUndefined(attributes["Delivery Area"]);
+  const deliveryArea =
+    textOrUndefined(attributes["Delivery Area"]) ?? (pickupOrder ? "Pickup" : undefined);
   const coordinateAttributes = getCoordinateAttributes(order.customAttributes);
   const latitude =
     numberOrUndefined(shippingAddress.latitude) ??
@@ -400,6 +403,11 @@ function getAttributeMap(customAttributes) {
 
 function getDeliveryDateAttribute(attributes) {
   return getFirstAttributeValue(attributes, DELIVERY_DATE_ATTRIBUTE_KEYS);
+}
+
+function isPickupAttributes(attributes) {
+  const orderType = textOrUndefined(attributes["Order Type"]);
+  return /^pickup$/iu.test(orderType ?? "") || Boolean(textOrUndefined(attributes["Pickup Day"]));
 }
 
 function getFirstAttributeValue(attributes, keys) {

@@ -64,7 +64,12 @@ test("additional and forbidden object-detail routes are not present", () => {
   );
   assert.deepEqual(
     appRouteFiles.filter((file) => file.includes("$")),
-    ["app.route-groups.$routeGroupId.jsx", "app.routes.$routeId.jsx"],
+    [
+      "app.route-groups.$routeGroupId.jsx",
+      "app.routes.$routeId.jsx",
+      "app.routes.groups.$routeGroupId.jsx",
+      "app.routes.groups.$routeGroupId_.routes.$routeId.jsx",
+    ],
     "only route plans and parent route groups should have app object detail routes",
   );
 });

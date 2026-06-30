@@ -82,6 +82,7 @@ test("maps server canonical orders to existing Orders row shape", () => {
       cancelledAt: undefined,
       totalPriceAmount: "95.00",
       currencyCode: "CAD",
+      lineItems: undefined,
       attributes: "Delivery Area: Mississauga, Delivery Day: Friday",
       attributeList: [
         { key: "Delivery Area", value: "Mississauga" },
@@ -144,6 +145,31 @@ test("canonical order adapter falls back safely and only trusts numeric coordina
   assert.equal(row.address, "Toronto, ON");
   assert.deepEqual(row.coordinates, [undefined, undefined]);
   assert.equal(row.hasCoordinates, false);
+});
+
+test("canonical order adapter labels pickup orders as Pickup area", () => {
+  const [row] = mapCanonicalOrdersToOrderRows([
+    {
+      shopifyOrderGid: "gid://shopify/Order/1077",
+      recipientName: "JunJunghwa",
+      rawPayload: {
+        customAttributes: [
+          { key: "Order Type", value: "Pickup" },
+          { key: "Pickup Day", value: "Saturday 12pm - 5pm" },
+        ],
+      },
+      shippingAddress: {
+        address1: "11 Timothy court",
+        city: "Toronto",
+        province: "ON",
+        postalCode: "M9P 3T8",
+        countryCode: "CA",
+      },
+    },
+  ]);
+
+  assert.equal(row.deliveryArea, "Pickup");
+  assert.equal(row.serviceType, "PICKUP");
 });
 
 test("canonical order adapter labels Friday evening route scope distinctly", () => {
@@ -375,6 +401,7 @@ test("getOrderSyncSnapshots returns only server-acceptable Shopify snapshots", (
     legacyResourceId: "1002",
     name: "#1002",
     updatedAt: "2026-05-07T14:00:00.000Z",
+    paymentGatewayNames: ["Email Money Transfer"],
     note: "",
     phone: "",
     customAttributes: [{ key: "Delivery Area", value: "" }],
@@ -445,6 +472,7 @@ test("getOrderSyncSnapshots normalizes optional fields for the strict delivery p
               currencyCode: "CAD",
             },
           },
+          paymentGatewayNames: ["Cash on Delivery (COD)", 7, null],
           customAttributes: [
             { key: "Delivery Area", value: "Scarborough" },
             { key: "tomatono_lat", value: "" },
@@ -494,6 +522,7 @@ test("getOrderSyncSnapshots normalizes optional fields for the strict delivery p
             currencyCode: "CAD",
           },
         },
+        paymentGatewayNames: ["Cash on Delivery (COD)"],
         customAttributes: [{ key: "Delivery Area", value: "Scarborough" }],
         lineItems: {
           nodes: [

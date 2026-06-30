@@ -9,7 +9,9 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
     const hasCoordinates =
       order?.hasCoordinates === true && latitude != null && longitude != null;
     const shippingAddress = normalizeShippingAddress(order?.shippingAddress);
-    const deliveryArea = textOrUndefined(order?.deliveryArea);
+    const serviceType = textOrUndefined(order?.serviceType) ?? inferServiceType(order);
+    const deliveryArea =
+      textOrUndefined(order?.deliveryArea) ?? (serviceType === "PICKUP" ? "Pickup" : undefined);
     const deliveryDay =
       textOrUndefined(order?.deliveryDayRaw) ??
       textOrUndefined(order?.deliveryWeekday);
@@ -77,7 +79,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       readiness: textOrUndefined(order?.readiness),
       reviewReasons: Array.isArray(order?.reviewReasons) ? order.reviewReasons : [],
       planningStatus: textOrUndefined(order?.planningStatus),
-      serviceType: textOrUndefined(order?.serviceType),
+      serviceType,
       ...(routePlanId ? { routePlanId } : {}),
       ...(routeStatus ? { routeStatus } : {}),
       ...(routePlanName ? { routePlanName } : {}),
@@ -163,6 +165,7 @@ function sanitizeShopifyOrderSyncSnapshot(snapshot) {
   copyStringField(output, snapshot, "email");
   copyStringField(output, snapshot, "note");
   copyStringField(output, snapshot, "phone");
+  copyStringArrayField(output, snapshot, "paymentGatewayNames");
 
   if (Object.hasOwn(snapshot, "currentTotalPriceSet")) {
     output.currentTotalPriceSet = sanitizeMoneySet(snapshot.currentTotalPriceSet);
@@ -192,6 +195,14 @@ function copyDateField(output, source, key) {
 function copyStringField(output, source, key) {
   if (Object.hasOwn(source, key)) {
     output[key] = stringOrNull(source[key]);
+  }
+}
+
+function copyStringArrayField(output, source, key) {
+  if (Object.hasOwn(source, key)) {
+    output[key] = Array.isArray(source[key])
+      ? source[key].flatMap((value) => (typeof value === "string" ? [value] : []))
+      : [];
   }
 }
 
@@ -311,6 +322,29 @@ function sanitizeShippingAddress(value) {
   }
 
   return output;
+}
+
+function inferServiceType(order) {
+  const attributes = getAttributeMap(
+    order?.customAttributes ??
+      order?.rawPayload?.customAttributes ??
+      order?.shopifyOrderSnapshot?.customAttributes,
+  );
+  const orderType = textOrUndefined(attributes["Order Type"]);
+
+  return /^pickup$/iu.test(orderType ?? "") || textOrUndefined(attributes["Pickup Day"])
+    ? "PICKUP"
+    : undefined;
+}
+
+function getAttributeMap(customAttributes) {
+  if (!Array.isArray(customAttributes)) return {};
+
+  return Object.fromEntries(
+    customAttributes
+      .map((attribute) => [textOrUndefined(attribute?.key), textOrUndefined(attribute?.value)])
+      .filter(([key, value]) => key && value),
+  );
 }
 
 function normalizeShippingAddress(address = {}) {

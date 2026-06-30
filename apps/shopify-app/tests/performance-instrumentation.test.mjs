@@ -10,6 +10,10 @@ const routeDetailPageSource = readFileSync(
   join(root, "app/routes/app.routes.$routeId.jsx"),
   "utf8",
 );
+const routeDetailServerSource = readFileSync(
+  join(root, "app/features/delivery/route-detail.server.js"),
+  "utf8",
+);
 const settingsPageSource = readFileSync(join(root, "app/routes/app.settings.jsx"), "utf8");
 const rootSource = readFileSync(join(root, "app/root.jsx"), "utf8");
 const perfRoutePath = join(root, "app/routes/perf.jsx");
@@ -72,7 +76,7 @@ test("root document preconnects to map tile infrastructure before MapLibre loads
 });
 
 test("app loaders scope cached Shopify departure location reads by authenticated shop", () => {
-  for (const source of [ordersPageSource, routeDetailPageSource, settingsPageSource]) {
+  for (const source of [ordersPageSource, routeDetailPageSource + routeDetailServerSource, settingsPageSource]) {
     assert.match(source, /session\?\.shop/);
     assert.match(source, /fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/);
   }

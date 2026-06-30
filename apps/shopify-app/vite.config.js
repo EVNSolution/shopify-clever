@@ -54,6 +54,7 @@ function isRoutesDocumentRequest(req) {
   );
 }
 
+
 function routesDocumentFallbackPlugin() {
   return {
     name: "clever-routes-document-fallback",

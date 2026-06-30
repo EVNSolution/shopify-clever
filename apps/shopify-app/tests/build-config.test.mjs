@@ -70,7 +70,6 @@ test("MapLibre maps share global interaction defaults", () => {
   assert.match(mapLibreMapSource, /cooperativeGestures:\s*true/);
   assert.match(mapLibreMapSource, /new maplibregl\.Map/);
   assert.match(ordersPageSource, /createMapLibreMap\(maplibregl, \{/);
-  assert.match(routeDetailPageSource, /createMapLibreMap\(maplibregl, \{/);
   assert.match(settingsPageSource, /createMapLibreMap\(maplibregl, \{/);
   assert.match(ordersPageSource, /fadeDuration:\s*0/);
   assert.match(routeDetailPageSource, /fadeDuration:\s*0/);
@@ -90,25 +89,19 @@ test("orders map renders order pins through a MapLibre source layer", () => {
   assert.match(ordersPageSource, /map\.addSource\(ORDERS_MAP_SOURCE_ID/);
   assert.match(ordersPageSource, /createMapPinSymbolLayer\(\{/);
   assert.match(mapMarkersSource, /type: "symbol"/);
-  assert.match(ordersPageSource, /const ORDER_MARKER_MIN_ZOOM = 7/);
-  assert.match(ordersPageSource, /minzoom: ORDER_MARKER_MIN_ZOOM/);
+  assert.doesNotMatch(ordersPageSource, /ORDER_MARKER_MIN_ZOOM/);
+  assert.doesNotMatch(ordersPageSource, /minzoom/);
   assert.match(ordersPageSource, /map\.on\("click",\s*ORDERS_MAP_ORDER_LAYER_ID/);
   assert.doesNotMatch(ordersPageSource, /const marker = new maplibregl\.Marker/);
 });
 
-test("route detail map renders route stops through a MapLibre source layer", () => {
-  assert.match(routeDetailPageSource, /ROUTE_DETAIL_STOPS_SOURCE_ID/);
-  assert.match(routeDetailPageSource, /ROUTE_DETAIL_STOPS_LAYER_ID/);
-  assert.match(routeDetailPageSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID/);
-  assert.match(mapMarkersSource, /type: "symbol"/);
-  assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
+test("route detail map renders route stops through MapLibre source layers", () => {
+  assert.match(routeDetailPageSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops/);
+  assert.match(routeDetailPageSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
+  assert.match(routeDetailPageSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
   assert.match(routeDetailPageSource, /createMapPinSymbolLayer\(\{/);
-  assert.doesNotMatch(routeDetailPageSource, /"icon-size"|const ROUTE_DETAIL_STOP_PIN_ICON_SIZE/);
-  assert.match(routeDetailPageSource, /createMapPinImageData\(routeColor, \{/);
-  assert.match(routeDetailPageSource, /map\.queryRenderedFeatures\(event\.point, \{ layers: \[ROUTE_DETAIL_STOPS_LAYER_ID\] \}\)/);
-  assert.doesNotMatch(routeDetailPageSource, /function createRouteStopMarkerElement/);
   assert.doesNotMatch(routeDetailPageSource, /const stopMarker = new maplibregl\.Marker/);
-  assert.match(routeDetailPageSource, /const snappedStopPointMarker = new maplibregl\.Marker/);
+  assert.doesNotMatch(routeDetailPageSource, /const snappedStopPointMarker = new maplibregl\.Marker/);
 });
 
 test("TypeScript config avoids deprecated baseUrl", () => {

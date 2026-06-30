@@ -13,10 +13,19 @@ const routeDetailPath = join(root, "app/routes/app.routes.$routeId.jsx");
 const routeDetailSource = existsSync(routeDetailPath)
   ? readFileSync(routeDetailPath, "utf8")
   : "";
-const routeGroupDetailPath = join(root, "app/routes/app.route-groups.$routeGroupId.jsx");
+const routeGroupDetailPath = join(root, "app/routes/app.routes.groups.$routeGroupId.jsx");
 const routeGroupDetailSource = existsSync(routeGroupDetailPath)
   ? readFileSync(routeGroupDetailPath, "utf8")
   : "";
+const legacyRouteGroupDetailPath = join(root, "app/routes/app.route-groups.$routeGroupId.jsx");
+const legacyRouteGroupDetailSource = existsSync(legacyRouteGroupDetailPath)
+  ? readFileSync(legacyRouteGroupDetailPath, "utf8")
+  : "";
+const routeGroupChildDetailPath = join(root, "app/routes/app.routes.groups.$routeGroupId_.routes.$routeId.jsx");
+const routeGroupChildDetailSource = existsSync(routeGroupChildDetailPath)
+  ? readFileSync(routeGroupChildDetailPath, "utf8")
+  : "";
+const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
 const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8");
 const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
 
@@ -53,8 +62,13 @@ test("Routes page loads persisted route plans and route groups from the delivery
 test("Routes page lists saved child routes below their parent route group", () => {
   assert.match(routesPageSource, /const routeChildRows = safeRouteGroups\.flatMap/);
   assert.match(routesPageSource, /\.filter\(\(child\) => child\?\.routePlanId\)/);
+  assert.match(routesPageSource, /href: routeGroupChildPath\(routeGroup\.id, child\.routePlanId\)/);
+  assert.match(routesPageSource, /function getRouteGroupChildRouteName\(routeGroup, child, index\) \{/);
+  assert.match(routesPageSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
+  assert.match(routesPageSource, /route: getRouteGroupChildRouteName\(routeGroup, child, index\)/);
   assert.match(routesPageSource, /parentRouteGroupId: routeGroup\.id/);
-  assert.match(routesPageSource, /isDeletable: false/);
+  assert.match(routesPageSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routesPageSource, /isDeletable: true,[\s\S]*deleteKey: `routePlan:\$\{child\.routePlanId\}`/);
   assert.match(routesPageSource, /return \[\.\.\.routeGroupRows, \.\.\.routeChildRows, \.\.\.routePlanRows\]/);
 });
 
@@ -90,9 +104,6 @@ test("Routes page adds only the top summary cards and Create routes action from 
   assert.match(routesPageSource, /label: "Distance"/);
   assert.match(routesPageSource, /function handleCreateRoutesClick\(\) \{/);
   assert.match(routesPageSource, /navigate\("\/app\/orders"\)/);
-  assert.match(routesPageSource, /<div style=\{routesHeaderActionsStyle\}>/);
-  assert.match(routesPageSource, /<span style=\{routeSelectionSummaryStyle\}>[\s\S]*\{checkedRouteIds\.length\} selected/);
-  assert.match(routesPageSource, />Delete<\/button>/);
   assert.match(routesPageSource, /<button type="button" style=\{createRoutesButtonStyle\} onClick=\{handleCreateRoutesClick\}>Create routes<\/button>/);
   assert.match(routesPageSource, /<section aria-label="Routes summary" style=\{routesSummaryCardsStyle\}>/);
   assert.match(routesPageSource, /routesSummary\.map\(\(summaryItem\) =>/);
@@ -111,34 +122,23 @@ test("Routes page keeps copied controls out while using checkbox route selection
   assert.doesNotMatch(routesPageSource, />Create route<\/a>/);
   assert.doesNotMatch(routesPageSource, /routesTableToolbarStyle|routeChipStyle/);
   assert.match(routesPageSource, /const routesTablePageStyle = \{/);
-  assert.match(routesPageSource, /const ROUTE_NAME_COLUMN_MIN_WIDTH = 112/);
-  assert.match(routesPageSource, /function getRouteNameColumnWidth\(routeRows\) \{/);
-  assert.match(routesPageSource, /Math\.max\(ROUTE_NAME_COLUMN_MIN_WIDTH, longestRouteName \* 7 \+ 28\)/);
   assert.match(routesPageSource, /function getRouteColumnWidths\(routeRows\) \{/);
-  assert.match(routesPageSource, /getRouteNameColumnWidth\(routeRows\)/);
+  assert.match(routesPageSource, /const routeColumnWidths = getRouteColumnWidths\(routeRows\)/);
   assert.match(routesPageSource, /const routesHeaderActionsStyle = \{/);
   assert.match(routesPageSource, /const routeSelectionSummaryStyle = \{/);
-  assert.doesNotMatch(routesPageSource, /const routeControlsStyle = \{/);
-  assert.doesNotMatch(routesPageSource, /const routeControlsTrailingStyle = \{/);
+  assert.match(routesPageSource, /gap: "8px"/);
   assert.match(routesPageSource, /const routeCheckboxCellStyle = \{/);
   assert.match(routesPageSource, /const routeActionButtonStyle = \{/);
-  assert.match(routesPageSource, /background: "#ffffff"/);
-  assert.match(routesPageSource, /color: "#303030"/);
-  assert.doesNotMatch(routesPageSource, /#d72c0d/);
   assert.match(routesPageSource, /const routeDisabledActionButtonStyle = \{/);
   assert.doesNotMatch(routesPageSource, /const routeIndexActionsStyle = \{/);
   assert.doesNotMatch(routesPageSource, /const routeIndexButtonStyle = \{/);
   assert.doesNotMatch(routesPageSource, /const routeDeleteButtonStyle = \{/);
   assert.match(routesPageSource, /const singleRouteTableStyle = \{/);
   assert.match(routesPageSource, /minWidth: "996px"/);
-  assert.match(routesPageSource, /width: "100%"/);
-  assert.match(routesPageSource, /const routeNumberHeaderCellStyle = \{/);
-  assert.match(routesPageSource, /<th style=\{routeNumberHeaderCellStyle\}>Orders<\/th>/);
   assert.match(routesPageSource, /padding: "7px 8px"/);
   assert.match(routesPageSource, /padding: "8px 8px"/);
   assert.match(routesPageSource, /<table style=\{singleRouteTableStyle\}>/);
   assert.match(routesPageSource, /<colgroup>/);
-  assert.match(routesPageSource, /const routeColumnWidths = getRouteColumnWidths\(routeRows\)/);
   assert.match(routesPageSource, /routeColumnWidths\.map\(\(width, index\) =>/);
   assert.match(routesPageSource, /key=\{`\$\{width\}-\$\{index\}`\}/);
 });
@@ -160,9 +160,13 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.doesNotMatch(routesPageSource, />Coordinates<\/th>/);
   assert.doesNotMatch(routesPageSource, />Missing<\/th>/);
   assert.doesNotMatch(routesPageSource, />Created<\/th>/);
-  assert.match(routesPageSource, />DRAFT<\/span>/);
+  assert.match(routesPageSource, /formatRouteStatus\(route\.status\)/);
   assert.match(routesPageSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
   assert.match(routesPageSource, /const routeGroupRows = safeRouteGroups\.map\(\(routeGroup\) =>/);
+  assert.match(routesPageSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
+  assert.match(routesPageSource, /return Number\(routeGroup\?\.totalOrders \?\? routeGroup\?\.ordersCount \?\? routeGroup\?\.assignments\?\.length \?\? 0\) \|\| 0/);
+  assert.match(routesPageSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routesPageSource, /end: getVisibleRouteGroupChildren\(routeGroup\)\.length > 0 \? `\$\{getVisibleRouteGroupChildren\(routeGroup\)\.length\} child routes` : "No split"/);
   assert.match(routesPageSource, /isRouteGroup: true/);
   assert.match(routesPageSource, /isDeletable: false/);
   assert.match(routesPageSource, /formatRouteGroupDate\(routeGroup\)/);
@@ -209,7 +213,6 @@ test("Routes table selection column uses checkboxes and a single delete action",
   assert.match(routesPageSource, /onChange=\{\(\) => toggleRouteCheck\(route\.deleteKey\)\}/);
   assert.match(routesPageSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(routesPageSource, />Delete<\/button>/);
-  assert.doesNotMatch(routesPageSource, />Delete selected<\/button>/);
   assert.doesNotMatch(routesPageSource, />\{route\.routeIndex\}<\/button>/);
   assert.doesNotMatch(routesPageSource, /aria-label=\{`Delete \$\{route\.route\}`\}/);
 });
@@ -219,21 +222,10 @@ test("Routes table rows are clickable links into route detail", () => {
   assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
   assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{/);
-  assert.ok(routesPageSource.includes("rowKey: `routeGroup:${routeGroup.id}`"));
-  assert.ok(routesPageSource.includes("key={route.rowKey ?? route.id}"));
-  assert.ok(routesPageSource.includes("href: `/app/route-groups/${routeGroup.id}`"));
-  assert.ok(routesPageSource.includes("href: `/app/routes/${child.routePlanId}`"));
-  assert.ok(routesPageSource.includes("href: `/app/routes/${routePlan.id}`"));
-  assert.match(routesPageSource, /return `\$\{route\.href\}\$\{getRouteDetailSearch\(idToken\)\}`/);
-  assert.match(routesPageSource, /function navigateRouteDetail\(route\) \{/);
-  assert.match(routesPageSource, /shopify\.idToken\(\)/);
-  assert.match(routesPageSource, /navigate\(createRouteDetailHref\(route, idToken\)\)/);
-  assert.match(routesPageSource, /catch\(\(\) => navigate\(createRouteDetailHref\(route, fallbackIdToken\)\)\)/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);
   assert.match(routesPageSource, /navigateRouteDetail\(route\)/);
-  assert.match(routesPageSource, /function getRouteDetailSearch\(idToken\) \{/);
-  assert.match(routesPageSource, /const fallbackIdToken = searchParams\.get\("id_token"\)/);
+  assert.match(routesPageSource, /navigate\(createRouteDetailHref\(route, idToken\)\)/);
   assert.match(routesPageSource, /onClick=\{\(\) => handleRouteRowClick\(route\)\}/);
   assert.match(routesPageSource, /onKeyDown=\{\(event\) => handleRouteRowKeyDown\(event, route\)\}/);
   assert.match(routesPageSource, /role=\{route\.isClickable \? "link" : undefined\}/);
@@ -261,26 +253,26 @@ test("Routes placeholder row is not clickable when there are no persisted route 
 });
 
 test("Routes parent renders the nested route detail page", () => {
-  assert.match(routesPageSource, /const \{ routeId \} = useParams\(\)/);
-  assert.match(routesPageSource, /if \(routeId\) return <Outlet \/>/);
+  assert.match(routesPageSource, /const \{ routeId, routeGroupId \} = useParams\(\)/);
+  assert.match(routesPageSource, /if \(routeId \|\| routeGroupId\) return <Outlet \/>/);
 });
 
 
 test("Route detail loader reads server-saved drivers for route driver labels", () => {
-  assert.match(routeDetailSource, /import \{ fetchDeliveryDrivers \} from "\.\.\/features\/delivery\/drivers\.server"/);
+  assert.match(routeDetailServerSource, /import \{ fetchDeliveryDrivers \} from "\.\/drivers\.server"/);
   assert.match(routeDetailSource, /drivers = \[\]/);
-  assert.match(routeDetailSource, /fetchDeliveryDrivers\(request, \{\}\)/);
-  assert.match(routeDetailSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
-  assert.match(routeDetailSource, /routeGroup: routeGroupData\.routeGroup/);
-  assert.match(routeDetailSource, /driverData\.drivers/);
-  assert.match(routeDetailSource, /driverData\.errors/);
+  assert.match(routeDetailServerSource, /fetchDeliveryDrivers\(request, \{\}\)/);
+  assert.match(routeDetailServerSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
+  assert.match(routeDetailServerSource, /routeGroup: routeGroupData\.routeGroup/);
+  assert.match(routeDetailServerSource, /driverData\.drivers/);
+  assert.match(routeDetailServerSource, /driverData\.errors/);
 });
 
 test("Route detail keeps the server driver action but removes the header assignment UI", () => {
-  assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver/);
-  assert.match(routeDetailSource, /intent === "saveRouteDriver"/);
-  assert.match(routeDetailSource, /formData\.get\("driverId"\)/);
-  assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+routeId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
+  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver/);
+  assert.match(routeDetailServerSource, /intent === "saveRouteDriver"/);
+  assert.match(routeDetailServerSource, /formData\.get\("driverId"\)/);
+  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+routeId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
   assert.match(routeDetailSource, /buildRouteDriverOptions\(drivers, effectiveRoutePlan\?\.driver\)/);
   assert.match(routeDetailSource, /Invite pending/);
   assert.doesNotMatch(routeDetailSource, /const routeDriverSaveFetcher = useFetcher\(\)/);
@@ -292,26 +284,25 @@ test("Route detail keeps the server driver action but removes the header assignm
 
 
 test("Route detail wires route group action buttons through App Bridge", () => {
-  assert.match(routeDetailSource, /import \{ Link, useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /previewDeliveryRouteGroupOptimization/);
+  assert.match(routeDetailServerSource, /previewDeliveryRouteGroupOptimization/);
   assert.doesNotMatch(routeDetailSource, /createDeliveryRouteGroupBranch/);
   assert.doesNotMatch(routeDetailSource, /reOptimizeDeliveryRouteGroup/);
   assert.doesNotMatch(routeDetailSource, /updateDeliveryRouteGroupBranchOrders/);
-  assert.match(routeDetailSource, /fetchDeliveryRouteGroupDetail/);
-  assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.action"/);
-  assert.match(routeDetailSource, /logRouteGroupActionResult\("routes\.detail\.action\.previewRouteOptimization"/);
+  assert.match(routeDetailServerSource, /fetchDeliveryRouteGroupDetail/);
+  assert.match(routeDetailServerSource, /logRouteDetailPerformance\("routes\.detail\.action"/);
+  assert.match(routeDetailServerSource, /logRouteGroupActionResult\("routes\.detail\.action\.previewRouteOptimization"/);
   assert.doesNotMatch(routeDetailSource, /getRouteGroupActionRedirectRouteId/);
   assert.doesNotMatch(routeDetailSource, /return redirect\(`\/app\/routes/);
-  assert.match(routeDetailSource, /intent === "previewRouteOptimization"/);
-  assert.match(routeDetailSource, /intent === "saveRouteDraft"/);
+  assert.match(routeDetailServerSource, /intent === "previewRouteOptimization"/);
+  assert.match(routeDetailServerSource, /intent === "saveRouteDraft"/);
   assert.doesNotMatch(routeDetailSource, /intent === "addEmptyRouteBranch"/);
   assert.doesNotMatch(routeDetailSource, /intent === "assignPolygonToRoute"/);
   assert.match(routeDetailSource, /const shopify = useAppBridge\(\)/);
   assert.match(routeDetailSource, /const routeActionFetcher = useFetcher\(\)/);
   assert.match(routeDetailSource, /const revalidator = useRevalidator\(\)/);
   assert.match(routeDetailSource, /effectiveRoutePlan\?\.routeGroupingChild\?\.groupingId/);
-  assert.match(routeDetailSource, /textOrUndefined\(effectiveRoutePlan\?\.routeGroupingChild\?\.groupingId\) \?\? textOrUndefined\(routeGroup\?\.id\)/);
   assert.match(routeDetailSource, /shopify\.idToken\(\)/);
   assert.doesNotMatch(routeDetailSource, /console\.info\("routes\.detail\.action\.submit"/);
   assert.doesNotMatch(routeDetailSource, /console\.warn\("routes\.detail\.action\.submit\.missing_route_group_id"/);
@@ -321,8 +312,8 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = false/);
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
   assert.match(routeDetailSource, /\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(timelineRouteRows, \{ includeExistingOptimized: true \}\)\),/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(timelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)\),/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeExistingOptimized: true \}\)\),/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)\),/);
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
   assert.match(routeDetailSource, /setClientRouteRows\(\(rows\) => \[/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
@@ -338,54 +329,61 @@ test("Routes list displays assigned route drivers from the server response", () 
   assert.match(routesPageSource, /routeFilters\.driverId && route\.driverId !== routeFilters\.driverId/);
 });
 
-test("Route path params ignore accidentally appended query flags", () => {
-  assert.match(routeDetailSource, /export function cleanRoutePathParam\(value\) \{/);
-  assert.match(routeDetailSource, /textOrUndefined\(value\)\?\.split\(\/\[\?&\]\/\)\[0\]/);
-  assert.match(routeDetailSource, /loadRoutePlanDetail\(request, cleanRoutePathParam\(params\.routeId\)\)/);
-  assert.match(routeGroupDetailSource, /cleanRoutePathParam\(params\.routeGroupId\)/);
-});
-
 test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /import \{ Link, useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeDetailTitleOverride = null,\s+routeMetrics = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
-  assert.match(routeDetailSource, /const routeMapRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
-  assert.match(routeDetailSource, /const routeMapStops = routeMapRows\.flatMap/);
-  assert.match(routeDetailSource, /buildRouteGeometryRows\(routeGeometrySourceRows, routeChildDetailsByOrders, routeGeometry, routeStopPoints\)/);
   assert.match(routeDetailSource, /const savedRouteGeometryRows = routeGeometryRows/);
-  assert.match(routeDetailSource, /const savedRouteMarkerStopPoints = routeMarkerStopPoints/);
+  assert.match(routeDetailSource, /const savedRouteStopPoints = routeGeometryStopPoints/);
   assert.match(routeDetailSource, /const routePathColor = softenRouteColor\(routeLineColor\)/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
-  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+routeMapStops,\s+savedRouteMarkerStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
-  assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan\)/);
+  assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
+  assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan, routeGroup\)/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
   assert.doesNotMatch(routeDetailSource, /parseRouteDetailDraft/);
   assert.doesNotMatch(routeDetailSource, /useSearchParams/);
 });
 
+test("Route group detail keeps its own page instead of becoming a child route", () => {
+  assert.match(routesPageSource, /href: routeGroupPath\(routeGroup\.id\)/);
+  assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{\n  return appendIdToken\(route\.href, idToken\);\n\}/);
+  assert.match(routeGroupDetailSource, /routePlan: null/);
+  assert.match(routeGroupDetailSource, /route_group_detail\.api/);
+  assert.match(routeGroupDetailSource, /routeDetailTitleOverride: routeGroupData\.routeGroup\?\.name \?\? null/);
+  assert.doesNotMatch(routeGroupDetailSource, /redirect\(childRoutePlanId/);
+  assert.match(legacyRouteGroupDetailSource, /redirect\(/);
+  assert.match(legacyRouteGroupDetailSource, /routeGroupPath\(cleanRoutePathParam\(params\.routeGroupId\)\)/);
+  assert.match(routeDetailSource, /const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null/);
+  assert.match(routeDetailSource, /const displayRouteRowsSource = isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
+  assert.match(routeDetailSource, /const contextRouteRowsSource = isRouteGroupDetail/);
+});
+
 test("Route detail loader reads the selected persisted route plan", () => {
-  assert.doesNotMatch(routeDetailSource, /fetchDeliveryOrders/);
-  assert.match(routeDetailSource, /assignDeliveryRoutePlanDriver,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\.\/features\/delivery\/route-plans\.server"/);
-  assert.doesNotMatch(routeDetailSource, /updateDeliveryRoutePlanStops/);
-  assert.match(routeDetailSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/features\/locations\/shopify-locations\.server"/);
-  assert.match(routeDetailSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
-  assert.match(routeDetailSource, /export const loader = async \(\{ params, request \}\) => loadRoutePlanDetail\(request, cleanRoutePathParam\(params\.routeId\)\)/);
-  assert.match(routeDetailSource, /const \{ admin, session \} = await authenticate\.admin\(request\)/);
-  assert.match(routeDetailSource, /const shopifyShopCacheKey = session\?\.shop/);
-  assert.match(routeDetailSource, /Promise\.all\(\[/);
-  assert.match(routeDetailSource, /fetchDeliveryRoutePlanDetail\(request, routeId, \{\s+cacheKey: shopifyShopCacheKey,\s+\}\)/);
-  assert.match(routeDetailSource, /fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/);
-  assert.match(routeDetailSource, /fetchDeliveryDrivers\(request, \{\}\)/);
-  assert.match(routeDetailSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
-  assert.match(routeDetailSource, /routeGroup: routeGroupData\.routeGroup/);
-  assert.doesNotMatch(routeDetailSource, /sameDateOrderData/);
-  assert.match(routeDetailSource, /currentDepartureLocation: departureLocationData\.departureLocation/);
-  assert.doesNotMatch(routeDetailSource, /fetchShopifyOrders\(admin\)/);
-  assert.doesNotMatch(routeDetailSource, /getRouteOrderIds/);
+  assert.doesNotMatch(routeDetailServerSource, /fetchDeliveryOrders/);
+  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\/route-plans\.server"/);
+  assert.doesNotMatch(routeDetailServerSource, /updateDeliveryRoutePlanStops/);
+  assert.match(routeDetailServerSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/locations\/shopify-locations\.server"/);
+  assert.match(routeDetailServerSource, /import \{ authenticate \} from "\.\.\/\.\.\/shopify\.server"/);
+  assert.match(routeDetailSource, /import \{ routeDetailAction, routeDetailLoader \} from "\.\.\/features\/delivery\/route-detail\.server"/);
+  assert.match(routeDetailSource, /export const loader = routeDetailLoader/);
+  assert.match(routeDetailServerSource, /export const routeDetailLoader = async \(\{ params, request \}\) => \{/);
+  assert.match(routeDetailServerSource, /return loadRoutePlanDetail\(request, routeId\)/);
+  assert.match(routeDetailServerSource, /const \{ admin, session \} = await authenticate\.admin\(request\)/);
+  assert.match(routeDetailServerSource, /const shopifyShopCacheKey = session\?\.shop/);
+  assert.match(routeDetailServerSource, /Promise\.all\(\[/);
+  assert.match(routeDetailServerSource, /fetchDeliveryRoutePlanDetail\(request, routeId, \{\s+cacheKey: shopifyShopCacheKey,\s+\}\)/);
+  assert.match(routeDetailServerSource, /fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/);
+  assert.match(routeDetailServerSource, /fetchDeliveryDrivers\(request, \{\}\)/);
+  assert.match(routeDetailServerSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
+  assert.match(routeDetailServerSource, /routeGroup: routeGroupData\.routeGroup/);
+  assert.doesNotMatch(routeDetailServerSource, /sameDateOrderData/);
+  assert.match(routeDetailServerSource, /currentDepartureLocation: departureLocationData\.departureLocation/);
+  assert.doesNotMatch(routeDetailServerSource, /fetchShopifyOrders\(admin\)/);
+  assert.doesNotMatch(routeDetailServerSource, /getRouteOrderIds/);
 });
 
 test("Route detail summarizes delivery with the actual date label", () => {
@@ -398,27 +396,21 @@ test("Route detail summarizes delivery with the actual date label", () => {
   assert.doesNotMatch(routeDetailSource, /renderSummaryItem\("Delivery day", routeDetail\.deliveryDay\)/);
 });
 
-test("Route detail preserves id_token on back and switch links", () => {
-  assert.match(routeDetailSource, /useLocation/);
-  assert.match(routeDetailSource, /function getRouteSessionSearch\(locationSearch\) \{/);
-  assert.match(routeDetailSource, /new URLSearchParams\(locationSearch\)\.get\("id_token"\)/);
-  assert.match(routeDetailSource, /const routesListHref = `\/app\/routes\$\{routeSessionSearch\}`/);
-  assert.match(routeDetailSource, /to=\{`\$\{routeLink\.href\}\$\{routeSessionSearch\}`\}/);
+test("Routes canonical group child route loads by group id", () => {
+  assert.match(routeGroupChildDetailSource, /loadRoutePlanDetail\(/);
+  assert.match(routeGroupChildDetailSource, /cleanRoutePathParam\(params\.routeId\)/);
+  assert.match(routeGroupChildDetailSource, /cleanRoutePathParam\(params\.routeGroupId\)/);
+  assert.match(routeDetailServerSource, /return redirect\(`\$\{routeGroupChildPath\(routeGroupIdHint, routeId\)\}/);
+  assert.match(routeDetailServerSource, /getRedirectSearch\(request, \["routeGroupId", "groupId"\]\)/);
 });
 
-test("Route detail refreshes expired Shopify session tokens in-place", () => {
-  assert.match(routeDetailSource, /function hasInvalidShopifySessionTokenError\(errors\) \{/);
-  assert.match(routeDetailSource, /Invalid Shopify session token/i);
-  assert.match(routeDetailSource, /function getRouteSessionRefreshHref\(location, sessionToken\) \{/);
-  assert.match(routeDetailSource, /searchParams\.set\("id_token", sessionToken\)/);
-  assert.match(routeDetailSource, /const sessionTokenRefreshSubmittedRef = useRef\(false\)/);
-  assert.match(routeDetailSource, /const needsSessionTokenRefresh = hasInvalidShopifySessionTokenError\(errors\)/);
-  assert.match(routeDetailSource, /shopify\s*\.\s*idToken\(\)/);
-  assert.match(routeDetailSource, /navigate\(getRouteSessionRefreshHref\(location, sessionToken\), \{\s*preventScrollReset: true,\s*replace: true,/);
-});
-
-test("Route detail uses the selected route title unless a group route supplies an override", () => {
-  assert.match(routeDetailSource, /const routeDetailTitle = textOrUndefined\(routeDetailTitleOverride\) \?\? textOrUndefined\(routeDetail\.route\) \?\? textOrUndefined\(routeGroup\?\.name\) \?\? "Route"/);
+test("Route detail separates group and child titles", () => {
+  assert.match(routeDetailSource, /const routeDetailTitle = textOrUndefined\(routeDetailTitleOverride\) \?\? \(isRouteGroupDetail \? textOrUndefined\(routeGroup\?\.name\) : textOrUndefined\(routeDetail\.route\)\) \?\? "Route"/);
+  assert.match(routeDetailSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
+  assert.match(routeDetailSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
+  assert.match(routeDetailServerSource, /name: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
+  assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, detail\?\.routePlan \?\? child\?\.routePlan, index\)/);
+  assert.match(routeDetailServerSource, /routePlan: currentChildDetail\?\.routePlan \?\? routePlanData\.routePlan/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
 });
 
@@ -474,7 +466,6 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /height: "56px"/);
   assert.match(routeDetailSource, /const routeTimelineRowsStyle = \{/);
   assert.match(routeDetailSource, /overflowX: "auto"/);
-  assert.match(routeDetailSource, /const currentRouteRows = timelineRouteRows\.filter\(\(routeRow\) => routeRow\.isCurrent\)/);
   assert.match(routeDetailSource, /const routeTimelineRowsMinHeight = `\$\{Math\.max\(1, timelineRouteRows\.length\) \* 24\}px`/);
   assert.match(routeDetailSource, /style=\{\{ \.\.\.routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight \}\}/);
   assert.match(routeDetailSource, /const routeTimelineDropHintStyle = \{/);
@@ -494,8 +485,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
   assert.doesNotMatch(routeDetailSource, /activeRouteDriverStops/);
   assert.match(routeDetailSource, /height: "440px"/);
-  assert.match(routeDetailSource, /height: "100%"/);
-  assert.doesNotMatch(routeDetailSource, /minHeight: "490px"/);
+  assert.match(routeDetailSource, /minHeight: "490px"/);
   assert.doesNotMatch(routeDetailSource, /routeDetailHeaderInfoCardStyle/);
   assert.doesNotMatch(routeDetailSource, /routeDetailPageNavStyle/);
   assert.doesNotMatch(routeDetailSource, /routeDetailTitleMetricsStyle/);
@@ -528,30 +518,29 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   );
   assert.match(routeDetailSource, /import\("maplibre-gl"\)/);
   assert.match(routeDetailSource, /import\("pmtiles"\)/);
-  assert.match(routeDetailSource, /import \{ createMapLibreMap \} from "\.\.\/features\/maps\/maplibre-map"/);
   assert.match(routeDetailSource, /import \{ installMissingMapImageFallback \} from "\.\.\/features\/maps\/maplibre-missing-images"/);
   assert.match(routeDetailSource, /import \{ installPmtilesProtocol \} from "\.\.\/features\/maps\/pmtiles-protocol"/);
   assert.match(routeDetailSource, /installPmtilesProtocol\(maplibregl, Protocol\)/);
   assert.match(routeDetailSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(routeDetailSource, /style: OPENFREEMAP_STYLE_URL/);
-  assert.match(routeDetailSource, /createMapLibreMap\(maplibregl, \{/);
+  assert.match(routeDetailSource, /new maplibregl\.Map\(\{/);
   assert.doesNotMatch(routeDetailSource, /new maplibregl\.NavigationControl/);
   assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
   assert.match(routeDetailSource, /const routeDetailMapFrameStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailMapCanvasStyle = \{/);
   assert.match(routeDetailSource, /canvasRef=\{mapContainerRef\}/);
-  assert.match(routeDetailSource, /syncRouteDetailDepartureMarker\(map, departureLocation\)/);
+  assert.match(routeDetailSource, /createDepartureMarkerImageData\(\)/);
   assert.match(routeDetailSource, /const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route"/);
   assert.match(routeDetailSource, /const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line"/);
   assert.match(routeDetailSource, /function syncRouteDetailRouteLine\(map, routeLines, routeColor = "#e11900"\) \{/);
   assert.match(routeDetailSource, /function softenRouteColor\(routeColor\) \{/);
-  assert.match(routeDetailSource, /function createRouteDetailMapMarkers\(map, maplibregl, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
+  assert.match(routeDetailSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
   assert.match(routeDetailSource, /type: "LineString"/);
   assert.match(routeDetailSource, /map\.addSource\(ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /map\.addLayer\(\{/);
   assert.match(routeDetailSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
-  assert.match(routeDetailSource, /createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+routeMapStops,\s+savedRouteMarkerStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
+  assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
   assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Inventory|Start free trial/);
 });
 
@@ -564,12 +553,12 @@ test("Route detail does not let route-line style readiness block marker renderin
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
   assert.match(
     routeDetailSource,
-    /const routeDetailMarkers = createRouteDetailMapMarkers\(\s+map,\s+maplibregl,\s+routeMapStops,\s+savedRouteMarkerStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\);/,
+    /const didSyncMarkerLayers = syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\);/,
   );
   assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.map\.sync"/);
   assert.doesNotMatch(
     routeDetailSource,
-    /syncRouteDetailRouteLine\(map, savedRouteGeometry, routePathColor\)\s+&&\s+syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteMarkerStopPoints\)/,
+    /syncRouteDetailRouteLine\(map, savedRouteGeometry, routePathColor\)\s+&&\s+syncRouteDetailStopLayers\(map, orderedRouteStops, savedRouteStopPoints\)/,
   );
   assert.doesNotMatch(routeDetailSource, /if \(!didSyncRouteLine\) return|return;\s+if \(departureLocation\?\.hasCoordinates\)/);
   assert.match(routeDetailSource, /const handleRouteDetailStyleData = \(\) => \{/);
@@ -593,41 +582,26 @@ test("Route detail keeps marker coordinates validated and ordered for MapLibre",
   assert.match(routeDetailSource, /hasCoordinates: coordinates != null/);
 });
 
-test("Route detail renders route stop and departure pins through MapLibre source layers", () => {
-  assert.match(mapMarkersSource, /function createDepartureMarkerIconElement\(\)/);
-  assert.match(mapMarkersSource, /departure-map-marker__icon/);
-  assert.doesNotMatch(routeDetailSource, /markerPinElement\.textContent = "Start"/);
-  assert.doesNotMatch(routeDetailSource, /createDepartureMarkerElement\(departureLocation\)|ROUTE_DEPARTURE_MARKER_OFFSET/);
-  assert.match(routeDetailSource, /const ROUTE_DETAIL_DEPARTURE_SOURCE_ID = "route-detail-departure"/);
+test("Route detail places stop and departure markers through MapLibre source layers", () => {
+  assert.match(routeDetailSource, /import \{ addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer, MAP_MARKER_PALETTE \}/);
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
   assert.match(routeDetailSource, /const ROUTE_DETAIL_DEPARTURE_LAYER_ID = "route-detail-departure-marker"/);
-  assert.match(routeDetailSource, /const ROUTE_DETAIL_DEPARTURE_PIN_IMAGE_ID = "route-detail-departure-pin"/);
-  assert.match(routeDetailSource, /createMapPinImageData\(MAP_MARKER_PALETTE\.departure\.color, \{\s+label: "⌂",/);
-  assert.match(routeDetailSource, /map\.addSource\(ROUTE_DETAIL_DEPARTURE_SOURCE_ID/);
-  assert.match(routeDetailSource, /id: ROUTE_DETAIL_DEPARTURE_LAYER_ID/);
-  assert.match(routeDetailSource, /iconImage: ROUTE_DETAIL_DEPARTURE_PIN_IMAGE_ID/);
-  assert.match(routeDetailSource, /const ROUTE_DETAIL_STOPS_SOURCE_ID = "route-detail-stops"/);
-  assert.match(routeDetailSource, /const ROUTE_DETAIL_STOPS_LAYER_ID = "route-detail-stop-markers"/);
-  assert.match(routeDetailSource, /createMapPinImageData\(routeColor, \{/);
-  assert.match(routeDetailSource, /map\.addSource\(ROUTE_DETAIL_STOPS_SOURCE_ID/);
-  assert.match(routeDetailSource, /id: ROUTE_DETAIL_STOPS_LAYER_ID/);
-  assert.match(mapMarkersSource, /type: "symbol"/);
-  assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
-  assert.match(mapMarkersSource, /"icon-image": iconImage/);
-  assert.match(routeDetailSource, /createMapPinSymbolLayer\(\{\s+id: ROUTE_DETAIL_STOPS_LAYER_ID,\s+minzoom: ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM,\s+source: ROUTE_DETAIL_STOPS_SOURCE_ID,\s+\}\)/);
-  assert.doesNotMatch(routeDetailSource, /"icon-size"|const ROUTE_DETAIL_STOP_PIN_ICON_SIZE/);
-  assert.match(routeDetailSource, /map\.queryRenderedFeatures\(event\.point, \{ layers: \[ROUTE_DETAIL_STOPS_LAYER_ID\] \}\)/);
-  assert.match(routeDetailSource, /event\.preventDefault\?\.\(\)/);
-  assert.match(routeDetailSource, /event\.originalEvent\?\.preventDefault\?\.\(\)/);
-  assert.match(routeDetailSource, /fitRouteStopAndSnappedPoint\(map, maplibregl, stop, findRouteStopPoint\(stop, savedRouteMarkerStopPoints\)\)/);
-  assert.match(routeDetailSource, /geometry: \{ type: "Point", coordinates: departureLocation\.coordinates \}/);
-  assert.match(routeDetailSource, /const markerCoordinates = getRouteStopPointerCoordinates\(stop, routeStopPoint\)/);
-  assert.match(routeDetailSource, /geometry: \{ type: "Point", coordinates: markerCoordinates \}/);
-  assert.match(routeDetailSource, /requestAnimationFrame\(\(\) => \{/);
-  assert.match(routeDetailSource, /map\.resize\(\)/);
-  assert.match(routeDetailSource, /fitRouteDetailMap\(map, maplibregl, routeMapLocations\)/);
-  assert.doesNotMatch(routeDetailSource, /function createRouteStopMarkerElement|ROUTE_STOP_MARKER_OFFSET|createRouteStopPopupElement|new maplibregl\.Popup|setPopup/);
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
+  assert.match(routeDetailSource, /function buildRouteDetailMarkerFeatureCollection\(departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById\) \{/);
+  assert.match(routeDetailSource, /featureType: "departure"/);
+  assert.match(routeDetailSource, /featureType: "routeStop"/);
+  assert.match(mapMarkersSource, /DEPARTURE_HOUSE_ICON_PATH/);
+  assert.match(mapMarkersSource, /function createDepartureMarkerImageData\(options = \{\}\) \{/);
+  assert.match(routeDetailSource, /createDepartureMarkerImageData\(\)/);
+  assert.match(routeDetailSource, /createMapPinImageData\(stopColor, \{/);
+  assert.match(routeDetailSource, /map\.addSource\(ROUTE_DETAIL_MARKER_SOURCE_ID/);
+  assert.match(routeDetailSource, /map\.addLayer\(createMapPinSymbolLayer\(\{/);
+  assert.match(routeDetailSource, /id: ROUTE_DETAIL_DEPARTURE_LAYER_ID,[\s\S]*iconSize: 1,/);
+  assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick\)/);
+  assert.match(routeDetailSource, /fitRouteStopAndSnappedPoint\(/);
+  assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, maplibregl, routeMapLocations\)/);
+  assert.doesNotMatch(routeDetailSource, /createRouteStopMarkerElement|createDepartureMarkerElement\(departureLocation\)|const stopMarker = new maplibregl\.Marker|const snappedStopPointMarker = new maplibregl\.Marker/);
 });
-
 test("Route detail falls back to route stop point coordinates before dropping stop markers", () => {
   assert.match(routeDetailSource, /function getRouteStopPointerCoordinates\(stop, routeStopPoint\) \{/);
   assert.match(routeDetailSource, /if \(stop\.hasCoordinates\) return stop\.coordinates/);
@@ -669,7 +643,7 @@ test("Route detail only auto-fits the map on initial map readiness", () => {
   assert.doesNotMatch(routeDetailSource, /appliedRouteStopSaveDataRef/);
   assert.doesNotMatch(routeDetailSource, /routeStopSaveFetcher/);
   assert.match(routeDetailSource, /const hasInitialRouteMapFitRef = useRef\(false\)/);
-  assert.match(routeDetailSource, /const routeMapCenterRef = useRef\(routeMapCenter\)/);
+  assert.match(routeDetailSource, /const routeMapCenterRef = useRef\(DEFAULT_CENTER\)/);
   assert.match(routeDetailSource, /routeMapCenterRef\.current = routeMapCenter/);
   assert.match(routeDetailSource, /center: routeMapCenterRef\.current/);
   assert.doesNotMatch(routeDetailSource, /\}, \[mapRenderKey, routeMapCenter, scheduleMapRecovery\]\)/);
@@ -681,62 +655,39 @@ test("Route detail only auto-fits the map on initial map readiness", () => {
   assert.match(routeDetailSource, /duration,/);
 });
 
-test("Route detail renders every stop as a route-colored MapLibre pin without click expansion", () => {
-  assert.match(routeDetailSource, /const ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM = 7/);
-  assert.match(routeDetailSource, /minzoom: ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM/);
-  assert.match(routeDetailSource, /function syncRouteDetailMarkerZoomVisibility\(map, container\) \{/);
-  assert.match(routeDetailSource, /route-detail-map--hide-order-markers/);
-  assert.match(globalCssSource, /\.route-detail-map--hide-order-markers \.order-map-marker,[\s\S]*\.route-detail-map--hide-order-markers \.route-detail-snapped-stop-point \{[\s\S]*display: none;/);
+test("Route detail renders every stop as a route-colored source-layer teardrop", () => {
+  assert.doesNotMatch(routeDetailSource, /ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM/);
+  assert.doesNotMatch(routeDetailSource, /minzoom/);
   assert.match(routeDetailSource, /function getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\) \{/);
-  assert.match(routeDetailSource, /function buildRouteDetailStopMarkerFeatureCollection\(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
-  assert.match(routeDetailSource, /const stopColor = getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\)/);
-  assert.match(routeDetailSource, /if \(!ensureRouteDetailStopPinImage\(map, stopColor, stop\.stop\)\) return null/);
-  assert.match(routeDetailSource, /geometry: \{ type: "Point", coordinates: markerCoordinates \}/);
-  assert.match(routeDetailSource, /pinImage: getRouteDetailStopPinImageId\(stopColor, stop\.stop\)/);
-  assert.match(routeDetailSource, /sortKey: stop\.stop/);
-  assert.match(routeDetailSource, /stopId: stop\.id/);
+  assert.match(routeDetailSource, /getRouteDetailStopPinImageId\(stop, stopColor\)/);
+  assert.match(routeDetailSource, /label: stop\.stop/);
   assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
-  assert.match(routeDetailSource, /createMapPinSymbolLayer\(\{/);
-  assert.match(mapMarkersSource, /"symbol-sort-key": sortKey/);
-  assert.doesNotMatch(routeDetailSource, /function createRouteStopMarkerElement|expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|route-stop-precision-point|Show stop|Show \$\{group\.stops\.length\} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS/);
+  assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick\)/);
+  assert.doesNotMatch(routeDetailSource, /expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|route-stop-precision-point|Show stop|Show \${group\.stops\.length} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS|createRouteStopMarkerElement/);
 });
-
-test("Route detail renders OSRM snapped stop points as small route-colored DOM points without their own zoom gate", () => {
-  assert.doesNotMatch(routeDetailSource, /ROUTE_STOP_POINT_MARKER_MIN_ZOOM/);
+test("Route detail renders OSRM snapped stop points as route-colored circle layers", () => {
   assert.match(routeDetailSource, /const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1/);
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_STOP_POINT_SOURCE_ID = "route-detail-snapped-stop-points"/);
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points"/);
   assert.match(routeDetailSource, /function buildRouteStopPointMarker\(stop, routeStopPoint\) \{/);
   assert.match(routeDetailSource, /const snappedCoordinates = normalizeLngLatPair\(routeStopPoint\?\.snappedCoordinates\)/);
   assert.match(routeDetailSource, /calculateLngLatDistanceMeters\(stop\.coordinates, snappedCoordinates\)/);
   assert.match(routeDetailSource, /distanceMeters < ROUTE_STOP_POINT_MIN_DISTANCE_METERS/);
-  assert.match(routeDetailSource, /function createRouteStopPointMarkerElement\(routeColor\) \{/);
-  assert.match(routeDetailSource, /className: "route-detail-snapped-stop-point"/);
-  assert.match(routeDetailSource, /color: routeColor/);
-  assert.match(routeDetailSource, /markerElement\.style\.backgroundColor = routeColor/);
-  assert.match(routeDetailSource, /const stopPointMarker = buildRouteStopPointMarker\(stop, routeStopPoint\)/);
-  assert.match(routeDetailSource, /new maplibregl\.Marker\(\{\s+anchor: "center",\s+element: createRouteStopPointMarkerElement\(stopColor\),\s+\}\)/);
-  assert.match(routeDetailSource, /\.setLngLat\(stopPointMarker\.coordinates\)/);
-  assert.match(globalCssSource, /\.route-detail-snapped-stop-point \{[\s\S]*border: 2px solid #ffffff;[\s\S]*height: 8px;[\s\S]*width: 8px;/);
-  assert.match(routeDetailSource, /mapRef\.current\.on\("zoom", syncMarkerZoomVisibility\)/);
-  assert.doesNotMatch(routeDetailSource, /function shouldRenderRouteStopPoints|zoomend/);
+  assert.match(routeDetailSource, /function buildRouteDetailStopPointFeatureCollection\(routeStops, routeStopPoints, routeColor, routeStopColorById\) \{/);
+  assert.match(routeDetailSource, /map\.addSource\(ROUTE_DETAIL_STOP_POINT_SOURCE_ID/);
+  assert.match(routeDetailSource, /type: "circle"/);
+  assert.match(routeDetailSource, /"circle-color": \["coalesce", \["get", "color"\], routeColor\]/);
+  assert.doesNotMatch(routeDetailSource, /createRouteStopPointMarkerElement|const snappedStopPointMarker = new maplibregl\.Marker|function shouldRenderRouteStopPoints|zoomend/);
 });
-
-test("Route detail keeps route stop source markers synced after style readiness", () => {
-  assert.match(routeDetailSource, /function createRouteDetailMapMarkers\(map, maplibregl, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
-  assert.match(routeDetailSource, /function syncRouteDetailStopMarkers\(map, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
-  assert.match(routeDetailSource, /function syncRouteDetailDepartureMarker\(map, departureLocation\) \{/);
-  assert.match(routeDetailSource, /if \(!isRouteDetailMapStyleReady\(map\)\) return false/);
-  assert.match(routeDetailSource, /existingSource\.setData\(markerData\)/);
-  assert.match(routeDetailSource, /map\.on\("styledata", handleRouteDetailStyleData\)/);
-  assert.match(routeDetailSource, /removeRouteDetailStopMarkers\(map\)/);
-  assert.match(routeDetailSource, /removeRouteDetailDepartureMarker\(map\)/);
-  assert.match(routeDetailSource, /function removeRouteDetailStopMarkers\(map\) \{\s+try \{/);
-  assert.match(routeDetailSource, /function removeRouteDetailDepartureMarker\(map\) \{\s+try \{/);
-  assert.match(routeDetailSource, /if \(!isRouteDetailMapStyleReady\(map\)\) return/);
-  assert.match(routeDetailSource, /catch \{/);
-  assert.doesNotMatch(routeDetailSource, /function syncRouteDetailStopLayers|function ensureRouteDetailStopLayerOrder|map\.moveLayer\(layerId\)/);
-  assert.doesNotMatch(routeDetailSource, /featureType: "routeStop"|featureType: "snappedStopPoint"/);
+test("Route detail uses WebGL stop layers so marker projection follows the map", () => {
+  assert.match(routeDetailSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_MARKER_SOURCE_ID/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_STOP_LAYER_ID/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
+  assert.match(routeDetailSource, /featureType: "routeStop"/);
+  assert.match(routeDetailSource, /map\.addLayer\(createMapPinSymbolLayer\(\{/);
+  assert.doesNotMatch(routeDetailSource, /function createRouteDetailMapMarkers|function createRouteStopMarkerElement|const stopMarker = new maplibregl\.Marker|const snappedStopPointMarker = new maplibregl\.Marker/);
 });
-
 test("Route detail map has compact refresh and automatic recovery controls", () => {
   assert.match(routeDetailSource, /const MAP_RECOVERY_DELAY_MS = 2500/);
   assert.match(routeDetailSource, /const MAX_MAP_RECOVERY_ATTEMPTS = 3/);
@@ -752,14 +703,6 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
   assert.match(routeDetailSource, /const handleRefreshMap = \(\) => \{/);
   assert.match(routeDetailSource, /const handleFitRouteMap = \(\) => \{/);
   assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, mapLibraryRef\.current, routeMapLocations\)/);
-  assert.match(routeDetailSource, /new URLSearchParams\(location\.search\)\.get\("mapDebug"\) === "1"/);
-  assert.match(routeDetailSource, /location\.pathname/);
-  assert.match(routeDetailSource, /new ResizeObserver\(\(\) => scheduleResize\("container"\)\)/);
-  assert.match(routeDetailSource, /console\.info\("routes\.detail\.map\.resize"/);
-  assert.match(routeDetailSource, /function getRouteMapMarkerDebug\(map, container, markers\) \{/);
-  assert.match(routeDetailSource, /markerDebug: getRouteMapMarkerDebug\(map, container, markersRef\.current\)/);
-  assert.match(routeDetailSource, /clientWidth: canvas\.clientWidth/);
-  assert.match(routeDetailSource, /devicePixelRatio: window\.devicePixelRatio/);
   assert.match(routeDetailSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
   assert.match(routeDetailSource, /scheduleMapRecovery\(\)/);
   assert.match(routeDetailSource, /ariaLabel: "Refresh route map"/);
@@ -781,46 +724,49 @@ test("Route detail marker rendering does not call MapLibre resize from map event
 
   assert.doesNotMatch(layerSyncBody, /\.resize\(\)/);
   assert.match(routeDetailSource, /map\.on\("styledata", handleRouteDetailStyleData\)/);
-  assert.match(routeDetailSource, /map\.on\("dblclick", handleRouteStopDoubleClick\)/);
+  assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick\)/);
   assert.doesNotMatch(routeDetailSource, /\.on\("moveend", syncRouteDetailMapLayers\)/);
   assert.doesNotMatch(routeDetailSource, /\.on\("zoomend", syncRouteDetailMapLayers\)/);
 });
 
 test("Route detail renders route lines and a stop timeline below the map", () => {
   assert.match(routeDetailSource, /function logRouteDetailPerformance\(name, metric = \{\}\) \{/);
-  assert.match(routeDetailSource, /routes\.detail\.action\.saveRouteDraft\.request/);
-  assert.match(routeDetailSource, /left: "50%"/);
-  assert.match(routeDetailSource, /top: "12px"/);
-  assert.match(routeDetailSource, /transform: "translateX\(-50%\)"/);
-  assert.match(routeDetailSource, /optimizedExistingRoutePlanCount: draft\.routes\.filter\(\(route\) => route\.routePlanId && route\.optimized !== undefined\)\.length/);
-  assert.match(routeDetailSource, /orderCounts: draft\.routes\.map\(\(route\) => route\.orderIds\.length\)/);
+  assert.match(routeDetailServerSource, /routes\.detail\.action\.saveRouteDraft\.request/);
+  assert.match(routeDetailServerSource, /optimizedExistingRoutePlanCount: draft\.routes\.filter\(\(route\) => route\.routePlanId && route\.optimized !== undefined\)\.length/);
+  assert.match(routeDetailServerSource, /orderCounts: draft\.routes\.map\(\(route\) => route\.orderIds\.length\)/);
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
   assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
   assert.match(routeDetailSource, /function buildRouteGroupStops\(routeGroup, childRouteDetails, currentRouteStops\) \{/);
-  assert.match(routeDetailSource, /\.\.\.buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
+  assert.match(routeDetailSource, /const assignmentStops = buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
   assert.match(routeDetailSource, /const allRouteGroupStops = useMemo/);
-  assert.match(routeDetailSource, /const routeGroupStopsSource = isRouteGroupDetail \? orderedRouteStops : allRouteGroupStops/);
-  assert.match(routeDetailSource, /buildRouteBranchRows\(routeGroup, routeGroupStopsSource, routeChildDetailsByOrders\)/);
+  assert.match(routeDetailSource, /buildRouteBranchRows\(routeGroup, routeGroupStopsSource, routeChildDetailsByRoutePlanId\)/);
+  assert.match(routeDetailSource, /routeGroupStopsSource\.filter\(\(stop\) => !branchOrderIds\.has\(stop\.orderId\)\)/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
-  assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\], childRouteDetailsByOrders = new Map\(\)\) \{/);
+  assert.match(routeDetailSource, /function buildRouteBranchRows\(routeGroup, routeStops = \[\], childDetailsByRoutePlanId = new Map\(\)\) \{/);
   assert.match(routeDetailSource, /readRouteOptimizedSnapshot\(branch\.optimized\)/);
   assert.match(routeDetailSource, /formatRouteDurationSeconds\(optimized\?\.metrics\?\.durationSeconds\)/);
   assert.match(routeDetailSource, /formatRouteDistanceMeters\(optimized\?\.metrics\?\.distanceMeters\)/);
-  assert.match(routeDetailSource, /const childDetail = childRouteDetailsByOrders\.get\(routeOrderKey\(branchStops\)\)[\s\S]*routePlanId: childDetail\?\.routePlanId \?\? null/);
-  assert.match(routeDetailSource, /orderIds: orderedRouteStops\.map\(\(stop\) => stop\.orderId\)\.filter\(Boolean\)/);
-  assert.match(routeDetailSource, /stops: orderedRouteStops/);
-  assert.match(routeDetailSource, /const editedRouteRows = \[/);
-  assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(editedRouteRows\)/);
+  assert.match(routeDetailSource, /const childDetail = childDetailsByRoutePlanId\.get\(textOrUndefined\(branch\.routePlanId\)\)/);
+  assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
+  assert.match(routeDetailSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeDetailSource, /const hasVisibleRouteSplit = routeBranchRows\.length > 0 \|\| routeGroupChildRows\.length > 0 \|\| clientRouteRows\.length > 0/);
+  assert.match(routeDetailSource, /\? \[\.\.\.groupRootRouteRows, \.\.\.routeGroupChildRows, \.\.\.routeBranchRows\]/);
+  assert.match(routeDetailSource, /const routePolygonSourceStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail \? routeGroupStopsSource : \[\]/);
+  assert.match(routeDetailSource, /const routeMapStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail[\s\S]*routeGroupStopsSource\.map/);
+  assert.match(routeDetailSource, /const displayRouteRowsSource = isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
+  assert.match(routeDetailSource, /const contextRouteRowsSource = isRouteGroupDetail/);
+  assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(applyRouteRowDraftState\(\[\.\.\.displayRouteRowsSource, \.\.\.clientRouteRows\]/);
+  assert.match(routeDetailSource, /const contextRouteRows = ensureUniqueRouteRowColors\(applyRouteRowDraftState\(\[\.\.\.contextRouteRowsSource, \.\.\.clientRouteRows\]/);
   assert.match(routeDetailSource, /function getRouteDraftOptimized\(routeRow, includeExistingOptimized\) \{/);
   assert.match(routeDetailSource, /if \(routeRow\.routePlanId && !includeExistingOptimized\) return undefined/);
   assert.match(routeDetailSource, /function shouldIncludeRouteDraftRow\(routeRow, includeEmptyTempRoutes\) \{/);
   assert.match(routeDetailSource, /return !\(routeRow\.tempId && !routeRow\.routePlanId && routeRow\.stops\.length === 0\)/);
-  assert.match(routeDetailSource, /buildRouteDraftPayload\(timelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)/);
+  assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeEmptyTempRoutes: false, includeExistingOptimized: false \}\)/);
   assert.ok(
-    routeDetailSource.indexOf("const [routeCandidateTitle") < routeDetailSource.indexOf("const editedRouteRows = ["),
+    routeDetailSource.indexOf("const [routeCandidateTitle") < routeDetailSource.indexOf("const currentRouteRowsSource ="),
     "routeRows reads route line state after the state is initialized",
   );
-  assert.match(routeDetailSource, /const ROUTE_EMPTY_LABEL = "-"/);
+  assert.match(routeDetailSource, /const ROUTE_EMPTY_LABEL = "–"/);
   assert.match(routeDetailSource, />Name<\/th>/);
   assert.match(routeDetailSource, />Status<\/th>/);
   assert.match(routeDetailSource, />Driver<\/th>/);
@@ -834,15 +780,11 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total distance<\/th>/);
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
+  assert.match(routeDetailSource, /const defaultRouteCandidateTitle = isRouteGroupDetail \? "Route 1" : routeDetailTitle/);
   assert.match(routeDetailSource, /title: textOrUndefined\(branch\.label\) \?\? `Route \$\{index \+ 2\}`/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
-  assert.match(routeDetailSource, /handleOpenRouteStartTimeEditor\(routeRow\)/);
-  assert.match(routeDetailSource, /aria-label="Edit route start time"/);
-  assert.match(routeDetailSource, /type="date"/);
-  assert.match(routeDetailSource, /type="time"/);
-  assert.match(routeDetailSource, /routeStartTimeByRouteId\[routeRow\.id\]/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
@@ -852,9 +794,15 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /function syncRouteEditPolygon\(map, points, isClosed\) \{/);
   assert.match(routeDetailSource, /function buildRouteDetailRouteLineData\(routeLines, fallbackRouteColor\) \{/);
   assert.match(routeDetailSource, /\["coalesce", \["get", "routeColor"\], routeColor\]/);
-  assert.match(routeDetailSource, /createRouteStopPointMarkerElement\(stopColor\)/);
+  assert.match(routeDetailSource, /ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
   assert.match(routeDetailSource, /map\.on\("styledata", syncPolygon\)/);
   assert.match(routeDetailSource, /function isLngLatInPolygon\(point, polygon\) \{/);
+  assert.match(routeDetailSource, /function createRoutePolygonCornerElement\(index\) \{/);
+  assert.match(routeDetailSource, /className = "route-polygon-corner-marker"/);
+  assert.match(routeDetailSource, /zIndex: "4500"/);
+  assert.match(routeDetailSource, /const routePolygonPointsRef = useRef\(\[\]\)/);
+  assert.match(routeDetailSource, /if \(\(event\.originalEvent\?\.detail \?\? 1\) > 1\) return/);
+  assert.doesNotMatch(routeDetailSource, /ROUTE_POLYGON_CLICK_DELAY_MS|routePolygonClickTimerRef/);
   assert.match(routeDetailSource, /Save polygon/);
   assert.match(routeDetailSource, /aria-label="Polygon route target"/);
   assert.match(routeDetailSource, /map\.doubleClickZoom\?\.disable\?\.\(\)/);
@@ -896,30 +844,10 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.doesNotMatch(routeDetailSource, /Save order/);
 });
 
-test("Route group detail keeps its own page instead of becoming a child route", () => {
-  assert.match(routeGroupDetailSource, /routePlan: null/);
-  assert.match(routeGroupDetailSource, /routeDetailTitleOverride: routeGroupData\.routeGroup\?\.name \?\? null/);
-  assert.doesNotMatch(routeGroupDetailSource, /primaryRoutePlanData/);
-  assert.match(routeDetailSource, /function buildRouteGroupChildRows\(routeGroup, childRouteDetails = \[\]\) \{/);
-  assert.match(routeDetailSource, /const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null/);
-  assert.match(routeDetailSource, /const currentRouteRowsSource = isRouteGroupDetail \|\| !currentRouteLineId[\s\S]*\? \[\]/);
-  assert.match(routeDetailSource, /const groupRouteRowsSource = isRouteGroupDetail[\s\S]*routeBranchRows\.length > 0 \? routeBranchRows : routeGroupChildRows/);
-  assert.match(routeGroupDetailSource, /cleanRoutePathParam\(params\.routeGroupId\)/);
-  assert.match(routeGroupDetailSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey \}\)/);
-  assert.match(routeGroupDetailSource, /stops: routeGroupData\.routeGroup\?\.assignments \?\? \[\]/);
-  assert.match(routeDetailSource, /const currentRouteRowsSource = isRouteGroupDetail \|\| !currentRouteLineId[\s\S]*\? \[\]/);
-  assert.match(routeDetailSource, /const routeMapRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
-  assert.match(routeDetailSource, /const routeMapStops = routeMapRows\.flatMap/);
-  assert.match(routeDetailSource, /const routeGroupStopsSource = isRouteGroupDetail \? orderedRouteStops : allRouteGroupStops/);
-  assert.match(routeDetailSource, /const routeGeometrySourceRows = isRouteGroupDetail \? timelineRouteRows : currentRouteRows/);
-  assert.match(routeDetailSource, /const routeMarkerStopPoints = isRouteGroupDetail \? \[\] : routeGeometryStopPoints/);
-  assert.match(routeDetailSource, /savedRouteMarkerStopPoints/);
-});
-
 test("Route detail page provides page navigation back to the route list", () => {
-  assert.match(routeDetailSource, /import \{ Link, useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
-  assert.match(routeDetailSource, /const routesListHref = `\/app\/routes\$\{routeSessionSearch\}`/);
+  assert.match(routeDetailSource, /const routesListHref = ROUTES_ROOT_PATH/);
   assert.match(routeDetailSource, /onClick=\{\(\) => navigate\(routesListHref\)\}/);
   assert.match(routeDetailSource, /<span aria-hidden="true" style=\{routeDetailBackIconStyle\}>/);
   assert.match(routeDetailSource, /viewBox="0 0 20 20"/);
@@ -927,22 +855,6 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /<span>Back to routes<\/span>/);
   assert.match(routeDetailSource, /aria-label="Back to routes list"/);
   assert.match(routeDetailSource, /const routeOverviewTopBarStyle = \{/);
-  assert.match(routeDetailSource, /buildRouteGroupRouteLinks\(timelineRouteRows, childRouteDetails, routeGroup, effectiveRoutePlan\?\.id \?\? null, routeDetailTitle, isRouteGroupDetail \? routeGroup\?\.id : null\)/);
-  assert.match(routeGroupDetailSource, /export const loader = async \(\{ params, request \}\) => \{/);
-  assert.ok(routeGroupDetailSource.includes("fetchDeliveryRouteGroupDetail(request, routeGroupId, { cacheKey })"));
-  assert.doesNotMatch(routeGroupDetailSource, /redirect\(childRoutePlanId/);
-  assert.match(routeDetailSource, /const seenIds = new Set\(\)/);
-  assert.match(routeDetailSource, /const seenLabels = new Set\(\)/);
-  assert.match(routeDetailSource, /seenIds\.has\(id\)/);
-  assert.match(routeDetailSource, /seenLabels\.has\(labelKey\)/);
-  assert.match(routeDetailSource, /routeGroup\?\.switchRoutes \?\? \[\]\)\.forEach\(\(routeLink\) => \{/);
-  assert.match(routeDetailSource, /routeLink\?\.routeGroupId/);
-  assert.match(routeDetailSource, /textOrUndefined\(routeLink\?\.label\) === groupLabel \? groupId : null/);
-  assert.match(routeDetailSource, /childRouteDetails \?\? \[\]\)\.forEach\(\(detail\) => addLink\(\{ label: detail\?\.routePlan\?\.name, routePlanId: detail\?\.routePlanId \?\? detail\?\.routePlan\?\.id \}\)\)/);
-  assert.match(routeDetailSource, /routeGroup\?\.children \?\? \[\]\)\.forEach\(\(child\) => addLink\(\{ label: child\?\.routePlan\?\.name \?\? child\?\.label, routePlanId: child\?\.routePlanId \?\? child\?\.routePlan\?\.id \}\)\)/);
-  assert.match(routeDetailSource, /<Link[\s\S]*prefetch="intent"[\s\S]*to=\{`\$\{routeLink\.href\}\$\{routeSessionSearch\}`\}/);
-  assert.match(routeDetailSource, /key=\{routeLink\.id\}/);
-  assert.doesNotMatch(routeDetailSource, /onClick=\{\(\) => navigate\(`\/app\/routes\/\$\{routeLink\.routePlanId\}`\)\}/);
   assert.match(routeDetailSource, /<header className="route-overview-header" style=\{routeOverviewHeaderStyle\}>[\s\S]*style=\{routeOverviewTopBarStyle\}[\s\S]*aria-label="Back to routes list"/);
   assert.match(routeDetailSource, /const routeDetailBackButtonStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailBackIconStyle = \{/);
