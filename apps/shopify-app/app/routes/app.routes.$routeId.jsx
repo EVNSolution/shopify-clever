@@ -35,6 +35,7 @@ import {
   syncRouteEditPolygon,
 } from "../features/delivery/route-detail-map";
 import { MAP_MARKER_PALETTE } from "../features/maps/map-markers";
+import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
@@ -2031,7 +2032,7 @@ export default function RouteDetailPage() {
         installPmtilesProtocol(maplibregl, Protocol);
         mapLibraryRef.current = maplibregl;
         const constructStartedAt = performance.now();
-        mapRef.current = new maplibregl.Map({
+        mapRef.current = createMapLibreMap(maplibregl, {
           attributionControl: { compact: true },
           center: routeMapCenterRef.current,
           container: mapContainerElement,

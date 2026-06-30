@@ -526,12 +526,13 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   );
   assert.match(routeDetailSource, /import\("maplibre-gl"\)/);
   assert.match(routeDetailSource, /import\("pmtiles"\)/);
+  assert.match(routeDetailSource, /import \{ createMapLibreMap \} from "\.\.\/features\/maps\/maplibre-map"/);
   assert.match(routeDetailSource, /import \{ installMissingMapImageFallback \} from "\.\.\/features\/maps\/maplibre-missing-images"/);
   assert.match(routeDetailSource, /import \{ installPmtilesProtocol \} from "\.\.\/features\/maps\/pmtiles-protocol"/);
   assert.match(routeDetailSource, /installPmtilesProtocol\(maplibregl, Protocol\)/);
   assert.match(routeDetailSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(routeDetailSource, /style: OPENFREEMAP_STYLE_URL/);
-  assert.match(routeDetailSource, /new maplibregl\.Map\(\{/);
+  assert.match(routeDetailSource, /createMapLibreMap\(maplibregl, \{/);
   assert.doesNotMatch(routeDetailSource, /new maplibregl\.NavigationControl/);
   assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
   assert.match(routeDetailSource, /const routeDetailMapFrameStyle = \{/);
