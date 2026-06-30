@@ -21,8 +21,9 @@ export function readRouteOptimizedSnapshot(value) {
 }
 
 export function getDefaultRouteGroupChildName(index, child) {
+  const routeIdx = numberOrUndefined(child?.routeIdx);
   const sortOrder = numberOrUndefined(child?.sortOrder);
-  return `Route ${sortOrder ?? index + 1}`;
+  return `Route ${routeIdx ?? sortOrder ?? index + 1}`;
 }
 
 export function getRouteGroupChildRouteName(routeGroup, child, routePlan, index) {
@@ -43,7 +44,14 @@ export function getRouteGroupChildren(routeGroup) {
 
 export function getVisibleRouteGroupChildren(routeGroup) {
   const children = getRouteGroupChildren(routeGroup);
-  return children.length >= 2 ? children : [];
+  return children
+    .map((child, index) => ({ child, index }))
+    .sort((left, right) => {
+      const leftRouteIdx = numberOrUndefined(left.child?.routeIdx) ?? numberOrUndefined(left.child?.sortOrder) ?? left.index + 1;
+      const rightRouteIdx = numberOrUndefined(right.child?.routeIdx) ?? numberOrUndefined(right.child?.sortOrder) ?? right.index + 1;
+      return leftRouteIdx - rightRouteIdx || left.index - right.index;
+    })
+    .map(({ child }) => child);
 }
 
 export function formatRouteDeliveryScope(routePlan, emptyLabel = "-") {
