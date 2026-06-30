@@ -1284,6 +1284,11 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /<colgroup>[\s\S]*INVENTORY_TABLE_COLUMN_WIDTHS/);
   assert.match(ordersPageSource, /const inventoryCheckboxStyle = \{[\s\S]*margin:\s*0/);
   assert.match(ordersPageSource, /aria-label="Select all visible inventories"/);
+  assert.match(ordersPageSource, /aria-label=\{`Select \$\{inventory\.name \?\? "inventory"\} for deletion`\}/);
+  assert.match(ordersPageSource, /const inventoryDeleteFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "deleteInventory"\)/);
+  assert.match(ordersPageSource, /formData\.set\("inventoryIds", JSON\.stringify\(checkedInventoryIds\)\)/);
+  assert.match(ordersPageSource, />Delete<\/button>/);
   assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
   assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);
   assert.doesNotMatch(ordersPageSource, /lower=\{<div \/>}/);
@@ -1303,13 +1308,14 @@ test("Orders inventory tabs avoid border shorthand style collisions", () => {
 });
 
 test("Orders inventory side-card Add creates standalone inventory without route ownership checks", () => {
-  assert.match(ordersPageSource, /import \{ createDeliveryInventory, fetchDeliveryInventories \}/);
+  assert.match(ordersPageSource, /import \{ createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories \}/);
   assert.match(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "createInventory"\)/);
   assert.match(ordersPageSource, /inventoryFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /reason: "route_create_preflight"/);
   assert.match(ordersPageSource, /if \(intent === "createInventory"\) \{/);
   assert.match(ordersPageSource, /createDeliveryInventory\(\s*request,/);
+  assert.match(ordersPageSource, /deleteDeliveryInventory\(request, inventoryId, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.orderId\)/);
   assert.match(ordersPageSource, /return \{ inventory, errors: \[\] \}/);
   assert.match(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(createdInventory\.id\)\}&id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);

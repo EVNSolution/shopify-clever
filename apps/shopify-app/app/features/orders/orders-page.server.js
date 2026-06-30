@@ -1,5 +1,5 @@
 import { bulkUpdateDeliveryOrders, fetchDeliveryOrders, syncDeliveryOrders } from "../delivery/orders.server";
-import { createDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
+import { createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
   DELIVERY_API_ERROR_CODE,
@@ -136,6 +136,15 @@ export const action = async ({ request }) => {
   }
 };
 
+function parseInventoryIds(value) {
+  try {
+    const inventoryIds = JSON.parse(value ?? "[]");
+    return Array.isArray(inventoryIds) ? inventoryIds.filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+}
+
 async function handleOrdersAction(request) {
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
@@ -212,6 +221,25 @@ async function handleOrdersAction(request) {
       },
       updatedOrders: bulkUpdateData.orders,
       errors: bulkUpdateData.errors,
+    };
+  }
+
+  if (intent === "deleteInventory") {
+    const inventoryIds = parseInventoryIds(formData.get("inventoryIds"));
+
+    if (inventoryIds.length === 0) {
+      return { inventoryIds: [], errors: [{ message: "삭제할 inventory를 선택해주세요." }] };
+    }
+
+    const deleteResults = await Promise.all(
+      inventoryIds.map((inventoryId) =>
+        deleteDeliveryInventory(request, inventoryId, { sessionToken: shopifySessionToken }),
+      ),
+    );
+
+    return {
+      inventoryIds: deleteResults.map((result) => result.inventoryId).filter(Boolean),
+      errors: deleteResults.flatMap((result) => result.errors ?? []),
     };
   }
 

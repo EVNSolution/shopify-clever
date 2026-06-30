@@ -4,6 +4,7 @@ import test from "node:test";
 
 import {
   createDeliveryInventory,
+  deleteDeliveryInventory,
   fetchDeliveryInventories,
   fetchDeliveryInventoryDetail,
 } from "../app/features/delivery/inventories.server.js";
@@ -76,6 +77,19 @@ test("inventory helper fetches an encoded inventory detail", async () => {
   assert.deepEqual(result, { inventory: { id: "inventory/1" }, errors: [] });
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/inventories/inventory%2F1");
   assert.equal(fakeFetch.calls[0].init.method, "GET");
+});
+
+test("inventory helper deletes an encoded inventory", async () => {
+  const fakeFetch = makeFetch({ data: { inventoryId: "inventory/1" }, error: null });
+
+  const result = await deleteDeliveryInventory(makeRequest(), "inventory/1", {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { inventoryId: "inventory/1", errors: [] });
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/inventories/inventory%2F1");
+  assert.equal(fakeFetch.calls[0].init.method, "DELETE");
 });
 
 test("inventory helper returns a local error when the inventory id is missing", async () => {

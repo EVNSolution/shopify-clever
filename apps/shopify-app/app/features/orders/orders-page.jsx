@@ -145,6 +145,12 @@ const inventoryListStyle = {
   minHeight: "420px",
 };
 
+const inventoryToolbarStyle = {
+  display: "flex",
+  justifyContent: "flex-end",
+  padding: "6px 10px",
+};
+
 const routePlanHeaderStyle = {
   alignItems: "center",
   display: "flex",
@@ -722,6 +728,12 @@ const inventoryCheckboxCellStyle = {
 };
 const inventoryCheckboxStyle = {
   margin: 0,
+};
+
+const inventoryDeleteButtonStyle = {
+  ...removeFromPlanButtonStyle,
+  borderColor: "#d72c0d",
+  color: "#d72c0d",
 };
 
 const inventoryNameCellStyle = {
@@ -1307,6 +1319,7 @@ function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
+  const inventoryDeleteFetcher = useFetcher();
   const orderBulkUpdateFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
   const shopify = useAppBridge();
@@ -1456,13 +1469,16 @@ export default function OrdersPage() {
           ? orderBulkUpdateFetcher.data
           : routePlanFetcher.data?.errors?.length
         ? routePlanFetcher.data
-        : inventoryFetcher.data;
+        : inventoryDeleteFetcher.data?.errors?.length
+          ? inventoryDeleteFetcher.data
+          : inventoryFetcher.data;
   const orderPageNoticeMessage = getServiceErrorNotice([
     actionErrors,
     { errors },
   ], { context: "orders_page" });
   const isCreatingRoute = routePlanFetcher.state !== "idle";
   const isCreatingInventory = inventoryFetcher.state !== "idle";
+  const isDeletingInventory = inventoryDeleteFetcher.state !== "idle";
   const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
   const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
@@ -1530,6 +1546,7 @@ export default function OrdersPage() {
   const allVisibleInventoriesChecked =
     visibleInventoryIds.length > 0 &&
     visibleInventoryIds.every((inventoryId) => checkedInventoryIdSet.has(inventoryId));
+  const inventoryDeleteDisabled = checkedInventoryIds.length === 0 || isDeletingInventory;
   const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
   const handleOrdersViewChange = useCallback((nextView) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -1570,6 +1587,22 @@ export default function OrdersPage() {
     });
   }, [visibleInventoryIds]);
 
+  const handleDeleteSelectedInventories = useCallback(async () => {
+    if (inventoryDeleteDisabled) return;
+
+    const formData = new FormData();
+    formData.set("_intent", "deleteInventory");
+    formData.set("inventoryIds", JSON.stringify(checkedInventoryIds));
+
+    try {
+      formData.set("shopifySessionToken", await shopify.idToken());
+    } catch {
+      // The server action still returns an auth error when the token cannot be fetched.
+    }
+
+    inventoryDeleteFetcher.submit(formData, { method: "post" });
+  }, [checkedInventoryIds, inventoryDeleteDisabled, inventoryDeleteFetcher, shopify]);
+
   const ordersViewTabs = (
     <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
       <button
@@ -1598,6 +1631,14 @@ export default function OrdersPage() {
 
   const inventoryList = (
     <div style={inventoryListStyle}>
+      <div style={inventoryToolbarStyle}>
+        <button
+          type="button"
+          style={inventoryDeleteDisabled ? disabledPlanButtonStyle : inventoryDeleteButtonStyle}
+          disabled={inventoryDeleteDisabled}
+          onClick={handleDeleteSelectedInventories}
+        >Delete</button>
+      </div>
       <div style={inventoryTableWrapStyle}>
         <table aria-label="Inventory list" style={inventoryTableStyle}>
           <colgroup>
@@ -1642,7 +1683,7 @@ export default function OrdersPage() {
                 <td style={inventoryCheckboxCellStyle}>
                   <input
                     type="checkbox"
-                    aria-label={`Select ${inventory.name ?? "inventory"} inventory`}
+                    aria-label={`Select ${inventory.name ?? "inventory"} for deletion`}
                     checked={Boolean(inventory.id && checkedInventoryIdSet.has(inventory.id))}
                     disabled={!inventory.id}
                     style={inventoryCheckboxStyle}
@@ -2441,6 +2482,13 @@ export default function OrdersPage() {
     submittedInventorySessionTokenRef.current = null;
     navigate(`/app/orders/inventory?id=${encodeURIComponent(createdInventory.id)}&id_token=${encodeURIComponent(sessionToken)}`);
   }, [inventoryFetcher.data?.inventory, navigate]);
+
+  useEffect(() => {
+    if (inventoryDeleteFetcher.state !== "idle" || !inventoryDeleteFetcher.data) return;
+    if ((inventoryDeleteFetcher.data.errors ?? []).length > 0) return;
+
+    setCheckedInventoryIds([]);
+  }, [inventoryDeleteFetcher.data, inventoryDeleteFetcher.state]);
 
   useEffect(() => {
     if (initialPerfEmittedRef.current) return;
