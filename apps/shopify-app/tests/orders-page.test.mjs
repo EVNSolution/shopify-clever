@@ -81,6 +81,8 @@ test("Orders map defers MapLibre initialization until after initial navigation p
   assert.match(ordersPageSource, /window\.cancelIdleCallback/);
   assert.match(ordersPageSource, /const cancelMapInitialization = scheduleIdleTask\(initializeMap\)/);
   assert.match(ordersPageSource, /cancelMapInitialization\(\)/);
+  assert.match(ordersPageSource, /try \{\s*const mapLibreImportStartedAt = performance\.now\(\)/);
+  assert.match(ordersPageSource, /catch \{\s*if \(!isMounted\) return;\s*scheduleMapRecovery\(\);/);
 });
 
 test("Orders map assets use stable local URLs to avoid dev console load warnings", () => {
@@ -913,11 +915,13 @@ test("Orders map popup content stays above all map markers", () => {
 
 test("Orders map has a compact refresh control for recovering failed tile loads", () => {
   assert.match(ordersPageSource, /const \[mapRenderKey, setMapRenderKey\] = useState\(0\)/);
+  assert.match(ordersPageSource, /const mapLoadedRef = useRef\(false\)/);
   assert.match(ordersPageSource, /const handleRefreshMap = \(\) => \{/);
   assert.match(ordersPageSource, /setIsMapReady\(false\)/);
   assert.match(ordersPageSource, /setMapStatus\("idle"\)/);
   assert.match(ordersPageSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
-  assert.match(ordersPageSource, /\}, \[mapRenderKey, scheduleMapRecovery\]\)/);
+  assert.match(ordersPageSource, /\}, \[activeOrdersView, mapRenderKey, scheduleMapRecovery\]\)/);
+  assert.match(ordersPageSource, /canvasKey=\{mapRenderKey\}/);
   assert.match(ordersPageSource, /ariaLabel: "Refresh map"/);
   assert.match(ordersPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/map-panel"/);
   assert.match(ordersPageSource, /<MapPanel/);
@@ -986,6 +990,7 @@ test("Orders map captures MapLibre tile errors without long visible copy", () =>
   assert.match(ordersPageSource, /import \{ installMissingMapImageFallback \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/maplibre-missing-images"/);
   assert.match(ordersPageSource, /installMissingMapImageFallback\(mapRef\.current\)/);
   assert.match(ordersPageSource, /mapRef\.current\.on\("error", \(event\) => \{/);
+  assert.match(ordersPageSource, /if \(mapLoadedRef\.current\) return/);
   assert.match(ordersPageSource, /tiles\.openfreemap\.org/);
   assert.match(ordersPageSource, /AJAXError/);
   assert.match(ordersPageSource, /setMapStatus\("recovering"\)/);
@@ -1045,8 +1050,8 @@ test("Orders map initially centers on the departure home with a wide zoom", () =
   assert.match(ordersPageSource, /departureLocation\?\.hasCoordinates \? departureLocation\.coordinates : DEFAULT_CENTER/);
   assert.match(ordersPageSource, /center: initialMapCenterRef\.current/);
   assert.match(ordersPageSource, /zoom: INITIAL_HOME_ZOOM/);
-  assert.doesNotMatch(ordersPageSource, /\}, \[initialMapCenter, mapRenderKey, scheduleMapRecovery\]\);/);
-  assert.match(ordersPageSource, /\}, \[mapRenderKey, scheduleMapRecovery\]\);/);
+  assert.doesNotMatch(ordersPageSource, /\}, \[initialMapCenter, activeOrdersView, mapRenderKey, scheduleMapRecovery\]\);/);
+  assert.match(ordersPageSource, /\}, \[activeOrdersView, mapRenderKey, scheduleMapRecovery\]\);/);
   assert.match(ordersPageSource, /const initialMapFitAppliedRef = useRef\(false\)/);
   assert.match(ordersPageSource, /initialMapFitAppliedRef\.current = false/);
   assert.match(ordersPageSource, /mapRef\.current\.flyTo\(\{\s*center: initialMapCenter,\s*zoom: INITIAL_HOME_ZOOM,\s*essential: true,\s*\}\)/);
@@ -1304,6 +1309,7 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
   assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);
   assert.doesNotMatch(ordersPageSource, /lower=\{<div \/>}/);
+  assert.match(ordersPageSource, /if \(activeOrdersView !== "orders" \|\| !mapContainerElement \|\| mapRef\.current\)/);
   assert.doesNotMatch(appShellSource, /nav\.inventory|Inventory plan/);
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
 });
