@@ -1345,11 +1345,13 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /borderRight: "1px solid #e5e7eb"/);
   assert.match(inventoryDetailSource, /textAlign: "center"/);
   assert.match(inventoryDetailSource, /aria-hidden="true"/);
-  assert.match(inventoryDetailSource, /width: "78px"/);
-  assert.match(inventoryDetailSource, /width: "68px"/);
+  assert.match(inventoryDetailSource, /width: "70px"/);
+  assert.match(inventoryDetailSource, /width: "64px"/);
   assert.match(inventoryDetailSource, /function DateCellLabel/);
-  assert.match(inventoryDetailSource, /gridTemplateColumns: "24px 38px"/);
+  assert.match(inventoryDetailSource, /gridTemplateColumns: "22px 34px"/);
   assert.match(inventoryDetailSource, /style=\{groupTotalHeadCellStyle\}>Group total/);
+  assert.match(inventoryDetailSource, /fontSize: "11px"/);
+  assert.match(inventoryDetailSource, /maxHeight: "28px"/);
   assert.match(inventoryDetailSource, /totalRowCellStyle/);
   assert.match(inventoryDetailSource, /borderTop: "1px solid #ebebeb"/);
   assert.doesNotMatch(inventoryDetailSource, /borderTop: "2px solid #d4d4d4"/);
