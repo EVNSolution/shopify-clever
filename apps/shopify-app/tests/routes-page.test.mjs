@@ -26,6 +26,7 @@ const routeGroupChildDetailSource = existsSync(routeGroupChildDetailPath)
   ? readFileSync(routeGroupChildDetailPath, "utf8")
   : "";
 const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
+const routeHelpersSource = readFileSync(join(root, "app/features/delivery/route-helpers.js"), "utf8");
 const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8");
 const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
 
@@ -60,14 +61,18 @@ test("Routes page loads persisted route plans and route groups from the delivery
 });
 
 test("Routes page lists saved child routes below their parent route group", () => {
+  assert.match(routesPageSource, /from "\.\.\/features\/delivery\/route-helpers"/);
   assert.match(routesPageSource, /const routeChildRows = safeRouteGroups\.flatMap/);
-  assert.match(routesPageSource, /\.filter\(\(child\) => child\?\.routePlanId\)/);
+  assert.match(routeHelpersSource, /function getRouteGroupChildren\(routeGroup\) \{/);
+  assert.match(routeHelpersSource, /\(child\) => child\?\.routePlanId/);
+  assert.match(routeHelpersSource, /function getVisibleRouteGroupChildrenWithRoutePlanFallback\(routeGroup\) \{/);
+  assert.match(routeHelpersSource, /child\?\.routePlanId \|\| child\?\.routePlan\?\.id/);
   assert.match(routesPageSource, /href: routeGroupChildPath\(routeGroup\.id, child\.routePlanId\)/);
-  assert.match(routesPageSource, /function getRouteGroupChildRouteName\(routeGroup, child, index\) \{/);
-  assert.match(routesPageSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
-  assert.match(routesPageSource, /route: getRouteGroupChildRouteName\(routeGroup, child, index\)/);
+  assert.match(routeHelpersSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
+  assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
+  assert.match(routesPageSource, /route: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
   assert.match(routesPageSource, /parentRouteGroupId: routeGroup\.id/);
-  assert.match(routesPageSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
   assert.match(routesPageSource, /isDeletable: true,[\s\S]*deleteKey: `routePlan:\$\{child\.routePlanId\}`/);
   assert.match(routesPageSource, /return \[\.\.\.routeGroupRows, \.\.\.routeChildRows, \.\.\.routePlanRows\]/);
 });
@@ -165,7 +170,7 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routesPageSource, /const routeGroupRows = safeRouteGroups\.map\(\(routeGroup\) =>/);
   assert.match(routesPageSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
   assert.match(routesPageSource, /return Number\(routeGroup\?\.totalOrders \?\? routeGroup\?\.ordersCount \?\? routeGroup\?\.assignments\?\.length \?\? 0\) \|\| 0/);
-  assert.match(routesPageSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
   assert.match(routesPageSource, /end: getVisibleRouteGroupChildren\(routeGroup\)\.length > 0 \? `\$\{getVisibleRouteGroupChildren\(routeGroup\)\.length\} child routes` : "No split"/);
   assert.match(routesPageSource, /isRouteGroup: true/);
   assert.match(routesPageSource, /isDeletable: false/);
@@ -387,11 +392,11 @@ test("Route detail loader reads the selected persisted route plan", () => {
 });
 
 test("Route detail summarizes delivery with the actual date label", () => {
-  assert.match(routeDetailSource, /import \{ formatDeliveryScopeLabel \} from "\.\.\/features\/delivery\/delivery-labels"/);
-  assert.match(routeDetailSource, /function formatRouteDeliveryScope\(routePlan\) \{/);
-  assert.match(routeDetailSource, /formatDeliveryScopeLabel\(\{/);
-  assert.match(routeDetailSource, /deliveryDate: routePlan\?\.routeScope\?\.deliveryDate \?\? routePlan\?\.deliveryDate \?\? routePlan\?\.planDate/);
-  assert.match(routeDetailSource, /deliveryDate: formatRouteDeliveryScope\(routePlan\)/);
+  assert.match(routeDetailSource, /from "\.\.\/features\/delivery\/route-helpers"/);
+  assert.match(routeHelpersSource, /function formatRouteDeliveryScope\(routePlan, emptyLabel = "-"\) \{/);
+  assert.match(routeHelpersSource, /formatDeliveryScopeLabel\(\{/);
+  assert.match(routeHelpersSource, /deliveryDate: routePlan\?\.routeScope\?\.deliveryDate \?\? routePlan\?\.deliveryDate \?\? routePlan\?\.planDate/);
+  assert.match(routeDetailSource, /deliveryDate: formatRouteDeliveryScope\(routePlan, ROUTE_EMPTY_LABEL\)/);
   assert.match(routeDetailSource, /renderRouteHeaderMetric\("Delivery date", routeDetail\.deliveryDate\)/);
   assert.doesNotMatch(routeDetailSource, /renderSummaryItem\("Delivery day", routeDetail\.deliveryDay\)/);
 });
@@ -406,8 +411,8 @@ test("Routes canonical group child route loads by group id", () => {
 
 test("Route detail separates group and child titles", () => {
   assert.match(routeDetailSource, /const routeDetailTitle = textOrUndefined\(routeDetailTitleOverride\) \?\? \(isRouteGroupDetail \? textOrUndefined\(routeGroup\?\.name\) : textOrUndefined\(routeDetail\.route\)\) \?\? "Route"/);
-  assert.match(routeDetailSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
-  assert.match(routeDetailSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
+  assert.match(routeHelpersSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
+  assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
   assert.match(routeDetailServerSource, /name: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
   assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, detail\?\.routePlan \?\? child\?\.routePlan, index\)/);
   assert.match(routeDetailServerSource, /routePlan: currentChildDetail\?\.routePlan \?\? routePlanData\.routePlan/);
@@ -748,7 +753,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /formatRouteDistanceMeters\(optimized\?\.metrics\?\.distanceMeters\)/);
   assert.match(routeDetailSource, /const childDetail = childDetailsByRoutePlanId\.get\(textOrUndefined\(branch\.routePlanId\)\)/);
   assert.match(routeDetailSource, /const rootRouteStops = useMemo/);
-  assert.match(routeDetailSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
   assert.match(routeDetailSource, /const hasVisibleRouteSplit = routeBranchRows\.length > 0 \|\| routeGroupChildRows\.length > 0 \|\| clientRouteRows\.length > 0/);
   assert.match(routeDetailSource, /\? \[\.\.\.groupRootRouteRows, \.\.\.routeGroupChildRows, \.\.\.routeBranchRows\]/);
   assert.match(routeDetailSource, /const routePolygonSourceStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail \? routeGroupStopsSource : \[\]/);

@@ -3,7 +3,16 @@ import { flushSync } from "react-dom";
 import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { formatDeliveryScopeLabel } from "../features/delivery/delivery-labels";
+import {
+  firstArray,
+  formatRouteDeliveryScope,
+  formatRouteStatus,
+  getRouteGroupChildRouteName,
+  getVisibleRouteGroupChildrenWithRoutePlanFallback,
+  numberOrUndefined,
+  readRouteOptimizedSnapshot,
+  textOrUndefined,
+} from "../features/delivery/route-helpers";
 import { routeDetailAction, routeDetailLoader } from "../features/delivery/route-detail.server";
 import { ROUTES_ROOT_PATH } from "../features/delivery/route-paths";
 import { addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer, MAP_MARKER_PALETTE } from "../features/maps/map-markers";
@@ -731,35 +740,6 @@ const routeDetailErrorStyle = {
 export const loader = routeDetailLoader;
 export const action = routeDetailAction;
 
-function firstArray(...values) {
-  return values.find((value) => Array.isArray(value)) ?? [];
-}
-
-function getDefaultRouteGroupChildName(index) {
-  return `Route ${index + 1}`;
-}
-
-function getRouteGroupChildRouteName(routeGroup, child, routePlan, index) {
-  const fallback = getDefaultRouteGroupChildName(index);
-  const name = textOrUndefined(routePlan?.name ?? child?.routePlan?.name ?? child?.label);
-  const groupName = textOrUndefined(routeGroup?.name);
-  if (name && groupName && name.startsWith(`${groupName} — `)) return fallback;
-  return name ?? fallback;
-}
-
-function formatRouteDeliveryScope(routePlan) {
-  return formatDeliveryScopeLabel({
-    deliveryDate: routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate,
-    timeWindowEnd: routePlan?.routeScope?.timeWindowEnd ?? routePlan?.timeWindowEnd,
-    timeWindowStart: routePlan?.routeScope?.timeWindowStart ?? routePlan?.timeWindowStart,
-  }) ?? ROUTE_EMPTY_LABEL;
-}
-
-function formatRouteStatus(status) {
-  const value = textOrUndefined(status)?.toUpperCase();
-  return value && value !== "UNAVAILABLE" && value !== "UNSTARTED" ? value : "DRAFT";
-}
-
 function buildRouteDetail(routePlan, routeGroup = null) {
   if (!routePlan) {
     const orderCount = numberOrUndefined(routeGroup?.totalOrders ?? routeGroup?.ordersCount)
@@ -771,7 +751,7 @@ function buildRouteDetail(routePlan, routeGroup = null) {
       orders: orderCount,
       coordinates: "0/0",
       missingCoordinates: 0,
-      deliveryDate: formatRouteDeliveryScope(routeGroup),
+      deliveryDate: formatRouteDeliveryScope(routeGroup, ROUTE_EMPTY_LABEL),
     };
   }
 
@@ -785,7 +765,7 @@ function buildRouteDetail(routePlan, routeGroup = null) {
     orders: stopsCount,
     coordinates: `${locatedCount}/${stopsCount}`,
     missingCoordinates,
-    deliveryDate: formatRouteDeliveryScope(routePlan),
+    deliveryDate: formatRouteDeliveryScope(routePlan, ROUTE_EMPTY_LABEL),
   };
 }
 
@@ -855,10 +835,6 @@ function formatRouteDistanceMeters(value) {
 
   const kilometers = meters / 1000;
   return `${kilometers >= 10 ? Math.round(kilometers) : kilometers.toFixed(1)} km`;
-}
-
-function readRouteOptimizedSnapshot(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }
 
 function buildRouteDriverOptions(drivers, currentDriver) {
@@ -1038,18 +1014,6 @@ function formatStopAttributes(attributes) {
     })
     .filter(Boolean)
     .join(", ") || "—";
-}
-
-function textOrUndefined(value) {
-  if (value == null) return undefined;
-  const text = String(value).trim();
-  return text || undefined;
-}
-
-function numberOrUndefined(value) {
-  if (value == null) return undefined;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : undefined;
 }
 
 function isValidLatitude(latitude) {
@@ -1736,17 +1700,8 @@ function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
   return detailsByRoutePlanId;
 }
 
-function getRouteGroupChildren(routeGroup) {
-  return (routeGroup?.children ?? []).filter((child) => child?.routePlanId ?? child?.routePlan?.id);
-}
-
-function getVisibleRouteGroupChildren(routeGroup) {
-  const children = getRouteGroupChildren(routeGroup);
-  return children.length >= 2 ? children : [];
-}
-
 function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = []) {
-  return getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
+  return getVisibleRouteGroupChildrenWithRoutePlanFallback(routeGroup).map((child, index) => {
     const routePlanId = textOrUndefined(child?.routePlanId ?? child?.routePlan?.id);
     const detail = childDetailsByRoutePlanId.get(routePlanId);
     const detailStops = detail?.stops ?? [];

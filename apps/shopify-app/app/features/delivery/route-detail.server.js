@@ -10,6 +10,13 @@ import {
   assignDeliveryRoutePlanDriver,
   fetchDeliveryRoutePlanDetail,
 } from "./route-plans.server";
+import {
+  firstArray,
+  getRouteGroupChildRouteName,
+  numberOrUndefined,
+  readRouteOptimizedSnapshot,
+  textOrUndefined,
+} from "./route-helpers";
 import { routeGroupChildPath } from "./route-paths";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
 import { authenticate } from "../../shopify.server";
@@ -31,26 +38,6 @@ function logRouteDetailPerformance(name, metric = {}) {
   });
 }
 
-function textOrUndefined(value) {
-  if (value == null) return undefined;
-  const text = String(value).trim();
-  return text || undefined;
-}
-
-function numberOrUndefined(value) {
-  if (value == null) return undefined;
-  const number = Number(value);
-  return Number.isFinite(number) ? number : undefined;
-}
-
-function firstArray(...values) {
-  return values.find((value) => Array.isArray(value)) ?? [];
-}
-
-function readRouteOptimizedSnapshot(value) {
-  return value && typeof value === "object" && !Array.isArray(value) ? value : null;
-}
-
 export function cleanRoutePathParam(value) {
   return textOrUndefined(value)?.split(/[?&]/)[0];
 }
@@ -58,18 +45,6 @@ export function cleanRoutePathParam(value) {
 function getRouteGroupIdHint(request) {
   const url = new URL(request.url);
   return cleanRoutePathParam(url.searchParams.get("routeGroupId") ?? url.searchParams.get("groupId"));
-}
-
-function getDefaultRouteGroupChildName(index) {
-  return `Route ${index + 1}`;
-}
-
-function getRouteGroupChildRouteName(routeGroup, child, routePlan, index) {
-  const fallback = getDefaultRouteGroupChildName(index);
-  const name = textOrUndefined(routePlan?.name ?? child?.routePlan?.name ?? child?.label);
-  const groupName = textOrUndefined(routeGroup?.name);
-  if (name && groupName && name.startsWith(`${groupName} — `)) return fallback;
-  return name ?? fallback;
 }
 
 function getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stops) {
