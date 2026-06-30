@@ -2,7 +2,7 @@ import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import process from "node:process";
 
-const PERF_LOG_PATH = join(process.cwd(), ".omx/perf/orders-navigation.jsonl");
+const PERF_LOG_DIR = join(process.cwd(), ".omx/perf");
 const MAX_PERF_PAYLOAD_BYTES = 32_000;
 
 function isPerformanceCaptureEnabled() {
@@ -42,6 +42,15 @@ function sanitizeMetricPayload(metric) {
   };
 }
 
+function getPerfLogPath(metric) {
+  const fileName =
+    metric?.name === "app.page.navigation"
+      ? "app-page-navigation.jsonl"
+      : "orders-navigation.jsonl";
+
+  return join(PERF_LOG_DIR, fileName);
+}
+
 async function parseMetricPayload(request) {
   const rawPayload = await request.text();
 
@@ -64,8 +73,9 @@ export async function action({ request }) {
       ...metric,
     };
 
-    await mkdir(dirname(PERF_LOG_PATH), { recursive: true });
-    await appendFile(PERF_LOG_PATH, `${JSON.stringify(entry)}\n`, "utf8");
+    const perfLogPath = getPerfLogPath(metric);
+    await mkdir(dirname(perfLogPath), { recursive: true });
+    await appendFile(perfLogPath, `${JSON.stringify(entry)}\n`, "utf8");
 
     return jsonResponse({ ok: true });
   } catch (error) {
