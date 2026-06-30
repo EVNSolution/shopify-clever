@@ -5,9 +5,14 @@ import { buildInventoryProductMatrix } from "../features/delivery/inventory-matr
 import { getServiceErrorNotice } from "../features/service-errors";
 
 const pageStyle = {
+  boxSizing: "border-box",
   display: "grid",
   gap: "8px",
+  margin: "0 auto",
+  maxWidth: "210mm",
+  minHeight: "297mm",
   padding: "4px 12px 12px",
+  width: "100%",
 };
 
 const panelStyle = {
@@ -208,12 +213,15 @@ const printCss = `
 @media print {
   html, body { margin: 0 !important; }
   .inventory-detail-no-print { display: none !important; }
-  .inventory-detail-page { justify-content: center !important; margin: 0 auto !important; max-width: 190mm !important; padding: 5mm 8mm 8mm !important; }
+  .inventory-detail-page { box-sizing: border-box !important; font-size: 11px !important; justify-content: center !important; margin: 0 auto !important; max-width: none !important; min-height: 297mm !important; padding: 5mm 8mm 8mm !important; width: 210mm !important; }
   .inventory-detail-panel { border: 0 !important; border-radius: 0 !important; }
   .inventory-detail-table-wrap { overflow: visible !important; }
   .inventory-detail-table { font-size: 11px !important; width: 100% !important; }
+  .inventory-detail-table th, .inventory-detail-table td { line-height: 14px !important; padding: 4px 5px !important; }
+  .inventory-detail-page h1 { font-size: 13px !important; line-height: 17px !important; }
+  .inventory-detail-product-label { max-height: 28px !important; }
   .inventory-detail-row-header { position: static !important; }
-  @page { margin: 0; }
+  @page { size: A4 portrait; margin: 0; }
 }
 `;
 
@@ -366,7 +374,7 @@ export default function InventoryDetailPage() {
                       {productSlots.map((product, index) => (
                         product ? (
                           <th key={product.key} style={productHeadCellStyle} title={product.label}>
-                            <span style={productHeadLabelStyle}>{product.displayLabel ?? product.label}</span>
+                            <span className="inventory-detail-product-label" style={productHeadLabelStyle}>{product.displayLabel ?? product.label}</span>
                           </th>
                         ) : (
                           <th aria-hidden="true" key={`empty-${index}`} style={productHeadCellStyle} />

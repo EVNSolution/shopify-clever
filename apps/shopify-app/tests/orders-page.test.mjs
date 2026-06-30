@@ -1358,8 +1358,11 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.doesNotMatch(inventoryDetailSource, /width:\s*"max-content"/);
   assert.match(inventoryDetailSource, /window\.print\(\)/);
   assert.match(inventoryDetailSource, /@media print/);
-  assert.match(inventoryDetailSource, /@page \{ margin: 0; \}/);
-  assert.match(inventoryDetailSource, /max-width: 190mm/);
+  assert.match(inventoryDetailSource, /maxWidth: "210mm"/);
+  assert.match(inventoryDetailSource, /minHeight: "297mm"/);
+  assert.match(inventoryDetailSource, /@page \{ size: A4 portrait; margin: 0; \}/);
+  assert.match(inventoryDetailSource, /width: 210mm !important/);
+  assert.match(inventoryDetailSource, /inventory-detail-product-label/);
   assert.doesNotMatch(inventoryDetailSource, /Delta remarks|Order-by-order items|lastChange/);
 });
 
