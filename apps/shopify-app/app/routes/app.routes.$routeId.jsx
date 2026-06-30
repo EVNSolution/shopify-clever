@@ -1030,6 +1030,7 @@ function buildRouteBranchRows(routeGroup, routeStops = [], childDetailsByRoutePl
   const stopByOrderId = new Map(routeStops.map((stop) => [stop.orderId, stop]));
 
   return branches.map((branch, index) => {
+    const routeIndex = Math.max(numberOrUndefined(branch.sortOrder) ?? index + 2, index + 2);
     const orderIds = Array.isArray(branch.orderIds) ? branch.orderIds.map(textOrUndefined).filter(Boolean) : [];
     const branchStops = orderIds.map((orderId) => stopByOrderId.get(orderId)).filter(Boolean);
     const childDetail = childDetailsByRoutePlanId.get(textOrUndefined(branch.routePlanId));
@@ -1053,10 +1054,11 @@ function buildRouteBranchRows(routeGroup, routeStops = [], childDetailsByRoutePl
       routePlanId: childDetail?.routePlanId ?? null,
       isCurrent: false,
       orderIds,
+      routeIndex,
       status: formatRouteStatus(branch.status ?? childDetail?.routePlan?.status),
       stops: branchStops,
       stopsCount: branchStops.length,
-      title: textOrUndefined(branch.label) ?? `Route ${index + 2}`,
+      title: textOrUndefined(branch.label) ?? `Route ${routeIndex}`,
       totalDistanceLabel: getRouteMetricLabel(formatRouteDistanceMeters(optimized?.metrics?.distanceMeters)),
       totalItems: ROUTE_EMPTY_LABEL,
       totalWeightLabel: ROUTE_EMPTY_LABEL,
@@ -1108,6 +1110,7 @@ function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
 
 function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = []) {
   return getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
+    const routeIndex = numberOrUndefined(child?.sortOrder) ?? index + 1;
     const routePlanId = getRouteGroupChildRoutePlanId(child);
     const detail = childDetailsByRoutePlanId.get(routePlanId);
     const detailStops = detail?.stops ?? [];
@@ -1135,6 +1138,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       optimized,
       orderIds: orderIds.length > 0 ? orderIds : stops.map((stop) => stop.orderId).filter(Boolean),
       routeKey: routePlanId ? `routePlan:${routePlanId}` : `group-route:${index}`,
+      routeIndex,
       routePlanId: routePlanId ?? null,
       status: formatRouteStatus(detail?.routePlan?.status ?? child?.displayStatus ?? child?.status),
       stops,
@@ -1199,10 +1203,12 @@ function ensureUniqueRouteRowColors(routeRows) {
 
 function getNextRouteBranchDraft(routeRows) {
   const usedColors = new Set(routeRows.map((routeRow) => normalizeRouteColor(routeRow.color)).filter(Boolean));
-  const routeNumber = routeRows.length + 1;
+  const maxRouteIndex = routeRows.reduce((max, routeRow) => Math.max(max, numberOrUndefined(routeRow.routeIndex) ?? 0), 0);
+  const routeNumber = (maxRouteIndex || routeRows.length) + 1;
   return {
     color: getUnusedRouteColor(null, usedColors, routeNumber - 1),
     label: `Route ${routeNumber}`,
+    routeIndex: routeNumber,
   };
 }
 
@@ -1323,7 +1329,7 @@ function buildRouteDraftPayload(routeRows, { includeEmptyTempRoutes = true, incl
         orderIds: routeRow.stops.map((stop) => stop.orderId).filter(Boolean),
         routeKey: getRouteRowDraftKey(routeRow),
         routePlanId: routeRow.routePlanId ?? null,
-        sortOrder: index + 1,
+        sortOrder: numberOrUndefined(routeRow.routeIndex) ?? index + 1,
         tempId: routeRow.tempId ?? null,
       };
     }),
@@ -1481,7 +1487,6 @@ export default function RouteDetailPage() {
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
   const currentRouteLineId = effectiveRoutePlan?.id ?? null;
-  const hasVisibleRouteSplit = routeBranchRows.length > 0 || routeGroupChildRows.length > 0 || clientRouteRows.length > 0;
   const currentRouteRowsSource = isRouteGroupDetail || !currentRouteLineId
     ? []
     : [
@@ -1497,6 +1502,7 @@ export default function RouteDetailPage() {
         isCurrent: true,
         optimized: routeMetrics ? { metrics: routeMetrics, routeGeometry, routeStopPoints } : null,
         orderIds: orderedRouteStops.map((stop) => stop.orderId).filter(Boolean),
+        routeIndex: 1,
         routeKey: "root",
         routePlanId: textOrUndefined(effectiveRoutePlan?.id) ?? null,
         status: formatRouteStatus(effectiveRoutePlan?.status),
@@ -1511,7 +1517,6 @@ export default function RouteDetailPage() {
     ];
   const groupRootRouteRows = isRouteGroupDetail
     && rootRouteStops.length > 0
-    && hasVisibleRouteSplit
     ? [
       {
         attemptedCount: countRouteStopsByStatus(rootRouteStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
@@ -1525,6 +1530,7 @@ export default function RouteDetailPage() {
         isCurrent: false,
         optimized: null,
         orderIds: rootRouteStops.map((stop) => stop.orderId).filter(Boolean),
+        routeIndex: 1,
         routeKey: "root",
         routePlanId: null,
         status: formatRouteStatus(routeGroup?.displayStatus ?? routeGroup?.status),
@@ -1539,7 +1545,9 @@ export default function RouteDetailPage() {
     ]
     : [];
   const groupRouteRowsSource = isRouteGroupDetail
-    ? [...groupRootRouteRows, ...routeGroupChildRows, ...routeBranchRows]
+    ? routeGroupChildRows.length > 0
+      ? routeGroupChildRows
+      : [...groupRootRouteRows, ...routeBranchRows]
     : routeGroupChildRows.length > 0
       ? routeGroupChildRows
       : routeBranchRows;
@@ -1915,6 +1923,7 @@ export default function RouteDetailPage() {
         isCurrent: false,
         orderIds: [],
         routeKey: tempId,
+        routeIndex: draft.routeIndex,
         routePlanId: null,
         stops: [],
         stopsCount: 0,
