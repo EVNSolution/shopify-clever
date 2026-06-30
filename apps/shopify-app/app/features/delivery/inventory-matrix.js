@@ -42,6 +42,21 @@ export function buildInventoryProductMatrix(orders) {
   };
 }
 
+
+export function buildInventoryHistoryItems(inventory) {
+  const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
+  if (orders.length === 0) return [];
+
+  const historyOrders = orders.map((order, index) => buildInventoryHistoryOrder(order, index));
+  const itemTotal = historyOrders.reduce((total, order) => total + Math.abs(order.itemDelta), 0);
+
+  return [{
+    meta: `${orders.length} orders · ${itemTotal} items`,
+    orders: historyOrders,
+    title: formatInventoryHistoryTitle(inventory),
+  }];
+}
+
 export function isRealInventorySku(value) {
   const sku = normalizeText(value);
   if (!sku) return false;
@@ -58,6 +73,86 @@ export function formatInventoryOptions(options) {
       })
     : [];
   return parts.join(", ");
+}
+
+
+function buildInventoryHistoryOrder(order, index) {
+  const items = getInventoryHistoryLineItems(order);
+  const itemDelta = getNumber(order?.itemDelta ?? order?.quantityDelta) ?? items.reduce(
+    (total, item) => total + getInventoryHistoryItemDelta(item),
+    0,
+  );
+
+  return {
+    customer: getInventoryHistoryCustomer(order),
+    itemDelta,
+    items: items.length > 0 ? items.map(formatInventoryHistoryLineItem) : ["No items"],
+    order: getInventoryHistoryOrderName(order, index),
+  };
+}
+
+function getInventoryHistoryLineItems(order) {
+  if (Array.isArray(order?.items)) return order.items;
+
+  const lineItems = order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
+  if (Array.isArray(lineItems)) return lineItems;
+  if (Array.isArray(lineItems?.nodes)) return lineItems.nodes;
+  if (Array.isArray(lineItems?.edges)) return lineItems.edges.map((edge) => edge?.node).filter(Boolean);
+  return [];
+}
+
+function getInventoryHistoryOrderName(order, index) {
+  const id = textOrNumber(order?.id);
+  return textOrNumber(order?.name)
+    ?? textOrNumber(order?.orderName)
+    ?? textOrNumber(order?.shopifyOrderName)
+    ?? textOrNumber(order?.orderNumber)
+    ?? textOrNumber(order?.shopifyOrderNumber)
+    ?? (id ? id.split("/").pop() : null)
+    ?? `Order ${index + 1}`;
+}
+
+function getInventoryHistoryCustomer(order) {
+  return textOrNumber(order?.customer)
+    ?? textOrNumber(order?.customerName)
+    ?? textOrNumber(order?.recipientName)
+    ?? textOrNumber(order?.shippingAddress?.name)
+    ?? textOrNumber(order?.deliveryAddress?.name)
+    ?? "Unknown customer";
+}
+
+function formatInventoryHistoryLineItem(item) {
+  const name = textOrNumber(item?.name) ?? textOrNumber(item?.title) ?? textOrNumber(item?.productTitle) ?? "Item";
+  const options = formatInventoryOptions(item?.options) || textOrNumber(item?.variantTitle);
+  const quantity = Math.abs(getInventoryHistoryItemDelta(item));
+  return `${options ? `${name} (${options})` : name} ×${quantity}`;
+}
+
+function getInventoryHistoryItemDelta(item) {
+  return getNumber(item?.quantityDelta ?? item?.quantity ?? item?.currentQuantity) ?? 1;
+}
+
+function formatInventoryHistoryTitle(inventory) {
+  const time = formatInventoryHistoryTime(inventory?.createdAt ?? inventory?.created_at);
+  return time ? `Initial snapshot · ${time}` : "Initial snapshot";
+}
+
+function formatInventoryHistoryTime(value) {
+  const text = textOrNumber(value);
+  if (!text) return null;
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+  return date.toISOString().slice(0, 16).replace("T", " ");
+}
+
+function getNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function textOrNumber(value) {
+  if (typeof value === "number") return String(value);
+  return normalizeText(value);
 }
 
 function getInventoryProduct(item) {
