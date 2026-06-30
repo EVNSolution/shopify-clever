@@ -1,4 +1,6 @@
 /* eslint-disable react/prop-types */
+import { useEffect, useRef, useState } from "react";
+
 const mapPanelStyle = {
   overflow: "hidden",
   position: "relative",
@@ -16,6 +18,25 @@ const MAPLIBRE_CONTROL_SIZE_PX = 30;
 const MAPLIBRE_CONTROL_BORDER_WIDTH_PX = 2;
 const MAP_TOOLBAR_BORDER_COLOR = "#8a8a8a";
 const MAP_TOOLBAR_DIVIDER_COLOR = MAP_TOOLBAR_BORDER_COLOR;
+const MAP_WHEEL_HINT_TEXT = "Hold Ctrl or ⌘ while scrolling to zoom the map.";
+const MAP_WHEEL_HINT_DURATION_MS = 1400;
+
+const mapWheelHintStyle = {
+  alignItems: "center",
+  background: "rgba(0, 0, 0, 0.38)",
+  color: "#ffffff",
+  display: "flex",
+  fontSize: "15px",
+  fontWeight: 700,
+  inset: 0,
+  justifyContent: "center",
+  lineHeight: 1.35,
+  padding: "24px",
+  pointerEvents: "none",
+  position: "absolute",
+  textAlign: "center",
+  zIndex: 100000,
+};
 
 const mapToolbarStyle = {
   alignItems: "center",
@@ -84,9 +105,51 @@ export function MapPanel({
   id,
   toolbar,
 }) {
+  const [wheelHintVisible, setWheelHintVisible] = useState(false);
+  const wheelHintTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (wheelHintTimerRef.current) window.clearTimeout(wheelHintTimerRef.current);
+  }, []);
+
+  useEffect(() => {
+    const mapCanvasElement = canvasRef?.current;
+    if (!mapCanvasElement) return undefined;
+
+    const showWheelHint = () => {
+      setWheelHintVisible(true);
+      if (wheelHintTimerRef.current) window.clearTimeout(wheelHintTimerRef.current);
+      wheelHintTimerRef.current = window.setTimeout(() => {
+        setWheelHintVisible(false);
+        wheelHintTimerRef.current = null;
+      }, MAP_WHEEL_HINT_DURATION_MS);
+    };
+
+    const handleMapWheel = (event) => {
+      if (event.ctrlKey || event.metaKey) {
+        setWheelHintVisible(false);
+        return;
+      }
+      showWheelHint();
+    };
+
+    mapCanvasElement.addEventListener("wheel", handleMapWheel, { capture: true, passive: true });
+    return () => mapCanvasElement.removeEventListener("wheel", handleMapWheel, { capture: true });
+  }, [canvasKey, canvasRef]);
+
   return (
     <div aria-label={ariaLabel} role="region" style={{ ...mapPanelStyle, ...frameStyle }}>
       {toolbar}
+      <div
+        aria-hidden="true"
+        style={{
+          ...mapWheelHintStyle,
+          opacity: wheelHintVisible ? 1 : 0,
+          transition: wheelHintVisible ? "opacity 80ms ease-out" : "opacity 260ms ease-in",
+        }}
+      >
+        {MAP_WHEEL_HINT_TEXT}
+      </div>
       <div
         aria-label={ariaLabel}
         id={id}

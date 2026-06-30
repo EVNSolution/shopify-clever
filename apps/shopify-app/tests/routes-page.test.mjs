@@ -538,6 +538,7 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /const routeDetailMapFrameStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailMapCanvasStyle = \{/);
   assert.match(routeDetailSource, /canvasRef=\{mapContainerRef\}/);
+  assert.doesNotMatch(routeDetailSource, /routeMapWheelHintVisible|handleRouteDetailMapWheel|routeDetailMapWheelHintStyle/);
   assert.match(routeDetailMapSource, /createDepartureMarkerImageData\(\)/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route"/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line"/);

@@ -911,6 +911,7 @@ test("Orders map popup content stays above all map markers", () => {
   assert.match(mapMarkersSource, /markerElement\.style\.zIndex = options\.zIndex \?\? "3000"/);
   assert.match(globalCssSource, /\.maplibregl-popup\s*\{/);
   assert.match(globalCssSource, /z-index:\s*5000/);
+  assert.match(globalCssSource, /\.maplibregl-map \.maplibregl-cooperative-gesture-screen\s*\{[\s\S]*display:\s*none !important/);
 });
 
 test("Orders map has a compact refresh control for recovering failed tile loads", () => {
@@ -937,6 +938,12 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(mapPanelSource, /border: `\$\{MAPLIBRE_CONTROL_BORDER_WIDTH_PX\}px solid \$\{MAP_TOOLBAR_BORDER_COLOR\}`/);
   assert.match(mapPanelSource, /borderTop: `\$\{MAPLIBRE_CONTROL_BORDER_WIDTH_PX\}px solid \$\{MAP_TOOLBAR_DIVIDER_COLOR\}`/);
   assert.match(mapPanelSource, /top: `\$\{MAPLIBRE_CONTROL_OFFSET_PX\}px`/);
+  assert.match(mapPanelSource, /MAP_WHEEL_HINT_TEXT = "Hold Ctrl or ⌘ while scrolling to zoom the map\."/);
+  assert.match(mapPanelSource, /background: "rgba\(0, 0, 0, 0\.38\)"/);
+  assert.match(mapPanelSource, /opacity: wheelHintVisible \? 1 : 0/);
+  assert.match(mapPanelSource, /transition: wheelHintVisible \? "opacity 80ms ease-out" : "opacity 260ms ease-in"/);
+  assert.match(mapPanelSource, /addEventListener\("wheel", handleMapWheel, \{ capture: true, passive: true \}\)/);
+  assert.match(mapPanelSource, /event\.ctrlKey \|\| event\.metaKey/);
   assert.match(ordersPageSource, /renderMapZoomInIcon\(\)/);
   assert.match(ordersPageSource, /renderMapZoomOutIcon\(\)/);
   assert.doesNotMatch(ordersPageSource, /NavigationControl/);
