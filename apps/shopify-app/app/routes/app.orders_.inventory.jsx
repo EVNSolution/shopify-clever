@@ -186,7 +186,7 @@ const historyItemListStyle = {
 const tableWrapStyle = {
   display: "grid",
   gap: "8px",
-  overflowX: "auto",
+  overflow: "visible",
 };
 
 const tableStyle = {
