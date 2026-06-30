@@ -1280,6 +1280,9 @@ test("Orders page exposes inventory as an Orders subview with the side-card shor
   assert.match(ordersPageSource, /inventory\.ordersCount \?\? inventory\.orderIds\?\.length \?\? inventory\.orders\?\.length \?\? 0/);
   assert.match(ordersPageSource, /const inventoryTableStyle = \{[\s\S]*\.\.\.tableStyle[\s\S]*minWidth:\s*"840px"/);
   assert.match(ordersPageSource, /<colgroup>[\s\S]*INVENTORY_TABLE_COLUMN_WIDTHS/);
+  assert.match(ordersPageSource, /aria-label="Select all visible inventories"/);
+  assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
+  assert.doesNotMatch(ordersPageSource, />Detail<\/th>|>Open<\/button>/);
   assert.doesNotMatch(ordersPageSource, /lower=\{<div \/>}/);
   assert.doesNotMatch(appShellSource, /nav\.inventory|Inventory plan/);
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);

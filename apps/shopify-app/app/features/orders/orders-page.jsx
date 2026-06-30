@@ -697,7 +697,7 @@ const tableCellStyle = {
   whiteSpace: "nowrap",
 };
 
-const INVENTORY_TABLE_COLUMN_WIDTHS = ["28%", "12%", "12%", "22%", "18%", "8%"];
+const INVENTORY_TABLE_COLUMN_WIDTHS = ["4%", "30%", "12%", "12%", "24%", "18%"];
 
 const inventoryTableWrapStyle = {
   maxHeight: "min(520px, 58vh)",
@@ -712,16 +712,16 @@ const inventoryTableStyle = {
 
 const inventoryHeaderCellStyle = tableHeaderCellStyle;
 const inventoryCellStyle = tableCellStyle;
+const inventoryCheckboxHeaderCellStyle = checkboxHeaderCellStyle;
+const inventoryCheckboxCellStyle = {
+  ...tableCellStyle,
+  padding: "6px 4px",
+};
 
 const inventoryNameCellStyle = {
   ...tableCellStyle,
   fontWeight: 650,
   textAlign: "left",
-};
-
-const inventoryActionCellStyle = {
-  ...tableCellStyle,
-  overflow: "visible",
 };
 
 const checkboxCellStyle = {
@@ -1464,6 +1464,7 @@ export default function OrdersPage() {
   );
   const [hoveredItemPopoverOrderId, setHoveredItemPopoverOrderId] = useState(null);
   const [pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId] = useState(null);
+  const [checkedInventoryIds, setCheckedInventoryIds] = useState([]);
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
   const [orderActionModalOpen, setOrderActionModalOpen] = useState(false);
@@ -1512,6 +1513,17 @@ export default function OrdersPage() {
     () => getCalendarDays(orderedDateCalendarMonth),
     [orderedDateCalendarMonth],
   );
+  const checkedInventoryIdSet = useMemo(
+    () => new Set(checkedInventoryIds),
+    [checkedInventoryIds],
+  );
+  const visibleInventoryIds = useMemo(
+    () => safeInventories.map((inventory) => inventory.id).filter(Boolean),
+    [safeInventories],
+  );
+  const allVisibleInventoriesChecked =
+    visibleInventoryIds.length > 0 &&
+    visibleInventoryIds.every((inventoryId) => checkedInventoryIdSet.has(inventoryId));
   const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
   const handleOrdersViewChange = useCallback((nextView) => {
     const nextSearchParams = new URLSearchParams(searchParams);
@@ -1523,6 +1535,34 @@ export default function OrdersPage() {
 
     setSearchParams(nextSearchParams, { preventScrollReset: true, replace: true });
   }, [searchParams, setSearchParams]);
+  const openInventoryDetail = useCallback((inventoryId) => {
+    if (!inventoryId) return;
+    navigate(`/app/orders/inventory?id=${encodeURIComponent(inventoryId)}`);
+  }, [navigate]);
+  const handleInventoryRowKeyDown = useCallback((event, inventory) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    openInventoryDetail(inventory.id);
+  }, [openInventoryDetail]);
+  const toggleInventoryCheck = useCallback((inventoryId) => {
+    if (!inventoryId) return;
+    setCheckedInventoryIds((currentInventoryIds) =>
+      currentInventoryIds.includes(inventoryId)
+        ? currentInventoryIds.filter((currentInventoryId) => currentInventoryId !== inventoryId)
+        : [...currentInventoryIds, inventoryId],
+    );
+  }, []);
+  const toggleAllVisibleInventoryChecks = useCallback(() => {
+    setCheckedInventoryIds((currentInventoryIds) => {
+      const visibleInventoryIdSet = new Set(visibleInventoryIds);
+      if (visibleInventoryIdSet.size === 0) return currentInventoryIds;
+
+      const allChecked = visibleInventoryIds.every((inventoryId) => currentInventoryIds.includes(inventoryId));
+      return allChecked
+        ? currentInventoryIds.filter((inventoryId) => !visibleInventoryIdSet.has(inventoryId))
+        : [...new Set([...currentInventoryIds, ...visibleInventoryIds])];
+    });
+  }, [visibleInventoryIds]);
 
   const ordersViewTabs = (
     <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
@@ -1561,12 +1601,20 @@ export default function OrdersPage() {
           </colgroup>
           <thead>
             <tr>
+              <th scope="col" style={inventoryCheckboxHeaderCellStyle}>
+                <input
+                  type="checkbox"
+                  aria-label="Select all visible inventories"
+                  checked={allVisibleInventoriesChecked}
+                  disabled={visibleInventoryIds.length === 0}
+                  onChange={toggleAllVisibleInventoryChecks}
+                />
+              </th>
               <th scope="col" style={inventoryHeaderCellStyle}>Inventory</th>
               <th scope="col" style={inventoryHeaderCellStyle}>Order count</th>
               <th scope="col" style={inventoryHeaderCellStyle}>Item count</th>
               <th scope="col" style={inventoryHeaderCellStyle}>Delta summary</th>
               <th scope="col" style={inventoryHeaderCellStyle}>Changed time</th>
-              <th scope="col" style={inventoryHeaderCellStyle}>Detail</th>
             </tr>
           </thead>
           <tbody>
@@ -1575,19 +1623,31 @@ export default function OrdersPage() {
                 <td colSpan={INVENTORY_TABLE_COLUMN_WIDTHS.length} style={inventoryCellStyle}>Inventory가 없습니다.</td>
               </tr>
             ) : safeInventories.map((inventory) => (
-              <tr key={inventory.id}>
+              <tr
+                key={inventory.id}
+                aria-label={`Open ${inventory.name ?? "inventory"} detail`}
+                className="route-table-row"
+                onClick={() => openInventoryDetail(inventory.id)}
+                onKeyDown={(event) => handleInventoryRowKeyDown(event, inventory)}
+                role="link"
+                tabIndex={0}
+              >
+                <td style={inventoryCheckboxCellStyle}>
+                  <input
+                    type="checkbox"
+                    aria-label={`Select ${inventory.name ?? "inventory"} inventory`}
+                    checked={Boolean(inventory.id && checkedInventoryIdSet.has(inventory.id))}
+                    disabled={!inventory.id}
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                    onChange={() => toggleInventoryCheck(inventory.id)}
+                  />
+                </td>
                 <td style={inventoryNameCellStyle}>{inventory.name}</td>
                 <td style={inventoryCellStyle}>{inventory.ordersCount ?? inventory.orderIds?.length ?? inventory.orders?.length ?? 0}</td>
                 <td style={inventoryCellStyle}>{inventory.itemSummary?.totalQuantity ?? 0}</td>
                 <td style={inventoryCellStyle}>{formatInventoryDeltaSummary(inventory)}</td>
                 <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt)}</td>
-                <td style={inventoryActionCellStyle}>
-                  <button
-                    type="button"
-                    style={orderFilterButtonStyle}
-                    onClick={() => navigate(`/app/orders/inventory?id=${encodeURIComponent(inventory.id)}`)}
-                  >Open</button>
-                </td>
               </tr>
             ))}
           </tbody>
