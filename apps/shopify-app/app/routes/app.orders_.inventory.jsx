@@ -125,17 +125,6 @@ const historyOrderListStyle = {
   marginTop: "8px",
 };
 
-const historyOrderHeaderStyle = {
-  color: "#616161",
-  display: "grid",
-  fontSize: "11px",
-  fontWeight: 750,
-  gap: "6px",
-  gridTemplateColumns: "70px minmax(0, 1fr) 54px",
-  padding: "0 8px",
-  textTransform: "uppercase",
-};
-
 const historyOrderStyle = {
   border: "1px solid #ebebeb",
   borderRadius: "8px",
@@ -159,8 +148,22 @@ const historyOrderCustomerStyle = {
 };
 
 const historyOrderItemCountStyle = {
+  borderRadius: "999px",
   fontWeight: 750,
-  textAlign: "right",
+  justifySelf: "end",
+  padding: "1px 7px",
+};
+
+const historyOrderAddStyle = {
+  ...historyOrderItemCountStyle,
+  background: "#e6f4ea",
+  color: "#137333",
+};
+
+const historyOrderRemoveStyle = {
+  ...historyOrderItemCountStyle,
+  background: "#fce8e6",
+  color: "#c5221f",
 };
 
 const historyItemListStyle = {
@@ -299,18 +302,25 @@ const HISTORY_ITEMS = [
   {
     meta: "55 orders · 270 items",
     orders: [
-      { customer: "Kim Minji", itemCount: 35, items: ["두툼 삼겹살 ×5", "유채 순 나물무침 ×6", "육개장 완조리 ×3"], order: "#1048" },
-      { customer: "Park Jiwon", itemCount: 29, items: ["오마고등 ×2", "소고기 사태수육 feat. 도가니 ×3", "소불고기 덮밥 완조리 ×2"], order: "#1051" },
+      { customer: "Kim Minji", itemDelta: 35, items: ["두툼 삼겹살 ×5", "유채 순 나물무침 ×6", "육개장 완조리 ×3"], order: "#1048" },
+      { customer: "Park Jiwon", itemDelta: 29, items: ["오마고등 ×2", "소고기 사태수육 feat. 도가니 ×3", "소불고기 덮밥 완조리 ×2"], order: "#1051" },
     ],
     title: "Initial snapshot",
   },
   {
     meta: "+2 orders · +7 items",
     orders: [
-      { customer: "Lee Hana", itemCount: 3, items: ["두툼 삼겹살 ×1", "오마고등 ×2"], order: "#1057" },
-      { customer: "Choi Daniel", itemCount: 4, items: ["육개장 완조리 ×3", "명란젓 ×1"], order: "#1061" },
+      { customer: "Lee Hana", itemDelta: 3, items: ["두툼 삼겹살 ×1", "오마고등 ×2"], order: "#1057" },
+      { customer: "Choi Daniel", itemDelta: 4, items: ["육개장 완조리 ×3", "명란젓 ×1"], order: "#1061" },
     ],
     title: "2026-06-30 14:12 update",
+  },
+  {
+    meta: "-1 order · -2 items",
+    orders: [
+      { customer: "Morgan Yu", itemDelta: -2, items: ["고기마파두부 완조리 ×1", "간장 돼지불고기 ×1"], order: "#1053" },
+    ],
+    title: "2026-06-30 14:32 update",
   },
 ];
 
@@ -569,17 +579,14 @@ export default function InventoryDetailPage() {
               </summary>
               <div style={historyCardContentStyle}>
                 <div style={historyOrderListStyle}>
-                  <div aria-hidden="true" style={historyOrderHeaderStyle}>
-                    <span>Order</span>
-                    <span>Customer</span>
-                    <span>Items</span>
-                  </div>
                   {item.orders.map((order) => (
                     <details key={order.order} style={historyOrderStyle}>
                       <summary style={historyOrderSummaryStyle}>
                         <strong>{order.order}</strong>
                         <span style={historyOrderCustomerStyle}>{order.customer}</span>
-                        <span style={historyOrderItemCountStyle}>{order.itemCount}</span>
+                        <span style={order.itemDelta < 0 ? historyOrderRemoveStyle : historyOrderAddStyle}>
+                          {order.itemDelta > 0 ? `+${order.itemDelta}` : order.itemDelta}
+                        </span>
                       </summary>
                       <ul style={historyItemListStyle}>
                         {order.items.map((historyItem) => <li key={historyItem}>{historyItem}</li>)}
