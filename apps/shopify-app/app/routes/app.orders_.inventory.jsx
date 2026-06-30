@@ -84,6 +84,8 @@ const tableWrapStyle = {
 };
 
 const tableStyle = {
+  borderLeft: "1px solid #e5e7eb",
+  borderTop: "1px solid #e5e7eb",
   borderCollapse: "separate",
   borderSpacing: 0,
   fontSize: "13px",
@@ -95,8 +97,9 @@ const tableStyle = {
 
 const cellStyle = {
   borderBottom: "1px solid #ebebeb",
+  borderRight: "1px solid #e5e7eb",
   padding: "6px 8px",
-  textAlign: "right",
+  textAlign: "center",
   whiteSpace: "nowrap",
 };
 
@@ -166,7 +169,7 @@ const totalColumnStyle = {
   width: "92px",
 };
 
-const PRODUCT_COLUMNS_PER_TABLE = 5;
+const PRODUCT_COLUMNS_PER_TABLE = 6;
 
 const noticeStyle = {
   background: "#fff4f4",
@@ -251,6 +254,10 @@ function getProductChunks(products) {
   return chunks;
 }
 
+function getProductSlots(products) {
+  return Array.from({ length: PRODUCT_COLUMNS_PER_TABLE }, (_, index) => products[index] ?? null);
+}
+
 export default function InventoryDetailPage() {
   const { errors, inventory } = useLoaderData();
   const notice = getServiceErrorNotice([{ errors }], { context: "inventory_detail" });
@@ -290,63 +297,78 @@ export default function InventoryDetailPage() {
                   <tr><td style={cellStyle}>No items</td></tr>
                 </tbody>
               </table>
-            ) : productChunks.map((products, chunkIndex) => (
-              <table
-                aria-label={
-                  productChunks.length === 1
-                    ? "Inventory product matrix"
-                    : `Inventory product matrix group ${chunkIndex + 1}`
-                }
-                className="inventory-detail-table"
-                key={products.map((product) => product.key).join("|")}
-                style={tableStyle}
-              >
-                <colgroup>
-                  <col style={dateColumnStyle} />
-                  {products.map((product) => <col key={product.key} />)}
-                  <col style={totalColumnStyle} />
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th className="inventory-detail-row-header" style={headRowHeaderStyle}>Date</th>
-                    {products.map((product) => (
-                      <th key={product.key} style={productHeadCellStyle} title={product.label}>
-                        <span style={productHeadLabelStyle}>{product.displayLabel ?? product.label}</span>
-                      </th>
-                    ))}
-                    <th style={headCellStyle}>Group total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {matrix.rows.map((row) => {
-                    const groupTotal = products.reduce(
-                      (total, product) => total + (row.quantities[product.key] ?? 0),
-                      0,
-                    );
-                    return (
-                      <tr key={row.date}>
-                        <th className="inventory-detail-row-header" scope="row" style={rowHeaderStyle}>{row.label}</th>
-                        {products.map((product) => (
-                          <td key={product.key} style={cellStyle}>{row.quantities[product.key] ?? 0}</td>
-                        ))}
-                        <td style={totalColumnCellStyle}>{groupTotal}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr>
-                    <th className="inventory-detail-row-header" scope="row" style={totalRowHeaderStyle}>Total</th>
-                    {products.map((product) => (
-                      <td key={product.key} style={totalRowCellStyle}>{matrix.productTotals[product.key] ?? 0}</td>
-                    ))}
-                    <td style={totalRowCellStyle}>
-                      {products.reduce((total, product) => total + (matrix.productTotals[product.key] ?? 0), 0)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            ))}
+            ) : productChunks.map((products, chunkIndex) => {
+              const productSlots = getProductSlots(products);
+              return (
+                <table
+                  aria-label={
+                    productChunks.length === 1
+                      ? "Inventory product matrix"
+                      : `Inventory product matrix group ${chunkIndex + 1}`
+                  }
+                  className="inventory-detail-table"
+                  key={products.map((product) => product.key).join("|")}
+                  style={tableStyle}
+                >
+                  <colgroup>
+                    <col style={dateColumnStyle} />
+                    {productSlots.map((product, index) => <col key={product?.key ?? `empty-${index}`} />)}
+                    <col style={totalColumnStyle} />
+                  </colgroup>
+                  <thead>
+                    <tr>
+                      <th className="inventory-detail-row-header" style={headRowHeaderStyle}>Date</th>
+                      {productSlots.map((product, index) => (
+                        product ? (
+                          <th key={product.key} style={productHeadCellStyle} title={product.label}>
+                            <span style={productHeadLabelStyle}>{product.displayLabel ?? product.label}</span>
+                          </th>
+                        ) : (
+                          <th aria-hidden="true" key={`empty-${index}`} style={productHeadCellStyle} />
+                        )
+                      ))}
+                      <th style={headCellStyle}>Group total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {matrix.rows.map((row) => {
+                      const groupTotal = products.reduce(
+                        (total, product) => total + (row.quantities[product.key] ?? 0),
+                        0,
+                      );
+                      return (
+                        <tr key={row.date}>
+                          <th className="inventory-detail-row-header" scope="row" style={rowHeaderStyle}>{row.label}</th>
+                          {productSlots.map((product, index) => (
+                            product ? (
+                              <td key={product.key} style={cellStyle}>{row.quantities[product.key] ?? 0}</td>
+                            ) : (
+                              <td aria-hidden="true" key={`empty-${index}`} style={cellStyle} />
+                            )
+                          ))}
+                          <td style={totalColumnCellStyle}>{groupTotal}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr>
+                      <th className="inventory-detail-row-header" scope="row" style={totalRowHeaderStyle}>Total</th>
+                      {productSlots.map((product, index) => (
+                        product ? (
+                          <td key={product.key} style={totalRowCellStyle}>{matrix.productTotals[product.key] ?? 0}</td>
+                        ) : (
+                          <td aria-hidden="true" key={`empty-${index}`} style={totalRowCellStyle} />
+                        )
+                      ))}
+                      <td style={totalRowCellStyle}>
+                        {products.reduce((total, product) => total + (matrix.productTotals[product.key] ?? 0), 0)}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              );
+            })}
           </div>
         </div>
       </section>
