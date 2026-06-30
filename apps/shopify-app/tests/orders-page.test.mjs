@@ -1332,6 +1332,8 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /Inventory product matrix/);
   assert.doesNotMatch(inventoryDetailSource, /Product quantities by date/);
   assert.match(inventoryDetailSource, /generatedAt: new Date\(\)\.toISOString\(\)/);
+  assert.match(inventoryDetailSource, /const headerActionStyle = \{/);
+  assert.match(inventoryDetailSource, /marginLeft: "auto"/);
   assert.match(inventoryDetailSource, /Output: \{formatOutputTime\(generatedAt\)\}/);
   assert.match(inventoryDetailSource, /const PRODUCT_COLUMNS_PER_TABLE = 6/);
   assert.match(inventoryDetailSource, /getProductChunks\(matrix\.products\)/);

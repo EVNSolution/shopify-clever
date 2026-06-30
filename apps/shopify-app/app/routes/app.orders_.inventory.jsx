@@ -30,6 +30,13 @@ const headerTopBarStyle = {
   justifyContent: "space-between",
 };
 
+const headerActionStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "8px",
+  marginLeft: "auto",
+};
+
 const backLinkStyle = {
   alignItems: "center",
   color: "#4b5563",
@@ -314,8 +321,10 @@ export default function InventoryDetailPage() {
             <Link className="inventory-detail-no-print" style={backLinkStyle} to="/app/orders?view=inventory">
               ← Back to Inventory
             </Link>
-            <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt)}</span>
-            <button className="inventory-detail-no-print" type="button" onClick={() => window.print()}>Print</button>
+            <div style={headerActionStyle}>
+              <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt)}</span>
+              <button className="inventory-detail-no-print" type="button" onClick={() => window.print()}>Print</button>
+            </div>
           </div>
         </div>
       </section>
