@@ -687,6 +687,13 @@ test("MapLibre missing image fallback does not poison app-generated pin images",
   assert.match(maplibreMissingImagesSource, /if \(isAppGeneratedMapImageId\(imageId\)\) return/);
 });
 
+test("Map pin image registration replaces any stale transparent fallback", () => {
+  assert.match(mapMarkersSource, /if \(map\.hasImage\(imageId\)\) \{/);
+  assert.match(mapMarkersSource, /typeof map\.removeImage !== "function"/);
+  assert.match(mapMarkersSource, /map\.removeImage\(imageId\)/);
+  assert.match(mapMarkersSource, /map\.addImage\(imageId, imageData, \{ pixelRatio: MAP_PIN_PIXEL_RATIO \}\)/);
+});
+
 test("Route detail places stop and departure markers through MapLibre source layers", () => {
   assert.match(routeDetailSource, /import \{ MAP_MARKER_PALETTE \} from "\.\.\/features\/maps\/map-markers"/);
   assert.match(routeDetailMapSource, /import \{ addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer \}/);
