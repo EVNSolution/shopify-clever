@@ -783,6 +783,8 @@ function getRouteStartDateTimeValue(routePlan) {
   if (value?.includes("T")) return value.slice(0, 16);
 
   const date = textOrUndefined(routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate);
+  const departureTime = textOrUndefined(routePlan?.departureTime);
+  if (date && departureTime) return `${date}T${departureTime}`;
   return date ? `${date}T09:00` : "";
 }
 
@@ -807,7 +809,7 @@ function countRouteStopsByStatus(routeStops, statuses) {
 }
 
 function getRouteTotalItems(routePlan, routeStops) {
-  const explicitTotal = numberOrUndefined(routePlan?.totalItems ?? routePlan?.itemsCount ?? routePlan?.itemCount);
+  const explicitTotal = numberOrUndefined(routePlan?.itemSummary?.totalQuantity ?? routePlan?.totalItems ?? routePlan?.itemsCount ?? routePlan?.itemCount);
   const stopTotal = routeStops.reduce((total, stop) => total + (numberOrUndefined(stop.itemCount) ?? 0), 0);
 
   return explicitTotal ?? (stopTotal > 0 ? stopTotal : ROUTE_EMPTY_LABEL);
@@ -918,6 +920,8 @@ function buildRouteStops(stops) {
     const stopNumber = Number.isInteger(sequence) && sequence > 0
       ? sequence
       : index + 1;
+    const itemCount = numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems)
+      ?? firstArray(stop.items).reduce((total, item) => total + (numberOrUndefined(item?.quantity) ?? 0), 0);
 
     return {
       id: stop.deliveryStopId ?? stop.shopifyOrderGid ?? `route-stop-${index + 1}`,
@@ -934,7 +938,7 @@ function buildRouteStops(stops) {
       status: stop.fulfillmentStatus ?? stop.status ?? stop.assignmentStatus ?? "PENDING",
       payment: stop.paymentStatus ?? stop.financialStatus ?? "—",
       attributes: formatStopAttributes(stop.attributes),
-      itemCount: numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems),
+      itemCount,
       coordinatesLabel: coordinates != null ? "Yes" : "No",
       coordinates,
       hasCoordinates: coordinates != null,
@@ -1065,13 +1069,15 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     const routePlanId = getRouteGroupChildRoutePlanId(child);
     const detail = childDetailsByRoutePlanId.get(routePlanId);
     const detailStops = detail?.stops ?? [];
+    const childRoutePlan = detail?.routePlan ?? child?.routePlan ?? null;
+    const childRouteMetrics = detail?.routeMetrics ?? child?.routeMetrics ?? childRoutePlan?.routeMetrics ?? null;
     const orderIds = getRouteGroupChildOrderIds(child, detailStops, routeStops);
     const stopByOrderId = new Map(routeStops.map((stop) => [stop.orderId, stop]));
     const stops = orderIds.length > 0
       ? orderIds.map((orderId) => detailStops.find((stop) => stop.orderId === orderId) ?? stopByOrderId.get(orderId)).filter(Boolean)
       : detailStops;
     const optimized = {
-      metrics: detail?.routeMetrics ?? null,
+      metrics: childRouteMetrics,
       routeGeometry: detail?.routeGeometry ?? null,
       routeStopPoints: detail?.routeStopPoints ?? [],
     };
@@ -1079,10 +1085,10 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     return {
       attemptedCount: countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
       color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[index % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
-      createdLabel: textOrUndefined(detail?.routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL,
+      createdLabel: getRouteCreatedLabel(childRoutePlan),
       deliveredCount: countRouteStopsByStatus(stops, ["DELIVERED", "FULFILLED"]),
-      driverLabel: textOrUndefined(child?.driverName ?? detail?.routePlan?.driver?.displayName) ?? "Unassigned",
-      driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(detail?.routeMetrics?.durationSeconds)),
+      driverLabel: textOrUndefined(child?.driverName ?? childRoutePlan?.driver?.displayName) ?? "Unassigned",
+      driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(childRouteMetrics?.durationSeconds)),
       id: routePlanId ?? `group-route-${index}`,
       isCurrent: false,
       optimized,
@@ -1091,14 +1097,15 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       routeKey: routePlanId ? `routePlan:${routePlanId}` : `routeIdx:${routeIndex}`,
       routeIndex,
       routePlanId: routePlanId ?? null,
-      status: formatRouteStatus(detail?.routePlan?.status ?? child?.displayStatus ?? child?.status),
+      startTimeLabel: getRouteStartTimeLabel(getRouteStartDateTimeValue(childRoutePlan)),
+      status: formatRouteStatus(childRoutePlan?.status ?? child?.displayStatus ?? child?.status),
       stops,
       stopsCount: stops.length || orderIds.length,
-      title: getRouteGroupChildRouteName(routeGroup, child, detail?.routePlan ?? child?.routePlan, index),
-      totalDistanceLabel: getRouteMetricLabel(formatRouteDistanceMeters(detail?.routeMetrics?.distanceMeters)),
-      totalItems: getRouteTotalItems(detail?.routePlan, stops),
-      totalWeightLabel: getRouteMetricLabel(detail?.routePlan?.totalWeight, detail?.routePlan?.weight),
-      vehicleLabel: getRouteVehicleLabel(detail?.routePlan),
+      title: getRouteGroupChildRouteName(routeGroup, child, childRoutePlan, index),
+      totalDistanceLabel: getRouteMetricLabel(formatRouteDistanceMeters(childRouteMetrics?.distanceMeters)),
+      totalItems: getRouteTotalItems(childRoutePlan, stops),
+      totalWeightLabel: getRouteMetricLabel(childRoutePlan?.totalWeight, childRoutePlan?.weight),
+      vehicleLabel: getRouteVehicleLabel(childRoutePlan),
     };
   }).filter((routeRow) => routeRow.routePlanId);
   routeGroupChildRows.sort((first, second) => (
@@ -1387,8 +1394,8 @@ export default function RouteDetailPage() {
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
-  const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds), effectiveRoutePlan?.totalDriveTime, effectiveRoutePlan?.driveTime);
-  const routeTotalDistance = getRouteMetricLabel(formatRouteDistanceMeters(routeMetrics?.distanceMeters), effectiveRoutePlan?.totalDistance, effectiveRoutePlan?.distance);
+  const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds));
+  const routeTotalDistance = getRouteMetricLabel(formatRouteDistanceMeters(routeMetrics?.distanceMeters));
   const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
@@ -1459,6 +1466,7 @@ export default function RouteDetailPage() {
         routeIndex: numberOrUndefined(currentRouteGroupChild?.routeIdx) ?? 1,
         routeKey: `routePlan:${textOrUndefined(effectiveRoutePlan?.id) ?? currentRouteLineId}`,
         routePlanId: textOrUndefined(effectiveRoutePlan?.id) ?? null,
+        startTimeLabel: routeStartTimeLabel,
         status: formatRouteStatus(effectiveRoutePlan?.status),
         stops: orderedRouteStops,
         stopsCount: orderedRouteStops.length,
@@ -1868,6 +1876,7 @@ export default function RouteDetailPage() {
         routeIdx: draft.routeIdx,
         routeIndex: draft.routeIndex,
         routePlanId: null,
+        startTimeLabel: ROUTE_EMPTY_LABEL,
         stops: [],
         stopsCount: 0,
         tempId,
@@ -2585,7 +2594,7 @@ export default function RouteDetailPage() {
                     </td>
                     <td style={routesDetailCellStyle}>
                       <button aria-label="Change route start time" style={routeEditableValueStyle} type="button">
-                        <span style={routeEditableValueTextStyle}>{routeStartTimeLabel}</span>
+                        <span style={routeEditableValueTextStyle}>{routeRow.startTimeLabel ?? routeStartTimeLabel}</span>
                         {renderRouteEditableChevron()}
                       </button>
                     </td>
