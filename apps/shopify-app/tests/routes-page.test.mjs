@@ -758,11 +758,7 @@ test("Route detail renders every stop as a route-colored source-layer teardrop",
   assert.doesNotMatch(routeDetailSource, /ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM/);
   assert.doesNotMatch(routeDetailSource, /minzoom/);
   assert.match(routeDetailMapSource, /function getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\) \{/);
-  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_PIN_BORDER_WIDTH = 2/);
-  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_PIN_ICON_SIZE = 0\.46/);
   assert.match(routeDetailMapSource, /getRouteDetailStopPinImageId\(stop, stopColor\)/);
-  assert.match(routeDetailMapSource, /borderWidth: ROUTE_DETAIL_STOP_PIN_BORDER_WIDTH/);
-  assert.match(routeDetailMapSource, /iconSize: ROUTE_DETAIL_STOP_PIN_ICON_SIZE/);
   assert.match(routeDetailMapSource, /label: stop\.stop/);
   assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
   assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick\)/);
@@ -779,7 +775,11 @@ test("Route detail renders OSRM snapped stop points as route-colored circle laye
   assert.match(routeDetailMapSource, /function buildRouteDetailStopPointFeatureCollection\(routeStops, routeStopPoints, routeColor, routeStopColorById\) \{/);
   assert.match(routeDetailMapSource, /map\.addSource\(ROUTE_DETAIL_STOP_POINT_SOURCE_ID/);
   assert.match(routeDetailMapSource, /type: "circle"/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_RADIUS = 3/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH = 1/);
   assert.match(routeDetailMapSource, /"circle-color": \["coalesce", \["get", "color"\], routeColor\]/);
+  assert.match(routeDetailMapSource, /"circle-radius": ROUTE_DETAIL_STOP_POINT_RADIUS/);
+  assert.match(routeDetailMapSource, /"circle-stroke-width": ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH/);
   assert.doesNotMatch(routeDetailSource, /createRouteStopPointMarkerElement|const snappedStopPointMarker = new maplibregl\.Marker|function shouldRenderRouteStopPoints|zoomend/);
 });
 test("Route detail uses WebGL stop layers so marker projection follows the map", () => {
