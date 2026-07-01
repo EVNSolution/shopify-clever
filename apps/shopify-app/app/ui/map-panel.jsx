@@ -105,6 +105,7 @@ export function MapPanel({
   id,
   toolbar,
   wheelHintEnabled = true,
+  children,
 }) {
   const [wheelHintVisible, setWheelHintVisible] = useState(false);
   const wheelHintTimerRef = useRef(null);
@@ -165,6 +166,7 @@ export function MapPanel({
         ref={canvasRef}
         style={{ ...mapCanvasStyle, ...canvasStyle }}
       />
+      {children}
     </div>
   );
 }

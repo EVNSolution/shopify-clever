@@ -1449,47 +1449,6 @@ function buildRoutePlanTitleFromOrders(orders) {
     : DEFAULT_ROUTE_PLAN_TITLE;
 }
 
-function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
-  const popupElement = document.createElement("div");
-  const popupTitleElement = document.createElement("strong");
-  const popupAddressElement = document.createElement("div");
-  const popupMetaElement = document.createElement("div");
-  const popupActionButton = document.createElement("button");
-  const deliveryMetaValues = [order.deliveryArea, formatOrderDeliveryLabel(order)].filter(Boolean);
-
-  popupElement.className = "order-marker-popup";
-  popupTitleElement.className = "order-marker-popup__title";
-  popupTitleElement.textContent = `${order.name} · ${order.customer}`;
-  popupAddressElement.className = "order-marker-popup__address";
-  popupAddressElement.textContent = order.address;
-  popupMetaElement.className = "order-marker-popup__meta";
-  for (const deliveryMetaValue of deliveryMetaValues.length > 0 ? deliveryMetaValues : ["—"]) {
-    const metaTabElement = document.createElement("span");
-    metaTabElement.className = "order-marker-popup__meta-tab";
-    metaTabElement.textContent = deliveryMetaValue;
-    popupMetaElement.append(metaTabElement);
-  }
-  popupActionButton.type = "button";
-  popupActionButton.className = "order-marker-popup__action";
-  popupActionButton.textContent = plannedIndex > 0 ? "Added to map" : "Add to map";
-  popupActionButton.disabled = plannedIndex > 0;
-  popupActionButton.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onAddToPlan(order.id);
-  });
-
-  popupElement.append(
-    popupTitleElement,
-    popupAddressElement,
-    popupMetaElement,
-    popupActionButton,
-  );
-
-  return popupElement;
-}
-
-
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
@@ -1668,6 +1627,8 @@ export default function OrdersPage() {
   const [orderActionValue, setOrderActionValue] = useState(ORDER_STATE_CHANGE_OPTIONS[0].value);
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
+  const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
+  const [activeOrderPopupId, setActiveOrderPopupId] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
   const [tableColumnWidths, setTableColumnWidths] = useState(DEFAULT_TABLE_COLUMN_WIDTHS);
   const [lockedTableWidth, setLockedTableWidth] = useState(null);
@@ -1935,6 +1896,17 @@ export default function OrdersPage() {
       .filter(Boolean);
   }, [displayOrderById, plannedOrderIds]);
 
+  const activeOrderPopup = activeOrderPopupId
+    ? displayOrderById.get(activeOrderPopupId) ?? null
+    : null;
+  const activeOrderPopupPlannedIndex = activeOrderPopup
+    ? plannedOrderIds.indexOf(activeOrderPopup.id) + 1
+    : 0;
+  const activeOrderPopupItems = activeOrderPopup ? getOrderLineItems(activeOrderPopup) : [];
+  const activeOrderPopupMetaValues = activeOrderPopup
+    ? [activeOrderPopup.deliveryArea, formatOrderDeliveryLabel(activeOrderPopup)].filter(Boolean)
+    : [];
+
   const selectableTableOrders = useMemo(
     () => tableOrders.filter((order) => !plannedOrderIdSet.has(order.id)),
     [plannedOrderIdSet, tableOrders],
@@ -2022,6 +1994,7 @@ export default function OrdersPage() {
 
   const handleSelectOrder = useCallback((orderId, options = {}) => {
     setSelectedOrderId(orderId);
+    setActiveOrderPopupId(orderId);
 
     if (options.focusMap !== false) {
       setSelectedOrderFocusRequest((requestCount) => requestCount + 1);
@@ -2474,6 +2447,7 @@ export default function OrdersPage() {
     });
   }, [isMapReady]);
 
+
   const toggleOrderCheck = (orderId) => {
     if (plannedOrderIdSet.has(orderId)) return;
 
@@ -2521,6 +2495,7 @@ export default function OrdersPage() {
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
   }, [displayOrderById, plannedOrderIdSet, plannedOrderIds]);
+
 
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
@@ -2579,6 +2554,7 @@ export default function OrdersPage() {
     setPlannedOrderIds([]);
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
     setRouteAssignActionsOpen(false);
+    setInventoryAssignActionsOpen(false);
     setCreateInventoryClientError(null);
   };
 
@@ -2590,6 +2566,12 @@ export default function OrdersPage() {
     if (createRouteDisabled) return;
 
     setRouteAssignActionsOpen((isOpen) => !isOpen);
+  };
+
+  const handleToggleInventoryAssignActions = () => {
+    if (createInventoryDisabled) return;
+
+    setInventoryAssignActionsOpen((isOpen) => !isOpen);
   };
 
 
@@ -2947,7 +2929,7 @@ export default function OrdersPage() {
 
     const sourceUpdateStartedAt = performance.now();
     const hadExistingOrderSource = Boolean(map.getSource?.(ORDERS_MAP_SOURCE_ID));
-    const ordersLayerSynced = syncOrdersMapMarkerLayer(map, locatedOrders, plannedOrderIds);
+    const ordersLayerSynced = syncOrdersMapMarkerLayer(map, locatedOrders, plannedOrderIds, activeOrderPopupId);
     const sourceUpdateMs = roundPerfDuration(performance.now() - sourceUpdateStartedAt);
 
     emitPerformanceMetric({
@@ -2978,18 +2960,7 @@ export default function OrdersPage() {
       const order = displayOrderById.get(orderId);
       if (!order?.hasCoordinates) return;
 
-      const plannedIndex = plannedOrderIds.indexOf(order.id) + 1;
       handleSelectOrder(order.id, { focusMap: false });
-      new maplibregl.Popup({ offset: 24 })
-        .setLngLat(order.coordinates)
-        .setDOMContent(
-          createOrderMarkerPopupElement(
-            order,
-            plannedIndex,
-            handleAddOrderToPlan,
-          ),
-        )
-        .addTo(map);
 
       const markerClickZoom = map.getZoom?.();
       if (
@@ -3010,22 +2981,27 @@ export default function OrdersPage() {
     const handleOrderMarkerMouseLeave = () => {
       map.getCanvas().style.cursor = "";
     };
+    const handleUserMapMoveStart = (event) => {
+      if (event?.originalEvent) setActiveOrderPopupId(null);
+    };
 
     map.on("click", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerClick);
     map.on("mouseenter", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseEnter);
     map.on("mouseleave", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseLeave);
+    map.on("movestart", handleUserMapMoveStart);
 
     return () => {
       map.off("click", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerClick);
       map.off("mouseenter", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseEnter);
       map.off("mouseleave", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseLeave);
+      map.off("movestart", handleUserMapMoveStart);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };
   }, [
+    activeOrderPopupId,
     departureLocation,
     displayOrderById,
-    handleAddOrderToPlan,
     handleSelectOrder,
     isMapReady,
     locatedOrders,
@@ -3148,7 +3124,58 @@ export default function OrdersPage() {
                 }
               />
             }
-          />
+          >
+            {activeOrderPopup ? (
+              <div
+                aria-label={`Map details for ${activeOrderPopup.name}`}
+                className="order-marker-popup order-map-focus-popup"
+                role="dialog"
+              >
+                <div className="order-marker-popup__header">
+                  <strong className="order-marker-popup__title">
+                    {activeOrderPopup.name} · {activeOrderPopup.customer}
+                  </strong>
+                  <button
+                    aria-label="Close order map details"
+                    className="order-marker-popup__close"
+                    onClick={() => setActiveOrderPopupId(null)}
+                    type="button"
+                  >×</button>
+                </div>
+                <div className="order-marker-popup__address">{activeOrderPopup.address}</div>
+                <div className="order-marker-popup__meta">
+                  {(activeOrderPopupMetaValues.length > 0 ? activeOrderPopupMetaValues : ["—"]).map((deliveryMetaValue, metaIndex) => (
+                    <span className="order-marker-popup__meta-tab" key={`${deliveryMetaValue}-${metaIndex}`}>{deliveryMetaValue}</span>
+                  ))}
+                </div>
+                <strong className="order-marker-popup__items-title">Items</strong>
+                {activeOrderPopupItems.length > 0 ? (
+                  <ul className="order-marker-popup__items">
+                    {activeOrderPopupItems.map((item, itemIndex) => (
+                      <li className="order-marker-popup__item" key={`${item.name}-${itemIndex}`}>
+                        <span>
+                          {item.name}
+                          {item.options && item.options !== "—" ? <small>{item.options}</small> : null}
+                          {item.sku && item.sku !== "—" ? <small>SKU {item.sku}</small> : null}
+                        </span>
+                        <strong>×{item.quantity}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="order-marker-popup__empty">
+                    {getOrderItemCount(activeOrderPopup) > 0 ? `${getOrderItemCount(activeOrderPopup)} items` : "No item detail"}
+                  </span>
+                )}
+                <button
+                  className="order-marker-popup__action"
+                  disabled={activeOrderPopupPlannedIndex > 0}
+                  onClick={() => handleAddOrderToPlan(activeOrderPopup.id)}
+                  type="button"
+                >{activeOrderPopupPlannedIndex > 0 ? "Added to map" : "Add to map"}</button>
+              </div>
+            ) : null}
+          </MapPanel>
       }
       secondary={
         <div className="order-route-plan" style={routePlanPanelStyle}>
@@ -3176,7 +3203,7 @@ export default function OrdersPage() {
                   aria-expanded={routeAssignActionsOpen}
                   disabled={createRouteDisabled}
                   onClick={handleToggleRouteAssignActions}
-                >Assign to route</button>
+                >Assign</button>
               </div>
             </div>
             <div
@@ -3213,23 +3240,43 @@ export default function OrdersPage() {
                   type="button"
                   style={
                     createInventoryDisabled
-                      ? disabledPlanButtonStyle
+                      ? disabledCreateRouteButtonStyle
                       : createRouteButtonStyle
                   }
+                  aria-expanded={inventoryAssignActionsOpen}
                   disabled={createInventoryDisabled}
-                  onClick={() => handleAddInventory("add")}
-                >{isCreatingInventory && inventorySubmitAction === "add" ? "Adding…" : "Add"}</button>
-                <button
-                  type="button"
-                  style={
-                    createInventoryDisabled
-                      ? disabledPlanButtonStyle
-                      : createRouteButtonStyle
-                  }
-                  disabled={createInventoryDisabled}
-                  onClick={() => handleAddInventory("create")}
-                >{isCreatingInventory && inventorySubmitAction === "create" ? "Creating…" : "Create"}</button>
+                  onClick={handleToggleInventoryAssignActions}
+                >Assign</button>
               </div>
+            </div>
+            <div
+              style={{
+                ...routeAssignActionsStyle,
+                ...(inventoryAssignActionsOpen
+                  ? routeAssignActionsOpenStyle
+                  : routeAssignActionsClosedStyle),
+              }}
+            >
+              <button
+                type="button"
+                style={
+                  createInventoryDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={createInventoryDisabled}
+                onClick={() => handleAddInventory("add")}
+              >{isCreatingInventory && inventorySubmitAction === "add" ? "Adding…" : "Add"}</button>
+              <button
+                type="button"
+                style={
+                  createInventoryDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={createInventoryDisabled}
+                onClick={() => handleAddInventory("create")}
+              >{isCreatingInventory && inventorySubmitAction === "create" ? "Creating…" : "Create"}</button>
             </div>
           </div>
 

@@ -271,7 +271,43 @@ s-badge {
 .order-marker-popup {
   display: grid;
   gap: 6px;
-  min-width: 180px;
+  max-width: 320px;
+  min-width: 240px;
+}
+
+
+.order-map-focus-popup {
+  background: #ffffff;
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.18);
+  box-sizing: border-box;
+  padding: 10px;
+  font-size: 12px;
+  left: 16px;
+  max-height: calc(100% - 32px);
+  overflow: auto;
+  position: absolute;
+  top: 16px;
+  width: min(320px, calc(100% - 96px));
+  z-index: 3;
+}
+
+.order-marker-popup__header {
+  align-items: start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
+.order-marker-popup__close {
+  background: transparent;
+  border: 0;
+  color: #6d7175;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
 }
 
 .order-marker-popup__title {
@@ -300,6 +336,43 @@ s-badge {
   font-weight: 650;
   line-height: 1.2;
   padding: 3px 8px;
+}
+
+.order-marker-popup__items-title {
+  color: #303030;
+  font-size: 12px;
+  font-weight: 700;
+  margin-top: 2px;
+}
+
+.order-marker-popup__items {
+  display: grid;
+  gap: 5px;
+  list-style: none;
+  margin: 0;
+  max-height: 160px;
+  overflow: auto;
+  padding: 0;
+}
+
+.order-marker-popup__item {
+  align-items: start;
+  border-top: 1px solid #edf0f3;
+  display: grid;
+  gap: 10px;
+  font-size: 12px;
+  font-weight: 500;
+  grid-template-columns: minmax(0, 1fr) auto;
+  line-height: 1.25;
+  padding: 5px 0 0;
+}
+
+.order-marker-popup__item small,
+.order-marker-popup__empty {
+  color: #6d7175;
+  display: block;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .order-marker-popup__action {

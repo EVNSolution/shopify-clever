@@ -258,9 +258,9 @@ test("Orders map stays visible when Shopify has no orders with coordinates", () 
   assert.doesNotMatch(ordersPageSource, /primary=\{\s*locatedOrders\.length > 0 \?/s);
   assert.doesNotMatch(ordersPageSource, /locatedOrders\.length === 0/);
   assert.match(ordersPageSource, /departureLocation\?\.hasCoordinates \? departureLocation\.coordinates : DEFAULT_CENTER/);
-  assert.match(ordersPageSource, /function buildOrdersMapFeatureCollection\(orders, plannedOrderIds\) \{/);
-  assert.match(ordersPageSource, /\.filter\(\(order\) => order\.hasCoordinates && plannedIndexByOrderId\.has\(order\.id\)\)/);
-  assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds\)/);
+  assert.match(ordersPageSource, /function buildOrdersMapFeatureCollection\(orders, plannedOrderIds, focusedOrderId = null\) \{/);
+  assert.match(ordersPageSource, /plannedIndexByOrderId\.has\(order\.id\) \|\| order\.id === focusedOrderId/);
+  assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds, activeOrderPopupId\)/);
 });
 
 test("Orders table container uses viewport height and scrolls internally", () => {
@@ -347,6 +347,7 @@ test("Orders column uses the order number itself as a neutral transparent button
   assert.match(ordersPageSource, /className="order-number-button"/);
   assert.match(ordersPageSource, /aria-label=\{`View \${order\.name}`\}/);
   assert.match(ordersPageSource, /style=\{orderNumberButtonStyle\}/);
+  assert.match(ordersPageSource, /onClick=\{\(\) => handleSelectOrder\(order\.id\)\}/);
   assert.match(ordersPageSource, /\{order\.name\}/);
   assert.doesNotMatch(ordersPageSource, /#005bd3/);
   assert.doesNotMatch(ordersPageSource, />View<\/button>/);
@@ -395,7 +396,7 @@ test("Orders page creates grouped child routes from scoped planned orders", () =
   assert.match(ordersPageSource, /const createdRouteGroup = routePlanFetcher\.data\?\.routeGroup/);
   assert.match(ordersPageSource, /navigate\(appendIdToken\(routeGroupPath\(createdRouteGroup\.id\), sessionToken\)\)/);
   assert.match(ordersPageSource, /navigate\(appendIdToken\(routePlanPath\(createdRoutePlan\.id\), sessionToken\)\)/);
-  assert.match(ordersPageSource, />Assign to route<\/button>/);
+  assert.match(ordersPageSource, />Assign<\/button>/);
   assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);
   assert.match(ordersPageSource, /disabled=\{createRouteDisabled\}/);
   assert.doesNotMatch(ordersPageSource, /createRouteDraftSearchParams/);
@@ -654,7 +655,7 @@ test("Orders page keeps Add to map in the table controls", () => {
   assert.doesNotMatch(ordersPageSource, />Clear selection<\/button>/);
   assert.doesNotMatch(ordersPageSource, /shown ·/);
   assert.doesNotMatch(ordersPageSource, /added to plan\./);
-  assert.doesNotMatch(ordersPageSource, />Add to map<\/button>[\s\S]{0,400}>Assign to route<\/button>/);
+  assert.doesNotMatch(ordersPageSource, />Add to map<\/button>[\s\S]{0,400}>Assign<\/button>/);
 });
 
 test("Orders table keeps delivery state operational and payment state separate", () => {
@@ -801,13 +802,17 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.doesNotMatch(ordersPageSource, /plannedOrders\.map\(\(order, orderIndex\) =>/);
   assert.doesNotMatch(ordersPageSource, /aria-label=\{`Remove \${order\.name} from route plan`\}/);
   assert.doesNotMatch(ordersPageSource, />Remove<\/button>/);
-  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Assign to route<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
+  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Route plan<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Add to route<\/button>[\s\S]*>Create route<\/button>/);
   assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
   assert.match(ordersPageSource, /const \[inventorySubmitAction, setInventorySubmitAction\] = useState\(null\)/);
+  assert.match(ordersPageSource, /const \[inventoryAssignActionsOpen, setInventoryAssignActionsOpen\] = useState\(false\)/);
+  assert.match(ordersPageSource, /const handleToggleInventoryAssignActions = \(\) => \{/);
   assert.match(ordersPageSource, /const handleAddInventory = async \(submitAction = "add"\) => \{/);
-  assert.match(ordersPageSource, />Inventory<\/s-heading>[\s\S]*onClick=\{\(\) => handleAddInventory\("add"\)\}[\s\S]*inventorySubmitAction === "add" \? "Adding…" : "Add"[\s\S]*onClick=\{\(\) => handleAddInventory\("create"\)\}[\s\S]*inventorySubmitAction === "create" \? "Creating…" : "Create"/);
+  assert.match(ordersPageSource, /aria-expanded=\{inventoryAssignActionsOpen\}/);
+  assert.match(ordersPageSource, /inventoryAssignActionsOpen[\s\S]*\? routeAssignActionsOpenStyle[\s\S]*: routeAssignActionsClosedStyle/);
+  assert.match(ordersPageSource, />Inventory<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*onClick=\{\(\) => handleAddInventory\("add"\)\}[\s\S]*inventorySubmitAction === "add" \? "Adding…" : "Add"[\s\S]*onClick=\{\(\) => handleAddInventory\("create"\)\}[\s\S]*inventorySubmitAction === "create" \? "Creating…" : "Create"/);
   assert.doesNotMatch(ordersPageSource, />Inventory plan<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Assign to inventory<\/button>/);
   assert.doesNotMatch(ordersPageSource, />Create<\/button>[\s\S]{0,80}disabled=\{true\}/);
@@ -884,35 +889,40 @@ test("Orders map highlights markers that were added to the plan", () => {
   assert.match(mapMarkersSource, /function addMapPinImage\(map, imageId, imageData\) \{/);
   assert.match(mapMarkersSource, /map\.addImage\(imageId, imageData, \{ pixelRatio: MAP_PIN_PIXEL_RATIO \}\)/);
   assert.match(ordersPageSource, /addMapPinImage\(map, image\.id, image\.imageData\)/);
-  assert.match(ordersPageSource, /function buildOrdersMapFeatureCollection\(orders, plannedOrderIds\) \{/);
-  assert.match(ordersPageSource, /const plannedIndex = plannedOrderIds\.indexOf\(order\.id\) \+ 1/);
+  assert.match(ordersPageSource, /function buildOrdersMapFeatureCollection\(orders, plannedOrderIds, focusedOrderId = null\) \{/);
+  assert.match(ordersPageSource, /const plannedIndex = plannedIndexByOrderId\.get\(order\.id\) \?\? 0/);
   assert.match(ordersPageSource, /pinImage: isPlanned \? getPlannedOrderPinImageId\(plannedIndex\) : ORDER_PIN_IMAGE_ID/);
-  assert.match(ordersPageSource, /const isPlanned = true/);
+  assert.match(ordersPageSource, /const isPlanned = plannedIndex > 0/);
   assert.match(mapMarkersSource, /"icon-image": iconImage/);
   assert.doesNotMatch(ordersPageSource, /"text-field": \["get", "plannedLabel"\]/);
   assert.doesNotMatch(ordersPageSource, /function createOrderMarkerElement\(order, plannedIndex\)/);
 });
 
-test("Orders map marker popup can add the clicked order to the route plan", () => {
-  assert.match(ordersPageSource, /function createOrderMarkerPopupElement\(order, plannedIndex, onAddToPlan\)/);
-  assert.match(ordersPageSource, /const deliveryMetaValues = \[order\.deliveryArea, formatOrderDeliveryLabel\(order\)\]\.filter\(Boolean\)/);
-  assert.match(ordersPageSource, /metaTabElement\.className = "order-marker-popup__meta-tab"/);
-  assert.match(globalCssSource, /\.order-marker-popup__meta-tab\s*\{/);
+test("Orders map popup uses a left-center overlay and can add the order to the route plan", () => {
+  assert.match(ordersPageSource, /const \[activeOrderPopupId, setActiveOrderPopupId\] = useState\(null\)/);
+  assert.match(ordersPageSource, /const activeOrderPopupItems = activeOrderPopup \? getOrderLineItems\(activeOrderPopup\) : \[\]/);
+  assert.match(ordersPageSource, /className="order-marker-popup order-map-focus-popup"/);
+  assert.match(ordersPageSource, /role="dialog"/);
+  assert.match(ordersPageSource, /className="order-marker-popup__close"/);
+  assert.match(ordersPageSource, /activeOrderPopupItems\.map\(\(item, itemIndex\) =>/);
+  assert.match(ordersPageSource, /×\{item\.quantity\}/);
+  assert.match(ordersPageSource, /disabled=\{activeOrderPopupPlannedIndex > 0\}/);
+  assert.match(ordersPageSource, /handleAddOrderToPlan\(activeOrderPopup\.id\)/);
+  assert.match(ordersPageSource, /const handleUserMapMoveStart = \(event\) => \{/);
+  assert.match(ordersPageSource, /if \(event\?\.originalEvent\) setActiveOrderPopupId\(null\)/);
+  assert.match(ordersPageSource, /map\.on\("movestart", handleUserMapMoveStart\)/);
+  assert.match(ordersPageSource, /map\.off\("movestart", handleUserMapMoveStart\)/);
+  assert.match(mapPanelSource, /children,/);
+  assert.match(mapPanelSource, /\{children\}/);
+  assert.match(globalCssSource, /\.order-map-focus-popup\s*\{/);
+  assert.match(globalCssSource, /left:\s*16px/);
+  assert.match(globalCssSource, /top:\s*16px/);
+  assert.match(globalCssSource, /font-size:\s*12px/);
+  assert.match(globalCssSource, /\.order-marker-popup__items\s*\{/);
+  assert.match(globalCssSource, /max-height:\s*160px/);
   assert.match(globalCssSource, /background:\s*rgba\(0, 0, 0, 0\.05\)/);
   assert.match(globalCssSource, /color:\s*#303030/);
-  assert.match(ordersPageSource, /popupActionButton\.textContent = plannedIndex > 0 \? "Added to map" : "Add to map"/);
-  assert.match(ordersPageSource, /popupActionButton\.disabled = plannedIndex > 0/);
-  assert.match(ordersPageSource, /popupActionButton\.addEventListener\("click", \(event\) => \{/);
-  assert.match(ordersPageSource, /onAddToPlan\(order\.id\)/);
-  assert.match(
-    ordersPageSource,
-    /\.setDOMContent\(\s*createOrderMarkerPopupElement\(\s*order,\s*plannedIndex,\s*handleAddOrderToPlan,\s*\),\s*\)/,
-  );
-  const popupBlock = ordersPageSource.match(
-    /function createOrderMarkerPopupElement\(order, plannedIndex, onAddToPlan\) \{[\s\S]*?\n\}/,
-  )?.[0] ?? "";
-  assert.doesNotMatch(popupBlock, /order\.status/);
-  assert.doesNotMatch(popupBlock, /order\.paymentStatus/);
+  assert.doesNotMatch(ordersPageSource, /new map(?:LibraryRef\.current|libregl)\.Popup/);
 });
 
 test("Orders map popup content stays above all map markers", () => {
@@ -1310,17 +1320,18 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.doesNotMatch(ordersPageSource, /Show routed orders/);
 });
 
-test("Orders map only renders orders after Add to map", () => {
+test("Orders map renders planned pins and the focused table-click pin", () => {
   assert.match(ordersPageSource, /const locatedOrders = useMemo\(\s*\(\) => filteredOrders\.filter\(\(order\) => order\.hasCoordinates\),\s*\[filteredOrders\],\s*\)/);
-  assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds\)/);
+  assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds, activeOrderPopupId\)/);
   assert.match(ordersPageSource, /if \(!ordersLayerSynced\) \{\s*mapSourceSyncPendingRef\.current = true;\s*scheduleMapSourceSyncRetry\(\);\s*return undefined;\s*\}/);
   assert.match(ordersPageSource, /mapSourceSyncPendingRef\.current = false/);
   assert.match(ordersPageSource, /clearMapSourceSyncRetryTimer\(\)/);
-  assert.match(ordersPageSource, /\.filter\(\(order\) => order\.hasCoordinates && plannedIndexByOrderId\.has\(order\.id\)\)/);
+  assert.match(ordersPageSource, /plannedIndexByOrderId\.has\(order\.id\) \|\| order\.id === focusedOrderId/);
   assert.match(ordersPageSource, /existingSource\.setData\(featureCollection\)/);
   assert.match(ordersPageSource, /map\.addSource\(ORDERS_MAP_SOURCE_ID/);
   assert.doesNotMatch(ordersPageSource, /function createOrderMarkerElement\(order, plannedIndex\)/);
   assert.doesNotMatch(ordersPageSource, /filteredOrderIdSet/);
+  assert.match(ordersPageSource, /activeOrderPopupId/);
   assert.doesNotMatch(ordersPageSource, /markerMatchState/);
   assert.doesNotMatch(ordersPageSource, /order-map-marker--matched/);
   assert.doesNotMatch(ordersPageSource, /order-map-marker--dimmed/);

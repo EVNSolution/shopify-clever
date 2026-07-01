@@ -52,7 +52,7 @@ function ensureOrdersMapPinImages(map, plannedOrderIds = []) {
   return true;
 }
 
-function buildOrdersMapFeatureCollection(orders, plannedOrderIds) {
+function buildOrdersMapFeatureCollection(orders, plannedOrderIds, focusedOrderId = null) {
   const plannedIndexByOrderId = new Map(
     plannedOrderIds.map((orderId, index) => [orderId, index + 1]),
   );
@@ -60,10 +60,13 @@ function buildOrdersMapFeatureCollection(orders, plannedOrderIds) {
   return {
     type: "FeatureCollection",
     features: orders
-      .filter((order) => order.hasCoordinates && plannedIndexByOrderId.has(order.id))
+      .filter((order) =>
+        order.hasCoordinates &&
+        (plannedIndexByOrderId.has(order.id) || order.id === focusedOrderId),
+      )
       .map((order) => {
         const plannedIndex = plannedIndexByOrderId.get(order.id) ?? 0;
-        const isPlanned = true;
+        const isPlanned = plannedIndex > 0;
 
         return {
           type: "Feature",
@@ -84,11 +87,11 @@ function buildOrdersMapFeatureCollection(orders, plannedOrderIds) {
   };
 }
 
-export function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds) {
+export function syncOrdersMapMarkerLayer(map, orders, plannedOrderIds, focusedOrderId = null) {
   if (!isOrdersMapStyleReady(map)) return false;
   if (!ensureOrdersMapPinImages(map, plannedOrderIds)) return false;
 
-  const featureCollection = buildOrdersMapFeatureCollection(orders, plannedOrderIds);
+  const featureCollection = buildOrdersMapFeatureCollection(orders, plannedOrderIds, focusedOrderId);
   const existingSource = map.getSource?.(ORDERS_MAP_SOURCE_ID);
   if (existingSource?.setData) {
     existingSource.setData(featureCollection);
