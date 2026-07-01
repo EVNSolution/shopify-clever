@@ -51,6 +51,7 @@ const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef444
 const ROUTE_TIMELINE_STOP_POPOVER_GAP = 4;
 const ROUTE_TIMELINE_STOP_POPOVER_HEIGHT = 260;
 const ROUTE_TIMELINE_STOP_POPOVER_WIDTH = 320;
+const ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET = 12;
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -515,16 +516,6 @@ const routeTimelineStopPopoverStyle = {
   top: 0,
   width: `min(${ROUTE_TIMELINE_STOP_POPOVER_WIDTH}px, calc(100vw - 16px))`,
   zIndex: 100010,
-};
-
-const routeTimelineStopPopoverBackdropStyle = {
-  background: "transparent",
-  border: 0,
-  cursor: "default",
-  inset: 0,
-  padding: 0,
-  position: "fixed",
-  zIndex: 100009,
 };
 
 const routeTimelineStopPopoverHeaderStyle = {
@@ -1057,7 +1048,9 @@ function getRouteTimelineStopPopoverPosition(rect, popoverSize = {}) {
   const width = Math.min(popoverSize.width ?? ROUTE_TIMELINE_STOP_POPOVER_WIDTH, window.innerWidth - gap * 2);
   const height = Math.min(popoverSize.height ?? ROUTE_TIMELINE_STOP_POPOVER_HEIGHT, window.innerHeight - gap * 2);
   const anchorX = rect.left + rect.width / 2;
-  const rawLeft = anchorX <= window.innerWidth / 2 ? anchorX : anchorX - width;
+  const rawLeft = anchorX <= window.innerWidth / 2
+    ? anchorX - ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET
+    : anchorX - width + ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET;
   const left = Math.max(gap, Math.min(rawLeft, window.innerWidth - width - gap));
   const aboveTop = rect.top - height - gap;
   const belowTop = rect.bottom + gap;
@@ -1878,11 +1871,12 @@ export default function RouteDetailPage() {
     routeTimelineStopRefs.current.delete(stopId);
   }, []);
 
-  const getRouteTimelineStopPopoverState = useCallback((stopId) => {
+  const getRouteTimelineStopPopoverState = useCallback((stopId, mode = "pinned") => {
     const node = routeTimelineStopRefs.current.get(stopId);
     if (!node) return null;
     return {
       ...getRouteTimelineStopPopoverPosition(node.getBoundingClientRect()),
+      mode,
       stopId,
     };
   }, []);
@@ -1957,9 +1951,21 @@ export default function RouteDetailPage() {
 
   const handleRouteTimelineStopClick = (event, stop) => {
     event.stopPropagation();
-    setActiveRouteTimelineStopPopover((current) => current?.stopId === stop.id
+    setActiveRouteTimelineStopPopover((current) => current?.mode === "pinned" && current.stopId === stop.id
       ? null
-      : getRouteTimelineStopPopoverState(stop.id));
+      : getRouteTimelineStopPopoverState(stop.id, "pinned"));
+  };
+
+  const handleRouteTimelineStopMouseEnter = (stop) => {
+    setActiveRouteTimelineStopPopover((current) => current?.mode === "pinned"
+      ? current
+      : getRouteTimelineStopPopoverState(stop.id, "hover"));
+  };
+
+  const handleRouteTimelineStopMouseLeave = (stop) => {
+    setActiveRouteTimelineStopPopover((current) => (
+      current?.mode === "hover" && current.stopId === stop.id ? null : current
+    ));
   };
 
   useEffect(() => {
@@ -1974,6 +1980,19 @@ export default function RouteDetailPage() {
       window.removeEventListener("resize", syncRouteTimelineStopPopover);
     };
   }, [activeRouteTimelineStopPopover?.stopId, positionRouteTimelineStopPopover]);
+
+  useEffect(() => {
+    if (activeRouteTimelineStopPopover?.mode !== "pinned") return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      if (event.target?.closest?.('[data-route-timeline-stop-popover-root="true"]')) return;
+      if (event.target?.closest?.('[data-route-timeline-stop-button="true"]')) return;
+      setActiveRouteTimelineStopPopover(null);
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [activeRouteTimelineStopPopover?.mode]);
 
   const handleRouteTimelineDragEnd = useCallback(() => {
     routeTimelineDragRef.current = null;
@@ -2916,16 +2935,19 @@ export default function RouteDetailPage() {
                       title={stop.order}
                     >
                       <span style={routeTimelineLineStyle}></span>
-                      <button
-                        ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                        draggable
-                        onDragEnd={handleRouteTimelineDragEnd}
-                        onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
-                        onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                        onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
-                        onClick={(event) => handleRouteTimelineStopClick(event, stop)}
-                        aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
-                        aria-label={`Show ${stop.order} stop details`}
+	                      <button
+	                        data-route-timeline-stop-button="true"
+	                        ref={(node) => setRouteTimelineStopRef(stop.id, node)}
+	                        draggable
+	                        onDragEnd={handleRouteTimelineDragEnd}
+	                        onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
+	                        onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+	                        onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+	                        onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+	                        onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
+	                        onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
+	                        aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
+	                        aria-label={`Show ${stop.order} stop details`}
                         style={{
                           ...routeTimelineStopStyle,
                           ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
@@ -2946,13 +2968,8 @@ export default function RouteDetailPage() {
             </div>
             {activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
               <>
-                <button
-                  aria-label="Close route stop details overlay"
-                  onClick={() => setActiveRouteTimelineStopPopover(null)}
-                  style={routeTimelineStopPopoverBackdropStyle}
-                  type="button"
-                />
                 <div
+                  data-route-timeline-stop-popover-root="true"
                   ref={routeTimelineStopPopoverRef}
                   role="tooltip"
                   style={{
