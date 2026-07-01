@@ -8,14 +8,17 @@ import { authenticate } from "../shopify.server";
 import { buildRouteGroupChildDetails, cleanRoutePathParam, routeDetailAction } from "../features/delivery/route-detail.server";
 import RouteDetailPage from "./app.routes.$routeId";
 
-function shouldLogRouteGroupApiPayload(request) {
-  const searchParams = new URL(request.url).searchParams;
-  return searchParams.get("apiDebug") === "1" || searchParams.get("graphqlDebug") === "1";
-}
+function logRouteGroupApiPayload(payload) {
+  const data = {
+    measuredAt: new Date().toISOString(),
+    ...payload,
+  };
 
-function logRouteGroupApiPayload(request, routeGroup) {
-  if (!shouldLogRouteGroupApiPayload(request)) return;
-  console.info("route_group_detail.api", { routeGroup });
+  try {
+    console.info("route_group_detail.api.raw", JSON.stringify(data, null, 2));
+  } catch {
+    console.info("route_group_detail.api.raw", data);
+  }
 }
 
 export const loader = async ({ params, request }) => {
@@ -28,12 +31,13 @@ export const loader = async ({ params, request }) => {
     fetchDeliveryDrivers(request, {}),
   ]);
   const childRouteDetails = buildRouteGroupChildDetails(routeGroupData.routeGroup);
-  logRouteGroupApiPayload(request, routeGroupData.routeGroup);
+  const errors = [
+    ...(routeGroupData.errors ?? []),
+    ...(driverData.errors ?? []),
+  ];
+  logRouteGroupApiPayload({ routeGroupData, departureLocationData, driverData });
   return {
-    errors: [
-      ...(routeGroupData.errors ?? []),
-      ...(driverData.errors ?? []),
-    ],
+    errors,
     childRouteDetails,
     currentDepartureLocation: departureLocationData.departureLocation,
     drivers: driverData.drivers,
