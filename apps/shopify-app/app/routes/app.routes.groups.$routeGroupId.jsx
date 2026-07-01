@@ -8,17 +8,35 @@ import { authenticate } from "../shopify.server";
 import { buildRouteGroupChildDetails, cleanRoutePathParam, routeDetailAction } from "../features/delivery/route-detail.server";
 import RouteDetailPage from "./app.routes.$routeId";
 
-function logRouteGroupApiPayload(payload) {
-  const data = {
-    measuredAt: new Date().toISOString(),
-    ...payload,
-  };
+function getTopLevelKeys(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
+  return Object.keys(value).sort();
+}
 
-  try {
-    console.info("route_group_detail.api.raw", JSON.stringify(data, null, 2));
-  } catch {
-    console.info("route_group_detail.api.raw", data);
-  }
+function buildApiSummary(name, result, counts = {}) {
+  const errorCount = result?.errors?.length ?? 0;
+  return {
+    name,
+    ok: errorCount === 0,
+    errorCount,
+    keys: getTopLevelKeys(result),
+    ...counts,
+  };
+}
+
+function logRouteGroupApiSummary({ routeGroupData, departureLocationData, driverData }) {
+  console.info("route_group_detail.api.summary", [
+    buildApiSummary("delivery.routeGroupDetail", routeGroupData, {
+      assignmentCount: routeGroupData.routeGroup?.assignments?.length ?? 0,
+      childCount: routeGroupData.routeGroup?.children?.length ?? 0,
+    }),
+    buildApiSummary("shopify.departureLocation", departureLocationData, {
+      hasDepartureLocation: Boolean(departureLocationData.departureLocation),
+    }),
+    buildApiSummary("delivery.drivers", driverData, {
+      driverCount: driverData.drivers?.length ?? 0,
+    }),
+  ]);
 }
 
 export const loader = async ({ params, request }) => {
@@ -35,7 +53,7 @@ export const loader = async ({ params, request }) => {
     ...(routeGroupData.errors ?? []),
     ...(driverData.errors ?? []),
   ];
-  logRouteGroupApiPayload({ routeGroupData, departureLocationData, driverData });
+  logRouteGroupApiSummary({ routeGroupData, departureLocationData, driverData });
   return {
     errors,
     childRouteDetails,
