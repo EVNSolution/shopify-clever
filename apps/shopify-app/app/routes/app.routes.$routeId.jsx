@@ -236,6 +236,26 @@ const routeActionButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const routeHeaderActionsStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "6px",
+};
+
+const routeDisabledActionButtonStyle = {
+  ...routeActionButtonStyle,
+  background: "#f7f7f7",
+  borderColor: "#d6d6d6",
+  color: "#8a8a8a",
+  cursor: "not-allowed",
+};
+
+const routeDangerActionButtonStyle = {
+  ...routeActionButtonStyle,
+  borderColor: "#d72c0d",
+  color: "#d72c0d",
+};
+
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
@@ -769,6 +789,19 @@ function buildRouteDetail(routePlan, routeGroup = null) {
     missingCoordinates,
     deliveryDate: formatRouteDeliveryScope(routePlan, ROUTE_EMPTY_LABEL),
   };
+}
+
+function getLinkedInventoryId(routePlan, routeGroup, routeGroupChild, isRouteGroupDetail) {
+  // ponytail: linked inventory field contract is pending; keep lookup narrow and disable when absent.
+  const childInventoryId = textOrUndefined(
+    routePlan?.linkedInventoryId
+      ?? routePlan?.inventoryId
+      ?? routeGroupChild?.linkedInventoryId
+      ?? routeGroupChild?.inventoryId,
+  );
+  if (childInventoryId || !isRouteGroupDetail) return childInventoryId;
+
+  return textOrUndefined(routeGroup?.linkedInventoryId ?? routeGroup?.inventoryId);
 }
 
 function getRouteDriverId(routePlan) {
@@ -1397,12 +1430,15 @@ export default function RouteDetailPage() {
     const routePlanId = textOrUndefined(effectiveRoutePlan?.id);
     return (routeGroup?.children ?? []).find((child) => getRouteGroupChildRoutePlanId(child) === routePlanId) ?? null;
   }, [effectiveRoutePlan?.id, routeGroup]);
+  const linkedInventoryId = getLinkedInventoryId(effectiveRoutePlan, routeGroup, currentRouteGroupChild, isRouteGroupDetail);
+  const inventoryDetailHref = linkedInventoryId ? `/app/orders/inventory?id=${encodeURIComponent(linkedInventoryId)}` : null;
   const defaultRouteLineColor = normalizeRouteColor(currentRouteGroupChild?.color) ?? MAP_MARKER_PALETTE.plannedOrder.color;
   const routeGroupActionBusy = routeActionFetcher.state !== "idle";
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
   const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
   const addEmptyRouteBranchBusy = false;
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
+  const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const mapLibraryRef = useRef(null);
@@ -1893,6 +1929,27 @@ export default function RouteDetailPage() {
     });
   };
 
+  const handleViewInventory = () => {
+    if (inventoryDetailHref) navigate(inventoryDetailHref);
+  };
+
+  const handleDeleteRoute = async () => {
+    if (routeGroupActionBusy || !window.confirm(`Delete ${routeDetailTitle}?`)) return;
+
+    try {
+      setRouteGroupClientError(null);
+      const sessionToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("_intent", "deleteRoute");
+      formData.set("shopifySessionToken", sessionToken);
+      routeActionFetcher.submit(formData, { method: "post" });
+    } catch {
+      setRouteGroupClientError(
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      );
+    }
+  };
+
   useEffect(() => {
     if (routeGroupActionIntent) lastRouteActionIntentRef.current = routeGroupActionIntent;
   }, [routeGroupActionIntent]);
@@ -1929,6 +1986,13 @@ export default function RouteDetailPage() {
     setRouteTimelineOrderByRouteId(nextOrderByRouteId);
     setRoutePreviewByKey(nextPreviewByKey);
   }, [contextTimelineRouteRows, routeActionFetcher.data, routeActionFetcher.state]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "deleteRoute") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length === 0) navigate(ROUTES_ROOT_PATH);
+  }, [navigate, routeActionFetcher.data, routeActionFetcher.state]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -2399,6 +2463,25 @@ export default function RouteDetailPage() {
               </span>
               <span>Back to routes</span>
             </button>
+            <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
+              <button
+                disabled={!inventoryDetailHref}
+                onClick={handleViewInventory}
+                style={inventoryDetailHref ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                title={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
+                type="button"
+              >
+                View inventory
+              </button>
+              <button
+                disabled={routeGroupActionBusy}
+                onClick={handleDeleteRoute}
+                style={routeGroupActionBusy ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
+                type="button"
+              >
+                {deleteRouteBusy ? "Deleting…" : "Delete route"}
+              </button>
+            </div>
           </div>
 
           <div className="route-overview-main">
