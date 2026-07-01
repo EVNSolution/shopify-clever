@@ -240,6 +240,7 @@ const routeReadinessValueStyle = {
 const orderControlsTrailingStyle = {
   alignItems: "center",
   display: "flex",
+  flex: "0 0 auto",
   gap: "6px",
   marginLeft: "auto",
 };
@@ -370,8 +371,9 @@ const orderTableLayoutStyle = {
 const orderControlsStyle = {
   alignItems: "center",
   display: "flex",
-  flexWrap: "wrap",
+  flexWrap: "nowrap",
   gap: "6px",
+  overflowX: "auto",
   padding: "6px 10px 8px",
 };
 
@@ -392,10 +394,10 @@ const orderFilterControlStyle = {
   borderRadius: "8px",
   boxSizing: "border-box",
   color: "#303030",
-  flex: "0 1 142px",
+  flex: "0 1 122px",
   fontSize: "13px",
   height: "30px",
-  minWidth: "116px",
+  minWidth: "104px",
   padding: "0 8px",
 };
 
@@ -403,19 +405,11 @@ const orderFilterDateFieldStyle = {
   ...orderFilterControlStyle,
   alignItems: "center",
   display: "flex",
-  flex: "0 1 204px",
+  flex: "0 1 176px",
   gap: "6px",
-  minWidth: "178px",
+  minWidth: "148px",
   overflow: "hidden",
   position: "relative",
-};
-
-const orderFilterLabelStyle = {
-  color: "#616161",
-  flex: "0 0 auto",
-  fontSize: "12px",
-  fontWeight: 650,
-  whiteSpace: "nowrap",
 };
 
 const orderFilterDateButtonStyle = {
@@ -425,6 +419,7 @@ const orderFilterDateButtonStyle = {
   cursor: "pointer",
   flex: "1 1 auto",
   font: "inherit",
+  fontWeight: 650,
   height: "26px",
   minWidth: 0,
   overflow: "hidden",
@@ -434,38 +429,41 @@ const orderFilterDateButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const orderFilterDatePlaceholderButtonStyle = {
+  ...orderFilterDateButtonStyle,
+  color: "#616161",
+  fontWeight: 500,
+};
+
 const orderFilterSelectFieldStyle = {
   ...orderFilterControlStyle,
+  display: "flex",
   padding: 0,
   position: "relative",
 };
 
-const orderFilterSelectStyle = {
-  appearance: "none",
-  WebkitAppearance: "none",
+const orderFilterMenuButtonStyle = {
   background: "transparent",
   border: 0,
   boxSizing: "border-box",
   color: "#303030",
+  cursor: "pointer",
+  flex: "1 1 auto",
   font: "inherit",
+  fontWeight: 650,
   height: "100%",
+  minWidth: 0,
+  overflow: "hidden",
   padding: "0 28px 0 8px",
-  width: "100%",
+  textAlign: "left",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
-const orderFilterEmptySelectStyle = {
-  ...orderFilterSelectStyle,
-  opacity: 0,
-};
-
-const orderFilterPlaceholderStyle = {
-  color: "#303030",
-  left: "8px",
-  lineHeight: 1,
-  pointerEvents: "none",
-  position: "absolute",
-  top: "50%",
-  transform: "translateY(-50%)",
+const orderFilterMenuPlaceholderStyle = {
+  ...orderFilterMenuButtonStyle,
+  color: "#616161",
+  fontWeight: 500,
 };
 
 const orderFilterIndicatorStyle = {
@@ -517,12 +515,150 @@ const orderFilterClearButtonStyle = {
   width: "22px",
 };
 
+const orderFilterMenuStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxShadow: "0 10px 28px rgba(0, 0, 0, 0.14)",
+  display: "grid",
+  gap: "2px",
+  maxHeight: "240px",
+  overflowY: "auto",
+  padding: "6px",
+  position: "absolute",
+  zIndex: 2147483647,
+};
+
+const orderFilterMenuOptionStyle = {
+  background: "transparent",
+  border: 0,
+  borderRadius: "7px",
+  color: "#303030",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "13px",
+  lineHeight: 1.25,
+  padding: "7px 8px",
+  textAlign: "left",
+};
+
+const selectedOrderFilterMenuOptionStyle = {
+  ...orderFilterMenuOptionStyle,
+  background: "#f1f1f1",
+  fontWeight: 700,
+};
+
 function renderOrderFilterChevron() {
   return (
     <span aria-hidden="true" style={orderFilterIndicatorStyle}>
       <span style={orderFilterChevronUpStyle} />
       <span style={orderFilterChevronDownStyle} />
     </span>
+  );
+}
+
+function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, options, value }) {
+  const fieldRef = useRef(null);
+  const menuRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const selectedOption = options.find((option) => option.value === value);
+  const displayLabel = selectedOption?.label ?? label;
+
+  const positionMenu = useCallback(() => {
+    const rect = fieldRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const width = Math.max(rect.width, 168);
+    const left = Math.max(
+      window.scrollX + 8,
+      Math.min(rect.left + window.scrollX, window.scrollX + window.innerWidth - width - 8),
+    );
+    setMenuPosition({ left, top: rect.bottom + window.scrollY + 4, width });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    positionMenu();
+    const handleDocumentPointerDown = (event) => {
+      if (fieldRef.current?.contains(event.target)) return;
+      if (menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+      setMenuPosition(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setMenuPosition(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", positionMenu);
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", positionMenu);
+    };
+  }, [open, positionMenu]);
+
+  return (
+    <div ref={fieldRef} style={orderFilterSelectFieldStyle}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        style={value ? orderFilterMenuButtonStyle : orderFilterMenuPlaceholderStyle}
+        type="button"
+        onClick={() => {
+          if (!open) positionMenu();
+          setOpen((isOpen) => !isOpen);
+        }}
+      >{displayLabel}</button>
+      {value ? (
+        <button
+          type="button"
+          aria-label={clearLabel}
+          style={orderFilterClearButtonStyle}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onClear()}
+        >×</button>
+      ) : (
+        renderOrderFilterChevron()
+      )}
+      {open && menuPosition
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="listbox"
+              style={{
+                ...orderFilterMenuStyle,
+                left: `${menuPosition.left}px`,
+                top: `${menuPosition.top}px`,
+                width: `${menuPosition.width}px`,
+              }}
+            >
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  aria-selected={option.value === value}
+                  role="option"
+                  style={option.value === value ? selectedOrderFilterMenuOptionStyle : orderFilterMenuOptionStyle}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                    setMenuPosition(null);
+                  }}
+                >{option.label}</button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
   );
 }
 
@@ -534,7 +670,7 @@ const orderDateCalendarStyle = {
   display: "grid",
   gap: "8px",
   padding: "10px",
-  position: "fixed",
+  position: "absolute",
   width: "238px",
   zIndex: 2147483647,
 };
@@ -1313,47 +1449,6 @@ function buildRoutePlanTitleFromOrders(orders) {
     : DEFAULT_ROUTE_PLAN_TITLE;
 }
 
-function createOrderMarkerPopupElement(order, plannedIndex, onAddToPlan) {
-  const popupElement = document.createElement("div");
-  const popupTitleElement = document.createElement("strong");
-  const popupAddressElement = document.createElement("div");
-  const popupMetaElement = document.createElement("div");
-  const popupActionButton = document.createElement("button");
-  const deliveryMetaValues = [order.deliveryArea, formatOrderDeliveryLabel(order)].filter(Boolean);
-
-  popupElement.className = "order-marker-popup";
-  popupTitleElement.className = "order-marker-popup__title";
-  popupTitleElement.textContent = `${order.name} · ${order.customer}`;
-  popupAddressElement.className = "order-marker-popup__address";
-  popupAddressElement.textContent = order.address;
-  popupMetaElement.className = "order-marker-popup__meta";
-  for (const deliveryMetaValue of deliveryMetaValues.length > 0 ? deliveryMetaValues : ["—"]) {
-    const metaTabElement = document.createElement("span");
-    metaTabElement.className = "order-marker-popup__meta-tab";
-    metaTabElement.textContent = deliveryMetaValue;
-    popupMetaElement.append(metaTabElement);
-  }
-  popupActionButton.type = "button";
-  popupActionButton.className = "order-marker-popup__action";
-  popupActionButton.textContent = plannedIndex > 0 ? "Added to map" : "Add to map";
-  popupActionButton.disabled = plannedIndex > 0;
-  popupActionButton.addEventListener("click", (event) => {
-    event.preventDefault();
-    event.stopPropagation();
-    onAddToPlan(order.id);
-  });
-
-  popupElement.append(
-    popupTitleElement,
-    popupAddressElement,
-    popupMetaElement,
-    popupActionButton,
-  );
-
-  return popupElement;
-}
-
-
 export default function OrdersPage() {
   const routePlanFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
@@ -1532,6 +1627,8 @@ export default function OrdersPage() {
   const [orderActionValue, setOrderActionValue] = useState(ORDER_STATE_CHANGE_OPTIONS[0].value);
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
+  const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
+  const [activeOrderPopupId, setActiveOrderPopupId] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
   const [tableColumnWidths, setTableColumnWidths] = useState(DEFAULT_TABLE_COLUMN_WIDTHS);
   const [lockedTableWidth, setLockedTableWidth] = useState(null);
@@ -1555,7 +1652,7 @@ export default function OrdersPage() {
   const orderSyncSubmittedRef = useRef(false);
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
-  const orderedDateButtonRef = useRef(null);
+  const orderedDateFieldRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const [mapSourceSyncRequest, setMapSourceSyncRequest] = useState(0);
@@ -1568,7 +1665,7 @@ export default function OrdersPage() {
   const [orderedDateCalendarMonth, setOrderedDateCalendarMonth] = useState(() =>
     getCalendarMonthValue(shopLocalDate),
   );
-  const [orderedDateCalendarPosition, setOrderedDateCalendarPosition] = useState({ left: 0, top: 0 });
+  const [orderedDateCalendarPosition, setOrderedDateCalendarPosition] = useState(null);
   const orderedDateLabel = formatOrderDateRangeLabel(
     orderFilters.orderedDateFrom,
     orderFilters.orderedDateTo,
@@ -1799,6 +1896,17 @@ export default function OrdersPage() {
       .filter(Boolean);
   }, [displayOrderById, plannedOrderIds]);
 
+  const activeOrderPopup = activeOrderPopupId
+    ? displayOrderById.get(activeOrderPopupId) ?? null
+    : null;
+  const activeOrderPopupPlannedIndex = activeOrderPopup
+    ? plannedOrderIds.indexOf(activeOrderPopup.id) + 1
+    : 0;
+  const activeOrderPopupItems = activeOrderPopup ? getOrderLineItems(activeOrderPopup) : [];
+  const activeOrderPopupMetaValues = activeOrderPopup
+    ? [activeOrderPopup.deliveryArea, formatOrderDeliveryLabel(activeOrderPopup)].filter(Boolean)
+    : [];
+
   const selectableTableOrders = useMemo(
     () => tableOrders.filter((order) => !plannedOrderIdSet.has(order.id)),
     [plannedOrderIdSet, tableOrders],
@@ -1886,6 +1994,7 @@ export default function OrdersPage() {
 
   const handleSelectOrder = useCallback((orderId, options = {}) => {
     setSelectedOrderId(orderId);
+    setActiveOrderPopupId(orderId);
 
     if (options.focusMap !== false) {
       setSelectedOrderFocusRequest((requestCount) => requestCount + 1);
@@ -2058,6 +2167,7 @@ export default function OrdersPage() {
       nextFilters.orderedDateTo = "";
       setPendingOrderedDateStart("");
       setOrderedDateCalendarOpen(false);
+      setOrderedDateCalendarPosition(null);
     } else {
       nextFilters[filterKey] = "";
     }
@@ -2092,21 +2202,31 @@ export default function OrdersPage() {
   }, [orderFilters, searchParams, setSearchParams]);
 
   const positionOrderedDateCalendar = useCallback(() => {
-    const rect = orderedDateButtonRef.current?.getBoundingClientRect();
+    const rect = orderedDateFieldRef.current?.getBoundingClientRect();
     if (!rect) return;
 
+    const width = 238;
     setOrderedDateCalendarPosition({
-      left: Math.max(8, rect.left),
-      top: rect.bottom + 8,
+      left: Math.max(
+        window.scrollX + 8,
+        Math.min(rect.left + window.scrollX, window.scrollX + window.innerWidth - width - 8),
+      ),
+      top: rect.bottom + window.scrollY + 4,
     });
   }, []);
 
   const handleOrderedDateCalendarOpen = () => {
+    if (orderedDateCalendarOpen) {
+      setOrderedDateCalendarOpen(false);
+      setOrderedDateCalendarPosition(null);
+      return;
+    }
+
     positionOrderedDateCalendar();
     setOrderedDateCalendarMonth(
       getCalendarMonthValue(orderFilters.orderedDateFrom || shopLocalDate),
     );
-    setOrderedDateCalendarOpen((isOpen) => !isOpen);
+    setOrderedDateCalendarOpen(true);
   };
 
   const handleOrderedDatePick = (dateValue) => {
@@ -2119,6 +2239,7 @@ export default function OrdersPage() {
     applyOrderedDateRange(startDate, endDate);
     setPendingOrderedDateStart("");
     setOrderedDateCalendarOpen(false);
+    setOrderedDateCalendarPosition(null);
   };
 
   useEffect(() => {
@@ -2138,7 +2259,7 @@ export default function OrdersPage() {
 
     const handleDocumentPointerDown = (event) => {
       if (orderedDateCalendarRef.current?.contains(event.target)) return;
-      if (orderedDateButtonRef.current?.contains(event.target)) return;
+      if (orderedDateFieldRef.current?.contains(event.target)) return;
 
       if (pendingOrderedDateStart) {
         applyOrderedDateRange(pendingOrderedDateStart, pendingOrderedDateStart);
@@ -2146,16 +2267,15 @@ export default function OrdersPage() {
 
       setPendingOrderedDateStart("");
       setOrderedDateCalendarOpen(false);
+      setOrderedDateCalendarPosition(null);
     };
     const handleWindowLayoutChange = () => positionOrderedDateCalendar();
 
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     window.addEventListener("resize", handleWindowLayoutChange);
-    window.addEventListener("scroll", handleWindowLayoutChange, true);
     return () => {
       document.removeEventListener("pointerdown", handleDocumentPointerDown);
       window.removeEventListener("resize", handleWindowLayoutChange);
-      window.removeEventListener("scroll", handleWindowLayoutChange, true);
     };
   }, [
     applyOrderedDateRange,
@@ -2182,6 +2302,7 @@ export default function OrdersPage() {
     setOptimisticOrderFilters(nextFilters);
     setPendingOrderedDateStart("");
     setOrderedDateCalendarOpen(false);
+    setOrderedDateCalendarPosition(null);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -2326,6 +2447,7 @@ export default function OrdersPage() {
     });
   }, [isMapReady]);
 
+
   const toggleOrderCheck = (orderId) => {
     if (plannedOrderIdSet.has(orderId)) return;
 
@@ -2373,6 +2495,7 @@ export default function OrdersPage() {
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
   }, [displayOrderById, plannedOrderIdSet, plannedOrderIds]);
+
 
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
@@ -2431,6 +2554,7 @@ export default function OrdersPage() {
     setPlannedOrderIds([]);
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
     setRouteAssignActionsOpen(false);
+    setInventoryAssignActionsOpen(false);
     setCreateInventoryClientError(null);
   };
 
@@ -2442,6 +2566,12 @@ export default function OrdersPage() {
     if (createRouteDisabled) return;
 
     setRouteAssignActionsOpen((isOpen) => !isOpen);
+  };
+
+  const handleToggleInventoryAssignActions = () => {
+    if (createInventoryDisabled) return;
+
+    setInventoryAssignActionsOpen((isOpen) => !isOpen);
   };
 
 
@@ -2799,7 +2929,7 @@ export default function OrdersPage() {
 
     const sourceUpdateStartedAt = performance.now();
     const hadExistingOrderSource = Boolean(map.getSource?.(ORDERS_MAP_SOURCE_ID));
-    const ordersLayerSynced = syncOrdersMapMarkerLayer(map, locatedOrders, plannedOrderIds);
+    const ordersLayerSynced = syncOrdersMapMarkerLayer(map, locatedOrders, plannedOrderIds, activeOrderPopupId);
     const sourceUpdateMs = roundPerfDuration(performance.now() - sourceUpdateStartedAt);
 
     emitPerformanceMetric({
@@ -2830,18 +2960,7 @@ export default function OrdersPage() {
       const order = displayOrderById.get(orderId);
       if (!order?.hasCoordinates) return;
 
-      const plannedIndex = plannedOrderIds.indexOf(order.id) + 1;
       handleSelectOrder(order.id, { focusMap: false });
-      new maplibregl.Popup({ offset: 24 })
-        .setLngLat(order.coordinates)
-        .setDOMContent(
-          createOrderMarkerPopupElement(
-            order,
-            plannedIndex,
-            handleAddOrderToPlan,
-          ),
-        )
-        .addTo(map);
 
       const markerClickZoom = map.getZoom?.();
       if (
@@ -2862,22 +2981,27 @@ export default function OrdersPage() {
     const handleOrderMarkerMouseLeave = () => {
       map.getCanvas().style.cursor = "";
     };
+    const handleUserMapMoveStart = (event) => {
+      if (event?.originalEvent) setActiveOrderPopupId(null);
+    };
 
     map.on("click", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerClick);
     map.on("mouseenter", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseEnter);
     map.on("mouseleave", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseLeave);
+    map.on("movestart", handleUserMapMoveStart);
 
     return () => {
       map.off("click", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerClick);
       map.off("mouseenter", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseEnter);
       map.off("mouseleave", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerMouseLeave);
+      map.off("movestart", handleUserMapMoveStart);
       markersRef.current.forEach((marker) => marker.remove());
       markersRef.current = [];
     };
   }, [
+    activeOrderPopupId,
     departureLocation,
     displayOrderById,
-    handleAddOrderToPlan,
     handleSelectOrder,
     isMapReady,
     locatedOrders,
@@ -3000,7 +3124,58 @@ export default function OrdersPage() {
                 }
               />
             }
-          />
+          >
+            {activeOrderPopup ? (
+              <div
+                aria-label={`Map details for ${activeOrderPopup.name}`}
+                className="order-marker-popup order-map-focus-popup"
+                role="dialog"
+              >
+                <div className="order-marker-popup__header">
+                  <strong className="order-marker-popup__title">
+                    {activeOrderPopup.name} · {activeOrderPopup.customer}
+                  </strong>
+                  <button
+                    aria-label="Close order map details"
+                    className="order-marker-popup__close"
+                    onClick={() => setActiveOrderPopupId(null)}
+                    type="button"
+                  >×</button>
+                </div>
+                <div className="order-marker-popup__address">{activeOrderPopup.address}</div>
+                <div className="order-marker-popup__meta">
+                  {(activeOrderPopupMetaValues.length > 0 ? activeOrderPopupMetaValues : ["—"]).map((deliveryMetaValue, metaIndex) => (
+                    <span className="order-marker-popup__meta-tab" key={`${deliveryMetaValue}-${metaIndex}`}>{deliveryMetaValue}</span>
+                  ))}
+                </div>
+                <strong className="order-marker-popup__items-title">Items</strong>
+                {activeOrderPopupItems.length > 0 ? (
+                  <ul className="order-marker-popup__items">
+                    {activeOrderPopupItems.map((item, itemIndex) => (
+                      <li className="order-marker-popup__item" key={`${item.name}-${itemIndex}`}>
+                        <span>
+                          {item.name}
+                          {item.options && item.options !== "—" ? <small>{item.options}</small> : null}
+                          {item.sku && item.sku !== "—" ? <small>SKU {item.sku}</small> : null}
+                        </span>
+                        <strong>×{item.quantity}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span className="order-marker-popup__empty">
+                    {getOrderItemCount(activeOrderPopup) > 0 ? `${getOrderItemCount(activeOrderPopup)} items` : "No item detail"}
+                  </span>
+                )}
+                <button
+                  className="order-marker-popup__action"
+                  disabled={activeOrderPopupPlannedIndex > 0}
+                  onClick={() => handleAddOrderToPlan(activeOrderPopup.id)}
+                  type="button"
+                >{activeOrderPopupPlannedIndex > 0 ? "Added to map" : "Add to map"}</button>
+              </div>
+            ) : null}
+          </MapPanel>
       }
       secondary={
         <div className="order-route-plan" style={routePlanPanelStyle}>
@@ -3028,7 +3203,7 @@ export default function OrdersPage() {
                   aria-expanded={routeAssignActionsOpen}
                   disabled={createRouteDisabled}
                   onClick={handleToggleRouteAssignActions}
-                >Assign to route</button>
+                >Assign</button>
               </div>
             </div>
             <div
@@ -3065,23 +3240,43 @@ export default function OrdersPage() {
                   type="button"
                   style={
                     createInventoryDisabled
-                      ? disabledPlanButtonStyle
+                      ? disabledCreateRouteButtonStyle
                       : createRouteButtonStyle
                   }
+                  aria-expanded={inventoryAssignActionsOpen}
                   disabled={createInventoryDisabled}
-                  onClick={() => handleAddInventory("add")}
-                >{isCreatingInventory && inventorySubmitAction === "add" ? "Adding…" : "Add"}</button>
-                <button
-                  type="button"
-                  style={
-                    createInventoryDisabled
-                      ? disabledPlanButtonStyle
-                      : createRouteButtonStyle
-                  }
-                  disabled={createInventoryDisabled}
-                  onClick={() => handleAddInventory("create")}
-                >{isCreatingInventory && inventorySubmitAction === "create" ? "Creating…" : "Create"}</button>
+                  onClick={handleToggleInventoryAssignActions}
+                >Assign</button>
               </div>
+            </div>
+            <div
+              style={{
+                ...routeAssignActionsStyle,
+                ...(inventoryAssignActionsOpen
+                  ? routeAssignActionsOpenStyle
+                  : routeAssignActionsClosedStyle),
+              }}
+            >
+              <button
+                type="button"
+                style={
+                  createInventoryDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={createInventoryDisabled}
+                onClick={() => handleAddInventory("add")}
+              >{isCreatingInventory && inventorySubmitAction === "add" ? "Adding…" : "Add"}</button>
+              <button
+                type="button"
+                style={
+                  createInventoryDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={createInventoryDisabled}
+                onClick={() => handleAddInventory("create")}
+              >{isCreatingInventory && inventorySubmitAction === "create" ? "Creating…" : "Create"}</button>
             </div>
           </div>
 
@@ -3132,15 +3327,13 @@ export default function OrdersPage() {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
-            <div style={orderFilterDateFieldStyle}>
-              {!orderedDateFilterActive ? <span style={orderFilterLabelStyle}>Order date</span> : null}
+            <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
               <button
-                ref={orderedDateButtonRef}
                 aria-label="Filter orders by ordered date"
-                style={orderFilterDateButtonStyle}
+                style={orderedDateFilterActive ? orderFilterDateButtonStyle : orderFilterDatePlaceholderButtonStyle}
                 type="button"
                 onClick={handleOrderedDateCalendarOpen}
-              >{orderedDateLabel}</button>
+              >{orderedDateFilterActive ? orderedDateLabel : "Order date"}</button>
               {orderedDateFilterActive ? (
                 <button
                   type="button"
@@ -3152,7 +3345,7 @@ export default function OrdersPage() {
               ) : (
                 renderOrderFilterChevron()
               )}
-              {orderedDateCalendarOpen
+              {orderedDateCalendarOpen && orderedDateCalendarPosition
                 ? createPortal(
                     <div
                       ref={orderedDateCalendarRef}
@@ -3193,119 +3386,48 @@ export default function OrdersPage() {
                   )
                 : null}
             </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by delivery day"
-                style={orderFilters.deliveryWeekday ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.deliveryWeekday}
-                onChange={(event) => handleOrderFilterChange("deliveryWeekday", event.currentTarget.value)}
-              >
-                <option value="">Delivery day</option>
-                {ORDER_WEEKDAY_OPTIONS.map((weekday) => (
-                  <option key={weekday.value} value={weekday.value}>
-                    {weekday.label}
-                  </option>
-                ))}
-              </select>
-              {!orderFilters.deliveryWeekday ? (
-                <span style={orderFilterPlaceholderStyle}>Delivery day</span>
-              ) : null}
-              {orderFilters.deliveryWeekday ? (
-                <button
-                  type="button"
-                  aria-label="Clear delivery day filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("deliveryWeekday")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by service type"
-                style={orderFilters.serviceType ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.serviceType}
-                onChange={(event) => handleOrderFilterChange("serviceType", event.currentTarget.value)}
-              >
-                <option value="">Type</option>
-                <option value="DELIVERY">Delivery</option>
-                <option value="PICKUP">Pickup</option>
-              </select>
-              {!orderFilters.serviceType ? (
-                <span style={orderFilterPlaceholderStyle}>Type</span>
-              ) : null}
-              {orderFilters.serviceType ? (
-                <button
-                  type="button"
-                  aria-label="Clear service type filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("serviceType")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by delivery area"
-                style={orderFilters.deliveryArea ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.deliveryArea}
-                onChange={(event) => handleOrderFilterChange("deliveryArea", event.currentTarget.value)}
-              >
-                <option value="">Area</option>
-                {orderFilterOptions.deliveryAreas.map((deliveryArea) => (
-                  <option key={deliveryArea} value={deliveryArea}>
-                    {deliveryArea}
-                  </option>
-                ))}
-              </select>
-              {!orderFilters.deliveryArea ? (
-                <span style={orderFilterPlaceholderStyle}>Area</span>
-              ) : null}
-              {orderFilters.deliveryArea ? (
-                <button
-                  type="button"
-                  aria-label="Clear delivery area filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("deliveryArea")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by state"
-                style={orderFilters.deliveryState ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.deliveryState}
-                onChange={(event) => handleOrderFilterChange("deliveryState", event.currentTarget.value)}
-              >
-                <option value="">State</option>
-                {ORDER_DELIVERY_STATE_OPTIONS.map((stateOption) => (
-                  <option key={stateOption.value} value={stateOption.value}>
-                    {stateOption.label}
-                  </option>
-                ))}
-              </select>
-              {!orderFilters.deliveryState ? (
-                <span style={orderFilterPlaceholderStyle}>State</span>
-              ) : null}
-              {orderFilters.deliveryState ? (
-                <button
-                  type="button"
-                  aria-label="Clear state filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("deliveryState")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
+            <OrderFilterMenu
+              aria-label="Filter orders by delivery day"
+              clearLabel="Clear delivery day filter"
+              label="Delivery day"
+              options={ORDER_WEEKDAY_OPTIONS}
+              value={orderFilters.deliveryWeekday}
+              onChange={(filterValue) => handleOrderFilterChange("deliveryWeekday", filterValue)}
+              onClear={() => handleClearOrderFilter("deliveryWeekday")}
+            />
+            <OrderFilterMenu
+              aria-label="Filter orders by service type"
+              clearLabel="Clear service type filter"
+              label="Type"
+              options={[
+                { label: "Delivery", value: "DELIVERY" },
+                { label: "Pickup", value: "PICKUP" },
+              ]}
+              value={orderFilters.serviceType}
+              onChange={(filterValue) => handleOrderFilterChange("serviceType", filterValue)}
+              onClear={() => handleClearOrderFilter("serviceType")}
+            />
+            <OrderFilterMenu
+              aria-label="Filter orders by delivery area"
+              clearLabel="Clear delivery area filter"
+              label="Area"
+              options={orderFilterOptions.deliveryAreas.map((deliveryArea) => ({
+                label: deliveryArea,
+                value: deliveryArea,
+              }))}
+              value={orderFilters.deliveryArea}
+              onChange={(filterValue) => handleOrderFilterChange("deliveryArea", filterValue)}
+              onClear={() => handleClearOrderFilter("deliveryArea")}
+            />
+            <OrderFilterMenu
+              aria-label="Filter orders by state"
+              clearLabel="Clear state filter"
+              label="State"
+              options={ORDER_DELIVERY_STATE_OPTIONS}
+              value={orderFilters.deliveryState}
+              onChange={(filterValue) => handleOrderFilterChange("deliveryState", filterValue)}
+              onClear={() => handleClearOrderFilter("deliveryState")}
+            />
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
               <button

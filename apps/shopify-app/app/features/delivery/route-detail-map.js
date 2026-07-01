@@ -462,8 +462,8 @@ function fitRouteStopAndSnappedPoint(map, maplibregl, stop, routeStopPoint) {
 
   const locations = buildRouteStopPointFitLocations(stop, routeStopPoint);
   fitRouteDetailMap(map, maplibregl, locations, {
-    maxZoom: 17,
-    singleZoom: 17,
+    maxZoom: 12,
+    singleZoom: 12,
   });
 }
 

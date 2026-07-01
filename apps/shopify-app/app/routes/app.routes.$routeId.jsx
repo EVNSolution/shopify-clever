@@ -48,9 +48,10 @@ const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_EMPTY_LABEL = "–";
 const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
-const ROUTE_TIMELINE_STOP_POPOVER_GAP = 8;
+const ROUTE_TIMELINE_STOP_POPOVER_GAP = 4;
 const ROUTE_TIMELINE_STOP_POPOVER_HEIGHT = 260;
 const ROUTE_TIMELINE_STOP_POPOVER_WIDTH = 320;
+const ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET = 12;
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -293,7 +294,7 @@ const routePlanRowsColumnWidths = [
   "82px",
   "116px",
   "74px",
-  "128px",
+  "160px",
   "52px",
   "74px",
   "76px",
@@ -528,22 +529,14 @@ const routeTimelineStopPopoverStyle = {
   display: "grid",
   fontSize: "12px",
   gap: "8px",
+  left: 0,
   maxWidth: `${ROUTE_TIMELINE_STOP_POPOVER_WIDTH}px`,
   minWidth: "280px",
   padding: "10px",
   position: "fixed",
+  top: 0,
   width: `min(${ROUTE_TIMELINE_STOP_POPOVER_WIDTH}px, calc(100vw - 16px))`,
-  zIndex: 2147483647,
-};
-
-const routeTimelineStopPopoverBackdropStyle = {
-  background: "transparent",
-  border: 0,
-  cursor: "default",
-  inset: 0,
-  padding: 0,
-  position: "fixed",
-  zIndex: 2147483646,
+  zIndex: 100010,
 };
 
 const routeTimelineStopPopoverHeaderStyle = {
@@ -763,7 +756,7 @@ const routeDraftBarStyle = {
   position: "fixed",
   top: "12px",
   transform: "translateX(-50%)",
-  zIndex: 9999,
+  zIndex: 2147483647,
 };
 
 const routeDraftBarTextStyle = {
@@ -1055,6 +1048,30 @@ function formatRouteStopItemOptions(options) {
     .join(", ");
 }
 
+function getLineItemList(lineItems) {
+  if (Array.isArray(lineItems)) return lineItems;
+  if (Array.isArray(lineItems?.nodes)) return lineItems.nodes;
+  if (Array.isArray(lineItems?.edges)) return lineItems.edges.map((edge) => edge?.node).filter(Boolean);
+  return [];
+}
+
+function getRouteStopLineItems(stop) {
+  const candidates = [
+    stop?.items,
+    stop?.lineItems,
+    stop?.shopifyOrderSnapshot?.lineItems,
+    stop?.rawPayload?.lineItems,
+    stop?.order?.lineItems,
+    stop?.order?.shopifyOrderSnapshot?.lineItems,
+    stop?.order?.rawPayload?.lineItems,
+  ];
+  for (const candidate of candidates) {
+    const items = getLineItemList(candidate);
+    if (items.length > 0) return items;
+  }
+  return [];
+}
+
 function normalizeRouteStopItems(items) {
   if (!Array.isArray(items)) return [];
   return items
@@ -1071,28 +1088,22 @@ function sumRouteStopItemQuantities(items) {
   return items.reduce((total, item) => total + (numberOrUndefined(item.quantity) ?? 0), 0);
 }
 
-function getRouteTimelineStopPopoverPosition(rect) {
+function getRouteTimelineStopPopoverPosition(rect, popoverSize = {}) {
   const gap = ROUTE_TIMELINE_STOP_POPOVER_GAP;
-  const width = Math.min(ROUTE_TIMELINE_STOP_POPOVER_WIDTH, window.innerWidth - gap * 2);
-  const height = Math.min(ROUTE_TIMELINE_STOP_POPOVER_HEIGHT, window.innerHeight - gap * 2);
-  const centeredLeft = Math.max(gap, Math.min(
-    rect.left + rect.width / 2 - width / 2,
-    window.innerWidth - width - gap,
-  ));
-  const belowTop = rect.bottom + gap;
-  if (belowTop + height <= window.innerHeight - gap) return { left: centeredLeft, top: belowTop };
-
+  const width = Math.min(popoverSize.width ?? ROUTE_TIMELINE_STOP_POPOVER_WIDTH, window.innerWidth - gap * 2);
+  const height = Math.min(popoverSize.height ?? ROUTE_TIMELINE_STOP_POPOVER_HEIGHT, window.innerHeight - gap * 2);
+  const anchorX = rect.left + rect.width / 2;
+  const rawLeft = anchorX <= window.innerWidth / 2
+    ? anchorX - ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET
+    : anchorX - width + ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET;
+  const left = Math.max(gap, Math.min(rawLeft, window.innerWidth - width - gap));
   const aboveTop = rect.top - height - gap;
-  if (aboveTop >= gap) return { left: centeredLeft, top: aboveTop };
+  const belowTop = rect.bottom + gap;
+  const top = aboveTop >= gap
+    ? aboveTop
+    : Math.max(gap, Math.min(belowTop, window.innerHeight - height - gap));
 
-  const sideTop = Math.max(gap, Math.min(rect.top, window.innerHeight - height - gap));
-  const rightLeft = rect.right + gap;
-  if (rightLeft + width <= window.innerWidth - gap) return { left: rightLeft, top: sideTop };
-
-  const leftLeft = rect.left - width - gap;
-  if (leftLeft >= gap) return { left: leftLeft, top: sideTop };
-
-  return { left: centeredLeft, top: belowTop };
+  return { left, top };
 }
 
 function buildRouteStops(stops) {
@@ -1102,7 +1113,7 @@ function buildRouteStops(stops) {
     const stopNumber = Number.isInteger(sequence) && sequence > 0
       ? sequence
       : index + 1;
-    const items = normalizeRouteStopItems(stop.items);
+    const items = normalizeRouteStopItems(getRouteStopLineItems(stop));
     const itemCount = numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems) ?? sumRouteStopItemQuantities(items);
 
     return {
@@ -1602,8 +1613,10 @@ export default function RouteDetailPage() {
   const routeMapCenterRef = useRef(DEFAULT_CENTER);
   const markersRef = useRef([]);
   const routeTimelineStopRefs = useRef(new Map());
+  const routeTimelineStopPopoverRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
   const lastRouteActionIntentRef = useRef(null);
+  const navigateAfterRouteDraftSaveRef = useRef(false);
   const routePolygonCornerDragIndexRef = useRef(null);
   const routePolygonSkipNextMapClickRef = useRef(false);
   const routePolygonSkipNextMapClickTimerRef = useRef(null);
@@ -1624,6 +1637,7 @@ export default function RouteDetailPage() {
   const [activeRouteLineId, setActiveRouteLineId] = useState(null);
   const [routeLineEdits, setRouteLineEdits] = useState({});
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
+  const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [routeGroupClientError, setRouteGroupClientError] = useState(null);
   const [isRoutePolygonEditMode, setIsRoutePolygonEditMode] = useState(false);
   const [routeTimelineOrderByRouteId, setRouteTimelineOrderByRouteId] = useState({});
@@ -1903,6 +1917,28 @@ export default function RouteDetailPage() {
     routeTimelineStopRefs.current.delete(stopId);
   }, []);
 
+  const getRouteTimelineStopPopoverState = useCallback((stopId, mode = "pinned") => {
+    const node = routeTimelineStopRefs.current.get(stopId);
+    if (!node) return null;
+    return {
+      ...getRouteTimelineStopPopoverPosition(node.getBoundingClientRect()),
+      mode,
+      stopId,
+    };
+  }, []);
+
+  const positionRouteTimelineStopPopover = useCallback((stopId = activeRouteTimelineStopPopover?.stopId) => {
+    const stopNode = stopId ? routeTimelineStopRefs.current.get(stopId) : null;
+    const popoverNode = routeTimelineStopPopoverRef.current;
+    if (!stopNode || !popoverNode) return;
+
+    const nextPosition = getRouteTimelineStopPopoverPosition(stopNode.getBoundingClientRect(), {
+      height: popoverNode.offsetHeight,
+      width: popoverNode.offsetWidth,
+    });
+    popoverNode.style.transform = `translate3d(${Math.round(nextPosition.left)}px, ${Math.round(nextPosition.top)}px, 0)`;
+  }, [activeRouteTimelineStopPopover?.stopId]);
+
   const readRouteTimelineStopRects = useCallback(() => {
     return new Map([...routeTimelineStopRefs.current.entries()].map(([stopId, node]) => [
       stopId,
@@ -1961,14 +1997,56 @@ export default function RouteDetailPage() {
 
   const handleRouteTimelineStopClick = (event, stop) => {
     event.stopPropagation();
-    const rect = event.currentTarget.getBoundingClientRect();
-    setActiveRouteTimelineStopPopover((current) => current?.stopId === stop.id
+    if (isMapReady && mapRef.current && mapLibraryRef.current) {
+      fitRouteStopAndSnappedPoint(
+        mapRef.current,
+        mapLibraryRef.current,
+        stop,
+        findRouteStopPoint(stop, savedRouteStopPoints),
+      );
+    }
+    setActiveRouteTimelineStopPopover((current) => current?.mode === "pinned" && current.stopId === stop.id
       ? null
-      : {
-        ...getRouteTimelineStopPopoverPosition(rect),
-        stopId: stop.id,
-      });
+      : getRouteTimelineStopPopoverState(stop.id, "pinned"));
   };
+
+  const handleRouteTimelineStopMouseEnter = (stop) => {
+    setActiveRouteTimelineStopPopover((current) => current?.mode === "pinned"
+      ? current
+      : getRouteTimelineStopPopoverState(stop.id, "hover"));
+  };
+
+  const handleRouteTimelineStopMouseLeave = (stop) => {
+    setActiveRouteTimelineStopPopover((current) => (
+      current?.mode === "hover" && current.stopId === stop.id ? null : current
+    ));
+  };
+
+  useEffect(() => {
+    if (!activeRouteTimelineStopPopover) return undefined;
+
+    const syncRouteTimelineStopPopover = () => positionRouteTimelineStopPopover();
+    positionRouteTimelineStopPopover();
+    window.addEventListener("scroll", syncRouteTimelineStopPopover, true);
+    window.addEventListener("resize", syncRouteTimelineStopPopover);
+    return () => {
+      window.removeEventListener("scroll", syncRouteTimelineStopPopover, true);
+      window.removeEventListener("resize", syncRouteTimelineStopPopover);
+    };
+  }, [activeRouteTimelineStopPopover?.stopId, positionRouteTimelineStopPopover]);
+
+  useEffect(() => {
+    if (activeRouteTimelineStopPopover?.mode !== "pinned") return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      if (event.target?.closest?.('[data-route-timeline-stop-popover-root="true"]')) return;
+      if (event.target?.closest?.('[data-route-timeline-stop-button="true"]')) return;
+      setActiveRouteTimelineStopPopover(null);
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [activeRouteTimelineStopPopover?.mode]);
 
   const handleRouteTimelineDragEnd = useCallback(() => {
     routeTimelineDragRef.current = null;
@@ -2105,8 +2183,25 @@ export default function RouteDetailPage() {
     });
   };
 
+  const handleSaveRouteDraftAndLeave = () => {
+    if (!canSaveRouteDraft) return;
+    navigateAfterRouteDraftSaveRef.current = true;
+    setIsRouteDraftExitDialogOpen(false);
+    handleSaveRouteDraft();
+  };
+
+  const handleDiscardRouteDraftAndLeave = () => {
+    navigateAfterRouteDraftSaveRef.current = false;
+    resetRouteDraftChanges();
+    setIsRouteDraftExitDialogOpen(false);
+    navigate(routesListHref);
+  };
+
   const handleBackToRoutes = () => {
-    if (hasRouteAllocationDraft && !window.confirm("Discard unsaved route changes?")) return;
+    if (hasRouteAllocationDraft) {
+      setIsRouteDraftExitDialogOpen(true);
+      return;
+    }
     navigate(routesListHref);
   };
 
@@ -2179,14 +2274,18 @@ export default function RouteDetailPage() {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "saveRouteDraft") {
       lastRouteActionIntentRef.current = null;
+      navigateAfterRouteDraftSaveRef.current = false;
       return;
     }
     lastRouteActionIntentRef.current = null;
+    const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
+    navigateAfterRouteDraftSaveRef.current = false;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) {
       resetRouteDraftChanges();
       revalidator.revalidate();
+      if (navigateAfterSave) navigate(routesListHref);
     }
-  }, [resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state]);
+  }, [navigate, resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state, routesListHref]);
 
   useEffect(() => {
     setRouteCandidateTitle(defaultRouteCandidateTitle);
@@ -2905,16 +3004,19 @@ export default function RouteDetailPage() {
                       title={stop.order}
                     >
                       <span style={routeTimelineLineStyle}></span>
-                      <button
-                        ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                        draggable
-                        onDragEnd={handleRouteTimelineDragEnd}
-                        onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
-                        onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                        onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
-                        onClick={(event) => handleRouteTimelineStopClick(event, stop)}
-                        aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
-                        aria-label={`Show ${stop.order} stop details`}
+	                      <button
+	                        data-route-timeline-stop-button="true"
+	                        ref={(node) => setRouteTimelineStopRef(stop.id, node)}
+	                        draggable
+	                        onDragEnd={handleRouteTimelineDragEnd}
+	                        onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
+	                        onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+	                        onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+	                        onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+	                        onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
+	                        onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
+	                        aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
+	                        aria-label={`Show ${stop.order} stop details`}
                         style={{
                           ...routeTimelineStopStyle,
                           ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
@@ -2935,18 +3037,13 @@ export default function RouteDetailPage() {
             </div>
             {activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
               <>
-                <button
-                  aria-label="Close route stop details overlay"
-                  onClick={() => setActiveRouteTimelineStopPopover(null)}
-                  style={routeTimelineStopPopoverBackdropStyle}
-                  type="button"
-                />
                 <div
+                  data-route-timeline-stop-popover-root="true"
+                  ref={routeTimelineStopPopoverRef}
                   role="tooltip"
                   style={{
                     ...routeTimelineStopPopoverStyle,
-                    left: `${activeRouteTimelineStopPopover.left}px`,
-                    top: `${activeRouteTimelineStopPopover.top}px`,
+                    transform: `translate3d(${Math.round(activeRouteTimelineStopPopover.left)}px, ${Math.round(activeRouteTimelineStopPopover.top)}px, 0)`,
                   }}
                 >
                   <div style={routeTimelineStopPopoverHeaderStyle}>
@@ -2986,6 +3083,56 @@ export default function RouteDetailPage() {
             ) : null}
           </section>
         </section>
+
+        {isRouteDraftExitDialogOpen ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Cancel unsaved route dialog"
+              onClick={() => setIsRouteDraftExitDialogOpen(false)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div
+              aria-label="Unsaved route changes"
+              role="dialog"
+              style={routeLineEditorDialogStyle}
+            >
+              <h2 style={routeLineEditorTitleStyle}>아직 남은 변경이 있습니다</h2>
+              <div style={routeLineEditorLabelStyle}>저장하지 않은 route 변경이 남아 있습니다.</div>
+              <div style={routeLineEditorActionsStyle}>
+                <button
+                  disabled={!canSaveRouteDraft}
+                  onClick={handleSaveRouteDraftAndLeave}
+                  style={{
+                    ...routeLineEditorPrimaryButtonStyle,
+                    ...(!canSaveRouteDraft ? { opacity: 0.55 } : {}),
+                  }}
+                  type="button"
+                >
+                  Save
+                </button>
+                <button
+                  disabled={routeGroupActionBusy}
+                  onClick={handleDiscardRouteDraftAndLeave}
+                  style={{
+                    ...routeActionButtonStyle,
+                    ...(routeGroupActionBusy ? { opacity: 0.55 } : {}),
+                  }}
+                  type="button"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={() => setIsRouteDraftExitDialogOpen(false)}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {isRouteLineEditorOpen ? (
           <div style={routeLineEditorOverlayStyle}>
