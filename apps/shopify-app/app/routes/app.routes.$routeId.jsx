@@ -273,7 +273,7 @@ const routePlanRowsColumnWidths = [
   "82px",
   "116px",
   "74px",
-  "128px",
+  "160px",
   "52px",
   "74px",
   "76px",
