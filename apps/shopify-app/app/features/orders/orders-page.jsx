@@ -412,14 +412,6 @@ const orderFilterDateFieldStyle = {
   position: "relative",
 };
 
-const orderFilterLabelStyle = {
-  color: "#616161",
-  flex: "0 0 auto",
-  fontSize: "12px",
-  fontWeight: 650,
-  whiteSpace: "nowrap",
-};
-
 const orderFilterDateButtonStyle = {
   background: "transparent",
   border: 0,
@@ -427,6 +419,7 @@ const orderFilterDateButtonStyle = {
   cursor: "pointer",
   flex: "1 1 auto",
   font: "inherit",
+  fontWeight: 650,
   height: "26px",
   minWidth: 0,
   overflow: "hidden",
@@ -436,38 +429,41 @@ const orderFilterDateButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const orderFilterDatePlaceholderButtonStyle = {
+  ...orderFilterDateButtonStyle,
+  color: "#616161",
+  fontWeight: 500,
+};
+
 const orderFilterSelectFieldStyle = {
   ...orderFilterControlStyle,
+  display: "flex",
   padding: 0,
   position: "relative",
 };
 
-const orderFilterSelectStyle = {
-  appearance: "none",
-  WebkitAppearance: "none",
+const orderFilterMenuButtonStyle = {
   background: "transparent",
   border: 0,
   boxSizing: "border-box",
   color: "#303030",
+  cursor: "pointer",
+  flex: "1 1 auto",
   font: "inherit",
+  fontWeight: 650,
   height: "100%",
+  minWidth: 0,
+  overflow: "hidden",
   padding: "0 28px 0 8px",
-  width: "100%",
+  textAlign: "left",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
-const orderFilterEmptySelectStyle = {
-  ...orderFilterSelectStyle,
-  opacity: 0,
-};
-
-const orderFilterPlaceholderStyle = {
-  color: "#303030",
-  left: "8px",
-  lineHeight: 1,
-  pointerEvents: "none",
-  position: "absolute",
-  top: "50%",
-  transform: "translateY(-50%)",
+const orderFilterMenuPlaceholderStyle = {
+  ...orderFilterMenuButtonStyle,
+  color: "#616161",
+  fontWeight: 500,
 };
 
 const orderFilterIndicatorStyle = {
@@ -519,12 +515,149 @@ const orderFilterClearButtonStyle = {
   width: "22px",
 };
 
+const orderFilterMenuStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxShadow: "0 10px 28px rgba(0, 0, 0, 0.14)",
+  display: "grid",
+  gap: "2px",
+  maxHeight: "240px",
+  overflowY: "auto",
+  padding: "6px",
+  position: "fixed",
+  zIndex: 2147483647,
+};
+
+const orderFilterMenuOptionStyle = {
+  background: "transparent",
+  border: 0,
+  borderRadius: "7px",
+  color: "#303030",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "13px",
+  lineHeight: 1.25,
+  padding: "7px 8px",
+  textAlign: "left",
+};
+
+const selectedOrderFilterMenuOptionStyle = {
+  ...orderFilterMenuOptionStyle,
+  background: "#f1f1f1",
+  fontWeight: 700,
+};
+
 function renderOrderFilterChevron() {
   return (
     <span aria-hidden="true" style={orderFilterIndicatorStyle}>
       <span style={orderFilterChevronUpStyle} />
       <span style={orderFilterChevronDownStyle} />
     </span>
+  );
+}
+
+function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, options, value }) {
+  const fieldRef = useRef(null);
+  const menuRef = useRef(null);
+  const [open, setOpen] = useState(false);
+  const [menuPosition, setMenuPosition] = useState(null);
+  const selectedOption = options.find((option) => option.value === value);
+  const displayLabel = selectedOption?.label ?? label;
+
+  const positionMenu = useCallback(() => {
+    const rect = fieldRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const width = Math.max(rect.width, 168);
+    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
+    setMenuPosition({ left, top: rect.bottom + 4, width });
+  }, []);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    positionMenu();
+    const handleDocumentPointerDown = (event) => {
+      if (fieldRef.current?.contains(event.target)) return;
+      if (menuRef.current?.contains(event.target)) return;
+      setOpen(false);
+      setMenuPosition(null);
+    };
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") {
+        setOpen(false);
+        setMenuPosition(null);
+      }
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("resize", positionMenu);
+    window.addEventListener("scroll", positionMenu, true);
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("resize", positionMenu);
+      window.removeEventListener("scroll", positionMenu, true);
+    };
+  }, [open, positionMenu]);
+
+  return (
+    <div ref={fieldRef} style={orderFilterSelectFieldStyle}>
+      <button
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        aria-label={ariaLabel}
+        style={value ? orderFilterMenuButtonStyle : orderFilterMenuPlaceholderStyle}
+        type="button"
+        onClick={() => {
+          if (!open) positionMenu();
+          setOpen((isOpen) => !isOpen);
+        }}
+      >{displayLabel}</button>
+      {value ? (
+        <button
+          type="button"
+          aria-label={clearLabel}
+          style={orderFilterClearButtonStyle}
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => onClear()}
+        >×</button>
+      ) : (
+        renderOrderFilterChevron()
+      )}
+      {open && menuPosition
+        ? createPortal(
+            <div
+              ref={menuRef}
+              role="listbox"
+              style={{
+                ...orderFilterMenuStyle,
+                left: `${menuPosition.left}px`,
+                top: `${menuPosition.top}px`,
+                width: `${menuPosition.width}px`,
+              }}
+            >
+              {options.map((option) => (
+                <button
+                  key={option.value}
+                  aria-selected={option.value === value}
+                  role="option"
+                  style={option.value === value ? selectedOrderFilterMenuOptionStyle : orderFilterMenuOptionStyle}
+                  type="button"
+                  onClick={() => {
+                    onChange(option.value);
+                    setOpen(false);
+                    setMenuPosition(null);
+                  }}
+                >{option.label}</button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
+    </div>
   );
 }
 
@@ -1557,7 +1690,7 @@ export default function OrdersPage() {
   const orderSyncSubmittedRef = useRef(false);
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
-  const orderedDateButtonRef = useRef(null);
+  const orderedDateFieldRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const [mapSourceSyncRequest, setMapSourceSyncRequest] = useState(0);
@@ -1570,7 +1703,7 @@ export default function OrdersPage() {
   const [orderedDateCalendarMonth, setOrderedDateCalendarMonth] = useState(() =>
     getCalendarMonthValue(shopLocalDate),
   );
-  const [orderedDateCalendarPosition, setOrderedDateCalendarPosition] = useState({ left: 0, top: 0 });
+  const [orderedDateCalendarPosition, setOrderedDateCalendarPosition] = useState(null);
   const orderedDateLabel = formatOrderDateRangeLabel(
     orderFilters.orderedDateFrom,
     orderFilters.orderedDateTo,
@@ -2060,6 +2193,7 @@ export default function OrdersPage() {
       nextFilters.orderedDateTo = "";
       setPendingOrderedDateStart("");
       setOrderedDateCalendarOpen(false);
+      setOrderedDateCalendarPosition(null);
     } else {
       nextFilters[filterKey] = "";
     }
@@ -2094,21 +2228,28 @@ export default function OrdersPage() {
   }, [orderFilters, searchParams, setSearchParams]);
 
   const positionOrderedDateCalendar = useCallback(() => {
-    const rect = orderedDateButtonRef.current?.getBoundingClientRect();
+    const rect = orderedDateFieldRef.current?.getBoundingClientRect();
     if (!rect) return;
 
+    const width = 238;
     setOrderedDateCalendarPosition({
-      left: Math.max(8, rect.left),
-      top: rect.bottom + 8,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      top: rect.bottom + 4,
     });
   }, []);
 
   const handleOrderedDateCalendarOpen = () => {
+    if (orderedDateCalendarOpen) {
+      setOrderedDateCalendarOpen(false);
+      setOrderedDateCalendarPosition(null);
+      return;
+    }
+
     positionOrderedDateCalendar();
     setOrderedDateCalendarMonth(
       getCalendarMonthValue(orderFilters.orderedDateFrom || shopLocalDate),
     );
-    setOrderedDateCalendarOpen((isOpen) => !isOpen);
+    setOrderedDateCalendarOpen(true);
   };
 
   const handleOrderedDatePick = (dateValue) => {
@@ -2121,6 +2262,7 @@ export default function OrdersPage() {
     applyOrderedDateRange(startDate, endDate);
     setPendingOrderedDateStart("");
     setOrderedDateCalendarOpen(false);
+    setOrderedDateCalendarPosition(null);
   };
 
   useEffect(() => {
@@ -2140,7 +2282,7 @@ export default function OrdersPage() {
 
     const handleDocumentPointerDown = (event) => {
       if (orderedDateCalendarRef.current?.contains(event.target)) return;
-      if (orderedDateButtonRef.current?.contains(event.target)) return;
+      if (orderedDateFieldRef.current?.contains(event.target)) return;
 
       if (pendingOrderedDateStart) {
         applyOrderedDateRange(pendingOrderedDateStart, pendingOrderedDateStart);
@@ -2148,6 +2290,7 @@ export default function OrdersPage() {
 
       setPendingOrderedDateStart("");
       setOrderedDateCalendarOpen(false);
+      setOrderedDateCalendarPosition(null);
     };
     const handleWindowLayoutChange = () => positionOrderedDateCalendar();
 
@@ -2184,6 +2327,7 @@ export default function OrdersPage() {
     setOptimisticOrderFilters(nextFilters);
     setPendingOrderedDateStart("");
     setOrderedDateCalendarOpen(false);
+    setOrderedDateCalendarPosition(null);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -3134,15 +3278,13 @@ export default function OrdersPage() {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
-            <div style={orderFilterDateFieldStyle}>
-              {!orderedDateFilterActive ? <span style={orderFilterLabelStyle}>Order date</span> : null}
+            <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
               <button
-                ref={orderedDateButtonRef}
                 aria-label="Filter orders by ordered date"
-                style={orderFilterDateButtonStyle}
+                style={orderedDateFilterActive ? orderFilterDateButtonStyle : orderFilterDatePlaceholderButtonStyle}
                 type="button"
                 onClick={handleOrderedDateCalendarOpen}
-              >{orderedDateLabel}</button>
+              >{orderedDateFilterActive ? orderedDateLabel : "Order date"}</button>
               {orderedDateFilterActive ? (
                 <button
                   type="button"
@@ -3154,7 +3296,7 @@ export default function OrdersPage() {
               ) : (
                 renderOrderFilterChevron()
               )}
-              {orderedDateCalendarOpen
+              {orderedDateCalendarOpen && orderedDateCalendarPosition
                 ? createPortal(
                     <div
                       ref={orderedDateCalendarRef}
@@ -3195,119 +3337,48 @@ export default function OrdersPage() {
                   )
                 : null}
             </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by delivery day"
-                style={orderFilters.deliveryWeekday ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.deliveryWeekday}
-                onChange={(event) => handleOrderFilterChange("deliveryWeekday", event.currentTarget.value)}
-              >
-                <option value="">Delivery day</option>
-                {ORDER_WEEKDAY_OPTIONS.map((weekday) => (
-                  <option key={weekday.value} value={weekday.value}>
-                    {weekday.label}
-                  </option>
-                ))}
-              </select>
-              {!orderFilters.deliveryWeekday ? (
-                <span style={orderFilterPlaceholderStyle}>Delivery day</span>
-              ) : null}
-              {orderFilters.deliveryWeekday ? (
-                <button
-                  type="button"
-                  aria-label="Clear delivery day filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("deliveryWeekday")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by service type"
-                style={orderFilters.serviceType ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.serviceType}
-                onChange={(event) => handleOrderFilterChange("serviceType", event.currentTarget.value)}
-              >
-                <option value="">Type</option>
-                <option value="DELIVERY">Delivery</option>
-                <option value="PICKUP">Pickup</option>
-              </select>
-              {!orderFilters.serviceType ? (
-                <span style={orderFilterPlaceholderStyle}>Type</span>
-              ) : null}
-              {orderFilters.serviceType ? (
-                <button
-                  type="button"
-                  aria-label="Clear service type filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("serviceType")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by delivery area"
-                style={orderFilters.deliveryArea ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.deliveryArea}
-                onChange={(event) => handleOrderFilterChange("deliveryArea", event.currentTarget.value)}
-              >
-                <option value="">Area</option>
-                {orderFilterOptions.deliveryAreas.map((deliveryArea) => (
-                  <option key={deliveryArea} value={deliveryArea}>
-                    {deliveryArea}
-                  </option>
-                ))}
-              </select>
-              {!orderFilters.deliveryArea ? (
-                <span style={orderFilterPlaceholderStyle}>Area</span>
-              ) : null}
-              {orderFilters.deliveryArea ? (
-                <button
-                  type="button"
-                  aria-label="Clear delivery area filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("deliveryArea")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
-            <div style={orderFilterSelectFieldStyle}>
-              <select
-                aria-label="Filter orders by state"
-                style={orderFilters.deliveryState ? orderFilterSelectStyle : orderFilterEmptySelectStyle}
-                value={orderFilters.deliveryState}
-                onChange={(event) => handleOrderFilterChange("deliveryState", event.currentTarget.value)}
-              >
-                <option value="">State</option>
-                {ORDER_DELIVERY_STATE_OPTIONS.map((stateOption) => (
-                  <option key={stateOption.value} value={stateOption.value}>
-                    {stateOption.label}
-                  </option>
-                ))}
-              </select>
-              {!orderFilters.deliveryState ? (
-                <span style={orderFilterPlaceholderStyle}>State</span>
-              ) : null}
-              {orderFilters.deliveryState ? (
-                <button
-                  type="button"
-                  aria-label="Clear state filter"
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("deliveryState")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-            </div>
+            <OrderFilterMenu
+              aria-label="Filter orders by delivery day"
+              clearLabel="Clear delivery day filter"
+              label="Delivery day"
+              options={ORDER_WEEKDAY_OPTIONS}
+              value={orderFilters.deliveryWeekday}
+              onChange={(filterValue) => handleOrderFilterChange("deliveryWeekday", filterValue)}
+              onClear={() => handleClearOrderFilter("deliveryWeekday")}
+            />
+            <OrderFilterMenu
+              aria-label="Filter orders by service type"
+              clearLabel="Clear service type filter"
+              label="Type"
+              options={[
+                { label: "Delivery", value: "DELIVERY" },
+                { label: "Pickup", value: "PICKUP" },
+              ]}
+              value={orderFilters.serviceType}
+              onChange={(filterValue) => handleOrderFilterChange("serviceType", filterValue)}
+              onClear={() => handleClearOrderFilter("serviceType")}
+            />
+            <OrderFilterMenu
+              aria-label="Filter orders by delivery area"
+              clearLabel="Clear delivery area filter"
+              label="Area"
+              options={orderFilterOptions.deliveryAreas.map((deliveryArea) => ({
+                label: deliveryArea,
+                value: deliveryArea,
+              }))}
+              value={orderFilters.deliveryArea}
+              onChange={(filterValue) => handleOrderFilterChange("deliveryArea", filterValue)}
+              onClear={() => handleClearOrderFilter("deliveryArea")}
+            />
+            <OrderFilterMenu
+              aria-label="Filter orders by state"
+              clearLabel="Clear state filter"
+              label="State"
+              options={ORDER_DELIVERY_STATE_OPTIONS}
+              value={orderFilters.deliveryState}
+              onChange={(filterValue) => handleOrderFilterChange("deliveryState", filterValue)}
+              onClear={() => handleClearOrderFilter("deliveryState")}
+            />
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
               <button
