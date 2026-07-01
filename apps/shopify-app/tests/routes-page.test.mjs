@@ -564,7 +564,11 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
-  assert.match(routeDetailSource, /const items = normalizeRouteStopItems\(stop\.items\)/);
+  assert.match(routeDetailSource, /function getRouteStopLineItems\(stop\) \{/);
+  assert.match(routeDetailSource, /stop\?\.rawPayload\?\.lineItems/);
+  assert.match(routeDetailSource, /Array\.isArray\(lineItems\?\.nodes\)/);
+  assert.match(routeDetailSource, /Array\.isArray\(lineItems\?\.edges\)/);
+  assert.match(routeDetailSource, /const items = normalizeRouteStopItems\(getRouteStopLineItems\(stop\)\)/);
   assert.match(routeDetailSource, /function getRouteTimelineStopPopoverPosition\(rect, popoverSize = \{\}\) \{/);
   assert.match(routeDetailSource, /ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET = 12/);
   assert.match(routeDetailSource, /anchorX - ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET/);

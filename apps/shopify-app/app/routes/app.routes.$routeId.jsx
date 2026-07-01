@@ -1027,6 +1027,20 @@ function formatRouteStopItemOptions(options) {
     .join(", ");
 }
 
+function getRouteStopLineItems(stop) {
+  const lineItems = stop?.items
+    ?? stop?.lineItems
+    ?? stop?.shopifyOrderSnapshot?.lineItems
+    ?? stop?.rawPayload?.lineItems
+    ?? stop?.order?.lineItems
+    ?? stop?.order?.shopifyOrderSnapshot?.lineItems
+    ?? stop?.order?.rawPayload?.lineItems;
+  if (Array.isArray(lineItems)) return lineItems;
+  if (Array.isArray(lineItems?.nodes)) return lineItems.nodes;
+  if (Array.isArray(lineItems?.edges)) return lineItems.edges.map((edge) => edge?.node).filter(Boolean);
+  return [];
+}
+
 function normalizeRouteStopItems(items) {
   if (!Array.isArray(items)) return [];
   return items
@@ -1068,7 +1082,7 @@ function buildRouteStops(stops) {
     const stopNumber = Number.isInteger(sequence) && sequence > 0
       ? sequence
       : index + 1;
-    const items = normalizeRouteStopItems(stop.items);
+    const items = normalizeRouteStopItems(getRouteStopLineItems(stop));
     const itemCount = numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems) ?? sumRouteStopItemQuantities(items);
 
     return {
