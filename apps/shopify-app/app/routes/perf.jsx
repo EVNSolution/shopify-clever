@@ -51,6 +51,10 @@ function getPerfLogPath(metric) {
   return join(PERF_LOG_DIR, fileName);
 }
 
+function shouldLogMetricToConsole(metric) {
+  return typeof metric?.name === "string" && metric.name.startsWith("routes.detail.map.");
+}
+
 async function parseMetricPayload(request) {
   const rawPayload = await request.text();
 
@@ -72,6 +76,10 @@ export async function action({ request }) {
       capturedAt: new Date().toISOString(),
       ...metric,
     };
+
+    if (shouldLogMetricToConsole(metric)) {
+      console.info(metric.name, entry);
+    }
 
     const perfLogPath = getPerfLogPath(metric);
     await mkdir(dirname(perfLogPath), { recursive: true });
