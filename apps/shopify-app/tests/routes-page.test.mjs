@@ -30,7 +30,6 @@ const routeDetailMapSource = readFileSync(join(root, "app/features/delivery/rout
 const routeHelpersSource = readFileSync(join(root, "app/features/delivery/route-helpers.js"), "utf8");
 const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8");
 const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
-const maplibreMissingImagesSource = readFileSync(join(root, "app/features/maps/maplibre-missing-images.js"), "utf8");
 
 test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
   assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
@@ -678,13 +677,6 @@ test("Route detail keeps marker coordinates validated and ordered for MapLibre",
   assert.match(routeDetailSource, /stop\?\.longitude \?\? stop\?\.coordinates\?\.longitude/);
   assert.match(routeDetailSource, /const coordinates = normalizeRouteStopCoordinates\(stop\)/);
   assert.match(routeDetailSource, /hasCoordinates: coordinates != null/);
-});
-
-
-test("MapLibre missing image fallback does not poison app-generated pin images", () => {
-  assert.match(maplibreMissingImagesSource, /APP_GENERATED_MAP_IMAGE_ID_PREFIXES = \["orders-map-pin", "route-detail-"\]/);
-  assert.match(maplibreMissingImagesSource, /imageId === prefix \|\| imageId\.startsWith\(prefix\)/);
-  assert.match(maplibreMissingImagesSource, /if \(isAppGeneratedMapImageId\(imageId\)\) return/);
 });
 
 test("Route detail places stop and departure markers through MapLibre source layers", () => {

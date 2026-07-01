@@ -1,9 +1,3 @@
-const APP_GENERATED_MAP_IMAGE_ID_PREFIXES = ["orders-map-pin", "route-detail-"];
-
-function isAppGeneratedMapImageId(imageId) {
-  return APP_GENERATED_MAP_IMAGE_ID_PREFIXES.some((prefix) => imageId === prefix || imageId.startsWith(prefix));
-}
-
 export function installMissingMapImageFallback(map) {
   if (!map || typeof map.on !== "function") return;
 
@@ -14,7 +8,6 @@ export function installMissingMapImageFallback(map) {
 
 function addTransparentFallbackImage(map, imageId) {
   if (typeof imageId !== "string" || imageId.trim() === "") return;
-  if (isAppGeneratedMapImageId(imageId)) return;
   if (typeof map.addImage !== "function") return;
   if (typeof map.hasImage === "function" && map.hasImage(imageId)) return;
 
