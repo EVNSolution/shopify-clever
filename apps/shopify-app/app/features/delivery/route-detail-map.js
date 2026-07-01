@@ -168,10 +168,11 @@ function removeRouteDetailRouteLine(map) {
 }
 
 function isRouteDetailMapStyleReady(map) {
-  if (typeof map?.isStyleLoaded !== "function") return true;
+  if (!map) return false;
+  if (typeof map.getStyle !== "function") return true;
 
   try {
-    return map.isStyleLoaded();
+    return Boolean(map.getStyle());
   } catch {
     return false;
   }

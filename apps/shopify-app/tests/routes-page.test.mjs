@@ -643,8 +643,9 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
 
 test("Route detail does not let route-line style readiness block marker rendering", () => {
   assert.match(routeDetailMapSource, /function isRouteDetailMapStyleReady\(map\) \{/);
-  assert.match(routeDetailMapSource, /typeof map\?\.isStyleLoaded !== "function"/);
-  assert.match(routeDetailMapSource, /return map\.isStyleLoaded\(\)/);
+  assert.match(routeDetailMapSource, /if \(!map\) return false/);
+  assert.match(routeDetailMapSource, /typeof map\.getStyle !== "function"/);
+  assert.match(routeDetailMapSource, /return Boolean\(map\.getStyle\(\)\)/);
   assert.match(routeDetailMapSource, /catch \{\s+return false;\s+\}/);
   assert.match(routeDetailMapSource, /return true/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
