@@ -758,7 +758,11 @@ test("Route detail renders every stop as a route-colored source-layer teardrop",
   assert.doesNotMatch(routeDetailSource, /ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM/);
   assert.doesNotMatch(routeDetailSource, /minzoom/);
   assert.match(routeDetailMapSource, /function getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\) \{/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_PIN_BORDER_WIDTH = 2/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_PIN_ICON_SIZE = 0\.46/);
   assert.match(routeDetailMapSource, /getRouteDetailStopPinImageId\(stop, stopColor\)/);
+  assert.match(routeDetailMapSource, /borderWidth: ROUTE_DETAIL_STOP_PIN_BORDER_WIDTH/);
+  assert.match(routeDetailMapSource, /iconSize: ROUTE_DETAIL_STOP_PIN_ICON_SIZE/);
   assert.match(routeDetailMapSource, /label: stop\.stop/);
   assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
   assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick\)/);

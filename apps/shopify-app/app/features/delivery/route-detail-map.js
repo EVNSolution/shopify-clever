@@ -15,6 +15,8 @@ const ROUTE_DETAIL_POLYGON_FILL_LAYER_ID = "route-detail-edit-polygon-fill";
 const ROUTE_DETAIL_POLYGON_LINE_LAYER_ID = "route-detail-edit-polygon-line";
 const ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID = "route-detail-edit-polygon-corners";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
+const ROUTE_DETAIL_STOP_PIN_BORDER_WIDTH = 2;
+const ROUTE_DETAIL_STOP_PIN_ICON_SIZE = 0.46;
 
 function emitRouteDetailMarkerDiagnostics(onDiagnostics, metric) {
   if (typeof onDiagnostics !== "function") return;
@@ -507,6 +509,7 @@ function ensureRouteDetailMarkerImages(map, departureLocation, routeStops, route
 
     const stopColor = getRouteStopDisplayColor(stop, routeColor, routeStopColorById);
     const imageData = createMapPinImageData(stopColor, {
+      borderWidth: ROUTE_DETAIL_STOP_PIN_BORDER_WIDTH,
       label: stop.stop,
       shadowBlur: stop.isPolygonSelected ? 8 : undefined,
       shadowColor: stop.isPolygonSelected ? "rgba(79, 124, 255, 0.95)" : undefined,
@@ -643,6 +646,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
     if (!map.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID)) {
       map.addLayer(createMapPinSymbolLayer({
         id: ROUTE_DETAIL_STOP_LAYER_ID,
+        iconSize: ROUTE_DETAIL_STOP_PIN_ICON_SIZE,
         source: ROUTE_DETAIL_MARKER_SOURCE_ID,
         iconImage: ["get", "pinImage"],
         sortKey: ["get", "sortKey"],
