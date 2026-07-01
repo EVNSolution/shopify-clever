@@ -596,6 +596,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /setIsRouteDraftExitDialogOpen\(true\)/);
   assert.doesNotMatch(routeDetailSource, /Discard unsaved route changes\?/);
   assert.match(routeDetailSource, /onClick=\{handleBackToRoutes\}/);
+  assert.match(routeDetailSource, /handleRouteTimelineStopClick[\s\S]*fitRouteStopAndSnappedPoint/);
   assert.match(routeDetailSource, /onClick=\{\(event\) => handleRouteTimelineStopClick\(event, stop\)\}/);
   assert.match(routeDetailSource, /onMouseEnter=\{\(\) => handleRouteTimelineStopMouseEnter\(stop\)\}/);
   assert.match(routeDetailSource, /onMouseLeave=\{\(\) => handleRouteTimelineStopMouseLeave\(stop\)\}/);

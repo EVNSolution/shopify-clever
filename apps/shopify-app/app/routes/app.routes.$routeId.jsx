@@ -1975,6 +1975,14 @@ export default function RouteDetailPage() {
 
   const handleRouteTimelineStopClick = (event, stop) => {
     event.stopPropagation();
+    if (isMapReady && mapRef.current && mapLibraryRef.current) {
+      fitRouteStopAndSnappedPoint(
+        mapRef.current,
+        mapLibraryRef.current,
+        stop,
+        findRouteStopPoint(stop, savedRouteStopPoints),
+      );
+    }
     setActiveRouteTimelineStopPopover((current) => current?.mode === "pinned" && current.stopId === stop.id
       ? null
       : getRouteTimelineStopPopoverState(stop.id, "pinned"));
