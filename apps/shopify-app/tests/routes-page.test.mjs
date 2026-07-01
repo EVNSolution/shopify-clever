@@ -304,8 +304,9 @@ test("Route detail loader reads server-saved drivers for route driver labels", (
 
 test("Route detail drive metrics are OSRM-only and use child DTO metrics", () => {
   assert.match(routeDetailServerSource, /routeMetrics: child\?\.routeMetrics \?\? routePlan\?\.routeMetrics \?\? null/);
-  assert.match(routeDetailSource, /driveTimeLabel: getRouteMetricLabel\(formatRouteDurationSeconds\(detail\?\.routeMetrics\?\.durationSeconds\)\)/);
-  assert.match(routeDetailSource, /totalDistanceLabel: getRouteMetricLabel\(formatRouteDistanceMeters\(detail\?\.routeMetrics\?\.distanceMeters\)\)/);
+  assert.match(routeDetailSource, /const childRouteMetrics = detail\?\.routeMetrics \?\? child\?\.routeMetrics \?\? childRoutePlan\?\.routeMetrics \?\? null/);
+  assert.match(routeDetailSource, /driveTimeLabel: getRouteMetricLabel\(formatRouteDurationSeconds\(childRouteMetrics\?\.durationSeconds\)\)/);
+  assert.match(routeDetailSource, /totalDistanceLabel: getRouteMetricLabel\(formatRouteDistanceMeters\(childRouteMetrics\?\.distanceMeters\)\)/);
   assert.match(routeDetailSource, /const routeTotalDriveTime = getRouteMetricLabel\(formatRouteDurationSeconds\(routeMetrics\?\.durationSeconds\)\)/);
   assert.match(routeDetailSource, /const routeTotalDistance = getRouteMetricLabel\(formatRouteDistanceMeters\(routeMetrics\?\.distanceMeters\)\)/);
   assert.doesNotMatch(routeDetailSource, /effectiveRoutePlan\?\.totalDriveTime/);
@@ -456,7 +457,7 @@ test("Route detail separates group and child titles", () => {
   assert.match(routeHelpersSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
   assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
   assert.match(routeDetailServerSource, /name: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
-  assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, detail\?\.routePlan \?\? child\?\.routePlan, index\)/);
+  assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, childRoutePlan, index\)/);
   assert.match(routeDetailServerSource, /routePlan: currentChildDetail\?\.routePlan \?\? routePlanData\.routePlan/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
 });
@@ -862,7 +863,12 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
   assert.match(routeDetailSource, /const defaultRouteCandidateTitle = isRouteGroupDetail \? "#1" : routeDetailTitle/);
-  assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, detail\?\.routePlan \?\? child\?\.routePlan, index\)/);
+  assert.match(routeDetailSource, /const childRoutePlan = detail\?\.routePlan \?\? child\?\.routePlan \?\? null/);
+  assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, childRoutePlan, index\)/);
+  assert.match(routeDetailSource, /startTimeLabel: getRouteStartTimeLabel\(getRouteStartDateTimeValue\(childRoutePlan\)\)/);
+  assert.match(routeDetailSource, /totalItems: getRouteTotalItems\(childRoutePlan, stops\)/);
+  assert.match(routeDetailSource, /routePlan\?\.itemSummary\?\.totalQuantity \?\? routePlan\?\.totalItems/);
+  assert.match(routeDetailSource, /routeRow\.startTimeLabel \?\? routeStartTimeLabel/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
