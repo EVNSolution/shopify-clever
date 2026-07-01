@@ -512,7 +512,7 @@ const routeTimelineStopPopoverStyle = {
   padding: "10px",
   position: "fixed",
   width: `min(${ROUTE_TIMELINE_STOP_POPOVER_WIDTH}px, calc(100vw - 16px))`,
-  zIndex: 2147483647,
+  zIndex: 100010,
 };
 
 const routeTimelineStopPopoverBackdropStyle = {
@@ -522,7 +522,7 @@ const routeTimelineStopPopoverBackdropStyle = {
   inset: 0,
   padding: 0,
   position: "fixed",
-  zIndex: 2147483646,
+  zIndex: 100009,
 };
 
 const routeTimelineStopPopoverHeaderStyle = {
@@ -742,7 +742,7 @@ const routeDraftBarStyle = {
   position: "fixed",
   top: "12px",
   transform: "translateX(-50%)",
-  zIndex: 9999,
+  zIndex: 2147483647,
 };
 
 const routeDraftBarTextStyle = {
@@ -1583,6 +1583,7 @@ export default function RouteDetailPage() {
   const routeTimelineStopRefs = useRef(new Map());
   const routeTimelineDragRef = useRef(null);
   const lastRouteActionIntentRef = useRef(null);
+  const navigateAfterRouteDraftSaveRef = useRef(false);
   const routePolygonCornerDragIndexRef = useRef(null);
   const routePolygonSkipNextMapClickRef = useRef(false);
   const routePolygonSkipNextMapClickTimerRef = useRef(null);
@@ -1602,6 +1603,7 @@ export default function RouteDetailPage() {
   const [activeRouteLineId, setActiveRouteLineId] = useState(null);
   const [routeLineEdits, setRouteLineEdits] = useState({});
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
+  const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [routeGroupClientError, setRouteGroupClientError] = useState(null);
   const [isRoutePolygonEditMode, setIsRoutePolygonEditMode] = useState(false);
   const [routeTimelineOrderByRouteId, setRouteTimelineOrderByRouteId] = useState({});
@@ -1881,6 +1883,15 @@ export default function RouteDetailPage() {
     routeTimelineStopRefs.current.delete(stopId);
   }, []);
 
+  const getRouteTimelineStopPopoverState = useCallback((stopId) => {
+    const node = routeTimelineStopRefs.current.get(stopId);
+    if (!node) return null;
+    return {
+      ...getRouteTimelineStopPopoverPosition(node.getBoundingClientRect()),
+      stopId,
+    };
+  }, []);
+
   const readRouteTimelineStopRects = useCallback(() => {
     return new Map([...routeTimelineStopRefs.current.entries()].map(([stopId, node]) => [
       stopId,
@@ -1939,14 +1950,32 @@ export default function RouteDetailPage() {
 
   const handleRouteTimelineStopClick = (event, stop) => {
     event.stopPropagation();
-    const rect = event.currentTarget.getBoundingClientRect();
     setActiveRouteTimelineStopPopover((current) => current?.stopId === stop.id
       ? null
-      : {
-        ...getRouteTimelineStopPopoverPosition(rect),
-        stopId: stop.id,
-      });
+      : getRouteTimelineStopPopoverState(stop.id));
   };
+
+  useEffect(() => {
+    if (!activeRouteTimelineStopPopover) return undefined;
+
+    let animationFrame = 0;
+    const syncRouteTimelineStopPopover = () => {
+      window.cancelAnimationFrame(animationFrame);
+      animationFrame = window.requestAnimationFrame(() => {
+        setActiveRouteTimelineStopPopover((current) => (
+          current ? getRouteTimelineStopPopoverState(current.stopId) : current
+        ));
+      });
+    };
+
+    window.addEventListener("scroll", syncRouteTimelineStopPopover, true);
+    window.addEventListener("resize", syncRouteTimelineStopPopover);
+    return () => {
+      window.cancelAnimationFrame(animationFrame);
+      window.removeEventListener("scroll", syncRouteTimelineStopPopover, true);
+      window.removeEventListener("resize", syncRouteTimelineStopPopover);
+    };
+  }, [activeRouteTimelineStopPopover?.stopId, getRouteTimelineStopPopoverState]);
 
   const handleRouteTimelineDragEnd = useCallback(() => {
     routeTimelineDragRef.current = null;
@@ -2083,8 +2112,25 @@ export default function RouteDetailPage() {
     });
   };
 
+  const handleSaveRouteDraftAndLeave = () => {
+    if (!canSaveRouteDraft) return;
+    navigateAfterRouteDraftSaveRef.current = true;
+    setIsRouteDraftExitDialogOpen(false);
+    handleSaveRouteDraft();
+  };
+
+  const handleDiscardRouteDraftAndLeave = () => {
+    navigateAfterRouteDraftSaveRef.current = false;
+    resetRouteDraftChanges();
+    setIsRouteDraftExitDialogOpen(false);
+    navigate(routesListHref);
+  };
+
   const handleBackToRoutes = () => {
-    if (hasRouteAllocationDraft && !window.confirm("Discard unsaved route changes?")) return;
+    if (hasRouteAllocationDraft) {
+      setIsRouteDraftExitDialogOpen(true);
+      return;
+    }
     navigate(routesListHref);
   };
 
@@ -2157,14 +2203,18 @@ export default function RouteDetailPage() {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "saveRouteDraft") {
       lastRouteActionIntentRef.current = null;
+      navigateAfterRouteDraftSaveRef.current = false;
       return;
     }
     lastRouteActionIntentRef.current = null;
+    const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
+    navigateAfterRouteDraftSaveRef.current = false;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) {
       resetRouteDraftChanges();
       revalidator.revalidate();
+      if (navigateAfterSave) navigate(routesListHref);
     }
-  }, [resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state]);
+  }, [navigate, resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state, routesListHref]);
 
   useEffect(() => {
     setRouteCandidateTitle(defaultRouteCandidateTitle);
@@ -2949,6 +2999,56 @@ export default function RouteDetailPage() {
             ) : null}
           </section>
         </section>
+
+        {isRouteDraftExitDialogOpen ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Cancel unsaved route dialog"
+              onClick={() => setIsRouteDraftExitDialogOpen(false)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div
+              aria-label="Unsaved route changes"
+              role="dialog"
+              style={routeLineEditorDialogStyle}
+            >
+              <h2 style={routeLineEditorTitleStyle}>아직 남은 변경이 있습니다</h2>
+              <div style={routeLineEditorLabelStyle}>저장하지 않은 route 변경이 남아 있습니다.</div>
+              <div style={routeLineEditorActionsStyle}>
+                <button
+                  disabled={!canSaveRouteDraft}
+                  onClick={handleSaveRouteDraftAndLeave}
+                  style={{
+                    ...routeLineEditorPrimaryButtonStyle,
+                    ...(!canSaveRouteDraft ? { opacity: 0.55 } : {}),
+                  }}
+                  type="button"
+                >
+                  Save
+                </button>
+                <button
+                  disabled={routeGroupActionBusy}
+                  onClick={handleDiscardRouteDraftAndLeave}
+                  style={{
+                    ...routeActionButtonStyle,
+                    ...(routeGroupActionBusy ? { opacity: 0.55 } : {}),
+                  }}
+                  type="button"
+                >
+                  Discard
+                </button>
+                <button
+                  onClick={() => setIsRouteDraftExitDialogOpen(false)}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {isRouteLineEditorOpen ? (
           <div style={routeLineEditorOverlayStyle}>
