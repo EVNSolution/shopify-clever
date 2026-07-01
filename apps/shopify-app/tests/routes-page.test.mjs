@@ -775,8 +775,8 @@ test("Route detail renders OSRM snapped stop points as route-colored circle laye
   assert.match(routeDetailMapSource, /function buildRouteDetailStopPointFeatureCollection\(routeStops, routeStopPoints, routeColor, routeStopColorById\) \{/);
   assert.match(routeDetailMapSource, /map\.addSource\(ROUTE_DETAIL_STOP_POINT_SOURCE_ID/);
   assert.match(routeDetailMapSource, /type: "circle"/);
-  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_RADIUS = 3/);
-  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH = 1/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_RADIUS = 2\.5/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH = 1\.5/);
   assert.match(routeDetailMapSource, /"circle-color": \["coalesce", \["get", "color"\], routeColor\]/);
   assert.match(routeDetailMapSource, /"circle-radius": ROUTE_DETAIL_STOP_POINT_RADIUS/);
   assert.match(routeDetailMapSource, /"circle-stroke-width": ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH/);

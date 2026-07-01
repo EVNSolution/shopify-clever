@@ -15,8 +15,8 @@ const ROUTE_DETAIL_POLYGON_FILL_LAYER_ID = "route-detail-edit-polygon-fill";
 const ROUTE_DETAIL_POLYGON_LINE_LAYER_ID = "route-detail-edit-polygon-line";
 const ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID = "route-detail-edit-polygon-corners";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
-const ROUTE_DETAIL_STOP_POINT_RADIUS = 3;
-const ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH = 1;
+const ROUTE_DETAIL_STOP_POINT_RADIUS = 2.5;
+const ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH = 1.5;
 
 function emitRouteDetailMarkerDiagnostics(onDiagnostics, metric) {
   if (typeof onDiagnostics !== "function") return;
