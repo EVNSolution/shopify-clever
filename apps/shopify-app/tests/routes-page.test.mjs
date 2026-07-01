@@ -414,7 +414,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /const savedRouteStopPoints = routeGeometryStopPoints/);
   assert.match(routeDetailSource, /const routePathColor = softenRouteColor\(routeLineColor\)/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
-  assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
+  assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan, routeGroup\)/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
   assert.doesNotMatch(routeDetailSource, /parseRouteDetailDraft/);
@@ -631,13 +631,13 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line"/);
   assert.match(routeDetailMapSource, /function syncRouteDetailRouteLine\(map, routeLines, routeColor = "#e11900"\) \{/);
   assert.match(routeDetailMapSource, /function softenRouteColor\(routeColor\) \{/);
-  assert.match(routeDetailMapSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
+  assert.match(routeDetailMapSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\), onDiagnostics = null\) \{/);
   assert.match(routeDetailMapSource, /type: "LineString"/);
   assert.match(routeDetailMapSource, /map\.addSource\(ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailMapSource, /map\.addLayer\(\{/);
   assert.match(routeDetailMapSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
-  assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
+  assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
   assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Start free trial/);
 });
 
@@ -650,7 +650,7 @@ test("Route detail does not let route-line style readiness block marker renderin
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
   assert.match(
     routeDetailSource,
-    /const didSyncMarkerLayers = syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\);/,
+    /const didSyncMarkerLayers = syncRouteDetailMapMarkerLayers\([\s\S]*?trigger: "initial-sync"[\s\S]*?\);/,
   );
   assert.match(routeDetailSource, /logRouteDetailPerformance\("routes\.detail\.map\.sync"/);
   assert.doesNotMatch(
@@ -778,13 +778,31 @@ test("Route detail renders OSRM snapped stop points as route-colored circle laye
   assert.doesNotMatch(routeDetailSource, /createRouteStopPointMarkerElement|const snappedStopPointMarker = new maplibregl\.Marker|function shouldRenderRouteStopPoints|zoomend/);
 });
 test("Route detail uses WebGL stop layers so marker projection follows the map", () => {
-  assert.match(routeDetailMapSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\)\) \{/);
+  assert.match(routeDetailMapSource, /function syncRouteDetailMapMarkerLayers\(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map\(\), onDiagnostics = null\) \{/);
   assert.match(routeDetailMapSource, /ROUTE_DETAIL_MARKER_SOURCE_ID/);
   assert.match(routeDetailSource, /ROUTE_DETAIL_STOP_LAYER_ID/);
   assert.match(routeDetailMapSource, /ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
   assert.match(routeDetailMapSource, /featureType: "routeStop"/);
   assert.match(routeDetailMapSource, /map\.addLayer\(createMapPinSymbolLayer\(\{/);
   assert.doesNotMatch(routeDetailSource, /function createRouteDetailMapMarkers|function createRouteStopMarkerElement|const stopMarker = new maplibregl\.Marker|const snappedStopPointMarker = new maplibregl\.Marker/);
+});
+test("Route detail emits browser marker diagnostics through the perf endpoint", () => {
+  assert.match(routeDetailSource, /const ROUTE_DETAIL_MAP_DIAGNOSTIC_ENDPOINT = "\/perf"/);
+  assert.match(routeDetailSource, /name: "routes\.detail\.map\.marker_diagnostics"/);
+  assert.match(routeDetailSource, /window\.fetch\?\.\(ROUTE_DETAIL_MAP_DIAGNOSTIC_ENDPOINT/);
+  assert.match(routeDetailSource, /markerDiagnosticCountRef\.current >= 12/);
+  assert.match(routeDetailSource, /routePlanId: textOrUndefined\(effectiveRoutePlan\?\.id\)/);
+  assert.match(routeDetailSource, /routeGroupId,/);
+  assert.match(routeDetailSource, /trigger: "initial-sync"/);
+  assert.match(routeDetailSource, /trigger: "styledata"/);
+  assert.match(routeDetailMapSource, /function emitRouteDetailMarkerDiagnostics\(onDiagnostics, metric\) \{/);
+  assert.match(routeDetailMapSource, /phase: "style-not-ready"/);
+  assert.match(routeDetailMapSource, /phase: "image-registration-failed"/);
+  assert.match(routeDetailMapSource, /phase: "synced"/);
+  assert.match(routeDetailMapSource, /phase: "exception"/);
+  assert.match(routeDetailMapSource, /markerFeatureCount: markerData\.features\.length/);
+  assert.match(routeDetailMapSource, /stopPointFeatureCount: stopPointData\.features\.length/);
+  assert.match(routeDetailMapSource, /hasDepartureLayer/);
 });
 test("Route detail map has compact refresh and automatic recovery controls", () => {
   assert.match(routeDetailSource, /const MAP_RECOVERY_DELAY_MS = 2500/);

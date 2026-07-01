@@ -66,6 +66,27 @@ function logRouteDetailPerformance(name, metric = {}) {
   });
 }
 
+const ROUTE_DETAIL_MAP_DIAGNOSTIC_ENDPOINT = "/perf";
+
+function logRouteDetailMapClientDiagnostic(metric = {}) {
+  if (typeof window === "undefined") return;
+
+  const payload = {
+    measuredAt: new Date().toISOString(),
+    name: "routes.detail.map.marker_diagnostics",
+    url: window.location.href,
+    ...metric,
+  };
+  console.info(payload.name, payload);
+
+  window.fetch?.(ROUTE_DETAIL_MAP_DIAGNOSTIC_ENDPOINT, {
+    body: JSON.stringify(payload),
+    headers: { "content-type": "application/json" },
+    keepalive: true,
+    method: "POST",
+  })?.catch?.(() => {});
+}
+
 const routesDetailPageStyle = {
   padding: "8px 12px 12px",
 };
@@ -1591,6 +1612,7 @@ export default function RouteDetailPage() {
   const mapLoadedRef = useRef(false);
   const mapRecoveryAttemptsRef = useRef(0);
   const mapRecoveryTimerRef = useRef(null);
+  const markerDiagnosticCountRef = useRef(0);
   const hasInitialRouteMapFitRef = useRef(false);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapStatus, setMapStatus] = useState("loading");
@@ -2313,6 +2335,17 @@ export default function RouteDetailPage() {
       didBindStopLayerHandlers = true;
     };
 
+    const emitMarkerDiagnostics = (metric) => {
+      if (markerDiagnosticCountRef.current >= 12) return;
+      markerDiagnosticCountRef.current += 1;
+      logRouteDetailMapClientDiagnostic({
+        routeGroupId,
+        routePlanId: textOrUndefined(effectiveRoutePlan?.id),
+        routeTitle: routeDetailTitle,
+        ...metric,
+      });
+    };
+
     const syncRouteDetailMap = () => {
       const syncStartedAt = performance.now();
       const routeLineStartedAt = performance.now();
@@ -2329,6 +2362,7 @@ export default function RouteDetailPage() {
         savedRouteStopPoints,
         routeLineColor,
         routeStopColorById,
+        (metric) => emitMarkerDiagnostics({ ...metric, trigger: "initial-sync" }),
       );
       bindStopLayerHandlers();
       const markerCreateMs = roundPerfDuration(performance.now() - markerStartedAt);
@@ -2347,7 +2381,7 @@ export default function RouteDetailPage() {
       if (!syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor)) {
         scheduleRouteLineRetry();
       }
-      if (syncRouteDetailMapMarkerLayers(map, departureLocation, routeMapStops, savedRouteStopPoints, routeLineColor, routeStopColorById)) {
+      if (syncRouteDetailMapMarkerLayers(map, departureLocation, routeMapStops, savedRouteStopPoints, routeLineColor, routeStopColorById, (metric) => emitMarkerDiagnostics({ ...metric, trigger: "styledata" }))) {
         bindStopLayerHandlers();
       }
     };
@@ -2373,6 +2407,9 @@ export default function RouteDetailPage() {
     routeLineColor,
     routeStopColorById,
     routePathColor,
+    routeGroupId,
+    routeDetailTitle,
+    effectiveRoutePlan?.id,
     timelineRouteRows,
     savedRouteGeometryRows,
     savedRouteStopPoints,

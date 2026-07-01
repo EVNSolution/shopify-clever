@@ -16,6 +16,41 @@ const ROUTE_DETAIL_POLYGON_LINE_LAYER_ID = "route-detail-edit-polygon-line";
 const ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID = "route-detail-edit-polygon-corners";
 const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 
+function emitRouteDetailMarkerDiagnostics(onDiagnostics, metric) {
+  if (typeof onDiagnostics !== "function") return;
+
+  onDiagnostics({
+    hasDepartureLayer: false,
+    hasMarkerLayer: false,
+    hasMarkerSource: false,
+    hasStopLayer: false,
+    hasStopPointLayer: false,
+    hasStopPointSource: false,
+    ...metric,
+  });
+}
+
+function getRouteDetailMarkerLayerState(map) {
+  const hasDepartureLayer = Boolean(map?.getLayer?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID));
+  const hasStopLayer = Boolean(map?.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID));
+
+  return {
+    hasDepartureLayer,
+    hasMarkerLayer: hasDepartureLayer || hasStopLayer,
+    hasMarkerSource: Boolean(map?.getSource?.(ROUTE_DETAIL_MARKER_SOURCE_ID)),
+    hasStopLayer,
+    hasStopPointLayer: Boolean(map?.getLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID)),
+    hasStopPointSource: Boolean(map?.getSource?.(ROUTE_DETAIL_STOP_POINT_SOURCE_ID)),
+  };
+}
+
+function getRouteDetailMarkerError(error) {
+  return {
+    errorMessage: error instanceof Error ? error.message : String(error),
+    errorName: error instanceof Error ? error.name : "unknown",
+  };
+}
+
 function isValidLatitude(latitude) {
   return typeof latitude === "number" && latitude >= -90 && latitude <= 90;
 }
@@ -551,68 +586,115 @@ function buildRouteDetailStopPointFeatureCollection(routeStops, routeStopPoints,
   };
 }
 
-function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map()) {
-  if (!isRouteDetailMapStyleReady(map)) return false;
-  if (!ensureRouteDetailMarkerImages(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById)) return false;
+function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById = new Map(), onDiagnostics = null) {
+  let markerData = null;
+  let stopPointData = null;
 
-  const markerData = buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById);
-  const existingMarkerSource = map.getSource?.(ROUTE_DETAIL_MARKER_SOURCE_ID);
-  if (existingMarkerSource?.setData) {
-    existingMarkerSource.setData(markerData);
-  } else {
-    map.addSource(ROUTE_DETAIL_MARKER_SOURCE_ID, {
-      type: "geojson",
-      data: markerData,
+  try {
+    markerData = buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById);
+    stopPointData = buildRouteDetailStopPointFeatureCollection(routeStops, routeStopPoints, routeColor, routeStopColorById);
+
+    if (!isRouteDetailMapStyleReady(map)) {
+      emitRouteDetailMarkerDiagnostics(onDiagnostics, {
+        ...getRouteDetailMarkerLayerState(map),
+        markerFeatureCount: markerData.features.length,
+        phase: "style-not-ready",
+        routeStopCount: routeStops.length,
+        stopPointCount: routeStopPoints.length,
+        stopPointFeatureCount: stopPointData.features.length,
+      });
+      return false;
+    }
+
+    if (!ensureRouteDetailMarkerImages(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById)) {
+      emitRouteDetailMarkerDiagnostics(onDiagnostics, {
+        ...getRouteDetailMarkerLayerState(map),
+        markerFeatureCount: markerData.features.length,
+        phase: "image-registration-failed",
+        routeStopCount: routeStops.length,
+        stopPointCount: routeStopPoints.length,
+        stopPointFeatureCount: stopPointData.features.length,
+      });
+      return false;
+    }
+
+    const existingMarkerSource = map.getSource?.(ROUTE_DETAIL_MARKER_SOURCE_ID);
+    if (existingMarkerSource?.setData) {
+      existingMarkerSource.setData(markerData);
+    } else {
+      map.addSource(ROUTE_DETAIL_MARKER_SOURCE_ID, {
+        type: "geojson",
+        data: markerData,
+      });
+    }
+
+    if (!map.getLayer?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID)) {
+      map.addLayer(createMapPinSymbolLayer({
+        id: ROUTE_DETAIL_DEPARTURE_LAYER_ID,
+        iconSize: 1,
+        source: ROUTE_DETAIL_MARKER_SOURCE_ID,
+        iconImage: ["get", "pinImage"],
+        sortKey: ["get", "sortKey"],
+      }));
+      map.setFilter?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID, ["==", ["get", "featureType"], "departure"]);
+    }
+
+    if (!map.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID)) {
+      map.addLayer(createMapPinSymbolLayer({
+        id: ROUTE_DETAIL_STOP_LAYER_ID,
+        source: ROUTE_DETAIL_MARKER_SOURCE_ID,
+        iconImage: ["get", "pinImage"],
+        sortKey: ["get", "sortKey"],
+      }));
+      map.setFilter?.(ROUTE_DETAIL_STOP_LAYER_ID, ["==", ["get", "featureType"], "routeStop"]);
+    }
+
+    const existingStopPointSource = map.getSource?.(ROUTE_DETAIL_STOP_POINT_SOURCE_ID);
+    if (existingStopPointSource?.setData) {
+      existingStopPointSource.setData(stopPointData);
+    } else {
+      map.addSource(ROUTE_DETAIL_STOP_POINT_SOURCE_ID, {
+        type: "geojson",
+        data: stopPointData,
+      });
+    }
+
+    if (!map.getLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID)) {
+      map.addLayer({
+        id: ROUTE_DETAIL_STOP_POINT_LAYER_ID,
+        type: "circle",
+        source: ROUTE_DETAIL_STOP_POINT_SOURCE_ID,
+        paint: {
+          "circle-color": ["coalesce", ["get", "color"], routeColor],
+          "circle-radius": 4,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+        },
+      });
+    }
+
+    emitRouteDetailMarkerDiagnostics(onDiagnostics, {
+      ...getRouteDetailMarkerLayerState(map),
+      markerFeatureCount: markerData.features.length,
+      phase: "synced",
+      routeStopCount: routeStops.length,
+      stopPointCount: routeStopPoints.length,
+      stopPointFeatureCount: stopPointData.features.length,
     });
-  }
 
-  if (!map.getLayer?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID)) {
-    map.addLayer(createMapPinSymbolLayer({
-      id: ROUTE_DETAIL_DEPARTURE_LAYER_ID,
-      iconSize: 1,
-      source: ROUTE_DETAIL_MARKER_SOURCE_ID,
-      iconImage: ["get", "pinImage"],
-      sortKey: ["get", "sortKey"],
-    }));
-    map.setFilter?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID, ["==", ["get", "featureType"], "departure"]);
-  }
-
-  if (!map.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID)) {
-    map.addLayer(createMapPinSymbolLayer({
-      id: ROUTE_DETAIL_STOP_LAYER_ID,
-      source: ROUTE_DETAIL_MARKER_SOURCE_ID,
-      iconImage: ["get", "pinImage"],
-      sortKey: ["get", "sortKey"],
-    }));
-    map.setFilter?.(ROUTE_DETAIL_STOP_LAYER_ID, ["==", ["get", "featureType"], "routeStop"]);
-  }
-
-  const stopPointData = buildRouteDetailStopPointFeatureCollection(routeStops, routeStopPoints, routeColor, routeStopColorById);
-  const existingStopPointSource = map.getSource?.(ROUTE_DETAIL_STOP_POINT_SOURCE_ID);
-  if (existingStopPointSource?.setData) {
-    existingStopPointSource.setData(stopPointData);
-  } else {
-    map.addSource(ROUTE_DETAIL_STOP_POINT_SOURCE_ID, {
-      type: "geojson",
-      data: stopPointData,
+    return true;
+  } catch (error) {
+    emitRouteDetailMarkerDiagnostics(onDiagnostics, {
+      ...getRouteDetailMarkerLayerState(map),
+      ...getRouteDetailMarkerError(error),
+      markerFeatureCount: markerData?.features?.length ?? null,
+      phase: "exception",
+      routeStopCount: routeStops.length,
+      stopPointCount: routeStopPoints.length,
+      stopPointFeatureCount: stopPointData?.features?.length ?? null,
     });
+    return false;
   }
-
-  if (!map.getLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID)) {
-    map.addLayer({
-      id: ROUTE_DETAIL_STOP_POINT_LAYER_ID,
-      type: "circle",
-      source: ROUTE_DETAIL_STOP_POINT_SOURCE_ID,
-      paint: {
-        "circle-color": ["coalesce", ["get", "color"], routeColor],
-        "circle-radius": 4,
-        "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 2,
-      },
-    });
-  }
-
-  return true;
 }
 
 function getRouteStopFromMapFeature(feature, routeStops) {

@@ -55,6 +55,9 @@ test("performance capture endpoint stores browser metrics outside app data", () 
   assert.match(perfRouteSource, /\.omx\/perf/);
   assert.match(perfRouteSource, /orders-navigation\.jsonl/);
   assert.match(perfRouteSource, /appendFile/);
+  assert.match(perfRouteSource, /function shouldLogMetricToConsole\(metric\) \{/);
+  assert.match(perfRouteSource, /metric\.name\.startsWith\("routes\.detail\.map\."\)/);
+  assert.match(perfRouteSource, /console\.info\(metric\.name, entry\)/);
   assert.doesNotMatch(perfRouteSource, /prisma|migrate|Session/);
 });
 
