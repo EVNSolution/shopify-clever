@@ -157,10 +157,7 @@ export function addMapPinImage(map, imageId, imageData) {
   if (!imageData || typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") {
     return false;
   }
-  if (map.hasImage(imageId)) {
-    if (typeof map.removeImage !== "function") return true;
-    map.removeImage(imageId);
-  }
+  if (map.hasImage(imageId)) return true;
 
   map.addImage(imageId, imageData, { pixelRatio: MAP_PIN_PIXEL_RATIO });
   return true;
