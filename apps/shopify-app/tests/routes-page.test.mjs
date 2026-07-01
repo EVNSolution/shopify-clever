@@ -296,6 +296,8 @@ test("Route detail loader reads server-saved drivers for route driver labels", (
   assert.match(routeDetailServerSource, /import \{ fetchDeliveryDrivers \} from "\.\/drivers\.server"/);
   assert.match(routeDetailSource, /drivers = \[\]/);
   assert.match(routeDetailServerSource, /fetchDeliveryDrivers\(request, \{\}\)/);
+  assert.match(routeDetailServerSource, /fetchDeliveryOrders\(request, \{\}, \{ cacheKey: shopifyShopCacheKey \}\)/);
+  assert.match(routeDetailServerSource, /attachDeliveryOrderItemsToStops\(routePlanData\.stops \?\? \[\], buildDeliveryOrderLookup\(orderData\.orders\)\)/);
   assert.match(routeDetailServerSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
   assert.match(routeDetailServerSource, /routeGroup: routeGroupData\.routeGroup/);
   assert.match(routeDetailServerSource, /driverData\.drivers/);
@@ -446,7 +448,7 @@ test("Route group detail keeps its own page instead of becoming a child route", 
 });
 
 test("Route detail loader reads the selected persisted route plan", () => {
-  assert.doesNotMatch(routeDetailServerSource, /fetchDeliveryOrders/);
+  assert.match(routeDetailServerSource, /import \{ fetchDeliveryOrders \} from "\.\/orders\.server"/);
   assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\/route-plans\.server"/);
   assert.doesNotMatch(routeDetailServerSource, /updateDeliveryRoutePlanStops/);
   assert.match(routeDetailServerSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/locations\/shopify-locations\.server"/);
@@ -461,10 +463,14 @@ test("Route detail loader reads the selected persisted route plan", () => {
   assert.match(routeDetailServerSource, /fetchDeliveryRoutePlanDetail\(request, routeId, \{\s+cacheKey: shopifyShopCacheKey,\s+\}\)/);
   assert.match(routeDetailServerSource, /fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/);
   assert.match(routeDetailServerSource, /fetchDeliveryDrivers\(request, \{\}\)/);
+  assert.match(routeDetailServerSource, /fetchDeliveryOrders\(request, \{\}, \{ cacheKey: shopifyShopCacheKey \}\)/);
+  assert.match(routeDetailServerSource, /attachDeliveryOrderItemsToStops\(routePlanData\.stops \?\? \[\], buildDeliveryOrderLookup\(orderData\.orders\)\)/);
   assert.match(routeDetailServerSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
   assert.match(routeDetailServerSource, /routeGroup: routeGroupData\.routeGroup/);
   assert.doesNotMatch(routeDetailServerSource, /sameDateOrderData/);
   assert.match(routeDetailServerSource, /currentDepartureLocation: departureLocationData\.departureLocation/);
+  assert.match(routeDetailServerSource, /function getDeliveryOrderLineItems\(order\) \{/);
+  assert.match(routeDetailServerSource, /stop\?\.orderName/);
   assert.doesNotMatch(routeDetailServerSource, /fetchShopifyOrders\(admin\)/);
   assert.doesNotMatch(routeDetailServerSource, /getRouteOrderIds/);
 });
@@ -564,6 +570,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
+  assert.match(routeDetailSource, /function getLineItemList\(lineItems\) \{/);
   assert.match(routeDetailSource, /function getRouteStopLineItems\(stop\) \{/);
   assert.match(routeDetailSource, /stop\?\.rawPayload\?\.lineItems/);
   assert.match(routeDetailSource, /Array\.isArray\(lineItems\?\.nodes\)/);

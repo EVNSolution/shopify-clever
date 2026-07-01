@@ -1,6 +1,7 @@
 import { redirect } from "react-router";
 
 import { fetchDeliveryDrivers } from "./drivers.server";
+import { fetchDeliveryOrders } from "./orders.server";
 import {
   deleteDeliveryRouteGroup,
   fetchDeliveryRouteGroupDetail,
@@ -48,6 +49,71 @@ export function cleanRoutePathParam(value) {
 function getRouteGroupIdHint(request) {
   const url = new URL(request.url);
   return cleanRoutePathParam(url.searchParams.get("routeGroupId") ?? url.searchParams.get("groupId"));
+}
+
+
+function attachDeliveryOrderItemsToRouteDetails(routeDetails, orders) {
+  const orderByKey = buildDeliveryOrderLookup(orders);
+  if (orderByKey.size === 0) return routeDetails;
+
+  return routeDetails.map((detail) => ({
+    ...detail,
+    stops: attachDeliveryOrderItemsToStops(detail.stops, orderByKey),
+  }));
+}
+
+function attachDeliveryOrderItemsToStops(stops, orderByKey) {
+  if (!Array.isArray(stops) || orderByKey.size === 0) return stops;
+
+  return stops.map((stop) => {
+    const order = getDeliveryOrderForStop(stop, orderByKey);
+    const lineItems = getDeliveryOrderLineItems(order);
+    return lineItems ? { ...stop, lineItems: stop?.lineItems ?? lineItems } : stop;
+  });
+}
+
+function buildDeliveryOrderLookup(orders) {
+  const orderByKey = new Map();
+  for (const order of orders ?? []) {
+    addOrderLookupKey(orderByKey, order?.id, order);
+    addOrderLookupKey(orderByKey, order?.orderId, order);
+    addOrderLookupKey(orderByKey, order?.name, order);
+    addOrderLookupKey(orderByKey, order?.shopifyOrderGid, order);
+    addOrderLookupKey(orderByKey, order?.shopifyOrderLegacyId, order);
+    addOrderLookupKey(orderByKey, order?.legacyResourceId, order);
+  }
+  return orderByKey;
+}
+
+function addOrderLookupKey(orderByKey, value, order) {
+  const key = textOrUndefined(value);
+  if (!key) return;
+  orderByKey.set(key, order);
+  if (key.startsWith("#")) orderByKey.set(key.slice(1), order);
+}
+
+function getDeliveryOrderForStop(stop, orderByKey) {
+  const keys = [
+    stop?.orderId,
+    stop?.orderName,
+    stop?.sourceOrderId,
+    stop?.shopifyOrderGid,
+    stop?.shopifyOrderLegacyId,
+    stop?.legacyResourceId,
+  ];
+  for (const key of keys) {
+    const order = orderByKey.get(textOrUndefined(key)) ?? orderByKey.get(textOrUndefined(key)?.replace(/^#/, ""));
+    if (order) return order;
+  }
+  return null;
+}
+
+function getDeliveryOrderLineItems(order) {
+  const lineItems = order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
+  if (Array.isArray(lineItems)) return lineItems;
+  if (Array.isArray(lineItems?.nodes)) return lineItems.nodes;
+  if (Array.isArray(lineItems?.edges)) return lineItems.edges.map((edge) => edge?.node).filter(Boolean);
+  return null;
 }
 
 function getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stops) {
@@ -139,13 +205,17 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
 
   if (routeGroupIdHint) {
     const primaryDataStartedAt = getRouteDetailPerfNow();
-    const [routeGroupData, departureLocationData, driverData] = await Promise.all([
+    const [routeGroupData, departureLocationData, driverData, orderData] = await Promise.all([
       fetchDeliveryRouteGroupDetail(request, routeGroupIdHint, { cacheKey: shopifyShopCacheKey }),
       fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
       fetchDeliveryDrivers(request, {}),
+      fetchDeliveryOrders(request, {}, { cacheKey: shopifyShopCacheKey }),
     ]);
     const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
-    const routeChildDetails = buildRouteGroupChildDetails(routeGroupData.routeGroup);
+    const routeChildDetails = attachDeliveryOrderItemsToRouteDetails(
+      buildRouteGroupChildDetails(routeGroupData.routeGroup),
+      orderData.orders,
+    );
     const currentChildDetail = routeChildDetails.find((detail) => textOrUndefined(detail.routePlanId) === routeId) ?? null;
 
     logRouteDetailPerformance("routes.detail.loader", {
@@ -178,12 +248,13 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
   }
 
   const primaryDataStartedAt = getRouteDetailPerfNow();
-  const [routePlanData, departureLocationData, driverData] = await Promise.all([
+  const [routePlanData, departureLocationData, driverData, orderData] = await Promise.all([
     fetchDeliveryRoutePlanDetail(request, routeId, {
       cacheKey: shopifyShopCacheKey,
     }),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
     fetchDeliveryDrivers(request, {}),
+    fetchDeliveryOrders(request, {}, { cacheKey: shopifyShopCacheKey }),
   ]);
   const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
   const routeGroupId = textOrUndefined(routePlanData.routePlan?.routeGroupingChild?.groupingId);
@@ -196,10 +267,13 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     routePlan: routePlanData.routePlan,
     routePlanId: routePlanData.routePlan?.id ?? routeId,
     routeStopPoints: routePlanData.routeStopPoints ?? [],
-    stops: routePlanData.stops ?? [],
+    stops: attachDeliveryOrderItemsToStops(routePlanData.stops ?? [], buildDeliveryOrderLookup(orderData.orders)),
   };
   const routeChildDetails = routeGroupData.routeGroup
-    ? mergeRouteGroupChildDetail(buildRouteGroupChildDetails(routeGroupData.routeGroup), currentRouteDetail)
+    ? mergeRouteGroupChildDetail(
+        attachDeliveryOrderItemsToRouteDetails(buildRouteGroupChildDetails(routeGroupData.routeGroup), orderData.orders),
+        currentRouteDetail,
+      )
     : [currentRouteDetail];
   const currentChildDetail = routeChildDetails.find((detail) => textOrUndefined(detail.routePlanId) === routeId) ?? null;
 
@@ -221,6 +295,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
   return {
     ...routePlanData,
     routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
+    stops: currentChildDetail?.stops ?? routePlanData.stops ?? [],
     errors: [
       ...(routePlanData.errors ?? []),
       ...(routeGroupData.errors ?? []),

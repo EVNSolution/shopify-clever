@@ -1027,17 +1027,27 @@ function formatRouteStopItemOptions(options) {
     .join(", ");
 }
 
-function getRouteStopLineItems(stop) {
-  const lineItems = stop?.items
-    ?? stop?.lineItems
-    ?? stop?.shopifyOrderSnapshot?.lineItems
-    ?? stop?.rawPayload?.lineItems
-    ?? stop?.order?.lineItems
-    ?? stop?.order?.shopifyOrderSnapshot?.lineItems
-    ?? stop?.order?.rawPayload?.lineItems;
+function getLineItemList(lineItems) {
   if (Array.isArray(lineItems)) return lineItems;
   if (Array.isArray(lineItems?.nodes)) return lineItems.nodes;
   if (Array.isArray(lineItems?.edges)) return lineItems.edges.map((edge) => edge?.node).filter(Boolean);
+  return [];
+}
+
+function getRouteStopLineItems(stop) {
+  const candidates = [
+    stop?.items,
+    stop?.lineItems,
+    stop?.shopifyOrderSnapshot?.lineItems,
+    stop?.rawPayload?.lineItems,
+    stop?.order?.lineItems,
+    stop?.order?.shopifyOrderSnapshot?.lineItems,
+    stop?.order?.rawPayload?.lineItems,
+  ];
+  for (const candidate of candidates) {
+    const items = getLineItemList(candidate);
+    if (items.length > 0) return items;
+  }
   return [];
 }
 
