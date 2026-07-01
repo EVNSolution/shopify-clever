@@ -394,11 +394,19 @@ function sumOptionalNumbers(values) {
   return hasValue ? total : null;
 }
 
-function formatDriveTime(totalMinutes) {
-  const minutes = numberOrNull(totalMinutes);
-  if (minutes == null) return "-";
+function readRouteMetrics(routePlan) {
+  const routeMetrics = routePlan?.routeMetrics ?? null;
+  return {
+    distanceMeters: firstNumber(routeMetrics?.distanceMeters),
+    durationSeconds: firstNumber(routeMetrics?.durationSeconds),
+  };
+}
 
-  const roundedMinutes = Math.max(Math.round(minutes), 0);
+function formatRouteDurationSeconds(totalSeconds) {
+  const seconds = numberOrNull(totalSeconds);
+  if (seconds == null) return "-";
+
+  const roundedMinutes = Math.max(Math.round(seconds / 60), 0);
   const hours = Math.floor(roundedMinutes / 60);
   const remainingMinutes = roundedMinutes % 60;
 
@@ -407,12 +415,13 @@ function formatDriveTime(totalMinutes) {
   return `${hours} hr ${remainingMinutes} min`;
 }
 
-function formatDistanceMiles(totalDistanceMiles) {
-  const distanceMiles = numberOrNull(totalDistanceMiles);
-  if (distanceMiles == null) return "-";
+function formatRouteDistanceMeters(totalDistanceMeters) {
+  const distanceMeters = numberOrNull(totalDistanceMeters);
+  if (distanceMeters == null) return "-";
 
-  const roundedDistanceMiles = Math.round(distanceMiles * 10) / 10;
-  return `${Number.isInteger(roundedDistanceMiles) ? roundedDistanceMiles : roundedDistanceMiles.toFixed(1)}mi`;
+  const kilometers = distanceMeters / 1000;
+  const roundedKilometers = Math.round(kilometers * 10) / 10;
+  return `${Number.isInteger(roundedKilometers) ? roundedKilometers : roundedKilometers.toFixed(1)} km`;
 }
 
 function formatRouteTableDate(routePlan) {
@@ -441,37 +450,12 @@ function buildRouteRows(routePlans, routeGroups = []) {
   const standaloneRoutePlans = Array.isArray(routePlans)
     ? routePlans.filter((routePlan) => !childRoutePlanIds.has(routePlan.id))
     : [];
-  const routeGroupRows = safeRouteGroups.map((routeGroup) => {
-    const childCount = getVisibleRouteGroupChildren(routeGroup).length;
-    return {
-      id: routeGroup.id,
-      rowKey: `routeGroup:${routeGroup.id}`,
-      routeGroupId: routeGroup.id,
-      href: routeGroupPath(routeGroup.id),
-      isClickable: true,
-      isDeletable: true,
-      isRouteGroup: true,
-      deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
-      route: routeGroup.name ?? routeGroup.id,
-      status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
-      orders: getRouteGroupTotalOrders(routeGroup),
-      coordinates: "-",
-      delivered: 0,
-      attempted: 0,
-      missingCoordinates: 0,
-      date: formatRouteGroupDate(routeGroup),
-      deliveryArea: "-",
-      start: "Parent group",
-      end: childCount > 0 ? `${childCount} child routes` : "No split",
-      driver: "-",
-      driverId: null,
-    };
-  });
   const routeChildRows = safeRouteGroups.flatMap((routeGroup) =>
     getVisibleRouteGroupChildren(routeGroup)
       .map((child, index) => {
         const routePlanId = getRouteGroupChildRoutePlanId(child);
         const routePlan = child.routePlan ?? {};
+        const routeMetrics = readRouteMetrics({ ...routePlan, routeMetrics: child.routeMetrics ?? routePlan.routeMetrics });
         const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
         const missingCoordinates = routePlan.missingCoordinates ?? 0;
         const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
@@ -493,27 +477,51 @@ function buildRouteRows(routePlans, routeGroups = []) {
           missingCoordinates,
           date: formatRouteTableDate(routePlan),
           deliveryArea: formatRouteValues(routePlan.deliveryAreas),
-          start: "Shopify departure location",
-          end: "Loop back to start",
           driver: formatRouteDriver({ displayName: child.driverName }),
           driverId: child.driverId ?? routePlan.driverId ?? null,
-          driveTimeMinutes: firstNumber(
-            routePlan.driveTimeMinutes,
-            routePlan.totalDriveTimeMinutes,
-            routePlan.durationMinutes,
-            routePlan.metrics?.driveTimeMinutes,
-            routePlan.metrics?.totalDriveTimeMinutes,
-          ),
-          distanceMiles: firstNumber(
-            routePlan.distanceMiles,
-            routePlan.totalDistanceMiles,
-            routePlan.distanceMi,
-            routePlan.metrics?.distanceMiles,
-            routePlan.metrics?.totalDistanceMiles,
-          ),
+          driveTimeSeconds: routeMetrics.durationSeconds,
+          distanceMeters: routeMetrics.distanceMeters,
         };
       }),
   );
+  const routeGroupMetricsById = new Map(
+    safeRouteGroups.map((routeGroup) => {
+      const childRows = routeChildRows.filter((routeRow) => routeRow.parentRouteGroupId === routeGroup.id);
+      return [
+        routeGroup.id,
+        {
+          distanceMeters: sumOptionalNumbers(childRows.map((routeRow) => routeRow.distanceMeters)),
+          durationSeconds: sumOptionalNumbers(childRows.map((routeRow) => routeRow.driveTimeSeconds)),
+        },
+      ];
+    }),
+  );
+  const routeGroupRows = safeRouteGroups.map((routeGroup) => {
+    const routeMetrics = routeGroupMetricsById.get(routeGroup.id) ?? {};
+    return {
+      id: routeGroup.id,
+      rowKey: `routeGroup:${routeGroup.id}`,
+      routeGroupId: routeGroup.id,
+      href: routeGroupPath(routeGroup.id),
+      isClickable: true,
+      isDeletable: true,
+      isRouteGroup: true,
+      deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
+      route: routeGroup.name ?? routeGroup.id,
+      status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
+      orders: getRouteGroupTotalOrders(routeGroup),
+      coordinates: "-",
+      delivered: 0,
+      attempted: 0,
+      missingCoordinates: 0,
+      date: formatRouteGroupDate(routeGroup),
+      deliveryArea: "-",
+      driver: "-",
+      driverId: null,
+      driveTimeSeconds: routeMetrics.durationSeconds ?? null,
+      distanceMeters: routeMetrics.distanceMeters ?? null,
+    };
+  });
 
   if (standaloneRoutePlans.length === 0 && routeGroupRows.length === 0 && routeChildRows.length === 0) {
     return [
@@ -526,15 +534,16 @@ function buildRouteRows(routePlans, routeGroups = []) {
         orders: 0,
         date: "-",
         deliveryArea: "-",
-        start: "Shopify departure location",
-        end: "Loop back to start",
         driver: "-",
         driverId: null,
+        driveTimeSeconds: null,
+        distanceMeters: null,
       },
     ];
   }
 
   const routePlanRows = standaloneRoutePlans.map((routePlan) => {
+    const routeMetrics = readRouteMetrics(routePlan);
     const stopsCount = routePlan.stopsCount ?? 0;
     const missingCoordinates = routePlan.missingCoordinates ?? 0;
     const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
@@ -567,24 +576,10 @@ function buildRouteRows(routePlans, routeGroups = []) {
       missingCoordinates,
       date: formatRouteTableDate(routePlan),
       deliveryArea: formatRouteValues(routePlan.deliveryAreas),
-      start: "Shopify departure location",
-      end: "Loop back to start",
       driver: formatRouteDriver(routePlan.driver),
       driverId: routePlan.driverId ?? routePlan.driver?.id ?? null,
-      driveTimeMinutes: firstNumber(
-        routePlan.driveTimeMinutes,
-        routePlan.totalDriveTimeMinutes,
-        routePlan.durationMinutes,
-        routePlan.metrics?.driveTimeMinutes,
-        routePlan.metrics?.totalDriveTimeMinutes,
-      ),
-      distanceMiles: firstNumber(
-        routePlan.distanceMiles,
-        routePlan.totalDistanceMiles,
-        routePlan.distanceMi,
-        routePlan.metrics?.distanceMiles,
-        routePlan.metrics?.totalDistanceMiles,
-      ),
+      driveTimeSeconds: routeMetrics.durationSeconds,
+      distanceMeters: routeMetrics.distanceMeters,
     };
   });
   return [...routeGroupRows, ...routeChildRows, ...routePlanRows];
@@ -599,19 +594,20 @@ function formatRouteGroupDate(routeGroup) {
 
 function buildRoutesSummary(routeRows) {
   const activeRouteRows = routeRows.filter((route) => route.isClickable);
+  const summaryRouteRows = activeRouteRows.filter((route) => !route.isRouteGroup);
 
   return [
-    { label: "Routes", value: String(activeRouteRows.length) },
-    { label: "Stops", value: String(sumNumbers(activeRouteRows.map((route) => route.orders))) },
-    { label: "Delivered", value: String(sumNumbers(activeRouteRows.map((route) => route.delivered))) },
-    { label: "Attempted", value: String(sumNumbers(activeRouteRows.map((route) => route.attempted))) },
+    { label: "Routes", value: String(summaryRouteRows.length) },
+    { label: "Stops", value: String(sumNumbers(summaryRouteRows.map((route) => route.orders))) },
+    { label: "Delivered", value: String(sumNumbers(summaryRouteRows.map((route) => route.delivered))) },
+    { label: "Attempted", value: String(sumNumbers(summaryRouteRows.map((route) => route.attempted))) },
     {
       label: "Drive time",
-      value: formatDriveTime(sumOptionalNumbers(activeRouteRows.map((route) => route.driveTimeMinutes))),
+      value: formatRouteDurationSeconds(sumOptionalNumbers(summaryRouteRows.map((route) => route.driveTimeSeconds))),
     },
     {
       label: "Distance",
-      value: formatDistanceMiles(sumOptionalNumbers(activeRouteRows.map((route) => route.distanceMiles))),
+      value: formatRouteDistanceMeters(sumOptionalNumbers(summaryRouteRows.map((route) => route.distanceMeters))),
     },
   ];
 }
@@ -841,8 +837,8 @@ export default function RoutesPage() {
                   <th style={routeNumberHeaderCellStyle}>Orders</th>
                   <th style={routeTableHeaderCellStyle}>Area</th>
                   <th style={routeTableHeaderCellStyle}>Driver</th>
-                  <th style={routeTableHeaderCellStyle}>Start</th>
-                  <th style={routeTableHeaderCellStyle}>End</th>
+                  <th style={routeTableHeaderCellStyle}>Total drive time</th>
+                  <th style={routeTableHeaderCellStyle}>Total distance</th>
                 </tr>
               </thead>
               <tbody>
@@ -875,8 +871,8 @@ export default function RoutesPage() {
                     <td style={routeNumberCellStyle}>{route.orders}</td>
                     <td style={routeTableCellStyle}>{route.deliveryArea}</td>
                     <td style={routeTableCellStyle}>{route.driver}</td>
-                    <td style={routeTableCellStyle}>{route.start}</td>
-                    <td style={routeTableCellStyle}>{route.end}</td>
+                    <td style={routeTableCellStyle}>{formatRouteDurationSeconds(route.driveTimeSeconds)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteDistanceMeters(route.distanceMeters)}</td>
                   </tr>
                 ))}
               </tbody>
