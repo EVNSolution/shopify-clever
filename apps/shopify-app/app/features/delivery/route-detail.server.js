@@ -2,12 +2,14 @@ import { redirect } from "react-router";
 
 import { fetchDeliveryDrivers } from "./drivers.server";
 import {
+  deleteDeliveryRouteGroup,
   fetchDeliveryRouteGroupDetail,
   previewDeliveryRouteGroupOptimization,
   saveDeliveryRouteGroupDraft,
 } from "./route-groups.server";
 import {
   assignDeliveryRoutePlanDriver,
+  deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
 } from "./route-plans.server";
 import {
@@ -235,15 +237,23 @@ export const routeDetailAction = async ({ params, request }) => {
   await authenticate.admin(request);
   const formData = await request.formData();
   const routeId = cleanRoutePathParam(params.routeId);
+  const routeGroupIdFromParams = cleanRoutePathParam(params.routeGroupId);
   const intent = formData.get("_intent");
   const routeGroupId = textOrUndefined(formData.get("routeGroupId"));
   const shopifySessionToken = formData.get("shopifySessionToken");
 
   logRouteDetailPerformance("routes.detail.action", {
     intent,
-    routeGroupId,
+    routeGroupId: routeGroupIdFromParams ?? routeGroupId,
     routeId,
   });
+
+  if (intent === "deleteRoute") {
+    if (routeGroupIdFromParams && !routeId) {
+      return deleteDeliveryRouteGroup(request, routeGroupIdFromParams, { sessionToken: shopifySessionToken });
+    }
+    return deleteDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
+  }
 
   if (intent === "saveRouteDriver") {
     const driverId = textOrUndefined(formData.get("driverId")) ?? null;

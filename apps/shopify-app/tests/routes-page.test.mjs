@@ -370,6 +370,31 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.doesNotMatch(routeDetailSource, /submitRouteGroupAction\("assignPolygonToRoute"/);
 });
 
+test("Route detail exposes inventory and delete header actions", () => {
+  assert.match(routeDetailSource, /function getLinkedInventoryId\(routePlan, routeGroup, routeGroupChild, isRouteGroupDetail\) \{/);
+  assert.match(routeDetailSource, /ponytail: linked inventory field contract is pending/);
+  assert.match(routeDetailSource, /const inventoryDetailHref = linkedInventoryId \? `\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(linkedInventoryId\)\}` : null/);
+  assert.match(routeDetailSource, /disabled=\{!inventoryDetailHref\}/);
+  assert.match(routeDetailSource, /View inventory/);
+  assert.match(routeDetailSource, /if \(inventoryDetailHref\) navigate\(inventoryDetailHref\)/);
+  assert.match(routeDetailSource, /window\.confirm\(`Delete \$\{routeDetailTitle\}\?`\)/);
+  assert.match(routeDetailSource, /formData\.set\("_intent", "deleteRoute"\)/);
+  assert.match(routeDetailSource, /lastRouteActionIntentRef\.current !== "deleteRoute"/);
+  assert.match(routeDetailSource, /navigate\(ROUTES_ROOT_PATH\)/);
+  assert.match(routeDetailSource, /Delete route/);
+});
+
+test("Route detail delete action uses params and existing delete helpers", () => {
+  assert.match(routeDetailServerSource, /deleteDeliveryRouteGroup/);
+  assert.match(routeDetailServerSource, /deleteDeliveryRoutePlan/);
+  assert.match(routeDetailServerSource, /const routeGroupIdFromParams = cleanRoutePathParam\(params\.routeGroupId\)/);
+  assert.match(routeDetailServerSource, /intent === "deleteRoute"/);
+  assert.match(routeDetailServerSource, /if \(routeGroupIdFromParams && !routeId\)/);
+  assert.match(routeDetailServerSource, /deleteDeliveryRouteGroup\(request, routeGroupIdFromParams, \{ sessionToken: shopifySessionToken \}\)/);
+  assert.match(routeDetailServerSource, /deleteDeliveryRoutePlan\(request, routeId, \{ sessionToken: shopifySessionToken \}\)/);
+  assert.doesNotMatch(routeDetailServerSource, /formData\.get\("(target|routeType)"\)/);
+});
+
 test("Routes list displays assigned route drivers from the server response", () => {
   assert.match(routesPageSource, /function formatRouteDriver\(driver\) \{/);
   assert.match(routesPageSource, /driverId: routePlan\.driverId \?\? routePlan\.driver\?\.id \?\? null/);
@@ -601,7 +626,7 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailMapSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\)/);
-  assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Inventory|Start free trial/);
+  assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Start free trial/);
 });
 
 test("Route detail does not let route-line style readiness block marker rendering", () => {
