@@ -629,6 +629,8 @@ test("caches Shopify order reads by shop cache key without sharing mutable resul
     const second = await fetchShopifyOrders(admin, { cacheKey: "shop-a" });
 
     assert.equal(calls, 1);
+    assert.equal(first.cacheStatus, "miss");
+    assert.equal(second.cacheStatus, "hit");
     assert.equal(second.orders[0].name, "#1001");
   } finally {
     if (previousTtl === undefined) {
@@ -669,6 +671,8 @@ test("does not cache Shopify order read errors", async () => {
     const second = await fetchShopifyOrders(admin, { cacheKey: "shop-a" });
 
     assert.equal(calls, 2);
+    assert.equal(first.cacheStatus, "miss");
+    assert.equal(second.cacheStatus, "miss");
     assert.equal(first.errors[0].code, ORDER_SCOPE_ACCESS_ERROR_CODE);
     assert.deepEqual(second.errors, []);
   } finally {

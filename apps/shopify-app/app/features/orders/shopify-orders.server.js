@@ -101,7 +101,7 @@ export async function fetchShopifyOrders(admin, options = {}) {
   const cacheTtlMs = getShopifyOrdersCacheTtlMs();
 
   if (!cacheKey || cacheTtlMs <= 0) {
-    return loadShopifyOrders(admin);
+    return withShopifyOrdersCacheStatus(await loadShopifyOrders(admin), "disabled");
   }
 
   const now = Date.now();
@@ -126,7 +126,7 @@ export async function fetchShopifyOrders(admin, options = {}) {
   };
   shopifyOrdersCache.set(cacheKey, cacheEntry);
 
-  return cloneShopifyOrdersResult(await cacheEntry.promise);
+  return withShopifyOrdersCacheStatus(await cacheEntry.promise, "miss");
 }
 
 async function loadShopifyOrders(admin) {
@@ -196,7 +196,9 @@ function readShopifyOrdersCache(cacheKey, now) {
     return null;
   }
 
-  return cached.promise.then(cloneShopifyOrdersResult);
+  return cached.promise.then((result) =>
+    withShopifyOrdersCacheStatus(result, "hit"),
+  );
 }
 
 function getShopifyOrdersCacheTtlMs() {
@@ -221,6 +223,13 @@ function cloneShopifyOrdersResult(result) {
   }
 
   return JSON.parse(JSON.stringify(result));
+}
+
+function withShopifyOrdersCacheStatus(result, cacheStatus) {
+  return {
+    ...cloneShopifyOrdersResult(result),
+    cacheStatus,
+  };
 }
 
 export function mapShopifyOrdersResponse(payload) {

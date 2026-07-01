@@ -36,12 +36,15 @@ test("performance evaluator captures real browser Orders navigation timings", ()
   assert.match(perfScriptSource, /orders\.maplibre\.init/);
   assert.match(perfScriptSource, /orders\.maplibre\.remove/);
   assert.match(perfScriptSource, /orders\.maplibre\.source_update/);
+  assert.match(perfScriptSource, /orders\.maplibre\.source_retry/);
+  assert.match(perfScriptSource, /shopifyOrdersCacheStatus/);
   assert.match(perfScriptSource, /serverOrdersMs/);
   assert.match(perfScriptSource, /ordersLoaderCold/);
   assert.match(perfScriptSource, /ordersLoaderWarm/);
   assert.match(perfScriptSource, /mapLibreCold/);
   assert.match(perfScriptSource, /mapLibreWarm/);
   assert.match(perfScriptSource, /ordersSourceUpdate/);
+  assert.match(perfScriptSource, /ordersSourceRetry/);
 });
 
 test("performance capture endpoint stores browser metrics outside app data", () => {
@@ -82,6 +85,7 @@ test("Orders page emits loader, iframe, document, and MapLibre timing metrics", 
   assert.match(ordersPageSource, /name: "orders\.maplibre\.remove"/);
   assert.match(ordersPageSource, /name: "orders\.maplibre\.source_update"/);
   assert.match(ordersPageSource, /activeOrdersView/);
+  assert.match(ordersPageSource, /shopifyOrdersCacheStatus/);
   assert.match(ordersPageSource, /shopifyOrdersMs/);
   assert.match(ordersPageSource, /departureLocationMs/);
   assert.match(ordersPageSource, /inventoriesMs/);

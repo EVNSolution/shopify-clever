@@ -617,6 +617,7 @@ export const loader = async ({ request }) => {
       loader: {
         activeOrdersView,
         totalMs: roundPerfDuration(getSafePerformanceNow() - loaderStartedAt),
+        shopifyOrdersCacheStatus: orderData.cacheStatus ?? (shouldLoadOrders ? "unknown" : "skipped"),
         shopifyOrdersMs: orderDataResult.durationMs,
         departureLocationMs: departureLocationDataResult.durationMs,
         serverOrdersMs: serverOrderDataResult.durationMs,
