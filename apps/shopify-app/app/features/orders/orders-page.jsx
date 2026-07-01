@@ -240,6 +240,7 @@ const routeReadinessValueStyle = {
 const orderControlsTrailingStyle = {
   alignItems: "center",
   display: "flex",
+  flex: "0 0 auto",
   gap: "6px",
   marginLeft: "auto",
 };
@@ -370,8 +371,9 @@ const orderTableLayoutStyle = {
 const orderControlsStyle = {
   alignItems: "center",
   display: "flex",
-  flexWrap: "wrap",
+  flexWrap: "nowrap",
   gap: "6px",
+  overflowX: "auto",
   padding: "6px 10px 8px",
 };
 
@@ -392,10 +394,10 @@ const orderFilterControlStyle = {
   borderRadius: "8px",
   boxSizing: "border-box",
   color: "#303030",
-  flex: "0 1 142px",
+  flex: "0 1 122px",
   fontSize: "13px",
   height: "30px",
-  minWidth: "116px",
+  minWidth: "104px",
   padding: "0 8px",
 };
 
@@ -403,9 +405,9 @@ const orderFilterDateFieldStyle = {
   ...orderFilterControlStyle,
   alignItems: "center",
   display: "flex",
-  flex: "0 1 204px",
+  flex: "0 1 176px",
   gap: "6px",
-  minWidth: "178px",
+  minWidth: "148px",
   overflow: "hidden",
   position: "relative",
 };

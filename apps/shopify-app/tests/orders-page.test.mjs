@@ -295,7 +295,8 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.doesNotMatch(ordersPageSource, /const orderFilterBarStyle = \{/);
   assert.doesNotMatch(ordersPageSource, /const planActionRowStyle = \{/);
   assert.match(orderControlsStyleBlock, /padding:\s*"6px 10px 8px"/);
-  assert.match(orderControlsStyleBlock, /flexWrap:\s*"wrap"/);
+  assert.match(orderControlsStyleBlock, /flexWrap:\s*"nowrap"/);
+  assert.match(orderControlsStyleBlock, /overflowX:\s*"auto"/);
   assert.doesNotMatch(orderControlsStyleBlock, /maxWidth:\s*"100%"/);
   assert.doesNotMatch(orderControlsStyleBlock, /overflowX:\s*"visible"/);
   assert.doesNotMatch(orderControlsStyleBlock, /overflowY:\s*"visible"/);
@@ -1271,10 +1272,11 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /deliveryWeekday: ""/);
   assert.match(ordersPageSource, /orderedDateFrom: ""/);
   assert.match(ordersPageSource, /orderedDateTo: ""/);
-  assert.match(ordersPageSource, /const orderFilterControlStyle = \{[\s\S]*?height:\s*"30px"[\s\S]*?padding:\s*"0 8px"/);
-  assert.match(ordersPageSource, /const orderFilterDateFieldStyle = \{[\s\S]*?\.\.\.orderFilterControlStyle/);
+  assert.match(ordersPageSource, /const orderFilterControlStyle = \{[\s\S]*?flex:\s*"0 1 122px"[\s\S]*?minWidth:\s*"104px"[\s\S]*?padding:\s*"0 8px"/);
+  assert.match(ordersPageSource, /const orderFilterDateFieldStyle = \{[\s\S]*?\.\.\.orderFilterControlStyle[\s\S]*?flex:\s*"0 1 176px"[\s\S]*?minWidth:\s*"148px"/);
   assert.match(ordersPageSource, /boxSizing:\s*"border-box"/);
-  assert.match(ordersPageSource, /const orderControlsStyle = \{[\s\S]*?flexWrap:\s*"wrap"[\s\S]*?padding:\s*"6px 10px 8px"/);
+  assert.match(ordersPageSource, /const orderControlsStyle = \{[\s\S]*?flexWrap:\s*"nowrap"[\s\S]*?overflowX:\s*"auto"[\s\S]*?padding:\s*"6px 10px 8px"/);
+  assert.match(ordersPageSource, /const orderControlsTrailingStyle = \{[\s\S]*?flex:\s*"0 0 auto"[\s\S]*?marginLeft:\s*"auto"/);
   assert.doesNotMatch(ordersPageSource, /aria-label="Order planning tabs" role="tablist"/);
   assert.doesNotMatch(ordersPageSource, /ORDER_STATUS_TABS\.map/);
   assert.doesNotMatch(ordersPageSource, /aria-label="Choose order scope"/);
