@@ -298,6 +298,7 @@ test("Route detail loader reads server-saved drivers for route driver labels", (
   assert.match(routeDetailServerSource, /fetchDeliveryDrivers\(request, \{\}\)/);
   assert.match(routeDetailServerSource, /fetchDeliveryOrders\(request, \{\}, \{ cacheKey: shopifyShopCacheKey \}\)/);
   assert.match(routeDetailServerSource, /attachDeliveryOrderItemsToStops\(routePlanData\.stops \?\? \[\], buildDeliveryOrderLookup\(orderData\.orders\)\)/);
+  assert.match(routeDetailServerSource, /order\?\.items \?\? order\?\.lineItems/);
   assert.match(routeDetailServerSource, /fetchDeliveryRouteGroupDetail\(request, routeGroupId, \{ cacheKey: shopifyShopCacheKey \}\)/);
   assert.match(routeDetailServerSource, /routeGroup: routeGroupData\.routeGroup/);
   assert.match(routeDetailServerSource, /driverData\.drivers/);

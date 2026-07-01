@@ -109,7 +109,7 @@ function getDeliveryOrderForStop(stop, orderByKey) {
 }
 
 function getDeliveryOrderLineItems(order) {
-  const lineItems = order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
+  const lineItems = order?.items ?? order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
   if (Array.isArray(lineItems)) return lineItems;
   if (Array.isArray(lineItems?.nodes)) return lineItems.nodes;
   if (Array.isArray(lineItems?.edges)) return lineItems.edges.map((edge) => edge?.node).filter(Boolean);
