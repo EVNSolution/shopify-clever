@@ -564,6 +564,11 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
+  assert.match(routeDetailSource, /const items = normalizeRouteStopItems\(stop\.items\)/);
+  assert.match(routeDetailSource, /onClick=\{\(event\) => handleRouteTimelineStopClick\(event, stop\)\}/);
+  assert.match(routeDetailSource, /role="tooltip"/);
+  assert.match(routeDetailSource, /Customer: \{activeRouteTimelineStop\.recipient\}/);
+  assert.match(routeDetailSource, /\(activeRouteTimelineStop\.items \?\? \[\]\)\.map/);
   assert.match(routeDetailSource, /onDrop=\{handleRouteTimelineRemoveDrop\}/);
   assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
   assert.doesNotMatch(routeDetailSource, /activeRouteDriverStops/);

@@ -494,6 +494,67 @@ const routeTimelineStopDraggingStyle = {
   transform: "scale(1.12)",
 };
 
+const routeTimelineStopPopoverStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.18)",
+  color: "#202223",
+  display: "grid",
+  fontSize: "12px",
+  gap: "8px",
+  maxWidth: "320px",
+  minWidth: "280px",
+  padding: "10px",
+  position: "fixed",
+  zIndex: 2147483647,
+};
+
+const routeTimelineStopPopoverHeaderStyle = {
+  alignItems: "start",
+  display: "flex",
+  fontSize: "14px",
+  fontWeight: 700,
+  gap: "8px",
+  justifyContent: "space-between",
+};
+
+const routeTimelineStopPopoverCloseStyle = {
+  background: "transparent",
+  border: 0,
+  color: "#6d7175",
+  cursor: "pointer",
+  fontSize: "16px",
+  lineHeight: 1,
+  padding: 0,
+};
+
+const routeTimelineStopPopoverMetaStyle = {
+  color: "#616161",
+  display: "grid",
+  gap: "3px",
+  lineHeight: 1.35,
+};
+
+const routeTimelineStopItemListStyle = {
+  display: "grid",
+  gap: "5px",
+  listStyle: "none",
+  margin: 0,
+  maxHeight: "180px",
+  overflowY: "auto",
+  padding: 0,
+};
+
+const routeTimelineStopItemStyle = {
+  alignItems: "start",
+  borderTop: "1px solid #f1f1f1",
+  display: "grid",
+  gap: "2px",
+  gridTemplateColumns: "1fr auto",
+  paddingTop: "5px",
+};
+
 const routeLineEditorOverlayStyle = {
   alignItems: "center",
   background: "rgba(0, 0, 0, 0.18)",
@@ -946,6 +1007,34 @@ function normalizeRouteStopCoordinates(stop) {
   );
 }
 
+function formatRouteStopItemOptions(options) {
+  if (!Array.isArray(options)) return textOrUndefined(options);
+  return options
+    .map((option) => {
+      const key = textOrUndefined(option?.key ?? option?.name);
+      const value = textOrUndefined(option?.value);
+      return key && value ? `${key}: ${value}` : value ?? key;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function normalizeRouteStopItems(items) {
+  if (!Array.isArray(items)) return [];
+  return items
+    .map((item) => ({
+      name: textOrUndefined(item?.name ?? item?.title) ?? "Item",
+      options: formatRouteStopItemOptions(item?.options) ?? textOrUndefined(item?.variantTitle),
+      quantity: numberOrUndefined(item?.quantity) ?? 1,
+      sku: textOrUndefined(item?.sku),
+    }))
+    .filter((item) => item.name);
+}
+
+function sumRouteStopItemQuantities(items) {
+  return items.reduce((total, item) => total + (numberOrUndefined(item.quantity) ?? 0), 0);
+}
+
 function buildRouteStops(stops) {
   return resequenceRouteStops(stops.map((stop, index) => {
     const coordinates = normalizeRouteStopCoordinates(stop);
@@ -953,8 +1042,8 @@ function buildRouteStops(stops) {
     const stopNumber = Number.isInteger(sequence) && sequence > 0
       ? sequence
       : index + 1;
-    const itemCount = numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems)
-      ?? firstArray(stop.items).reduce((total, item) => total + (numberOrUndefined(item?.quantity) ?? 0), 0);
+    const items = normalizeRouteStopItems(stop.items);
+    const itemCount = numberOrUndefined(stop.itemCount ?? stop.itemsCount ?? stop.totalItems) ?? sumRouteStopItemQuantities(items);
 
     return {
       id: stop.deliveryStopId ?? stop.shopifyOrderGid ?? `route-stop-${index + 1}`,
@@ -972,6 +1061,7 @@ function buildRouteStops(stops) {
       payment: stop.paymentStatus ?? stop.financialStatus ?? "—",
       attributes: formatStopAttributes(stop.attributes),
       itemCount,
+      items,
       coordinatesLabel: coordinates != null ? "Yes" : "No",
       coordinates,
       hasCoordinates: coordinates != null,
@@ -1479,6 +1569,7 @@ export default function RouteDetailPage() {
   const [clientRouteRows, setClientRouteRows] = useState([]);
   const [routePreviewByKey, setRoutePreviewByKey] = useState({});
   const [routeTimelineDrag, setRouteTimelineDrag] = useState(null);
+  const [activeRouteTimelineStopPopover, setActiveRouteTimelineStopPopover] = useState(null);
   const [routePolygonPoints, setRoutePolygonPoints] = useState([]);
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
@@ -1522,6 +1613,9 @@ export default function RouteDetailPage() {
   const contextRouteRows = ensureUniqueRouteRowColors(applyRouteRowDraftState([...contextRouteRowsSource, ...clientRouteRows], routeLineEdits, routePreviewByKey));
   const timelineRouteRows = buildTimelineRows(routeRows, routeTimelineOrderByRouteId);
   const contextTimelineRouteRows = buildTimelineRows(contextRouteRows, routeTimelineOrderByRouteId);
+  const activeRouteTimelineStop = activeRouteTimelineStopPopover
+    ? timelineRouteRows.flatMap((routeRow) => routeRow.stops).find((stop) => stop.id === activeRouteTimelineStopPopover.stopId)
+    : null;
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || clientRouteRows.length > 0
@@ -1797,10 +1891,23 @@ export default function RouteDetailPage() {
   const handleRouteTimelineDragStart = (event, routeRow, stop) => {
     const drag = { routeId: routeRow.id, stopId: stop.id };
     routeTimelineDragRef.current = drag;
+    setActiveRouteTimelineStopPopover(null);
     setRouteTimelineDrag(drag);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData("text/plain", stop.id);
     event.dataTransfer.setDragImage(event.currentTarget, 9, 9);
+  };
+
+  const handleRouteTimelineStopClick = (event, stop) => {
+    event.stopPropagation();
+    const rect = event.currentTarget.getBoundingClientRect();
+    setActiveRouteTimelineStopPopover((current) => current?.stopId === stop.id
+      ? null
+      : {
+        left: Math.max(8, Math.min(rect.left - 130, window.innerWidth - 328)),
+        stopId: stop.id,
+        top: Math.max(8, Math.min(rect.bottom + 8, window.innerHeight - 220)),
+      });
   };
 
   const handleRouteTimelineDragEnd = useCallback(() => {
@@ -2725,6 +2832,9 @@ export default function RouteDetailPage() {
                         onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
                         onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
                         onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                        onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+                        aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
+                        aria-label={`Show ${stop.order} stop details`}
                         style={{
                           ...routeTimelineStopStyle,
                           ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
@@ -2743,6 +2853,49 @@ export default function RouteDetailPage() {
             >
               <div style={routeTimelineDropHintStyle}>Drop orders here to remove them from the route</div>
             </div>
+            {activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
+              <div
+                role="tooltip"
+                style={{
+                  ...routeTimelineStopPopoverStyle,
+                  left: `${activeRouteTimelineStopPopover.left}px`,
+                  top: `${activeRouteTimelineStopPopover.top}px`,
+                }}
+              >
+                <div style={routeTimelineStopPopoverHeaderStyle}>
+                  <span>{activeRouteTimelineStop.order}</span>
+                  <button
+                    aria-label="Close route stop details"
+                    onClick={() => setActiveRouteTimelineStopPopover(null)}
+                    style={routeTimelineStopPopoverCloseStyle}
+                    type="button"
+                  >×</button>
+                </div>
+                <div style={routeTimelineStopPopoverMetaStyle}>
+                  <span>Customer: {activeRouteTimelineStop.recipient}</span>
+                  <span>Address: {activeRouteTimelineStop.address}</span>
+                </div>
+                <strong>Items</strong>
+                {(activeRouteTimelineStop.items ?? []).length > 0 ? (
+                  <ul style={routeTimelineStopItemListStyle}>
+                    {(activeRouteTimelineStop.items ?? []).map((item, itemIndex) => (
+                      <li key={`${item.name}-${itemIndex}`} style={routeTimelineStopItemStyle}>
+                        <span>
+                          {item.name}
+                          {item.options ? <small style={{ color: "#6d7175", display: "block" }}>{item.options}</small> : null}
+                          {item.sku ? <small style={{ color: "#6d7175", display: "block" }}>SKU {item.sku}</small> : null}
+                        </span>
+                        <strong>×{item.quantity}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <span style={{ color: "#6d7175" }}>
+                    {activeRouteTimelineStop.itemCount > 0 ? `${activeRouteTimelineStop.itemCount} items` : "No item detail"}
+                  </span>
+                )}
+              </div>
+            ) : null}
           </section>
         </section>
 
