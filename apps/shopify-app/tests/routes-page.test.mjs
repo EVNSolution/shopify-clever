@@ -400,7 +400,9 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routesPageSource, /href: routeGroupPath\(routeGroup\.id\)/);
   assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{\n  return appendIdToken\(route\.href, idToken\);\n\}/);
   assert.match(routeGroupDetailSource, /routePlan: null/);
-  assert.match(routeGroupDetailSource, /route_group_detail\.api/);
+  assert.match(routeGroupDetailSource, /route_group_detail\.api\.raw/);
+  assert.match(routeGroupDetailSource, /JSON\.stringify\(data, null, 2\)/);
+  assert.match(routeGroupDetailSource, /logRouteGroupApiPayload\(\{ routeGroupData, departureLocationData, driverData \}\)/);
   assert.match(routeGroupDetailSource, /routeDetailTitleOverride: routeGroupData\.routeGroup\?\.name \?\? null/);
   assert.doesNotMatch(routeGroupDetailSource, /redirect\(childRoutePlanId/);
   assert.match(legacyRouteGroupDetailSource, /redirect\(/);

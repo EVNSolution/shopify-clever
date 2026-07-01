@@ -73,6 +73,12 @@ test("dev config keeps /app/routes document navigations out of Vite's route mani
   assert.match(viteConfigSource, /plugins:\s*\[routesDocumentFallbackPlugin\(\),\s*reactRouter\(\),\s*tsconfigPaths\(\)\]/);
 });
 
+test("dev config allows Shopify CLI Cloudflare tunnel hosts without disabling host checks", () => {
+  assert.match(viteConfigSource, /const SHOPIFY_DEV_TUNNEL_HOST = "\.trycloudflare\.com"/);
+  assert.match(viteConfigSource, /allowedHosts:\s*\[host,\s*SHOPIFY_DEV_TUNNEL_HOST\]/);
+  assert.doesNotMatch(viteConfigSource, /allowedHosts:\s*true/);
+});
+
 test("MapLibre maps share global interaction defaults", () => {
   assert.match(mapLibreMapSource, /cooperativeGestures:\s*true/);
   assert.match(mapLibreMapSource, /scrollZoom:\s*true/);

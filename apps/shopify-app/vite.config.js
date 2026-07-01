@@ -17,6 +17,7 @@ if (
 
 const host = new URL(process.env.SHOPIFY_APP_URL || "http://localhost")
   .hostname;
+const SHOPIFY_DEV_TUNNEL_HOST = ".trycloudflare.com";
 let hmrConfig;
 
 if (host === "localhost") {
@@ -71,7 +72,7 @@ function routesDocumentFallbackPlugin() {
 
 export default defineConfig({
   server: {
-    allowedHosts: [host],
+    allowedHosts: [host, SHOPIFY_DEV_TUNNEL_HOST],
     cors: {
       preflightContinue: true,
     },
