@@ -48,7 +48,7 @@ const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_EMPTY_LABEL = "–";
 const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
-const ROUTE_TIMELINE_STOP_POPOVER_GAP = 8;
+const ROUTE_TIMELINE_STOP_POPOVER_GAP = 4;
 const ROUTE_TIMELINE_STOP_POPOVER_HEIGHT = 260;
 const ROUTE_TIMELINE_STOP_POPOVER_WIDTH = 320;
 
@@ -507,10 +507,12 @@ const routeTimelineStopPopoverStyle = {
   display: "grid",
   fontSize: "12px",
   gap: "8px",
+  left: 0,
   maxWidth: `${ROUTE_TIMELINE_STOP_POPOVER_WIDTH}px`,
   minWidth: "280px",
   padding: "10px",
   position: "fixed",
+  top: 0,
   width: `min(${ROUTE_TIMELINE_STOP_POPOVER_WIDTH}px, calc(100vw - 16px))`,
   zIndex: 100010,
 };
@@ -1050,28 +1052,20 @@ function sumRouteStopItemQuantities(items) {
   return items.reduce((total, item) => total + (numberOrUndefined(item.quantity) ?? 0), 0);
 }
 
-function getRouteTimelineStopPopoverPosition(rect) {
+function getRouteTimelineStopPopoverPosition(rect, popoverSize = {}) {
   const gap = ROUTE_TIMELINE_STOP_POPOVER_GAP;
-  const width = Math.min(ROUTE_TIMELINE_STOP_POPOVER_WIDTH, window.innerWidth - gap * 2);
-  const height = Math.min(ROUTE_TIMELINE_STOP_POPOVER_HEIGHT, window.innerHeight - gap * 2);
-  const centeredLeft = Math.max(gap, Math.min(
-    rect.left + rect.width / 2 - width / 2,
-    window.innerWidth - width - gap,
-  ));
-  const belowTop = rect.bottom + gap;
-  if (belowTop + height <= window.innerHeight - gap) return { left: centeredLeft, top: belowTop };
-
+  const width = Math.min(popoverSize.width ?? ROUTE_TIMELINE_STOP_POPOVER_WIDTH, window.innerWidth - gap * 2);
+  const height = Math.min(popoverSize.height ?? ROUTE_TIMELINE_STOP_POPOVER_HEIGHT, window.innerHeight - gap * 2);
+  const anchorX = rect.left + rect.width / 2;
+  const rawLeft = anchorX <= window.innerWidth / 2 ? anchorX : anchorX - width;
+  const left = Math.max(gap, Math.min(rawLeft, window.innerWidth - width - gap));
   const aboveTop = rect.top - height - gap;
-  if (aboveTop >= gap) return { left: centeredLeft, top: aboveTop };
+  const belowTop = rect.bottom + gap;
+  const top = aboveTop >= gap
+    ? aboveTop
+    : Math.max(gap, Math.min(belowTop, window.innerHeight - height - gap));
 
-  const sideTop = Math.max(gap, Math.min(rect.top, window.innerHeight - height - gap));
-  const rightLeft = rect.right + gap;
-  if (rightLeft + width <= window.innerWidth - gap) return { left: rightLeft, top: sideTop };
-
-  const leftLeft = rect.left - width - gap;
-  if (leftLeft >= gap) return { left: leftLeft, top: sideTop };
-
-  return { left: centeredLeft, top: belowTop };
+  return { left, top };
 }
 
 function buildRouteStops(stops) {
@@ -1581,6 +1575,7 @@ export default function RouteDetailPage() {
   const routeMapCenterRef = useRef(DEFAULT_CENTER);
   const markersRef = useRef([]);
   const routeTimelineStopRefs = useRef(new Map());
+  const routeTimelineStopPopoverRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
   const lastRouteActionIntentRef = useRef(null);
   const navigateAfterRouteDraftSaveRef = useRef(false);
@@ -1892,6 +1887,18 @@ export default function RouteDetailPage() {
     };
   }, []);
 
+  const positionRouteTimelineStopPopover = useCallback((stopId = activeRouteTimelineStopPopover?.stopId) => {
+    const stopNode = stopId ? routeTimelineStopRefs.current.get(stopId) : null;
+    const popoverNode = routeTimelineStopPopoverRef.current;
+    if (!stopNode || !popoverNode) return;
+
+    const nextPosition = getRouteTimelineStopPopoverPosition(stopNode.getBoundingClientRect(), {
+      height: popoverNode.offsetHeight,
+      width: popoverNode.offsetWidth,
+    });
+    popoverNode.style.transform = `translate3d(${Math.round(nextPosition.left)}px, ${Math.round(nextPosition.top)}px, 0)`;
+  }, [activeRouteTimelineStopPopover?.stopId]);
+
   const readRouteTimelineStopRects = useCallback(() => {
     return new Map([...routeTimelineStopRefs.current.entries()].map(([stopId, node]) => [
       stopId,
@@ -1958,24 +1965,15 @@ export default function RouteDetailPage() {
   useEffect(() => {
     if (!activeRouteTimelineStopPopover) return undefined;
 
-    let animationFrame = 0;
-    const syncRouteTimelineStopPopover = () => {
-      window.cancelAnimationFrame(animationFrame);
-      animationFrame = window.requestAnimationFrame(() => {
-        setActiveRouteTimelineStopPopover((current) => (
-          current ? getRouteTimelineStopPopoverState(current.stopId) : current
-        ));
-      });
-    };
-
+    const syncRouteTimelineStopPopover = () => positionRouteTimelineStopPopover();
+    positionRouteTimelineStopPopover();
     window.addEventListener("scroll", syncRouteTimelineStopPopover, true);
     window.addEventListener("resize", syncRouteTimelineStopPopover);
     return () => {
-      window.cancelAnimationFrame(animationFrame);
       window.removeEventListener("scroll", syncRouteTimelineStopPopover, true);
       window.removeEventListener("resize", syncRouteTimelineStopPopover);
     };
-  }, [activeRouteTimelineStopPopover?.stopId, getRouteTimelineStopPopoverState]);
+  }, [activeRouteTimelineStopPopover?.stopId, positionRouteTimelineStopPopover]);
 
   const handleRouteTimelineDragEnd = useCallback(() => {
     routeTimelineDragRef.current = null;
@@ -2955,11 +2953,11 @@ export default function RouteDetailPage() {
                   type="button"
                 />
                 <div
+                  ref={routeTimelineStopPopoverRef}
                   role="tooltip"
                   style={{
                     ...routeTimelineStopPopoverStyle,
-                    left: `${activeRouteTimelineStopPopover.left}px`,
-                    top: `${activeRouteTimelineStopPopover.top}px`,
+                    transform: `translate3d(${Math.round(activeRouteTimelineStopPopover.left)}px, ${Math.round(activeRouteTimelineStopPopover.top)}px, 0)`,
                   }}
                 >
                   <div style={routeTimelineStopPopoverHeaderStyle}>

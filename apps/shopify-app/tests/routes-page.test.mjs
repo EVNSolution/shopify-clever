@@ -565,9 +565,13 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /draggable/);
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /const items = normalizeRouteStopItems\(stop\.items\)/);
-  assert.match(routeDetailSource, /function getRouteTimelineStopPopoverPosition\(rect\) \{/);
-  assert.match(routeDetailSource, /const belowTop = rect\.bottom \+ gap/);
+  assert.match(routeDetailSource, /function getRouteTimelineStopPopoverPosition\(rect, popoverSize = \{\}\) \{/);
+  assert.match(routeDetailSource, /const rawLeft = anchorX <= window\.innerWidth \/ 2 \? anchorX : anchorX - width/);
+  assert.match(routeDetailSource, /const aboveTop = rect\.top - height - gap/);
   assert.match(routeDetailSource, /const getRouteTimelineStopPopoverState = useCallback\(\(stopId\) => \{/);
+  assert.match(routeDetailSource, /const positionRouteTimelineStopPopover = useCallback\(\(stopId = activeRouteTimelineStopPopover\?\.stopId\) => \{/);
+  assert.match(routeDetailSource, /popoverNode\.style\.transform = `translate3d/);
+  assert.match(routeDetailSource, /const syncRouteTimelineStopPopover = \(\) => positionRouteTimelineStopPopover\(\)/);
   assert.match(routeDetailSource, /window\.addEventListener\("scroll", syncRouteTimelineStopPopover, true\)/);
   assert.match(routeDetailSource, /window\.addEventListener\("resize", syncRouteTimelineStopPopover\)/);
   assert.match(routeDetailSource, /zIndex: 2147483647/);
