@@ -41,6 +41,91 @@ function logRouteDetailPerformance(name, metric = {}) {
   });
 }
 
+function isFiniteCoordinate(value) {
+  return Number.isFinite(Number(value));
+}
+
+function hasLngLatPair(value) {
+  return Array.isArray(value) && isFiniteCoordinate(value[0]) && isFiniteCoordinate(value[1]);
+}
+
+function countLngLatPairs(value) {
+  if (!Array.isArray(value)) return 0;
+  if (hasLngLatPair(value)) return 1;
+  return value.reduce((total, entry) => total + countLngLatPairs(entry), 0);
+}
+
+function hasRouteStopCoordinates(stop) {
+  if (hasLngLatPair(stop?.coordinates)) return true;
+
+  return (
+    isFiniteCoordinate(stop?.latitude ?? stop?.coordinates?.latitude) &&
+    isFiniteCoordinate(stop?.longitude ?? stop?.coordinates?.longitude)
+  );
+}
+
+function hasRouteStopPointCoordinates(routeStopPoint) {
+  return hasLngLatPair(routeStopPoint?.inputCoordinates) || hasLngLatPair(routeStopPoint?.snappedCoordinates);
+}
+
+function findRouteStopPointForMarker(stop, routeStopPoints) {
+  if (!Array.isArray(routeStopPoints)) return null;
+
+  return routeStopPoints.find((point) => (
+    (point.deliveryStopId && stop?.deliveryStopId && point.deliveryStopId === stop.deliveryStopId) ||
+    point.shopifyOrderGid === stop?.shopifyOrderGid
+  )) ?? null;
+}
+
+function countRouteGeometryCoordinates(routeGeometry) {
+  const geometry = routeGeometry?.geometry ?? routeGeometry;
+  return countLngLatPairs(geometry?.coordinates);
+}
+
+function summarizeRouteMarkerData(detail, currentRoutePlanId) {
+  const routePlanId = textOrUndefined(detail?.routePlanId ?? detail?.routePlan?.id);
+  const routeStopPoints = Array.isArray(detail?.routeStopPoints) ? detail.routeStopPoints : [];
+  const stops = Array.isArray(detail?.stops) ? detail.stops : [];
+  let markerCandidateStopCount = 0;
+  let stopsMatchedToStopPoints = 0;
+  let stopsWithCoordinates = 0;
+
+  for (const stop of stops) {
+    const hasStopCoordinates = hasRouteStopCoordinates(stop);
+    const routeStopPoint = findRouteStopPointForMarker(stop, routeStopPoints);
+    if (hasStopCoordinates) stopsWithCoordinates += 1;
+    if (routeStopPoint) stopsMatchedToStopPoints += 1;
+    if (hasStopCoordinates || hasRouteStopPointCoordinates(routeStopPoint)) {
+      markerCandidateStopCount += 1;
+    }
+  }
+
+  return {
+    routePlanId,
+    isCurrent: Boolean(routePlanId && routePlanId === currentRoutePlanId),
+    stopCount: stops.length,
+    stopsWithCoordinates,
+    routeStopPointCount: routeStopPoints.length,
+    routeStopPointsWithCoordinates: routeStopPoints.filter(hasRouteStopPointCoordinates).length,
+    stopsMatchedToStopPoints,
+    markerCandidateStopCount,
+    hasRouteGeometry: Boolean(detail?.routeGeometry),
+    routeGeometryCoordinateCount: countRouteGeometryCoordinates(detail?.routeGeometry),
+    hasRouteMetrics: Boolean(detail?.routeMetrics),
+  };
+}
+
+function logRouteMarkerDataDiagnostics({ routeChildDetails, routeGroupId, routeId }) {
+  const childSummaries = routeChildDetails.map((detail) => summarizeRouteMarkerData(detail, routeId));
+  logRouteDetailPerformance("routes.detail.loader.marker_data", {
+    routeId,
+    routeGroupId,
+    childRouteCount: childSummaries.length,
+    current: childSummaries.find((summary) => summary.isCurrent) ?? null,
+    children: childSummaries,
+  });
+}
+
 export function cleanRoutePathParam(value) {
   return textOrUndefined(value)?.split(/[?&]/)[0];
 }
@@ -148,6 +233,12 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     const routeChildDetails = buildRouteGroupChildDetails(routeGroupData.routeGroup);
     const currentChildDetail = routeChildDetails.find((detail) => textOrUndefined(detail.routePlanId) === routeId) ?? null;
 
+    logRouteMarkerDataDiagnostics({
+      routeChildDetails,
+      routeGroupId: routeGroupIdHint,
+      routeId,
+    });
+
     logRouteDetailPerformance("routes.detail.loader", {
       totalMs: roundPerfDuration(getRouteDetailPerfNow() - loaderStartedAt),
       primaryDataMs,
@@ -202,6 +293,12 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     ? mergeRouteGroupChildDetail(buildRouteGroupChildDetails(routeGroupData.routeGroup), currentRouteDetail)
     : [currentRouteDetail];
   const currentChildDetail = routeChildDetails.find((detail) => textOrUndefined(detail.routePlanId) === routeId) ?? null;
+
+  logRouteMarkerDataDiagnostics({
+    routeChildDetails,
+    routeGroupId,
+    routeId,
+  });
 
   logRouteDetailPerformance("routes.detail.loader", {
     totalMs: roundPerfDuration(getRouteDetailPerfNow() - loaderStartedAt),
