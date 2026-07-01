@@ -556,8 +556,16 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /draggable/);
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /const items = normalizeRouteStopItems\(stop\.items\)/);
+  assert.match(routeDetailSource, /function getRouteTimelineStopPopoverPosition\(rect\) \{/);
+  assert.match(routeDetailSource, /const belowTop = rect\.bottom \+ gap/);
+  assert.match(routeDetailSource, /const handleBackToRoutes = \(\) => \{/);
+  assert.match(routeDetailSource, /hasRouteAllocationDraft && !window\.confirm\("Discard unsaved route changes\?"\)/);
+  assert.match(routeDetailSource, /onClick=\{handleBackToRoutes\}/);
   assert.match(routeDetailSource, /onClick=\{\(event\) => handleRouteTimelineStopClick\(event, stop\)\}/);
   assert.match(routeDetailSource, /role="tooltip"/);
+  assert.match(routeDetailSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
+  assert.match(routeDetailSource, /routeTimelineStopPopoverBackdropStyle/);
+  assert.match(routeDetailSource, /aria-label="Close route stop details overlay"/);
   assert.match(routeDetailSource, /Customer: \{activeRouteTimelineStop\.recipient\}/);
   assert.match(routeDetailSource, /\(activeRouteTimelineStop\.items \?\? \[\]\)\.map/);
   assert.match(routeDetailSource, /onDrop=\{handleRouteTimelineRemoveDrop\}/);
@@ -978,7 +986,10 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = ROUTES_ROOT_PATH/);
-  assert.match(routeDetailSource, /onClick=\{\(\) => navigate\(routesListHref\)\}/);
+  assert.match(routeDetailSource, /const handleBackToRoutes = \(\) => \{/);
+  assert.match(routeDetailSource, /hasRouteAllocationDraft && !window\.confirm\("Discard unsaved route changes\?"\)/);
+  assert.match(routeDetailSource, /navigate\(routesListHref\)/);
+  assert.match(routeDetailSource, /onClick=\{handleBackToRoutes\}/);
   assert.match(routeDetailSource, /<span aria-hidden="true" style=\{routeDetailBackIconStyle\}>/);
   assert.match(routeDetailSource, /viewBox="0 0 20 20"/);
   assert.match(routeDetailSource, /d="M12\.5 4\.5 7 10l5\.5 5\.5"/);
