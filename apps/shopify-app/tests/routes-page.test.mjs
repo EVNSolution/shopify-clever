@@ -754,7 +754,7 @@ test("Route detail can zoom a stop marker to its OSRM snapped stop point", () =>
   assert.match(routeDetailMapSource, /normalizeLngLatPair\(routeStopPoint\?\.snappedCoordinates\)/);
   assert.match(routeDetailMapSource, /areLngLatPairsEqual\(location\.coordinates, snappedCoordinates\)/);
   assert.match(routeDetailMapSource, /function fitRouteStopAndSnappedPoint\(map, maplibregl, stop, routeStopPoint\) \{/);
-  assert.match(routeDetailMapSource, /fitRouteDetailMap\(map, maplibregl, locations, \{\s+maxZoom: 17,\s+singleZoom: 17,\s+\}\)/);
+  assert.match(routeDetailMapSource, /fitRouteDetailMap\(map, maplibregl, locations, \{\s+maxZoom: 13,\s+singleZoom: 13,\s+\}\)/);
   assert.doesNotMatch(routeDetailSource, /routeGeometry\.coordinates.*snapped|routeGeometry.*findRouteStopPoint/);
 });
 
