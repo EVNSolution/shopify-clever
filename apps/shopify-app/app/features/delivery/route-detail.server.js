@@ -79,7 +79,7 @@ export function buildRouteGroupChildDetails(routeGroup) {
       const optimized = readRouteOptimizedSnapshot(child?.optimized ?? routePlan?.optimized);
       return {
         routeGeometry: child?.routeGeometry ?? routePlan?.routeGeometry ?? optimized?.routeGeometry ?? null,
-        routeMetrics: child?.routeMetrics ?? routePlan?.routeMetrics ?? routePlan?.metrics ?? optimized?.metrics ?? null,
+        routeMetrics: child?.routeMetrics ?? routePlan?.routeMetrics ?? null,
         routePlan: getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stops),
         routePlanId,
         routeStopPoints: firstArray(child?.routeStopPoints, routePlan?.routeStopPoints, optimized?.routeStopPoints),
