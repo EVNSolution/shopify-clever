@@ -1163,7 +1163,7 @@ function getNextChildRouteDraft(routeRows) {
   const routeNumber = (maxRouteIdx || routeRows.length) + 1;
   return {
     color: getUnusedRouteColor(null, usedColors, routeNumber - 1),
-    label: `Route ${routeNumber}`,
+    label: `#${routeNumber}`,
     routeIdx: routeNumber,
     routeIndex: routeNumber,
   };
@@ -1381,7 +1381,7 @@ export default function RouteDetailPage() {
   );
   const routeGroupStopsSource = routeGroup ? allRouteGroupStops : orderedRouteStops;
   const routeGroupChildRows = useMemo(() => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource), [routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource]);
-  const defaultRouteCandidateTitle = isRouteGroupDetail ? "Route 1" : routeDetailTitle;
+  const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);

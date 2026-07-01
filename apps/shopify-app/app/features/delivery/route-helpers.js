@@ -23,7 +23,7 @@ export function readRouteOptimizedSnapshot(value) {
 export function getDefaultRouteGroupChildName(index, child) {
   const routeIdx = numberOrUndefined(child?.routeIdx);
   const sortOrder = numberOrUndefined(child?.sortOrder);
-  return `Route ${routeIdx ?? sortOrder ?? index + 1}`;
+  return `#${routeIdx ?? sortOrder ?? index + 1}`;
 }
 
 export function getRouteGroupChildRouteName(routeGroup, child, routePlan, index) {

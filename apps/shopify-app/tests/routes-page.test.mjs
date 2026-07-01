@@ -825,7 +825,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Total distance<\/th>/);
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
-  assert.match(routeDetailSource, /const defaultRouteCandidateTitle = isRouteGroupDetail \? "Route 1" : routeDetailTitle/);
+  assert.match(routeDetailSource, /const defaultRouteCandidateTitle = isRouteGroupDetail \? "#1" : routeDetailTitle/);
   assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, detail\?\.routePlan \?\? child\?\.routePlan, index\)/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
