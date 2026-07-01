@@ -153,6 +153,7 @@ function summarizeOrdersLoader(metric) {
     ? {
         activeOrdersView: metric.activeOrdersView,
         totalMs: metric.totalMs,
+        shopifyOrdersCacheStatus: metric.shopifyOrdersCacheStatus,
         shopifyOrdersMs: metric.shopifyOrdersMs,
         departureLocationMs: metric.departureLocationMs,
         serverOrdersMs: metric.serverOrdersMs,
@@ -198,6 +199,20 @@ function summarizeOrdersSourceUpdate(metric) {
     : null;
 }
 
+function summarizeOrdersSourceRetry(metrics) {
+  return {
+    count: metrics.length,
+    latest: metrics.at(-1)
+      ? {
+          trigger: metrics.at(-1).trigger,
+          retryAttemptCount: metrics.at(-1).retryAttemptCount,
+          mapLoaded: metrics.at(-1).mapLoaded,
+          styleLoaded: metrics.at(-1).styleLoaded,
+        }
+      : null,
+  };
+}
+
 function summarizeEvents(events) {
   const shopifyIframe = latestMetric(events, "shopify.admin.iframe");
   const documentNavigation = latestMetric(events, "app.document.navigation");
@@ -207,6 +222,7 @@ function summarizeEvents(events) {
   const mapLoads = metricsByName(events, "orders.maplibre.load");
   const mapRemove = latestMetric(events, "orders.maplibre.remove");
   const ordersSourceUpdate = latestMetric(events, "orders.maplibre.source_update");
+  const ordersSourceRetries = metricsByName(events, "orders.maplibre.source_retry");
   const ordersLoader = ordersLoaders.at(-1) ?? null;
   const mapInit = mapInits.at(-1) ?? null;
   const mapLoad = mapLoads.at(-1) ?? null;
@@ -240,6 +256,7 @@ function summarizeEvents(events) {
         }
       : null,
     ordersSourceUpdate: summarizeOrdersSourceUpdate(ordersSourceUpdate),
+    ordersSourceRetry: summarizeOrdersSourceRetry(ordersSourceRetries),
   };
 }
 
