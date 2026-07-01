@@ -525,7 +525,7 @@ const orderFilterMenuStyle = {
   maxHeight: "240px",
   overflowY: "auto",
   padding: "6px",
-  position: "fixed",
+  position: "absolute",
   zIndex: 2147483647,
 };
 
@@ -570,8 +570,11 @@ function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, opti
     if (!rect) return;
 
     const width = Math.max(rect.width, 168);
-    const left = Math.max(8, Math.min(rect.left, window.innerWidth - width - 8));
-    setMenuPosition({ left, top: rect.bottom + 4, width });
+    const left = Math.max(
+      window.scrollX + 8,
+      Math.min(rect.left + window.scrollX, window.scrollX + window.innerWidth - width - 8),
+    );
+    setMenuPosition({ left, top: rect.bottom + window.scrollY + 4, width });
   }, []);
 
   useEffect(() => {
@@ -594,12 +597,10 @@ function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, opti
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     document.addEventListener("keydown", handleKeyDown);
     window.addEventListener("resize", positionMenu);
-    window.addEventListener("scroll", positionMenu, true);
     return () => {
       document.removeEventListener("pointerdown", handleDocumentPointerDown);
       document.removeEventListener("keydown", handleKeyDown);
       window.removeEventListener("resize", positionMenu);
-      window.removeEventListener("scroll", positionMenu, true);
     };
   }, [open, positionMenu]);
 
@@ -669,7 +670,7 @@ const orderDateCalendarStyle = {
   display: "grid",
   gap: "8px",
   padding: "10px",
-  position: "fixed",
+  position: "absolute",
   width: "238px",
   zIndex: 2147483647,
 };
@@ -2233,8 +2234,11 @@ export default function OrdersPage() {
 
     const width = 238;
     setOrderedDateCalendarPosition({
-      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
-      top: rect.bottom + 4,
+      left: Math.max(
+        window.scrollX + 8,
+        Math.min(rect.left + window.scrollX, window.scrollX + window.innerWidth - width - 8),
+      ),
+      top: rect.bottom + window.scrollY + 4,
     });
   }, []);
 
@@ -2296,11 +2300,9 @@ export default function OrdersPage() {
 
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     window.addEventListener("resize", handleWindowLayoutChange);
-    window.addEventListener("scroll", handleWindowLayoutChange, true);
     return () => {
       document.removeEventListener("pointerdown", handleDocumentPointerDown);
       window.removeEventListener("resize", handleWindowLayoutChange);
-      window.removeEventListener("scroll", handleWindowLayoutChange, true);
     };
   }, [
     applyOrderedDateRange,

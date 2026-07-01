@@ -1225,6 +1225,8 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /aria-haspopup="listbox"/);
   assert.match(ordersPageSource, /role="listbox"/);
   assert.match(ordersPageSource, /const orderFilterMenuStyle = \{/);
+  assert.match(ordersPageSource, /const orderFilterMenuStyle = \{[\s\S]*?position:\s*"absolute"/);
+  assert.match(ordersPageSource, /rect\.bottom \+ window\.scrollY \+ 4/);
   assert.match(ordersPageSource, /const orderFilterMenuOptionStyle = \{/);
   assert.match(ordersPageSource, /const orderFilterClearButtonStyle = \{/);
   assert.match(ordersPageSource, /if \(!startDate && !endDate\) return ""/);
@@ -1236,6 +1238,8 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /const \[pendingOrderedDateStart, setPendingOrderedDateStart\] = useState\(""\)/);
   assert.match(ordersPageSource, /const \[orderedDateCalendarPosition, setOrderedDateCalendarPosition\] = useState\(null\)/);
   assert.match(ordersPageSource, /\{orderedDateCalendarOpen && orderedDateCalendarPosition\s*\? createPortal/);
+  assert.match(ordersPageSource, /const orderDateCalendarStyle = \{[\s\S]*?position:\s*"absolute"/);
+  assert.doesNotMatch(ordersPageSource, /window\.addEventListener\("scroll", positionMenu, true\)/);
   assert.match(ordersPageSource, /orderedDateFrom: startDate/);
   assert.match(ordersPageSource, /orderedDateTo: endDate/);
   assert.match(ordersPageSource, /applyOrderedDateRange\(pendingOrderedDateStart, pendingOrderedDateStart\)/);
