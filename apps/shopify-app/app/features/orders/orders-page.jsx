@@ -751,6 +751,111 @@ const orderActionDialogStyle = {
   width: "420px",
 };
 
+const routeAddDialogStyle = {
+  ...orderActionDialogStyle,
+  maxWidth: "min(880px, calc(100vw - 32px))",
+  width: "min(880px, calc(100vw - 32px))",
+};
+
+const routeAddDialogGridStyle = {
+  display: "grid",
+  gap: "12px",
+  gridTemplateColumns: "repeat(auto-fit, minmax(260px, 1fr))",
+  minWidth: 0,
+};
+
+const routeAddDialogControlsStyle = {
+  alignContent: "start",
+  display: "grid",
+  gap: "10px",
+  minWidth: 0,
+};
+
+const routeAddSnapshotStyle = {
+  ...routeAddPreviewStyle,
+  alignContent: "start",
+  maxHeight: "520px",
+};
+
+const routeAddSnapshotHeaderStyle = {
+  alignItems: "baseline",
+  display: "flex",
+  gap: "8px",
+  justifyContent: "space-between",
+};
+
+const routeAddSnapshotHintStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 650,
+};
+
+const routeAddSnapshotMapStyle = {
+  background: "linear-gradient(135deg, #eef6ff 0%, #f7f7f7 48%, #edf7ed 100%)",
+  border: "1px solid #e3e3e3",
+  borderRadius: "8px",
+  height: "190px",
+  overflow: "hidden",
+  pointerEvents: "none",
+  position: "relative",
+};
+
+const routeAddSnapshotPinStyle = {
+  alignItems: "center",
+  background: "#0b84d8",
+  border: "2px solid #ffffff",
+  borderRadius: "999px",
+  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.24)",
+  color: "#ffffff",
+  display: "inline-flex",
+  fontSize: "10px",
+  fontWeight: 750,
+  height: "22px",
+  justifyContent: "center",
+  position: "absolute",
+  transform: "translate(-50%, -50%)",
+  width: "22px",
+};
+
+const routeAddSnapshotEmptyStyle = {
+  color: "#616161",
+  fontSize: "13px",
+  left: "50%",
+  position: "absolute",
+  textAlign: "center",
+  top: "50%",
+  transform: "translate(-50%, -50%)",
+  width: "80%",
+};
+
+const routeAddSnapshotListStyle = {
+  display: "grid",
+  gap: "6px",
+  listStyle: "none",
+  margin: 0,
+  maxHeight: "188px",
+  overflowY: "auto",
+  padding: 0,
+};
+
+const routeAddSnapshotOrderStyle = {
+  background: "#f7f7f7",
+  border: "1px solid #ebebeb",
+  borderRadius: "8px",
+  display: "grid",
+  gap: "2px",
+  minWidth: 0,
+  padding: "7px 9px",
+};
+
+const routeAddSnapshotOrderMetaStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 const orderActionToggleStyle = {
   display: "grid",
   gap: "8px",
@@ -1286,6 +1391,98 @@ function getRouteAddTargetLabel(routeGroup) {
   const [firstChild] = getVisibleRouteGroupChildren(routeGroup);
   if (!firstChild) return "No child route";
   return getRouteGroupChildRouteName(routeGroup, firstChild, firstChild.routePlan, 0);
+}
+
+function getRouteAddSnapshotOrderIds(routeGroup) {
+  const assignmentOrderIds = (Array.isArray(routeGroup?.assignments) ? routeGroup.assignments : [])
+    .map((assignment) => textOrUndefined(assignment?.orderId ?? assignment?.sourceOrderId ?? assignment?.shopifyOrderGid));
+  if (assignmentOrderIds.some(Boolean)) return assignmentOrderIds.filter(Boolean);
+
+  return getVisibleRouteGroupChildren(routeGroup)
+    .flatMap((child) => (Array.isArray(child?.orderIds) ? child.orderIds : []))
+    .map(textOrUndefined)
+    .filter(Boolean);
+}
+
+function getRouteAddSnapshotCoordinate(value) {
+  const coordinates = Array.isArray(value?.coordinates) ? value.coordinates : null;
+  const longitude = Number(coordinates?.[0] ?? value?.longitude ?? value?.coordinates?.longitude);
+  const latitude = Number(coordinates?.[1] ?? value?.latitude ?? value?.coordinates?.latitude);
+
+  return Number.isFinite(longitude) && Number.isFinite(latitude)
+    ? [longitude, latitude]
+    : null;
+}
+
+function getRouteAddSnapshotAddress(value) {
+  if (typeof value?.address === "string") return textOrUndefined(value.address);
+
+  const address = value?.address ?? value?.shippingAddress;
+  return [address?.address1, address?.address2, address?.city, address?.province, address?.postalCode, address?.countryCode]
+    .map(textOrUndefined)
+    .filter(Boolean)
+    .join(", ") || undefined;
+}
+
+function buildRouteAddSnapshotOrders(routeGroup, orders) {
+  const ordersByAnyId = new Map();
+  for (const order of Array.isArray(orders) ? orders : []) {
+    for (const key of [order?.orderId, order?.id, order?.name].map(textOrUndefined).filter(Boolean)) {
+      ordersByAnyId.set(key, order);
+    }
+  }
+
+  const assignments = Array.isArray(routeGroup?.assignments) ? routeGroup.assignments : [];
+  const sources = assignments.length > 0
+    ? assignments
+    : getRouteAddSnapshotOrderIds(routeGroup).map((orderId) => ({ orderId }));
+
+  return sources.map((source, index) => {
+    const orderId = textOrUndefined(source?.orderId ?? source?.sourceOrderId ?? source?.shopifyOrderGid);
+    const order = ordersByAnyId.get(orderId) ?? ordersByAnyId.get(textOrUndefined(source?.orderName)) ?? source?.order ?? null;
+    const snapshotSource = order ?? source;
+
+    return {
+      address: getRouteAddSnapshotAddress(snapshotSource) ?? getRouteAddSnapshotAddress(source) ?? "No address loaded",
+      coordinates: getRouteAddSnapshotCoordinate(snapshotSource) ?? getRouteAddSnapshotCoordinate(source),
+      customer: textOrUndefined(snapshotSource?.customer ?? snapshotSource?.recipientName ?? source?.recipientName) ?? "Unknown recipient",
+      id: orderId ?? textOrUndefined(order?.id) ?? `route-order-${index + 1}`,
+      label: textOrUndefined(order?.name ?? source?.orderName ?? source?.sourceOrderId ?? orderId) ?? `Order ${index + 1}`,
+    };
+  });
+}
+
+function getRouteAddSnapshotBounds(orders) {
+  const coordinates = orders.map((order) => order.coordinates).filter(Boolean);
+  if (coordinates.length === 0) return null;
+
+  return coordinates.reduce((bounds, [longitude, latitude]) => ({
+    maxLatitude: Math.max(bounds.maxLatitude, latitude),
+    maxLongitude: Math.max(bounds.maxLongitude, longitude),
+    minLatitude: Math.min(bounds.minLatitude, latitude),
+    minLongitude: Math.min(bounds.minLongitude, longitude),
+  }), {
+    maxLatitude: -90,
+    maxLongitude: -180,
+    minLatitude: 90,
+    minLongitude: 180,
+  });
+}
+
+function getRouteAddSnapshotPinPosition(coordinates, bounds) {
+  if (!coordinates || !bounds) return {};
+
+  const [longitude, latitude] = coordinates;
+  const longitudeRange = bounds.maxLongitude - bounds.minLongitude;
+  const latitudeRange = bounds.maxLatitude - bounds.minLatitude;
+  const left = longitudeRange === 0
+    ? 50
+    : 8 + ((longitude - bounds.minLongitude) / longitudeRange) * 84;
+  const top = latitudeRange === 0
+    ? 50
+    : 8 + ((bounds.maxLatitude - latitude) / latitudeRange) * 84;
+
+  return { left: `${left}%`, top: `${top}%` };
 }
 
 function getOrderItemCount(order) {
@@ -1925,6 +2122,15 @@ export default function OrdersPage() {
     () => safeRouteGroups.find((routeGroup) => routeGroup.id === selectedRouteGroupId) ?? safeRouteGroups[0] ?? null,
     [safeRouteGroups, selectedRouteGroupId],
   );
+  const routeAddSnapshotOrders = useMemo(
+    () => buildRouteAddSnapshotOrders(selectedRouteGroup, displayOrders),
+    [displayOrders, selectedRouteGroup],
+  );
+  const routeAddSnapshotBounds = useMemo(
+    () => getRouteAddSnapshotBounds(routeAddSnapshotOrders),
+    [routeAddSnapshotOrders],
+  );
+  const routeAddSnapshotLocatedOrders = routeAddSnapshotOrders.filter((order) => order.coordinates);
   const orderActionValueOptions =
     orderActionField === "state" ? ORDER_STATE_CHANGE_OPTIONS : ORDER_PAYMENT_CHANGE_OPTIONS;
 
@@ -3605,39 +3811,76 @@ export default function OrdersPage() {
                     if (event.target === event.currentTarget) setRouteAddModalOpen(false);
                   }}
                 >
-                  <div aria-label="Add orders to route preview" aria-modal="true" role="dialog" style={orderActionDialogStyle}>
+                  <div aria-label="Add orders to route preview" aria-modal="true" role="dialog" style={routeAddDialogStyle}>
                     <strong>Add to route</strong>
                     <span style={orderSelectionCountStyle}>Selected: {plannedOrders.length} orders</span>
-                    <label style={routePlanTitleGroupStyle}>
-                      <span style={routePlanTitleLabelStyle}>Route</span>
-                      <select
-                        aria-label="Route to add orders"
-                        style={orderActionSelectStyle}
-                        value={selectedRouteGroup?.id ?? ""}
-                        onChange={(event) => setSelectedRouteGroupId(event.currentTarget.value)}
-                      >
-                        {safeRouteGroups.map((routeGroup) => (
-                          <option key={routeGroup.id} value={routeGroup.id}>
-                            {getRouteAddOptionLabel(routeGroup)}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <div style={routeAddPreviewStyle}>
-                      <div style={routeReadinessGridStyle}>
-                        <div style={routeReadinessItemStyle}>
-                          Target first route
-                          <span style={routeReadinessValueStyle}>{getRouteAddTargetLabel(selectedRouteGroup)}</span>
-                        </div>
-                        <div style={routeReadinessItemStyle}>
-                          Existing route orders
-                          <span style={routeReadinessValueStyle}>{getRouteGroupOrderCount(selectedRouteGroup)}</span>
-                        </div>
-                        <div style={routeReadinessItemStyle}>
-                          Delivery scope
-                          <span style={routeReadinessValueStyle}>{formatRouteDeliveryScope(selectedRouteGroup, "-")}</span>
+                    <div style={routeAddDialogGridStyle}>
+                      <div style={routeAddDialogControlsStyle}>
+                        <label style={routePlanTitleGroupStyle}>
+                          <span style={routePlanTitleLabelStyle}>Route</span>
+                          <select
+                            aria-label="Route to add orders"
+                            style={orderActionSelectStyle}
+                            value={selectedRouteGroup?.id ?? ""}
+                            onChange={(event) => setSelectedRouteGroupId(event.currentTarget.value)}
+                          >
+                            {safeRouteGroups.map((routeGroup) => (
+                              <option key={routeGroup.id} value={routeGroup.id}>
+                                {getRouteAddOptionLabel(routeGroup)}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        <div style={routeAddPreviewStyle}>
+                          <div style={routeReadinessGridStyle}>
+                            <div style={routeReadinessItemStyle}>
+                              Target first route
+                              <span style={routeReadinessValueStyle}>{getRouteAddTargetLabel(selectedRouteGroup)}</span>
+                            </div>
+                            <div style={routeReadinessItemStyle}>
+                              Existing route orders
+                              <span style={routeReadinessValueStyle}>{getRouteGroupOrderCount(selectedRouteGroup)}</span>
+                            </div>
+                            <div style={routeReadinessItemStyle}>
+                              Delivery scope
+                              <span style={routeReadinessValueStyle}>{formatRouteDeliveryScope(selectedRouteGroup, "-")}</span>
+                            </div>
+                          </div>
                         </div>
                       </div>
+                      <aside aria-label="Selected route snapshot" style={routeAddSnapshotStyle}>
+                        <div style={routeAddSnapshotHeaderStyle}>
+                          <strong>Route snapshot</strong>
+                          <span style={routeAddSnapshotHintStyle}>Read-only</span>
+                        </div>
+                        <div aria-hidden="true" style={routeAddSnapshotMapStyle}>
+                          {routeAddSnapshotLocatedOrders.length > 0 ? routeAddSnapshotLocatedOrders.map((order, index) => (
+                            <span
+                              key={`${order.id}-pin`}
+                              style={{
+                                ...routeAddSnapshotPinStyle,
+                                ...getRouteAddSnapshotPinPosition(order.coordinates, routeAddSnapshotBounds),
+                              }}
+                            >{index + 1}</span>
+                          )) : (
+                            <span style={routeAddSnapshotEmptyStyle}>No coordinates loaded for this group</span>
+                          )}
+                        </div>
+                        <strong>Orders in group</strong>
+                        {routeAddSnapshotOrders.length > 0 ? (
+                          <ol style={routeAddSnapshotListStyle}>
+                            {routeAddSnapshotOrders.slice(0, 12).map((order, index) => (
+                              <li key={`${order.id}-${index}`} style={routeAddSnapshotOrderStyle}>
+                                <span style={routeReadinessValueStyle}>{index + 1}. {order.label}</span>
+                                <span style={routeAddSnapshotOrderMetaStyle}>{order.customer}</span>
+                                <span style={routeAddSnapshotOrderMetaStyle}>{order.address}</span>
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <span style={routeAddSnapshotOrderMetaStyle}>No orders loaded for this group</span>
+                        )}
+                      </aside>
                     </div>
                     <div style={orderControlsTrailingStyle}>
                       <button
