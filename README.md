@@ -65,6 +65,7 @@ The repo contains three Shopify app config files:
 Use explicit Shopify CLI config selection:
 
 - `npm --prefix apps/shopify-app run dev` → `shopify app dev -c dev`
+- `npm --prefix apps/shopify-app run dev:local -- --store clever-test-syhae28n.myshopify.com` → same dev config plus required local delivery env. See [`docs/runbooks/shopify-app-dev.md`](docs/runbooks/shopify-app-dev.md).
 - `npm --prefix apps/shopify-app run deploy:prod` → production config
 - `npm --prefix apps/shopify-app run deploy:dev` → dev/custom config
 - `npm --prefix apps/shopify-app run deploy:kfood` → KFood custom config

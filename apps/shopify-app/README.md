@@ -38,7 +38,7 @@ This repo intentionally separates production and dev Shopify app configs:
 - `shopify.app.dev.toml` — dev/custom-store app (`CleverRoute Dev`, handle `clever-route-dev`).
 - `shopify.app.kfood.toml` — KFood custom-store app (`CLEVER K-Food`, handle `clever-route-kfood`).
 
-`npm run dev` runs `shopify app dev -c dev` so routine development does not attach to the production app config. Use `npm run deploy:prod`, `npm run deploy:dev`, or `npm run deploy:kfood` only after an explicit release decision.
+`npm run dev` runs `shopify app dev -c dev` so routine development does not attach to the production app config. Prefer `npm run dev:local -- --store clever-test-syhae28n.myshopify.com` for local agent/dev sessions because it injects the required delivery API env; see `../../docs/runbooks/shopify-app-dev.md`. Use `npm run deploy:prod`, `npm run deploy:dev`, or `npm run deploy:kfood` only after an explicit release decision.
 
 ### Authenticating and querying data
 
