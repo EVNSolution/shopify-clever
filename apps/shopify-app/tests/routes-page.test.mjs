@@ -322,7 +322,8 @@ test("Route detail keeps the server driver action but removes the header assignm
   assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver/);
   assert.match(routeDetailServerSource, /intent === "saveRouteDriver"/);
   assert.match(routeDetailServerSource, /formData\.get\("driverId"\)/);
-  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+routeId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
+  assert.match(routeDetailServerSource, /const targetRouteId = textOrUndefined\(formData\.get\("routePlanId"\)\) \?\? routeId/);
+  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+targetRouteId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
   assert.match(routeDetailSource, /buildRouteDriverOptions\(drivers, effectiveRoutePlan\?\.driver\)/);
   assert.match(routeDetailSource, /Invite pending/);
   assert.doesNotMatch(routeDetailSource, /const routeDriverSaveFetcher = useFetcher\(\)/);
@@ -1055,6 +1056,20 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.doesNotMatch(routeDetailSource, />Address<\/th>/);
   assert.doesNotMatch(routeDetailSource, /Same-date orders/);
   assert.doesNotMatch(routeDetailSource, /Save order/);
+});
+
+test("Route detail opens driver and vehicle selectors even with empty saved data", () => {
+  assert.match(routeDetailSource, /const \[activeRouteSelector, setActiveRouteSelector\] = useState\(null\)/);
+  assert.match(routeDetailSource, /function getRouteSelectorEmptyMessage\(selectorType, query, options\) \{/);
+  assert.match(routeDetailSource, /return "No matching driver"/);
+  assert.match(routeDetailSource, /return "No driver found"/);
+  assert.match(routeDetailSource, /return "No vehicle found"/);
+  assert.match(routeDetailSource, /onClick=\{\(\) => handleOpenRouteSelector\("driver", routeRow\)\}/);
+  assert.match(routeDetailSource, /onClick=\{\(\) => handleOpenRouteSelector\("vehicle", routeRow\)\}/);
+  assert.match(routeDetailSource, /aria-label=\{`\$\{activeRouteSelector\.title\} selector`\}/);
+  assert.match(routeDetailSource, /routeSelectorOptions\.length > 0 \? \(/);
+  assert.match(routeDetailSource, /routeSelectorEmptyMessage/);
+  assert.doesNotMatch(routeDetailSource, /fakeDrivers|mockDrivers|driverRows/);
 });
 
 test("Route detail page provides page navigation back to the route list", () => {

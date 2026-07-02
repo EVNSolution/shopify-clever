@@ -429,10 +429,11 @@ export const routeDetailAction = async ({ params, request }) => {
 
   if (intent === "saveRouteDriver") {
     const driverId = textOrUndefined(formData.get("driverId")) ?? null;
+    const targetRouteId = textOrUndefined(formData.get("routePlanId")) ?? routeId;
 
     return assignDeliveryRoutePlanDriver(
       request,
-      routeId,
+      targetRouteId,
       { driverId },
       { sessionToken: shopifySessionToken },
     );

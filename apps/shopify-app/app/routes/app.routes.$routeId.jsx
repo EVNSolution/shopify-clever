@@ -651,6 +651,35 @@ const routeLineEditorInputStyle = {
   width: "100%",
 };
 
+const routeSelectorListStyle = {
+  border: "1px solid #eeeeee",
+  borderRadius: "8px",
+  display: "grid",
+  maxHeight: "220px",
+  overflowY: "auto",
+};
+
+const routeSelectorOptionStyle = {
+  background: "#ffffff",
+  border: 0,
+  borderBottom: "1px solid #eeeeee",
+  color: "#303030",
+  cursor: "pointer",
+  fontFamily: "inherit",
+  fontSize: "13px",
+  fontWeight: 600,
+  minHeight: "34px",
+  padding: "8px 10px",
+  textAlign: "left",
+};
+
+const routeSelectorEmptyStyle = {
+  color: "#616161",
+  fontSize: "13px",
+  padding: "16px 10px",
+  textAlign: "center",
+};
+
 const routeLineColorGridStyle = {
   display: "flex",
   gap: "6px",
@@ -990,6 +1019,25 @@ function buildRouteDriverOptions(drivers, currentDriver) {
       label,
     };
   });
+}
+
+function filterRouteSelectorOptions(options, query) {
+  const normalizedQuery = textOrUndefined(query)?.toLowerCase();
+  if (!normalizedQuery) return options;
+
+  return options.filter((option) => option.label.toLowerCase().includes(normalizedQuery));
+}
+
+function getRouteSelectorEmptyMessage(selectorType, query, options) {
+  if (selectorType === "driver") {
+    if (textOrUndefined(query) && Array.isArray(options) && options.length > 0) {
+      return "No matching driver";
+    }
+
+    return "No driver found";
+  }
+
+  return "No vehicle found";
 }
 
 function buildDepartureLocation(routePlan, currentDepartureLocation) {
@@ -1646,6 +1694,8 @@ export default function RouteDetailPage() {
   const [routePreviewByKey, setRoutePreviewByKey] = useState({});
   const [routeTimelineDrag, setRouteTimelineDrag] = useState(null);
   const [activeRouteTimelineStopPopover, setActiveRouteTimelineStopPopover] = useState(null);
+  const [activeRouteSelector, setActiveRouteSelector] = useState(null);
+  const [routeSelectorQuery, setRouteSelectorQuery] = useState("");
   const [routePolygonPoints, setRoutePolygonPoints] = useState([]);
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
@@ -1692,6 +1742,11 @@ export default function RouteDetailPage() {
   const activeRouteTimelineStop = activeRouteTimelineStopPopover
     ? timelineRouteRows.flatMap((routeRow) => routeRow.stops).find((stop) => stop.id === activeRouteTimelineStopPopover.stopId)
     : null;
+  const routeSelectorBaseOptions = activeRouteSelector?.type === "driver" ? routeDriverOptions : [];
+  const routeSelectorOptions = filterRouteSelectorOptions(routeSelectorBaseOptions, routeSelectorQuery);
+  const routeSelectorEmptyMessage = activeRouteSelector
+    ? getRouteSelectorEmptyMessage(activeRouteSelector.type, routeSelectorQuery, routeSelectorBaseOptions)
+    : "";
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || clientRouteRows.length > 0
@@ -1887,6 +1942,36 @@ export default function RouteDetailPage() {
     setRouteLineDraftTitle(routeRow.title);
     setRouteLineDraftColor(routeRow.color);
     setIsRouteLineEditorOpen(true);
+  };
+
+  const handleOpenRouteSelector = (selectorType, routeRow) => {
+    setActiveRouteSelector({
+      routePlanId: routeRow.routePlanId,
+      routeTitle: routeRow.title,
+      title: selectorType === "vehicle" ? "Vehicle" : "Driver",
+      type: selectorType,
+    });
+    setRouteSelectorQuery("");
+  };
+
+  const handleSelectRouteDriver = async (driverId) => {
+    if (activeRouteSelector?.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy) return;
+
+    try {
+      setRouteGroupClientError(null);
+      const sessionToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("_intent", "saveRouteDriver");
+      formData.set("driverId", driverId);
+      formData.set("routePlanId", activeRouteSelector.routePlanId);
+      formData.set("shopifySessionToken", sessionToken);
+      routeActionFetcher.submit(formData, { method: "post" });
+      setActiveRouteSelector(null);
+    } catch {
+      setRouteGroupClientError(
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      );
+    }
   };
 
   const handleSaveRouteLineEditor = () => {
@@ -2304,6 +2389,13 @@ export default function RouteDetailPage() {
     lastRouteActionIntentRef.current = null;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) navigate(ROUTES_ROOT_PATH);
   }, [navigate, routeActionFetcher.data, routeActionFetcher.state]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "saveRouteDriver") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length === 0) revalidator.revalidate();
+  }, [revalidator, routeActionFetcher.data, routeActionFetcher.state]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -2985,13 +3077,23 @@ export default function RouteDetailPage() {
                     </td>
                     <td style={routeStatusCellStyle}><span style={routeRowStatusStyle}>{formatRouteStatus(routeRow.status)}</span></td>
                     <td style={routesDetailCellStyle}>
-                      <button aria-label="Change route driver" style={routeEditableValueStyle} type="button">
+                      <button
+                        aria-label="Change route driver"
+                        onClick={() => handleOpenRouteSelector("driver", routeRow)}
+                        style={routeEditableValueStyle}
+                        type="button"
+                      >
                         <span style={routeEditableValueTextStyle}>{routeRow.driverLabel}</span>
                         {renderRouteEditableChevron()}
                       </button>
                     </td>
                     <td style={routesDetailCellStyle}>
-                      <button aria-label="Change route vehicle" style={routeEditableValueStyle} type="button">
+                      <button
+                        aria-label="Change route vehicle"
+                        onClick={() => handleOpenRouteSelector("vehicle", routeRow)}
+                        style={routeEditableValueStyle}
+                        type="button"
+                      >
                         <span style={routeEditableValueTextStyle}>{routeRow.vehicleLabel}</span>
                         {renderRouteEditableChevron()}
                       </button>
@@ -3164,6 +3266,59 @@ export default function RouteDetailPage() {
                 >
                   Cancel
                 </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {activeRouteSelector ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Close route selector"
+              onClick={() => setActiveRouteSelector(null)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div
+              aria-label={`${activeRouteSelector.title} selector`}
+              role="dialog"
+              style={routeLineEditorDialogStyle}
+            >
+              <h2 style={routeLineEditorTitleStyle}>Change {activeRouteSelector.title}</h2>
+              <div style={routeLineEditorLabelStyle}>{activeRouteSelector.routeTitle}</div>
+              <input
+                aria-label={`Search ${activeRouteSelector.title.toLowerCase()}`}
+                onChange={(event) => setRouteSelectorQuery(event.target.value)}
+                placeholder={`Search ${activeRouteSelector.title.toLowerCase()}`}
+                style={routeLineEditorInputStyle}
+                type="search"
+                value={routeSelectorQuery}
+              />
+              <div role="listbox" style={routeSelectorListStyle}>
+                {routeSelectorOptions.length > 0 ? (
+                  routeSelectorOptions.map((option) => (
+                    <button
+                      disabled={activeRouteSelector.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy}
+                      key={option.id}
+                      onClick={() => handleSelectRouteDriver(option.id)}
+                      role="option"
+                      style={{
+                        ...routeSelectorOptionStyle,
+                        ...(activeRouteSelector.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy
+                          ? { cursor: "not-allowed", opacity: 0.55 }
+                          : null),
+                      }}
+                      type="button"
+                    >
+                      {option.label}
+                    </button>
+                  ))
+                ) : (
+                  <div style={routeSelectorEmptyStyle}>{routeSelectorEmptyMessage}</div>
+                )}
+              </div>
+              <div style={routeLineEditorActionsStyle}>
+                <button onClick={() => setActiveRouteSelector(null)} style={routeActionButtonStyle} type="button">Close</button>
               </div>
             </div>
           </div>
