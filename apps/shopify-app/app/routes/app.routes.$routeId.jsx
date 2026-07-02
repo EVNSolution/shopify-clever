@@ -882,15 +882,15 @@ function buildRouteDetail(routePlan, routeGroup = null) {
 }
 
 function getLinkedInventoryId(routePlan, routeGroup, routeGroupChild, isRouteGroupDetail) {
+  void isRouteGroupDetail;
   const childInventoryId = textOrUndefined(
     routePlan?.linkedInventoryId
       ?? routePlan?.inventoryId
       ?? routeGroupChild?.linkedInventoryId
       ?? routeGroupChild?.inventoryId,
   );
-  if (childInventoryId || !isRouteGroupDetail) return childInventoryId;
 
-  return textOrUndefined(routeGroup?.linkedInventoryId ?? routeGroup?.inventoryId);
+  return childInventoryId ?? textOrUndefined(routeGroup?.linkedInventoryId ?? routeGroup?.inventoryId);
 }
 
 function getRouteDriverId(routePlan) {

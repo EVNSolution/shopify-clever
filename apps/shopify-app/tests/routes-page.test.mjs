@@ -375,6 +375,8 @@ test("Route detail wires route group action buttons through App Bridge", () => {
 
 test("Route detail exposes inventory and delete header actions", () => {
   assert.match(routeDetailSource, /function getLinkedInventoryId\(routePlan, routeGroup, routeGroupChild, isRouteGroupDetail\) \{/);
+  assert.doesNotMatch(routeDetailSource, /if \(childInventoryId \|\| !isRouteGroupDetail\) return childInventoryId/);
+  assert.match(routeDetailSource, /childInventoryId \?\? textOrUndefined\(routeGroup\?\.linkedInventoryId \?\? routeGroup\?\.inventoryId\)/);
   assert.match(routeDetailSource, /routeGroup\?\.linkedInventoryId \?\? routeGroup\?\.inventoryId/);
   assert.match(routeDetailSource, /const inventoryDetailHref = linkedInventoryId \? `\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(linkedInventoryId\)\}` : null/);
   assert.match(routeDetailSource, /disabled=\{!inventoryDetailHref\}/);
