@@ -882,7 +882,6 @@ function buildRouteDetail(routePlan, routeGroup = null) {
 }
 
 function getLinkedInventoryId(routePlan, routeGroup, routeGroupChild, isRouteGroupDetail) {
-  // ponytail: linked inventory field contract is pending; keep lookup narrow and disable when absent.
   const childInventoryId = textOrUndefined(
     routePlan?.linkedInventoryId
       ?? routePlan?.inventoryId
