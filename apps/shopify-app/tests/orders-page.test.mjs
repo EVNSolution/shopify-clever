@@ -423,7 +423,12 @@ test("Orders page adds planned orders to an existing route group first child", (
   assert.match(ordersPageSource, /expectedUpdatedAt/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "addOrdersToRouteGroup"\)/);
   assert.match(ordersPageSource, /formData\.set\("routeGroupId", selectedRouteGroup\.id\)/);
+  assert.match(ordersPageSource, /const handleOpenAddRoutePreview = \(\) => \{/);
+  assert.match(ordersPageSource, /aria-label="Add orders to route preview"/);
   assert.match(ordersPageSource, /aria-label="Route to add orders"/);
+  assert.match(ordersPageSource, /Target first route/);
+  assert.match(ordersPageSource, /Existing route orders/);
+  assert.match(ordersPageSource, /getRouteAddOptionLabel\(routeGroup\)/);
   assert.doesNotMatch(ordersPageSource, /disabled=\{true\}\s*>Add to route/);
 });
 
@@ -812,15 +817,18 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.match(ordersPageSource, /const routeReadinessValueStyle = \{/);
   assert.match(ordersPageSource, /const handleClearPlan = \(\) => \{/);
   assert.match(ordersPageSource, /setPlannedOrderIds\(\[\]\)/);
-  assert.match(ordersPageSource, /setRouteAssignActionsOpen\(false\)/);
-  assert.match(ordersPageSource, /const \[routeAssignActionsOpen, setRouteAssignActionsOpen\] = useState\(false\)/);
-  assert.match(ordersPageSource, /const handleToggleRouteAssignActions = \(\) => \{/);
+  assert.match(ordersPageSource, /setRouteAddModalOpen\(false\)/);
+  assert.match(ordersPageSource, /const \[routeAddModalOpen, setRouteAddModalOpen\] = useState\(false\)/);
+  assert.match(ordersPageSource, /const handleOpenAddRoutePreview = \(\) => \{/);
+  assert.doesNotMatch(ordersPageSource, /const \[routeAssignActionsOpen, setRouteAssignActionsOpen\] = useState\(false\)/);
+  assert.doesNotMatch(ordersPageSource, /const handleToggleRouteAssignActions = \(\) => \{/);
   assert.doesNotMatch(ordersPageSource, /plannedOrders\.map\(\(order, orderIndex\) =>/);
   assert.doesNotMatch(ordersPageSource, /aria-label=\{`Remove \${order\.name} from route plan`\}/);
   assert.doesNotMatch(ordersPageSource, />Remove<\/button>/);
-  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Route plan<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
-  assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
+  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Route plan<\/s-heading>[\s\S]*>Add to route<\/button>[\s\S]*>Create route<\/button>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Add to route<\/button>[\s\S]*>Create route<\/button>/);
+  assert.match(ordersPageSource, /aria-label="Add orders to route preview"[\s\S]*>Add<\/button>/);
   assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
   assert.match(ordersPageSource, /const \[inventorySubmitAction, setInventorySubmitAction\] = useState\(null\)/);
   assert.match(ordersPageSource, /const \[inventoryAssignActionsOpen, setInventoryAssignActionsOpen\] = useState\(false\)/);
