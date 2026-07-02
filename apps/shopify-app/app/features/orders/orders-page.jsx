@@ -1658,6 +1658,7 @@ export default function OrdersPage() {
   const [orderActionField, setOrderActionField] = useState("state");
   const [orderActionValue, setOrderActionValue] = useState(ORDER_STATE_CHANGE_OPTIONS[0].value);
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
+  const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [routeAddModalOpen, setRouteAddModalOpen] = useState(false);
   const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
   const [selectedRouteGroupId, setSelectedRouteGroupId] = useState("");
@@ -2591,6 +2592,7 @@ export default function OrdersPage() {
   const handleClearPlan = () => {
     setPlannedOrderIds([]);
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
+    setRouteAssignActionsOpen(false);
     setRouteAddModalOpen(false);
     setInventoryAssignActionsOpen(false);
     setCreateInventoryClientError(null);
@@ -2598,6 +2600,12 @@ export default function OrdersPage() {
 
   const handleZoomToPlanned = () => {
     fitMapToOrders(routeFitLocations);
+  };
+
+  const handleToggleRouteAssignActions = () => {
+    if (createRouteDisabled) return;
+
+    setRouteAssignActionsOpen((isOpen) => !isOpen);
   };
 
   const handleOpenAddRoutePreview = () => {
@@ -3263,24 +3271,44 @@ export default function OrdersPage() {
                 <button
                   type="button"
                   style={
-                    addToRouteDisabled
-                      ? disabledCreateRouteButtonStyle
-                      : addToPlanButtonStyle
-                  }
-                  disabled={addToRouteDisabled}
-                  onClick={handleOpenAddRoutePreview}
-                >Add to route</button>
-                <button
-                  type="button"
-                  style={
                     createRouteDisabled
                       ? disabledCreateRouteButtonStyle
                       : createRouteButtonStyle
                   }
+                  aria-expanded={routeAssignActionsOpen}
                   disabled={createRouteDisabled}
-                  onClick={handleCreateRoute}
-                >Create route</button>
+                  onClick={handleToggleRouteAssignActions}
+                >Assign</button>
               </div>
+            </div>
+            <div
+              style={{
+                ...routeAssignActionsStyle,
+                ...(routeAssignActionsOpen
+                  ? routeAssignActionsOpenStyle
+                  : routeAssignActionsClosedStyle),
+              }}
+            >
+              <button
+                type="button"
+                style={
+                  addToRouteDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={addToRouteDisabled}
+                onClick={handleOpenAddRoutePreview}
+              >Add to route</button>
+              <button
+                type="button"
+                style={
+                  createRouteDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={createRouteDisabled}
+                onClick={handleCreateRoute}
+              >Create route</button>
             </div>
           </div>
 
