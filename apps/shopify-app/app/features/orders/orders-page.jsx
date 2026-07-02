@@ -791,7 +791,7 @@ const routeAddSnapshotHintStyle = {
 };
 
 const routeAddSnapshotMapStyle = {
-  background: "linear-gradient(135deg, #eef6ff 0%, #f7f7f7 48%, #edf7ed 100%)",
+  background: "#f7f7f7",
   border: "1px solid #e3e3e3",
   borderRadius: "8px",
   height: "190px",
@@ -800,21 +800,9 @@ const routeAddSnapshotMapStyle = {
   position: "relative",
 };
 
-const routeAddSnapshotPinStyle = {
-  alignItems: "center",
-  background: "#0b84d8",
-  border: "2px solid #ffffff",
-  borderRadius: "999px",
-  boxShadow: "0 2px 8px rgba(0, 0, 0, 0.24)",
-  color: "#ffffff",
-  display: "inline-flex",
-  fontSize: "10px",
-  fontWeight: 750,
-  height: "22px",
-  justifyContent: "center",
-  position: "absolute",
-  transform: "translate(-50%, -50%)",
-  width: "22px",
+const routeAddSnapshotMapCanvasStyle = {
+  height: "100%",
+  width: "100%",
 };
 
 const routeAddSnapshotEmptyStyle = {
@@ -1441,48 +1429,104 @@ function buildRouteAddSnapshotOrders(routeGroup, orders) {
     const orderId = textOrUndefined(source?.orderId ?? source?.sourceOrderId ?? source?.shopifyOrderGid);
     const order = ordersByAnyId.get(orderId) ?? ordersByAnyId.get(textOrUndefined(source?.orderName)) ?? source?.order ?? null;
     const snapshotSource = order ?? source;
+    const coordinates = getRouteAddSnapshotCoordinate(snapshotSource) ?? getRouteAddSnapshotCoordinate(source);
+    const label = textOrUndefined(order?.name ?? source?.orderName ?? source?.sourceOrderId ?? orderId) ?? `Order ${index + 1}`;
 
     return {
       address: getRouteAddSnapshotAddress(snapshotSource) ?? getRouteAddSnapshotAddress(source) ?? "No address loaded",
-      coordinates: getRouteAddSnapshotCoordinate(snapshotSource) ?? getRouteAddSnapshotCoordinate(source),
+      coordinates,
       customer: textOrUndefined(snapshotSource?.customer ?? snapshotSource?.recipientName ?? source?.recipientName) ?? "Unknown recipient",
+      hasCoordinates: coordinates != null,
       id: orderId ?? textOrUndefined(order?.id) ?? `route-order-${index + 1}`,
-      label: textOrUndefined(order?.name ?? source?.orderName ?? source?.sourceOrderId ?? orderId) ?? `Order ${index + 1}`,
+      label,
+      name: label,
     };
   });
 }
 
-function getRouteAddSnapshotBounds(orders) {
-  const coordinates = orders.map((order) => order.coordinates).filter(Boolean);
-  if (coordinates.length === 0) return null;
+function fitRouteAddSnapshotMap(map, maplibregl, locations) {
+  const located = locations.filter((location) => location?.hasCoordinates && Array.isArray(location.coordinates));
+  if (located.length === 0) return;
 
-  return coordinates.reduce((bounds, [longitude, latitude]) => ({
-    maxLatitude: Math.max(bounds.maxLatitude, latitude),
-    maxLongitude: Math.max(bounds.maxLongitude, longitude),
-    minLatitude: Math.min(bounds.minLatitude, latitude),
-    minLongitude: Math.min(bounds.minLongitude, longitude),
-  }), {
-    maxLatitude: -90,
-    maxLongitude: -180,
-    minLatitude: 90,
-    minLongitude: 180,
-  });
+  if (located.length === 1) {
+    map.jumpTo({ center: located[0].coordinates, zoom: 13 });
+    return;
+  }
+
+  const bounds = new maplibregl.LngLatBounds(located[0].coordinates, located[0].coordinates);
+  for (const location of located.slice(1)) bounds.extend(location.coordinates);
+  map.fitBounds(bounds, { duration: 0, maxZoom: 13, padding: 36 });
 }
 
-function getRouteAddSnapshotPinPosition(coordinates, bounds) {
-  if (!coordinates || !bounds) return {};
+function RouteAddSnapshotMap({ departureLocation, orders }) {
+  const mapContainerRef = useRef(null);
+  const departureMarkerRef = useRef(null);
 
-  const [longitude, latitude] = coordinates;
-  const longitudeRange = bounds.maxLongitude - bounds.minLongitude;
-  const latitudeRange = bounds.maxLatitude - bounds.minLatitude;
-  const left = longitudeRange === 0
-    ? 50
-    : 8 + ((longitude - bounds.minLongitude) / longitudeRange) * 84;
-  const top = latitudeRange === 0
-    ? 50
-    : 8 + ((bounds.maxLatitude - latitude) / latitudeRange) * 84;
+  useEffect(() => {
+    const mapContainer = mapContainerRef.current;
+    if (!mapContainer) return undefined;
 
-  return { left: `${left}%`, top: `${top}%` };
+    let isMounted = true;
+    let snapshotMap = null;
+    const locatedOrders = orders.filter((order) => order.hasCoordinates);
+
+    const initializeMap = async () => {
+      const [{ default: maplibregl }, { Protocol }] = await Promise.all([
+        import("maplibre-gl"),
+        import("pmtiles"),
+      ]);
+      if (!isMounted || !mapContainerRef.current) return;
+
+      installPmtilesProtocol(maplibregl, Protocol);
+      snapshotMap = createMapLibreMap(maplibregl, {
+        attributionControl: { compact: true },
+        center: locatedOrders[0]?.coordinates ?? departureLocation?.coordinates ?? DEFAULT_CENTER,
+        cooperativeGestures: false,
+        fadeDuration: 0,
+        interactive: false,
+        scrollZoom: false,
+        container: mapContainerRef.current,
+        style: OPENFREEMAP_STYLE_URL,
+        zoom: locatedOrders.length === 1 ? 13 : INITIAL_HOME_ZOOM,
+      });
+      installMissingMapImageFallback(snapshotMap);
+
+      snapshotMap.on("load", () => {
+        if (!isMounted || !snapshotMap) return;
+
+        if (departureLocation?.hasCoordinates) {
+          departureMarkerRef.current = new maplibregl.Marker({
+            anchor: "bottom",
+            element: createDepartureMarkerElement(departureLocation),
+          })
+            .setLngLat(departureLocation.coordinates)
+            .addTo(snapshotMap);
+        }
+
+        syncOrdersMapMarkerLayer(snapshotMap, locatedOrders, locatedOrders.map((order) => order.id));
+        fitRouteAddSnapshotMap(snapshotMap, maplibregl, [departureLocation, ...locatedOrders]);
+        snapshotMap.resize();
+      });
+    };
+
+    initializeMap();
+
+    return () => {
+      isMounted = false;
+      departureMarkerRef.current?.remove();
+      departureMarkerRef.current = null;
+      snapshotMap?.remove();
+    };
+  }, [departureLocation, orders]);
+
+  return (
+    <div style={routeAddSnapshotMapStyle}>
+      <div aria-label="Route group snapshot map" ref={mapContainerRef} style={routeAddSnapshotMapCanvasStyle} />
+      {orders.some((order) => order.hasCoordinates) ? null : (
+        <span style={routeAddSnapshotEmptyStyle}>No coordinates loaded for this group</span>
+      )}
+    </div>
+  );
 }
 
 function getOrderItemCount(order) {
@@ -2126,11 +2170,6 @@ export default function OrdersPage() {
     () => buildRouteAddSnapshotOrders(selectedRouteGroup, displayOrders),
     [displayOrders, selectedRouteGroup],
   );
-  const routeAddSnapshotBounds = useMemo(
-    () => getRouteAddSnapshotBounds(routeAddSnapshotOrders),
-    [routeAddSnapshotOrders],
-  );
-  const routeAddSnapshotLocatedOrders = routeAddSnapshotOrders.filter((order) => order.coordinates);
   const orderActionValueOptions =
     orderActionField === "state" ? ORDER_STATE_CHANGE_OPTIONS : ORDER_PAYMENT_CHANGE_OPTIONS;
 
@@ -3853,19 +3892,7 @@ export default function OrdersPage() {
                           <strong>Route snapshot</strong>
                           <span style={routeAddSnapshotHintStyle}>Read-only</span>
                         </div>
-                        <div aria-hidden="true" style={routeAddSnapshotMapStyle}>
-                          {routeAddSnapshotLocatedOrders.length > 0 ? routeAddSnapshotLocatedOrders.map((order, index) => (
-                            <span
-                              key={`${order.id}-pin`}
-                              style={{
-                                ...routeAddSnapshotPinStyle,
-                                ...getRouteAddSnapshotPinPosition(order.coordinates, routeAddSnapshotBounds),
-                              }}
-                            >{index + 1}</span>
-                          )) : (
-                            <span style={routeAddSnapshotEmptyStyle}>No coordinates loaded for this group</span>
-                          )}
-                        </div>
+                        <RouteAddSnapshotMap departureLocation={departureLocation} orders={routeAddSnapshotOrders} />
                         <strong>Orders in group</strong>
                         {routeAddSnapshotOrders.length > 0 ? (
                           <ol style={routeAddSnapshotListStyle}>
