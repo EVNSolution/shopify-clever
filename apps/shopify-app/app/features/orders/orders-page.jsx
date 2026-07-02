@@ -4,6 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { appendIdToken, routeGroupPath, routePlanPath } from "../delivery/route-paths";
+import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
 import { createDepartureMarkerElement } from "../maps/map-markers";
 import { createMapLibreMap } from "../maps/maplibre-map";
 import { installMissingMapImageFallback } from "../maps/maplibre-missing-images";
@@ -235,6 +236,11 @@ const routeReadinessValueStyle = {
   fontWeight: 650,
   overflow: "hidden",
   textOverflow: "ellipsis",
+};
+
+const routeAddPreviewStyle = {
+  ...routeReadinessStyle,
+  minHeight: 0,
 };
 
 const orderControlsTrailingStyle = {
@@ -1260,6 +1266,28 @@ function getOrderLineItems(order) {
     .filter((item) => item.name);
 }
 
+function getRouteGroupOrderCount(routeGroup) {
+  const assignments = Array.isArray(routeGroup?.assignments) ? routeGroup.assignments : [];
+  if (assignments.length > 0) return assignments.length;
+
+  return getVisibleRouteGroupChildren(routeGroup).reduce(
+    (total, child) => total + (Array.isArray(child?.orderIds) ? child.orderIds.length : 0),
+    0,
+  );
+}
+
+function getRouteAddOptionLabel(routeGroup) {
+  const name = textOrUndefined(routeGroup?.name) ?? "Untitled route";
+  const scope = formatRouteDeliveryScope(routeGroup, "");
+  return [name, scope, `${getRouteGroupOrderCount(routeGroup)} orders`].filter(Boolean).join(" · ");
+}
+
+function getRouteAddTargetLabel(routeGroup) {
+  const [firstChild] = getVisibleRouteGroupChildren(routeGroup);
+  if (!firstChild) return "No child route";
+  return getRouteGroupChildRouteName(routeGroup, firstChild, firstChild.routePlan, 0);
+}
+
 function getOrderItemCount(order) {
   const lineItems = getOrderLineItems(order);
   return lineItems.reduce((sum, item) => sum + item.quantity, 0);
@@ -1630,7 +1658,7 @@ export default function OrdersPage() {
   const [orderActionField, setOrderActionField] = useState("state");
   const [orderActionValue, setOrderActionValue] = useState(ORDER_STATE_CHANGE_OPTIONS[0].value);
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
-  const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
+  const [routeAddModalOpen, setRouteAddModalOpen] = useState(false);
   const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
   const [selectedRouteGroupId, setSelectedRouteGroupId] = useState("");
   const [activeOrderPopupId, setActiveOrderPopupId] = useState(null);
@@ -1956,7 +1984,7 @@ export default function OrdersPage() {
     selectableTableOrders.length > 0 &&
     selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
   const createRouteDisabled = plannedOrders.length === 0 || routePlanFetcher.state !== "idle";
-  const addToRouteDisabled = createRouteDisabled || !selectedRouteGroup?.id;
+  const addToRouteDisabled = createRouteDisabled || safeRouteGroups.length === 0;
   const createInventoryDisabled = plannedOrders.length === 0 || isCreatingInventory;
 
   useEffect(() => {
@@ -2563,7 +2591,7 @@ export default function OrdersPage() {
   const handleClearPlan = () => {
     setPlannedOrderIds([]);
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
-    setRouteAssignActionsOpen(false);
+    setRouteAddModalOpen(false);
     setInventoryAssignActionsOpen(false);
     setCreateInventoryClientError(null);
   };
@@ -2572,10 +2600,14 @@ export default function OrdersPage() {
     fitMapToOrders(routeFitLocations);
   };
 
-  const handleToggleRouteAssignActions = () => {
-    if (createRouteDisabled) return;
+  const handleOpenAddRoutePreview = () => {
+    if (addToRouteDisabled) return;
 
-    setRouteAssignActionsOpen((isOpen) => !isOpen);
+    if (!selectedRouteGroupId && safeRouteGroups[0]?.id) {
+      setSelectedRouteGroupId(safeRouteGroups[0].id);
+    }
+    setCreateRouteClientError(null);
+    setRouteAddModalOpen(true);
   };
 
   const handleToggleInventoryAssignActions = () => {
@@ -2611,7 +2643,7 @@ export default function OrdersPage() {
   };
 
   const handleAddToRoute = async () => {
-    if (addToRouteDisabled) return;
+    if (addToRouteDisabled || !selectedRouteGroup?.id) return;
 
     try {
       setCreateRouteClientError(null);
@@ -2624,6 +2656,7 @@ export default function OrdersPage() {
       formData.set("routeGroupId", selectedRouteGroup.id);
       if (selectedRouteGroup.updatedAt) formData.set("expectedUpdatedAt", selectedRouteGroup.updatedAt);
       formData.set("shopifySessionToken", sessionToken);
+      setRouteAddModalOpen(false);
       routePlanFetcher.submit(formData, { method: "post" });
     } catch {
       submittedRouteSessionTokenRef.current = null;
@@ -3230,59 +3263,24 @@ export default function OrdersPage() {
                 <button
                   type="button"
                   style={
+                    addToRouteDisabled
+                      ? disabledCreateRouteButtonStyle
+                      : addToPlanButtonStyle
+                  }
+                  disabled={addToRouteDisabled}
+                  onClick={handleOpenAddRoutePreview}
+                >Add to route</button>
+                <button
+                  type="button"
+                  style={
                     createRouteDisabled
                       ? disabledCreateRouteButtonStyle
                       : createRouteButtonStyle
                   }
-                  aria-expanded={routeAssignActionsOpen}
                   disabled={createRouteDisabled}
-                  onClick={handleToggleRouteAssignActions}
-                >Assign</button>
+                  onClick={handleCreateRoute}
+                >Create route</button>
               </div>
-            </div>
-            <div
-              style={{
-                ...routeAssignActionsStyle,
-                ...(routeAssignActionsOpen
-                  ? routeAssignActionsOpenStyle
-                  : routeAssignActionsClosedStyle),
-              }}
-            >
-              <select
-                aria-label="Route to add orders"
-                disabled={safeRouteGroups.length === 0 || isCreatingRoute}
-                value={selectedRouteGroup?.id ?? ""}
-                onChange={(event) => setSelectedRouteGroupId(event.currentTarget.value)}
-                style={routePlanTitleFieldStyle}
-              >
-                {safeRouteGroups.length === 0 ? (
-                  <option value="">No routes</option>
-                ) : safeRouteGroups.map((routeGroup) => (
-                  <option key={routeGroup.id} value={routeGroup.id}>
-                    {routeGroup.name ?? routeGroup.id}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                style={
-                  addToRouteDisabled
-                    ? disabledRouteAssignActionButtonStyle
-                    : routeAssignActionButtonStyle
-                }
-                disabled={addToRouteDisabled}
-                onClick={handleAddToRoute}
-              >Add to route</button>
-              <button
-                type="button"
-                style={
-                  createRouteDisabled
-                    ? disabledRouteAssignActionButtonStyle
-                    : routeAssignActionButtonStyle
-                }
-                disabled={createRouteDisabled}
-                onClick={handleCreateRoute}
-              >Create route</button>
             </div>
           </div>
 
@@ -3564,6 +3562,67 @@ export default function OrdersPage() {
                         disabled={isBulkUpdatingOrders}
                         onClick={handleSaveOrderAction}
                       >Save</button>
+                    </div>
+                  </div>
+                </div>,
+                document.body,
+              )
+            : null}
+          {routeAddModalOpen
+            ? createPortal(
+                <div
+                  role="presentation"
+                  style={orderActionOverlayStyle}
+                  onMouseDown={(event) => {
+                    if (event.target === event.currentTarget) setRouteAddModalOpen(false);
+                  }}
+                >
+                  <div aria-label="Add orders to route preview" aria-modal="true" role="dialog" style={orderActionDialogStyle}>
+                    <strong>Add to route</strong>
+                    <span style={orderSelectionCountStyle}>Selected: {plannedOrders.length} orders</span>
+                    <label style={routePlanTitleGroupStyle}>
+                      <span style={routePlanTitleLabelStyle}>Route</span>
+                      <select
+                        aria-label="Route to add orders"
+                        style={orderActionSelectStyle}
+                        value={selectedRouteGroup?.id ?? ""}
+                        onChange={(event) => setSelectedRouteGroupId(event.currentTarget.value)}
+                      >
+                        {safeRouteGroups.map((routeGroup) => (
+                          <option key={routeGroup.id} value={routeGroup.id}>
+                            {getRouteAddOptionLabel(routeGroup)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div style={routeAddPreviewStyle}>
+                      <div style={routeReadinessGridStyle}>
+                        <div style={routeReadinessItemStyle}>
+                          Target first route
+                          <span style={routeReadinessValueStyle}>{getRouteAddTargetLabel(selectedRouteGroup)}</span>
+                        </div>
+                        <div style={routeReadinessItemStyle}>
+                          Existing route orders
+                          <span style={routeReadinessValueStyle}>{getRouteGroupOrderCount(selectedRouteGroup)}</span>
+                        </div>
+                        <div style={routeReadinessItemStyle}>
+                          Delivery scope
+                          <span style={routeReadinessValueStyle}>{formatRouteDeliveryScope(selectedRouteGroup, "-")}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <div style={orderControlsTrailingStyle}>
+                      <button
+                        type="button"
+                        style={orderFilterButtonStyle}
+                        onClick={() => setRouteAddModalOpen(false)}
+                      >Cancel</button>
+                      <button
+                        type="button"
+                        style={isCreatingRoute ? disabledCreateRouteButtonStyle : createRouteButtonStyle}
+                        disabled={isCreatingRoute || !selectedRouteGroup?.id}
+                        onClick={handleAddToRoute}
+                      >Add</button>
                     </div>
                   </div>
                 </div>,
