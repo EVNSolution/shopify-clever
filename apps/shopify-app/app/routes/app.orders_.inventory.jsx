@@ -1,5 +1,7 @@
 /* eslint-disable react/prop-types */
-import { Link, useLoaderData, useRouteError } from "react-router";
+import { useEffect, useRef, useState } from "react";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { Link, useLoaderData, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryDetail } from "../features/delivery/inventories.server";
 import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
@@ -19,6 +21,7 @@ const pageStyle = {
 };
 
 const sheetStyle = {
+  alignContent: "start",
   boxSizing: "border-box",
   display: "grid",
   gap: "8px",
@@ -111,6 +114,156 @@ const summaryStyle = {
 const outputTimeStyle = {
   color: "#616161",
   fontSize: "11px",
+};
+
+const viewToggleStyle = {
+  background: "#f6f6f7",
+  border: "1px solid #d6d6d6",
+  borderRadius: "999px",
+  display: "inline-flex",
+  gap: "2px",
+  padding: "2px",
+};
+
+const viewToggleButtonStyle = {
+  background: "transparent",
+  border: 0,
+  borderRadius: "999px",
+  color: "#616161",
+  cursor: "pointer",
+  fontSize: "11px",
+  fontWeight: 650,
+  lineHeight: "16px",
+  padding: "3px 9px",
+};
+
+const activeViewToggleButtonStyle = {
+  ...viewToggleButtonStyle,
+  background: "#202223",
+  color: "#ffffff",
+  cursor: "default",
+  opacity: 1,
+};
+
+const hiddenStyle = {
+  display: "none",
+};
+
+const orderViewStyle = {
+  display: "grid",
+  gap: "8px",
+};
+
+const orderViewMetaStyle = {
+  border: "1px solid #e5e7eb",
+  display: "grid",
+  fontSize: "11px",
+  gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
+};
+
+const orderViewMetaCellStyle = {
+  borderRight: "1px solid #e5e7eb",
+  display: "grid",
+  gap: "2px",
+  minWidth: 0,
+  padding: "6px",
+};
+
+const orderViewMetaLabelStyle = {
+  color: "#6b7280",
+  fontSize: "9px",
+  fontWeight: 750,
+  letterSpacing: "0.02em",
+  textTransform: "uppercase",
+};
+
+const orderViewMetaValueStyle = {
+  fontSize: "11px",
+  fontWeight: 700,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const orderViewColumns = "74px minmax(0, 1fr) 58px 76px 72px 118px 86px";
+
+const orderViewOrdersListStyle = {
+  display: "grid",
+  gap: "14px",
+  width: "100%",
+};
+
+const orderViewHeaderRowStyle = {
+  alignItems: "start",
+  borderBottom: "1px solid #d1d5db",
+  color: "#374151",
+  display: "grid",
+  fontSize: "11px",
+  fontWeight: 750,
+  gap: "0 10px",
+  gridTemplateColumns: orderViewColumns,
+  lineHeight: "14px",
+  padding: "4px 0 8px",
+};
+
+const orderViewHeaderCellStyle = {
+  minWidth: 0,
+  whiteSpace: "normal",
+};
+
+const orderViewOrderCardStyle = {
+  borderBottom: "1px solid #d1d5db",
+  borderTop: "1px solid #d1d5db",
+  breakInside: "avoid",
+  display: "grid",
+  gap: 0,
+  pageBreakInside: "avoid",
+};
+
+const orderViewOrderRowStyle = {
+  alignItems: "start",
+  borderBottom: "1px solid #e5e7eb",
+  display: "grid",
+  fontSize: "11px",
+  gap: "0 10px",
+  gridTemplateColumns: orderViewColumns,
+  lineHeight: "16px",
+  minHeight: "34px",
+  padding: "8px 0",
+};
+
+const orderViewCellStyle = {
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  wordBreak: "keep-all",
+};
+
+const orderViewCenterCellStyle = {
+  ...orderViewCellStyle,
+  textAlign: "center",
+};
+
+const orderViewPriceCellStyle = {
+  ...orderViewCellStyle,
+  whiteSpace: "nowrap",
+};
+
+const orderViewMutedStyle = {
+  color: "#6b7280",
+  fontSize: "10px",
+  marginTop: "3px",
+};
+
+const orderViewItemsCellStyle = {
+  display: "grid",
+  gap: "2px",
+  padding: "8px 0 10px",
+};
+
+const orderViewItemLineStyle = {
+  fontSize: "11px",
+  lineHeight: "17px",
+  overflowWrap: "anywhere",
 };
 
 const historyCardStyle = {
@@ -311,6 +464,10 @@ const totalColumnStyle = {
 };
 
 const PRODUCT_COLUMNS_PER_TABLE = 6;
+const PRINT_CONTENT_HEIGHT_MM = 286;
+const CSS_PX_PER_MM = 96 / 25.4;
+const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
+const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
 
 const noticeStyle = {
   background: "#fff4f4",
@@ -324,32 +481,98 @@ const printCss = `
 @media print {
   html, body { margin: 0 !important; }
   .inventory-detail-no-print { display: none !important; }
-  .inventory-detail-page { display: block !important; margin: 0 auto !important; max-width: none !important; padding: 5mm 8mm 8mm !important; width: 210mm !important; }
-  .inventory-detail-sheet { box-sizing: border-box !important; font-size: 11px !important; max-width: none !important; min-height: 297mm !important; width: 100% !important; }
+  .inventory-detail-page { box-sizing: border-box !important; display: block !important; margin: 0 auto !important; max-width: none !important; min-height: 297mm !important; padding: 4mm 10mm 7mm !important; width: 210mm !important; }
+  .inventory-detail-sheet { box-sizing: border-box !important; font-size: 13px !important; max-width: none !important; min-height: 0 !important; width: 100% !important; }
   .inventory-detail-history { display: none !important; }
   .inventory-detail-panel { border: 0 !important; border-radius: 0 !important; }
   .inventory-detail-table-wrap { overflow: visible !important; }
-  .inventory-detail-table { font-size: 11px !important; width: 100% !important; }
-  .inventory-detail-table th, .inventory-detail-table td { line-height: 14px !important; padding: 4px 5px !important; }
-  .inventory-detail-group-total-head { font-size: 11px !important; }
+  .inventory-detail-table { font-size: 13px !important; width: 100% !important; }
+  .inventory-detail-table th, .inventory-detail-table td { line-height: 17px !important; padding: 5px 6px !important; }
+  .inventory-detail-group-total-head { font-size: 13px !important; }
   .inventory-detail-total-col { width: 64px !important; }
-  .inventory-detail-page h1 { font-size: 13px !important; line-height: 17px !important; }
-  .inventory-detail-product-label { max-height: 28px !important; }
+  .inventory-detail-page h1 { font-size: 17px !important; line-height: 22px !important; }
+  .inventory-detail-product-label { max-height: 34px !important; }
   .inventory-detail-row-header { position: static !important; }
+  .inventory-detail-orders-list { display: grid !important; gap: 8mm !important; width: 100% !important; }
+  .inventory-detail-orders-head, .inventory-detail-order-row { column-gap: 3mm !important; display: grid !important; grid-template-columns: 18mm minmax(0, 1fr) 12mm 20mm 18mm 30mm 22mm !important; }
+  .inventory-detail-orders-head { border-bottom: 1px solid #111 !important; font-size: 15px !important; font-weight: 750 !important; line-height: 19px !important; padding: 0 0 4mm !important; }
+  .inventory-detail-order-card { border-bottom: 1px solid #c7c7c7 !important; border-top: 1px solid #c7c7c7 !important; break-inside: avoid-page !important; display: grid !important; gap: 0 !important; margin: 0 !important; padding: 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-row { border-bottom: 1px solid #e5e7eb !important; font-size: 15px !important; line-height: 21px !important; padding: 4mm 0 !important; }
+  .inventory-detail-order-items { display: grid !important; font-size: 15px !important; gap: 1mm !important; line-height: 21px !important; padding: 3mm 0 4mm !important; }
+  .inventory-detail-order-items > div { break-inside: avoid !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-meta { break-inside: avoid !important; page-break-inside: avoid !important; }
   @page { size: A4 portrait; margin: 0; }
 }
 `;
 
+
+function getPrintContentHeightPx() {
+  return PRINT_CONTENT_HEIGHT_MM * CSS_PX_PER_MM;
+}
+
+function clearInventoryOrderPrintBreaks(root) {
+  const targetRoot = root ?? globalThis.document;
+  targetRoot?.querySelectorAll(".inventory-detail-order-card").forEach((card) => {
+    card.style.breakBefore = "";
+    card.style.pageBreakBefore = "";
+  });
+}
+
+function applyInventoryOrderPrintBreaks(root) {
+  const targetRoot = root ?? globalThis.document;
+  const page = targetRoot?.querySelector(".inventory-detail-view-orders");
+  const list = page?.querySelector(".inventory-detail-orders-list");
+  if (!page || !list || typeof globalThis.window === "undefined") return;
+
+  const cards = Array.from(list.querySelectorAll(".inventory-detail-order-card"));
+  if (cards.length === 0) return;
+
+  clearInventoryOrderPrintBreaks(targetRoot);
+
+  const pageHeight = getPrintContentHeightPx();
+  const pageTop = page.getBoundingClientRect().top;
+  const listTop = list.getBoundingClientRect().top;
+  const computedList = globalThis.window.getComputedStyle(list);
+  const gap = Number.parseFloat(computedList.rowGap || computedList.gap) || 0;
+  let usedHeight = (((listTop - pageTop) % pageHeight) + pageHeight) % pageHeight;
+
+  cards.forEach((card, index) => {
+    const height = card.getBoundingClientRect().height;
+    const requiredHeight = height + (index === 0 ? 0 : gap);
+
+    if (index > 0 && height < pageHeight && usedHeight + requiredHeight > pageHeight) {
+      card.style.breakBefore = "page";
+      card.style.pageBreakBefore = "always";
+      usedHeight = height;
+      return;
+    }
+
+    usedHeight += requiredHeight;
+  });
+}
+
 export const loader = async ({ request }) => {
   const inventoryId = new URL(request.url).searchParams.get("id");
   const result = await fetchDeliveryInventoryDetail(request, inventoryId);
+  const errors = result.errors ?? [];
   logInventoryDetailPayload(inventoryId, result, buildInventoryDetailApiPath(inventoryId));
   return {
-    errors: result.errors ?? [],
+    errors,
     generatedAt: new Date().toISOString(),
     inventory: result.inventory,
+    needsSessionTokenRefresh: hasSessionTokenRefreshError(errors),
   };
 };
+
+function hasSessionTokenRefreshError(errors) {
+  return errors.some((error) =>
+    error?.code === "DELIVERY_SESSION_TOKEN_MISSING" ||
+    (
+      error?.code === "UNAUTHORIZED" &&
+      error?.message === INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE
+    ),
+  );
+}
 
 function buildInventoryDetailApiPath(inventoryId) {
   return inventoryId ? `/admin/inventories/${encodeURIComponent(inventoryId)}` : null;
@@ -415,6 +638,172 @@ function formatOutputTime(value) {
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
+
+function buildInventoryOrderRouteMeta(inventory, matrix, orders) {
+  // ponytail: driver/display route fields should come from inventory.linkedRoutes[0] when the API contract exists.
+  const route = Array.isArray(inventory?.linkedRoutes) ? inventory.linkedRoutes[0] : null;
+  return [
+    { label: "Driver", value: textOrDisplay(route?.driver?.displayName ?? route?.driverName) },
+    { label: "Route", value: textOrDisplay(route?.name ?? inventory?.routeName ?? inventory?.name) },
+    { label: "Delivery date", value: matrix.rows.length === 1 ? matrix.rows[0].label : "-" },
+    { label: "Start", value: textOrDisplay(route?.startTime ?? route?.scheduledStartAt) },
+    { label: "Orders", value: String(orders.length) },
+    { label: "Items", value: String(matrix.totalQuantity ?? 0) },
+  ];
+}
+
+function buildInventoryOrderViewRows(orders) {
+  return (Array.isArray(orders) ? orders : []).map((order, index) => {
+    // ponytail: ETA/Drive time/Stop time should come from inventory.linkedRoutes[].stops keyed by order id when the API contract exists.
+    return {
+      address: getInventoryOrderAddress(order),
+      customer: getInventoryOrderCustomer(order),
+      driveTime: formatInventoryRouteTime(order?.driveTime ?? order?.driveTimeMinutes ?? order?.routeStop?.driveTime),
+      eta: textOrDisplay(order?.eta ?? order?.routeStop?.eta),
+      items: getInventoryOrderLineItems(order).map(formatInventoryOrderLineItem),
+      orderId: getInventoryOrderName(order, index),
+      payment: formatInventoryOrderPayment(order),
+      phone: getInventoryOrderPhone(order),
+      price: formatInventoryOrderPrice(order),
+      stopTime: formatInventoryRouteTime(order?.stopTime ?? order?.stopTimeMinutes ?? order?.routeStop?.stopTime),
+    };
+  });
+}
+
+function getInventoryOrderLineItems(order) {
+  if (Array.isArray(order?.items)) return order.items;
+  const lineItems = order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
+  if (Array.isArray(lineItems)) return lineItems;
+  if (Array.isArray(lineItems?.nodes)) return lineItems.nodes;
+  if (Array.isArray(lineItems?.edges)) return lineItems.edges.map((edge) => edge?.node).filter(Boolean);
+  return [];
+}
+
+function formatInventoryOrderLineItem(item) {
+  const name = textOrDisplay(item?.name ?? item?.title ?? item?.productTitle, "Item");
+  const options = formatInventoryOrderOptions(item?.options) || textOrUndefined(item?.variantTitle);
+  const quantity = Math.abs(Number(item?.quantityDelta ?? item?.quantity ?? item?.currentQuantity) || 1);
+  return `${quantity} EA · ${options ? `${name} (${options})` : name}`;
+}
+
+function formatInventoryOrderOptions(options) {
+  if (!Array.isArray(options)) return "";
+  return options
+    .map((option) => {
+      const key = textOrUndefined(option?.key);
+      const value = textOrUndefined(option?.value);
+      return key && value ? `${key}: ${value}` : value;
+    })
+    .filter(Boolean)
+    .join(", ");
+}
+
+function getInventoryOrderName(order, index) {
+  const id = textOrUndefined(order?.id);
+  return textOrUndefined(order?.orderName)
+    ?? textOrUndefined(order?.name)
+    ?? textOrUndefined(order?.shopifyOrderName)
+    ?? textOrUndefined(order?.orderNumber)
+    ?? textOrUndefined(order?.shopifyOrderNumber)
+    ?? (id ? id.split("/").pop() : null)
+    ?? `Order ${index + 1}`;
+}
+
+function getInventoryOrderCustomer(order) {
+  return textOrDisplay(
+    order?.recipientName
+      ?? order?.customer
+      ?? order?.customerName
+      ?? order?.shippingAddress?.name
+      ?? order?.deliveryAddress?.name
+      ?? order?.shopifyOrderSnapshot?.shippingAddress?.name
+      ?? order?.rawPayload?.recipientName
+      ?? order?.rawPayload?.shippingAddress?.name,
+    "Unknown customer",
+  );
+}
+
+function getInventoryOrderAddress(order) {
+  return textOrDisplay(
+    order?.address
+      ?? formatInventoryAddress(order?.shippingAddress)
+      ?? formatInventoryAddress(order?.deliveryAddress)
+      ?? formatInventoryAddress(order?.shopifyOrderSnapshot?.shippingAddress)
+      ?? formatInventoryAddress(order?.rawPayload?.shippingAddress),
+  );
+}
+
+function formatInventoryAddress(address) {
+  if (typeof address === "string") return textOrUndefined(address);
+  if (!address || typeof address !== "object") return undefined;
+  return [address.address1, address.address2, address.city, address.province ?? address.provinceCode, address.zip, address.countryCodeV2 ?? address.country]
+    .map(textOrUndefined)
+    .filter(Boolean)
+    .join(", ") || undefined;
+}
+
+function getInventoryOrderPhone(order) {
+  return textOrUndefined(
+    order?.phone
+      ?? order?.shippingPhone
+      ?? order?.shippingAddress?.phone
+      ?? order?.deliveryAddress?.phone
+      ?? order?.shopifyOrderSnapshot?.shippingAddress?.phone
+      ?? order?.shopifyOrderSnapshot?.phone
+      ?? order?.rawPayload?.shippingAddress?.phone
+      ?? order?.rawPayload?.phone,
+  );
+}
+
+function formatInventoryOrderPrice(order) {
+  const amount = Number(
+    order?.totalPriceAmount
+      ?? order?.currentTotalPriceSet?.shopMoney?.amount
+      ?? order?.rawPayload?.currentTotalPriceSet?.shopMoney?.amount
+      ?? order?.shopifyOrderSnapshot?.currentTotalPriceSet?.shopMoney?.amount,
+  );
+  if (!Number.isFinite(amount)) return "-";
+  const currency = textOrUndefined(
+    order?.currencyCode
+      ?? order?.currentTotalPriceSet?.shopMoney?.currencyCode
+      ?? order?.rawPayload?.currentTotalPriceSet?.shopMoney?.currencyCode
+      ?? order?.shopifyOrderSnapshot?.currentTotalPriceSet?.shopMoney?.currencyCode,
+  );
+  return `${amount.toFixed(2)} ${currency ?? ""}`.trim();
+}
+
+function formatInventoryOrderPayment(order) {
+  const status = textOrUndefined(
+    order?.paymentStatus
+      ?? order?.financialStatus
+      ?? order?.rawPayload?.displayFinancialStatus
+      ?? order?.shopifyOrderSnapshot?.displayFinancialStatus,
+  );
+  if (!status) return "-";
+  const normalized = status.replace(/\s+/g, "_").toUpperCase();
+  if (normalized === "PAID") return "Paid";
+  if (normalized === "PENDING") return "Pending";
+  return status;
+}
+
+function formatInventoryRouteTime(value) {
+  const text = textOrUndefined(value);
+  if (!text) return "-";
+  const number = Number(text);
+  return Number.isFinite(number) ? `${number} min` : text;
+}
+
+function textOrDisplay(value, fallback = "-") {
+  return textOrUndefined(value) ?? fallback;
+}
+
+function textOrUndefined(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  if (typeof value !== "string") return undefined;
+  const text = value.trim();
+  return text || undefined;
+}
+
 function DateCellLabel({ label }) {
   const match = String(label).match(/^([A-Za-z]{3}),\s*(\d{2}\/\d{2})$/);
   if (!match) return label;
@@ -427,16 +816,72 @@ function DateCellLabel({ label }) {
 }
 
 export default function InventoryDetailPage() {
-  const { errors, generatedAt, inventory } = useLoaderData();
+  const { errors, generatedAt, inventory, needsSessionTokenRefresh } = useLoaderData();
+  const shopify = useAppBridge();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const sessionTokenRefreshSubmittedRef = useRef(false);
+  const [inventoryDetailView, setInventoryDetailView] = useState("products");
   const notice = getServiceErrorNotice([{ errors }], { context: "inventory_detail" });
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
   const matrix = buildInventoryProductMatrix(orders);
   const hasMatrix = matrix.rows.length > 0 && matrix.products.length > 0;
   const productChunks = hasMatrix ? getProductChunks(matrix.products) : [];
   const historyItems = buildInventoryHistoryItems(inventory);
+  const orderRouteMeta = buildInventoryOrderRouteMeta(inventory, matrix, orders);
+  const orderViewRows = buildInventoryOrderViewRows(orders);
+
+  useEffect(() => {
+    if (!needsSessionTokenRefresh || searchParams.get(SESSION_TOKEN_REFRESH_PARAM)) return;
+    if (sessionTokenRefreshSubmittedRef.current) return;
+
+    let cancelled = false;
+    sessionTokenRefreshSubmittedRef.current = true;
+
+    shopify
+      .idToken()
+      .then((sessionToken) => {
+        if (cancelled || !sessionToken) return;
+
+        const nextSearchParams = new URLSearchParams(searchParams);
+        nextSearchParams.set("id_token", sessionToken);
+        nextSearchParams.set(SESSION_TOKEN_REFRESH_PARAM, "1");
+        setSearchParams(nextSearchParams, {
+          preventScrollReset: true,
+          replace: true,
+        });
+      })
+      .catch(() => {
+        sessionTokenRefreshSubmittedRef.current = false;
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [needsSessionTokenRefresh, searchParams, setSearchParams, shopify]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+
+    if (inventoryDetailView !== "orders") {
+      clearInventoryOrderPrintBreaks();
+      return undefined;
+    }
+
+    const handleBeforePrint = () => applyInventoryOrderPrintBreaks();
+    const handleAfterPrint = () => clearInventoryOrderPrintBreaks();
+
+    window.addEventListener("beforeprint", handleBeforePrint);
+    window.addEventListener("afterprint", handleAfterPrint);
+
+    return () => {
+      window.removeEventListener("beforeprint", handleBeforePrint);
+      window.removeEventListener("afterprint", handleAfterPrint);
+      clearInventoryOrderPrintBreaks();
+    };
+  }, [inventoryDetailView, orderViewRows.length]);
 
   return (
-    <main className="inventory-detail-page" style={pageStyle}>
+    <main className={`inventory-detail-page inventory-detail-view-${inventoryDetailView}`} style={pageStyle}>
       <style>{printCss}</style>
       <div className="inventory-detail-sheet" style={sheetStyle}>
         <section className="inventory-detail-panel" style={panelStyle}>
@@ -447,8 +892,31 @@ export default function InventoryDetailPage() {
                 ← Back to Inventory
               </Link>
               <div style={headerActionStyle}>
+                <div className="inventory-detail-no-print" role="group" aria-label="Inventory detail view" style={viewToggleStyle}>
+                  <button
+                    aria-pressed={inventoryDetailView === "products"}
+                    disabled={inventoryDetailView === "products"}
+                    onClick={() => setInventoryDetailView("products")}
+                    style={inventoryDetailView === "products" ? activeViewToggleButtonStyle : viewToggleButtonStyle}
+                    type="button"
+                  >Products</button>
+                  <button
+                    aria-pressed={inventoryDetailView === "orders"}
+                    disabled={inventoryDetailView === "orders"}
+                    onClick={() => setInventoryDetailView("orders")}
+                    style={inventoryDetailView === "orders" ? activeViewToggleButtonStyle : viewToggleButtonStyle}
+                    type="button"
+                  >Orders</button>
+                </div>
                 <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt)}</span>
-                <button className="inventory-detail-no-print" type="button" onClick={() => window.print()}>Print</button>
+                <button
+                  className="inventory-detail-no-print"
+                  type="button"
+                  onClick={() => {
+                    applyInventoryOrderPrintBreaks();
+                    window.print();
+                  }}
+                >Print</button>
               </div>
             </div>
           </div>
@@ -460,7 +928,59 @@ export default function InventoryDetailPage() {
               <h1 style={titleStyle}>{inventory?.name ?? "Inventory"}</h1>
               {hasMatrix ? <span style={summaryStyle}>Overall total: {matrix.totalQuantity}</span> : null}
             </div>
-            <div className="inventory-detail-table-wrap" style={tableWrapStyle}>
+            {inventoryDetailView === "orders" ? (
+              <div style={orderViewStyle}>
+                {/* ponytail: driver, delivery date, route start, ETA, drive time, and stop time should be hydrated from linked route stops once inventory exposes linkedRoutes. */}
+                {/* ponytail: Order Note is intentionally not rendered until inventory detail guarantees order.note in this payload. */}
+                <div className="inventory-detail-order-meta" style={orderViewMetaStyle}>
+                  {orderRouteMeta.map((meta, index) => (
+                    <div key={meta.label} style={index === orderRouteMeta.length - 1 ? { ...orderViewMetaCellStyle, borderRight: 0 } : orderViewMetaCellStyle}>
+                      <span style={orderViewMetaLabelStyle}>{meta.label}</span>
+                      <span style={orderViewMetaValueStyle}>{meta.value}</span>
+                    </div>
+                  ))}
+                </div>
+                {orderViewRows.length === 0 ? (
+                  <p style={historyMetaStyle}>No orders</p>
+                ) : (
+                  <div aria-label="Inventory orders" className="inventory-detail-orders-list" style={orderViewOrdersListStyle}>
+                    <div className="inventory-detail-orders-head" style={orderViewHeaderRowStyle}>
+                      <span style={orderViewHeaderCellStyle}>Order id</span>
+                      <span style={orderViewHeaderCellStyle}>Address</span>
+                      <span style={orderViewHeaderCellStyle}>ETA</span>
+                      <span style={orderViewHeaderCellStyle}>Drive time</span>
+                      <span style={orderViewHeaderCellStyle}>Stop time</span>
+                      <span style={orderViewHeaderCellStyle}>Customer</span>
+                      <span style={orderViewHeaderCellStyle}>Price</span>
+                    </div>
+                    {orderViewRows.map((order) => (
+                      <article className="inventory-detail-order-card" key={order.orderId} style={orderViewOrderCardStyle}>
+                        <div className="inventory-detail-order-row" style={orderViewOrderRowStyle}>
+                          <div style={orderViewCellStyle}><strong>{order.orderId}</strong></div>
+                          <div style={orderViewCellStyle}>{order.address}</div>
+                          <div style={orderViewCenterCellStyle}>{order.eta}</div>
+                          <div style={orderViewCenterCellStyle}>{order.driveTime}</div>
+                          <div style={orderViewCenterCellStyle}>{order.stopTime}</div>
+                          <div style={orderViewCellStyle}>
+                            <div>{order.customer}</div>
+                            {order.phone ? <div style={orderViewMutedStyle}>Shipping phone: {order.phone}</div> : null}
+                          </div>
+                          <div style={orderViewPriceCellStyle}>
+                            {order.payment !== "-" ? `${order.price} · ${order.payment}` : order.price}
+                          </div>
+                        </div>
+                        <div className="inventory-detail-order-items" style={orderViewItemsCellStyle}>
+                          {(order.items.length > 0 ? order.items : ["No items"]).map((item, itemIndex) => (
+                            <div key={`${order.orderId}-${itemIndex}`} style={orderViewItemLineStyle}>{item}</div>
+                          ))}
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+            <div className="inventory-detail-table-wrap" style={inventoryDetailView === "orders" ? hiddenStyle : tableWrapStyle}>
               {!hasMatrix ? (
                 <table aria-label="Inventory product matrix" className="inventory-detail-table" style={tableStyle}>
                   <tbody>
