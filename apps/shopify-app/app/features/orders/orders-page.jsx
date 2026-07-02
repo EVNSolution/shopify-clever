@@ -177,7 +177,7 @@ const routeAssignActionsStyle = {
 
 const routeAssignActionsOpenStyle = {
   marginTop: "8px",
-  maxHeight: "100px",
+  maxHeight: "150px",
   opacity: 1,
 };
 
@@ -1458,7 +1458,7 @@ export default function OrdersPage() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, inventories, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = useLoaderData();
+  const { orders, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = useLoaderData();
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
@@ -1467,6 +1467,10 @@ export default function OrdersPage() {
   const safeInventories = useMemo(
     () => (Array.isArray(inventories) ? inventories : []),
     [inventories],
+  );
+  const safeRouteGroups = useMemo(
+    () => (Array.isArray(routeGroups) ? routeGroups.filter((routeGroup) => routeGroup?.id) : []),
+    [routeGroups],
   );
   const syncedOrders = useMemo(
     () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders),
@@ -1628,6 +1632,7 @@ export default function OrdersPage() {
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
+  const [selectedRouteGroupId, setSelectedRouteGroupId] = useState("");
   const [activeOrderPopupId, setActiveOrderPopupId] = useState(null);
   const [sortConfig, setSortConfig] = useState(null);
   const [tableColumnWidths, setTableColumnWidths] = useState(DEFAULT_TABLE_COLUMN_WIDTHS);
@@ -1887,6 +1892,10 @@ export default function OrdersPage() {
     () => checkedOrders.map((order) => order.orderId).filter(Boolean),
     [checkedOrders],
   );
+  const selectedRouteGroup = useMemo(
+    () => safeRouteGroups.find((routeGroup) => routeGroup.id === selectedRouteGroupId) ?? safeRouteGroups[0] ?? null,
+    [safeRouteGroups, selectedRouteGroupId],
+  );
   const orderActionValueOptions =
     orderActionField === "state" ? ORDER_STATE_CHANGE_OPTIONS : ORDER_PAYMENT_CHANGE_OPTIONS;
 
@@ -1947,6 +1956,7 @@ export default function OrdersPage() {
     selectableTableOrders.length > 0 &&
     selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
   const createRouteDisabled = plannedOrders.length === 0 || routePlanFetcher.state !== "idle";
+  const addToRouteDisabled = createRouteDisabled || !selectedRouteGroup?.id;
   const createInventoryDisabled = plannedOrders.length === 0 || isCreatingInventory;
 
   useEffect(() => {
@@ -2600,6 +2610,29 @@ export default function OrdersPage() {
     }
   };
 
+  const handleAddToRoute = async () => {
+    if (addToRouteDisabled) return;
+
+    try {
+      setCreateRouteClientError(null);
+      const sessionToken = await shopify.idToken();
+      submittedRouteSessionTokenRef.current = sessionToken;
+
+      const formData = new FormData();
+      formData.set("_intent", "addOrdersToRouteGroup");
+      formData.set("plannedOrderIds", JSON.stringify(plannedOrders.map((order) => order.id)));
+      formData.set("routeGroupId", selectedRouteGroup.id);
+      if (selectedRouteGroup.updatedAt) formData.set("expectedUpdatedAt", selectedRouteGroup.updatedAt);
+      formData.set("shopifySessionToken", sessionToken);
+      routePlanFetcher.submit(formData, { method: "post" });
+    } catch {
+      submittedRouteSessionTokenRef.current = null;
+      setCreateRouteClientError(
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      );
+    }
+  };
+
   const handleAddInventory = async (submitAction = "add") => {
     if (createInventoryDisabled) return;
 
@@ -2690,6 +2723,7 @@ export default function OrdersPage() {
     const sessionToken = submittedRouteSessionTokenRef.current;
 
     if (!sessionToken) return;
+    if ((routePlanFetcher.data?.errors ?? []).length > 0) return;
 
     if (createdRouteGroup?.id) {
       submittedRouteSessionTokenRef.current = null;
@@ -2701,7 +2735,7 @@ export default function OrdersPage() {
 
     submittedRouteSessionTokenRef.current = null;
     navigate(appendIdToken(routePlanPath(createdRoutePlan.id), sessionToken));
-  }, [navigate, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
+  }, [navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
 
   useEffect(() => {
     const createdInventory = inventoryFetcher.data?.inventory;
@@ -3214,10 +3248,30 @@ export default function OrdersPage() {
                   : routeAssignActionsClosedStyle),
               }}
             >
+              <select
+                aria-label="Route to add orders"
+                disabled={safeRouteGroups.length === 0 || isCreatingRoute}
+                value={selectedRouteGroup?.id ?? ""}
+                onChange={(event) => setSelectedRouteGroupId(event.currentTarget.value)}
+                style={routePlanTitleFieldStyle}
+              >
+                {safeRouteGroups.length === 0 ? (
+                  <option value="">No routes</option>
+                ) : safeRouteGroups.map((routeGroup) => (
+                  <option key={routeGroup.id} value={routeGroup.id}>
+                    {routeGroup.name ?? routeGroup.id}
+                  </option>
+                ))}
+              </select>
               <button
                 type="button"
-                style={disabledRouteAssignActionButtonStyle}
-                disabled={true}
+                style={
+                  addToRouteDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={addToRouteDisabled}
+                onClick={handleAddToRoute}
               >Add to route</button>
               <button
                 type="button"

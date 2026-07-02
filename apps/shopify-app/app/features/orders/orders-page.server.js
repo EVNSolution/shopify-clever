@@ -7,9 +7,12 @@ import {
 } from "../delivery/route-plans.server";
 import {
   createDeliveryRouteGroup,
+  fetchDeliveryRouteGroups,
   generateDeliveryRouteGroupChildRoutes,
+  saveDeliveryRouteGroupDraft,
+  updateDeliveryRouteGroupOrders,
 } from "../delivery/route-groups.server";
-import { getRouteGroupChildRoutePlanId } from "../delivery/route-helpers";
+import { getRouteGroupChildRoutePlanId, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
 import {
   getOrderSyncSnapshots,
@@ -70,6 +73,46 @@ function getFirstRouteGroupRoutePlan(routeGroup) {
   const firstChild = routeGroup?.children?.find(getRouteGroupChildRoutePlanId);
   if (!firstChild) return null;
   return firstChild.routePlan ?? { id: getRouteGroupChildRoutePlanId(firstChild) };
+}
+
+function buildFirstRouteDraftPayload(routeGroup, addedOrderIds = []) {
+  const children = getVisibleRouteGroupChildren(routeGroup);
+  if (children.length === 0) return null;
+
+  const assignmentOrderIds = Array.isArray(routeGroup?.assignments)
+    ? routeGroup.assignments.map((assignment) => textOrUndefined(assignment?.orderId)).filter(Boolean)
+    : [];
+  const fallbackOrderIds = [
+    ...children.flatMap((child) => Array.isArray(child?.orderIds) ? child.orderIds : []),
+    ...addedOrderIds,
+  ].map(textOrUndefined).filter(Boolean);
+  const groupOrderIds = assignmentOrderIds.length > 0 ? assignmentOrderIds : [...new Set(fallbackOrderIds)];
+  const groupOrderIdSet = new Set(groupOrderIds);
+  const draftedOrderIds = new Set();
+
+  const routes = children.map((child) => {
+    const orderIds = (Array.isArray(child?.orderIds) ? child.orderIds : [])
+      .map(textOrUndefined)
+      .filter((orderId) => orderId && groupOrderIdSet.has(orderId) && !draftedOrderIds.has(orderId));
+    orderIds.forEach((orderId) => draftedOrderIds.add(orderId));
+
+    return {
+      branchId: null,
+      ...(child?.color ? { color: child.color } : {}),
+      ...(child?.label ? { label: child.label } : {}),
+      orderIds,
+      ...(child?.routeIdx == null ? {} : { routeIdx: child.routeIdx }),
+      routePlanId: getRouteGroupChildRoutePlanId(child),
+      ...(child?.sortOrder == null ? {} : { sortOrder: child.sortOrder }),
+    };
+  });
+
+  routes[0].orderIds = [
+    ...routes[0].orderIds,
+    ...groupOrderIds.filter((orderId) => !draftedOrderIds.has(orderId)),
+  ];
+
+  return { routes };
 }
 
 async function fetchShopifyShopTimeZone(admin, options = {}) {
@@ -291,7 +334,7 @@ async function handleOrdersAction(request) {
     shopifySessionToken,
     shopifyShopCacheKey,
     plannedOrderIds,
-    reason: "route_create_preflight",
+    reason: intent === "addOrdersToRouteGroup" ? "route_add_preflight" : "route_create_preflight",
     timings: createTimings,
   });
 
@@ -300,6 +343,52 @@ async function handleOrdersAction(request) {
   }
 
   const { canonicalOrderCount, departureLocationData, plannedOrders, syncedOrderCount } = plannedOrderData;
+
+  if (intent === "addOrdersToRouteGroup") {
+    const routeGroupId = textOrUndefined(formData.get("routeGroupId"));
+    const expectedUpdatedAt = textOrUndefined(formData.get("expectedUpdatedAt"));
+
+    if (!routeGroupId) {
+      return { errors: [{ message: "추가할 route를 선택해주세요." }] };
+    }
+
+    const addOrderIds = plannedOrders.map((order) => order.orderId).filter(Boolean);
+    const addResult = await updateDeliveryRouteGroupOrders(
+      request,
+      routeGroupId,
+      {
+        addOrderIds,
+        ...(expectedUpdatedAt ? { expectedUpdatedAt } : {}),
+      },
+      { sessionToken: shopifySessionToken },
+    );
+
+    if (!addResult.routeGroup?.id || (addResult.errors ?? []).length > 0) {
+      return {
+        routeGroup: addResult.routeGroup,
+        errors: (addResult.errors ?? []).length > 0
+          ? addResult.errors
+          : [{ message: "Route에 주문을 추가하지 못했습니다." }],
+      };
+    }
+
+    const draftPayload = buildFirstRouteDraftPayload(addResult.routeGroup, addOrderIds);
+    if (!draftPayload) {
+      return { routeGroup: addResult.routeGroup, errors: [{ message: "주문을 배정할 child route가 없습니다." }] };
+    }
+
+    const draftResult = await saveDeliveryRouteGroupDraft(
+      request,
+      routeGroupId,
+      draftPayload,
+      { sessionToken: shopifySessionToken },
+    );
+
+    return {
+      routeGroup: draftResult.routeGroup ?? addResult.routeGroup,
+      errors: draftResult.errors ?? [],
+    };
+  }
 
   const routePlanPayload = buildCreateRoutePlanPayload({
     departureLocation: departureLocationData.departureLocation,
@@ -523,6 +612,7 @@ export const loader = async ({ request }) => {
 
   const serverOrdersStartedAt = getSafePerformanceNow();
   const inventoriesStartedAt = getSafePerformanceNow();
+  const routeGroupsStartedAt = getSafePerformanceNow();
   const shopTimeZoneStartedAt = getSafePerformanceNow();
   const shopTimeZoneDataPromise = shouldLoadOrders
     ? fetchShopifyShopTimeZone(
@@ -577,24 +667,44 @@ export const loader = async ({ request }) => {
     }),
   );
 
+  const routeGroupDataPromise = shouldLoadOrders
+    ? fetchDeliveryRouteGroups(
+        request,
+        {},
+        { cacheKey: shopifyShopCacheKey },
+      ).then(
+        (routeGroupData) => ({
+          data: routeGroupData,
+          durationMs: roundPerfDuration(getSafePerformanceNow() - routeGroupsStartedAt),
+        }),
+        () => ({
+          data: { routeGroups: [], errors: [{ code: DELIVERY_API_ERROR_CODE, message: "Route group API 호출에 실패했습니다." }] },
+          durationMs: roundPerfDuration(getSafePerformanceNow() - routeGroupsStartedAt),
+        }),
+      )
+    : Promise.resolve({ data: { routeGroups: [], errors: [] }, durationMs: 0 });
+
   const [
     orderDataResult,
     departureLocationDataResult,
     serverOrderDataResult,
     inventoryDataResult,
     shopTimeZoneDataResult,
+    routeGroupDataResult,
   ] = await Promise.all([
     orderDataPromise,
     departureLocationDataPromise,
     serverOrderDataPromise,
     inventoryDataPromise,
     shopTimeZoneDataPromise,
+    routeGroupDataPromise,
   ]);
   const orderData = orderDataResult.data;
   const departureLocationData = departureLocationDataResult.data;
   const serverOrderData = serverOrderDataResult.data;
   const inventoryData = inventoryDataResult.data;
   const shopTimeZoneData = shopTimeZoneDataResult.data;
+  const routeGroupData = routeGroupDataResult.data;
   const shopLocalDate = getShopLocalDate(shopTimeZoneData);
   const serverOrderRows = mapCanonicalOrdersToOrderRows(serverOrderData.orders);
   const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows(
@@ -605,9 +715,10 @@ export const loader = async ({ request }) => {
   return {
     orders: mergedOrders,
     inventories: inventoryData.inventories,
+    routeGroups: routeGroupData.routeGroups,
     needsSessionTokenRefresh: hasSessionTokenRefreshError([serverOrderData, inventoryData]),
     errors: collectServiceErrors(
-      [orderData, departureLocationData, serverOrderData, inventoryData],
+      [orderData, departureLocationData, serverOrderData, inventoryData, routeGroupData],
       { ignoredCodes: [DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE] },
     ),
     departureLocation: departureLocationData.departureLocation,
@@ -622,6 +733,7 @@ export const loader = async ({ request }) => {
         departureLocationMs: departureLocationDataResult.durationMs,
         serverOrdersMs: serverOrderDataResult.durationMs,
         inventoriesMs: inventoryDataResult.durationMs,
+        routeGroupsMs: routeGroupDataResult.durationMs,
         shopTimeZoneMs: shopTimeZoneDataResult.durationMs,
       },
     },

@@ -304,7 +304,7 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.doesNotMatch(ordersPageSource, /<s-banner tone="critical">/);
   assert.match(ordersPageSource, /<div style=\{orderControlsStyle\}>/);
   assert.match(ordersPageSource, /getServiceErrorNotice\(\[/);
-  assert.match(ordersPageSource, /collectServiceErrors\(\s*\[orderData, departureLocationData, serverOrderData, inventoryData\]/);
+  assert.match(ordersPageSource, /collectServiceErrors\(\s*\[orderData, departureLocationData, serverOrderData, inventoryData, routeGroupData\]/);
   assert.doesNotMatch(ordersPageSource, /style=\{orderFilterBarStyle\}/);
   assert.doesNotMatch(ordersPageSource, /style=\{planActionRowStyle\}/);
   assert.match(ordersPageSource, /<div style=\{tableWrapStyle\}>\s*<table/s);
@@ -375,7 +375,7 @@ test("Orders page creates grouped child routes from scoped planned orders", () =
   assert.match(ordersPageSource, /JSON\.parse\(formData\.get\("routeScope"\) \?\? "null"\)/);
   assert.match(ordersPageSource, /const routeName = textOrUndefined\(formData\.get\("routeName"\)\)/);
   assert.match(ordersPageSource, /const shopifySessionToken = formData\.get\("shopifySessionToken"\)/);
-  assert.match(ordersPageSource, /reason: "route_create_preflight"/);
+  assert.match(ordersPageSource, /route_create_preflight/);
   assert.match(ordersPageSource, /buildCreateRoutePlanPayload\(\{/);
   assert.match(ordersPageSource, /routeName,/);
   assert.match(ordersPageSource, /routeScope,/);
@@ -409,6 +409,22 @@ test("Orders page keeps the UI label as route creation while using route groups 
   assert.match(ordersPageSource, /buildCreateRouteGroupPayload/);
   assert.doesNotMatch(ordersPageSource, />Create group<\/button>/);
   assert.match(ordersPageSource, />Create route<\/button>/);
+});
+
+test("Orders page adds planned orders to an existing route group first child", () => {
+  assert.match(ordersPageSource, /fetchDeliveryRouteGroups/);
+  assert.match(ordersPageSource, /updateDeliveryRouteGroupOrders/);
+  assert.match(ordersPageSource, /saveDeliveryRouteGroupDraft/);
+  assert.match(ordersPageSource, /function buildFirstRouteDraftPayload\(routeGroup, addedOrderIds = \[\]\)/);
+  assert.match(ordersPageSource, /const children = getVisibleRouteGroupChildren\(routeGroup\)/);
+  assert.match(ordersPageSource, /routes\[0\]\.orderIds = \[/);
+  assert.match(ordersPageSource, /if \(intent === "addOrdersToRouteGroup"\) \{/);
+  assert.match(ordersPageSource, /addOrderIds,/);
+  assert.match(ordersPageSource, /expectedUpdatedAt/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "addOrdersToRouteGroup"\)/);
+  assert.match(ordersPageSource, /formData\.set\("routeGroupId", selectedRouteGroup\.id\)/);
+  assert.match(ordersPageSource, /aria-label="Route to add orders"/);
+  assert.doesNotMatch(ordersPageSource, /disabled=\{true\}\s*>Add to route/);
 });
 
 test("Orders route-group payload sends delivery-api order UUIDs, not Shopify GIDs", () => {
@@ -838,7 +854,7 @@ test("Orders route plan side panel keeps compact copy in a fixed scroll containe
   assert.match(ordersPageSource, /minHeight:\s*0/);
   assert.match(ordersPageSource, /overflow:\s*"visible"/);
   assert.match(ordersPageSource, /marginTop:\s*"auto"/);
-  assert.match(ordersPageSource, /maxHeight:\s*"100px"/);
+  assert.match(ordersPageSource, /maxHeight:\s*"150px"/);
   assert.match(ordersPageSource, /style=\{routePlanScrollAreaStyle\}/);
   assert.match(ordersPageSource, />Order summary<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, /선택 → Add to plan/);
@@ -1068,7 +1084,7 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
 });
 
 test("Orders map shows the Shopify departure location as the route start point", () => {
-  assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation/);
+  assert.match(ordersPageSource, /const \{ orders, inventories, routeGroups, errors, departureLocation/);
   assert.match(ordersPageSource, /import \{ createDepartureMarkerElement \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
   assert.match(ordersPageSource, /import \{ addMapPinImage, createMapPinSymbolLayer, createPaletteMapPinImageData \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
   assert.match(mapMarkersSource, /function createDepartureMarkerElement\(departureLocation, options = \{\}\)/);
@@ -1209,7 +1225,7 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, inventories, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate \} = useLoaderData\(\)/);
+  assert.match(ordersPageSource, /const \{ orders, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate \} = useLoaderData\(\)/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
@@ -1393,7 +1409,7 @@ test("Orders inventory side-card Add creates standalone inventory without route 
   assert.match(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "createInventory"\)/);
   assert.match(ordersPageSource, /inventoryFetcher\.submit\(formData, \{ method: "post" \}\)/);
-  assert.match(ordersPageSource, /reason: "route_create_preflight"/);
+  assert.match(ordersPageSource, /route_create_preflight/);
   assert.match(ordersPageSource, /if \(intent === "createInventory"\) \{/);
   assert.match(ordersPageSource, /createDeliveryInventory\(\s*request,/);
   assert.match(ordersPageSource, /deleteDeliveryInventory\(request, inventoryId, \{ sessionToken: shopifySessionToken \}\)/);
