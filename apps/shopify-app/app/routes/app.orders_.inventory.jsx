@@ -185,7 +185,7 @@ const orderViewMetaValueStyle = {
   whiteSpace: "nowrap",
 };
 
-const orderViewColumns = "74px minmax(0, 1fr) 58px 76px 72px 118px 86px";
+const orderViewColumns = "70px minmax(190px, 260px) 52px 70px 68px minmax(112px, 1fr) 112px";
 
 const orderViewOrdersListStyle = {
   display: "grid",
@@ -212,7 +212,6 @@ const orderViewHeaderCellStyle = {
 };
 
 const orderViewOrderCardStyle = {
-  borderBottom: "1px solid #d1d5db",
   borderTop: "1px solid #d1d5db",
   breakInside: "avoid",
   display: "grid",
@@ -243,15 +242,45 @@ const orderViewCenterCellStyle = {
   textAlign: "center",
 };
 
-const orderViewPriceCellStyle = {
+const orderViewAddressCellStyle = {
   ...orderViewCellStyle,
+  display: "grid",
+  gap: "1px",
+  lineHeight: "15px",
+  maxHeight: "31px",
+  overflow: "hidden",
+};
+
+const orderViewAddressLineStyle = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
 
-const orderViewMutedStyle = {
+const orderViewPriceCellStyle = {
+  ...orderViewCellStyle,
+  alignContent: "start",
+  display: "grid",
+  gap: "3px",
+};
+
+const orderViewPaymentPillBaseStyle = {
+  borderRadius: "999px",
+  display: "inline-block",
+  fontSize: "10px",
+  fontWeight: 700,
+  lineHeight: "14px",
+  padding: "1px 7px",
+  width: "fit-content",
+};
+
+const orderViewPhoneLineStyle = {
   color: "#6b7280",
   fontSize: "10px",
-  marginTop: "3px",
+  lineHeight: "14px",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const orderViewItemsCellStyle = {
@@ -464,8 +493,17 @@ const totalColumnStyle = {
 };
 
 const PRODUCT_COLUMNS_PER_TABLE = 6;
-const PRINT_CONTENT_HEIGHT_MM = 286;
+const PRINT_PAGE_HEIGHT_MM = 297;
+const PRINT_PAGE_MARGIN_MM = 10;
+const PRINT_CONTENT_HEIGHT_MM = PRINT_PAGE_HEIGHT_MM - PRINT_PAGE_MARGIN_MM * 2;
 const CSS_PX_PER_MM = 96 / 25.4;
+const PRINT_ORDER_LIST_GAP_PX = 8 * CSS_PX_PER_MM;
+const PRINT_ORDER_HEADER_HEIGHT_PX = 16 + 3 * CSS_PX_PER_MM + 2;
+const PRINT_ORDER_ROW_HEIGHT_PX = 8 * CSS_PX_PER_MM + 53 + 2;
+const PRINT_ORDER_ITEMS_PADDING_PX = 7 * CSS_PX_PER_MM;
+const PRINT_ORDER_ITEM_LINE_HEIGHT_PX = 17;
+const PRINT_ORDER_ITEM_GAP_PX = 1 * CSS_PX_PER_MM;
+const PRINT_ORDER_BREAK_SAFETY_PX = 12;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
 const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
 
@@ -481,8 +519,8 @@ const printCss = `
 @media print {
   html, body { margin: 0 !important; }
   .inventory-detail-no-print { display: none !important; }
-  .inventory-detail-page { box-sizing: border-box !important; display: block !important; margin: 0 auto !important; max-width: none !important; min-height: 297mm !important; padding: 4mm 10mm 7mm !important; width: 210mm !important; }
-  .inventory-detail-sheet { box-sizing: border-box !important; font-size: 13px !important; max-width: none !important; min-height: 0 !important; width: 100% !important; }
+  .inventory-detail-page { box-sizing: border-box !important; display: block !important; margin: 0 !important; max-width: none !important; min-height: 0 !important; min-width: 0 !important; padding: 0 !important; width: 100% !important; }
+  .inventory-detail-sheet { box-sizing: border-box !important; font-size: 13px !important; max-width: none !important; min-height: 0 !important; min-width: 0 !important; width: 100% !important; }
   .inventory-detail-history { display: none !important; }
   .inventory-detail-panel { border: 0 !important; border-radius: 0 !important; }
   .inventory-detail-table-wrap { overflow: visible !important; }
@@ -493,21 +531,40 @@ const printCss = `
   .inventory-detail-page h1 { font-size: 17px !important; line-height: 22px !important; }
   .inventory-detail-product-label { max-height: 34px !important; }
   .inventory-detail-row-header { position: static !important; }
-  .inventory-detail-orders-list { display: grid !important; gap: 8mm !important; width: 100% !important; }
-  .inventory-detail-orders-head, .inventory-detail-order-row { column-gap: 3mm !important; display: grid !important; grid-template-columns: 18mm minmax(0, 1fr) 12mm 20mm 18mm 30mm 22mm !important; }
-  .inventory-detail-orders-head { border-bottom: 1px solid #111 !important; font-size: 15px !important; font-weight: 750 !important; line-height: 19px !important; padding: 0 0 4mm !important; }
-  .inventory-detail-order-card { border-bottom: 1px solid #c7c7c7 !important; border-top: 1px solid #c7c7c7 !important; break-inside: avoid-page !important; display: grid !important; gap: 0 !important; margin: 0 !important; padding: 0 !important; page-break-inside: avoid !important; }
-  .inventory-detail-order-row { border-bottom: 1px solid #e5e7eb !important; font-size: 15px !important; line-height: 21px !important; padding: 4mm 0 !important; }
-  .inventory-detail-order-items { display: grid !important; font-size: 15px !important; gap: 1mm !important; line-height: 21px !important; padding: 3mm 0 4mm !important; }
+  .inventory-detail-orders-list { display: block !important; width: 100% !important; }
+  .inventory-detail-orders-head, .inventory-detail-order-row { column-gap: 1mm !important; display: grid !important; grid-template-columns: 17mm minmax(0, 1fr) 9mm 24mm 23mm 20mm 19mm !important; }
+  .inventory-detail-orders-head { border-bottom: 1px solid #111 !important; font-size: 12px !important; font-weight: 750 !important; line-height: 16px !important; margin-bottom: 8mm !important; padding: 0 0 3mm !important; }
+  .inventory-detail-orders-head > span { white-space: nowrap !important; }
+  .inventory-detail-orders-head > span:last-child { text-align: right !important; }
+  .inventory-detail-order-card { -webkit-column-break-inside: avoid !important; border-top: 1px solid #c7c7c7 !important; break-inside: avoid !important; break-inside: avoid-page !important; display: block !important; gap: 0 !important; margin: 0 0 8mm !important; padding: 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-row { border-bottom: 1px solid #e5e7eb !important; font-size: 12px !important; line-height: 17px !important; padding: 4mm 0 !important; }
+  .inventory-detail-order-address { line-height: 17px !important; max-height: 53px !important; overflow: hidden !important; }
+  .inventory-detail-order-address > span { display: block !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
+  .inventory-detail-order-price { display: grid !important; gap: 1mm !important; justify-items: end !important; text-align: right !important; }
+  .inventory-detail-order-payment { font-size: 12px !important; line-height: 16px !important; padding: 0 2mm !important; }
+  .inventory-detail-order-customer { line-height: 17px !important; max-height: 35px !important; overflow: hidden !important; }
+  .inventory-detail-order-items { break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 3mm 0 4mm !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-phone { font-size: 12px !important; line-height: 17px !important; white-space: nowrap !important; }
   .inventory-detail-order-items > div { break-inside: avoid !important; page-break-inside: avoid !important; }
   .inventory-detail-order-meta { break-inside: avoid !important; page-break-inside: avoid !important; }
-  @page { size: A4 portrait; margin: 0; }
+  @page { size: A4 portrait; margin: 10mm; }
 }
 `;
 
 
 function getPrintContentHeightPx() {
   return PRINT_CONTENT_HEIGHT_MM * CSS_PX_PER_MM;
+}
+
+function getPrintOrderHeightPx(card) {
+  const itemLines = Math.max(1, card.querySelectorAll(".inventory-detail-order-items > div").length);
+  return Math.ceil(
+    PRINT_ORDER_ROW_HEIGHT_PX +
+    PRINT_ORDER_ITEMS_PADDING_PX +
+    itemLines * PRINT_ORDER_ITEM_LINE_HEIGHT_PX +
+    Math.max(0, itemLines - 1) * PRINT_ORDER_ITEM_GAP_PX +
+    PRINT_ORDER_BREAK_SAFETY_PX,
+  );
 }
 
 function clearInventoryOrderPrintBreaks(root) {
@@ -532,22 +589,26 @@ function applyInventoryOrderPrintBreaks(root) {
   const pageHeight = getPrintContentHeightPx();
   const pageTop = page.getBoundingClientRect().top;
   const listTop = list.getBoundingClientRect().top;
-  const computedList = globalThis.window.getComputedStyle(list);
-  const gap = Number.parseFloat(computedList.rowGap || computedList.gap) || 0;
+  const header = list.querySelector(".inventory-detail-orders-head");
+  const gap = PRINT_ORDER_LIST_GAP_PX;
   let usedHeight = (((listTop - pageTop) % pageHeight) + pageHeight) % pageHeight;
+  if (header) {
+    usedHeight = (usedHeight + PRINT_ORDER_HEADER_HEIGHT_PX + gap) % pageHeight;
+  }
 
   cards.forEach((card, index) => {
-    const height = card.getBoundingClientRect().height;
+    const height = getPrintOrderHeightPx(card);
     const requiredHeight = height + (index === 0 ? 0 : gap);
+    const canFitOnOnePage = height < pageHeight;
 
-    if (index > 0 && height < pageHeight && usedHeight + requiredHeight > pageHeight) {
+    if (index > 0 && canFitOnOnePage && usedHeight + requiredHeight > pageHeight) {
       card.style.breakBefore = "page";
       card.style.pageBreakBefore = "always";
-      usedHeight = height;
+      usedHeight = height % pageHeight;
       return;
     }
 
-    usedHeight += requiredHeight;
+    usedHeight = (usedHeight + requiredHeight) % pageHeight;
   });
 }
 
@@ -654,7 +715,7 @@ function buildInventoryOrderRouteMeta(inventory, matrix, orders) {
 function buildInventoryOrderViewRows(orders) {
   return (Array.isArray(orders) ? orders : []).map((order, index) => {
     return {
-      address: getInventoryOrderAddress(order),
+      addressLines: getInventoryOrderAddressLines(order),
       customer: getInventoryOrderCustomer(order),
       driveTime: formatInventoryRouteTime(order?.driveTime ?? order?.driveTimeMinutes ?? order?.routeStop?.driveTime),
       eta: textOrDisplay(order?.eta ?? order?.routeStop?.eta),
@@ -731,6 +792,19 @@ function getInventoryOrderAddress(order) {
   );
 }
 
+function getInventoryOrderAddressLines(order) {
+  const address = getInventoryOrderAddress(order);
+  if (address === "-") return [address];
+  const parts = address.split(",").map((part) => part.trim()).filter(Boolean);
+  if (parts.length < 4) return [address];
+  const cityIndex = parts.length >= 5 ? parts.length - 4 : parts.length - 3;
+  return [
+    parts.slice(0, cityIndex).join(", "),
+    [parts[cityIndex], parts[cityIndex + 1]].filter(Boolean).join(", "),
+    parts.slice(cityIndex + 2).join(", "),
+  ].filter(Boolean);
+}
+
 function formatInventoryAddress(address) {
   if (typeof address === "string") return textOrUndefined(address);
   if (!address || typeof address !== "object") return undefined;
@@ -768,6 +842,12 @@ function formatInventoryOrderPrice(order) {
       ?? order?.shopifyOrderSnapshot?.currentTotalPriceSet?.shopMoney?.currencyCode,
   );
   return `${amount.toFixed(2)} ${currency ?? ""}`.trim();
+}
+
+function getOrderViewPaymentPillStyle(payment) {
+  if (payment === "Paid") return { ...orderViewPaymentPillBaseStyle, background: "#d9f3e6", color: "#087443" };
+  if (payment === "Pending") return { ...orderViewPaymentPillBaseStyle, background: "#fff1d6", color: "#8a6116" };
+  return { ...orderViewPaymentPillBaseStyle, background: "#f1f2f4", color: "#4b5563" };
 }
 
 function formatInventoryOrderPayment(order) {
@@ -942,11 +1022,11 @@ export default function InventoryDetailPage() {
                 ) : (
                   <div aria-label="Inventory orders" className="inventory-detail-orders-list" style={orderViewOrdersListStyle}>
                     <div className="inventory-detail-orders-head" style={orderViewHeaderRowStyle}>
-                      <span style={orderViewHeaderCellStyle}>Order id</span>
+                      <span style={orderViewHeaderCellStyle}>{"Order\u00a0id"}</span>
                       <span style={orderViewHeaderCellStyle}>Address</span>
                       <span style={orderViewHeaderCellStyle}>ETA</span>
-                      <span style={orderViewHeaderCellStyle}>Drive time</span>
-                      <span style={orderViewHeaderCellStyle}>Stop time</span>
+                      <span style={orderViewHeaderCellStyle}>{"Drive\u00a0time"}</span>
+                      <span style={orderViewHeaderCellStyle}>{"Stop\u00a0time"}</span>
                       <span style={orderViewHeaderCellStyle}>Customer</span>
                       <span style={orderViewHeaderCellStyle}>Price</span>
                     </div>
@@ -954,22 +1034,23 @@ export default function InventoryDetailPage() {
                       <article className="inventory-detail-order-card" key={order.orderId} style={orderViewOrderCardStyle}>
                         <div className="inventory-detail-order-row" style={orderViewOrderRowStyle}>
                           <div style={orderViewCellStyle}><strong>{order.orderId}</strong></div>
-                          <div style={orderViewCellStyle}>{order.address}</div>
+                          <div className="inventory-detail-order-address" style={orderViewAddressCellStyle}>
+                            {order.addressLines.map((line, lineIndex) => <span key={lineIndex} style={orderViewAddressLineStyle}>{line}</span>)}
+                          </div>
                           <div style={orderViewCenterCellStyle}>{order.eta}</div>
                           <div style={orderViewCenterCellStyle}>{order.driveTime}</div>
                           <div style={orderViewCenterCellStyle}>{order.stopTime}</div>
-                          <div style={orderViewCellStyle}>
-                            <div>{order.customer}</div>
-                            {order.phone ? <div style={orderViewMutedStyle}>Shipping phone: {order.phone}</div> : null}
-                          </div>
-                          <div style={orderViewPriceCellStyle}>
-                            {order.payment !== "-" ? `${order.price} · ${order.payment}` : order.price}
+                          <div className="inventory-detail-order-customer" style={orderViewCellStyle}>{order.customer}</div>
+                          <div className="inventory-detail-order-price" style={orderViewPriceCellStyle}>
+                            <span>{order.price}</span>
+                            {order.payment !== "-" ? <span className="inventory-detail-order-payment" style={getOrderViewPaymentPillStyle(order.payment)}>{order.payment}</span> : null}
                           </div>
                         </div>
                         <div className="inventory-detail-order-items" style={orderViewItemsCellStyle}>
                           {(order.items.length > 0 ? order.items : ["No items"]).map((item, itemIndex) => (
                             <div key={`${order.orderId}-${itemIndex}`} style={orderViewItemLineStyle}>{item}</div>
                           ))}
+                          {order.phone ? <div className="inventory-detail-order-phone" style={orderViewPhoneLineStyle}>Shipping phone: {order.phone}</div> : null}
                         </div>
                       </article>
                     ))}
