@@ -49,6 +49,25 @@ export async function fetchDeliveryInventoryDetail(request, inventoryId, options
   };
 }
 
+export async function fetchDeliveryInventoryOrderView(request, inventoryId, options = {}) {
+  const safeInventoryId = encodeURIComponent(inventoryId ?? "");
+  if (!safeInventoryId) {
+    return { inventory: null, errors: [{ code: DELIVERY_INVENTORY_ID_MISSING_ERROR_CODE, message: "조회할 inventory ID가 없습니다." }] };
+  }
+
+  const result = await deliveryApiRequest(request, `/admin/inventories/${safeInventoryId}/order-view`, {
+    cacheKey: options.cacheKey,
+    fetch: options.fetch,
+    method: "GET",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    inventory: result.data?.inventory ?? null,
+    errors: result.errors,
+  };
+}
+
 export async function deleteDeliveryInventory(request, inventoryId, options = {}) {
   const normalizedInventoryId = String(inventoryId ?? "").trim();
   if (!normalizedInventoryId) {

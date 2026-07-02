@@ -1404,7 +1404,7 @@ test("Orders inventory side-card Add creates standalone inventory without route 
 });
 
 test("Orders inventory detail shows a printable product matrix without delta", () => {
-  assert.match(inventoryDetailSource, /fetchDeliveryInventoryDetail/);
+  assert.match(inventoryDetailSource, /fetchDeliveryInventoryOrderView/);
   assert.match(inventoryDetailSource, /buildInventoryProductMatrix/);
   assert.match(inventoryDetailSource, /buildInventoryHistoryItems/);
   assert.match(inventoryDetailSource, /Inventory product matrix/);
@@ -1450,7 +1450,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /aria-label="Inventory orders"/);
   assert.match(inventoryDetailSource, />Order id<\/span>[\s\S]*>Address<\/span>[\s\S]*>ETA<\/span>[\s\S]*>Drive time<\/span>[\s\S]*>Stop time<\/span>[\s\S]*>Customer<\/span>[\s\S]*>Price<\/span>/);
   assert.match(inventoryDetailSource, /Shipping phone:/);
-  assert.match(inventoryDetailSource, /linkedRoutes\[\]\.stops/);
+  assert.match(inventoryDetailSource, /inventory\.linkedRoutes/);
   assert.match(inventoryDetailSource, /Order Note is intentionally not rendered/);
   assert.match(inventoryDetailSource, /`\$\{quantity\} EA ·/);
   assert.match(inventoryDetailSource, /className="inventory-detail-order-meta"/);

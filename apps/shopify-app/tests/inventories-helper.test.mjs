@@ -7,6 +7,7 @@ import {
   deleteDeliveryInventory,
   fetchDeliveryInventories,
   fetchDeliveryInventoryDetail,
+  fetchDeliveryInventoryOrderView,
 } from "../app/features/delivery/inventories.server.js";
 
 process.env.CLEVER_DELIVERY_API_URL = "https://delivery.test/";
@@ -76,6 +77,19 @@ test("inventory helper fetches an encoded inventory detail", async () => {
 
   assert.deepEqual(result, { inventory: { id: "inventory/1" }, errors: [] });
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/inventories/inventory%2F1");
+  assert.equal(fakeFetch.calls[0].init.method, "GET");
+});
+
+test("inventory helper fetches the dedicated order-view projection", async () => {
+  const fakeFetch = makeFetch({ data: { inventory: { id: "inventory/1", linkedRoutes: [] } }, error: null });
+
+  const result = await fetchDeliveryInventoryOrderView(makeRequest(), "inventory/1", {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { inventory: { id: "inventory/1", linkedRoutes: [] }, errors: [] });
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/inventories/inventory%2F1/order-view");
   assert.equal(fakeFetch.calls[0].init.method, "GET");
 });
 

@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Link, useLoaderData, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { fetchDeliveryInventoryDetail } from "../features/delivery/inventories.server";
+import { fetchDeliveryInventoryOrderView } from "../features/delivery/inventories.server";
 import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
 import { getServiceErrorNotice } from "../features/service-errors";
 
@@ -553,7 +553,7 @@ function applyInventoryOrderPrintBreaks(root) {
 
 export const loader = async ({ request }) => {
   const inventoryId = new URL(request.url).searchParams.get("id");
-  const result = await fetchDeliveryInventoryDetail(request, inventoryId);
+  const result = await fetchDeliveryInventoryOrderView(request, inventoryId);
   const errors = result.errors ?? [];
   logInventoryDetailPayload(inventoryId, result, buildInventoryDetailApiPath(inventoryId));
   return {
@@ -575,7 +575,7 @@ function hasSessionTokenRefreshError(errors) {
 }
 
 function buildInventoryDetailApiPath(inventoryId) {
-  return inventoryId ? `/admin/inventories/${encodeURIComponent(inventoryId)}` : null;
+  return inventoryId ? `/admin/inventories/${encodeURIComponent(inventoryId)}/order-view` : null;
 }
 
 function logInventoryDetailPayload(inventoryId, result, apiPath) {
@@ -640,7 +640,6 @@ function formatOutputTime(value) {
 
 
 function buildInventoryOrderRouteMeta(inventory, matrix, orders) {
-  // ponytail: driver/display route fields should come from inventory.linkedRoutes[0] when the API contract exists.
   const route = Array.isArray(inventory?.linkedRoutes) ? inventory.linkedRoutes[0] : null;
   return [
     { label: "Driver", value: textOrDisplay(route?.driver?.displayName ?? route?.driverName) },
@@ -654,7 +653,6 @@ function buildInventoryOrderRouteMeta(inventory, matrix, orders) {
 
 function buildInventoryOrderViewRows(orders) {
   return (Array.isArray(orders) ? orders : []).map((order, index) => {
-    // ponytail: ETA/Drive time/Stop time should come from inventory.linkedRoutes[].stops keyed by order id when the API contract exists.
     return {
       address: getInventoryOrderAddress(order),
       customer: getInventoryOrderCustomer(order),
@@ -930,7 +928,6 @@ export default function InventoryDetailPage() {
             </div>
             {inventoryDetailView === "orders" ? (
               <div style={orderViewStyle}>
-                {/* ponytail: driver, delivery date, route start, ETA, drive time, and stop time should be hydrated from linked route stops once inventory exposes linkedRoutes. */}
                 {/* ponytail: Order Note is intentionally not rendered until inventory detail guarantees order.note in this payload. */}
                 <div className="inventory-detail-order-meta" style={orderViewMetaStyle}>
                   {orderRouteMeta.map((meta, index) => (
