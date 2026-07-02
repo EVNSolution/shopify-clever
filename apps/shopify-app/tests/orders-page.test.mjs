@@ -424,8 +424,14 @@ test("Orders page adds planned orders to an existing route group first child", (
   assert.match(ordersPageSource, /formData\.set\("_intent", "addOrdersToRouteGroup"\)/);
   assert.match(ordersPageSource, /formData\.set\("routeGroupId", selectedRouteGroup\.id\)/);
   assert.match(ordersPageSource, /const handleOpenAddRoutePreview = \(\) => \{/);
+  assert.match(ordersPageSource, /function buildRouteAddSnapshotOrders\(routeGroup, orders\)/);
+  assert.match(ordersPageSource, /const routeAddSnapshotOrders = useMemo/);
   assert.match(ordersPageSource, /aria-label="Add orders to route preview"/);
   assert.match(ordersPageSource, /aria-label="Route to add orders"/);
+  assert.match(ordersPageSource, /aria-label="Selected route snapshot"/);
+  assert.match(ordersPageSource, /pointerEvents:\s*"none"/);
+  assert.match(ordersPageSource, /Route snapshot/);
+  assert.match(ordersPageSource, /Orders in group/);
   assert.match(ordersPageSource, /Target first route/);
   assert.match(ordersPageSource, /Existing route orders/);
   assert.match(ordersPageSource, /getRouteAddOptionLabel\(routeGroup\)/);
@@ -830,7 +836,7 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Assign<\/button>[\s\S]*>Add to route<\/button>[\s\S]*>Create route<\/button>/);
   assert.doesNotMatch(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}[\s\S]{0,1200}aria-label="Route to add orders"/);
-  assert.match(ordersPageSource, /aria-label="Add orders to route preview"[\s\S]*>Add<\/button>/);
+  assert.match(ordersPageSource, /aria-label="Add orders to route preview"[\s\S]*aria-label="Selected route snapshot"[\s\S]*>Add<\/button>/);
   assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
   assert.match(ordersPageSource, /const \[inventorySubmitAction, setInventorySubmitAction\] = useState\(null\)/);
   assert.match(ordersPageSource, /const \[inventoryAssignActionsOpen, setInventoryAssignActionsOpen\] = useState\(false\)/);
