@@ -1614,6 +1614,8 @@ export default function RouteDetailPage() {
   const routeTimelineStopRefs = useRef(new Map());
   const routeTimelineStopPopoverRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
+  const routeTimelineDragSnapshotRef = useRef(null);
+  const routeTimelineDropCommittedRef = useRef(false);
   const lastRouteActionIntentRef = useRef(null);
   const navigateAfterRouteDraftSaveRef = useRef(false);
   const routePolygonCornerDragIndexRef = useRef(null);
@@ -1987,6 +1989,11 @@ export default function RouteDetailPage() {
   const handleRouteTimelineDragStart = (event, routeRow, stop) => {
     const drag = { routeId: routeRow.id, stopId: stop.id };
     routeTimelineDragRef.current = drag;
+    routeTimelineDragSnapshotRef.current = {
+      orderByRouteId: routeTimelineOrderByRouteId,
+      previewByKey: routePreviewByKey,
+    };
+    routeTimelineDropCommittedRef.current = false;
     setActiveRouteTimelineStopPopover(null);
     setRouteTimelineDrag(drag);
     event.dataTransfer.effectAllowed = "move";
@@ -2047,10 +2054,37 @@ export default function RouteDetailPage() {
     return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
   }, [activeRouteTimelineStopPopover?.mode]);
 
-  const handleRouteTimelineDragEnd = useCallback(() => {
-    routeTimelineDragRef.current = null;
-    flushSync(() => setRouteTimelineDrag(null));
+  const restoreRouteTimelineDragPreview = useCallback(() => {
+    const snapshot = routeTimelineDragSnapshotRef.current;
+    if (!routeTimelineDragRef.current || !snapshot) return;
+
+    flushSync(() => {
+      setRouteTimelineOrderByRouteId(snapshot.orderByRouteId);
+      setRoutePreviewByKey(snapshot.previewByKey);
+    });
   }, []);
+
+  const handleRouteTimelineDragEnd = useCallback(() => {
+    const shouldRestorePreview = routeTimelineDragRef.current && !routeTimelineDropCommittedRef.current;
+    if (shouldRestorePreview) restoreRouteTimelineDragPreview();
+
+    routeTimelineDragRef.current = null;
+    routeTimelineDragSnapshotRef.current = null;
+    routeTimelineDropCommittedRef.current = false;
+    flushSync(() => setRouteTimelineDrag(null));
+  }, [restoreRouteTimelineDragPreview]);
+
+  const handleRouteTimelineDragLeave = useCallback((event) => {
+    if (!routeTimelineDragRef.current) return;
+    if (event.relatedTarget && event.currentTarget.contains(event.relatedTarget)) return;
+
+    const rect = event.currentTarget.getBoundingClientRect();
+    const isOutside = event.clientX < rect.left
+      || event.clientX > rect.right
+      || event.clientY < rect.top
+      || event.clientY > rect.bottom;
+    if (isOutside) restoreRouteTimelineDragPreview();
+  }, [restoreRouteTimelineDragPreview]);
 
   const handleRouteTimelineDragOver = (event) => {
     event.preventDefault();
@@ -2085,6 +2119,7 @@ export default function RouteDetailPage() {
 
   const handleRouteTimelineRouteDrop = (event, routeRow) => {
     event.preventDefault();
+    routeTimelineDropCommittedRef.current = true;
     moveDraggedTimelineStop(routeRow.id);
     handleRouteTimelineDragEnd();
   };
@@ -2094,6 +2129,7 @@ export default function RouteDetailPage() {
     const drag = routeTimelineDragRef.current;
     if (!drag) return;
 
+    routeTimelineDropCommittedRef.current = true;
     setRoutePreviewByKey({});
     animateRouteTimelineChange(() => {
       setRouteTimelineOrderByRouteId((currentOrderByRouteId) => removeTimelineStop(
@@ -2980,7 +3016,7 @@ export default function RouteDetailPage() {
             </table>
           </div>
 
-          <section aria-label="Route stop timeline" style={routeTimelineStyle}>
+          <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
             <div style={{ ...routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight }}>
               {timelineRouteRows.map((routeRow) => (
                 <div

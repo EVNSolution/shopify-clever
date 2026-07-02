@@ -568,6 +568,12 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /flushSync\(\(\) => setRouteTimelineDrag\(null\)\)/);
   assert.match(routeDetailSource, /pointerEvents: "none"/);
   assert.match(routeDetailSource, /event\.dataTransfer\.setDragImage\(event\.currentTarget, 9, 9\)/);
+  assert.match(routeDetailSource, /routeTimelineDragSnapshotRef\.current = \{[\s\S]*orderByRouteId: routeTimelineOrderByRouteId,[\s\S]*previewByKey: routePreviewByKey,[\s\S]*\}/);
+  assert.match(routeDetailSource, /const restoreRouteTimelineDragPreview = useCallback\(\(\) => \{[\s\S]*setRouteTimelineOrderByRouteId\(snapshot\.orderByRouteId\)[\s\S]*setRoutePreviewByKey\(snapshot\.previewByKey\)/);
+  assert.match(routeDetailSource, /const handleRouteTimelineDragLeave = useCallback\(\(event\) => \{[\s\S]*getBoundingClientRect\(\)[\s\S]*restoreRouteTimelineDragPreview\(\)/);
+  assert.match(routeDetailSource, /onDragLeave=\{handleRouteTimelineDragLeave\}/);
+  assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*moveDraggedTimelineStop\(routeRow\.id\);[\s\S]*handleRouteTimelineDragEnd\(\);/);
+  assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*removeTimelineStop\(/);
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
