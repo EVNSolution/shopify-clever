@@ -425,7 +425,12 @@ test("Orders page adds planned orders to an existing route group first child", (
   assert.match(ordersPageSource, /formData\.set\("routeGroupId", selectedRouteGroup\.id\)/);
   assert.match(ordersPageSource, /const handleOpenAddRoutePreview = \(\) => \{/);
   assert.match(ordersPageSource, /function buildRouteAddSnapshotOrders\(routeGroup, orders\)/);
+  assert.match(ordersPageSource, /function RouteAddSnapshotMap\(\{ departureLocation, orders \}\)/);
   assert.match(ordersPageSource, /const routeAddSnapshotOrders = useMemo/);
+  assert.match(ordersPageSource, /createMapLibreMap\(maplibregl, \{/);
+  assert.match(ordersPageSource, /interactive:\s*false/);
+  assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(snapshotMap, locatedOrders, locatedOrders\.map\(\(order\) => order\.id\)\)/);
+  assert.doesNotMatch(ordersPageSource, /getRouteAddSnapshotPinPosition/);
   assert.match(ordersPageSource, /aria-label="Add orders to route preview"/);
   assert.match(ordersPageSource, /aria-label="Route to add orders"/);
   assert.match(ordersPageSource, /aria-label="Selected route snapshot"/);
