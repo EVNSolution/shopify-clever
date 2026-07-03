@@ -945,8 +945,10 @@ test("Orders map popup uses a left-center overlay and can add the order to the r
   assert.match(ordersPageSource, /×\{item\.quantity\}/);
   assert.match(ordersPageSource, /disabled=\{activeOrderPopupPlannedIndex > 0\}/);
   assert.match(ordersPageSource, /handleAddOrderToPlan\(activeOrderPopup\.id\)/);
+  assert.match(ordersPageSource, /onClick=\{\(\) => setActiveOrderPopup\(null\)\}/);
   assert.match(ordersPageSource, /const handleUserMapMoveStart = \(event\) => \{/);
-  assert.match(ordersPageSource, /if \(event\?\.originalEvent\) setActiveOrderPopupId\(null\)/);
+  assert.match(ordersPageSource, /if \(!event\?\.originalEvent\) return/);
+  assert.match(ordersPageSource, /setActiveOrderPopup\(null\)/);
   assert.match(ordersPageSource, /map\.on\("movestart", handleUserMapMoveStart\)/);
   assert.match(ordersPageSource, /map\.off\("movestart", handleUserMapMoveStart\)/);
   assert.match(mapPanelSource, /children,/);
@@ -954,6 +956,9 @@ test("Orders map popup uses a left-center overlay and can add the order to the r
   assert.match(globalCssSource, /\.order-map-focus-popup\s*\{/);
   assert.match(globalCssSource, /left:\s*16px/);
   assert.match(globalCssSource, /top:\s*16px/);
+  assert.match(globalCssSource, /max-width:\s*260px/);
+  assert.match(globalCssSource, /min-width:\s*200px/);
+  assert.match(globalCssSource, /width:\s*min\(260px, calc\(100% - 96px\)\)/);
   assert.match(globalCssSource, /font-size:\s*12px/);
   assert.match(globalCssSource, /\.order-marker-popup__items\s*\{/);
   assert.match(globalCssSource, /max-height:\s*160px/);
@@ -1140,9 +1145,12 @@ test("Orders map initially centers on the departure home with a wide zoom", () =
   assert.match(ordersPageSource, /mapRef\.current\.flyTo\(\{\s*center: initialMapCenter,\s*zoom: INITIAL_HOME_ZOOM,\s*essential: true,\s*\}\)/);
   assert.doesNotMatch(ordersPageSource, /const firstLocatedOrder = useMemo/);
   assert.doesNotMatch(ordersPageSource, /fitMapToOrders\(initialMapFitLocations\)/);
+  assert.match(ordersPageSource, /const setActiveOrderPopup = useCallback\(\(orderId\) => \{/);
   assert.match(ordersPageSource, /const handleSelectOrder = useCallback\(\(orderId, options = \{\}\) => \{/);
+  assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(mapRef\.current, locatedOrders, plannedOrderIds, orderId\)/);
   assert.match(ordersPageSource, /if \(options\.focusMap !== false\)/);
   assert.match(ordersPageSource, /selectedOrderFocusRequest === 0/);
+  assert.match(ordersPageSource, /mapRef\.current\.jumpTo\(\{\s*center: selectedOrder\.coordinates,\s*zoom: 11,\s*\}\)/);
   assert.match(ordersPageSource, /onClick=\{\(\) => handleSelectOrder\(order\.id\)\}/);
   assert.match(ordersPageSource, /handleSelectOrder\(order\.id, \{ focusMap: false \}\)/);
 });
@@ -1366,6 +1374,7 @@ test("Orders map renders planned pins and the focused table-click pin", () => {
   assert.match(ordersPageSource, /plannedIndexByOrderId\.has\(order\.id\) \|\| order\.id === focusedOrderId/);
   assert.match(ordersPageSource, /existingSource\.setData\(featureCollection\)/);
   assert.match(ordersPageSource, /map\.addSource\(ORDERS_MAP_SOURCE_ID/);
+  assert.match(ordersPageSource, /const handleUserMapMoveStart = \(event\) => \{\s*if \(!event\?\.originalEvent\) return;\s*setActiveOrderPopup\(null\);\s*\};/);
   assert.doesNotMatch(ordersPageSource, /function createOrderMarkerElement\(order, plannedIndex\)/);
   assert.doesNotMatch(ordersPageSource, /filteredOrderIdSet/);
   assert.match(ordersPageSource, /activeOrderPopupId/);

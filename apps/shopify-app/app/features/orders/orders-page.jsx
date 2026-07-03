@@ -2276,14 +2276,21 @@ export default function OrdersPage() {
   const selectedOrder =
     displayOrders.find((order) => order.id === selectedOrderId) ?? filteredOrders[0];
 
+  const setActiveOrderPopup = useCallback((orderId) => {
+    setActiveOrderPopupId(orderId);
+    if (isMapReady && mapRef.current) {
+      syncOrdersMapMarkerLayer(mapRef.current, locatedOrders, plannedOrderIds, orderId);
+    }
+  }, [isMapReady, locatedOrders, plannedOrderIds]);
+
   const handleSelectOrder = useCallback((orderId, options = {}) => {
     setSelectedOrderId(orderId);
-    setActiveOrderPopupId(orderId);
+    setActiveOrderPopup(orderId);
 
     if (options.focusMap !== false) {
       setSelectedOrderFocusRequest((requestCount) => requestCount + 1);
     }
-  }, []);
+  }, [setActiveOrderPopup]);
 
   const handleSort = (columnKey) => {
     setSortConfig((currentSortConfig) => {
@@ -3302,7 +3309,8 @@ export default function OrdersPage() {
       map.getCanvas().style.cursor = "";
     };
     const handleUserMapMoveStart = (event) => {
-      if (event?.originalEvent) setActiveOrderPopupId(null);
+      if (!event?.originalEvent) return;
+      setActiveOrderPopup(null);
     };
 
     map.on("click", ORDERS_MAP_ORDER_LAYER_ID, handleOrderMarkerClick);
@@ -3328,6 +3336,7 @@ export default function OrdersPage() {
     mapSourceSyncRequest,
     plannedOrderIds,
     scheduleMapSourceSyncRetry,
+    setActiveOrderPopup,
     clearMapSourceSyncRetryTimer,
   ]);
 
@@ -3341,10 +3350,9 @@ export default function OrdersPage() {
       return;
     }
 
-    mapRef.current.flyTo({
+    mapRef.current.jumpTo({
       center: selectedOrder.coordinates,
-      zoom: 13,
-      essential: true,
+      zoom: 11,
     });
   }, [isMapReady, selectedOrder, selectedOrderFocusRequest]);
 
@@ -3458,7 +3466,7 @@ export default function OrdersPage() {
                   <button
                     aria-label="Close order map details"
                     className="order-marker-popup__close"
-                    onClick={() => setActiveOrderPopupId(null)}
+                    onClick={() => setActiveOrderPopup(null)}
                     type="button"
                   >×</button>
                 </div>

@@ -271,8 +271,8 @@ s-badge {
 .order-marker-popup {
   display: grid;
   gap: 6px;
-  max-width: 320px;
-  min-width: 240px;
+  max-width: 260px;
+  min-width: 200px;
 }
 
 
@@ -289,7 +289,7 @@ s-badge {
   overflow: auto;
   position: absolute;
   top: 16px;
-  width: min(320px, calc(100% - 96px));
+  width: min(260px, calc(100% - 96px));
   z-index: 3;
 }
 
