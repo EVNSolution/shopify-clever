@@ -1084,6 +1084,72 @@ const itemPopoverQtyCellStyle = {
   textAlign: "right",
 };
 
+const detailPillRootStyle = {
+  display: "inline-flex",
+  justifyContent: "center",
+  position: "relative",
+};
+
+const detailPopoverStyle = {
+  ...itemPopoverStyle,
+  maxWidth: "360px",
+  minWidth: "280px",
+  pointerEvents: "none",
+  textAlign: "left",
+  transform: "none",
+  whiteSpace: "normal",
+  zIndex: 30,
+};
+
+const detailPopoverListStyle = {
+  display: "grid",
+  gap: "5px",
+  listStyle: "none",
+  margin: 0,
+  padding: 0,
+};
+
+const detailPopoverItemStyle = {
+  color: "#303030",
+  fontSize: "11px",
+  fontWeight: 650,
+  lineHeight: 1.35,
+  overflowWrap: "anywhere",
+  textAlign: "left",
+  whiteSpace: "normal",
+};
+
+const DETAIL_POPOVER_GAP = 8;
+const DETAIL_POPOVER_WIDTH = 280;
+const DETAIL_POPOVER_HEIGHT = 96;
+const ITEM_POPOVER_WIDTH = 360;
+const ITEM_POPOVER_HEIGHT = 220;
+
+function clampPopoverPosition(value, min, max) {
+  return Math.max(min, Math.min(value, max));
+}
+
+function getOrderDetailPopoverPosition(rect, popoverSize = {}) {
+  const gap = DETAIL_POPOVER_GAP;
+  const viewportLeft = window.scrollX;
+  const viewportTop = window.scrollY;
+  const width = Math.min(popoverSize.width ?? DETAIL_POPOVER_WIDTH, window.innerWidth - gap * 2);
+  const height = Math.min(popoverSize.height ?? DETAIL_POPOVER_HEIGHT, window.innerHeight - gap * 2);
+  const anchorX = rect.left + window.scrollX + rect.width / 2;
+  const left = clampPopoverPosition(
+    anchorX - width / 2,
+    viewportLeft + gap,
+    viewportLeft + window.innerWidth - width - gap,
+  );
+  const aboveTop = rect.top + window.scrollY - height - gap;
+  const belowTop = rect.bottom + window.scrollY + gap;
+  const top = aboveTop >= viewportTop + gap
+    ? aboveTop
+    : clampPopoverPosition(belowTop, viewportTop + gap, viewportTop + window.innerHeight - height - gap);
+
+  return { left, top, width };
+}
+
 function scheduleIdleTask(callback) {
   if (window.requestIdleCallback) {
     const idleTaskId = window.requestIdleCallback(callback, { timeout: 600 });
@@ -1315,8 +1381,6 @@ function formatDeliveryValue(value) {
 const DELIVERY_DATE_ATTRIBUTE_KEYS = ["Delivery Date", "Delivery date", "clever_delivery_date", "deliveryDate", "delivery_date", "tomatono_delivery_date"];
 const DELIVERY_DAY_ATTRIBUTE_KEYS = ["Delivery Day", "Delivery day", "delivery_day"];
 const DELIVERY_AREA_ATTRIBUTE_KEYS = ["Delivery Area", "Delivery area", "delivery_area"];
-const PICKUP_ATTRIBUTE_KEYS = ["Pickup Day", "Pickup day", "pickup_day"];
-const ORDER_TYPE_ATTRIBUTE_KEYS = ["Order Type", "Order type", "order_type"];
 const NOTE_DATE_HINT_PATTERNS = [
   /(\d{1,2}\s*월\s*\d{1,2}\s*일)/u,
   /((?:월|화|수|목|금|토|일)요일)/u,
@@ -1329,12 +1393,19 @@ function formatAreaValue(order) {
   return textOrUndefined(order?.deliveryArea) ?? (order?.serviceType === "PICKUP" ? "Pickup" : "Null");
 }
 
+function getUniqueInfoDetails(values) {
+  return Array.from(
+    new Set(
+      values
+        .flatMap((value) => (Array.isArray(value) ? value : [value]))
+        .map(textOrUndefined)
+        .filter(Boolean),
+    ),
+  );
+}
+
 function formatInfoPillTitle(label, values) {
-  const rawValues = values
-    .flatMap((value) => (Array.isArray(value) ? value : [value]))
-    .map(textOrUndefined)
-    .filter(Boolean);
-  const uniqueValues = Array.from(new Set(rawValues));
+  const uniqueValues = getUniqueInfoDetails(values);
 
   return uniqueValues.length > 0 ? `${label}: ${uniqueValues.join(" · ")}` : label;
 }
@@ -1348,37 +1419,33 @@ function getOrderOrderedDatePillTitle(order) {
   return formatInfoPillTitle("Ordered", [order?.orderedDate]);
 }
 
-function getOrderAreaPillTitle(order) {
+function getOrderAreaPillDetails(order) {
+  if (getOrderAreaPillTone(order) === "neutral") return [];
+
   const rawArea = getOrderRawAttributeValue(order, DELIVERY_AREA_ATTRIBUTE_KEYS);
-  const city = textOrUndefined(
-    order?.shippingAddress?.city ??
-      order?.rawPayload?.shippingAddress?.city ??
-      order?.shopifyOrderSnapshot?.shippingAddress?.city,
-  );
-  const pickupHint = getOrderPickupHint(order);
-  const details = [formatAreaValue(order), rawArea ? formatInfoDetail("Raw Delivery Area", rawArea) : "Raw Delivery Area missing"];
 
-  if (!rawArea && city) details.push(`Address city: ${city}`);
-  if (!rawArea && pickupHint) details.push(pickupHint);
-
-  return formatInfoPillTitle("Area", details);
+  return getUniqueInfoDetails([
+    "Delivery area is missing",
+    rawArea ? formatInfoDetail("Raw Delivery Area", rawArea) : "Raw Delivery Area missing",
+  ]);
 }
 
 function getOrderAreaPillTone(order) {
   return textOrUndefined(order?.deliveryArea) || order?.serviceType === "PICKUP" ? "neutral" : "warning";
 }
 
-function getOrderDeliveryPillTitle(order) {
+function getOrderDeliveryPillDetails(order) {
+  if (getOrderDeliveryPillTone(order) === "neutral") return [];
+
   const rawDate = getOrderRawAttributeValue(order, DELIVERY_DATE_ATTRIBUTE_KEYS);
   const rawDay = getOrderRawAttributeValue(order, DELIVERY_DAY_ATTRIBUTE_KEYS);
   const noteHint = getOrderNoteDeliveryHint(order);
   const lineItemHint = getOrderLineItemDateRangeHint(order);
 
-  return formatInfoPillTitle("Delivery", [
-    formatOrderDeliveryLabel(order),
-    getOrderDeliveryDateValue(order),
-    rawDate ? `Raw Delivery Date: ${rawDate}` : "Raw Delivery Date missing",
-    rawDay ? `Raw Delivery Day: ${rawDay}` : "Raw Delivery Day missing",
+  return getUniqueInfoDetails([
+    "Delivery date is missing",
+    rawDate ? formatInfoDetail("Raw Delivery Date", rawDate) : "Raw Delivery Date missing",
+    rawDay ? formatInfoDetail("Raw Delivery Day", rawDay) : undefined,
     noteHint,
     lineItemHint,
   ]);
@@ -1392,6 +1459,10 @@ function getOrderDeliveryPillTone(order) {
     getOrderLineItemDateRangeHint(order)
     ? "warning"
     : "critical";
+}
+
+function isAttentionPillTone(tone) {
+  return tone === "warning" || tone === "critical";
 }
 
 function getOrderLineItems(order) {
@@ -1451,18 +1522,6 @@ function getOrderNoteDeliveryHint(order) {
 
 function hasNoteDeliveryContext(note) {
   return /배송|배달|delivery|픽업|pickup|요망|날짜|date/iu.test(note);
-}
-
-function getOrderPickupHint(order) {
-  const rawOrderType = getOrderRawAttributeValue(order, ORDER_TYPE_ATTRIBUTE_KEYS);
-  const rawPickupDay = getOrderRawAttributeValue(order, PICKUP_ATTRIBUTE_KEYS);
-  const note = getOrderNote(order);
-
-  if (!PICKUP_HINT_PATTERN.test(note ?? "")) return undefined;
-  if (/^pickup$/iu.test(rawOrderType ?? "") || rawPickupDay) return "Raw pickup fields present";
-  if (rawOrderType) return `Note mentions pickup, but raw Order Type is ${rawOrderType}`;
-
-  return "Note mentions pickup, but raw Order Type/Pickup Day is missing";
 }
 
 function getOrderLineItemDateRangeHint(order) {
@@ -1744,25 +1803,21 @@ function getOrderPaymentPillTone(order) {
   return "critical";
 }
 
-function getOrderPaymentHint(order) {
+function getOrderPaymentPillDetails(order) {
   const paymentState = formatOrderPaymentState(order);
-  const total = formatOrderTotal(order);
-  const collectText = total === "—" ? "order total" : total;
+  if (paymentState === "Paid") return [];
 
-  if (paymentState === "Cash") return `Cash: collect ${collectText}`;
-  if (paymentState === "eTransfer") return `eTransfer: collect ${collectText}`;
-  if (paymentState === "Pending") return `Pending: collect ${collectText}`;
-  if (paymentState === "Unknown") return "Unknown payment: check raw status/gateway";
+  const gatewayNames = getOrderPaymentGatewayNames(order);
+  const reason = paymentState === "Cash" || paymentState === "eTransfer"
+    ? `${paymentState} payment needs collection`
+    : paymentState === "Pending"
+      ? "Payment is pending"
+      : "Payment status or gateway is unknown";
 
-  return null;
-}
-
-function getOrderPaymentPillTitle(order) {
-  return formatInfoPillTitle("Payment", [
-    formatOrderPaymentState(order),
-    getOrderPaymentHint(order),
-    getOrderPaymentStatus(order),
-    getOrderPaymentGatewayNames(order),
+  return getUniqueInfoDetails([
+    reason,
+    formatInfoDetail("Raw payment status", getOrderPaymentStatus(order)) ?? "Raw payment status missing",
+    gatewayNames.length > 0 ? `Raw payment gateway: ${gatewayNames.join(", ")}` : "Raw payment gateway missing",
   ]);
 }
 
@@ -1783,20 +1838,20 @@ function getOrderDeliveryStateHint(order, referenceDate) {
 
   if (exceptionState === "overdue_assigned") return "Past due: assigned route is not delivered";
   if (exceptionState === "overdue_unassigned") return "Past due: no route assigned";
-  if (isShopifyFulfilledWithoutDriverStatus(order)) return "Delivered source: Shopify fulfillment only; CLEVER driver status is not present";
+  if (isShopifyFulfilledWithoutDriverStatus(order)) return "Shopify shows fulfilled, but CLEVER driver status is missing";
 
   return null;
 }
 
-function getOrderDeliveryStatePillTitle(order, referenceDate) {
-  return formatInfoPillTitle("State", [
-    formatOrderDeliveryState(order, referenceDate),
-    getOrderDeliveryStateHint(order, referenceDate),
-    formatInfoDetail("Shopify fulfillment", getOrderShopifyFulfillmentStatus(order)),
-    formatInfoDetail("CLEVER driver stop", order?.deliveryStopStatus),
-    formatInfoDetail("CLEVER delivery", order?.deliveryStatus),
-    formatInfoDetail("CLEVER planning", order?.planningStatus),
-    formatInfoDetail("Filter state", getOrderDeliveryStateFilterValue(order, referenceDate)),
+function getOrderDeliveryStatePillDetails(order, referenceDate) {
+  const hint = getOrderDeliveryStateHint(order, referenceDate);
+  if (!hint) return [];
+
+  return getUniqueInfoDetails([
+    hint,
+    formatInfoDetail("Delivery date", getOrderDeliveryDateValue(order)),
+    isShopifyFulfilledWithoutDriverStatus(order) ? formatInfoDetail("Shopify fulfillment", getOrderShopifyFulfillmentStatus(order)) : undefined,
+    isShopifyFulfilledWithoutDriverStatus(order) ? "CLEVER driver status missing" : undefined,
   ]);
 }
 
@@ -2027,6 +2082,8 @@ export default function OrdersPage() {
   );
   const [hoveredItemPopoverOrderId, setHoveredItemPopoverOrderId] = useState(null);
   const [pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId] = useState(null);
+  const [itemPopoverPosition, setItemPopoverPosition] = useState(null);
+  const [activeOrderDetailPopover, setActiveOrderDetailPopover] = useState(null);
   const [checkedInventoryIds, setCheckedInventoryIds] = useState([]);
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
@@ -2063,6 +2120,10 @@ export default function OrdersPage() {
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
   const orderedDateFieldRef = useRef(null);
+  const itemPopoverAnchorRef = useRef(null);
+  const itemPopoverRef = useRef(null);
+  const orderDetailAnchorRef = useRef(null);
+  const orderDetailPopoverRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const [mapSourceSyncRequest, setMapSourceSyncRequest] = useState(0);
@@ -2082,6 +2143,131 @@ export default function OrdersPage() {
   );
   const orderedDateFilterActive = Boolean(orderFilters.orderedDateFrom || orderFilters.orderedDateTo);
   const visibleItemPopoverOrderId = pinnedItemPopoverOrderId ?? hoveredItemPopoverOrderId;
+  const syncItemPopover = useCallback(() => {
+    const anchor = itemPopoverAnchorRef.current;
+    if (!anchor) return;
+
+    const popoverNode = itemPopoverRef.current;
+    setItemPopoverPosition(getOrderDetailPopoverPosition(anchor.getBoundingClientRect(), {
+      height: popoverNode?.offsetHeight ?? ITEM_POPOVER_HEIGHT,
+      width: popoverNode?.offsetWidth ?? ITEM_POPOVER_WIDTH,
+    }));
+  }, []);
+  const openItemPopover = useCallback((event, orderId) => {
+    if (pinnedItemPopoverOrderId && pinnedItemPopoverOrderId !== orderId) return;
+
+    itemPopoverAnchorRef.current = event.currentTarget;
+    setHoveredItemPopoverOrderId(orderId);
+    setItemPopoverPosition(getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect(), {
+      height: ITEM_POPOVER_HEIGHT,
+      width: ITEM_POPOVER_WIDTH,
+    }));
+  }, [pinnedItemPopoverOrderId]);
+  const closeHoveredItemPopover = useCallback((orderId) => {
+    setHoveredItemPopoverOrderId((currentOrderId) => currentOrderId === orderId ? null : currentOrderId);
+  }, []);
+  const togglePinnedItemPopover = useCallback((event, orderId) => {
+    itemPopoverAnchorRef.current = event.currentTarget;
+    setItemPopoverPosition(getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect(), {
+      height: ITEM_POPOVER_HEIGHT,
+      width: ITEM_POPOVER_WIDTH,
+    }));
+    setPinnedItemPopoverOrderId((currentOrderId) => currentOrderId === orderId ? null : orderId);
+  }, []);
+  const activeOrderDetailKey = activeOrderDetailPopover?.detailKey;
+  const syncOrderDetailPopover = useCallback(() => {
+    const anchor = orderDetailAnchorRef.current;
+    if (!anchor) return;
+
+    const popoverNode = orderDetailPopoverRef.current;
+    const position = getOrderDetailPopoverPosition(anchor.getBoundingClientRect(), {
+      height: popoverNode?.offsetHeight,
+      width: popoverNode?.offsetWidth,
+    });
+    setActiveOrderDetailPopover((current) => current ? { ...current, position } : current);
+  }, []);
+  const openOrderDetailPopover = useCallback((event, detail) => {
+    orderDetailAnchorRef.current = event.currentTarget;
+    setActiveOrderDetailPopover({
+      ...detail,
+      position: getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect()),
+    });
+  }, []);
+  const closeOrderDetailPopover = useCallback((detailKey) => {
+    setActiveOrderDetailPopover((current) => {
+      if (current?.detailKey !== detailKey) return current;
+      orderDetailAnchorRef.current = null;
+      return null;
+    });
+  }, []);
+
+  useEffect(() => {
+    if (!activeOrderDetailKey) return undefined;
+
+    syncOrderDetailPopover();
+    const handleWindowLayoutChange = () => syncOrderDetailPopover();
+    window.addEventListener("scroll", handleWindowLayoutChange, true);
+    window.addEventListener("resize", handleWindowLayoutChange);
+    return () => {
+      window.removeEventListener("scroll", handleWindowLayoutChange, true);
+      window.removeEventListener("resize", handleWindowLayoutChange);
+    };
+  }, [activeOrderDetailKey, syncOrderDetailPopover]);
+
+  useEffect(() => {
+    if (!visibleItemPopoverOrderId) return undefined;
+
+    syncItemPopover();
+    const handleWindowLayoutChange = () => syncItemPopover();
+    window.addEventListener("scroll", handleWindowLayoutChange, true);
+    window.addEventListener("resize", handleWindowLayoutChange);
+    return () => {
+      window.removeEventListener("scroll", handleWindowLayoutChange, true);
+      window.removeEventListener("resize", handleWindowLayoutChange);
+    };
+  }, [syncItemPopover, visibleItemPopoverOrderId]);
+
+  const renderDetailPill = ({ children, details, detailKey, label, tone }) => {
+    if (!isAttentionPillTone(tone) || details.length === 0) {
+      return <InfoPill title="" tone={tone}>{children}</InfoPill>;
+    }
+
+    const activeDetailPopover = activeOrderDetailPopover?.detailKey === detailKey ? activeOrderDetailPopover : null;
+
+    return (
+      <span
+        aria-label={formatInfoPillTitle(label, details)}
+        data-order-detail-popover-root="true"
+        style={detailPillRootStyle}
+        onMouseEnter={(event) => openOrderDetailPopover(event, { detailKey, details, label })}
+        onMouseLeave={() => closeOrderDetailPopover(detailKey)}
+      >
+        <InfoPill title="" tone={tone}>
+          {children}
+        </InfoPill>
+        {activeDetailPopover && typeof document !== "undefined" ? createPortal(
+          <div
+            ref={orderDetailPopoverRef}
+            role="tooltip"
+            style={{
+              ...detailPopoverStyle,
+              left: `${Math.round(activeDetailPopover.position.left)}px`,
+              top: `${Math.round(activeDetailPopover.position.top)}px`,
+              width: `${Math.round(activeDetailPopover.position.width)}px`,
+            }}
+          >
+            <div style={itemPopoverTitleStyle}>{activeDetailPopover.label}</div>
+            <ul style={detailPopoverListStyle}>
+              {activeDetailPopover.details.map((detail) => (
+                <li key={detail} style={detailPopoverItemStyle}>{detail}</li>
+              ))}
+            </ul>
+          </div>,
+          document.body,
+        ) : null}
+      </span>
+    );
+  };
   const orderedDateCalendarDays = useMemo(
     () => getCalendarDays(orderedDateCalendarMonth),
     [orderedDateCalendarMonth],
@@ -4130,6 +4316,10 @@ export default function OrdersPage() {
                 {tableOrders.map((order) => {
                   const orderIsPlanned = plannedOrderIdSet.has(order.id);
                   const checkboxChecked = orderIsPlanned || checkedOrderIdSet.has(order.id);
+                  const areaPillDetails = getOrderAreaPillDetails(order);
+                  const deliveryPillDetails = getOrderDeliveryPillDetails(order);
+                  const statePillDetails = getOrderDeliveryStatePillDetails(order, orderFilterReferenceDate);
+                  const paymentPillDetails = getOrderPaymentPillDetails(order);
 
                   return (
                     <tr key={order.id}>
@@ -4172,15 +4362,25 @@ export default function OrdersPage() {
                             type="button"
                             aria-label={`Show items for ${order.name}`}
                             style={itemInfoButtonStyle}
-                            onMouseEnter={() => setHoveredItemPopoverOrderId(order.id)}
-                            onMouseLeave={() => setHoveredItemPopoverOrderId((currentOrderId) => currentOrderId === order.id ? null : currentOrderId)}
-                            onClick={() => setPinnedItemPopoverOrderId((currentOrderId) => currentOrderId === order.id ? null : order.id)}
+                            onMouseEnter={(event) => openItemPopover(event, order.id)}
+                            onMouseLeave={() => closeHoveredItemPopover(order.id)}
+                            onClick={(event) => togglePinnedItemPopover(event, order.id)}
                           >
                             <s-icon type="info" size="base" color="subdued"></s-icon>
                           </button>
-                          {visibleItemPopoverOrderId === order.id ? (
-                            <div style={itemPopoverStyle}>
-                            <div style={itemPopoverTitleStyle}>Ordered items</div>
+                          {visibleItemPopoverOrderId === order.id && itemPopoverPosition && typeof document !== "undefined" ? createPortal(
+                            <div
+                              ref={itemPopoverRef}
+                              data-order-items-popover-root="true"
+                              style={{
+                                ...itemPopoverStyle,
+                                left: `${Math.round(itemPopoverPosition.left)}px`,
+                                top: `${Math.round(itemPopoverPosition.top)}px`,
+                                transform: "none",
+                                width: `${Math.round(itemPopoverPosition.width)}px`,
+                              }}
+                            >
+                              <div style={itemPopoverTitleStyle}>Ordered items</div>
                             <table style={itemPopoverTableStyle}>
                               <thead>
                                 <tr>
@@ -4205,35 +4405,46 @@ export default function OrdersPage() {
                                 </tr>
                               </tbody>
                             </table>
-                            </div>
+                            </div>,
+                            document.body,
                           ) : null}
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <InfoPill title={getOrderAreaPillTitle(order)} tone={getOrderAreaPillTone(order)}>
-                          {formatAreaValue(order)}
-                        </InfoPill>
+                        {renderDetailPill({
+                          children: formatAreaValue(order),
+                          details: areaPillDetails,
+                          detailKey: `${order.id}:area`,
+                          label: "Area details",
+                          tone: getOrderAreaPillTone(order),
+                        })}
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <InfoPill title={getOrderDeliveryPillTitle(order)} tone={getOrderDeliveryPillTone(order)}>
-                          {formatOrderDeliveryLabel(order)}
-                        </InfoPill>
+                        {renderDetailPill({
+                          children: formatOrderDeliveryLabel(order),
+                          details: deliveryPillDetails,
+                          detailKey: `${order.id}:delivery`,
+                          label: "Delivery details",
+                          tone: getOrderDeliveryPillTone(order),
+                        })}
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <InfoPill
-                          title={getOrderDeliveryStatePillTitle(order, orderFilterReferenceDate)}
-                          tone={getOrderDeliveryStatePillTone(order, orderFilterReferenceDate)}
-                        >
-                          {formatOrderDeliveryState(order, orderFilterReferenceDate)}
-                        </InfoPill>
+                        {renderDetailPill({
+                          children: formatOrderDeliveryState(order, orderFilterReferenceDate),
+                          details: statePillDetails,
+                          detailKey: `${order.id}:state`,
+                          label: "State details",
+                          tone: getOrderDeliveryStatePillTone(order, orderFilterReferenceDate),
+                        })}
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <InfoPill
-                          title={getOrderPaymentPillTitle(order)}
-                          tone={getOrderPaymentPillTone(order)}
-                        >
-                          {formatOrderPaymentState(order)}
-                        </InfoPill>
+                        {renderDetailPill({
+                          children: formatOrderPaymentState(order),
+                          details: paymentPillDetails,
+                          detailKey: `${order.id}:payment`,
+                          label: "Payment details",
+                          tone: getOrderPaymentPillTone(order),
+                        })}
                       </td>
                       <td style={tableCellStyle}>
                         {order.hasCoordinates ? "Yes" : "No"}
