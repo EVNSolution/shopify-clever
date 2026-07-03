@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -1311,6 +1312,19 @@ function formatDeliveryValue(value) {
   return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
 
+const DELIVERY_DATE_ATTRIBUTE_KEYS = ["Delivery Date", "Delivery date", "clever_delivery_date", "deliveryDate", "delivery_date", "tomatono_delivery_date"];
+const DELIVERY_DAY_ATTRIBUTE_KEYS = ["Delivery Day", "Delivery day", "delivery_day"];
+const DELIVERY_AREA_ATTRIBUTE_KEYS = ["Delivery Area", "Delivery area", "delivery_area"];
+const PICKUP_ATTRIBUTE_KEYS = ["Pickup Day", "Pickup day", "pickup_day"];
+const ORDER_TYPE_ATTRIBUTE_KEYS = ["Order Type", "Order type", "order_type"];
+const NOTE_DATE_HINT_PATTERNS = [
+  /(\d{1,2}\s*월\s*\d{1,2}\s*일)/u,
+  /((?:월|화|수|목|금|토|일)요일)/u,
+  /(?:^|[^\d])((?:20\d{2}[./-])?(?:0?[1-9]|1[0-2])[./-](?:0?[1-9]|[12]\d|3[01]))(?!\d)/u,
+];
+const PICKUP_HINT_PATTERN = /픽업|pickup/iu;
+const LINE_ITEM_DATE_RANGE_PATTERN = /\b(\d{1,2}[./-]\d{1,2}\s*(?:-|~|–)\s*(?:\d{1,2}[./-])?\d{1,2})\b/u;
+
 function formatAreaValue(order) {
   return textOrUndefined(order?.deliveryArea) ?? (order?.serviceType === "PICKUP" ? "Pickup" : "Null");
 }
@@ -1325,20 +1339,59 @@ function formatInfoPillTitle(label, values) {
   return uniqueValues.length > 0 ? `${label}: ${uniqueValues.join(" · ")}` : label;
 }
 
+function formatInfoDetail(label, value) {
+  const text = textOrUndefined(value);
+  return text ? `${label}: ${text}` : undefined;
+}
+
 function getOrderOrderedDatePillTitle(order) {
   return formatInfoPillTitle("Ordered", [order?.orderedDate]);
 }
 
 function getOrderAreaPillTitle(order) {
-  return formatInfoPillTitle("Area", [formatAreaValue(order), order?.deliveryArea, order?.serviceType]);
+  const rawArea = getOrderRawAttributeValue(order, DELIVERY_AREA_ATTRIBUTE_KEYS);
+  const city = textOrUndefined(
+    order?.shippingAddress?.city ??
+      order?.rawPayload?.shippingAddress?.city ??
+      order?.shopifyOrderSnapshot?.shippingAddress?.city,
+  );
+  const pickupHint = getOrderPickupHint(order);
+  const details = [formatAreaValue(order), rawArea ? formatInfoDetail("Raw Delivery Area", rawArea) : "Raw Delivery Area missing"];
+
+  if (!rawArea && city) details.push(`Address city: ${city}`);
+  if (!rawArea && pickupHint) details.push(pickupHint);
+
+  return formatInfoPillTitle("Area", details);
+}
+
+function getOrderAreaPillTone(order) {
+  return textOrUndefined(order?.deliveryArea) || order?.serviceType === "PICKUP" ? "neutral" : "warning";
 }
 
 function getOrderDeliveryPillTitle(order) {
+  const rawDate = getOrderRawAttributeValue(order, DELIVERY_DATE_ATTRIBUTE_KEYS);
+  const rawDay = getOrderRawAttributeValue(order, DELIVERY_DAY_ATTRIBUTE_KEYS);
+  const noteHint = getOrderNoteDeliveryHint(order);
+  const lineItemHint = getOrderLineItemDateRangeHint(order);
+
   return formatInfoPillTitle("Delivery", [
     formatOrderDeliveryLabel(order),
     getOrderDeliveryDateValue(order),
-    order?.deliveryWeekday,
+    rawDate ? `Raw Delivery Date: ${rawDate}` : "Raw Delivery Date missing",
+    rawDay ? `Raw Delivery Day: ${rawDay}` : "Raw Delivery Day missing",
+    noteHint,
+    lineItemHint,
   ]);
+}
+
+function getOrderDeliveryPillTone(order) {
+  if (getOrderDeliveryDateValue(order)) return "neutral";
+  return getOrderRawAttributeValue(order, DELIVERY_DATE_ATTRIBUTE_KEYS) ||
+    getOrderRawAttributeValue(order, DELIVERY_DAY_ATTRIBUTE_KEYS) ||
+    getOrderNoteDeliveryHint(order) ||
+    getOrderLineItemDateRangeHint(order)
+    ? "warning"
+    : "critical";
 }
 
 function getOrderLineItems(order) {
@@ -1357,6 +1410,68 @@ function getOrderLineItems(order) {
       sku: textOrUndefined(item?.sku) ?? "—",
     }))
     .filter((item) => item.name);
+}
+
+function getOrderRawAttributeValue(order, keys) {
+  const attributes = [
+    order?.rawPayload?.customAttributes,
+    order?.shopifyOrderSnapshot?.customAttributes,
+    order?.customAttributes,
+    order?.attributeList,
+  ].flatMap((candidate) => (Array.isArray(candidate) ? candidate : []));
+
+  for (const key of keys) {
+    const attribute = attributes.find((candidate) => textOrUndefined(candidate?.key) === key);
+    const value = textOrUndefined(attribute?.value);
+    if (value) return value;
+  }
+
+  return undefined;
+}
+
+function getOrderNote(order) {
+  return textOrUndefined(order?.note ?? order?.rawPayload?.note ?? order?.shopifyOrderSnapshot?.note);
+}
+
+function getOrderNoteDeliveryHint(order) {
+  const note = getOrderNote(order);
+  if (!note) return undefined;
+
+  for (const pattern of NOTE_DATE_HINT_PATTERNS) {
+    const match = note.match(pattern);
+    const hint = match?.[1]?.trim();
+    if (hint && (hasNoteDeliveryContext(note) || !/^\d{1,2}[./-]\d{1,2}$/u.test(hint))) return `Note hint: ${hint}`;
+  }
+
+  if (/배송|delivery/iu.test(note)) return "Note mentions delivery";
+  if (PICKUP_HINT_PATTERN.test(note)) return "Note mentions pickup";
+
+  return undefined;
+}
+
+function hasNoteDeliveryContext(note) {
+  return /배송|배달|delivery|픽업|pickup|요망|날짜|date/iu.test(note);
+}
+
+function getOrderPickupHint(order) {
+  const rawOrderType = getOrderRawAttributeValue(order, ORDER_TYPE_ATTRIBUTE_KEYS);
+  const rawPickupDay = getOrderRawAttributeValue(order, PICKUP_ATTRIBUTE_KEYS);
+  const note = getOrderNote(order);
+
+  if (!PICKUP_HINT_PATTERN.test(note ?? "")) return undefined;
+  if (/^pickup$/iu.test(rawOrderType ?? "") || rawPickupDay) return "Raw pickup fields present";
+  if (rawOrderType) return `Note mentions pickup, but raw Order Type is ${rawOrderType}`;
+
+  return "Note mentions pickup, but raw Order Type/Pickup Day is missing";
+}
+
+function getOrderLineItemDateRangeHint(order) {
+  for (const item of getOrderLineItems(order)) {
+    const match = [item.name, item.options, item.sku].join(" ").match(LINE_ITEM_DATE_RANGE_PATTERN);
+    if (match?.[1]) return `Item date range: ${match[1].trim()}`;
+  }
+
+  return undefined;
 }
 
 function getRouteGroupOrderCount(routeGroup) {
@@ -1656,6 +1771,7 @@ function getOrderDeliveryStatePillTone(order, referenceDate) {
 
   if (exceptionState === "overdue_assigned") return "warning";
   if (exceptionState === "overdue_unassigned") return "critical";
+  if (isShopifyFulfilledWithoutDriverStatus(order)) return "warning";
   if (isOrderDeliveryComplete(order)) return "success";
   if (isOrderRouteCreated(order)) return "success";
 
@@ -1667,6 +1783,7 @@ function getOrderDeliveryStateHint(order, referenceDate) {
 
   if (exceptionState === "overdue_assigned") return "Past due: assigned route is not delivered";
   if (exceptionState === "overdue_unassigned") return "Past due: no route assigned";
+  if (isShopifyFulfilledWithoutDriverStatus(order)) return "Delivered source: Shopify fulfillment only; CLEVER driver status is not present";
 
   return null;
 }
@@ -1675,11 +1792,29 @@ function getOrderDeliveryStatePillTitle(order, referenceDate) {
   return formatInfoPillTitle("State", [
     formatOrderDeliveryState(order, referenceDate),
     getOrderDeliveryStateHint(order, referenceDate),
-    order?.deliveryStopStatus,
-    order?.planningStatus,
-    order?.status,
-    getOrderDeliveryStateFilterValue(order, referenceDate),
+    formatInfoDetail("Shopify fulfillment", getOrderShopifyFulfillmentStatus(order)),
+    formatInfoDetail("CLEVER driver stop", order?.deliveryStopStatus),
+    formatInfoDetail("CLEVER delivery", order?.deliveryStatus),
+    formatInfoDetail("CLEVER planning", order?.planningStatus),
+    formatInfoDetail("Filter state", getOrderDeliveryStateFilterValue(order, referenceDate)),
   ]);
+}
+
+function getOrderShopifyFulfillmentStatus(order) {
+  return textOrUndefined(
+    order?.rawPayload?.displayFulfillmentStatus ??
+      order?.shopifyOrderSnapshot?.displayFulfillmentStatus ??
+      order?.displayFulfillmentStatus ??
+      order?.fulfillmentStatus ??
+      order?.status,
+  );
+}
+
+function isShopifyFulfilledWithoutDriverStatus(order) {
+  const shopifyStatus = normalizePaymentStatus(getOrderShopifyFulfillmentStatus(order));
+  const driverStatus = normalizePaymentStatus(order?.deliveryStopStatus ?? order?.deliveryStatus);
+
+  return shopifyStatus === "FULFILLED" && !driverStatus;
 }
 
 function formatOrderDeliveryLabel(order) {
@@ -4075,12 +4210,12 @@ export default function OrdersPage() {
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <InfoPill title={getOrderAreaPillTitle(order)}>
+                        <InfoPill title={getOrderAreaPillTitle(order)} tone={getOrderAreaPillTone(order)}>
                           {formatAreaValue(order)}
                         </InfoPill>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <InfoPill title={getOrderDeliveryPillTitle(order)}>
+                        <InfoPill title={getOrderDeliveryPillTitle(order)} tone={getOrderDeliveryPillTone(order)}>
                           {formatOrderDeliveryLabel(order)}
                         </InfoPill>
                       </td>
