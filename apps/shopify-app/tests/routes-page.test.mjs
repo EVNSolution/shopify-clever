@@ -28,12 +28,13 @@ const routeGroupChildDetailSource = existsSync(routeGroupChildDetailPath)
 const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
 const routeDetailMapSource = readFileSync(join(root, "app/features/delivery/route-detail-map.js"), "utf8");
 const routeHelpersSource = readFileSync(join(root, "app/features/delivery/route-helpers.js"), "utf8");
+const routeListRowsSource = readFileSync(join(root, "app/features/delivery/route-list-rows.js"), "utf8");
 const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8");
 const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
 
 test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
   assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
-  assert.match(routesPageSource, /import \{ deleteDeliveryRouteGroup, fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
+  assert.match(routesPageSource, /import \{ deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
   assert.match(routesPageSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
   assert.match(routesPageSource, /import \{ Outlet, redirect,/);
   assert.match(routesPageSource, /export const loader = async \(\{ request \}\) => \{/);
@@ -49,8 +50,9 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.match(routesPageSource, /await request\.formData\(\)/);
   assert.match(routesPageSource, /function parseRouteDeleteTargets\(value\) \{/);
   assert.match(routesPageSource, /const routeDeleteTargets = parseRouteDeleteTargets\(formData\.get\("routePlanIds"\)\)/);
-  assert.match(routesPageSource, /routeDeleteTargets\.map\(\(target\) =>/);
+  assert.match(routesPageSource, /const childRoutePlanIdsByGroupId = new Map\(\)/);
   assert.match(routesPageSource, /deleteDeliveryRouteGroup\(request, target\.id, \{ sessionToken: shopifySessionToken \}\)/);
+  assert.match(routesPageSource, /deleteDeliveryRouteGroupChildRoutes\(request, routeGroupId, routePlanIds, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(routesPageSource, /deleteDeliveryRoutePlan\(request, target\.id, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(routesPageSource, /const \{ routeGroups = \[\], routePlans = \[\], errors = \[\] \} = useLoaderData\(\)/);
   assert.match(routesPageSource, /buildRouteRows\(routePlans, routeGroups\)/);
@@ -62,22 +64,21 @@ test("Routes page loads persisted route plans and route groups from the delivery
 });
 
 test("Routes page lists saved child routes below their parent route group", () => {
-  assert.match(routesPageSource, /from "\.\.\/features\/delivery\/route-helpers"/);
-  assert.match(routesPageSource, /const routeChildRows = safeRouteGroups\.flatMap/);
+  assert.match(routesPageSource, /from "\.\.\/features\/delivery\/route-list-rows"/);
+  assert.match(routeListRowsSource, /function buildRouteChildRows\(routeGroup, children = getVisibleRouteGroupChildren\(routeGroup\)\) \{/);
   assert.match(routeHelpersSource, /function getRouteGroupChildren\(routeGroup\) \{/);
   assert.match(routeHelpersSource, /function getRouteGroupChildRoutePlanId\(child\) \{/);
   assert.match(routeHelpersSource, /textOrUndefined\(child\?\.routePlanId\) \?\? textOrUndefined\(child\?\.routePlan\?\.id\)/);
   assert.match(routeHelpersSource, /filter\(\(child\) => getRouteGroupChildRoutePlanId\(child\)\)/);
-  assert.match(routesPageSource, /const routePlanId = getRouteGroupChildRoutePlanId\(child\)/);
-  assert.match(routesPageSource, /href: routeGroupChildPath\(routeGroup\.id, routePlanId\)/);
+  assert.match(routeListRowsSource, /const routePlanId = getRouteGroupChildRoutePlanId\(child\)/);
+  assert.match(routeListRowsSource, /href: routeGroupChildPath\(routeGroup\.id, routePlanId\)/);
   assert.match(routeHelpersSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
   assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
-  assert.match(routesPageSource, /route: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
-  assert.match(routesPageSource, /parentRouteGroupId: routeGroup\.id/);
-  assert.doesNotMatch(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
+  assert.match(routeListRowsSource, /route: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
+  assert.match(routeListRowsSource, /routeGroupId: routeGroup\.id/);
   assert.match(routeHelpersSource, /leftRouteIdx = numberOrUndefined\(left\.child\?\.routeIdx\)/);
-  assert.match(routesPageSource, /isDeletable: true,[\s\S]*deleteKey: `routePlan:\$\{routePlanId\}`/);
-  assert.match(routesPageSource, /return \[\.\.\.routeGroupRows, \.\.\.routeChildRows, \.\.\.routePlanRows\]/);
+  assert.match(routeListRowsSource, /isDeletable: true,[\s\S]*deleteKey: getRouteGroupChildDeleteKey\(routeGroup\.id, routePlanId\)/);
+  assert.match(routeListRowsSource, /return \[\.\.\.routeGroupBundles, \.\.\.routePlanBundles\]/);
 });
 
 test("Routes page renders a tab-consistent title header above the route table without info copy", () => {
@@ -152,7 +153,7 @@ test("Routes page keeps copied controls out while using checkbox route selection
 });
 
 test("Routes table uses aligned CLEVER planning columns", () => {
-  assert.match(routesPageSource, /function buildRouteRows\(routePlans, routeGroups = \[\]\) \{/);
+  assert.match(routeListRowsSource, /export function buildRouteRows\(routePlans, routeGroups = \[\]\) \{/);
   assert.match(routesPageSource, /routeRows\.map\(\(route\) =>/);
   assert.match(routesPageSource, /aria-label="Select all visible routes"/);
   assert.match(routesPageSource, />Route<\/th>/);
@@ -169,22 +170,19 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.doesNotMatch(routesPageSource, />Missing<\/th>/);
   assert.doesNotMatch(routesPageSource, />Created<\/th>/);
   assert.match(routesPageSource, /formatRouteStatus\(route\.status\)/);
-  assert.match(routesPageSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
-  assert.match(routesPageSource, /const routeGroupRows = safeRouteGroups\.map\(\(routeGroup\) =>/);
-  assert.match(routesPageSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
-  assert.match(routesPageSource, /return Number\(routeGroup\?\.totalOrders \?\? routeGroup\?\.ordersCount \?\? routeGroup\?\.assignments\?\.length \?\? 0\) \|\| 0/);
+  assert.match(routeListRowsSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
+  assert.match(routeListRowsSource, /const routeGroupRows = routeGroupEntries\.map/);
+  assert.match(routeListRowsSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
+  assert.match(routeListRowsSource, /return Number\(routeGroup\?\.totalOrders \?\? routeGroup\?\.ordersCount \?\? routeGroup\?\.assignments\?\.length \?\? 0\) \|\| 0/);
   assert.doesNotMatch(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
   assert.match(routeHelpersSource, /rightRouteIdx = numberOrUndefined\(right\.child\?\.routeIdx\)/);
-  assert.match(routesPageSource, /const routeGroupMetricsById = new Map/);
-  assert.match(routesPageSource, /distanceMeters: sumOptionalNumbers\(childRows\.map\(\(routeRow\) => routeRow\.distanceMeters\)\)/);
-  assert.match(routesPageSource, /durationSeconds: sumOptionalNumbers\(childRows\.map\(\(routeRow\) => routeRow\.driveTimeSeconds\)\)/);
-  assert.match(routesPageSource, /isRouteGroup: true/);
-  assert.match(routesPageSource, /isDeletable: false/);
-  assert.match(routesPageSource, /formatRouteGroupDate\(routeGroup\)/);
+  assert.match(routeListRowsSource, /isRouteGroup: true/);
+  assert.match(routeListRowsSource, /isDeletable: true/);
+  assert.match(routeListRowsSource, /formatRouteGroupDate\(routeGroup\)/);
   assert.doesNotMatch(routesPageSource, /routeIndex: routeIndex \+ 1/);
-  assert.match(routesPageSource, /formatRouteValues\(routePlan\.deliveryAreas\)/);
-  assert.match(routesPageSource, /formatRouteDeliveryScope\(routePlan\)/);
-  assert.match(routesPageSource, /date: formatRouteTableDate\(routePlan\)/);
+  assert.match(routeListRowsSource, /formatRouteValues\(routePlan\.deliveryAreas\)/);
+  assert.match(routeListRowsSource, /formatRouteDeliveryScope\(routePlan\)/);
+  assert.match(routeListRowsSource, /date: formatRouteTableDate\(routePlan\)/);
   assert.match(routesPageSource, /<td style=\{routeTableCellStyle\}>\{route\.date\}<\/td>/);
   assert.doesNotMatch(routesPageSource, /\{route\.plannedFor\}/);
   assert.doesNotMatch(routesPageSource, /\{route\.deliveryDate\}/);
@@ -196,14 +194,13 @@ test("Routes table renders OSRM drive metrics instead of start and end placehold
   assert.match(routesPageSource, />Total distance<\/th>/);
   assert.doesNotMatch(routesPageSource, />Start<\/th>/);
   assert.doesNotMatch(routesPageSource, />End<\/th>/);
-  assert.match(routesPageSource, /function readRouteMetrics\(routePlan\) \{/);
-  assert.match(routesPageSource, /routeMetrics\?\.durationSeconds/);
-  assert.match(routesPageSource, /routeMetrics\?\.distanceMeters/);
+  assert.match(routeListRowsSource, /function readRouteMetrics\(routePlan\) \{/);
+  assert.match(routeListRowsSource, /routeMetrics\?\.durationSeconds/);
+  assert.match(routeListRowsSource, /routeMetrics\?\.distanceMeters/);
   assert.match(routesPageSource, /formatRouteDurationSeconds\(route\.driveTimeSeconds\)/);
   assert.match(routesPageSource, /formatRouteDistanceMeters\(route\.distanceMeters\)/);
-  assert.match(routesPageSource, /const routeGroupMetricsById = new Map/);
-  assert.match(routesPageSource, /parentRouteGroupId: routeGroup\.id/);
-  assert.match(routesPageSource, /const summaryRouteRows = activeRouteRows\.filter\(\(route\) => !route\.isRouteGroup\)/);
+  assert.match(routeListRowsSource, /routeGroupId: routeGroup\.id/);
+  assert.match(routesPageSource, /const summaryRouteRows = activeRouteRows\.filter\(\(route\) => route\.isSummaryRoute \?\? !route\.isRouteGroup\)/);
   assert.match(routesPageSource, /value: String\(summaryRouteRows\.length\)/);
   assert.match(routesPageSource, /sumNumbers\(summaryRouteRows\.map\(\(route\) => route\.orders\)\)/);
   assert.match(routesPageSource, /sumNumbers\(summaryRouteRows\.map\(\(route\) => route\.delivered\)\)/);
@@ -232,19 +229,23 @@ test("Routes table selection column uses checkboxes and a single delete action",
   assert.match(routesPageSource, /const routeDeleteFetcher = useFetcher\(\)/);
   assert.match(routesPageSource, /const \[checkedRouteIds, setCheckedRouteIds\] = useState\(\[\]\)/);
   assert.match(routesPageSource, /const selectableRouteRows = routeRows\.filter\(\(route\) => route\.isClickable && route\.isDeletable !== false\)/);
-  assert.match(routesPageSource, /const checkedRouteIdSet = new Set\(checkedRouteIds\)/);
+  assert.match(routesPageSource, /const checkedRouteIdSet = new Set\(getExpandedRouteDeleteKeys\(routeRows, checkedRouteIds\)\)/);
+  assert.match(routesPageSource, /const selectedRouteCount = selectableRouteRows\.filter\(\(route\) => checkedRouteIdSet\.has\(route\.deleteKey\)\)\.length/);
+  assert.match(routesPageSource, /const routeDeleteTargetIds = getRouteDeletePayloadKeys\(allRouteRows, checkedRouteIds\)/);
   assert.match(routesPageSource, /const allVisibleRoutesChecked =/);
-  assert.match(routesPageSource, /function toggleRouteCheck\(routeId\) \{/);
+  assert.match(routesPageSource, /function toggleRouteCheck\(route\) \{/);
+  assert.match(routesPageSource, /toggleRouteSelection\(routeRows, currentRouteIds, route\)/);
   assert.match(routesPageSource, /function toggleAllVisibleRouteChecks\(\) \{/);
+  assert.match(routesPageSource, /getPrimaryRouteSelectionKeys\(selectableRouteRows\)/);
   assert.match(routesPageSource, /async function handleDeleteSelectedRoutes\(\) \{/);
   assert.match(routesPageSource, /formData\.set\("_intent", "deleteRoutePlan"\)/);
-  assert.match(routesPageSource, /formData\.set\("routePlanIds", JSON\.stringify\(checkedRouteIds\)\)/);
+  assert.match(routesPageSource, /formData\.set\("routePlanIds", JSON\.stringify\(routeDeleteTargetIds\)\)/);
   assert.match(routesPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(routesPageSource, /routeDeleteFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(routesPageSource, /aria-label="Select all visible routes"/);
   assert.match(routesPageSource, /aria-label=\{`Select \$\{route\.route\} for deletion`\}/);
   assert.match(routesPageSource, /checked=\{checkedRouteIdSet\.has\(route\.deleteKey\)\}/);
-  assert.match(routesPageSource, /onChange=\{\(\) => toggleRouteCheck\(route\.deleteKey\)\}/);
+  assert.match(routesPageSource, /onChange=\{\(\) => toggleRouteCheck\(route\)\}/);
   assert.match(routesPageSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
   assert.match(routesPageSource, />Delete<\/button>/);
   assert.doesNotMatch(routesPageSource, />\{route\.routeIndex\}<\/button>/);
@@ -273,7 +274,7 @@ test("Routes table rows are clickable links into route detail", () => {
 });
 
 test("Routes placeholder row is not clickable when there are no persisted route plans", () => {
-  assert.match(routesPageSource, /isClickable: true/);
+  assert.match(routeListRowsSource, /isClickable: false/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /if \(!route\.isClickable\) return/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);
@@ -402,9 +403,9 @@ test("Route detail delete action uses params and existing delete helpers", () =>
 });
 
 test("Routes list displays assigned route drivers from the server response", () => {
-  assert.match(routesPageSource, /function formatRouteDriver\(driver\) \{/);
-  assert.match(routesPageSource, /driverId: routePlan\.driverId \?\? routePlan\.driver\?\.id \?\? null/);
-  assert.match(routesPageSource, /driver: formatRouteDriver\(routePlan\.driver\)/);
+  assert.match(routeListRowsSource, /function formatRouteDriver\(driver\) \{/);
+  assert.match(routeListRowsSource, /driverId: routePlan\.driverId \?\? routePlan\.driver\?\.id \?\? null/);
+  assert.match(routeListRowsSource, /driver: formatRouteDriver\(routePlan\.driver\)/);
   assert.match(routesPageSource, /routeFilters\.driverId && route\.driverId !== routeFilters\.driverId/);
 });
 
@@ -428,8 +429,8 @@ test("Route detail route exists for clicked persisted route rows", () => {
 });
 
 test("Route group detail keeps its own page instead of becoming a child route", () => {
-  assert.match(routesPageSource, /href: routeGroupPath\(routeGroup\.id\)/);
-  assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{\n  return appendIdToken\(route\.href, idToken\);\n\}/);
+  assert.match(routeListRowsSource, /href: routeGroupPath\(routeGroup\.id\)/);
+  assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{\n {2}return appendIdToken\(route\.href, idToken\);\n\}/);
   assert.match(routeGroupDetailSource, /routePlan: null/);
   assert.match(routeGroupDetailSource, /route_group_detail\.api\.summary/);
   assert.match(routeGroupDetailSource, /"delivery\.routeGroupDetail"/);
@@ -594,7 +595,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /const getRouteTimelineStopPopoverState = useCallback\(\(stopId, mode = "pinned"\) => \{/);
   assert.match(routeDetailSource, /const positionRouteTimelineStopPopover = useCallback\(\(stopId = activeRouteTimelineStopPopover\?\.stopId\) => \{/);
   assert.match(routeDetailSource, /popoverNode\.style\.transform = `translate3d/);
-  assert.match(routeDetailSource, /const syncRouteTimelineStopPopover = \(\) => positionRouteTimelineStopPopover\(\)/);
+  assert.match(routeDetailSource, /const syncRouteTimelineStopPopover = \(\) => positionRouteTimelineStopPopover\(activeRouteTimelineStopPopoverId\)/);
   assert.match(routeDetailSource, /window\.addEventListener\("scroll", syncRouteTimelineStopPopover, true\)/);
   assert.match(routeDetailSource, /window\.addEventListener\("resize", syncRouteTimelineStopPopover\)/);
   assert.match(routeDetailSource, /const handleRouteTimelineStopMouseEnter = \(stop\) => \{/);
@@ -900,6 +901,15 @@ test("Route detail uses child-only rows and global routeIdx save assertions", ()
   assert.doesNotMatch(routeDetailSource, /rootRouteStops/);
   assert.match(routeDetailSource, /routeGroupChildRows\.sort/);
   assert.match(routeDetailSource, /routeIdx/);
+});
+
+test("Route group detail keeps an unsplit group visible as route #1", () => {
+  assert.match(routeDetailSource, /function buildUnsplitRouteGroupRow\(routeGroup, routeStops = \[\]\) \{/);
+  assert.match(routeDetailSource, /if \(!routeGroup \|\| routeStops\.length === 0\) return null/);
+  assert.match(routeDetailSource, /routeKey: "routeIdx:1"/);
+  assert.match(routeDetailSource, /routePlanId: null/);
+  assert.match(routeDetailSource, /title: "#1"/);
+  assert.match(routeDetailSource, /return routeGroupChildRows\.length > 0 \? routeGroupChildRows : \[buildUnsplitRouteGroupRow\(routeGroup, routeStops\)\]\.filter\(Boolean\)/);
 });
 
 test("Route detail draft payload is child-only and treats routeIdx as server assertion", () => {

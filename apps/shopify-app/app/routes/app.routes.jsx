@@ -2,17 +2,17 @@ import { useEffect, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { formatRouteStatus } from "../features/delivery/route-helpers";
 import {
-  formatRouteDeliveryScope,
-  formatRouteStatus,
-  getRouteGroupChildRoutePlanId,
-  getRouteGroupChildRouteName,
-  getRouteGroupChildren,
-  getVisibleRouteGroupChildren,
-} from "../features/delivery/route-helpers";
-import { appendIdToken, routeGroupChildPath, routeGroupPath, routePlanPath } from "../features/delivery/route-paths";
+  buildRouteRows,
+  getExpandedRouteDeleteKeys,
+  getPrimaryRouteSelectionKeys,
+  getRouteDeletePayloadKeys,
+  toggleRouteSelection,
+} from "../features/delivery/route-list-rows";
+import { appendIdToken } from "../features/delivery/route-paths";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
-import { deleteDeliveryRouteGroup, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
+import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 
@@ -264,6 +264,13 @@ const routesErrorStyle = {
   padding: "10px 12px",
 };
 
+function logRouteDeleteAction(name, metric = {}) {
+  console.info(name, {
+    measuredAt: new Date().toISOString(),
+    ...metric,
+  });
+}
+
 export const loader = async ({ request }) => {
   const url = new URL(request.url);
   if (url.pathname === "/app/routes/") {
@@ -307,17 +314,48 @@ export const action = async ({ request }) => {
     };
   }
 
-  const deleteResults = await Promise.all(
-    routeDeleteTargets.map((target) =>
-      target.type === "routeGroup"
-        ? deleteDeliveryRouteGroup(request, target.id, { sessionToken: shopifySessionToken })
-        : deleteDeliveryRoutePlan(request, target.id, { sessionToken: shopifySessionToken }),
-    ),
-  );
+  const routeGroupIds = new Set(routeDeleteTargets.filter((target) => target.type === "routeGroup").map((target) => target.id));
+  const childRoutePlanIdsByGroupId = new Map();
+
+  for (const target of routeDeleteTargets) {
+    if (target.type !== "routeGroupChild" || routeGroupIds.has(target.routeGroupId)) continue;
+    childRoutePlanIdsByGroupId.set(target.routeGroupId, [
+      ...(childRoutePlanIdsByGroupId.get(target.routeGroupId) ?? []),
+      target.routePlanId,
+    ]);
+  }
+
+  logRouteDeleteAction("routes.delete.action.start", {
+    childRoutePlanIdsByGroupId: Object.fromEntries(childRoutePlanIdsByGroupId),
+    routeGroupIds: Array.from(routeGroupIds),
+    routePlanIds: routeDeleteTargets.filter((target) => target.type === "routePlan").map((target) => target.id),
+    targetCount: routeDeleteTargets.length,
+  });
+
+  const deleteResults = await Promise.all([
+    ...routeDeleteTargets
+      .filter((target) => target.type === "routeGroup")
+      .map((target) => deleteDeliveryRouteGroup(request, target.id, { sessionToken: shopifySessionToken })),
+    ...Array.from(childRoutePlanIdsByGroupId)
+      .map(([routeGroupId, routePlanIds]) =>
+        deleteDeliveryRouteGroupChildRoutes(request, routeGroupId, routePlanIds, { sessionToken: shopifySessionToken }),
+      ),
+    ...routeDeleteTargets
+      .filter((target) => target.type === "routePlan")
+      .map((target) => deleteDeliveryRoutePlan(request, target.id, { sessionToken: shopifySessionToken })),
+  ]);
+  const routePlanIds = deleteResults.map((result) => result.routePlanId ?? result.routeGroupId).filter(Boolean);
+  const errors = deleteResults.flatMap((result) => result.errors ?? []);
+
+  logRouteDeleteAction("routes.delete.action.done", {
+    deletedIds: routePlanIds,
+    errorCount: errors.length,
+    targetCount: routeDeleteTargets.length,
+  });
 
   return {
-    routePlanIds: deleteResults.map((result) => result.routePlanId ?? result.routeGroupId).filter(Boolean),
-    errors: deleteResults.flatMap((result) => result.errors ?? []),
+    routePlanIds,
+    errors,
   };
 };
 
@@ -339,42 +377,21 @@ function parseRouteDeleteTarget(value) {
   const text = String(value ?? "").trim();
   if (!text) return null;
   if (text.startsWith("routeGroup:")) return { type: "routeGroup", id: text.slice("routeGroup:".length) };
+  if (text.startsWith("routeGroupChild:")) {
+    const [routeGroupId, routePlanId] = text
+      .slice("routeGroupChild:".length)
+      .split(":")
+      .map((part) => decodeURIComponent(part));
+    return routeGroupId && routePlanId ? { type: "routeGroupChild", routeGroupId, routePlanId } : null;
+  }
   if (text.startsWith("routePlan:")) return { type: "routePlan", id: text.slice("routePlan:".length) };
   return { type: "routePlan", id: text };
-}
-
-function getRouteDeleteKey(route) {
-  const routeGroupId = route?.routeGroupingChild?.groupingId;
-  if (routeGroupId) return `routeGroup:${routeGroupId}`;
-  return route?.isRouteGroup ? `routeGroup:${route.id}` : `routePlan:${route.id}`;
-}
-
-function formatRouteValues(values) {
-  return Array.isArray(values) && values.length > 0 ? values.join(", ") : "-";
-}
-
-function formatRouteDate(value) {
-  if (!value) return "-";
-  const date = new Date(value);
-
-  if (Number.isNaN(date.getTime())) return String(value);
-
-  return date.toISOString().slice(0, 10);
 }
 
 function numberOrNull(value) {
   if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
-}
-
-function firstNumber(...values) {
-  for (const value of values) {
-    const number = numberOrNull(value);
-    if (number != null) return number;
-  }
-
-  return null;
 }
 
 function sumNumbers(values) {
@@ -392,14 +409,6 @@ function sumOptionalNumbers(values) {
   }, 0);
 
   return hasValue ? total : null;
-}
-
-function readRouteMetrics(routePlan) {
-  const routeMetrics = routePlan?.routeMetrics ?? null;
-  return {
-    distanceMeters: firstNumber(routeMetrics?.distanceMeters),
-    durationSeconds: firstNumber(routeMetrics?.durationSeconds),
-  };
 }
 
 function formatRouteDurationSeconds(totalSeconds) {
@@ -424,177 +433,9 @@ function formatRouteDistanceMeters(totalDistanceMeters) {
   return `${Number.isInteger(roundedKilometers) ? roundedKilometers : roundedKilometers.toFixed(1)} km`;
 }
 
-function formatRouteTableDate(routePlan) {
-  const deliveryScope = formatRouteDeliveryScope(routePlan);
-  return deliveryScope !== "-" ? deliveryScope : formatRouteDate(routePlan?.planDate);
-}
-
-function formatRouteDriver(driver) {
-  const displayName = String(driver?.displayName ?? "").trim();
-  const phone = String(driver?.phone ?? "").trim();
-
-  return displayName || phone || "-";
-}
-
-function getRouteGroupTotalOrders(routeGroup) {
-  return Number(routeGroup?.totalOrders ?? routeGroup?.ordersCount ?? routeGroup?.assignments?.length ?? 0) || 0;
-}
-
-function buildRouteRows(routePlans, routeGroups = []) {
-  const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
-  const childRoutePlanIds = new Set(
-    safeRouteGroups.flatMap((routeGroup) =>
-      getRouteGroupChildren(routeGroup).map(getRouteGroupChildRoutePlanId).filter(Boolean),
-    ),
-  );
-  const standaloneRoutePlans = Array.isArray(routePlans)
-    ? routePlans.filter((routePlan) => !childRoutePlanIds.has(routePlan.id))
-    : [];
-  const routeChildRows = safeRouteGroups.flatMap((routeGroup) =>
-    getVisibleRouteGroupChildren(routeGroup)
-      .map((child, index) => {
-        const routePlanId = getRouteGroupChildRoutePlanId(child);
-        const routePlan = child.routePlan ?? {};
-        const routeMetrics = readRouteMetrics({ ...routePlan, routeMetrics: child.routeMetrics ?? routePlan.routeMetrics });
-        const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
-        const missingCoordinates = routePlan.missingCoordinates ?? 0;
-        const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
-
-        return {
-          id: routePlanId,
-          rowKey: `routePlan:${routePlanId}`,
-          href: routeGroupChildPath(routeGroup.id, routePlanId),
-          isClickable: true,
-          isDeletable: true,
-          deleteKey: `routePlan:${routePlanId}`,
-          parentRouteGroupId: routeGroup.id,
-          route: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
-          status: child.displayStatus ?? routePlan.status ?? "DRAFT",
-          orders: stopsCount,
-          coordinates: `${locatedCount}/${stopsCount}`,
-          delivered: 0,
-          attempted: 0,
-          missingCoordinates,
-          date: formatRouteTableDate(routePlan),
-          deliveryArea: formatRouteValues(routePlan.deliveryAreas),
-          driver: formatRouteDriver({ displayName: child.driverName }),
-          driverId: child.driverId ?? routePlan.driverId ?? null,
-          driveTimeSeconds: routeMetrics.durationSeconds,
-          distanceMeters: routeMetrics.distanceMeters,
-        };
-      }),
-  );
-  const routeGroupMetricsById = new Map(
-    safeRouteGroups.map((routeGroup) => {
-      const childRows = routeChildRows.filter((routeRow) => routeRow.parentRouteGroupId === routeGroup.id);
-      return [
-        routeGroup.id,
-        {
-          distanceMeters: sumOptionalNumbers(childRows.map((routeRow) => routeRow.distanceMeters)),
-          durationSeconds: sumOptionalNumbers(childRows.map((routeRow) => routeRow.driveTimeSeconds)),
-        },
-      ];
-    }),
-  );
-  const routeGroupRows = safeRouteGroups.map((routeGroup) => {
-    const routeMetrics = routeGroupMetricsById.get(routeGroup.id) ?? {};
-    return {
-      id: routeGroup.id,
-      rowKey: `routeGroup:${routeGroup.id}`,
-      routeGroupId: routeGroup.id,
-      href: routeGroupPath(routeGroup.id),
-      isClickable: true,
-      isDeletable: true,
-      isRouteGroup: true,
-      deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
-      route: routeGroup.name ?? routeGroup.id,
-      status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
-      orders: getRouteGroupTotalOrders(routeGroup),
-      coordinates: "-",
-      delivered: 0,
-      attempted: 0,
-      missingCoordinates: 0,
-      date: formatRouteGroupDate(routeGroup),
-      deliveryArea: "-",
-      driver: "-",
-      driverId: null,
-      driveTimeSeconds: routeMetrics.durationSeconds ?? null,
-      distanceMeters: routeMetrics.distanceMeters ?? null,
-    };
-  });
-
-  if (standaloneRoutePlans.length === 0 && routeGroupRows.length === 0 && routeChildRows.length === 0) {
-    return [
-      {
-        id: "empty-route-plans",
-        isClickable: false,
-        isDeletable: false,
-        route: "No routes",
-        status: "Waiting",
-        orders: 0,
-        date: "-",
-        deliveryArea: "-",
-        driver: "-",
-        driverId: null,
-        driveTimeSeconds: null,
-        distanceMeters: null,
-      },
-    ];
-  }
-
-  const routePlanRows = standaloneRoutePlans.map((routePlan) => {
-    const routeMetrics = readRouteMetrics(routePlan);
-    const stopsCount = routePlan.stopsCount ?? 0;
-    const missingCoordinates = routePlan.missingCoordinates ?? 0;
-    const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
-    const delivered = firstNumber(
-      routePlan.deliveredCount,
-      routePlan.deliveredStopsCount,
-      routePlan.metrics?.deliveredCount,
-      routePlan.metrics?.deliveredStopsCount,
-    ) ?? 0;
-    const attempted = firstNumber(
-      routePlan.attemptedCount,
-      routePlan.attemptedStopsCount,
-      routePlan.metrics?.attemptedCount,
-      routePlan.metrics?.attemptedStopsCount,
-    ) ?? 0;
-
-    return {
-      id: routePlan.id,
-      rowKey: `routePlan:${routePlan.id}`,
-      href: routePlanPath(routePlan.id),
-      isClickable: true,
-      isDeletable: true,
-      deleteKey: getRouteDeleteKey(routePlan),
-      route: routePlan.name ?? routePlan.id,
-      status: routePlan.status ?? "DRAFT",
-      orders: stopsCount,
-      coordinates: `${locatedCount}/${stopsCount}`,
-      delivered,
-      attempted,
-      missingCoordinates,
-      date: formatRouteTableDate(routePlan),
-      deliveryArea: formatRouteValues(routePlan.deliveryAreas),
-      driver: formatRouteDriver(routePlan.driver),
-      driverId: routePlan.driverId ?? routePlan.driver?.id ?? null,
-      driveTimeSeconds: routeMetrics.durationSeconds,
-      distanceMeters: routeMetrics.distanceMeters,
-    };
-  });
-  return [...routeGroupRows, ...routeChildRows, ...routePlanRows];
-}
-
-function formatRouteGroupDate(routeGroup) {
-  const start = routeGroup?.dateRangeStart ?? routeGroup?.planDate;
-  const end = routeGroup?.dateRangeEnd ?? start;
-  if (!start) return "-";
-  return start === end ? start : `${start} ~ ${end}`;
-}
-
 function buildRoutesSummary(routeRows) {
   const activeRouteRows = routeRows.filter((route) => route.isClickable);
-  const summaryRouteRows = activeRouteRows.filter((route) => !route.isRouteGroup);
+  const summaryRouteRows = activeRouteRows.filter((route) => route.isSummaryRoute ?? !route.isRouteGroup);
 
   return [
     { label: "Routes", value: String(summaryRouteRows.length) },
@@ -688,12 +529,14 @@ export default function RoutesPage() {
   const routeRows = filterRouteRows(allRouteRows, routeFilters);
   const routeColumnWidths = getRouteColumnWidths(routeRows);
   const selectableRouteRows = routeRows.filter((route) => route.isClickable && route.isDeletable !== false);
-  const checkedRouteIdSet = new Set(checkedRouteIds);
+  const checkedRouteIdSet = new Set(getExpandedRouteDeleteKeys(routeRows, checkedRouteIds));
+  const selectedRouteCount = selectableRouteRows.filter((route) => checkedRouteIdSet.has(route.deleteKey)).length;
+  const routeDeleteTargetIds = getRouteDeletePayloadKeys(allRouteRows, checkedRouteIds);
   const allVisibleRoutesChecked =
     selectableRouteRows.length > 0 &&
     selectableRouteRows.every((route) => checkedRouteIdSet.has(route.deleteKey));
   const routeDeleteDisabled =
-    checkedRouteIds.length === 0 || routeDeleteFetcher.state !== "idle";
+    routeDeleteTargetIds.length === 0 || routeDeleteFetcher.state !== "idle";
   const actionErrors = routeDeleteFetcher.data?.errors ?? [];
   const visibleErrors = [...errors, ...actionErrors];
   const routesNoticeMessage = getServiceErrorNotice(
@@ -735,25 +578,24 @@ export default function RoutesPage() {
     navigate("/app/orders");
   }
 
-  function toggleRouteCheck(routeId) {
+  function toggleRouteCheck(route) {
     setCheckedRouteIds((currentRouteIds) =>
-      currentRouteIds.includes(routeId)
-        ? currentRouteIds.filter((currentRouteId) => currentRouteId !== routeId)
-        : [...currentRouteIds, routeId],
+      toggleRouteSelection(routeRows, currentRouteIds, route),
     );
   }
 
   function toggleAllVisibleRouteChecks() {
     setCheckedRouteIds((currentRouteIds) => {
+      const visibleRouteIds = new Set(selectableRouteRows.map((route) => route.deleteKey));
+
       if (allVisibleRoutesChecked) {
-        const visibleRouteIds = new Set(selectableRouteRows.map((route) => route.deleteKey));
         return currentRouteIds.filter((routeId) => !visibleRouteIds.has(routeId));
       }
 
       return Array.from(
         new Set([
-          ...currentRouteIds,
-          ...selectableRouteRows.map((route) => route.deleteKey),
+          ...currentRouteIds.filter((routeId) => !visibleRouteIds.has(routeId)),
+          ...getPrimaryRouteSelectionKeys(selectableRouteRows),
         ]),
       );
     });
@@ -764,7 +606,7 @@ export default function RoutesPage() {
 
     const formData = new FormData();
     formData.set("_intent", "deleteRoutePlan");
-    formData.set("routePlanIds", JSON.stringify(checkedRouteIds));
+    formData.set("routePlanIds", JSON.stringify(routeDeleteTargetIds));
 
     try {
       const sessionToken = await shopify.idToken();
@@ -786,7 +628,7 @@ export default function RoutesPage() {
             <h1 style={routesTitleStyle}>Routes</h1>
             <div style={routesHeaderActionsStyle}>
               <span style={routeSelectionSummaryStyle}>
-                {checkedRouteIds.length} selected
+                {selectedRouteCount} selected
               </span>
               <button
                 type="button"
@@ -859,7 +701,7 @@ export default function RoutesPage() {
                           aria-label={`Select ${route.route} for deletion`}
                           checked={checkedRouteIdSet.has(route.deleteKey)}
                           onClick={(event) => event.stopPropagation()}
-                          onChange={() => toggleRouteCheck(route.deleteKey)}
+                          onChange={() => toggleRouteCheck(route)}
                         />
                       ) : null}
                     </td>

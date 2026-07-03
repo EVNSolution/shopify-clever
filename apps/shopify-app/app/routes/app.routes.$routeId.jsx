@@ -1303,6 +1303,36 @@ function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
   return detailsByRoutePlanId;
 }
 
+function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
+  if (!routeGroup || routeStops.length === 0) return null;
+
+  return {
+    attemptedCount: countRouteStopsByStatus(routeStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
+    color: MAP_MARKER_PALETTE.plannedOrder.color,
+    createdLabel: getRouteCreatedLabel(routeGroup),
+    deliveredCount: countRouteStopsByStatus(routeStops, ["DELIVERED", "FULFILLED"]),
+    driverLabel: "Unassigned",
+    driveTimeLabel: ROUTE_EMPTY_LABEL,
+    id: `routeGroup:${routeGroup.id}:routeIdx:1`,
+    isCurrent: false,
+    optimized: null,
+    orderIds: routeStops.map((stop) => stop.orderId).filter(Boolean),
+    routeIdx: 1,
+    routeIndex: 1,
+    routeKey: "routeIdx:1",
+    routePlanId: null,
+    startTimeLabel: ROUTE_EMPTY_LABEL,
+    status: formatRouteStatus(routeGroup.displayStatus ?? routeGroup.status),
+    stops: routeStops,
+    stopsCount: routeStops.length,
+    title: "#1",
+    totalDistanceLabel: ROUTE_EMPTY_LABEL,
+    totalItems: getRouteTotalItems(null, routeStops),
+    totalWeightLabel: ROUTE_EMPTY_LABEL,
+    vehicleLabel: ROUTE_EMPTY_LABEL,
+  };
+}
+
 function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = []) {
   const routeGroupChildRows = getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
     const routeIdx = numberOrUndefined(child?.routeIdx);
@@ -1353,7 +1383,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     (numberOrUndefined(first.routeIdx) ?? numberOrUndefined(first.routeIndex) ?? 0)
     - (numberOrUndefined(second.routeIdx) ?? numberOrUndefined(second.routeIndex) ?? 0)
   ));
-  return routeGroupChildRows;
+  return routeGroupChildRows.length > 0 ? routeGroupChildRows : [buildUnsplitRouteGroupRow(routeGroup, routeStops)].filter(Boolean);
 }
 
 function applyRouteRowDraftState(routeRows, routeLineEdits, routePreviewByKey) {
@@ -2113,18 +2143,20 @@ export default function RouteDetailPage() {
     ));
   };
 
-  useEffect(() => {
-    if (!activeRouteTimelineStopPopover) return undefined;
+  const activeRouteTimelineStopPopoverId = activeRouteTimelineStopPopover?.stopId;
 
-    const syncRouteTimelineStopPopover = () => positionRouteTimelineStopPopover();
-    positionRouteTimelineStopPopover();
+  useEffect(() => {
+    if (!activeRouteTimelineStopPopoverId) return undefined;
+
+    const syncRouteTimelineStopPopover = () => positionRouteTimelineStopPopover(activeRouteTimelineStopPopoverId);
+    positionRouteTimelineStopPopover(activeRouteTimelineStopPopoverId);
     window.addEventListener("scroll", syncRouteTimelineStopPopover, true);
     window.addEventListener("resize", syncRouteTimelineStopPopover);
     return () => {
       window.removeEventListener("scroll", syncRouteTimelineStopPopover, true);
       window.removeEventListener("resize", syncRouteTimelineStopPopover);
     };
-  }, [activeRouteTimelineStopPopover?.stopId, positionRouteTimelineStopPopover]);
+  }, [activeRouteTimelineStopPopoverId, positionRouteTimelineStopPopover]);
 
   useEffect(() => {
     if (activeRouteTimelineStopPopover?.mode !== "pinned") return undefined;
@@ -3141,19 +3173,19 @@ export default function RouteDetailPage() {
                       title={stop.order}
                     >
                       <span style={routeTimelineLineStyle}></span>
-	                      <button
-	                        data-route-timeline-stop-button="true"
-	                        ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-	                        draggable
-	                        onDragEnd={handleRouteTimelineDragEnd}
-	                        onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
-	                        onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-	                        onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
-	                        onClick={(event) => handleRouteTimelineStopClick(event, stop)}
-	                        onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
-	                        onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
-	                        aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
-	                        aria-label={`Show ${stop.order} stop details`}
+                      <button
+                        data-route-timeline-stop-button="true"
+                        ref={(node) => setRouteTimelineStopRef(stop.id, node)}
+                        draggable
+                        onDragEnd={handleRouteTimelineDragEnd}
+                        onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
+                        onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+                        onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                        onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+                        onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
+                        onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
+                        aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
+                        aria-label={`Show ${stop.order} stop details`}
                         style={{
                           ...routeTimelineStopStyle,
                           ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
@@ -3301,6 +3333,7 @@ export default function RouteDetailPage() {
                       disabled={activeRouteSelector.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy}
                       key={option.id}
                       onClick={() => handleSelectRouteDriver(option.id)}
+                      aria-selected="false"
                       role="option"
                       style={{
                         ...routeSelectorOptionStyle,

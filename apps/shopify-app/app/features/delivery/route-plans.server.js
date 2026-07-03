@@ -18,6 +18,13 @@ const deliveryApiGetCache = new Map();
 const customFetchCacheIds = new WeakMap();
 let nextCustomFetchCacheId = 1;
 
+function logRoutePlanLifecycle(name, metric = {}) {
+  console.info(name, {
+    measuredAt: new Date().toISOString(),
+    ...metric,
+  });
+}
+
 export function getShopifySessionBearer(request) {
   const authorizationHeader = request.headers.get("authorization");
 
@@ -110,15 +117,30 @@ export function buildCreateRoutePlanPayload({
 }
 
 export async function createDeliveryRoutePlan(request, payload, options = {}) {
+  logRoutePlanLifecycle("delivery.route_plan.create.start", {
+    orderCount: Array.isArray(payload?.orders) ? payload.orders.length : 0,
+    planDate: payload?.planDate ?? null,
+    routeName: payload?.name ?? null,
+  });
+
   const result = await deliveryApiRequest(request, "/admin/route-plans", {
     body: JSON.stringify(payload),
     fetch: options.fetch,
     method: "POST",
     sessionToken: options.sessionToken,
   });
+  const routePlan = result.data?.routePlan ?? null;
+
+  logRoutePlanLifecycle("delivery.route_plan.create.done", {
+    errorCount: result.errors.length,
+    routePlanId: routePlan?.id ?? null,
+    routeName: routePlan?.name ?? null,
+    status: routePlan?.status ?? null,
+    stopCount: routePlan?.stopsCount ?? routePlan?.stops?.length ?? null,
+  });
 
   return {
-    routePlan: result.data?.routePlan ?? null,
+    routePlan,
     errors: result.errors,
   };
 }
@@ -258,6 +280,10 @@ export async function deleteDeliveryRoutePlan(request, routePlanId, options = {}
     };
   }
 
+  logRoutePlanLifecycle("delivery.route_plan.delete.start", {
+    routePlanId: normalizedRoutePlanId,
+  });
+
   const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
   const result = await deliveryApiRequest(
     request,
@@ -268,9 +294,16 @@ export async function deleteDeliveryRoutePlan(request, routePlanId, options = {}
       sessionToken: options.sessionToken,
     },
   );
+  const deletedRoutePlanId = result.data?.routePlanId ?? result.data?.id ?? normalizedRoutePlanId;
+
+  logRoutePlanLifecycle("delivery.route_plan.delete.done", {
+    deletedRoutePlanId,
+    errorCount: result.errors.length,
+    requestedRoutePlanId: normalizedRoutePlanId,
+  });
 
   return {
-    routePlanId: result.data?.routePlanId ?? result.data?.id ?? normalizedRoutePlanId,
+    routePlanId: deletedRoutePlanId,
     errors: result.errors,
   };
 }
