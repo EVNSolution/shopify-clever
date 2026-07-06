@@ -64,9 +64,11 @@ import {
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
+const ORDER_DATA_FIX_ACTION = "fixData";
 const ORDER_BULK_ACTION_OPTIONS = [
   { label: "State", value: "state" },
   { label: "Payment", value: "payment" },
+  { label: "Fix data", value: ORDER_DATA_FIX_ACTION },
 ];
 const ORDER_STATE_CHANGE_OPTIONS = [
   { label: "Pending", value: "PENDING" },
@@ -848,7 +850,7 @@ const routeAddSnapshotOrderMetaStyle = {
 const orderActionToggleStyle = {
   display: "grid",
   gap: "8px",
-  gridTemplateColumns: "1fr 1fr",
+  gridTemplateColumns: "repeat(3, 1fr)",
 };
 
 const orderActionSelectStyle = {
@@ -862,6 +864,84 @@ const orderActionSelectStyle = {
   padding: "0 8px",
   flex: "none",
   width: "100%",
+};
+
+const orderDataDialogStyle = {
+  ...orderActionDialogStyle,
+  maxWidth: "min(860px, calc(100vw - 32px))",
+  width: "min(860px, calc(100vw - 32px))",
+};
+
+const orderDataDialogGridStyle = {
+  display: "grid",
+  gap: "12px",
+  gridTemplateColumns: "minmax(220px, 0.9fr) minmax(280px, 1.1fr)",
+  minWidth: 0,
+};
+
+const orderDataListStyle = {
+  border: "1px solid #ebebeb",
+  borderRadius: "10px",
+  display: "grid",
+  gap: "4px",
+  margin: 0,
+  maxHeight: "330px",
+  overflowY: "auto",
+  padding: "6px",
+};
+
+const orderDataListButtonStyle = {
+  background: "#ffffff",
+  border: "1px solid transparent",
+  borderRadius: "8px",
+  color: "#303030",
+  cursor: "pointer",
+  display: "grid",
+  font: "inherit",
+  fontSize: "13px",
+  gap: "2px",
+  padding: "8px",
+  textAlign: "left",
+};
+
+const activeOrderDataListButtonStyle = {
+  ...orderDataListButtonStyle,
+  background: "#f1f5ff",
+  borderColor: "#2c6ecb",
+};
+
+const orderDataReasonStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const orderDataPanelStyle = {
+  display: "grid",
+  gap: "10px",
+  minWidth: 0,
+};
+
+const orderRawNoteStyle = {
+  background: "#f7f7f7",
+  border: "1px solid #ebebeb",
+  borderRadius: "10px",
+  color: "#303030",
+  fontFamily: "inherit",
+  fontSize: "13px",
+  lineHeight: 1.45,
+  margin: 0,
+  maxHeight: "150px",
+  overflow: "auto",
+  padding: "10px",
+  whiteSpace: "pre-wrap",
+};
+
+const orderDataFormStyle = {
+  display: "grid",
+  gap: "8px",
 };
 
 const tableStyle = {
@@ -1439,6 +1519,7 @@ function getOrderDeliveryPillDetails(order) {
 
   const rawDate = getOrderRawAttributeValue(order, DELIVERY_DATE_ATTRIBUTE_KEYS);
   const rawDay = getOrderRawAttributeValue(order, DELIVERY_DAY_ATTRIBUTE_KEYS);
+  const rawNote = getOrderNote(order);
   const noteHint = getOrderNoteDeliveryHint(order);
   const lineItemHint = getOrderLineItemDateRangeHint(order);
 
@@ -1446,6 +1527,7 @@ function getOrderDeliveryPillDetails(order) {
     "Delivery date is missing",
     rawDate ? formatInfoDetail("Raw Delivery Date", rawDate) : "Raw Delivery Date missing",
     rawDay ? formatInfoDetail("Raw Delivery Day", rawDay) : undefined,
+    rawNote ? formatInfoDetail("Raw note", rawNote) : undefined,
     noteHint,
     lineItemHint,
   ]);
@@ -1502,6 +1584,21 @@ function getOrderRawAttributeValue(order, keys) {
 
 function getOrderNote(order) {
   return textOrUndefined(order?.note ?? order?.rawPayload?.note ?? order?.shopifyOrderSnapshot?.note);
+}
+
+function getOrderDataDraft(order) {
+  return {
+    deliveryArea: textOrUndefined(order?.deliveryArea) ?? "",
+    deliveryDate: getOrderDeliveryDateValue(order) ?? "",
+  };
+}
+
+function getOrderDataIssueReasons(order, plannedOrderIdSet) {
+  const reasons = [];
+  if (!isOrderRouteCreated(order) && !plannedOrderIdSet?.has(order?.id)) reasons.push("Unassigned");
+  if (getOrderDeliveryPillTone(order) !== "neutral") reasons.push("Delivery date");
+  if (getOrderAreaPillTone(order) !== "neutral") reasons.push("Area");
+  return reasons;
 }
 
 function getOrderNoteDeliveryHint(order) {
@@ -2090,6 +2187,8 @@ export default function OrdersPage() {
   const [orderActionModalOpen, setOrderActionModalOpen] = useState(false);
   const [orderActionField, setOrderActionField] = useState("state");
   const [orderActionValue, setOrderActionValue] = useState(ORDER_STATE_CHANGE_OPTIONS[0].value);
+  const [activeOrderDataOrderId, setActiveOrderDataOrderId] = useState(null);
+  const [orderDataDraft, setOrderDataDraft] = useState(() => getOrderDataDraft(null));
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [routeAddModalOpen, setRouteAddModalOpen] = useState(false);
@@ -2483,6 +2582,23 @@ export default function OrdersPage() {
     () => checkedOrders.map((order) => order.orderId).filter(Boolean),
     [checkedOrders],
   );
+  const orderDataReviewRows = useMemo(
+    () => checkedOrders
+      .map((order) => ({ order, reasons: getOrderDataIssueReasons(order, plannedOrderIdSet) }))
+      .filter((row) => row.reasons.length > 0),
+    [checkedOrders, plannedOrderIdSet],
+  );
+  const orderDataRows = orderDataReviewRows.length > 0
+    ? orderDataReviewRows
+    : checkedOrders.map((order) => ({ order, reasons: ["Selected"] }));
+  const activeOrderDataOrder = activeOrderDataOrderId
+    ? orderDataRows.find((row) => row.order.id === activeOrderDataOrderId)?.order ?? orderDataRows[0]?.order ?? null
+    : orderDataRows[0]?.order ?? null;
+  const activeOrderDataReasons = activeOrderDataOrder
+    ? orderDataRows.find((row) => row.order.id === activeOrderDataOrder.id)?.reasons ?? []
+    : [];
+  const activeOrderRawNote = activeOrderDataOrder ? getOrderNote(activeOrderDataOrder) : undefined;
+  const activeOrderNoteHint = activeOrderDataOrder ? getOrderNoteDeliveryHint(activeOrderDataOrder) : undefined;
   const selectedRouteGroup = useMemo(
     () => safeRouteGroups.find((routeGroup) => routeGroup.id === selectedRouteGroupId) ?? safeRouteGroups[0] ?? null,
     [safeRouteGroups, selectedRouteGroupId],
@@ -2493,6 +2609,7 @@ export default function OrdersPage() {
   );
   const orderActionValueOptions =
     orderActionField === "state" ? ORDER_STATE_CHANGE_OPTIONS : ORDER_PAYMENT_CHANGE_OPTIONS;
+  const isOrderDataAction = orderActionField === ORDER_DATA_FIX_ACTION;
 
   const plannedOrders = useMemo(() => {
     return plannedOrderIds
@@ -3131,8 +3248,27 @@ export default function OrdersPage() {
     setPlanFitRequest((requestCount) => requestCount + 1);
   };
 
+  const selectOrderDataOrder = useCallback((order) => {
+    if (!order) return;
+    setActiveOrderDataOrderId(order.id);
+    setOrderDataDraft(getOrderDataDraft(order));
+  }, []);
+
+  useEffect(() => {
+    if (!isOrderDataAction) return;
+    if (!activeOrderDataOrder) return;
+    if (activeOrderDataOrder.id === activeOrderDataOrderId) return;
+    selectOrderDataOrder(activeOrderDataOrder);
+  }, [activeOrderDataOrder, activeOrderDataOrderId, isOrderDataAction, selectOrderDataOrder]);
+
   const handleOrderActionFieldChange = (field) => {
     setOrderActionField(field);
+    if (field === ORDER_DATA_FIX_ACTION) {
+      selectOrderDataOrder(orderDataRows[0]?.order);
+      setOrderActionValue("");
+      return;
+    }
+
     setOrderActionValue(
       field === "state"
         ? ORDER_STATE_CHANGE_OPTIONS[0].value
@@ -3144,16 +3280,39 @@ export default function OrdersPage() {
     if (checkedOrderIds.length === 0) return;
     setBulkUpdateClientError(null);
     setOrderActionModalOpen(true);
+    if (orderActionField === ORDER_DATA_FIX_ACTION) selectOrderDataOrder(orderDataRows[0]?.order);
+  };
+
+  const handleOrderDataDraftChange = (field, value) => {
+    setOrderDataDraft((currentDraft) => ({ ...currentDraft, [field]: value }));
   };
 
   const handleSaveOrderAction = async () => {
-    if (checkedServerOrderIds.length === 0 || isBulkUpdatingOrders) {
+    if (isBulkUpdatingOrders) return;
+
+    const formData = new FormData();
+    const sessionToken = await shopify.idToken();
+
+    if (orderActionField === ORDER_DATA_FIX_ACTION) {
+      if (!activeOrderDataOrder?.orderId) {
+        setBulkUpdateClientError("서버에 저장된 주문만 변경할 수 있습니다. 주문 동기화 후 다시 시도해주세요.");
+        return;
+      }
+
+      formData.set("_intent", "patchOrderData");
+      formData.set("orderId", activeOrderDataOrder.orderId);
+      formData.set("deliveryDate", orderDataDraft.deliveryDate);
+      formData.set("deliveryArea", orderDataDraft.deliveryArea);
+      formData.set("shopifySessionToken", sessionToken);
+      orderBulkUpdateFetcher.submit(formData, { method: "post" });
+      return;
+    }
+
+    if (checkedServerOrderIds.length === 0) {
       setBulkUpdateClientError("서버에 저장된 주문만 변경할 수 있습니다. 주문 동기화 후 다시 시도해주세요.");
       return;
     }
 
-    const formData = new FormData();
-    const sessionToken = await shopify.idToken();
     formData.set("_intent", "bulkUpdateOrders");
     formData.set("field", orderActionField);
     formData.set("value", orderActionValue);
@@ -4122,7 +4281,7 @@ export default function OrdersPage() {
                     if (event.target === event.currentTarget) setOrderActionModalOpen(false);
                   }}
                 >
-                  <div aria-modal="true" role="dialog" style={orderActionDialogStyle}>
+                  <div aria-modal="true" role="dialog" style={isOrderDataAction ? orderDataDialogStyle : orderActionDialogStyle}>
                     <strong>Action</strong>
                     <span style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
                     <div style={orderActionToggleStyle}>
@@ -4133,25 +4292,77 @@ export default function OrdersPage() {
                           style={orderActionField === option.value ? createRouteButtonStyle : addToPlanButtonStyle}
                           onClick={() => handleOrderActionFieldChange(option.value)}
                         >
-                          Change {option.label}
+                          {option.value === ORDER_DATA_FIX_ACTION ? option.label : `Change ${option.label}`}
                         </button>
                       ))}
                     </div>
-                    <label style={routePlanTitleLabelStyle}>
-                      Change to
-                      <select
-                        aria-label="Change selected orders to"
-                        style={orderActionSelectStyle}
-                        value={orderActionValue}
-                        onChange={(event) => setOrderActionValue(event.currentTarget.value)}
-                      >
-                        {orderActionValueOptions.map((option) => (
-                          <option key={option.value} value={option.value}>
-                            {option.label}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
+                    {isOrderDataAction ? (
+                      <div style={orderDataDialogGridStyle}>
+                        <div>
+                          <strong>Orders needing review</strong>
+                          <div aria-label="Orders needing review" style={orderDataListStyle}>
+                            {orderDataRows.map(({ order, reasons }) => (
+                              <button
+                                key={order.id}
+                                type="button"
+                                style={activeOrderDataOrder?.id === order.id ? activeOrderDataListButtonStyle : orderDataListButtonStyle}
+                                onClick={() => selectOrderDataOrder(order)}
+                              >
+                                <strong>{order.name}</strong>
+                                <span style={orderDataReasonStyle}>{reasons.join(" · ")}</span>
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div style={orderDataPanelStyle}>
+                          <div>
+                            <strong>Raw note</strong>
+                            <pre style={orderRawNoteStyle}>{activeOrderRawNote ?? "No raw note"}</pre>
+                            {activeOrderNoteHint ? <span style={orderDataReasonStyle}>{activeOrderNoteHint}</span> : null}
+                          </div>
+                          <div style={orderDataFormStyle}>
+                            <strong>Fix data</strong>
+                            <span style={orderDataReasonStyle}>{activeOrderDataReasons.join(" · ")}</span>
+                            <label style={routePlanTitleLabelStyle}>
+                              Delivery date
+                              <input
+                                aria-label="Delivery date"
+                                type="date"
+                                style={orderActionSelectStyle}
+                                value={orderDataDraft.deliveryDate}
+                                onChange={(event) => handleOrderDataDraftChange("deliveryDate", event.currentTarget.value)}
+                              />
+                            </label>
+                            <label style={routePlanTitleLabelStyle}>
+                              Area
+                              <input
+                                aria-label="Delivery area"
+                                type="text"
+                                style={orderActionSelectStyle}
+                                value={orderDataDraft.deliveryArea}
+                                onChange={(event) => handleOrderDataDraftChange("deliveryArea", event.currentTarget.value)}
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <label style={routePlanTitleLabelStyle}>
+                        Change to
+                        <select
+                          aria-label="Change selected orders to"
+                          style={orderActionSelectStyle}
+                          value={orderActionValue}
+                          onChange={(event) => setOrderActionValue(event.currentTarget.value)}
+                        >
+                          {orderActionValueOptions.map((option) => (
+                            <option key={option.value} value={option.value}>
+                              {option.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                     <div style={orderControlsTrailingStyle}>
                       <button
                         type="button"
@@ -4161,7 +4372,7 @@ export default function OrdersPage() {
                       <button
                         type="button"
                         style={isBulkUpdatingOrders ? disabledCreateRouteButtonStyle : createRouteButtonStyle}
-                        disabled={isBulkUpdatingOrders}
+                        disabled={isBulkUpdatingOrders || (isOrderDataAction && !activeOrderDataOrder)}
                         onClick={handleSaveOrderAction}
                       >Save</button>
                     </div>

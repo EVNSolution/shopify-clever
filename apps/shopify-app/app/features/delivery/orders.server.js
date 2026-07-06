@@ -60,6 +60,21 @@ export async function fetchDeliveryOrders(request, filters = {}, options = {}) {
   };
 }
 
+export async function patchDeliveryOrderMetadata(request, orderId, patch = {}, options = {}) {
+  const result = await deliveryApiRequest(request, `/admin/orders/${encodeURIComponent(orderId)}/metadata`, {
+    body: JSON.stringify(patch),
+    fetch: options.fetch,
+    method: "PATCH",
+    sessionToken: options.sessionToken,
+  });
+  clearDeliveryApiResponseCache();
+
+  return {
+    order: result.data?.order ?? null,
+    errors: result.errors,
+  };
+}
+
 export async function bulkUpdateDeliveryOrders(request, payload = {}, options = {}) {
   const result = await deliveryApiRequest(request, "/admin/orders/bulk-update", {
     body: JSON.stringify({

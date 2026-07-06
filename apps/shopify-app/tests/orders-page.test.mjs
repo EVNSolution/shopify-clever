@@ -23,6 +23,10 @@ const serviceErrorsSource = readFileSync(
   join(root, "app/features/service-errors.js"),
   "utf8",
 );
+const deliveryOrdersSource = readFileSync(
+  join(root, "app/features/delivery/orders.server.js"),
+  "utf8",
+);
 const mapPanelSource = readFileSync(
   join(root, "app/ui/map-panel.jsx"),
   "utf8",
@@ -467,6 +471,7 @@ test("Orders page bulk-changes selected server order state or payment", () => {
   assert.match(ordersPageSource, /const ORDER_BULK_ACTION_OPTIONS = \[/);
   assert.match(ordersPageSource, /\{ label: "State", value: "state" \}/);
   assert.match(ordersPageSource, /\{ label: "Payment", value: "payment" \}/);
+  assert.match(ordersPageSource, /\{ label: "Fix data", value: ORDER_DATA_FIX_ACTION \}/);
   assert.match(ordersPageSource, /const ORDER_STATE_CHANGE_OPTIONS = \[/);
   assert.match(ordersPageSource, /\{ label: "Delivered", value: "DELIVERED" \}/);
   assert.match(ordersPageSource, /const ORDER_PAYMENT_CHANGE_OPTIONS = \[/);
@@ -484,9 +489,22 @@ test("Orders page bulk-changes selected server order state or payment", () => {
   assert.match(ordersPageSource, /orderBulkUpdateFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, />Action<\/button>/);
   assert.match(ordersPageSource, /aria-modal="true" role="dialog"/);
-  assert.match(ordersPageSource, /Change \{option\.label\}/);
+  assert.match(ordersPageSource, /option.value === ORDER_DATA_FIX_ACTION/);
   assert.match(ordersPageSource, />Save<\/button>/);
   assert.match(ordersPageSource, />Cancel<\/button>/);
+});
+
+test("Orders page fixes selected order delivery metadata from Action", () => {
+  assert.match(ordersPageSource, /const ORDER_DATA_FIX_ACTION = "fixData"/);
+  assert.match(ordersPageSource, /Orders needing review/);
+  assert.match(ordersPageSource, /Raw note/);
+  assert.match(ordersPageSource, /Fix data/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "patchOrderData"\)/);
+  assert.match(ordersPageSource, /formData\.set\("deliveryDate", orderDataDraft\.deliveryDate\)/);
+  assert.match(ordersPageSource, /formData\.set\("deliveryArea", orderDataDraft\.deliveryArea\)/);
+  assert.match(ordersPageSource, /aria-label="Delivery date"[\s\S]*?type="date"/);
+  assert.match(ordersPageSource, /patchDeliveryOrderMetadata\(/);
+  assert.match(deliveryOrdersSource, /`\/admin\/orders\/\$\{encodeURIComponent\(orderId\)\}\/metadata`/);
 });
 
 test("Orders loader merges delivery server planning state before background sync", () => {
@@ -1356,7 +1374,7 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /nextFilters\.orderedDateFrom = ""/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateTo = ""/);
   assert.match(ordersPageSource, /nextFilters\[filterKey\] = ""/);
-  assert.doesNotMatch(ordersPageSource, /type="date"/);
+  assert.match(ordersPageSource, /onClick=\{handleOrderedDateCalendarOpen\}/);
   assert.match(ordersPageSource, /aria-label="Filter orders by delivery day"/);
   assert.match(ordersPageSource, /value=\{orderFilters\.deliveryWeekday\}/);
   assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?setOptimisticOrderFilters\(nextFilters\);[\s\S]*?updateOrderFilterSearchParams\(searchParams, nextFilters\)/);

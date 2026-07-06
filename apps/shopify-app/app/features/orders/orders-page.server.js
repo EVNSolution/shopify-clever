@@ -1,4 +1,4 @@
-import { bulkUpdateDeliveryOrders, fetchDeliveryOrders, syncDeliveryOrders } from "../delivery/orders.server";
+import { bulkUpdateDeliveryOrders, fetchDeliveryOrders, patchDeliveryOrderMetadata, syncDeliveryOrders } from "../delivery/orders.server";
 import { createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
@@ -258,6 +258,35 @@ async function handleOrdersAction(request) {
       syncedOrders: syncedOrderData.orders,
       sync: syncedOrderData.sync,
       errors: syncedOrderData.errors,
+    };
+  }
+
+
+  if (intent === "patchOrderData") {
+    const orderId = textOrUndefined(formData.get("orderId"));
+    if (!orderId) {
+      return { updatedOrders: [], errors: [{ message: "수정할 주문을 선택해주세요." }] };
+    }
+
+    const patch = {};
+    for (const field of ["deliveryDate", "deliveryArea"]) {
+      if (formData.has(field)) patch[field] = textOrUndefined(formData.get(field)) ?? null;
+    }
+
+    if (Object.keys(patch).length === 0) {
+      return { updatedOrders: [], errors: [{ message: "수정할 값을 입력해주세요." }] };
+    }
+
+    const patchData = await patchDeliveryOrderMetadata(
+      request,
+      orderId,
+      patch,
+      { sessionToken: shopifySessionToken },
+    );
+
+    return {
+      updatedOrders: patchData.order ? [patchData.order] : [],
+      errors: patchData.errors,
     };
   }
 
