@@ -10,6 +10,7 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
+import { syncShopifyOfflineTokenToDeliveryApi } from "../features/delivery/shopify-token-sync.server";
 import { fetchShopifyAppPreferences } from "../features/settings/app-preferences.server";
 import { DEFAULT_LANGUAGE, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
@@ -156,7 +157,8 @@ export const loader = async ({ request }) => {
   let language = DEFAULT_LANGUAGE;
 
   if (hasShopifyAdminContext(request)) {
-    const { admin } = await authenticate.admin(request);
+    const { admin, session } = await authenticate.admin(request);
+    await syncShopifyOfflineTokenToDeliveryApi(request, session).catch(() => {});
     const { appPreferences } = await fetchShopifyAppPreferences(admin);
     language = appPreferences.language;
   }
