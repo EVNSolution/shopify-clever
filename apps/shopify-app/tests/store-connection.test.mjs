@@ -116,6 +116,10 @@ const complianceWebhookRoutePath = join(
   process.cwd(),
   "app/routes/webhooks.compliance.jsx",
 );
+const webhookForwardingHelperPath = join(
+  process.cwd(),
+  "app/features/delivery/webhook-forwarding.server.js",
+);
 
 test("root document server-renders the Shopify App Bridge CDN bootstrap", () => {
   assert.match(rootDocumentSource, /useLoaderData/);
@@ -138,15 +142,17 @@ test("Shopify app config subscribes the mandatory compliance webhooks", () => {
 test("compliance webhook route verifies Shopify webhooks before acknowledging privacy topics", () => {
   assert.equal(existsSync(complianceWebhookRoutePath), true);
   const complianceWebhookRouteSource = readFileSync(complianceWebhookRoutePath, "utf8");
+  const webhookForwardingHelperSource = readFileSync(webhookForwardingHelperPath, "utf8");
 
   assert.match(complianceWebhookRouteSource, /request\.clone\(\)/);
   assert.match(complianceWebhookRouteSource, /authenticate\.webhook\(requestForAuth\)/);
   assert.match(complianceWebhookRouteSource, /customers\/data_request/);
   assert.match(complianceWebhookRouteSource, /customers\/redact/);
   assert.match(complianceWebhookRouteSource, /shop\/redact/);
-  assert.match(complianceWebhookRouteSource, /forwardComplianceWebhookToDeliveryApi\(request, rawBody\)/);
-  assert.match(complianceWebhookRouteSource, /\/shopify\/webhooks/);
-  assert.match(complianceWebhookRouteSource, /x-shopify-hmac-sha256/);
+  assert.match(complianceWebhookRouteSource, /forwardShopifyWebhookToDeliveryApi\(request, rawBody/);
+  assert.match(complianceWebhookRouteSource, /webhookKind: "compliance"/);
+  assert.match(webhookForwardingHelperSource, /\/shopify\/webhooks/);
+  assert.match(webhookForwardingHelperSource, /x-shopify-hmac-sha256/);
   assert.doesNotMatch(complianceWebhookRouteSource, /DEFAULT_DELIVERY_API_URL|clever-route\.cleversystem\.ai/);
 });
 
