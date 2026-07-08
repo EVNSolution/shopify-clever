@@ -6,6 +6,7 @@ import test from "node:test";
 import {
   forwardShopifyWebhookToDeliveryApi,
   getForwardedWebhookHeaders,
+  normalizeOrderWebhookTopic,
   ORDER_WEBHOOK_TOPICS,
 } from "../app/features/delivery/webhook-forwarding.server.js";
 
@@ -51,9 +52,41 @@ test("order webhook route authenticates before forwarding the raw webhook body",
   assert.match(source, /request\.clone\(\)/);
   assert.match(source, /await request\.text\(\)/);
   assert.match(source, /authenticate\.webhook\(requestForAuth\)/);
-  assert.match(source, /ORDER_WEBHOOK_TOPICS\.has\(topic\)/);
+  assert.match(source, /normalizeOrderWebhookTopic\(topic\)/);
   assert.match(source, /forwardShopifyWebhookToDeliveryApi\(request, rawBody/);
   assert.match(source, /webhookKind: "order"/);
+});
+
+
+test("normalizes Admin GraphQL order webhook topic enums before forwarding", async () => {
+  assert.equal(normalizeOrderWebhookTopic("ORDERS_UPDATED"), "orders/updated");
+  assert.equal(normalizeOrderWebhookTopic("orders/updated"), "orders/updated");
+  assert.equal(normalizeOrderWebhookTopic("PRODUCTS_UPDATE"), null);
+
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
+  try {
+    const calls = [];
+    const request = new Request("https://app.invalid/webhooks/orders", {
+      headers: {
+        "x-shopify-topic": "ORDERS_UPDATED",
+      },
+      method: "POST",
+      body: "{}",
+    });
+
+    await forwardShopifyWebhookToDeliveryApi(request, "{}", {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return new Response(null, { status: 200 });
+      },
+      normalizedTopic: "orders/updated",
+    });
+
+    assert.equal(calls[0].options.headers.get("x-shopify-topic"), "orders/updated");
+  } finally {
+    restoreDeliveryApiBaseUrl(previousBaseUrl);
+  }
 });
 
 test("delivery webhook forwarding preserves raw body and Shopify webhook headers only", async () => {

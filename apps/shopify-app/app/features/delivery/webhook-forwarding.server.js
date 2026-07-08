@@ -10,6 +10,21 @@ export const ORDER_WEBHOOK_TOPICS = new Set([
   "orders/partially_fulfilled",
 ]);
 
+const SHOPIFY_ADMIN_ORDER_TOPICS = new Map([
+  ["ORDERS_CREATE", "orders/create"],
+  ["ORDERS_UPDATED", "orders/updated"],
+  ["ORDERS_EDITED", "orders/edited"],
+  ["ORDERS_CANCELLED", "orders/cancelled"],
+  ["ORDERS_DELETE", "orders/delete"],
+  ["ORDERS_FULFILLED", "orders/fulfilled"],
+  ["ORDERS_PARTIALLY_FULFILLED", "orders/partially_fulfilled"],
+]);
+
+export function normalizeOrderWebhookTopic(topic) {
+  if (ORDER_WEBHOOK_TOPICS.has(topic)) return topic;
+  return SHOPIFY_ADMIN_ORDER_TOPICS.get(topic) ?? null;
+}
+
 const FORWARDED_SHOPIFY_WEBHOOK_HEADERS = [
   "content-type",
   "x-shopify-api-version",
@@ -24,11 +39,11 @@ const FORWARDED_SHOPIFY_WEBHOOK_HEADERS = [
 export async function forwardShopifyWebhookToDeliveryApi(
   request,
   rawBody,
-  { fetch: fetchImpl = fetch, webhookKind = "Shopify" } = {},
+  { fetch: fetchImpl = fetch, normalizedTopic, webhookKind = "Shopify" } = {},
 ) {
   const response = await fetchImpl(`${getDeliveryApiBaseUrl()}/shopify/webhooks`, {
     body: rawBody,
-    headers: getForwardedWebhookHeaders(request.headers),
+    headers: getForwardedWebhookHeaders(request.headers, { normalizedTopic }),
     method: "POST",
   });
 
@@ -40,7 +55,7 @@ export async function forwardShopifyWebhookToDeliveryApi(
   }
 }
 
-export function getForwardedWebhookHeaders(sourceHeaders) {
+export function getForwardedWebhookHeaders(sourceHeaders, { normalizedTopic } = {}) {
   const headers = new Headers();
 
   for (const name of FORWARDED_SHOPIFY_WEBHOOK_HEADERS) {
@@ -48,6 +63,10 @@ export function getForwardedWebhookHeaders(sourceHeaders) {
     if (value) {
       headers.set(name, value);
     }
+  }
+
+  if (normalizedTopic) {
+    headers.set("x-shopify-topic", normalizedTopic);
   }
 
   return headers;

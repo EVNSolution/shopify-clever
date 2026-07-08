@@ -1,7 +1,7 @@
 import { authenticate } from "../shopify.server";
 import {
-  ORDER_WEBHOOK_TOPICS,
   forwardShopifyWebhookToDeliveryApi,
+  normalizeOrderWebhookTopic,
 } from "../features/delivery/webhook-forwarding.server";
 
 export const action = async ({ request }) => {
@@ -9,7 +9,8 @@ export const action = async ({ request }) => {
   const rawBody = await request.text();
   const { shop, topic } = await authenticate.webhook(requestForAuth);
 
-  if (!ORDER_WEBHOOK_TOPICS.has(topic)) {
+  const normalizedTopic = normalizeOrderWebhookTopic(topic);
+  if (normalizedTopic === null) {
     console.warn(`Received unexpected order webhook topic ${topic} for ${shop}`);
     return new Response(null, { status: 200 });
   }
@@ -17,6 +18,7 @@ export const action = async ({ request }) => {
   console.log(`Received ${topic} order webhook for ${shop}`);
 
   await forwardShopifyWebhookToDeliveryApi(request, rawBody, {
+    normalizedTopic,
     webhookKind: "order",
   });
 
