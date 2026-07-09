@@ -51,7 +51,7 @@ Ensure you have provided the correct store domain, that the store is a dev store
 - App name: `CLEVER K-Food`
 - App handle: `clever-route-kfood`
 - Public app URL: `https://clever-kfood-app.cleversystem.ai`
-- Delivery API URL: `https://clever-route.cleversystem.ai`
+- Delivery API URL: `https://clever-route-api.cleversystem.ai`
 - Expected app id: `clever-route-kfood`
 
 ## 사용자가 “KFood 설치해”라고 하면 할 일
@@ -86,7 +86,7 @@ KFood가 아니라 CLEVER dev store에서 실행한다.
 ```bash
 cd ~/Documents/Files/03_Work_EVnSolution/01_Repos/05_CLEVER_Shopify/shopify-clever/apps/shopify-app
 export CLEVER_APP_ID=clever-route-dev
-export CLEVER_DELIVERY_API_URL=https://clever-route.cleversystem.ai
+export CLEVER_DELIVERY_API_URL=https://clever-route-api.cleversystem.ai
 export SHOPIFY_APP_DISTRIBUTION=single_merchant
 npm run dev -- --store clever-test-syhae28n.myshopify.com
 ```

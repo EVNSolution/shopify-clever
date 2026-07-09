@@ -1,26 +1,28 @@
 name: shopify-clever-main
 
 services:
-  shopify-app:
+  clever-route-app:
     build:
       context: ../../apps/shopify-app
       dockerfile: Dockerfile
-    image: shopify-clever-main-shopify-app:local
+    image: shopify-clever-main-clever-route-app:local
     env_file:
       - ../env/shopify-app.env
     environment:
       NODE_ENV: production
       PORT: 3000
       SHOPIFY_APP_DISTRIBUTION: app_store
-      SHOPIFY_APP_URL: https://clever-admin.cleversystem.ai
-      CLEVER_DELIVERY_API_URL: http://delivery-api:3000
+      SHOPIFY_APP_URL: https://clever-route-app.cleversystem.ai
+      CLEVER_DELIVERY_API_URL: http://clever-route-api:3000
       CLEVER_APP_ID: clever
       GEOCODING_SEARCH_URL: https://nominatim.openstreetmap.org/search
     restart: unless-stopped
     volumes:
       - /srv/shopify-clever/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
     networks:
-      - route-server
+      route-server:
+        aliases:
+          - shopify-app
 
 networks:
   route-server:

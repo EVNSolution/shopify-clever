@@ -119,10 +119,10 @@ jobs:
           ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
           security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
           compose-file: infra/compose/docker-compose.shopify-main.yml
-          service: shopify-app
+          service: clever-route-app
           sqlite-path: /srv/shopify-clever/data/shopify/dev.sqlite
           env-file: infra/env/shopify-app.env
-          smoke-url: https://clever-admin.cleversystem.ai/auth/login
+          smoke-url: https://clever-route-app.cleversystem.ai/auth/login
 
   deploy-clever-route:
     name: Deploy CleverRoute Dev Shopify app to EC2
@@ -155,10 +155,10 @@ jobs:
           ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
           security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
           compose-file: infra/compose/docker-compose.shopify-dev.yml
-          service: shopify-app-clever-route
+          service: clever-route-app-dev
           sqlite-path: /srv/shopify-clever-dev/data/shopify/dev.sqlite
           env-file: infra/env/shopify-app-clever-route.env
-          smoke-url: https://clever-route-app.cleversystem.ai/auth/login
+          smoke-url: https://clever-route-app-dev.cleversystem.ai/auth/login
 
 
   deploy-kfood:
@@ -192,7 +192,7 @@ jobs:
           ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
           security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
           compose-file: infra/compose/docker-compose.shopify-kfood.yml
-          service: shopify-app-kfood
+          service: clever-kfood-app
           sqlite-path: /srv/shopify-clever-kfood/data/shopify/dev.sqlite
           env-file: infra/env/shopify-app-kfood.env
           smoke-url: https://clever-kfood-app.cleversystem.ai/auth/login
