@@ -110,7 +110,7 @@ runs:
           chmod 600 '${{ inputs.env-file }}' '${{ inputs.sqlite-path }}'
           docker compose -f '${{ inputs.compose-file }}' config --quiet
           docker compose -f '${{ inputs.compose-file }}' build
-          docker compose -f '${{ inputs.compose-file }}' up -d '${{ inputs.service }}'
+          docker compose -f '${{ inputs.compose-file }}' up -d --remove-orphans '${{ inputs.service }}'
           docker compose -f '${{ inputs.compose-file }}' ps
         "
 

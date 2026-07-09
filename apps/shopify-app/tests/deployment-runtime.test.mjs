@@ -16,7 +16,7 @@ test("Shopify compose files run only the app containers on the route-server netw
 
   for (const composeSource of [mainCompose, devCompose]) {
     assert.match(composeSource, /context: \.\.\/\.\.\/apps\/shopify-app/);
-    assert.match(composeSource, /CLEVER_DELIVERY_API_URL: http:\/\/delivery-api:3000/);
+    assert.match(composeSource, /CLEVER_DELIVERY_API_URL: http:\/\/clever-route-api:3000/);
     assert.match(composeSource, /route-server:[\s\S]*external: true/);
     assert.doesNotMatch(composeSource, /context: \.\.\/\.\.\/apps\/delivery-api/);
     assert.doesNotMatch(composeSource, /postgres/);
@@ -27,4 +27,6 @@ test("Shopify compose files run only the app containers on the route-server netw
   assert.match(workflowSource, /docker-compose\.shopify-dev\.yml/);
   assert.doesNotMatch(workflowSource, /delivery-api-migrate/);
   assert.doesNotMatch(workflowSource, /up -d postgres/);
+  const deployAction = readRepoFile(".github/actions/ec2-shopify-deploy/action.yml");
+  assert.match(deployAction, /up -d --remove-orphans/);
 });

@@ -4,7 +4,7 @@
 client_id = "9be6895e1de376bf056787803e863a4d"
 name = "CleverRoute Dev"
 handle = "clever-route-dev"
-application_url = "https://clever-route-app.cleversystem.ai"
+application_url = "https://clever-route-app-dev.cleversystem.ai"
 embedded = true
 
 [access_scopes]
@@ -39,7 +39,7 @@ api_version = "2026-07"
   compliance_topics = ["customers/data_request", "customers/redact", "shop/redact"]
 
 [auth]
-redirect_urls = [ "https://clever-route-app.cleversystem.ai/auth/callback" ]
+redirect_urls = [ "https://clever-route-app-dev.cleversystem.ai/auth/callback" ]
 
 [build]
 automatically_update_urls_on_dev = true

@@ -10,8 +10,8 @@ This document is the source of truth for CLEVER Shopify app naming. Shopify uses
 | Shopify app config `name` | `CLEVER` | `CleverRoute Dev` | `CLEVER K-Food` | The name in Shopify app TOML files released by Shopify CLI. |
 | Shopify app `handle` | `clever-route` | `clever-route-dev` | `clever-route-kfood` | Unique Shopify Admin URL slug. Handles are globally constrained and can be rejected if already taken. |
 | Shopify Admin app path | `/apps/clever-route/...` | `/apps/clever-route-dev/...` | `/apps/clever-route-kfood/...` | The path visible inside `admin.shopify.com` when opening the embedded app. |
-| Hosted app URL | `https://clever-admin.cleversystem.ai` | `https://clever-route-app.cleversystem.ai` | `https://clever-kfood-app.cleversystem.ai` | The web app host Shopify loads in the embedded app iframe. |
-| Delivery API URL | `https://clever-route.cleversystem.ai` | `https://clever-route.cleversystem.ai` | `https://clever-route.cleversystem.ai` | The delivery backend paired with each app runtime. |
+| Hosted app URL | `https://clever-route-app.cleversystem.ai` | `https://clever-route-app-dev.cleversystem.ai` | `https://clever-kfood-app.cleversystem.ai` | The web app host Shopify loads in the embedded app iframe. |
+| Delivery API URL | `https://clever-route-api.cleversystem.ai` | `https://clever-route-api.cleversystem.ai` | `https://clever-route-api.cleversystem.ai` | The delivery backend paired with each app runtime. |
 | Shopify config file | `apps/shopify-app/shopify.app.toml` | `apps/shopify-app/shopify.app.dev.toml` | `apps/shopify-app/shopify.app.kfood.toml` | Local CLI configuration file. |
 | Runtime distribution | `app_store` | `single_merchant` | `single_merchant` | Runtime value for `SHOPIFY_APP_DISTRIBUTION`. |
 
@@ -19,7 +19,7 @@ This document is the source of truth for CLEVER Shopify app naming. Shopify uses
 
 - `CLEVER` is the product/merchant-facing name.
 - `clever-route` is the production Shopify URL handle.
-- `clever-admin...` is our hosted production app URL.
+- `clever-route-app...` is our hosted production app URL.
 - `CleverRoute Dev` / `clever-route-dev` are only for the dev/custom-store app.
 - `CLEVER K-Food` / `clever-route-kfood` are only for the KFood custom-store app.
 
@@ -28,8 +28,10 @@ In other words, this is intentional:
 ```text
 Production display name: CLEVER
 Production handle:       clever-route
-Production app URL:      https://clever-admin.cleversystem.ai
+Production app URL:      https://clever-route-app.cleversystem.ai
 ```
+
+Legacy production hosted URL alias during migration: `https://clever-admin.cleversystem.ai`.
 
 ## Why production uses `clever-route` as the handle
 
@@ -65,7 +67,7 @@ These are different:
 
 ```text
 Shopify Admin path: /apps/clever-route/...
-Hosted app URL:    https://clever-admin.cleversystem.ai
+Hosted app URL:    https://clever-route-app.cleversystem.ai
 ```
 
 The Admin path is controlled by the Shopify handle. The hosted app URL is controlled by our infrastructure and `application_url`.

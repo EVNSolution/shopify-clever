@@ -31,7 +31,7 @@
     "deploy:kfood": "shopify app deploy -c shopify.app.kfood.toml",
     "config:use:kfood": "shopify app config use shopify.app.kfood.toml",
     "config:link:kfood": "shopify app config link -c shopify.app.kfood.toml",
-    "dev:local": "CLEVER_DELIVERY_API_URL=${CLEVER_DELIVERY_API_URL:-https://clever-route.cleversystem.ai} CLEVER_APP_ID=${CLEVER_APP_ID:-clever-route-dev} SHOPIFY_APP_DISTRIBUTION=${SHOPIFY_APP_DISTRIBUTION:-single_merchant} shopify app dev -c dev"
+    "dev:local": "CLEVER_DELIVERY_API_URL=${CLEVER_DELIVERY_API_URL:-https://clever-route-api.cleversystem.ai} CLEVER_APP_ID=${CLEVER_APP_ID:-clever-route-dev} SHOPIFY_APP_DISTRIBUTION=${SHOPIFY_APP_DISTRIBUTION:-single_merchant} shopify app dev -c dev"
   },
   "type": "module",
   "engines": {

@@ -1,35 +1,36 @@
 # shopify-clever
 
-Shopify embedded admin app for CLEVER. The delivery backend now lives in the separate `clever-route-server` repository; this repo keeps only the Shopify app and its app-server/BFF loader/action code.
+Shopify embedded app for CLEVER. The delivery backend now lives in the separate `clever-route-server` repository; this repo keeps only the Shopify app and its app-server/BFF loader/action code.
 
 ## App
 
 - `apps/shopify-app` — React Router Shopify embedded app.
 
 The Shopify app calls the operating delivery API through `CLEVER_DELIVERY_API_URL`.
-On EC2 compose, Shopify app containers join the external route-server Docker network and call `http://delivery-api:3000`.
+On EC2 compose, Shopify app containers join the external route-server Docker network and call `http://clever-route-api:3000`.
 
 ## Public and dev endpoints
 
 Production/App Store runtime:
 
-- App URL: `https://clever-admin.cleversystem.ai`
-- Redirect URL: `https://clever-admin.cleversystem.ai/auth/callback`
-- Delivery API: `https://clever-route.cleversystem.ai`
+- App URL: `https://clever-route-app.cleversystem.ai`
+- Redirect URL: `https://clever-route-app.cleversystem.ai/auth/callback`
+- Delivery API: `https://clever-route-api.cleversystem.ai`
 - App scope: `CLEVER_APP_ID=clever`
+- Legacy host alias: `https://clever-admin.cleversystem.ai` during staged host migration
 
 Dev preview/runtime:
 
-- App URL: `https://clever-route-app.cleversystem.ai`
-- Redirect URL: `https://clever-route-app.cleversystem.ai/auth/callback`
-- Delivery API: `https://clever-route.cleversystem.ai`
+- App URL: `https://clever-route-app-dev.cleversystem.ai`
+- Redirect URL: `https://clever-route-app-dev.cleversystem.ai/auth/callback`
+- Delivery API: `https://clever-route-api.cleversystem.ai`
 - App scope: `CLEVER_APP_ID=clever-route-dev`
 
 KFood custom/runtime:
 
 - App URL: `https://clever-kfood-app.cleversystem.ai`
 - Redirect URL: `https://clever-kfood-app.cleversystem.ai/auth/callback`
-- Delivery API: `https://clever-route.cleversystem.ai`
+- Delivery API: `https://clever-route-api.cleversystem.ai`
 - App scope: `CLEVER_APP_ID=clever-route-kfood`
 
 Public URL hostnames must not contain `shopify` or `example`.
@@ -91,9 +92,9 @@ The repository is intended to stay private under the `EVNSolution` GitHub Free o
 
 Shopify app containers run on the existing route server EC2 and attach to the route-server Docker network:
 
-- `docker-compose.shopify-main.yml` → `shopify-clever-main-shopify-app-1`
-- `docker-compose.shopify-dev.yml` → `shopify-clever-dev-shopify-app-clever-route-1`
-- `docker-compose.shopify-kfood.yml` → `shopify-clever-kfood-shopify-app-kfood-1`
+- `docker-compose.shopify-main.yml` → `shopify-clever-main-clever-route-app-1`
+- `docker-compose.shopify-dev.yml` → `shopify-clever-dev-clever-route-app-dev-1`
+- `docker-compose.shopify-kfood.yml` → `shopify-clever-kfood-clever-kfood-app-1`
 
 Runtime env files are intentionally not committed:
 

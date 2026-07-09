@@ -13,7 +13,7 @@ npm --prefix apps/shopify-app run dev:local -- --store clever-test-syhae28n.mysh
 `dev:local` keeps the normal dev config (`shopify app dev -c dev`) and injects the local defaults agents kept missing:
 
 ```bash
-CLEVER_DELIVERY_API_URL=${CLEVER_DELIVERY_API_URL:-https://clever-route.cleversystem.ai}
+CLEVER_DELIVERY_API_URL=${CLEVER_DELIVERY_API_URL:-https://clever-route-api.cleversystem.ai}
 CLEVER_APP_ID=${CLEVER_APP_ID:-clever-route-dev}
 SHOPIFY_APP_DISTRIBUTION=${SHOPIFY_APP_DISTRIBUTION:-single_merchant}
 ```
@@ -30,7 +30,7 @@ CLEVER_DELIVERY_API_URL=http://localhost:3000 npm --prefix apps/shopify-app run 
 infra/env/shopify-app.env
 ```
 
-That file is deployment/runtime container input. Copying it into local shell can point the app at Docker-only hosts like `http://delivery-api:3000` and cause `fetch failed`.
+That file is deployment/runtime container input. Copying it into local shell can point the app at Docker-only hosts like `http://clever-route-api:3000` and cause `fetch failed`.
 
 ## Quick stale-process check
 
