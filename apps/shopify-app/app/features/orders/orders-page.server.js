@@ -14,6 +14,7 @@ import {
 } from "../delivery/route-groups.server";
 import { getRouteGroupChildRoutePlanId, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
+import { fetchShopifyAppPreferences } from "../settings/app-preferences.server";
 import {
   getOrderSyncSnapshots,
   mapCanonicalOrdersToOrderRows,
@@ -516,8 +517,9 @@ async function resolvePlannedOrdersForAction({
   timings,
 }) {
   const shopifyDataStartedAt = getSafePerformanceNow();
+  const preferencesData = await fetchShopifyAppPreferences(admin);
   const [orderData, departureLocationData] = await Promise.all([
-    fetchShopifyOrders(admin),
+    fetchShopifyOrders(admin, { deliveryCycle: preferencesData.appPreferences.deliveryCycle }),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
   ]);
   timings.shopifyDataMs = roundPerfDuration(getSafePerformanceNow() - shopifyDataStartedAt);
@@ -544,6 +546,7 @@ async function resolvePlannedOrdersForAction({
   if ((syncedOrderData.errors ?? []).length > 0) {
     return {
       errors: [
+        ...(preferencesData.errors ?? []),
         ...(orderData.errors ?? []),
         ...(syncedOrderData.errors ?? []),
         ...(departureLocationData.errors ?? []),
@@ -562,6 +565,7 @@ async function resolvePlannedOrdersForAction({
   if ((canonicalOrderData.errors ?? []).length > 0) {
     return {
       errors: [
+        ...(preferencesData.errors ?? []),
         ...(orderData.errors ?? []),
         ...(syncedOrderData.errors ?? []),
         ...(canonicalOrderData.errors ?? []),
@@ -618,11 +622,20 @@ export const loader = async ({ request }) => {
     : "orders";
   const shouldLoadOrders = activeOrdersView !== "inventory";
 
+  const preferencesStartedAt = getSafePerformanceNow();
+  const preferencesDataPromise = shouldLoadOrders
+    ? fetchShopifyAppPreferences(admin).then((preferencesData) => ({
+        data: preferencesData,
+        durationMs: roundPerfDuration(getSafePerformanceNow() - preferencesStartedAt),
+      }))
+    : Promise.resolve({ data: { appPreferences: { deliveryCycle: undefined }, errors: [] }, durationMs: 0 });
+
   const ordersStartedAt = getSafePerformanceNow();
   const orderDataPromise = shouldLoadOrders
-    ? fetchShopifyOrders(admin, {
+    ? preferencesDataPromise.then(({ data: preferencesData }) => fetchShopifyOrders(admin, {
         cacheKey: shopifyShopCacheKey,
-      }).then((orderData) => ({
+        deliveryCycle: preferencesData.appPreferences.deliveryCycle,
+      })).then((orderData) => ({
         data: orderData,
         durationMs: roundPerfDuration(getSafePerformanceNow() - ordersStartedAt),
       }))
@@ -714,6 +727,7 @@ export const loader = async ({ request }) => {
     : Promise.resolve({ data: { routeGroups: [], errors: [] }, durationMs: 0 });
 
   const [
+    preferencesDataResult,
     orderDataResult,
     departureLocationDataResult,
     serverOrderDataResult,
@@ -721,6 +735,7 @@ export const loader = async ({ request }) => {
     shopTimeZoneDataResult,
     routeGroupDataResult,
   ] = await Promise.all([
+    preferencesDataPromise,
     orderDataPromise,
     departureLocationDataPromise,
     serverOrderDataPromise,
@@ -728,6 +743,7 @@ export const loader = async ({ request }) => {
     shopTimeZoneDataPromise,
     routeGroupDataPromise,
   ]);
+  const preferencesData = preferencesDataResult.data;
   const orderData = orderDataResult.data;
   const departureLocationData = departureLocationDataResult.data;
   const serverOrderData = serverOrderDataResult.data;
@@ -747,7 +763,7 @@ export const loader = async ({ request }) => {
     routeGroups: routeGroupData.routeGroups,
     needsSessionTokenRefresh: hasSessionTokenRefreshError([serverOrderData, inventoryData]),
     errors: collectServiceErrors(
-      [orderData, departureLocationData, serverOrderData, inventoryData, routeGroupData],
+      [preferencesData, orderData, departureLocationData, serverOrderData, inventoryData, routeGroupData],
       { ignoredCodes: [DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE] },
     ),
     departureLocation: departureLocationData.departureLocation,
@@ -758,6 +774,7 @@ export const loader = async ({ request }) => {
         activeOrdersView,
         totalMs: roundPerfDuration(getSafePerformanceNow() - loaderStartedAt),
         shopifyOrdersCacheStatus: orderData.cacheStatus ?? (shouldLoadOrders ? "unknown" : "skipped"),
+        preferencesMs: preferencesDataResult.durationMs,
         shopifyOrdersMs: orderDataResult.durationMs,
         departureLocationMs: departureLocationDataResult.durationMs,
         serverOrdersMs: serverOrderDataResult.durationMs,

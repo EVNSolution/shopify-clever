@@ -97,11 +97,13 @@ export function clearShopifyOrdersCache() {
 }
 
 export async function fetchShopifyOrders(admin, options = {}) {
-  const cacheKey = normalizeShopifyOrdersCacheKey(options.cacheKey);
+  const cacheKey = normalizeShopifyOrdersCacheKey(
+    [options.cacheKey, buildDeliveryCycleCacheScope(options.deliveryCycle)].filter(Boolean).join("|"),
+  );
   const cacheTtlMs = getShopifyOrdersCacheTtlMs();
 
   if (!cacheKey || cacheTtlMs <= 0) {
-    return withShopifyOrdersCacheStatus(await loadShopifyOrders(admin), "disabled");
+    return withShopifyOrdersCacheStatus(await loadShopifyOrders(admin, options), "disabled");
   }
 
   const now = Date.now();
@@ -110,7 +112,7 @@ export async function fetchShopifyOrders(admin, options = {}) {
 
   const cacheEntry = {
     expiresAt: now + cacheTtlMs,
-    promise: loadShopifyOrders(admin).then(
+    promise: loadShopifyOrders(admin, options).then(
       (result) => {
         if ((result.errors ?? []).length > 0) {
           shopifyOrdersCache.delete(cacheKey);
@@ -129,7 +131,7 @@ export async function fetchShopifyOrders(admin, options = {}) {
   return withShopifyOrdersCacheStatus(await cacheEntry.promise, "miss");
 }
 
-async function loadShopifyOrders(admin) {
+async function loadShopifyOrders(admin, options = {}) {
   try {
     const orders = [];
     const errors = [];
@@ -143,7 +145,7 @@ async function loadShopifyOrders(admin) {
         },
       });
       const payload = await response.json();
-      orders.push(...mapShopifyOrdersResponse(payload));
+      orders.push(...mapShopifyOrdersResponse(payload, options));
       errors.push(...normalizeGraphqlErrors(payload.errors));
 
       const pageInfo = payload?.data?.orders?.pageInfo;
@@ -201,6 +203,11 @@ function readShopifyOrdersCache(cacheKey, now) {
   );
 }
 
+function buildDeliveryCycleCacheScope(deliveryCycle) {
+  if (!deliveryCycle) return "";
+  return `${deliveryCycle.cutoffWeekday ?? ""}@${deliveryCycle.cutoffTime ?? ""}@${deliveryCycle.timeZone ?? ""}`;
+}
+
 function getShopifyOrdersCacheTtlMs() {
   const configuredTtl = Number(process.env.CLEVER_SHOPIFY_ORDERS_CACHE_TTL_MS);
 
@@ -232,14 +239,14 @@ function withShopifyOrdersCacheStatus(result, cacheStatus) {
   };
 }
 
-export function mapShopifyOrdersResponse(payload) {
+export function mapShopifyOrdersResponse(payload, options = {}) {
   const edges = payload?.data?.orders?.edges;
   if (!Array.isArray(edges)) return [];
 
-  return edges.map((edge) => mapOrderNode(edge?.node)).filter(Boolean);
+  return edges.map((edge) => mapOrderNode(edge?.node, options)).filter(Boolean);
 }
 
-function mapOrderNode(order) {
+function mapOrderNode(order, options = {}) {
   if (!order?.id) return undefined;
 
   const shippingAddress = order.shippingAddress ?? {};
@@ -247,6 +254,7 @@ function mapOrderNode(order) {
   const deliveryDay = textOrUndefined(attributes["Delivery Day"]);
   const deliveryDateRaw = getDeliveryDateAttribute(attributes);
   const deliveryDate = inferDeliveryDateForOrder({
+    deliveryCycle: options.deliveryCycle,
     deliveryDate: deliveryDateRaw,
     deliveryDay,
     lineItems: order.lineItems,

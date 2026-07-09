@@ -8,13 +8,19 @@ import {
   saveShopifyAppPreferences,
 } from "./app-preferences.server.js";
 
+const DEFAULT_DELIVERY_CYCLE = {
+  cutoffTime: "23:59",
+  cutoffWeekday: "MONDAY",
+  timeZone: "America/Toronto",
+};
+
 test("app preferences query reads the language setting metafield", () => {
   assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /query CleverRouteAppPreferences/);
   assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /currentAppInstallation\s*\{/);
   assert.match(SHOPIFY_APP_PREFERENCES_QUERY, /metafield\(namespace: "clever_route", key: "app_preferences"\)/);
 });
 
-test("maps saved app language preferences with English fallback", () => {
+test("maps saved app preferences with defaults and English fallback", () => {
   assert.deepEqual(
     mapShopifyAppPreferencesResponse({
       data: {
@@ -25,7 +31,10 @@ test("maps saved app language preferences with English fallback", () => {
         },
       },
     }),
-    { language: "ko" },
+    {
+      deliveryCycle: DEFAULT_DELIVERY_CYCLE,
+      language: "ko",
+    },
   );
 
   assert.deepEqual(
@@ -33,12 +42,18 @@ test("maps saved app language preferences with English fallback", () => {
       data: {
         currentAppInstallation: {
           metafield: {
-            value: JSON.stringify({ language: "fr" }),
+            value: JSON.stringify({
+              deliveryCycle: { cutoffTime: "12:00", cutoffWeekday: "SUNDAY" },
+              language: "fr",
+            }),
           },
         },
       },
     }),
-    { language: "en" },
+    {
+      deliveryCycle: { cutoffTime: "12:00", cutoffWeekday: "SUNDAY", timeZone: "America/Toronto" },
+      language: "en",
+    },
   );
 });
 
@@ -49,12 +64,23 @@ test("fetches app preferences without breaking the app when Shopify blocks the m
     },
   });
 
-  assert.deepEqual(result.appPreferences, { language: "en" });
+  assert.deepEqual(result.appPreferences, {
+    deliveryCycle: DEFAULT_DELIVERY_CYCLE,
+    language: "en",
+  });
   assert.match(result.errors[0].message, /currentAppInstallation/);
 });
 
-test("saves app language preferences to an app-data metafield", async () => {
+test("saves app language and delivery cycle preferences to an app-data metafield", async () => {
   const calls = [];
+  const input = {
+    deliveryCycle: { cutoffTime: "12:00", cutoffWeekday: "SUNDAY" },
+    language: "ko",
+  };
+  const expectedPreferences = {
+    deliveryCycle: { cutoffTime: "12:00", cutoffWeekday: "SUNDAY", timeZone: "America/Toronto" },
+    language: "ko",
+  };
   const result = await saveShopifyAppPreferences(
     {
       graphql: async (query, options) => {
@@ -86,7 +112,7 @@ test("saves app language preferences to an app-data metafield", async () => {
         };
       },
     },
-    { language: "ko" },
+    input,
   );
 
   assert.match(SAVE_APP_PREFERENCES_MUTATION, /metafieldsSet/);
@@ -96,8 +122,8 @@ test("saves app language preferences to an app-data metafield", async () => {
     key: "app_preferences",
     ownerId: "gid://shopify/AppInstallation/1",
     type: "json",
-    value: JSON.stringify({ language: "ko" }),
+    value: JSON.stringify(expectedPreferences),
   });
-  assert.deepEqual(result.appPreferences, { language: "ko" });
+  assert.deepEqual(result.appPreferences, expectedPreferences);
   assert.equal(result.errors.length, 0);
 });

@@ -56,8 +56,11 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.match(ordersPageSource, /export const loader = async \(\{ request \}\) =>/);
   assert.match(ordersPageSource, /authenticate\.admin\(request\)/);
   assert.match(ordersPageSource, /const shopifyShopCacheKey = session\?\.shop/);
-  assert.match(ordersPageSource, /fetchShopifyOrders\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\}\)/);
-  assert.match(ordersPageSource, /fetchShopifyOrders\(admin\)/);
+  assert.match(ordersPageSource, /fetchShopifyAppPreferences\(admin\)/);
+  assert.match(
+    ordersPageSource,
+    /fetchShopifyOrders\(admin,\s*\{[\s\S]*cacheKey: shopifyShopCacheKey,[\s\S]*deliveryCycle: preferencesData\.appPreferences\.deliveryCycle,[\s\S]*\}\)/,
+  );
   assert.match(ordersPageSource, /fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/);
   assert.match(ordersPageSource, /useLoaderData\(\)/);
   assert.doesNotMatch(ordersPageSource, /title="Orders"/);
@@ -308,7 +311,7 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.doesNotMatch(ordersPageSource, /<s-banner tone="critical">/);
   assert.match(ordersPageSource, /<div style=\{orderControlsStyle\}>/);
   assert.match(ordersPageSource, /getServiceErrorNotice\(\[/);
-  assert.match(ordersPageSource, /collectServiceErrors\(\s*\[orderData, departureLocationData, serverOrderData, inventoryData, routeGroupData\]/);
+  assert.match(ordersPageSource, /collectServiceErrors\(\s*\[preferencesData, orderData, departureLocationData, serverOrderData, inventoryData, routeGroupData\]/);
   assert.doesNotMatch(ordersPageSource, /style=\{orderFilterBarStyle\}/);
   assert.doesNotMatch(ordersPageSource, /style=\{planActionRowStyle\}/);
   assert.match(ordersPageSource, /<div style=\{tableWrapStyle\}>\s*<table/s);
