@@ -1,4 +1,5 @@
 import { DEFAULT_LANGUAGE, normalizeLanguage } from "../../i18n/i18n.js";
+import { normalizeDeliveryCycle } from "../delivery/delivery-labels.js";
 import { normalizeCaughtServiceError, normalizeGraphqlErrors } from "../service-errors.js";
 
 export const SHOPIFY_APP_PREFERENCES_QUERY = `#graphql
@@ -112,6 +113,7 @@ export function mapShopifyAppPreferencesResponse(payload) {
 
 export function normalizeAppPreferences(input = {}) {
   return {
+    deliveryCycle: normalizeDeliveryCycle(input?.deliveryCycle),
     language: normalizeLanguage(input?.language ?? DEFAULT_LANGUAGE),
   };
 }

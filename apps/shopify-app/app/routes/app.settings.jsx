@@ -11,6 +11,7 @@ import {
   saveShopifyAppPreferences,
 } from "../features/settings/app-preferences.server";
 import { SettingsDepartureMap } from "../features/settings/settings-departure-map";
+import { clearShopifyOrdersCache } from "../features/orders/shopify-orders.server";
 import { SUPPORTED_LANGUAGES, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
 import { PageShell } from "../ui/page-shell";
@@ -77,6 +78,16 @@ const settingsSelectStyle = {
   height: "36px",
   lineHeight: "20px",
 };
+
+const DELIVERY_CYCLE_WEEKDAY_OPTIONS = [
+  { label: "Sunday", value: "SUNDAY" },
+  { label: "Monday", value: "MONDAY" },
+  { label: "Tuesday", value: "TUESDAY" },
+  { label: "Wednesday", value: "WEDNESDAY" },
+  { label: "Thursday", value: "THURSDAY" },
+  { label: "Friday", value: "FRIDAY" },
+  { label: "Saturday", value: "SATURDAY" },
+];
 
 const settingsReadonlyInputStyle = {
   ...settingsInputStyle,
@@ -177,6 +188,10 @@ export const action = async ({ request }) => {
   const formData = await request.formData();
   const departureAddress = formText(formData.get("departureAddress"));
   const appPreferencesInput = {
+    deliveryCycle: {
+      cutoffTime: formText(formData.get("deliveryCycleCutoffTime")),
+      cutoffWeekday: formText(formData.get("deliveryCycleCutoffWeekday")),
+    },
     language: formText(formData.get("language")),
   };
 
@@ -220,6 +235,7 @@ export const action = async ({ request }) => {
     saveShopifyDepartureLocation(admin, departureLocationInput),
     saveShopifyAppPreferences(admin, appPreferencesInput),
   ]);
+  if ((preferencesResult.errors ?? []).length === 0) clearShopifyOrdersCache();
 
   return {
     departureLocation: departureResult.departureLocation,
@@ -315,6 +331,7 @@ export default function SettingsPage() {
   const submitSettings = useSubmit();
   const { revalidate } = useRevalidator();
   const activeLanguage = actionData?.appPreferences?.language ?? appPreferences?.language ?? "en";
+  const activeDeliveryCycle = actionData?.appPreferences?.deliveryCycle ?? appPreferences?.deliveryCycle ?? {};
   const activeDepartureLocation = actionData?.departureLocation ?? departureLocation;
   const activeDepartureAddress = activeDepartureLocation?.address ?? "";
   const activeDepartureLatitude = activeDepartureLocation?.coordinates?.[1];
@@ -324,6 +341,8 @@ export default function SettingsPage() {
   const [language, setLanguage] = useState(activeLanguage);
   const [departureName, setDepartureName] = useState(activeDepartureLocation?.name ?? "");
   const [departureAddress, setDepartureAddress] = useState(activeDepartureLocation?.address ?? "");
+  const [deliveryCycleCutoffWeekday, setDeliveryCycleCutoffWeekday] = useState(activeDeliveryCycle.cutoffWeekday ?? "MONDAY");
+  const [deliveryCycleCutoffTime, setDeliveryCycleCutoffTime] = useState(activeDeliveryCycle.cutoffTime ?? "23:59");
   const currentMapCoordinateRef = useRef(initialMapCoordinate);
   const [mapCoordinate, setMapCoordinate] = useState(initialMapCoordinate);
   const [coordinateAddress, setCoordinateAddress] = useState(
@@ -361,10 +380,12 @@ export default function SettingsPage() {
     setLanguage(activeLanguage);
     setDepartureName(activeDepartureName);
     setDepartureAddress(activeDepartureAddress);
+    setDeliveryCycleCutoffWeekday(activeDeliveryCycle.cutoffWeekday ?? "MONDAY");
+    setDeliveryCycleCutoffTime(activeDeliveryCycle.cutoffTime ?? "23:59");
     currentMapCoordinateRef.current = activeCoordinate;
     setMapCoordinate(activeCoordinate);
     setCoordinateAddress(activeCoordinate ? activeDepartureAddress : "");
-  }, [activeDepartureAddress, activeDepartureLatitude, activeDepartureLongitude, activeDepartureName, activeLanguage]);
+  }, [activeDeliveryCycle.cutoffTime, activeDeliveryCycle.cutoffWeekday, activeDepartureAddress, activeDepartureLatitude, activeDepartureLongitude, activeDepartureName, activeLanguage]);
 
   useEffect(() => {
     if (!geocodeFetcher.data?.geocodedLocation) return;
@@ -402,10 +423,12 @@ export default function SettingsPage() {
     setLanguage(activeLanguage);
     setDepartureName(activeDepartureLocation?.name ?? "");
     setDepartureAddress(activeDepartureLocation?.address ?? "");
+    setDeliveryCycleCutoffWeekday(activeDeliveryCycle.cutoffWeekday ?? "MONDAY");
+    setDeliveryCycleCutoffTime(activeDeliveryCycle.cutoffTime ?? "23:59");
     currentMapCoordinateRef.current = activeCoordinate;
     setMapCoordinate(activeCoordinate);
     setCoordinateAddress(activeCoordinate ? activeDepartureLocation?.address ?? "" : "");
-  }, [activeDepartureLocation, activeLanguage]);
+  }, [activeDeliveryCycle.cutoffTime, activeDeliveryCycle.cutoffWeekday, activeDepartureLocation, activeLanguage]);
 
   const saveSettings = useCallback((event) => {
     event.preventDefault();
@@ -414,9 +437,11 @@ export default function SettingsPage() {
     formData.set("language", language);
     formData.set("departureName", departureName);
     formData.set("departureAddress", departureAddress);
+    formData.set("deliveryCycleCutoffWeekday", deliveryCycleCutoffWeekday);
+    formData.set("deliveryCycleCutoffTime", deliveryCycleCutoffTime);
     appendDepartureCoordinate(formData, currentMapCoordinateRef.current);
     submitSettings(formData, { method: "post" });
-  }, [departureAddress, departureName, language, submitSettings]);
+  }, [deliveryCycleCutoffTime, deliveryCycleCutoffWeekday, departureAddress, departureName, language, submitSettings]);
 
   const isCheckingAddress = geocodeFetcher.state !== "idle";
 
@@ -452,6 +477,45 @@ export default function SettingsPage() {
                 ))}
               </select>
             </label>
+          </fieldset>
+
+
+          <fieldset style={settingsFieldsetStyle}>
+            <legend style={settingsLegendStyle}>{copy("settings.deliveryCycle.title")}</legend>
+            <p style={settingsMessageStyle}>{copy("settings.deliveryCycle.description")}</p>
+            <div style={settingsCoordinateGridStyle}>
+              <label style={settingsLabelStyle}>
+                {copy("settings.deliveryCycle.cutoffWeekday")}
+                <select
+                  name="deliveryCycleCutoffWeekday"
+                  onChange={(event) => {
+                    setLastOperation(null);
+                    setDeliveryCycleCutoffWeekday(event.currentTarget.value);
+                  }}
+                  style={settingsSelectStyle}
+                  value={deliveryCycleCutoffWeekday}
+                >
+                  {DELIVERY_CYCLE_WEEKDAY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label style={settingsLabelStyle}>
+                {copy("settings.deliveryCycle.cutoffTime")}
+                <input
+                  name="deliveryCycleCutoffTime"
+                  onChange={(event) => {
+                    setLastOperation(null);
+                    setDeliveryCycleCutoffTime(event.currentTarget.value);
+                  }}
+                  style={settingsInputStyle}
+                  type="time"
+                  value={deliveryCycleCutoffTime}
+                />
+              </label>
+            </div>
           </fieldset>
 
           <fieldset style={settingsFieldsetStyle}>

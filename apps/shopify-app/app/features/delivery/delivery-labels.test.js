@@ -5,6 +5,7 @@ import {
   formatDeliveryScopeLabel,
   inferDeliveryDateFromLineItems,
   inferDeliveryDateFromOrderCycle,
+  normalizeDeliveryCycle,
 } from "./delivery-labels.js";
 
 test("formats delivery labels with the actual date and weekday", () => {
@@ -73,6 +74,24 @@ test("infers delivery dates from the CLEVER Tuesday-to-Monday order cycle", () =
       orderCreatedAt: "2026-05-05T15:30:00.000Z",
     }),
     "2026-05-16",
+  );
+});
+
+test("honors a configured delivery cycle cutoff time", () => {
+  assert.equal(
+    inferDeliveryDateFromOrderCycle({
+      deliveryCycle: { cutoffTime: "12:00", cutoffWeekday: "MONDAY" },
+      deliveryDay: "Thursday",
+      orderCreatedAt: "2026-05-04T17:30:00.000Z",
+    }),
+    "2026-05-14",
+  );
+});
+
+test("normalizes invalid delivery cycle settings to the current default", () => {
+  assert.deepEqual(
+    normalizeDeliveryCycle({ cutoffTime: "99:99", cutoffWeekday: "NOPE" }),
+    { cutoffTime: "23:59", cutoffWeekday: "MONDAY", timeZone: "America/Toronto" },
   );
 });
 

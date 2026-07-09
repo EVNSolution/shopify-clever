@@ -14,7 +14,23 @@ const DELIVERY_OFFSET_FROM_THURSDAY = {
   6: 2,
 };
 
-const TORONTO_TIME_ZONE = "America/Toronto";
+const WEEKDAY_INDEX_BY_CODE = {
+  SUNDAY: 0,
+  MONDAY: 1,
+  TUESDAY: 2,
+  WEDNESDAY: 3,
+  THURSDAY: 4,
+  FRIDAY: 5,
+  SATURDAY: 6,
+};
+
+export const DEFAULT_DELIVERY_CYCLE = {
+  cutoffTime: "23:59",
+  cutoffWeekday: "MONDAY",
+  timeZone: "America/Toronto",
+};
+
+const TORONTO_TIME_ZONE = DEFAULT_DELIVERY_CYCLE.timeZone;
 
 export function formatDeliveryScopeLabel({
   deliveryDate,
@@ -29,6 +45,7 @@ export function formatDeliveryScopeLabel({
 }
 
 export function inferDeliveryDateForOrder({
+  deliveryCycle,
   deliveryDate,
   deliveryDay,
   lineItems,
@@ -42,6 +59,7 @@ export function inferDeliveryDateForOrder({
       orderCreatedAt,
     }) ??
     inferDeliveryDateFromOrderCycle({
+      deliveryCycle,
       deliveryDay,
       orderCreatedAt,
     })
@@ -90,26 +108,36 @@ export function inferDeliveryDateFromLineItems({
 }
 
 export function inferDeliveryDateFromOrderCycle({
+  deliveryCycle,
   deliveryDay,
   orderCreatedAt,
 } = {}) {
   const weekdayIndex = getWeekdayIndex(deliveryDay);
-  const deliveryOffset = DELIVERY_OFFSET_FROM_THURSDAY[weekdayIndex];
-  const orderLocalDate = getLocalDateParts(orderCreatedAt, TORONTO_TIME_ZONE);
-  if (deliveryOffset == null || !orderLocalDate) return undefined;
+  if (weekdayIndex == null || DELIVERY_OFFSET_FROM_THURSDAY[weekdayIndex] == null) return undefined;
+
+  const cycle = normalizeDeliveryCycle(deliveryCycle);
+  const orderLocalDate = getLocalDateTimeParts(orderCreatedAt, cycle.timeZone);
+  if (!orderLocalDate) return undefined;
 
   const orderDate = new Date(
     Date.UTC(orderLocalDate.year, orderLocalDate.month - 1, orderLocalDate.day),
   );
-  const daysSinceTuesday = (orderDate.getUTCDay() - 2 + 7) % 7;
-  const cycleStartTuesday = new Date(orderDate);
-  cycleStartTuesday.setUTCDate(orderDate.getUTCDate() - daysSinceTuesday);
+  const cutoffWeekdayIndex = WEEKDAY_INDEX_BY_CODE[cycle.cutoffWeekday];
+  let daysUntilCutoff = (cutoffWeekdayIndex - orderDate.getUTCDay() + 7) % 7;
+  if (daysUntilCutoff === 0 && getLocalMinutes(orderLocalDate) > parseCutoffMinutes(cycle.cutoffTime)) {
+    daysUntilCutoff = 7;
+  }
 
-  const deliveryThursday = new Date(cycleStartTuesday);
-  deliveryThursday.setUTCDate(cycleStartTuesday.getUTCDate() + 9);
-  deliveryThursday.setUTCDate(deliveryThursday.getUTCDate() + deliveryOffset);
+  const cutoffDate = new Date(orderDate);
+  cutoffDate.setUTCDate(orderDate.getUTCDate() + daysUntilCutoff);
 
-  return deliveryThursday.toISOString().slice(0, 10);
+  let daysAfterCutoff = (weekdayIndex - cutoffWeekdayIndex + 7) % 7;
+  if (daysAfterCutoff === 0) daysAfterCutoff = 7;
+
+  const deliveryDate = new Date(cutoffDate);
+  deliveryDate.setUTCDate(cutoffDate.getUTCDate() + daysAfterCutoff);
+
+  return deliveryDate.toISOString().slice(0, 10);
 }
 
 function findDateRangeInLineItems(lineItems, orderCreatedAt) {
@@ -165,7 +193,7 @@ function getDefaultYear(value) {
   return new Date().getUTCFullYear();
 }
 
-function getLocalDateParts(value, timeZone) {
+function getLocalDateTimeParts(value, timeZone) {
   const text = textOrUndefined(value);
   if (!text) return null;
 
@@ -174,6 +202,9 @@ function getLocalDateParts(value, timeZone) {
 
   const parts = new Intl.DateTimeFormat("en-CA", {
     day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
     month: "2-digit",
     timeZone,
     year: "numeric",
@@ -186,13 +217,40 @@ function getLocalDateParts(value, timeZone) {
 
   return Number.isFinite(partMap.year) &&
     Number.isFinite(partMap.month) &&
-    Number.isFinite(partMap.day)
+    Number.isFinite(partMap.day) &&
+    Number.isFinite(partMap.hour) &&
+    Number.isFinite(partMap.minute)
     ? {
         day: partMap.day,
+        hour: partMap.hour,
+        minute: partMap.minute,
         month: partMap.month,
         year: partMap.year,
       }
     : null;
+}
+
+export function normalizeDeliveryCycle(input = {}) {
+  const cutoffWeekday = String(input?.cutoffWeekday ?? DEFAULT_DELIVERY_CYCLE.cutoffWeekday).trim().toUpperCase();
+  const cutoffTime = String(input?.cutoffTime ?? DEFAULT_DELIVERY_CYCLE.cutoffTime).trim();
+  const timeZone = textOrUndefined(input?.timeZone) ?? DEFAULT_DELIVERY_CYCLE.timeZone;
+
+  return {
+    cutoffTime: /^([01]\d|2[0-3]):[0-5]\d$/.test(cutoffTime) ? cutoffTime : DEFAULT_DELIVERY_CYCLE.cutoffTime,
+    cutoffWeekday: Object.hasOwn(WEEKDAY_INDEX_BY_CODE, cutoffWeekday)
+      ? cutoffWeekday
+      : DEFAULT_DELIVERY_CYCLE.cutoffWeekday,
+    timeZone,
+  };
+}
+
+function parseCutoffMinutes(value) {
+  const [hour, minute] = normalizeDeliveryCycle({ cutoffTime: value }).cutoffTime.split(":").map(Number);
+  return hour * 60 + minute;
+}
+
+function getLocalMinutes(parts) {
+  return parts.hour * 60 + parts.minute;
 }
 
 function getWeekdayIndex(value) {
