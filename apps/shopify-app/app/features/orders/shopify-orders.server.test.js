@@ -10,7 +10,7 @@ import {
   mapShopifyOrdersResponse,
 } from "./shopify-orders.server.js";
 
-test("orders query reads Shopify orders without requiring customer scope", () => {
+test("orders query reads order and customer notes", () => {
   assert.match(SHOPIFY_ORDERS_QUERY, /query CleverRouteOrders\(\$first: Int!, \$after: String\)/);
   assert.match(SHOPIFY_ORDERS_QUERY, /orders\(first: \$first, after: \$after, sortKey: CREATED_AT, reverse: true\)/);
   assert.match(SHOPIFY_ORDERS_QUERY, /pageInfo\s*\{[\s\S]*hasNextPage[\s\S]*endCursor[\s\S]*\}/);
@@ -20,7 +20,8 @@ test("orders query reads Shopify orders without requiring customer scope", () =>
   assert.match(SHOPIFY_ORDERS_QUERY, /createdAt/);
   assert.match(SHOPIFY_ORDERS_QUERY, /updatedAt/);
   assert.match(SHOPIFY_ORDERS_QUERY, /cancelledAt/);
-  assert.match(SHOPIFY_ORDERS_QUERY, /note/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /\bnote\b/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /customer\s*\{\s*note\s*\}/);
   assert.match(SHOPIFY_ORDERS_QUERY, /processedAt/);
   assert.match(SHOPIFY_ORDERS_QUERY, /paymentGatewayNames/);
   assert.match(SHOPIFY_ORDERS_QUERY, /currentTotalPriceSet\s*\{/);
@@ -34,7 +35,26 @@ test("orders query reads Shopify orders without requiring customer scope", () =>
   assert.match(SHOPIFY_ORDERS_QUERY, /province/);
   assert.match(SHOPIFY_ORDERS_QUERY, /provinceCode/);
   assert.match(SHOPIFY_ORDERS_QUERY, /longitude/);
-  assert.equal(SHOPIFY_ORDERS_QUERY.includes("customer {"), false);
+});
+
+test("maps Shopify customer notes without changing the recipient name", () => {
+  const [order] = mapShopifyOrdersResponse({
+    data: {
+      orders: {
+        edges: [{
+          node: {
+            id: "gid://shopify/Order/1002",
+            name: "#1002",
+            customer: { note: "Call before delivery" },
+            shippingAddress: { name: "Kim Minji" },
+          },
+        }],
+      },
+    },
+  });
+
+  assert.equal(order.customer, "Kim Minji");
+  assert.equal(order.customerNote, "Call before delivery");
 });
 
 

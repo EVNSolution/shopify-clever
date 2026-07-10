@@ -78,6 +78,7 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.doesNotMatch(ordersPageSource, /const orders = \[/);
   assert.match(appConfigSource, /scopes = "[^"]*read_orders/);
   assert.match(appConfigSource, /scopes = "[^"]*read_locations/);
+  assert.match(appConfigSource, /scopes = "[^"]*read_customers/);
   assert.equal(packageJson.dependencies["maplibre-gl"]?.length > 0, true);
   assert.equal(packageJson.dependencies.pmtiles?.length > 0, true);
 });
@@ -334,11 +335,12 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const \[checkedOrderIds, setCheckedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
-  assert.match(ordersPageSource, /address: "24\.4%"/);
+  assert.match(ordersPageSource, /address: "21\.4%"/);
+  assert.match(ordersPageSource, /notes: "3%"/);
   assert.match(ordersPageSource, /itemCount: "6\.4%"/);
   assert.match(ordersPageSource, /planningStatus: "7\.4%"/);
   assert.match(ordersPageSource, /hasCoordinates: "6\.4%"/);
-  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.map\(\(column\) => ORDER_TABLE_COLUMN_WIDTHS\[column\.key\]\)/);
+  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.flatMap/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
   assert.match(ordersPageSource, /const checkboxChecked = orderIsPlanned \|\| checkedOrderIdSet\.has\(order\.id\)/);
@@ -367,6 +369,28 @@ test("Orders order-number button shows a subtle rounded hover state", () => {
   assert.match(globalCssSource, /transition:\s*background-color 120ms ease/);
   assert.match(globalCssSource, /\.order-number-button:hover\s*\{/);
   assert.match(globalCssSource, /background-color:\s*rgba\(0, 0, 0, 0\.06\)/);
+});
+
+test("Orders table shows a headerless note toggle only when a note exists", () => {
+  assert.match(ordersPageSource, /notes: "3%"/);
+  assert.match(ordersPageSource, /aria-label="Notes"/);
+  assert.match(ordersPageSource, /const \[hoveredNoteOrderId, setHoveredNoteOrderId\] = useState\(null\)/);
+  assert.match(ordersPageSource, /const \[pinnedNoteOrderId, setPinnedNoteOrderId\] = useState\(null\)/);
+  assert.match(ordersPageSource, /const visibleNoteOrderId = pinnedNoteOrderId \?\? hoveredNoteOrderId/);
+  assert.match(ordersPageSource, /const orderNote = getOrderNote\(order\)/);
+  assert.match(ordersPageSource, /const customerNote = getCustomerNote\(order\)/);
+  assert.match(ordersPageSource, /\{orderNote \|\| customerNote \? \(/);
+  assert.match(ordersPageSource, /onMouseEnter=\{\(\) => openNotePopover\(order\.id\)\}/);
+  assert.match(ordersPageSource, /onMouseLeave=\{\(\) => closeHoveredNotePopover\(order\.id\)\}/);
+  assert.match(ordersPageSource, /onClick=\{\(\) => togglePinnedNotePopover\(order\.id\)\}/);
+  assert.match(ordersPageSource, /data-order-notes-popover-root="true"/);
+  assert.match(ordersPageSource, /<s-icon type="note"/);
+  assert.match(ordersPageSource, />Order Note</);
+  assert.match(ordersPageSource, /const noteCardStyle = \{/);
+  assert.match(ordersPageSource, /const noteListStyle = \{/);
+  assert.match(ordersPageSource, /<ul style=\{noteListStyle\}>/);
+  assert.match(ordersPageSource, /<li style=\{noteListItemStyle\}>\{orderNote\}<\/li>/);
+  assert.match(ordersPageSource, /<li style=\{noteListItemStyle\}>\{customerNote\}<\/li>/);
 });
 
 
@@ -1017,6 +1041,10 @@ test("Orders map popup uses a left-center overlay and can add the order to the r
   assert.match(ordersPageSource, /×\{item\.quantity\}/);
   assert.match(ordersPageSource, /disabled=\{activeOrderPopupPlannedIndex > 0\}/);
   assert.match(ordersPageSource, /handleAddOrderToPlan\(activeOrderPopup\.id\)/);
+  assert.match(ordersPageSource, /const activeOrderPopupShopifyUrl = activeOrderPopup \? getShopifyAdminOrderUrl\(activeOrderPopup\) : null/);
+  assert.match(ordersPageSource, /href=\{activeOrderPopupShopifyUrl\}/);
+  assert.match(ordersPageSource, /target="_top"/);
+  assert.match(ordersPageSource, />View in Shopify<\/a>/);
   assert.match(ordersPageSource, /onClick=\{\(\) => setActiveOrderPopup\(null\)\}/);
   assert.match(ordersPageSource, /const handleUserMapMoveStart = \(event\) => \{/);
   assert.match(ordersPageSource, /if \(!event\?\.originalEvent\) return/);
@@ -1032,6 +1060,8 @@ test("Orders map popup uses a left-center overlay and can add the order to the r
   assert.match(globalCssSource, /min-width:\s*200px/);
   assert.match(globalCssSource, /width:\s*min\(260px, calc\(100% - 96px\)\)/);
   assert.match(globalCssSource, /font-size:\s*12px/);
+  assert.match(globalCssSource, /\.order-map-focus-popup\s*\{[\s\S]*z-index:\s*6000/);
+  assert.match(globalCssSource, /\.order-marker-popup__actions\s*\{/);
   assert.match(globalCssSource, /\.order-marker-popup__items\s*\{/);
   assert.match(globalCssSource, /max-height:\s*160px/);
   assert.match(globalCssSource, /background:\s*rgba\(0, 0, 0, 0\.05\)/);
@@ -1297,7 +1327,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /<span style=\{columnResizeHandleLineStyle\} \/>/);
   assert.match(ordersPageSource, /columnIndex < SORTABLE_ORDER_COLUMNS\.length - 1/);
   assert.match(ordersPageSource, /key=\{columnIndex\}/);
-  assert.match(ordersPageSource, /onPointerDown=\{\(event\) => handleColumnResizeStart\(columnIndex \+ 1, event\)\}/);
+  assert.match(ordersPageSource, /onPointerDown=\{\(event\) => handleColumnResizeStart\(columnIndex \+ 1 \+ \(columnIndex > 0 \? 1 : 0\), event\)\}/);
   assert.match(ordersPageSource, /function getTableColumnFitWidth\(tableElement, columnIndex\) \{/);
   assert.match(ordersPageSource, /querySelectorAll\(\s*`thead th:nth-child/);
   assert.match(ordersPageSource, /const handleColumnAutoFit = \(columnIndex, event\) => \{/);
@@ -1307,7 +1337,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /clone\.querySelectorAll\("\*"\)\.forEach/);
   assert.match(ordersPageSource, /clone\.getBoundingClientRect\(\)\.width/);
   assert.doesNotMatch(ordersPageSource, /cell\.scrollWidth/);
-  assert.match(ordersPageSource, /onDoubleClick=\{\(event\) => handleColumnAutoFit\(columnIndex \+ 1, event\)\}/);
+  assert.match(ordersPageSource, /onDoubleClick=\{\(event\) => handleColumnAutoFit\(columnIndex \+ 1 \+ \(columnIndex > 0 \? 1 : 0\), event\)\}/);
   assert.doesNotMatch(ordersPageSource, /handleColumnResizeStart\(0, event\)/);
   assert.match(ordersPageSource, /const tableHeaderButtonStyle = \{[\s\S]*?padding:\s*0/);
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{[\s\S]*?padding:\s*0/);
@@ -1457,9 +1487,9 @@ test("Orders map renders planned pins and the focused table-click pin", () => {
   assert.doesNotMatch(globalCssSource, /\.order-map-marker--dimmed\s*\{/);
 });
 
-test("Shopify order mapping avoids Customer object and keeps coordinate metadata", () => {
+test("Shopify order mapping reads only the Customer note and keeps coordinate metadata", () => {
   assert.match(shopifyOrdersSource, /export const SHOPIFY_ORDERS_QUERY/);
-  assert.doesNotMatch(shopifyOrdersSource, /customer\s*\{/);
+  assert.match(shopifyOrdersSource, /customer\s*\{\s*note\s*\}/);
   assert.match(shopifyOrdersSource, /shippingAddress\s*\{/);
   assert.match(shopifyOrdersSource, /coordinates: \[longitude, latitude\]/);
 });

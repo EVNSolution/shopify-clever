@@ -1,9 +1,10 @@
 export const ORDER_TABLE_COLUMN_WIDTHS = {
   select: "3%",
   name: "7.4%",
+  notes: "3%",
   orderedDate: "8.4%",
   customer: "10.4%",
-  address: "24.4%",
+  address: "21.4%",
   itemCount: "6.4%",
   deliveryArea: "8.4%",
   deliveryLabel: "9.4%",
@@ -29,7 +30,10 @@ export const SORTABLE_ORDER_COLUMNS = [
 
 export const DEFAULT_TABLE_COLUMN_WIDTHS = [
   ORDER_TABLE_COLUMN_WIDTHS.select,
-  ...SORTABLE_ORDER_COLUMNS.map((column) => ORDER_TABLE_COLUMN_WIDTHS[column.key]),
+  ...SORTABLE_ORDER_COLUMNS.flatMap((column) => [
+    ORDER_TABLE_COLUMN_WIDTHS[column.key],
+    ...(column.key === "name" ? [ORDER_TABLE_COLUMN_WIDTHS.notes] : []),
+  ]),
 ];
 
 export function getTableColumnPixelState(tableElement) {

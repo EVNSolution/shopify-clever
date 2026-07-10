@@ -30,8 +30,6 @@ export const DEFAULT_DELIVERY_CYCLE = {
   timeZone: "America/Toronto",
 };
 
-const TORONTO_TIME_ZONE = DEFAULT_DELIVERY_CYCLE.timeZone;
-
 export function formatDeliveryScopeLabel({
   deliveryDate,
   timeWindowEnd,

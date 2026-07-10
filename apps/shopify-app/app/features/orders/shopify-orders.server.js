@@ -25,6 +25,9 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
           updatedAt
           cancelledAt
           note
+          customer {
+            note
+          }
           processedAt
           displayFinancialStatus
           paymentGatewayNames
@@ -276,6 +279,7 @@ function mapOrderNode(order, options = {}) {
   const longitude =
     numberOrUndefined(shippingAddress.longitude) ??
     numberOrUndefined(coordinateAttributes.longitude);
+  const customerNote = textOrUndefined(order.customer?.note);
 
   return {
     id: order.id,
@@ -290,6 +294,7 @@ function mapOrderNode(order, options = {}) {
     updatedAt: textOrUndefined(order.updatedAt),
     cancelledAt: textOrUndefined(order.cancelledAt),
     note: textOrUndefined(order.note),
+    ...(customerNote ? { customerNote } : {}),
     phone:
       textOrUndefined(shippingAddress.phone) ?? textOrUndefined(order.phone) ?? "",
     processedAt: textOrUndefined(order.processedAt),

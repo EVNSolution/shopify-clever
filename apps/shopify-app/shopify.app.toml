@@ -8,7 +8,7 @@ embedded = true
 
 [access_scopes]
 # Required Admin API access scopes
-scopes = "read_orders,read_locations"
+scopes = "read_orders,read_locations,read_customers"
 
 
 [webhooks]
