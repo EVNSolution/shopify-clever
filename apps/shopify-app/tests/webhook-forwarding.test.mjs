@@ -36,7 +36,7 @@ test("Shopify app configs subscribe the same order webhook topics without fulfil
       source.match(/uri = "\/webhooks\/orders"\s+topics = \[([^\]]+)\]/) ?? [];
 
     assert.deepEqual(parseTopics(orderTopicsBlock), expectedOrderTopics, configFile);
-    assert.match(source, /scopes = "read_orders,read_locations"/);
+    assert.match(source, /scopes = "read_orders,read_locations,read_customers"/);
     assert.doesNotMatch(source, /read_fulfillments/);
     assert.match(source, /compliance_topics = \["customers\/data_request", "customers\/redact", "shop\/redact"\]/);
   }

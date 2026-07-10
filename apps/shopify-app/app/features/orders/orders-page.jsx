@@ -1104,6 +1104,12 @@ const itemCellStyle = {
   position: "relative",
 };
 
+const noteCellStyle = {
+  ...itemCellStyle,
+  padding: "6px 2px",
+  textAlign: "center",
+};
+
 const itemInfoButtonStyle = {
   alignItems: "center",
   background: "transparent",
@@ -1121,6 +1127,11 @@ const itemInfoButtonStyle = {
   width: "18px",
 };
 
+const noteButtonStyle = {
+  ...itemInfoButtonStyle,
+  marginLeft: 0,
+};
+
 const itemPopoverStyle = {
   background: "#ffffff",
   border: "1px solid #d6dce5",
@@ -1133,6 +1144,33 @@ const itemPopoverStyle = {
   top: "28px",
   transform: "translateX(-50%)",
   zIndex: 20,
+};
+
+const notePopoverStyle = {
+  ...itemPopoverStyle,
+  minWidth: "240px",
+  maxWidth: "320px",
+  whiteSpace: "normal",
+};
+
+const noteCardStyle = {
+  background: "#f6f6f7",
+  border: "1px solid #e1e3e5",
+  borderRadius: "8px",
+  padding: "8px 10px",
+};
+
+const noteListStyle = {
+  margin: 0,
+  paddingLeft: "18px",
+};
+
+const noteListItemStyle = {
+  color: "#303030",
+  fontSize: "12px",
+  lineHeight: 1.4,
+  overflowWrap: "anywhere",
+  textAlign: "left",
 };
 
 const itemPopoverTitleStyle = {
@@ -1584,6 +1622,19 @@ function getOrderRawAttributeValue(order, keys) {
 
 function getOrderNote(order) {
   return textOrUndefined(order?.note ?? order?.rawPayload?.note ?? order?.shopifyOrderSnapshot?.note);
+}
+
+function getCustomerNote(order) {
+  return textOrUndefined(
+    order?.customerNote ?? order?.rawPayload?.customer?.note ?? order?.shopifyOrderSnapshot?.customer?.note,
+  );
+}
+
+function getShopifyAdminOrderUrl(order) {
+  const legacyResourceId = textOrUndefined(order?.legacyResourceId);
+  const gidResourceId = textOrUndefined(order?.id)?.match(/^gid:\/\/shopify\/Order\/(\d+)$/)?.[1];
+  const resourceId = legacyResourceId ?? gidResourceId;
+  return resourceId ? `shopify://admin/orders/${encodeURIComponent(resourceId)}` : null;
 }
 
 function getOrderDataDraft(order) {
@@ -2179,6 +2230,8 @@ export default function OrdersPage() {
   );
   const [hoveredItemPopoverOrderId, setHoveredItemPopoverOrderId] = useState(null);
   const [pinnedItemPopoverOrderId, setPinnedItemPopoverOrderId] = useState(null);
+  const [hoveredNoteOrderId, setHoveredNoteOrderId] = useState(null);
+  const [pinnedNoteOrderId, setPinnedNoteOrderId] = useState(null);
   const [itemPopoverPosition, setItemPopoverPosition] = useState(null);
   const [activeOrderDetailPopover, setActiveOrderDetailPopover] = useState(null);
   const [checkedInventoryIds, setCheckedInventoryIds] = useState([]);
@@ -2242,6 +2295,7 @@ export default function OrdersPage() {
   );
   const orderedDateFilterActive = Boolean(orderFilters.orderedDateFrom || orderFilters.orderedDateTo);
   const visibleItemPopoverOrderId = pinnedItemPopoverOrderId ?? hoveredItemPopoverOrderId;
+  const visibleNoteOrderId = pinnedNoteOrderId ?? hoveredNoteOrderId;
   const syncItemPopover = useCallback(() => {
     const anchor = itemPopoverAnchorRef.current;
     if (!anchor) return;
@@ -2272,6 +2326,16 @@ export default function OrdersPage() {
       width: ITEM_POPOVER_WIDTH,
     }));
     setPinnedItemPopoverOrderId((currentOrderId) => currentOrderId === orderId ? null : orderId);
+  }, []);
+  const openNotePopover = useCallback((orderId) => {
+    if (pinnedNoteOrderId && pinnedNoteOrderId !== orderId) return;
+    setHoveredNoteOrderId(orderId);
+  }, [pinnedNoteOrderId]);
+  const closeHoveredNotePopover = useCallback((orderId) => {
+    setHoveredNoteOrderId((currentOrderId) => currentOrderId === orderId ? null : currentOrderId);
+  }, []);
+  const togglePinnedNotePopover = useCallback((orderId) => {
+    setPinnedNoteOrderId((currentOrderId) => currentOrderId === orderId ? null : orderId);
   }, []);
   const activeOrderDetailKey = activeOrderDetailPopover?.detailKey;
   const syncOrderDetailPopover = useCallback(() => {
@@ -2624,6 +2688,7 @@ export default function OrdersPage() {
     ? plannedOrderIds.indexOf(activeOrderPopup.id) + 1
     : 0;
   const activeOrderPopupItems = activeOrderPopup ? getOrderLineItems(activeOrderPopup) : [];
+  const activeOrderPopupShopifyUrl = activeOrderPopup ? getShopifyAdminOrderUrl(activeOrderPopup) : null;
   const activeOrderPopupMetaValues = activeOrderPopup
     ? [activeOrderPopup.deliveryArea, formatOrderDeliveryLabel(activeOrderPopup)].filter(Boolean)
     : [];
@@ -2982,6 +3047,18 @@ export default function OrdersPage() {
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
   }, [pinnedItemPopoverOrderId]);
+
+  useEffect(() => {
+    if (!pinnedNoteOrderId) return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      if (event.target?.closest?.('[data-order-notes-popover-root="true"]')) return;
+      setPinnedNoteOrderId(null);
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [pinnedNoteOrderId]);
 
   useEffect(() => {
     if (!orderedDateCalendarOpen) return undefined;
@@ -3975,12 +4052,21 @@ export default function OrdersPage() {
                     {getOrderItemCount(activeOrderPopup) > 0 ? `${getOrderItemCount(activeOrderPopup)} items` : "No item detail"}
                   </span>
                 )}
-                <button
-                  className="order-marker-popup__action"
-                  disabled={activeOrderPopupPlannedIndex > 0}
-                  onClick={() => handleAddOrderToPlan(activeOrderPopup.id)}
-                  type="button"
-                >{activeOrderPopupPlannedIndex > 0 ? "Added to map" : "Add to map"}</button>
+                <div className="order-marker-popup__actions">
+                  <button
+                    className="order-marker-popup__action"
+                    disabled={activeOrderPopupPlannedIndex > 0}
+                    onClick={() => handleAddOrderToPlan(activeOrderPopup.id)}
+                    type="button"
+                  >{activeOrderPopupPlannedIndex > 0 ? "Added to map" : "Add to map"}</button>
+                  {activeOrderPopupShopifyUrl ? (
+                    <a
+                      className="order-marker-popup__action order-marker-popup__action--secondary"
+                      href={activeOrderPopupShopifyUrl}
+                      target="_top"
+                    >View in Shopify</a>
+                  ) : null}
+                </div>
               </div>
             ) : null}
           </MapPanel>
@@ -4492,7 +4578,7 @@ export default function OrdersPage() {
                       onChange={toggleAllVisibleOrderChecks}
                     />
                   </th>
-                  {SORTABLE_ORDER_COLUMNS.map((column, columnIndex) => (
+                  {SORTABLE_ORDER_COLUMNS.flatMap((column, columnIndex) => [
                     <th
                       key={column.key}
                       scope="col"
@@ -4513,14 +4599,17 @@ export default function OrdersPage() {
                         <span
                           aria-hidden="true"
                           style={columnResizeHandleStyle}
-                          onPointerDown={(event) => handleColumnResizeStart(columnIndex + 1, event)}
-                          onDoubleClick={(event) => handleColumnAutoFit(columnIndex + 1, event)}
+                          onPointerDown={(event) => handleColumnResizeStart(columnIndex + 1 + (columnIndex > 0 ? 1 : 0), event)}
+                          onDoubleClick={(event) => handleColumnAutoFit(columnIndex + 1 + (columnIndex > 0 ? 1 : 0), event)}
                         >
                           <span style={columnResizeHandleLineStyle} />
                         </span>
                       ) : null}
-                    </th>
-                  ))}
+                    </th>,
+                    column.key === "name" ? (
+                      <th key="notes" scope="col" aria-label="Notes" style={checkboxHeaderCellStyle} />
+                    ) : null,
+                  ])}
                 </tr>
               </thead>
               <tbody>
@@ -4531,6 +4620,8 @@ export default function OrdersPage() {
                   const deliveryPillDetails = getOrderDeliveryPillDetails(order);
                   const statePillDetails = getOrderDeliveryStatePillDetails(order, orderFilterReferenceDate);
                   const paymentPillDetails = getOrderPaymentPillDetails(order);
+                  const orderNote = getOrderNote(order);
+                  const customerNote = getCustomerNote(order);
 
                   return (
                     <tr key={order.id}>
@@ -4558,6 +4649,34 @@ export default function OrdersPage() {
                         >
                           {order.name}
                         </button>
+                      </td>
+                      <td style={noteCellStyle}>
+                        {orderNote || customerNote ? (
+                          <span data-order-notes-popover-root="true">
+                            <button
+                              type="button"
+                              aria-expanded={visibleNoteOrderId === order.id}
+                              aria-label={`${visibleNoteOrderId === order.id ? "Hide" : "Show"} notes for ${order.name}`}
+                              style={noteButtonStyle}
+                              onMouseEnter={() => openNotePopover(order.id)}
+                              onMouseLeave={() => closeHoveredNotePopover(order.id)}
+                              onClick={() => togglePinnedNotePopover(order.id)}
+                            >
+                              <s-icon type="note" size="base" color="subdued"></s-icon>
+                            </button>
+                            {visibleNoteOrderId === order.id ? (
+                              <div data-order-notes-popover-root="true" role="dialog" aria-label={`Notes for ${order.name}`} style={notePopoverStyle}>
+                                <div style={itemPopoverTitleStyle}>Order Note</div>
+                                <div style={noteCardStyle}>
+                                  <ul style={noteListStyle}>
+                                    {orderNote ? <li style={noteListItemStyle}>{orderNote}</li> : null}
+                                    {customerNote ? <li style={noteListItemStyle}>{customerNote}</li> : null}
+                                  </ul>
+                                </div>
+                              </div>
+                            ) : null}
+                          </span>
+                        ) : null}
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         <InfoPill title={getOrderOrderedDatePillTitle(order)}>

@@ -290,7 +290,7 @@ s-badge {
   position: absolute;
   top: 16px;
   width: min(260px, calc(100% - 96px));
-  z-index: 3;
+  z-index: 6000;
 }
 
 .order-marker-popup__header {
@@ -376,16 +376,32 @@ s-badge {
 }
 
 .order-marker-popup__action {
+  align-items: center;
   background: #303030;
   border: 1px solid #303030;
   border-radius: 8px;
   color: #ffffff;
   cursor: pointer;
+  display: inline-flex;
   font-size: 12px;
   font-weight: 650;
+  justify-content: center;
   margin-top: 2px;
   min-height: 28px;
   padding: 4px 10px;
+  text-align: center;
+  text-decoration: none;
+}
+
+.order-marker-popup__actions {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(auto-fit, minmax(90px, 1fr));
+}
+
+.order-marker-popup__action--secondary {
+  background: #ffffff;
+  color: #303030;
 }
 
 .order-marker-popup__action:disabled {
