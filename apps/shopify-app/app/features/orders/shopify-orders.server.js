@@ -74,6 +74,11 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
   }
 `;
 
+export const SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE = SHOPIFY_ORDERS_QUERY.replace(
+  /\n[ ]{10}customer \{\n[ ]{12}note\n[ ]{10}\}/,
+  "",
+);
+
 export const ORDER_SCOPE_ACCESS_ERROR_CODE = "ORDER_SCOPE_ACCESS";
 export const PROTECTED_ORDER_ACCESS_ERROR_CODE = SERVICE_ERROR_CODES.PROTECTED_ORDER_ACCESS;
 
@@ -139,14 +144,18 @@ async function loadShopifyOrders(admin, options = {}) {
     const orders = [];
     const errors = [];
     let after = null;
+    let ordersQuery = SHOPIFY_ORDERS_QUERY;
 
     for (let page = 0; page < SHOPIFY_ORDERS_MAX_PAGES; page += 1) {
-      const response = await admin.graphql(SHOPIFY_ORDERS_QUERY, {
-        variables: {
-          after,
-          first: SHOPIFY_ORDERS_PAGE_SIZE,
-        },
-      });
+      const variables = { after, first: SHOPIFY_ORDERS_PAGE_SIZE };
+      let response;
+      try {
+        response = await admin.graphql(ordersQuery, { variables });
+      } catch (error) {
+        if (ordersQuery !== SHOPIFY_ORDERS_QUERY || !isCustomerScopeAccessError(error)) throw error;
+        ordersQuery = SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE;
+        response = await admin.graphql(ordersQuery, { variables });
+      }
       const payload = await response.json();
       orders.push(...mapShopifyOrdersResponse(payload, options));
       errors.push(...normalizeGraphqlErrors(payload.errors));
@@ -481,6 +490,11 @@ function isOrderScopeAccessError(error) {
     /Access denied for orders field/i.test(message) ||
     /Required access:\s*`?read_orders`?/i.test(message)
   );
+}
+
+function isCustomerScopeAccessError(error) {
+  const message = getShopifyErrorMessage(error);
+  return /Access denied for customer field/i.test(message) || /Required access:\s*`?read_customers`?/i.test(message);
 }
 
 function isProtectedOrderAccessError(error) {
