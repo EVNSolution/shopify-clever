@@ -7,6 +7,7 @@ import {
   ORDER_SCOPE_ACCESS_ERROR_CODE,
   PROTECTED_ORDER_ACCESS_ERROR_CODE,
   SHOPIFY_ORDERS_QUERY,
+  SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE,
   mapShopifyOrdersResponse,
 } from "./shopify-orders.server.js";
 
@@ -35,6 +36,35 @@ test("orders query reads order and customer notes", () => {
   assert.match(SHOPIFY_ORDERS_QUERY, /province/);
   assert.match(SHOPIFY_ORDERS_QUERY, /provinceCode/);
   assert.match(SHOPIFY_ORDERS_QUERY, /longitude/);
+});
+
+test("retries orders without customer notes when read_customers is not approved", async () => {
+  const queries = [];
+  const admin = {
+    graphql: async (query) => {
+      queries.push(query);
+      if (queries.length === 1) {
+        throw new Error("Access denied for customer field. Required access: `read_customers` access scope.");
+      }
+
+      return {
+        json: async () => ({
+          data: {
+            orders: {
+              edges: [{ node: { id: "gid://shopify/Order/1001", name: "#1001", note: "Gate code 1234" } }],
+              pageInfo: { endCursor: null, hasNextPage: false },
+            },
+          },
+        }),
+      };
+    },
+  };
+
+  const result = await fetchShopifyOrders(admin);
+
+  assert.deepEqual(queries, [SHOPIFY_ORDERS_QUERY, SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE]);
+  assert.equal(result.orders[0].note, "Gate code 1234");
+  assert.equal(result.orders[0].customerNote, undefined);
 });
 
 test("maps Shopify customer notes without changing the recipient name", () => {
