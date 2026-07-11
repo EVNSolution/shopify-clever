@@ -380,9 +380,12 @@ test("Orders table shows a headerless note toggle only when a note exists", () =
   assert.match(ordersPageSource, /const orderNote = getOrderNote\(order\)/);
   assert.match(ordersPageSource, /const customerNote = getCustomerNote\(order\)/);
   assert.match(ordersPageSource, /\{orderNote \|\| customerNote \? \(/);
-  assert.match(ordersPageSource, /onMouseEnter=\{\(\) => openNotePopover\(order\.id\)\}/);
+  assert.match(ordersPageSource, /onMouseEnter=\{\(event\) => openNotePopover\(event, order\.id\)\}/);
   assert.match(ordersPageSource, /onMouseLeave=\{\(\) => closeHoveredNotePopover\(order\.id\)\}/);
-  assert.match(ordersPageSource, /onClick=\{\(\) => togglePinnedNotePopover\(order\.id\)\}/);
+  assert.match(ordersPageSource, /onClick=\{\(event\) => togglePinnedNotePopover\(event, order\.id\)\}/);
+  assert.match(ordersPageSource, /function getRightPopoverPosition\(rect, popoverSize = \{\}\) \{/);
+  assert.match(ordersPageSource, /const rightLeft = rect\.right \+ window\.scrollX \+ gap/);
+  assert.match(ordersPageSource, /createPortal\([\s\S]*?ref=\{notePopoverRef\}[\s\S]*?notePopoverPosition\.left/);
   assert.match(ordersPageSource, /data-order-notes-popover-root="true"/);
   assert.match(ordersPageSource, /<s-icon type="note"/);
   assert.match(ordersPageSource, />Order Note</);

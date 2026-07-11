@@ -1242,6 +1242,8 @@ const DETAIL_POPOVER_WIDTH = 280;
 const DETAIL_POPOVER_HEIGHT = 96;
 const ITEM_POPOVER_WIDTH = 360;
 const ITEM_POPOVER_HEIGHT = 220;
+const NOTE_POPOVER_WIDTH = 280;
+const NOTE_POPOVER_HEIGHT = 140;
 
 function clampPopoverPosition(value, min, max) {
   return Math.max(min, Math.min(value, max));
@@ -1264,6 +1266,24 @@ function getOrderDetailPopoverPosition(rect, popoverSize = {}) {
   const top = aboveTop >= viewportTop + gap
     ? aboveTop
     : clampPopoverPosition(belowTop, viewportTop + gap, viewportTop + window.innerHeight - height - gap);
+
+  return { left, top, width };
+}
+
+function getRightPopoverPosition(rect, popoverSize = {}) {
+  const gap = DETAIL_POPOVER_GAP;
+  const width = Math.min(popoverSize.width ?? NOTE_POPOVER_WIDTH, window.innerWidth - gap * 2);
+  const height = Math.min(popoverSize.height ?? NOTE_POPOVER_HEIGHT, window.innerHeight - gap * 2);
+  const rightLeft = rect.right + window.scrollX + gap;
+  const viewportRight = window.scrollX + window.innerWidth;
+  const left = rightLeft + width <= viewportRight - gap
+    ? rightLeft
+    : Math.max(window.scrollX + gap, rect.left + window.scrollX - width - gap);
+  const top = clampPopoverPosition(
+    rect.top + window.scrollY,
+    window.scrollY + gap,
+    window.scrollY + window.innerHeight - height - gap,
+  );
 
   return { left, top, width };
 }
@@ -2233,6 +2253,7 @@ export default function OrdersPage() {
   const [hoveredNoteOrderId, setHoveredNoteOrderId] = useState(null);
   const [pinnedNoteOrderId, setPinnedNoteOrderId] = useState(null);
   const [itemPopoverPosition, setItemPopoverPosition] = useState(null);
+  const [notePopoverPosition, setNotePopoverPosition] = useState(null);
   const [activeOrderDetailPopover, setActiveOrderDetailPopover] = useState(null);
   const [checkedInventoryIds, setCheckedInventoryIds] = useState([]);
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
@@ -2274,6 +2295,8 @@ export default function OrdersPage() {
   const orderedDateFieldRef = useRef(null);
   const itemPopoverAnchorRef = useRef(null);
   const itemPopoverRef = useRef(null);
+  const notePopoverAnchorRef = useRef(null);
+  const notePopoverRef = useRef(null);
   const orderDetailAnchorRef = useRef(null);
   const orderDetailPopoverRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -2327,14 +2350,28 @@ export default function OrdersPage() {
     }));
     setPinnedItemPopoverOrderId((currentOrderId) => currentOrderId === orderId ? null : orderId);
   }, []);
-  const openNotePopover = useCallback((orderId) => {
+  const syncNotePopover = useCallback(() => {
+    const anchor = notePopoverAnchorRef.current;
+    if (!anchor) return;
+
+    const popoverNode = notePopoverRef.current;
+    setNotePopoverPosition(getRightPopoverPosition(anchor.getBoundingClientRect(), {
+      height: popoverNode?.offsetHeight ?? NOTE_POPOVER_HEIGHT,
+      width: popoverNode?.offsetWidth ?? NOTE_POPOVER_WIDTH,
+    }));
+  }, []);
+  const openNotePopover = useCallback((event, orderId) => {
     if (pinnedNoteOrderId && pinnedNoteOrderId !== orderId) return;
+    notePopoverAnchorRef.current = event.currentTarget;
     setHoveredNoteOrderId(orderId);
+    setNotePopoverPosition(getRightPopoverPosition(event.currentTarget.getBoundingClientRect()));
   }, [pinnedNoteOrderId]);
   const closeHoveredNotePopover = useCallback((orderId) => {
     setHoveredNoteOrderId((currentOrderId) => currentOrderId === orderId ? null : currentOrderId);
   }, []);
-  const togglePinnedNotePopover = useCallback((orderId) => {
+  const togglePinnedNotePopover = useCallback((event, orderId) => {
+    notePopoverAnchorRef.current = event.currentTarget;
+    setNotePopoverPosition(getRightPopoverPosition(event.currentTarget.getBoundingClientRect()));
     setPinnedNoteOrderId((currentOrderId) => currentOrderId === orderId ? null : orderId);
   }, []);
   const activeOrderDetailKey = activeOrderDetailPopover?.detailKey;
@@ -2389,6 +2426,19 @@ export default function OrdersPage() {
       window.removeEventListener("resize", handleWindowLayoutChange);
     };
   }, [syncItemPopover, visibleItemPopoverOrderId]);
+
+  useEffect(() => {
+    if (!visibleNoteOrderId) return undefined;
+
+    syncNotePopover();
+    const handleWindowLayoutChange = () => syncNotePopover();
+    window.addEventListener("scroll", handleWindowLayoutChange, true);
+    window.addEventListener("resize", handleWindowLayoutChange);
+    return () => {
+      window.removeEventListener("scroll", handleWindowLayoutChange, true);
+      window.removeEventListener("resize", handleWindowLayoutChange);
+    };
+  }, [syncNotePopover, visibleNoteOrderId]);
 
   const renderDetailPill = ({ children, details, detailKey, label, tone }) => {
     if (!isAttentionPillTone(tone) || details.length === 0) {
@@ -4658,14 +4708,26 @@ export default function OrdersPage() {
                               aria-expanded={visibleNoteOrderId === order.id}
                               aria-label={`${visibleNoteOrderId === order.id ? "Hide" : "Show"} notes for ${order.name}`}
                               style={noteButtonStyle}
-                              onMouseEnter={() => openNotePopover(order.id)}
+                              onMouseEnter={(event) => openNotePopover(event, order.id)}
                               onMouseLeave={() => closeHoveredNotePopover(order.id)}
-                              onClick={() => togglePinnedNotePopover(order.id)}
+                              onClick={(event) => togglePinnedNotePopover(event, order.id)}
                             >
                               <s-icon type="note" size="base" color="subdued"></s-icon>
                             </button>
-                            {visibleNoteOrderId === order.id ? (
-                              <div data-order-notes-popover-root="true" role="dialog" aria-label={`Notes for ${order.name}`} style={notePopoverStyle}>
+                            {visibleNoteOrderId === order.id && notePopoverPosition && typeof document !== "undefined" ? createPortal(
+                              <div
+                                ref={notePopoverRef}
+                                data-order-notes-popover-root="true"
+                                role="dialog"
+                                aria-label={`Notes for ${order.name}`}
+                                style={{
+                                  ...notePopoverStyle,
+                                  left: `${Math.round(notePopoverPosition.left)}px`,
+                                  top: `${Math.round(notePopoverPosition.top)}px`,
+                                  transform: "none",
+                                  width: `${Math.round(notePopoverPosition.width)}px`,
+                                }}
+                              >
                                 <div style={itemPopoverTitleStyle}>Order Note</div>
                                 <div style={noteCardStyle}>
                                   <ul style={noteListStyle}>
@@ -4674,7 +4736,7 @@ export default function OrdersPage() {
                                   </ul>
                                 </div>
                               </div>
-                            ) : null}
+                            , document.body) : null}
                           </span>
                         ) : null}
                       </td>
