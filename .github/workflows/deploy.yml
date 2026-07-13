@@ -1,0 +1,103 @@
+name: Deploy Shopify app
+
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: Deployment target
+        required: true
+        type: choice
+        options:
+          - clever-route
+          - kfood
+          - production
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: shopify-clever-ec2-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy ${{ inputs.target }} to EC2
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EC2_HOST: ${{ vars.EC2_HOST }}
+      EC2_USER: ${{ vars.EC2_USER }}
+      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
+      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
+      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
+      EC2_SSH_SECURITY_GROUP_ID: ${{ vars.EC2_SSH_SECURITY_GROUP_ID }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+    steps:
+      - name: Require a validated main commit
+        env:
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF" = "refs/heads/main"
+          count="$(gh api --method GET \
+            "repos/$GITHUB_REPOSITORY/actions/workflows/ci-cd.yml/runs" \
+            -f branch=main \
+            -f event=push \
+            -f status=success \
+            -f head_sha="$HEAD_SHA" \
+            -f per_page=1 \
+            --jq '.total_count')"
+          test "$count" -gt 0
+
+      - name: Resolve deployment target
+        id: target
+        env:
+          TARGET: ${{ inputs.target }}
+        run: |
+          case "$TARGET" in
+            clever-route)
+              echo "compose-file=infra/compose/docker-compose.shopify-dev.yml"
+              echo "service=clever-route-app-dev"
+              echo "sqlite-path=/srv/shopify-clever-dev/data/shopify/dev.sqlite"
+              echo "env-file=infra/env/shopify-app-clever-route.env"
+              echo "smoke-url=https://clever-route-app-dev.cleversystem.ai/auth/login"
+              ;;
+            kfood)
+              echo "compose-file=infra/compose/docker-compose.shopify-kfood.yml"
+              echo "service=clever-kfood-app"
+              echo "sqlite-path=/srv/shopify-clever-kfood/data/shopify/dev.sqlite"
+              echo "env-file=infra/env/shopify-app-kfood.env"
+              echo "smoke-url=https://clever-kfood-app.cleversystem.ai/auth/login"
+              ;;
+            production)
+              echo "compose-file=infra/compose/docker-compose.shopify-main.yml"
+              echo "service=clever-route-app"
+              echo "sqlite-path=/srv/shopify-clever/data/shopify/dev.sqlite"
+              echo "env-file=infra/env/shopify-app.env"
+              echo "smoke-url=https://clever-route-app.cleversystem.ai/auth/login"
+              ;;
+            *) exit 1 ;;
+          esac >> "$GITHUB_OUTPUT"
+
+      - name: Checkout
+        uses: actions/checkout@v6.0.2
+
+      - name: Deploy selected Shopify app
+        uses: ./.github/actions/ec2-shopify-deploy
+        with:
+          ec2-host: ${{ env.EC2_HOST }}
+          ec2-user: ${{ env.EC2_USER }}
+          deploy-path: ${{ env.DEPLOY_PATH }}
+          ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
+          security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
+          compose-file: ${{ steps.target.outputs.compose-file }}
+          service: ${{ steps.target.outputs.service }}
+          sqlite-path: ${{ steps.target.outputs.sqlite-path }}
+          env-file: ${{ steps.target.outputs.env-file }}
+          smoke-url: ${{ steps.target.outputs.smoke-url }}

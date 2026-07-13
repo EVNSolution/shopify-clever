@@ -1,10 +1,11 @@
-name: CI/CD
+name: CI
 
-# Private GitHub Free strategy: keep CI light and Shopify app deploys manual.
+# Private GitHub Free strategy: validate changes here and deploy separately.
 on:
   pull_request:
     paths:
-      - ".github/workflows/ci-cd.yml"
+      - ".github/workflows/**"
+      - ".github/actions/**"
       - "apps/shopify-app/**"
       - "infra/**"
       - "package.json"
@@ -13,35 +14,19 @@ on:
     branches:
       - main
     paths:
-      - ".github/workflows/ci-cd.yml"
+      - ".github/workflows/**"
+      - ".github/actions/**"
       - "apps/shopify-app/**"
       - "infra/**"
       - "package.json"
       - "scripts/**"
-  workflow_dispatch:
-    inputs:
-      deploy_production:
-        description: "Deploy the CLEVER Shopify app container"
-        required: true
-        default: false
-        type: boolean
-      deploy_clever_route:
-        description: "Deploy the CleverRoute Dev Shopify app container"
-        required: true
-        default: false
-        type: boolean
-      deploy_kfood:
-        description: "Deploy the CLEVER K-Food Shopify app container"
-        required: true
-        default: false
-        type: boolean
 
 permissions:
   contents: read
 
 concurrency:
-  group: shopify-clever-${{ github.ref }}
-  cancel-in-progress: false
+  group: shopify-clever-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   validate:
@@ -61,7 +46,8 @@ jobs:
           cache-dependency-path: apps/shopify-app/package-lock.json
 
       - name: Install app dependencies
-        run: npm run setup
+        working-directory: apps/shopify-app
+        run: npm ci --prefer-offline --no-audit --no-fund
 
       - name: Build app
         run: npm run build
@@ -75,7 +61,6 @@ jobs:
       - name: Check public URL hostnames
         run: npm run check:public-urls
 
-
       - name: Prepare non-secret compose env files
         run: |
           cp infra/env/shopify-app.env.example infra/env/shopify-app.env
@@ -87,112 +72,3 @@ jobs:
           docker compose -f infra/compose/docker-compose.shopify-main.yml config --quiet
           docker compose -f infra/compose/docker-compose.shopify-dev.yml config --quiet
           docker compose -f infra/compose/docker-compose.shopify-kfood.yml config --quiet
-
-  deploy-production:
-    name: Deploy CLEVER Shopify app to EC2
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_production == true && github.ref == 'refs/heads/main' }}
-    concurrency:
-      group: shopify-clever-ec2-deploy
-      cancel-in-progress: false
-
-    env:
-      EC2_HOST: ${{ vars.EC2_HOST }}
-      EC2_USER: ${{ vars.EC2_USER }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      EC2_SSH_SECURITY_GROUP_ID: ${{ vars.EC2_SSH_SECURITY_GROUP_ID }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-    steps:
-      - uses: actions/checkout@v6.0.2
-      - uses: ./.github/actions/ec2-shopify-deploy
-        with:
-          ec2-host: ${{ env.EC2_HOST }}
-          ec2-user: ${{ env.EC2_USER }}
-          deploy-path: ${{ env.DEPLOY_PATH }}
-          ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
-          security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
-          compose-file: infra/compose/docker-compose.shopify-main.yml
-          service: clever-route-app
-          sqlite-path: /srv/shopify-clever/data/shopify/dev.sqlite
-          env-file: infra/env/shopify-app.env
-          smoke-url: https://clever-route-app.cleversystem.ai/auth/login
-
-  deploy-clever-route:
-    name: Deploy CleverRoute Dev Shopify app to EC2
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_clever_route == true && github.ref == 'refs/heads/main' }}
-    concurrency:
-      group: shopify-clever-ec2-deploy
-      cancel-in-progress: false
-
-    env:
-      EC2_HOST: ${{ vars.EC2_HOST }}
-      EC2_USER: ${{ vars.EC2_USER }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      EC2_SSH_SECURITY_GROUP_ID: ${{ vars.EC2_SSH_SECURITY_GROUP_ID }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-    steps:
-      - uses: actions/checkout@v6.0.2
-      - uses: ./.github/actions/ec2-shopify-deploy
-        with:
-          ec2-host: ${{ env.EC2_HOST }}
-          ec2-user: ${{ env.EC2_USER }}
-          deploy-path: ${{ env.DEPLOY_PATH }}
-          ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
-          security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
-          compose-file: infra/compose/docker-compose.shopify-dev.yml
-          service: clever-route-app-dev
-          sqlite-path: /srv/shopify-clever-dev/data/shopify/dev.sqlite
-          env-file: infra/env/shopify-app-clever-route.env
-          smoke-url: https://clever-route-app-dev.cleversystem.ai/auth/login
-
-
-  deploy-kfood:
-    name: Deploy CLEVER K-Food Shopify app to EC2
-    needs: validate
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.deploy_kfood == true && github.ref == 'refs/heads/main' }}
-    concurrency:
-      group: shopify-clever-ec2-deploy
-      cancel-in-progress: false
-
-    env:
-      EC2_HOST: ${{ vars.EC2_HOST }}
-      EC2_USER: ${{ vars.EC2_USER }}
-      DEPLOY_PATH: ${{ vars.DEPLOY_PATH }}
-      EC2_SSH_KEY: ${{ secrets.EC2_SSH_KEY }}
-      AWS_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      AWS_DEFAULT_REGION: ${{ vars.AWS_REGION || 'ap-northeast-2' }}
-      EC2_SSH_SECURITY_GROUP_ID: ${{ vars.EC2_SSH_SECURITY_GROUP_ID }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
-    steps:
-      - uses: actions/checkout@v6.0.2
-      - uses: ./.github/actions/ec2-shopify-deploy
-        with:
-          ec2-host: ${{ env.EC2_HOST }}
-          ec2-user: ${{ env.EC2_USER }}
-          deploy-path: ${{ env.DEPLOY_PATH }}
-          ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
-          security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
-          compose-file: infra/compose/docker-compose.shopify-kfood.yml
-          service: clever-kfood-app
-          sqlite-path: /srv/shopify-clever-kfood/data/shopify/dev.sqlite
-          env-file: infra/env/shopify-app-kfood.env
-          smoke-url: https://clever-kfood-app.cleversystem.ai/auth/login
