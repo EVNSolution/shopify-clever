@@ -197,6 +197,9 @@ test("Routes table reserves an unlabeled group marker column without indenting r
   assert.match(routesPageSource, /<th aria-hidden="true" style=\{routeGroupMarkerHeaderCellStyle\}><\/th>/);
   assert.match(routesPageSource, /<td aria-hidden="true" style=\{routeGroupMarkerCellStyle\}>/);
   assert.match(routesPageSource, /background: route\.groupAccentColor/);
+  assert.match(routesPageSource, /title=\{route\.isRouteGroup \? route\.groupSummary : undefined\}/);
+  assert.match(routeListRowsSource, /groupSummary: formatRouteGroupSummary\(children\.length, totalOrders\)/);
+  assert.doesNotMatch(routeListRowsSource, /routeGroupId: routeGroup\.id,\s+groupAccentColor,\s+href: routeGroupPath/);
   assert.doesNotMatch(routesPageSource, /isRouteGroupChild[\s\S]{0,120}padding(?:InlineStart|Left)/);
 });
 

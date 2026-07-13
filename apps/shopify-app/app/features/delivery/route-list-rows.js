@@ -95,6 +95,10 @@ function getRouteGroupTotalOrders(routeGroup) {
   return Number(routeGroup?.totalOrders ?? routeGroup?.ordersCount ?? routeGroup?.assignments?.length ?? 0) || 0;
 }
 
+function formatRouteGroupSummary(routeCount, totalOrders) {
+  return `${routeCount} ${routeCount === 1 ? "Route" : "Routes"} - ${totalOrders} Stop(s)`;
+}
+
 function formatRouteGroupDate(routeGroup) {
   const start = routeGroup?.dateRangeStart ?? routeGroup?.planDate;
   const end = routeGroup?.dateRangeEnd ?? start;
@@ -268,12 +272,13 @@ export function buildRouteRows(routePlans, routeGroups = []) {
         return !childRoutePlanIds.has(routePlan.id) && !(routeGroupId && routeGroupIds.has(routeGroupId));
       })
     : [];
-  const routeGroupRows = routeGroupEntries.map(({ childRows, groupAccentColor, routeGroup, routeMetrics }) => {
+  const routeGroupRows = routeGroupEntries.map(({ childRows, children, routeGroup, routeMetrics }) => {
+    const totalOrders = getRouteGroupTotalOrders(routeGroup);
     return {
       id: routeGroup.id,
       rowKey: `routeGroup:${routeGroup.id}`,
       routeGroupId: routeGroup.id,
-      groupAccentColor,
+      groupSummary: formatRouteGroupSummary(children.length, totalOrders),
       href: routeGroupPath(routeGroup.id),
       isClickable: true,
       isDeletable: true,
@@ -282,7 +287,7 @@ export function buildRouteRows(routePlans, routeGroups = []) {
       deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
       route: routeGroup.name ?? routeGroup.id,
       status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
-      orders: getRouteGroupTotalOrders(routeGroup),
+      orders: totalOrders,
       coordinates: "-",
       delivered: 0,
       attempted: 0,
