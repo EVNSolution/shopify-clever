@@ -918,7 +918,7 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.match(ordersPageSource, /const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft"/);
   assert.match(ordersPageSource, /const \[routePlanTitle, setRoutePlanTitle\] = useState\(DEFAULT_ROUTE_PLAN_TITLE\)/);
   assert.match(ordersPageSource, /aria-label="Route plan title"/);
-  assert.match(ordersPageSource, /placeholder=\{DEFAULT_ROUTE_PLAN_TITLE\}/);
+  assert.match(ordersPageSource, /placeholder="YYYY\.MM\.DD X요일"/);
   assert.match(ordersPageSource, /function buildRoutePlanTitleFromOrders\(orders\) \{/);
   assert.match(ordersPageSource, /`\$\{scopeLabel\} orders`/);
   assert.match(ordersPageSource, /const routePlanHeaderActionsStyle = \{/);

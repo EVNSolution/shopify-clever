@@ -4129,7 +4129,7 @@ export default function OrdersPage() {
               aria-label="Route plan title"
               value={routePlanTitle}
               onChange={(event) => setRoutePlanTitle(event.currentTarget.value)}
-              placeholder={DEFAULT_ROUTE_PLAN_TITLE}
+              placeholder="YYYY.MM.DD X요일"
               style={routePlanTitleFieldStyle}
             />
           </label>
