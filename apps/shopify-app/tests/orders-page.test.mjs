@@ -538,6 +538,14 @@ test("Orders page fixes selected order delivery metadata from Action", () => {
   assert.match(deliveryOrdersSource, /`\/admin\/orders\/\$\{encodeURIComponent\(orderId\)\}\/metadata`/);
 });
 
+test("Orders data fix suggests a nearby delivery area without saving it", () => {
+  assert.match(ordersPageSource, /getOrderAreaSuggestion\(activeOrderDataOrder, displayOrders\)/);
+  assert.match(ordersPageSource, /Suggested area: \{activeOrderAreaSuggestion\.area\}/);
+  assert.match(ordersPageSource, /Based on \{activeOrderAreaSuggestion\.matchedOrders\} of \{activeOrderAreaSuggestion\.nearbyOrders\} nearby orders/);
+  assert.match(ordersPageSource, /handleOrderDataDraftChange\("deliveryArea", activeOrderAreaSuggestion\.area\)/);
+  assert.match(ordersPageSource, />Apply<\/button>/);
+});
+
 test("Date pending pill opens Fix data for that order", () => {
   assert.match(ordersPageSource, /const handleOpenOrderDataAction = \(order\) => \{/);
   assert.match(ordersPageSource, /setCheckedOrderIds\(\[order\.id\]\)/);

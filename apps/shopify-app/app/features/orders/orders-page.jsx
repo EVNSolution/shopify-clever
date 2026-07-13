@@ -11,6 +11,7 @@ import { createMapLibreMap } from "../maps/maplibre-map";
 import { installMissingMapImageFallback } from "../maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../maps/pmtiles-protocol";
 import { getOrderSyncSnapshots, mapCanonicalOrdersToOrderRows, mergeShopifyOrderRowsWithCanonicalRows } from "./canonical-orders";
+import { getOrderAreaSuggestion } from "./order-area-suggestion";
 import {
   DEFAULT_CENTER,
   INITIAL_HOME_ZOOM,
@@ -2721,6 +2722,10 @@ export default function OrdersPage() {
     : [];
   const activeOrderRawNote = activeOrderDataOrder ? getOrderNote(activeOrderDataOrder) : undefined;
   const activeOrderNoteHint = activeOrderDataOrder ? getOrderNoteDeliveryHint(activeOrderDataOrder) : undefined;
+  const activeOrderAreaSuggestion = useMemo(
+    () => getOrderAreaSuggestion(activeOrderDataOrder, displayOrders),
+    [activeOrderDataOrder, displayOrders],
+  );
   const selectedRouteGroup = useMemo(
     () => safeRouteGroups.find((routeGroup) => routeGroup.id === selectedRouteGroupId) ?? safeRouteGroups[0] ?? null,
     [safeRouteGroups, selectedRouteGroupId],
@@ -4499,6 +4504,19 @@ export default function OrdersPage() {
                                 onChange={(event) => handleOrderDataDraftChange("deliveryArea", event.currentTarget.value)}
                               />
                             </label>
+                            {activeOrderAreaSuggestion ? (
+                              <div style={routeAddSnapshotOrderStyle}>
+                                <strong>Suggested area: {activeOrderAreaSuggestion.area}</strong>
+                                <span style={orderDataReasonStyle}>
+                                  Based on {activeOrderAreaSuggestion.matchedOrders} of {activeOrderAreaSuggestion.nearbyOrders} nearby orders
+                                </span>
+                                <button
+                                  type="button"
+                                  style={orderFilterButtonStyle}
+                                  onClick={() => handleOrderDataDraftChange("deliveryArea", activeOrderAreaSuggestion.area)}
+                                >Apply</button>
+                              </div>
+                            ) : null}
                           </div>
                         </div>
                       </div>
