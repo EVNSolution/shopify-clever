@@ -6,6 +6,17 @@ import {
 } from "./route-helpers.js";
 import { routeGroupChildPath, routeGroupPath, routePlanPath } from "./route-paths.js";
 
+const ROUTE_GROUP_ACCENT_COLORS = ["#2563eb", "#7c3aed", "#0891b2", "#059669", "#d97706", "#e11d48"];
+
+function getRouteGroupAccentColor(routeGroupId) {
+  const text = String(routeGroupId ?? "");
+  if (!text) return null;
+
+  let hash = 0;
+  for (const character of text) hash = ((hash * 31) + character.charCodeAt(0)) >>> 0;
+  return ROUTE_GROUP_ACCENT_COLORS[hash % ROUTE_GROUP_ACCENT_COLORS.length];
+}
+
 function formatRouteValues(values) {
   return Array.isArray(values) && values.length > 0 ? values.join(", ") : "-";
 }
@@ -195,7 +206,7 @@ export function toggleRouteSelection(routeRows, checkedDeleteKeys, route) {
   return Array.from(checkedDeleteKeySet);
 }
 
-function buildRouteChildRows(routeGroup, children = getVisibleRouteGroupChildren(routeGroup)) {
+function buildRouteChildRows(routeGroup, children = getVisibleRouteGroupChildren(routeGroup), groupAccentColor = null) {
   return children.map((child, index) => {
     const routePlanId = getRouteGroupChildRoutePlanId(child);
     const routeGroupDeleteKey = `routeGroup:${routeGroup.id}`;
@@ -214,6 +225,7 @@ function buildRouteChildRows(routeGroup, children = getVisibleRouteGroupChildren
       deleteKey: getRouteGroupChildDeleteKey(routeGroup.id, routePlanId),
       routeGroupDeleteKey,
       routeGroupId: routeGroup.id,
+      groupAccentColor,
       route: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
       status: child.displayStatus ?? routePlan.status ?? "DRAFT",
       orders: stopsCount,
@@ -236,9 +248,11 @@ export function buildRouteRows(routePlans, routeGroups = []) {
   const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
   const routeGroupEntries = safeRouteGroups.map((routeGroup, index) => {
     const children = getVisibleRouteGroupChildren(routeGroup);
+    const groupAccentColor = getRouteGroupAccentColor(routeGroup.id);
     return {
-      childRows: children.length > 1 ? buildRouteChildRows(routeGroup, children) : [],
+      childRows: children.length > 1 ? buildRouteChildRows(routeGroup, children, groupAccentColor) : [],
       children,
+      groupAccentColor,
       index,
       routeGroup,
       routeMetrics: readRouteGroupMetrics(children),
@@ -254,11 +268,12 @@ export function buildRouteRows(routePlans, routeGroups = []) {
         return !childRoutePlanIds.has(routePlan.id) && !(routeGroupId && routeGroupIds.has(routeGroupId));
       })
     : [];
-  const routeGroupRows = routeGroupEntries.map(({ childRows, routeGroup, routeMetrics }) => {
+  const routeGroupRows = routeGroupEntries.map(({ childRows, groupAccentColor, routeGroup, routeMetrics }) => {
     return {
       id: routeGroup.id,
       rowKey: `routeGroup:${routeGroup.id}`,
       routeGroupId: routeGroup.id,
+      groupAccentColor,
       href: routeGroupPath(routeGroup.id),
       isClickable: true,
       isDeletable: true,

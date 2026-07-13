@@ -65,7 +65,7 @@ test("Routes page loads persisted route plans and route groups from the delivery
 
 test("Routes page lists saved child routes below their parent route group", () => {
   assert.match(routesPageSource, /from "\.\.\/features\/delivery\/route-list-rows"/);
-  assert.match(routeListRowsSource, /function buildRouteChildRows\(routeGroup, children = getVisibleRouteGroupChildren\(routeGroup\)\) \{/);
+  assert.match(routeListRowsSource, /function buildRouteChildRows\(routeGroup, children = getVisibleRouteGroupChildren\(routeGroup\), groupAccentColor = null\) \{/);
   assert.match(routeHelpersSource, /function getRouteGroupChildren\(routeGroup\) \{/);
   assert.match(routeHelpersSource, /function getRouteGroupChildRoutePlanId\(child\) \{/);
   assert.match(routeHelpersSource, /textOrUndefined\(child\?\.routePlanId\) \?\? textOrUndefined\(child\?\.routePlan\?\.id\)/);
@@ -187,6 +187,17 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.doesNotMatch(routesPageSource, /\{route\.plannedFor\}/);
   assert.doesNotMatch(routesPageSource, /\{route\.deliveryDate\}/);
   assert.doesNotMatch(routesPageSource, />Delivery day<\/th>/);
+});
+
+test("Routes table reserves an unlabeled group marker column without indenting route names", () => {
+  assert.match(routesPageSource, /const routeGroupMarkerHeaderCellStyle = \{/);
+  assert.match(routesPageSource, /const routeGroupMarkerCellStyle = \{/);
+  assert.match(routesPageSource, /const routeGroupMarkerStyle = \{/);
+  assert.match(routesPageSource, /"14px",\s+getRouteNameColumnWidth\(routeRows\)/);
+  assert.match(routesPageSource, /<th aria-hidden="true" style=\{routeGroupMarkerHeaderCellStyle\}><\/th>/);
+  assert.match(routesPageSource, /<td aria-hidden="true" style=\{routeGroupMarkerCellStyle\}>/);
+  assert.match(routesPageSource, /background: route\.groupAccentColor/);
+  assert.doesNotMatch(routesPageSource, /isRouteGroupChild[\s\S]{0,120}padding(?:InlineStart|Left)/);
 });
 
 test("Routes table renders OSRM drive metrics instead of start and end placeholders", () => {

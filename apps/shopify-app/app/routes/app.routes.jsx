@@ -136,6 +136,7 @@ function getRouteNameColumnWidth(routeRows) {
 function getRouteColumnWidths(routeRows) {
   return [
     "44px",
+    "14px",
     getRouteNameColumnWidth(routeRows),
     "104px",
     "84px",
@@ -209,6 +210,26 @@ const routeCheckboxHeaderCellStyle = {
   ...routeTableHeaderCellStyle,
   padding: "7px 3px",
   textAlign: "center",
+};
+
+const routeGroupMarkerHeaderCellStyle = {
+  ...routeTableHeaderCellStyle,
+  padding: 0,
+};
+
+const routeGroupMarkerCellStyle = {
+  ...routeTableCellStyle,
+  overflow: "visible",
+  padding: 0,
+  textOverflow: "clip",
+};
+
+const routeGroupMarkerStyle = {
+  borderRadius: "1px",
+  display: "block",
+  height: "24px",
+  margin: "0 auto",
+  width: "4px",
 };
 
 const routeActionButtonStyle = {
@@ -673,6 +694,7 @@ export default function RoutesPage() {
                       onChange={toggleAllVisibleRouteChecks}
                     />
                   </th>
+                  <th aria-hidden="true" style={routeGroupMarkerHeaderCellStyle}></th>
                   <th style={routeTableHeaderCellStyle}>Route</th>
                   <th style={routeTableHeaderCellStyle}>Date</th>
                   <th style={routeTableHeaderCellStyle}>Status</th>
@@ -703,6 +725,11 @@ export default function RoutesPage() {
                           onClick={(event) => event.stopPropagation()}
                           onChange={() => toggleRouteCheck(route)}
                         />
+                      ) : null}
+                    </td>
+                    <td aria-hidden="true" style={routeGroupMarkerCellStyle}>
+                      {route.groupAccentColor ? (
+                        <span style={{ ...routeGroupMarkerStyle, background: route.groupAccentColor }}></span>
                       ) : null}
                     </td>
                     <td style={routeNameCellStyle}>{route.route}</td>
