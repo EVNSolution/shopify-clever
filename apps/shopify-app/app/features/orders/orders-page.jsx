@@ -1668,7 +1668,7 @@ function getShopifyAdminOrderUrl(order) {
 function getOrderDataDraft(order) {
   return {
     deliveryArea: textOrUndefined(order?.deliveryArea) ?? "",
-    deliveryDate: getOrderDeliveryDateValue(order) ?? "",
+    deliveryDate: (getOrderDeliveryDateValue(order) ?? "").replaceAll("-", "."),
   };
 }
 
@@ -3445,7 +3445,7 @@ export default function OrdersPage() {
 
       formData.set("_intent", "patchOrderData");
       formData.set("orderId", activeOrderDataOrder.orderId);
-      formData.set("deliveryDate", orderDataDraft.deliveryDate);
+      formData.set("deliveryDate", orderDataDraft.deliveryDate.replaceAll(".", "-"));
       formData.set("deliveryArea", orderDataDraft.deliveryArea);
       formData.set("shopifySessionToken", sessionToken);
       orderBulkUpdateFetcher.submit(formData, { method: "post" });
@@ -4480,7 +4480,9 @@ export default function OrdersPage() {
                               Delivery date
                               <input
                                 aria-label="Delivery date"
-                                type="date"
+                                type="text"
+                                inputMode="numeric"
+                                maxLength={10}
                                 placeholder="yyyy.mm.dd"
                                 style={orderActionSelectStyle}
                                 value={orderDataDraft.deliveryDate}
