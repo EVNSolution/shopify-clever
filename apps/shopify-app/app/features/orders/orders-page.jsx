@@ -4469,7 +4469,7 @@ export default function OrdersPage() {
                         </div>
                         <div style={orderDataPanelStyle}>
                           <div>
-                            <strong>Raw note</strong>
+                            <strong>Customer Note</strong>
                             <pre style={orderRawNoteStyle}>{activeOrderRawNote ?? "No raw note"}</pre>
                             {activeOrderNoteHint ? <span style={orderDataReasonStyle}>{activeOrderNoteHint}</span> : null}
                           </div>
@@ -4481,6 +4481,7 @@ export default function OrdersPage() {
                               <input
                                 aria-label="Delivery date"
                                 type="date"
+                                placeholder="yyyy.mm.dd"
                                 style={orderActionSelectStyle}
                                 value={orderDataDraft.deliveryDate}
                                 onChange={(event) => handleOrderDataDraftChange("deliveryDate", event.currentTarget.value)}
