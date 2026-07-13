@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -221,15 +222,46 @@ const routeGroupMarkerCellStyle = {
   ...routeTableCellStyle,
   overflow: "visible",
   padding: 0,
+  position: "relative",
   textOverflow: "clip",
 };
 
 const routeGroupMarkerStyle = {
-  borderRadius: "1px",
+  bottom: 0,
   display: "block",
-  height: "24px",
-  margin: "0 auto",
-  width: "4px",
+  left: "50%",
+  position: "absolute",
+  top: 0,
+  transform: "translateX(-50%)",
+  width: "6px",
+};
+
+const routeGroupMarkerTooltipStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "6px",
+  boxShadow: "0 3px 10px rgba(0, 0, 0, 0.18)",
+  color: "#303030",
+  fontSize: "13px",
+  lineHeight: 1.2,
+  padding: "7px 9px",
+  pointerEvents: "none",
+  position: "fixed",
+  transform: "translate(-50%, -100%)",
+  whiteSpace: "nowrap",
+  zIndex: 2000,
+};
+
+const routeGroupMarkerTooltipArrowStyle = {
+  background: "#ffffff",
+  borderBottom: "1px solid #c9cccf",
+  borderRight: "1px solid #c9cccf",
+  bottom: "-5px",
+  height: "8px",
+  left: "50%",
+  position: "absolute",
+  transform: "translateX(-50%) rotate(45deg)",
+  width: "8px",
 };
 
 const routeActionButtonStyle = {
@@ -544,6 +576,7 @@ export default function RoutesPage() {
   const shopify = useAppBridge();
   const routeDeleteFetcher = useFetcher();
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
+  const [routeGroupMarkerTooltip, setRouteGroupMarkerTooltip] = useState(null);
   const allRouteRows = buildRouteRows(routePlans, routeGroups);
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
@@ -597,6 +630,21 @@ export default function RoutesPage() {
 
   function handleCreateRoutesClick() {
     navigate("/app/orders");
+  }
+
+  function openRouteGroupMarkerTooltip(event, route) {
+    if (!route.groupAccentColor || !route.groupSummary) return;
+
+    const bounds = event.currentTarget.getBoundingClientRect();
+    setRouteGroupMarkerTooltip({
+      left: bounds.left + bounds.width / 2,
+      text: route.groupSummary,
+      top: bounds.top - 8,
+    });
+  }
+
+  function closeRouteGroupMarkerTooltip() {
+    setRouteGroupMarkerTooltip(null);
   }
 
   function toggleRouteCheck(route) {
@@ -715,7 +763,6 @@ export default function RoutesPage() {
                     onKeyDown={(event) => handleRouteRowKeyDown(event, route)}
                     role={route.isClickable ? "link" : undefined}
                     tabIndex={route.isClickable ? 0 : undefined}
-                    title={route.isRouteGroup ? route.groupSummary : undefined}
                   >
                     <td style={routeCheckboxCellStyle}>
                       {route.isClickable && route.isDeletable !== false ? (
@@ -730,7 +777,11 @@ export default function RoutesPage() {
                     </td>
                     <td aria-hidden="true" style={routeGroupMarkerCellStyle}>
                       {route.groupAccentColor ? (
-                        <span style={{ ...routeGroupMarkerStyle, background: route.groupAccentColor }}></span>
+                        <span
+                          onMouseEnter={(event) => openRouteGroupMarkerTooltip(event, route)}
+                          onMouseLeave={closeRouteGroupMarkerTooltip}
+                          style={{ ...routeGroupMarkerStyle, background: route.groupAccentColor }}
+                        ></span>
                       ) : null}
                     </td>
                     <td style={routeNameCellStyle}>{route.route}</td>
@@ -750,6 +801,20 @@ export default function RoutesPage() {
           </div>
         </div>
       </div>
+      {routeGroupMarkerTooltip && typeof document !== "undefined" ? createPortal(
+        <div
+          role="tooltip"
+          style={{
+            ...routeGroupMarkerTooltipStyle,
+            left: `${Math.round(routeGroupMarkerTooltip.left)}px`,
+            top: `${Math.round(routeGroupMarkerTooltip.top)}px`,
+          }}
+        >
+          {routeGroupMarkerTooltip.text}
+          <span aria-hidden="true" style={routeGroupMarkerTooltipArrowStyle}></span>
+        </div>,
+        document.body,
+      ) : null}
     </main>
   );
 }
