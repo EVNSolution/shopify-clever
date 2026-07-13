@@ -142,6 +142,7 @@ test("route list leaves the group marker blank and gives only its children one s
   assert.equal(groupRow.groupSummary, "2 Routes - 43 Stop(s)");
   assert.ok(childRows[0].groupAccentColor);
   assert.equal(childRows[1].groupAccentColor, childRows[0].groupAccentColor);
+  assert.deepEqual(childRows.map((row) => row.groupSummary), [groupRow.groupSummary, groupRow.groupSummary]);
   assert.equal(repeatedRows[1].groupAccentColor, childRows[0].groupAccentColor);
   assert.equal(standaloneRow.groupAccentColor, undefined);
 });

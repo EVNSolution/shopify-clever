@@ -65,7 +65,7 @@ test("Routes page loads persisted route plans and route groups from the delivery
 
 test("Routes page lists saved child routes below their parent route group", () => {
   assert.match(routesPageSource, /from "\.\.\/features\/delivery\/route-list-rows"/);
-  assert.match(routeListRowsSource, /function buildRouteChildRows\(routeGroup, children = getVisibleRouteGroupChildren\(routeGroup\), groupAccentColor = null\) \{/);
+  assert.match(routeListRowsSource, /function buildRouteChildRows\([\s\S]*groupAccentColor = null,[\s\S]*groupSummary = null,[\s\S]*\) \{/);
   assert.match(routeHelpersSource, /function getRouteGroupChildren\(routeGroup\) \{/);
   assert.match(routeHelpersSource, /function getRouteGroupChildRoutePlanId\(child\) \{/);
   assert.match(routeHelpersSource, /textOrUndefined\(child\?\.routePlanId\) \?\? textOrUndefined\(child\?\.routePlan\?\.id\)/);
@@ -190,15 +190,25 @@ test("Routes table uses aligned CLEVER planning columns", () => {
 });
 
 test("Routes table reserves an unlabeled group marker column without indenting route names", () => {
+  assert.match(routesPageSource, /import \{ createPortal \} from "react-dom"/);
   assert.match(routesPageSource, /const routeGroupMarkerHeaderCellStyle = \{/);
   assert.match(routesPageSource, /const routeGroupMarkerCellStyle = \{/);
   assert.match(routesPageSource, /const routeGroupMarkerStyle = \{/);
+  assert.match(routesPageSource, /const routeGroupMarkerTooltipStyle = \{/);
+  assert.match(routesPageSource, /const routeGroupMarkerTooltipArrowStyle = \{/);
   assert.match(routesPageSource, /"14px",\s+getRouteNameColumnWidth\(routeRows\)/);
   assert.match(routesPageSource, /<th aria-hidden="true" style=\{routeGroupMarkerHeaderCellStyle\}><\/th>/);
   assert.match(routesPageSource, /<td aria-hidden="true" style=\{routeGroupMarkerCellStyle\}>/);
   assert.match(routesPageSource, /background: route\.groupAccentColor/);
-  assert.match(routesPageSource, /title=\{route\.isRouteGroup \? route\.groupSummary : undefined\}/);
-  assert.match(routeListRowsSource, /groupSummary: formatRouteGroupSummary\(children\.length, totalOrders\)/);
+  assert.match(routesPageSource, /onMouseEnter=\{\(event\) => openRouteGroupMarkerTooltip\(event, route\)\}/);
+  assert.match(routesPageSource, /onMouseLeave=\{closeRouteGroupMarkerTooltip\}/);
+  assert.match(routesPageSource, /const routeGroupMarkerStyle = \{[\s\S]*bottom: 0,[\s\S]*top: 0,[\s\S]*width: "6px"/);
+  assert.doesNotMatch(routesPageSource, /const routeGroupMarkerStyle = \{[\s\S]{0,240}(?:height: "24px"|margin: "0 auto")/);
+  assert.doesNotMatch(routesPageSource, /title=\{route\.(?:isRouteGroup|groupAccentColor)/);
+  assert.match(routesPageSource, /const \[routeGroupMarkerTooltip, setRouteGroupMarkerTooltip\] = useState\(null\)/);
+  assert.match(routesPageSource, /getBoundingClientRect\(\)/);
+  assert.match(routesPageSource, /createPortal\([\s\S]*role="tooltip"[\s\S]*routeGroupMarkerTooltip\.text[\s\S]*routeGroupMarkerTooltipArrowStyle[\s\S]*document\.body/);
+  assert.match(routeListRowsSource, /const groupSummary = formatRouteGroupSummary\(children\.length, totalOrders\)/);
   assert.doesNotMatch(routeListRowsSource, /routeGroupId: routeGroup\.id,\s+groupAccentColor,\s+href: routeGroupPath/);
   assert.doesNotMatch(routesPageSource, /isRouteGroupChild[\s\S]{0,120}padding(?:InlineStart|Left)/);
 });

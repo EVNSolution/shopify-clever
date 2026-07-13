@@ -210,7 +210,12 @@ export function toggleRouteSelection(routeRows, checkedDeleteKeys, route) {
   return Array.from(checkedDeleteKeySet);
 }
 
-function buildRouteChildRows(routeGroup, children = getVisibleRouteGroupChildren(routeGroup), groupAccentColor = null) {
+function buildRouteChildRows(
+  routeGroup,
+  children = getVisibleRouteGroupChildren(routeGroup),
+  groupAccentColor = null,
+  groupSummary = null,
+) {
   return children.map((child, index) => {
     const routePlanId = getRouteGroupChildRoutePlanId(child);
     const routeGroupDeleteKey = `routeGroup:${routeGroup.id}`;
@@ -230,6 +235,7 @@ function buildRouteChildRows(routeGroup, children = getVisibleRouteGroupChildren
       routeGroupDeleteKey,
       routeGroupId: routeGroup.id,
       groupAccentColor,
+      groupSummary,
       route: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
       status: child.displayStatus ?? routePlan.status ?? "DRAFT",
       orders: stopsCount,
@@ -253,13 +259,17 @@ export function buildRouteRows(routePlans, routeGroups = []) {
   const routeGroupEntries = safeRouteGroups.map((routeGroup, index) => {
     const children = getVisibleRouteGroupChildren(routeGroup);
     const groupAccentColor = getRouteGroupAccentColor(routeGroup.id);
+    const totalOrders = getRouteGroupTotalOrders(routeGroup);
+    const groupSummary = formatRouteGroupSummary(children.length, totalOrders);
     return {
-      childRows: children.length > 1 ? buildRouteChildRows(routeGroup, children, groupAccentColor) : [],
+      childRows: children.length > 1 ? buildRouteChildRows(routeGroup, children, groupAccentColor, groupSummary) : [],
       children,
       groupAccentColor,
+      groupSummary,
       index,
       routeGroup,
       routeMetrics: readRouteGroupMetrics(children),
+      totalOrders,
     };
   });
   const childRoutePlanIds = new Set(
@@ -272,13 +282,12 @@ export function buildRouteRows(routePlans, routeGroups = []) {
         return !childRoutePlanIds.has(routePlan.id) && !(routeGroupId && routeGroupIds.has(routeGroupId));
       })
     : [];
-  const routeGroupRows = routeGroupEntries.map(({ childRows, children, routeGroup, routeMetrics }) => {
-    const totalOrders = getRouteGroupTotalOrders(routeGroup);
+  const routeGroupRows = routeGroupEntries.map(({ childRows, groupSummary, routeGroup, routeMetrics, totalOrders }) => {
     return {
       id: routeGroup.id,
       rowKey: `routeGroup:${routeGroup.id}`,
       routeGroupId: routeGroup.id,
-      groupSummary: formatRouteGroupSummary(children.length, totalOrders),
+      groupSummary,
       href: routeGroupPath(routeGroup.id),
       isClickable: true,
       isDeletable: true,
