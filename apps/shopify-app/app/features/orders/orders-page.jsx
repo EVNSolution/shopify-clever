@@ -1098,6 +1098,14 @@ const orderNumberButtonStyle = {
   width: "100%",
 };
 
+const editablePillButtonStyle = {
+  background: "transparent",
+  border: 0,
+  cursor: "pointer",
+  font: "inherit",
+  padding: 0,
+};
+
 const itemCellStyle = {
   ...tableCellStyle,
   overflow: "visible",
@@ -3410,6 +3418,15 @@ export default function OrdersPage() {
     if (orderActionField === ORDER_DATA_FIX_ACTION) selectOrderDataOrder(orderDataRows[0]?.order);
   };
 
+  const handleOpenOrderDataAction = (order) => {
+    setBulkUpdateClientError(null);
+    setCheckedOrderIds([order.id]);
+    setOrderActionField(ORDER_DATA_FIX_ACTION);
+    setOrderActionValue("");
+    selectOrderDataOrder(order);
+    setOrderActionModalOpen(true);
+  };
+
   const handleOrderDataDraftChange = (field, value) => {
     setOrderDataDraft((currentDraft) => ({ ...currentDraft, [field]: value }));
   };
@@ -4668,6 +4685,14 @@ export default function OrdersPage() {
                   const checkboxChecked = orderIsPlanned || checkedOrderIdSet.has(order.id);
                   const areaPillDetails = getOrderAreaPillDetails(order);
                   const deliveryPillDetails = getOrderDeliveryPillDetails(order);
+                  const deliveryLabel = formatOrderDeliveryLabel(order);
+                  const deliveryPill = renderDetailPill({
+                    children: deliveryLabel,
+                    details: deliveryPillDetails,
+                    detailKey: `${order.id}:delivery`,
+                    label: "Delivery details",
+                    tone: getOrderDeliveryPillTone(order),
+                  });
                   const statePillDetails = getOrderDeliveryStatePillDetails(order, orderFilterReferenceDate);
                   const paymentPillDetails = getOrderPaymentPillDetails(order);
                   const orderNote = getOrderNote(order);
@@ -4812,13 +4837,16 @@ export default function OrdersPage() {
                         })}
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        {renderDetailPill({
-                          children: formatOrderDeliveryLabel(order),
-                          details: deliveryPillDetails,
-                          detailKey: `${order.id}:delivery`,
-                          label: "Delivery details",
-                          tone: getOrderDeliveryPillTone(order),
-                        })}
+                        {deliveryLabel === "Date pending" ? (
+                          <button
+                            type="button"
+                            aria-label={`Edit delivery date for ${order.name}`}
+                            style={editablePillButtonStyle}
+                            onClick={() => handleOpenOrderDataAction(order)}
+                          >
+                            {deliveryPill}
+                          </button>
+                        ) : deliveryPill}
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         {renderDetailPill({
