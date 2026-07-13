@@ -530,9 +530,10 @@ test("Orders page fixes selected order delivery metadata from Action", () => {
   assert.match(ordersPageSource, /<strong>Customer Note<\/strong>/);
   assert.match(ordersPageSource, /Fix data/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "patchOrderData"\)/);
-  assert.match(ordersPageSource, /formData\.set\("deliveryDate", orderDataDraft\.deliveryDate\)/);
+  assert.match(ordersPageSource, /deliveryDate: \(getOrderDeliveryDateValue\(order\) \?\? ""\)\.replaceAll\("-", "\."\)/);
+  assert.match(ordersPageSource, /formData\.set\("deliveryDate", orderDataDraft\.deliveryDate\.replaceAll\("\.", "-"\)\)/);
   assert.match(ordersPageSource, /formData\.set\("deliveryArea", orderDataDraft\.deliveryArea\)/);
-  assert.match(ordersPageSource, /aria-label="Delivery date"[\s\S]*?type="date"[\s\S]*?placeholder="yyyy\.mm\.dd"/);
+  assert.match(ordersPageSource, /aria-label="Delivery date"[\s\S]*?type="text"[\s\S]*?inputMode="numeric"[\s\S]*?maxLength=\{10\}[\s\S]*?placeholder="yyyy\.mm\.dd"/);
   assert.match(ordersPageSource, /patchDeliveryOrderMetadata\(/);
   assert.match(deliveryOrdersSource, /`\/admin\/orders\/\$\{encodeURIComponent\(orderId\)\}\/metadata`/);
 });
