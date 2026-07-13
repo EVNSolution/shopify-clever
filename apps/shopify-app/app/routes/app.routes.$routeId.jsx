@@ -244,7 +244,8 @@ const siblingRouteMenuButtonStyle = {
   borderLeft: 0,
   borderRadius: 0,
   borderRight: 0,
-  minWidth: "70px",
+  minWidth: "52px",
+  padding: "4px 7px",
 };
 
 const siblingRouteNextButtonStyle = {
@@ -3093,9 +3094,6 @@ export default function RouteDetailPage() {
                     title={hasRouteAllocationDraft ? "Save or revert route changes before switching routes" : "All routes in this group"}
                     type="button"
                   >
-                    <svg aria-hidden="true" fill="none" style={siblingRouteNavigatorIconStyle} viewBox="0 0 20 20">
-                      <path d="M5 5h10M5 10h10M5 15h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
-                    </svg>
                     <span>{currentSiblingRouteIndex + 1} / {siblingRouteRows.length}</span>
                   </button>
                   <button
