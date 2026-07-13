@@ -1106,3 +1106,13 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /const routeDetailBackIconStyle = \{/);
   assert.match(routeDetailSource, /background: "transparent"/);
 });
+
+test("Route detail can move between child routes in the same route group", () => {
+  assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath \} from "\.\.\/features\/delivery\/route-paths"/);
+  assert.match(routeDetailSource, /const siblingRouteRows = routeGroupChildRows\.filter\(\(routeRow\) => routeRow\.routePlanId\)/);
+  assert.match(routeDetailSource, /const handleSiblingRouteChange = \(event\) => \{/);
+  assert.match(routeDetailSource, /navigate\(routeGroupChildPath\(routeGroupId, routePlanId\)\)/);
+  assert.match(routeDetailSource, /aria-label="Route in group"/);
+  assert.match(routeDetailSource, /disabled=\{hasRouteAllocationDraft\}/);
+  assert.match(routeDetailSource, /siblingRouteRows\.map\(\(routeRow\) => \(/);
+});
