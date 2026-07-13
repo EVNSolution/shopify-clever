@@ -115,6 +115,35 @@ test("route list keeps split children attached to their group in child order", (
   assert.equal(earlyChildRow.routeGroupDeleteKey, "routeGroup:early-group");
 });
 
+test("route list gives a route group and all of its children one stable accent color", () => {
+  const routeGroups = [
+    {
+      id: "group-accent",
+      name: "Accent group",
+      children: [
+        { routeIdx: 1, routePlanId: "accent-child-1", routePlan: { id: "accent-child-1" } },
+        { routeIdx: 2, routePlanId: "accent-child-2", routePlan: { id: "accent-child-2" } },
+      ],
+    },
+  ];
+  const groupedRows = buildRouteRows(
+    [{ id: "standalone", name: "Standalone" }],
+    routeGroups,
+  );
+  const repeatedRows = buildRouteRows([], routeGroups);
+  const accentRows = groupedRows.filter((row) => row.routeGroupId === "group-accent");
+  const standaloneRow = groupedRows.find((row) => row.id === "standalone");
+
+  assert.equal(accentRows.length, 3);
+  assert.ok(accentRows[0].groupAccentColor);
+  assert.deepEqual(
+    accentRows.map((row) => row.groupAccentColor),
+    [accentRows[0].groupAccentColor, accentRows[0].groupAccentColor, accentRows[0].groupAccentColor],
+  );
+  assert.equal(repeatedRows[0].groupAccentColor, accentRows[0].groupAccentColor);
+  assert.equal(standaloneRow.groupAccentColor, undefined);
+});
+
 test("route selection displays group children as checked without double-deleting them", () => {
   const rows = buildRouteRows(
     [
