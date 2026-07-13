@@ -1110,9 +1110,20 @@ test("Route detail page provides page navigation back to the route list", () => 
 test("Route detail can move between child routes in the same route group", () => {
   assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath \} from "\.\.\/features\/delivery\/route-paths"/);
   assert.match(routeDetailSource, /const siblingRouteRows = routeGroupChildRows\.filter\(\(routeRow\) => routeRow\.routePlanId\)/);
-  assert.match(routeDetailSource, /const handleSiblingRouteChange = \(event\) => \{/);
+  assert.match(routeDetailSource, /const currentSiblingRouteIndex = siblingRouteRows\.findIndex/);
+  assert.match(routeDetailSource, /const previousSiblingRoute = siblingRouteRows\[currentSiblingRouteIndex - 1\]/);
+  assert.match(routeDetailSource, /const nextSiblingRoute = siblingRouteRows\[currentSiblingRouteIndex \+ 1\]/);
+  assert.match(routeDetailSource, /const handleSiblingRouteChange = \(routePlanId\) => \{/);
   assert.match(routeDetailSource, /navigate\(routeGroupChildPath\(routeGroupId, routePlanId\)\)/);
-  assert.match(routeDetailSource, /aria-label="Route in group"/);
-  assert.match(routeDetailSource, /disabled=\{hasRouteAllocationDraft\}/);
+  assert.match(routeDetailSource, /aria-label="Previous route in group"/);
+  assert.match(routeDetailSource, /aria-label="All routes in group"/);
+  assert.match(routeDetailSource, /aria-label="Next route in group"/);
+  assert.match(routeDetailSource, />All routes</);
+  assert.match(routeDetailSource, /aria-current=\{routeRow\.routePlanId === effectiveRoutePlan\?\.id \? "page" : undefined\}/);
+  assert.match(routeDetailSource, /background: routeRow\.color/);
+  assert.match(routeDetailSource, /disabled=\{hasRouteAllocationDraft \|\| !previousSiblingRoute\}/);
+  assert.match(routeDetailSource, /disabled=\{hasRouteAllocationDraft \|\| !nextSiblingRoute\}/);
+  assert.match(routeDetailSource, /routeGroupId && currentSiblingRouteIndex >= 0 && siblingRouteRows\.length > 1/);
   assert.match(routeDetailSource, /siblingRouteRows\.map\(\(routeRow\) => \(/);
+  assert.doesNotMatch(routeDetailSource, /<select[\s\S]*aria-label="Route in group"/);
 });

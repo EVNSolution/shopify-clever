@@ -110,6 +110,8 @@ const routeOverviewHeaderStyle = {
 const routeOverviewTopBarStyle = {
   alignItems: "center",
   display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
   justifyContent: "space-between",
 };
 
@@ -200,17 +202,124 @@ const routeDetailBackIconStyle = {
 const routeDetailNavigationStyle = {
   alignItems: "center",
   display: "flex",
-  gap: "12px",
+  gap: "8px",
 };
 
-const siblingRouteSelectStyle = {
+const routeHeaderRightStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  justifyContent: "flex-end",
+};
+
+const siblingRouteNavigatorStyle = {
+  alignItems: "stretch",
+  display: "inline-flex",
+  position: "relative",
+};
+
+const siblingRouteNavigatorButtonStyle = {
+  alignItems: "center",
   background: "#ffffff",
   border: "1px solid #c9cccf",
+  color: "#303030",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontSize: "13px",
+  fontWeight: 650,
+  gap: "5px",
+  justifyContent: "center",
+  minHeight: "34px",
+  padding: "4px 9px",
+};
+
+const siblingRoutePreviousButtonStyle = {
+  ...siblingRouteNavigatorButtonStyle,
+  borderRadius: "8px 0 0 8px",
+};
+
+const siblingRouteMenuButtonStyle = {
+  ...siblingRouteNavigatorButtonStyle,
+  borderLeft: 0,
+  borderRadius: 0,
+  borderRight: 0,
+  minWidth: "70px",
+};
+
+const siblingRouteNextButtonStyle = {
+  ...siblingRouteNavigatorButtonStyle,
+  borderRadius: "0 8px 8px 0",
+};
+
+const siblingRouteNavigatorDisabledStyle = {
+  background: "#f7f7f7",
+  color: "#a3a3a3",
+  cursor: "not-allowed",
+};
+
+const siblingRouteNavigatorIconStyle = {
+  display: "block",
+  height: "16px",
+  width: "16px",
+};
+
+const siblingRouteMenuStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "12px",
+  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.16)",
+  display: "grid",
+  gap: "4px",
+  minWidth: "240px",
+  padding: "8px",
+  position: "absolute",
+  right: 0,
+  top: "calc(100% + 6px)",
+  zIndex: 30,
+};
+
+const siblingRouteMenuHeadingStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 700,
+  padding: "4px 8px 6px",
+};
+
+const siblingRouteMenuItemStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
   borderRadius: "8px",
   color: "#303030",
+  cursor: "pointer",
+  display: "flex",
+  fontFamily: "inherit",
   fontSize: "13px",
-  minHeight: "30px",
-  padding: "3px 28px 3px 9px",
+  fontWeight: 600,
+  gap: "9px",
+  minHeight: "36px",
+  padding: "7px 9px",
+  textAlign: "left",
+  width: "100%",
+};
+
+const siblingRouteMenuCurrentItemStyle = {
+  background: "#f1f1f1",
+  fontWeight: 750,
+};
+
+const siblingRouteMenuDotStyle = {
+  borderRadius: "999px",
+  flex: "0 0 auto",
+  height: "10px",
+  width: "10px",
+};
+
+const siblingRouteMenuLabelStyle = {
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
 };
 
 const routesDetailCardStyle = {
@@ -1688,6 +1797,9 @@ export default function RouteDetailPage() {
   const routeVehicleLabel = getRouteVehicleLabel(effectiveRoutePlan);
   const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
+  const currentSiblingRouteIndex = siblingRouteRows.findIndex((routeRow) => routeRow.routePlanId === effectiveRoutePlan?.id);
+  const previousSiblingRoute = siblingRouteRows[currentSiblingRouteIndex - 1] ?? null;
+  const nextSiblingRoute = siblingRouteRows[currentSiblingRouteIndex + 1] ?? null;
   const currentRouteGroupChild = useMemo(() => {
     const routePlanId = textOrUndefined(effectiveRoutePlan?.id);
     return (routeGroup?.children ?? []).find((child) => getRouteGroupChildRoutePlanId(child) === routePlanId) ?? null;
@@ -1734,6 +1846,7 @@ export default function RouteDetailPage() {
   const [routeLineEdits, setRouteLineEdits] = useState({});
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
+  const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
   const [routeGroupClientError, setRouteGroupClientError] = useState(null);
   const [isRoutePolygonEditMode, setIsRoutePolygonEditMode] = useState(false);
   const [routeTimelineOrderByRouteId, setRouteTimelineOrderByRouteId] = useState({});
@@ -2374,9 +2487,10 @@ export default function RouteDetailPage() {
     navigate(routesListHref);
   };
 
-  const handleSiblingRouteChange = (event) => {
-    const routePlanId = textOrUndefined(event.target.value);
-    if (!routeGroupId || !routePlanId || routePlanId === effectiveRoutePlan?.id) return;
+  const handleSiblingRouteChange = (routePlanId) => {
+    if (!routeGroupId || !routePlanId) return;
+    setIsSiblingRouteMenuOpen(false);
+    if (routePlanId === effectiveRoutePlan?.id) return;
     navigate(routeGroupChildPath(routeGroupId, routePlanId));
   };
 
@@ -2941,39 +3055,106 @@ export default function RouteDetailPage() {
                 </span>
                 <span>Back to routes</span>
               </button>
-              {routeGroupId && siblingRouteRows.length > 1 ? (
-                <select
-                  aria-label="Route in group"
-                  disabled={hasRouteAllocationDraft}
-                  onChange={handleSiblingRouteChange}
-                  style={siblingRouteSelectStyle}
-                  title={hasRouteAllocationDraft ? "Save or revert route changes before switching routes" : "Switch route"}
-                  value={effectiveRoutePlan?.id ?? ""}
-                >
-                  {siblingRouteRows.map((routeRow) => (
-                    <option key={routeRow.routePlanId} value={routeRow.routePlanId}>{routeRow.title}</option>
-                  ))}
-                </select>
-              ) : null}
             </div>
-            <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
-              <button
-                disabled={!inventoryDetailHref}
-                onClick={handleViewInventory}
-                style={inventoryDetailHref ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                title={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
-                type="button"
-              >
-                View inventory
-              </button>
-              <button
-                disabled={routeGroupActionBusy}
-                onClick={handleDeleteRoute}
-                style={routeGroupActionBusy ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
-                type="button"
-              >
-                {deleteRouteBusy ? "Deleting…" : "Delete route"}
-              </button>
+            <div style={routeHeaderRightStyle}>
+              {routeGroupId && currentSiblingRouteIndex >= 0 && siblingRouteRows.length > 1 ? (
+                <div
+                  aria-label="Routes in this group"
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setIsSiblingRouteMenuOpen(false);
+                  }}
+                  style={siblingRouteNavigatorStyle}
+                >
+                  <button
+                    aria-label="Previous route in group"
+                    disabled={hasRouteAllocationDraft || !previousSiblingRoute}
+                    onClick={() => handleSiblingRouteChange(previousSiblingRoute?.routePlanId)}
+                    style={{
+                      ...siblingRoutePreviousButtonStyle,
+                      ...(hasRouteAllocationDraft || !previousSiblingRoute ? siblingRouteNavigatorDisabledStyle : {}),
+                    }}
+                    title={hasRouteAllocationDraft ? "Save or revert route changes before switching routes" : previousSiblingRoute?.title}
+                    type="button"
+                  >
+                    <svg aria-hidden="true" fill="none" style={siblingRouteNavigatorIconStyle} viewBox="0 0 20 20">
+                      <path d="m12 5-5 5 5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                    </svg>
+                  </button>
+                  <button
+                    aria-expanded={isSiblingRouteMenuOpen}
+                    aria-haspopup="menu"
+                    aria-label="All routes in group"
+                    disabled={hasRouteAllocationDraft}
+                    onClick={() => setIsSiblingRouteMenuOpen((isOpen) => !isOpen)}
+                    style={{
+                      ...siblingRouteMenuButtonStyle,
+                      ...(hasRouteAllocationDraft ? siblingRouteNavigatorDisabledStyle : {}),
+                    }}
+                    title={hasRouteAllocationDraft ? "Save or revert route changes before switching routes" : "All routes in this group"}
+                    type="button"
+                  >
+                    <svg aria-hidden="true" fill="none" style={siblingRouteNavigatorIconStyle} viewBox="0 0 20 20">
+                      <path d="M5 5h10M5 10h10M5 15h10" stroke="currentColor" strokeLinecap="round" strokeWidth="1.7" />
+                    </svg>
+                    <span>{currentSiblingRouteIndex + 1} / {siblingRouteRows.length}</span>
+                  </button>
+                  <button
+                    aria-label="Next route in group"
+                    disabled={hasRouteAllocationDraft || !nextSiblingRoute}
+                    onClick={() => handleSiblingRouteChange(nextSiblingRoute?.routePlanId)}
+                    style={{
+                      ...siblingRouteNextButtonStyle,
+                      ...(hasRouteAllocationDraft || !nextSiblingRoute ? siblingRouteNavigatorDisabledStyle : {}),
+                    }}
+                    title={hasRouteAllocationDraft ? "Save or revert route changes before switching routes" : nextSiblingRoute?.title}
+                    type="button"
+                  >
+                    <svg aria-hidden="true" fill="none" style={siblingRouteNavigatorIconStyle} viewBox="0 0 20 20">
+                      <path d="m8 5 5 5-5 5" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.8" />
+                    </svg>
+                  </button>
+                  {isSiblingRouteMenuOpen ? (
+                    <div aria-label="All routes" role="menu" style={siblingRouteMenuStyle}>
+                      <div style={siblingRouteMenuHeadingStyle}>All routes</div>
+                      {siblingRouteRows.map((routeRow) => (
+                        <button
+                          aria-current={routeRow.routePlanId === effectiveRoutePlan?.id ? "page" : undefined}
+                          key={routeRow.routePlanId}
+                          onClick={() => handleSiblingRouteChange(routeRow.routePlanId)}
+                          role="menuitem"
+                          style={{
+                            ...siblingRouteMenuItemStyle,
+                            ...(routeRow.routePlanId === effectiveRoutePlan?.id ? siblingRouteMenuCurrentItemStyle : {}),
+                          }}
+                          type="button"
+                        >
+                          <span aria-hidden="true" style={{ ...siblingRouteMenuDotStyle, background: routeRow.color }} />
+                          <span style={siblingRouteMenuLabelStyle}>{routeRow.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
+                <button
+                  disabled={!inventoryDetailHref}
+                  onClick={handleViewInventory}
+                  style={inventoryDetailHref ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                  title={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
+                  type="button"
+                >
+                  View inventory
+                </button>
+                <button
+                  disabled={routeGroupActionBusy}
+                  onClick={handleDeleteRoute}
+                  style={routeGroupActionBusy ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
+                  type="button"
+                >
+                  {deleteRouteBusy ? "Deleting…" : "Delete route"}
+                </button>
+              </div>
             </div>
           </div>
 
