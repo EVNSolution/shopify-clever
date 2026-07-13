@@ -83,9 +83,9 @@ The runtime distribution is selected with `SHOPIFY_APP_DISTRIBUTION`:
 The repository is intended to stay private under the `EVNSolution` GitHub Free organization. Private GitHub-hosted workflow runs consume the org Actions quota, so the workflow is intentionally split:
 
 - PR and `main` pushes run lightweight CI: install, build, typecheck, tests, public URL hostname guard, Shopify submission readiness, and compose config validation.
-- Production deploy is manual only: run the `CI/CD` workflow on `main` with `deploy_production=true`.
-- Dev app deploy is manual only: run the same workflow on `main` with `deploy_clever_route=true`.
-- KFood app deploy is manual only: run the same workflow on `main` with `deploy_kfood=true`.
+- Deploys are manual only: run the `Deploy Shopify app` workflow on a validated `main` commit.
+- Select `production`, `clever-route`, or `kfood` with the required `target` input.
+- The deploy workflow verifies that the exact `main` commit passed CI and does not repeat install, build, typecheck, or tests.
 - Production image builds happen on the EC2 host during deploy instead of on a GitHub-hosted runner.
 
 ## EC2 deployment

@@ -19,8 +19,8 @@
   - `apps/shopify-app` — Shopify embedded admin app, React Router
   - - template lineage: `clever Shopify monorepo / React Router Shopify app + Fastify delivery API / AWS single-EIP EC2`
 - default integration branch: `main`
-- production deploy mode: manual GitHub Actions `workflow_dispatch` with
-  `deploy_production=true`
+- production deploy mode: manual GitHub Actions `Deploy Shopify app`
+  `workflow_dispatch` with `target=production`
 
 값이 아직 확정되지 않은 항목은 `pending`으로 남기고, 추측해서 채우지 않는다.
 
@@ -111,7 +111,7 @@ test/shopify-route-smoke
 
 - `main`에 직접 push하지 않는다.
 - private repo 전략상 production 배포는 push 자동 배포가 아니라 수동
-  `workflow_dispatch deploy_production=true`로만 실행한다.
+  `Deploy Shopify app` workflow의 `target=production`으로만 실행한다.
 - 오래된 별도 EC2 `clever-shopify-app` 또는 `43.201.116.245`가 남아 있어도
   명시 지시 없이 terminate/delete 하지 않는다.
 - 내부 agent/tool 이름을 public commit, PR 제목, merge commit, GitHub
@@ -195,8 +195,9 @@ Private GitHub-hosted Actions는 org quota를 소모하므로 workflow 전략은
 
 - PR과 `main` push: install, build, typecheck, tests, public URL hostname guard,
   compose config validation만 자동 실행한다.
-- production deploy: `main`에서 수동 `workflow_dispatch` 입력
-  `deploy_production=true`일 때만 실행한다.
+- deploy: 검증을 통과한 `main`에서 수동 `Deploy Shopify app`
+  `workflow_dispatch`의 `target`을 `production`, `clever-route`, `kfood` 중 하나로
+  선택할 때만 실행한다. 배포 workflow는 동일 SHA의 install/build/test를 반복하지 않는다.
 - private repo의 GitHub deployment environment/protection 제약을 우회하려고
   자동 production push deploy를 추가하지 않는다.
 - production image build는 GitHub runner가 아니라 EC2 host에서 수행한다.
