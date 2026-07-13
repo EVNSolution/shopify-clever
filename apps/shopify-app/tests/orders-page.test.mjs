@@ -537,6 +537,16 @@ test("Orders page fixes selected order delivery metadata from Action", () => {
   assert.match(deliveryOrdersSource, /`\/admin\/orders\/\$\{encodeURIComponent\(orderId\)\}\/metadata`/);
 });
 
+test("Date pending pill opens Fix data for that order", () => {
+  assert.match(ordersPageSource, /const handleOpenOrderDataAction = \(order\) => \{/);
+  assert.match(ordersPageSource, /setCheckedOrderIds\(\[order\.id\]\)/);
+  assert.match(ordersPageSource, /setOrderActionField\(ORDER_DATA_FIX_ACTION\)/);
+  assert.match(ordersPageSource, /selectOrderDataOrder\(order\)/);
+  assert.match(ordersPageSource, /setOrderActionModalOpen\(true\)/);
+  assert.match(ordersPageSource, /aria-label=\{`Edit delivery date for \$\{order\.name\}`\}/);
+  assert.match(ordersPageSource, /onClick=\{\(\) => handleOpenOrderDataAction\(order\)\}/);
+});
+
 test("Orders loader merges delivery server planning state before background sync", () => {
   assert.match(ordersPageSource, /const activeOrdersView = new URL\(request\.url\)\.searchParams\.get\("view"\) === "inventory"/);
   assert.match(ordersPageSource, /const shouldLoadOrders = activeOrdersView !== "inventory"/);
