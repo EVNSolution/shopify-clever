@@ -15,7 +15,7 @@ import {
   textOrUndefined,
 } from "../features/delivery/route-helpers";
 import { routeDetailAction, routeDetailLoader } from "../features/delivery/route-detail.server";
-import { ROUTES_ROOT_PATH } from "../features/delivery/route-paths";
+import { ROUTES_ROOT_PATH, routeGroupChildPath } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
@@ -195,6 +195,22 @@ const routeDetailBackIconStyle = {
   display: "inline-flex",
   height: "16px",
   width: "16px",
+};
+
+const routeDetailNavigationStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "12px",
+};
+
+const siblingRouteSelectStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "8px",
+  color: "#303030",
+  fontSize: "13px",
+  minHeight: "30px",
+  padding: "3px 28px 3px 9px",
 };
 
 const routesDetailCardStyle = {
@@ -1659,6 +1675,7 @@ export default function RouteDetailPage() {
   );
   const routeGroupStopsSource = routeGroup ? allRouteGroupStops : orderedRouteStops;
   const routeGroupChildRows = useMemo(() => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource), [routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource]);
+  const siblingRouteRows = routeGroupChildRows.filter((routeRow) => routeRow.routePlanId);
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
@@ -2357,6 +2374,12 @@ export default function RouteDetailPage() {
     navigate(routesListHref);
   };
 
+  const handleSiblingRouteChange = (event) => {
+    const routePlanId = textOrUndefined(event.target.value);
+    if (!routeGroupId || !routePlanId || routePlanId === effectiveRoutePlan?.id) return;
+    navigate(routeGroupChildPath(routeGroupId, routePlanId));
+  };
+
   const handleViewInventory = () => {
     if (inventoryDetailHref) navigate(inventoryDetailHref);
   };
@@ -2898,25 +2921,41 @@ export default function RouteDetailPage() {
       <div style={routesDetailContentStyle}>
         <header className="route-overview-header" style={routeOverviewHeaderStyle}>
           <div style={routeOverviewTopBarStyle}>
-            <button
-              aria-label="Back to routes list"
-              onClick={handleBackToRoutes}
-              style={routeDetailBackButtonStyle}
-              type="button"
-            >
-              <span aria-hidden="true" style={routeDetailBackIconStyle}>
-                <svg fill="none" viewBox="0 0 20 20">
-                  <path
-                    d="M12.5 4.5 7 10l5.5 5.5"
-                    stroke="currentColor"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="1.8"
-                  />
-                </svg>
-              </span>
-              <span>Back to routes</span>
-            </button>
+            <div style={routeDetailNavigationStyle}>
+              <button
+                aria-label="Back to routes list"
+                onClick={handleBackToRoutes}
+                style={routeDetailBackButtonStyle}
+                type="button"
+              >
+                <span aria-hidden="true" style={routeDetailBackIconStyle}>
+                  <svg fill="none" viewBox="0 0 20 20">
+                    <path
+                      d="M12.5 4.5 7 10l5.5 5.5"
+                      stroke="currentColor"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth="1.8"
+                    />
+                  </svg>
+                </span>
+                <span>Back to routes</span>
+              </button>
+              {routeGroupId && siblingRouteRows.length > 1 ? (
+                <select
+                  aria-label="Route in group"
+                  disabled={hasRouteAllocationDraft}
+                  onChange={handleSiblingRouteChange}
+                  style={siblingRouteSelectStyle}
+                  title={hasRouteAllocationDraft ? "Save or revert route changes before switching routes" : "Switch route"}
+                  value={effectiveRoutePlan?.id ?? ""}
+                >
+                  {siblingRouteRows.map((routeRow) => (
+                    <option key={routeRow.routePlanId} value={routeRow.routePlanId}>{routeRow.title}</option>
+                  ))}
+                </select>
+              ) : null}
+            </div>
             <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
               <button
                 disabled={!inventoryDetailHref}
