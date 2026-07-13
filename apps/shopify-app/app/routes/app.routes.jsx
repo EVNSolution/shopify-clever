@@ -715,6 +715,7 @@ export default function RoutesPage() {
                     onKeyDown={(event) => handleRouteRowKeyDown(event, route)}
                     role={route.isClickable ? "link" : undefined}
                     tabIndex={route.isClickable ? 0 : undefined}
+                    title={route.isRouteGroup ? route.groupSummary : undefined}
                   >
                     <td style={routeCheckboxCellStyle}>
                       {route.isClickable && route.isDeletable !== false ? (
