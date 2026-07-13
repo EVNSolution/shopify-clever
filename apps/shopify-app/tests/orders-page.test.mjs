@@ -527,12 +527,12 @@ test("Orders page bulk-changes selected server order state or payment", () => {
 test("Orders page fixes selected order delivery metadata from Action", () => {
   assert.match(ordersPageSource, /const ORDER_DATA_FIX_ACTION = "fixData"/);
   assert.match(ordersPageSource, /Orders needing review/);
-  assert.match(ordersPageSource, /Raw note/);
+  assert.match(ordersPageSource, /<strong>Customer Note<\/strong>/);
   assert.match(ordersPageSource, /Fix data/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "patchOrderData"\)/);
   assert.match(ordersPageSource, /formData\.set\("deliveryDate", orderDataDraft\.deliveryDate\)/);
   assert.match(ordersPageSource, /formData\.set\("deliveryArea", orderDataDraft\.deliveryArea\)/);
-  assert.match(ordersPageSource, /aria-label="Delivery date"[\s\S]*?type="date"/);
+  assert.match(ordersPageSource, /aria-label="Delivery date"[\s\S]*?type="date"[\s\S]*?placeholder="yyyy\.mm\.dd"/);
   assert.match(ordersPageSource, /patchDeliveryOrderMetadata\(/);
   assert.match(deliveryOrdersSource, /`\/admin\/orders\/\$\{encodeURIComponent\(orderId\)\}\/metadata`/);
 });
