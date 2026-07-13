@@ -1119,6 +1119,8 @@ test("Route detail can move between child routes in the same route group", () =>
   assert.match(routeDetailSource, /aria-label="All routes in group"/);
   assert.match(routeDetailSource, /aria-label="Next route in group"/);
   assert.match(routeDetailSource, />All routes</);
+  assert.match(routeDetailSource, /const siblingRouteMenuButtonStyle = \{[\s\S]*minWidth: "52px"/);
+  assert.doesNotMatch(routeDetailSource, /M5 5h10M5 10h10M5 15h10/);
   assert.match(routeDetailSource, /aria-current=\{routeRow\.routePlanId === effectiveRoutePlan\?\.id \? "page" : undefined\}/);
   assert.match(routeDetailSource, /background: routeRow\.color/);
   assert.match(routeDetailSource, /disabled=\{hasRouteAllocationDraft \|\| !previousSiblingRoute\}/);
