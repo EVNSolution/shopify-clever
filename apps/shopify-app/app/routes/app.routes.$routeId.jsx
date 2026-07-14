@@ -497,16 +497,19 @@ const childRouteOrderRowStyle = {
 };
 
 const childRouteTableStopMarkerStyle = {
-  alignItems: "center",
   background: "var(--route-marker-color, #0b84d8)",
   borderRadius: "999px",
   color: "#ffffff",
-  display: "inline-flex",
+  display: "inline-grid",
   fontSize: "11px",
   fontWeight: 700,
+  fontVariantNumeric: "tabular-nums",
   height: "20px",
-  justifyContent: "center",
   lineHeight: 1,
+  padding: 0,
+  placeItems: "center",
+  textAlign: "center",
+  verticalAlign: "middle",
   width: "20px",
 };
 
@@ -520,6 +523,7 @@ const childRouteDisclosureCellStyle = {
   overflow: "hidden",
   padding: "8px 4px",
   position: "relative",
+  textAlign: "center",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
@@ -537,12 +541,14 @@ const childRouteDisclosureButtonStyle = {
   fontSize: "13px",
   fontWeight: 600,
   gap: "5px",
+  justifyContent: "center",
   lineHeight: 1.2,
+  margin: "0 auto",
   maxWidth: "100%",
   minWidth: 0,
   overflow: "hidden",
   padding: "2px 3px",
-  textAlign: "left",
+  textAlign: "center",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
 };
@@ -669,16 +675,25 @@ const childRouteTimelineStopUnitStyle = {
   alignContent: "center",
   alignItems: "center",
   boxSizing: "border-box",
-  display: "inline-grid",
+  display: "grid",
   gap: "2px",
   gridTemplateRows: "14px 20px",
   isolation: "isolate",
-  justifyContent: "center",
+  justifyItems: "center",
   minHeight: "48px",
   minWidth: "73px",
   padding: "3px 4px",
   position: "relative",
   textAlign: "center",
+  width: "100%",
+};
+
+const childRouteTimelineStopMarkerStyle = {
+  display: "grid",
+  fontVariantNumeric: "tabular-nums",
+  justifySelf: "center",
+  lineHeight: 1,
+  placeItems: "center",
 };
 
 const childRouteTimelineConnectorStyle = {
@@ -739,8 +754,10 @@ const childRouteTimelineOrderLabelStyle = {
   maxWidth: "65px",
   overflow: "hidden",
   position: "relative",
+  textAlign: "center",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  width: "100%",
   zIndex: 1,
 };
 
@@ -1271,6 +1288,12 @@ const routesDetailHeaderCellStyle = {
   whiteSpace: "nowrap",
 };
 
+const childRouteOrderHeaderCellStyle = {
+  ...routesDetailHeaderCellStyle,
+  textAlign: "center",
+  verticalAlign: "middle",
+};
+
 const routeStatusHeaderCellStyle = {
   ...routesDetailHeaderCellStyle,
   textAlign: "center",
@@ -1298,6 +1321,7 @@ const routesDetailCellStyle = {
 const childRouteOrderCellStyle = {
   ...routesDetailCellStyle,
   padding: "8px 4px",
+  textAlign: "center",
 };
 
 const childRouteStopCellStyle = {
@@ -3820,6 +3844,7 @@ export default function RouteDetailPage() {
                           aria-label={`Show ${stop.order} stop details`}
                           style={{
                             ...routeTimelineStopStyle,
+                            ...childRouteTimelineStopMarkerStyle,
                             position: "relative",
                             zIndex: 1,
                             ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
@@ -3854,7 +3879,7 @@ export default function RouteDetailPage() {
                 <thead>
                   <tr>
                     {CHILD_ROUTE_ORDER_COLUMNS.map((column) => (
-                      <th key={column.key} style={routesDetailHeaderCellStyle}>{column.label}</th>
+                      <th key={column.key} style={childRouteOrderHeaderCellStyle}>{column.label}</th>
                     ))}
                   </tr>
                 </thead>

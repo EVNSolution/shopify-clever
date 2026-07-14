@@ -200,6 +200,16 @@ test("child order stop rows reuse the route color marker and a taller row", () =
   assert.match(routeDetailSource, /"--route-marker-color": currentTimelineRouteRow\?\.color \?\? routeLineColor/);
 });
 
+test("child timeline and order table share explicit centered alignment axes", () => {
+  assert.match(routeDetailSource, /const childRouteTimelineStopUnitStyle = \{[\s\S]*justifyItems: "center"[\s\S]*width: "100%"/);
+  assert.match(routeDetailSource, /const childRouteTimelineOrderLabelStyle = \{[\s\S]*textAlign: "center"[\s\S]*width: "100%"/);
+  assert.match(routeDetailSource, /const childRouteTimelineStopMarkerStyle = \{[\s\S]*display: "grid"[\s\S]*placeItems: "center"/);
+  assert.match(routeDetailSource, /const childRouteOrderHeaderCellStyle = \{[\s\S]*textAlign: "center"[\s\S]*verticalAlign: "middle"/);
+  assert.match(routeDetailSource, /const childRouteOrderCellStyle = \{[\s\S]*textAlign: "center"/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "inline-grid"[\s\S]*placeItems: "center"[\s\S]*textAlign: "center"/);
+  assert.match(routeDetailSource, /<th key=\{column\.key\} style=\{childRouteOrderHeaderCellStyle\}>\{column\.label\}<\/th>/);
+});
+
 test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
   assert.match(routeDetailSource, /createPortal/);
   assert.match(routeDetailSource, /position: "fixed"/);
