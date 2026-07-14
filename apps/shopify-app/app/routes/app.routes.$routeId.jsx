@@ -3925,7 +3925,7 @@ export default function RouteDetailPage() {
                       <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.customer}</td>
-                      <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
+                      <td style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "items"}
                           aria-haspopup="dialog"
@@ -3935,6 +3935,7 @@ export default function RouteDetailPage() {
                           onBlur={handleChildOrderDisclosureMouseLeave}
                           onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
                           onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
+                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
                           style={childRouteDisclosureButtonStyle}
                           type="button"
                         >
@@ -3943,7 +3944,7 @@ export default function RouteDetailPage() {
                         </button>
                       </td>
                       <td style={childRouteOrderCellStyle}>{row.method}</td>
-                      <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
+                      <td style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "attributes"}
                           aria-haspopup="dialog"
@@ -3953,6 +3954,7 @@ export default function RouteDetailPage() {
                           onBlur={handleChildOrderDisclosureMouseLeave}
                           onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
                           onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
+                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
                           style={childRouteDisclosureButtonStyle}
                           type="button"
                         >

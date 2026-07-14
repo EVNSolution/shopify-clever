@@ -232,9 +232,12 @@ test("Items and Attributes use hover and click disclosures above their trigger",
   assert.match(routeDetailSource, /window\.addEventListener\("scroll", syncChildOrderDisclosurePopover, true\)/);
   assert.match(routeDetailSource, /setTimeout\([\s\S]*setActiveChildOrderDisclosure[\s\S]*}, 40\);/);
   assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);
+  assert.doesNotMatch(routeDetailSource, /<td onMouseLeave=\{handleChildOrderDisclosureMouseLeave\} style=\{childRouteDisclosureCellStyle\}>/);
   assert.match(routeDetailSource, /data-child-order-disclosure-popover="true"/);
   assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onBlur=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /aria-haspopup="dialog"/);
