@@ -222,6 +222,7 @@ test("child timeline keeps breathing room and stop digits share a browser-neutra
 });
 
 test("Items and Attributes use hover and click disclosures above their trigger", () => {
+  assert.match(routeDetailSource, /const CHILD_ORDER_DISCLOSURE_GAP = 2;/);
   assert.match(routeDetailSource, /createPortal/);
   assert.match(routeDetailSource, /position: "fixed"/);
   assert.match(routeDetailSource, /function getChildOrderDisclosurePopoverPosition\(rect, popoverSize = \{\}\)/);
@@ -229,6 +230,7 @@ test("Items and Attributes use hover and click disclosures above their trigger",
   assert.match(routeDetailSource, /const top = Math\.max\([\s\S]*rect\.top - height - CHILD_ORDER_DISCLOSURE_GAP/);
   assert.match(routeDetailSource, /childOrderDisclosurePopoverRef\.current[\s\S]*popoverNode\.offsetHeight[\s\S]*popoverNode\.offsetWidth/);
   assert.match(routeDetailSource, /window\.addEventListener\("scroll", syncChildOrderDisclosurePopover, true\)/);
+  assert.match(routeDetailSource, /setTimeout\([\s\S]*setActiveChildOrderDisclosure[\s\S]*}, 40\);/);
   assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);
   assert.match(routeDetailSource, /data-child-order-disclosure-popover="true"/);
   assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}/);

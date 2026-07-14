@@ -60,7 +60,7 @@ const ROUTE_TIMELINE_STOP_POPOVER_WIDTH = 320;
 const ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET = 12;
 const CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH = 73;
 const CHILD_ORDER_DISCLOSURE_EDGE_INSET = 12;
-const CHILD_ORDER_DISCLOSURE_GAP = 6;
+const CHILD_ORDER_DISCLOSURE_GAP = 2;
 const CHILD_ORDER_DISCLOSURE_HEIGHT = 260;
 const CHILD_ORDER_DISCLOSURE_WIDTH = 300;
 
@@ -2727,7 +2727,7 @@ export default function RouteDetailPage() {
     childOrderDisclosureCloseTimerRef.current = window.setTimeout(() => {
       childOrderDisclosureCloseTimerRef.current = null;
       setActiveChildOrderDisclosure((current) => current?.mode === "hover" ? null : current);
-    }, 120);
+    }, 40);
   };
 
   const handleToggleChildOrderDisclosure = (event, rowId, type) => {
