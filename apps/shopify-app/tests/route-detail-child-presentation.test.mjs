@@ -210,12 +210,15 @@ test("child timeline and order table share explicit centered alignment axes", ()
   assert.match(routeDetailSource, /<th key=\{column\.key\} style=\{childRouteOrderHeaderCellStyle\}>\{column\.label\}<\/th>/);
 });
 
-test("child timeline keeps breathing room and stop digits use an explicit centered line box", () => {
+test("child timeline keeps breathing room and stop digits share a browser-neutral optical correction", () => {
   assert.match(routeDetailSource, /const childRouteTimelineStyle = \{[\s\S]*padding: "8px 8px 16px"/);
   assert.match(routeDetailSource, /aria-label="Child route stop timeline"[\s\S]*style=\{childRouteTimelineStyle\}/);
   assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "flex"[\s\S]*margin: "0 auto"/);
-  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*height: "20px"[\s\S]*lineHeight: "20px"[\s\S]*textAlign: "center"[\s\S]*width: "20px"/);
+  assert.match(routeDetailSource, /const routeNumberMarkerGlyphStyle = \{[\s\S]*lineHeight: 1[\s\S]*transform: "translateY\(0\.1em\)"/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "11px"[\s\S]*fontWeight: 700/);
+  assert.match(routeDetailSource, /<span style=\{routeNumberMarkerGlyphStyle\}>\{stop\.stop\}<\/span>/);
   assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
+  assert.doesNotMatch(routeDetailSource, /textBox:/);
 });
 
 test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {

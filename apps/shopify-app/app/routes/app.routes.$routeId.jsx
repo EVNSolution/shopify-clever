@@ -510,15 +510,17 @@ const childRouteTableStopMarkerStyle = {
   width: "20px",
 };
 
-const childRouteTableStopMarkerTextStyle = {
+const routeNumberMarkerGlyphStyle = {
   display: "block",
+  lineHeight: 1,
+  transform: "translateY(0.1em)",
+};
+
+const childRouteTableStopMarkerTextStyle = {
+  ...routeNumberMarkerGlyphStyle,
   fontSize: "11px",
   fontWeight: 700,
   fontVariantNumeric: "tabular-nums",
-  height: "20px",
-  lineHeight: "20px",
-  textAlign: "center",
-  width: "20px",
 };
 
 const childRouteDisclosureCellStyle = {
@@ -3864,7 +3866,7 @@ export default function RouteDetailPage() {
                             ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
                           }}
                           type="button"
-                        >{stop.stop}</button>
+                        ><span style={routeNumberMarkerGlyphStyle}>{stop.stop}</span></button>
                       </span>
                     ))}
                     <span style={childRouteTimelineEndStyle}>
