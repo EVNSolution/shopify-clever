@@ -659,23 +659,27 @@ function getChildRouteTimelineTrackStyle(stopCount) {
   };
 }
 
-function getChildOrderDisclosurePopoverPosition(rect) {
+function getChildOrderDisclosurePopoverPosition(rect, popoverSize = {}) {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const width = Math.min(
-    CHILD_ORDER_DISCLOSURE_WIDTH,
+    popoverSize.width ?? CHILD_ORDER_DISCLOSURE_WIDTH,
     viewportWidth - CHILD_ORDER_DISCLOSURE_EDGE_INSET * 2,
+  );
+  const height = Math.min(
+    popoverSize.height ?? CHILD_ORDER_DISCLOSURE_HEIGHT,
+    viewportHeight - CHILD_ORDER_DISCLOSURE_EDGE_INSET * 2,
   );
   const left = Math.min(
     Math.max(CHILD_ORDER_DISCLOSURE_EDGE_INSET, rect.left),
     viewportWidth - width - CHILD_ORDER_DISCLOSURE_EDGE_INSET,
   );
   const belowTop = rect.bottom + CHILD_ORDER_DISCLOSURE_GAP;
-  const top = belowTop + CHILD_ORDER_DISCLOSURE_HEIGHT <= viewportHeight - CHILD_ORDER_DISCLOSURE_EDGE_INSET
+  const top = belowTop + height <= viewportHeight - CHILD_ORDER_DISCLOSURE_EDGE_INSET
     ? belowTop
     : Math.max(
       CHILD_ORDER_DISCLOSURE_EDGE_INSET,
-      rect.top - CHILD_ORDER_DISCLOSURE_HEIGHT - CHILD_ORDER_DISCLOSURE_GAP,
+      rect.top - height - CHILD_ORDER_DISCLOSURE_GAP,
     );
 
   return { left, top, width };
@@ -2236,6 +2240,7 @@ export default function RouteDetailPage() {
   const routeTimelineStopPopoverRef = useRef(null);
   const childOrderDisclosureCloseTimerRef = useRef(null);
   const childOrderDisclosureCloseButtonRef = useRef(null);
+  const childOrderDisclosurePopoverRef = useRef(null);
   const childOrderDisclosureTriggerRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
   const routeTimelineDragSnapshotRef = useRef(null);
@@ -2704,12 +2709,15 @@ export default function RouteDetailPage() {
     childOrderDisclosureCloseTimerRef.current = null;
   };
 
-  const getChildOrderDisclosureState = (event, rowId, type, mode) => ({
-    ...getChildOrderDisclosurePopoverPosition(event.currentTarget.getBoundingClientRect()),
-    mode,
-    rowId,
-    type,
-  });
+  const getChildOrderDisclosureState = (event, rowId, type, mode) => {
+    childOrderDisclosureTriggerRef.current = event.currentTarget;
+    return {
+      ...getChildOrderDisclosurePopoverPosition(event.currentTarget.getBoundingClientRect()),
+      mode,
+      rowId,
+      type,
+    };
+  };
 
   const handleChildOrderDisclosureMouseEnter = (event, rowId, type) => {
     cancelChildOrderDisclosureClose();
@@ -2729,11 +2737,22 @@ export default function RouteDetailPage() {
     event.stopPropagation();
     cancelChildOrderDisclosureClose();
     const next = getChildOrderDisclosureState(event, rowId, type, "pinned");
-    childOrderDisclosureTriggerRef.current = event.currentTarget;
     setActiveChildOrderDisclosure((current) => (
       current?.mode === "pinned" && current.rowId === rowId && current.type === type ? null : next
     ));
   };
+
+  const positionChildOrderDisclosurePopover = useCallback(() => {
+    const triggerNode = childOrderDisclosureTriggerRef.current;
+    const popoverNode = childOrderDisclosurePopoverRef.current;
+    if (!triggerNode || !popoverNode) return;
+
+    const nextPosition = getChildOrderDisclosurePopoverPosition(triggerNode.getBoundingClientRect(), {
+      height: popoverNode.offsetHeight,
+      width: popoverNode.offsetWidth,
+    });
+    popoverNode.style.transform = `translate3d(${Math.round(nextPosition.left)}px, ${Math.round(nextPosition.top)}px, 0)`;
+  }, []);
 
   const activeRouteTimelineStopPopoverId = activeRouteTimelineStopPopover?.stopId;
 
@@ -2795,17 +2814,15 @@ export default function RouteDetailPage() {
   useEffect(() => {
     if (!activeChildOrderDisclosure) return undefined;
 
-    const closeDisclosure = (event) => {
-      if (event.type === "scroll" && event.target?.closest?.('[data-child-order-disclosure-popover="true"]')) return;
-      setActiveChildOrderDisclosure(null);
-    };
-    window.addEventListener("resize", closeDisclosure);
-    window.addEventListener("scroll", closeDisclosure, true);
+    const syncChildOrderDisclosurePopover = () => positionChildOrderDisclosurePopover();
+    positionChildOrderDisclosurePopover();
+    window.addEventListener("resize", syncChildOrderDisclosurePopover);
+    window.addEventListener("scroll", syncChildOrderDisclosurePopover, true);
     return () => {
-      window.removeEventListener("resize", closeDisclosure);
-      window.removeEventListener("scroll", closeDisclosure, true);
+      window.removeEventListener("resize", syncChildOrderDisclosurePopover);
+      window.removeEventListener("scroll", syncChildOrderDisclosurePopover, true);
     };
-  }, [activeChildOrderDisclosure]);
+  }, [activeChildOrderDisclosure, positionChildOrderDisclosurePopover]);
 
   useEffect(() => () => {
     if (childOrderDisclosureCloseTimerRef.current != null) {
@@ -4147,6 +4164,7 @@ export default function RouteDetailPage() {
               data-child-order-disclosure-popover="true"
               onMouseEnter={cancelChildOrderDisclosureClose}
               onMouseLeave={handleChildOrderDisclosureMouseLeave}
+              ref={childOrderDisclosurePopoverRef}
               role={activeChildOrderDisclosure.mode === "pinned" ? "dialog" : "tooltip"}
               aria-label={`${activeChildOrderDisclosure.type === "items" ? "Items" : "Attributes"} for ${activeChildOrderDisclosureRow.order}`}
               style={{
