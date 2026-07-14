@@ -192,6 +192,14 @@ test("child timeline connectors run only between component centers", () => {
   assert.doesNotMatch(routeDetailSource, /backgroundSize: `calc\(100% - \$\{CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH\}px\) 2px`/);
 });
 
+test("child order stop rows reuse the route color marker and a taller row", () => {
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{/);
+  assert.match(routeDetailSource, /background: "var\(--route-marker-color, #0b84d8\)"/);
+  assert.match(routeDetailSource, /const childRouteOrderRowStyle = \{[\s\S]*height: "40px"/);
+  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}>\{row\.stop\}<\/span>/);
+  assert.match(routeDetailSource, /"--route-marker-color": currentTimelineRouteRow\?\.color \?\? routeLineColor/);
+});
+
 test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
   assert.match(routeDetailSource, /createPortal/);
   assert.match(routeDetailSource, /position: "fixed"/);

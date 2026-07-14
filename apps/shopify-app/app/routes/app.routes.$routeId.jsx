@@ -492,6 +492,24 @@ const childRouteOrderColumnWidths = [
   "94px",
 ];
 
+const childRouteOrderRowStyle = {
+  height: "40px",
+};
+
+const childRouteTableStopMarkerStyle = {
+  alignItems: "center",
+  background: "var(--route-marker-color, #0b84d8)",
+  borderRadius: "999px",
+  color: "#ffffff",
+  display: "inline-flex",
+  fontSize: "11px",
+  fontWeight: 700,
+  height: "20px",
+  justifyContent: "center",
+  lineHeight: 1,
+  width: "20px",
+};
+
 const childRouteDisclosureCellStyle = {
   borderBottomColor: "#ececec",
   borderBottomStyle: "solid",
@@ -500,7 +518,7 @@ const childRouteDisclosureCellStyle = {
   fontSize: "14px",
   lineHeight: 1.2,
   overflow: "hidden",
-  padding: "4px",
+  padding: "8px 4px",
   position: "relative",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
@@ -1275,6 +1293,16 @@ const routesDetailCellStyle = {
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
+};
+
+const childRouteOrderCellStyle = {
+  ...routesDetailCellStyle,
+  padding: "8px 4px",
+};
+
+const childRouteStopCellStyle = {
+  ...childRouteOrderCellStyle,
+  textAlign: "center",
 };
 
 const routeStatusCellStyle = {
@@ -3811,7 +3839,12 @@ export default function RouteDetailPage() {
           ) : null}
 
           {isMaterializedChildRouteDetail ? (
-            <div style={routesDetailTableFrameStyle}>
+            <div
+              style={{
+                ...routesDetailTableFrameStyle,
+                "--route-marker-color": currentTimelineRouteRow?.color ?? routeLineColor,
+              }}
+            >
               <table aria-label="Child route order stops" style={childRouteOrderTableStyle}>
                 <colgroup>
                   {childRouteOrderColumnWidths.map((width, index) => (
@@ -3827,16 +3860,16 @@ export default function RouteDetailPage() {
                 </thead>
                 <tbody>
                   {childRouteOrderRows.map((row) => (
-                    <tr key={row.id}>
-                      <td style={routesDetailCellStyle}>{row.stop}</td>
-                      <td style={routesDetailCellStyle}>{row.order}</td>
-                      <td style={routesDetailCellStyle}>{row.status}</td>
-                      <td style={routesDetailCellStyle}>{row.orderDate}</td>
-                      <td style={routesDetailCellStyle}>{row.address}</td>
-                      <td style={routesDetailCellStyle}>{row.eta}</td>
-                      <td style={routesDetailCellStyle}>{row.driveTime}</td>
-                      <td style={routesDetailCellStyle}>{row.stopTime}</td>
-                      <td style={routesDetailCellStyle}>{row.customer}</td>
+                    <tr key={row.id} style={childRouteOrderRowStyle}>
+                      <td style={childRouteStopCellStyle}><span style={childRouteTableStopMarkerStyle}>{row.stop}</span></td>
+                      <td style={childRouteOrderCellStyle}>{row.order}</td>
+                      <td style={childRouteOrderCellStyle}>{row.status}</td>
+                      <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
+                      <td style={childRouteOrderCellStyle}>{row.address}</td>
+                      <td style={childRouteOrderCellStyle}>{row.eta}</td>
+                      <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
+                      <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
+                      <td style={childRouteOrderCellStyle}>{row.customer}</td>
                       <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "items"}
@@ -3854,7 +3887,7 @@ export default function RouteDetailPage() {
                           {renderChildRouteInfoIcon()}
                         </button>
                       </td>
-                      <td style={routesDetailCellStyle}>{row.method}</td>
+                      <td style={childRouteOrderCellStyle}>{row.method}</td>
                       <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "attributes"}
