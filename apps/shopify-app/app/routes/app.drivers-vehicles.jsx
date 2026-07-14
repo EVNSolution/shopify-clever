@@ -192,14 +192,6 @@ const appAccessInlineStyle = {
   whiteSpace: "nowrap",
 };
 
-const appAccessStatusTextStyle = {
-  flex: "0 1 auto",
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const appAccessInlineButtonStyle = {
   background: "transparent",
   border: 0,
@@ -440,7 +432,6 @@ function buildDriverSearchText(driver) {
     driver.displayName,
     driver.phone,
     driver.status,
-    driver.authStatus,
     driver.assignedRoute?.label,
     driver.joinedAt,
     driver.lastSeenAt,
@@ -462,7 +453,6 @@ function mapDeliveryDriverToRow(driver) {
     displayName: textOrFallback(driver.displayName, phone, "Pending driver"),
     phone,
     status: formatOperationalDriverStatus(driver.status, { invitePending }),
-    authStatus: invitePending ? "Invite pending" : appLinked ? "App linked" : "Not linked",
     isInvitePending: invitePending,
     isAppLinked: appLinked,
     inviteCode: driver.inviteCode,
@@ -513,10 +503,7 @@ function buildDriverInviteMessage({ downloadLink, inviteCode }) {
 }
 
 function canShowDriverInviteActions(driver) {
-  return (
-    driver?.isInvitePending === true &&
-    normalizeSearchText(driver?.authStatus) === "invite pending"
-  );
+  return driver?.isInvitePending === true;
 }
 
 function canShowDriverReloginAction(driver) {
@@ -846,9 +833,8 @@ export default function DriversVehiclesPage() {
             <colgroup>
               <col style={{ width: "40px" }} />
               <col style={{ width: "14.4%" }} />
-              <col style={{ width: "150px" }} />
+              <col style={{ width: "250px" }} />
               <col style={{ width: "96px" }} />
-              <col style={{ width: "154px" }} />
               <col style={{ width: "110px" }} />
               <col style={{ width: "110px" }} />
               <col style={{ width: "110px" }} />
@@ -867,7 +853,6 @@ export default function DriversVehiclesPage() {
                 <th style={tableHeaderCellStyle}>Driver</th>
                 <th style={tableHeaderCellStyle}>Phone</th>
                 <th style={tableHeaderCellStyle}>Status</th>
-                <th style={tableHeaderCellStyle}>App access</th>
                 <th style={tableHeaderCellStyle}>Joined</th>
                 <th style={tableHeaderCellStyle}>Assigned route</th>
                 <th style={tableHeaderCellStyle}>Recent events</th>
@@ -887,10 +872,9 @@ export default function DriversVehiclesPage() {
                   <td style={tableCellStyle}>
                     <strong>{driver.displayName}</strong>
                   </td>
-                  <td style={tableCellStyle}>{driver.phone}</td>
-                  <td style={tableCellStyle}><span style={statusPillStyle}>{driver.status}</span></td>
                   <td style={appAccessCellStyle}>
                     <span style={appAccessInlineStyle}>
+                      <span>{driver.phone}</span>
                       {canShowDriverInviteActions(driver) && driver.inviteCode ? (
                         <>
                           <span style={inviteCodeInlineStyle}>
@@ -906,7 +890,6 @@ export default function DriversVehiclesPage() {
                         </>
                       ) : (
                         <>
-                          <span style={appAccessStatusTextStyle}>{driver.authStatus}</span>
                           {canShowDriverReloginAction(driver) ? (
                             <button
                               type="button"
@@ -929,6 +912,7 @@ export default function DriversVehiclesPage() {
                       )}
                     </span>
                   </td>
+                  <td style={tableCellStyle}><span style={statusPillStyle}>{driver.status}</span></td>
                   <td style={tableCellStyle}>{driver.joinedAt}</td>
                   <td style={tableCellStyle}>
                     <span style={assignedRouteTextStyle}>{driver.assignedRoute.label}</span>
@@ -937,7 +921,7 @@ export default function DriversVehiclesPage() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={8} style={emptyRowStyle}>No drivers match this search.</td>
+                  <td colSpan={7} style={emptyRowStyle}>No drivers match this search.</td>
                 </tr>
               )}
             </tbody>

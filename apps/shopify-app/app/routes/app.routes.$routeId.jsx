@@ -469,6 +469,37 @@ const childRouteHeaderDriverButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const childRouteDepartureControlStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  gap: "4px",
+};
+
+const childRouteDepartureInputStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "6px",
+  color: "#1f1f1f",
+  font: "inherit",
+  fontSize: "13px",
+  height: "26px",
+  padding: "2px 5px",
+  width: "92px",
+};
+
+const childRouteDepartureSaveButtonStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "6px",
+  color: "#303030",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "12px",
+  fontWeight: 650,
+  height: "26px",
+  padding: "2px 7px",
+};
+
 const childRouteOrderTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
@@ -1431,6 +1462,14 @@ function getRouteStartDateTimeValue(routePlan) {
   return date ? `${date}T09:00` : "";
 }
 
+function getRouteDepartureTimeValue(routePlan) {
+  const departureTime = textOrUndefined(routePlan?.departureTime);
+  if (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(departureTime ?? "")) return departureTime;
+
+  const dateTime = textOrUndefined(routePlan?.scheduledStartAt ?? routePlan?.startTime);
+  return dateTime?.match(/T(\d{2}:\d{2})/)?.[1] ?? "09:00";
+}
+
 function getRouteStartTimeLabel(value) {
   if (!value) return ROUTE_EMPTY_LABEL;
   return value.replace("T", " ");
@@ -2199,6 +2238,7 @@ export default function RouteDetailPage() {
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
+  const routeDepartureTimeValue = getRouteDepartureTimeValue(effectiveRoutePlan);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
@@ -2228,6 +2268,7 @@ export default function RouteDetailPage() {
   const addEmptyRouteBranchBusy = false;
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
+  const saveRouteDepartureTimeBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDepartureTime";
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const mapLibraryRef = useRef(null);
@@ -2276,10 +2317,14 @@ export default function RouteDetailPage() {
   const [activeChildOrderDisclosure, setActiveChildOrderDisclosure] = useState(null);
   const [activeRouteSelector, setActiveRouteSelector] = useState(null);
   const [routeSelectorQuery, setRouteSelectorQuery] = useState("");
+  const [routeDepartureTimeDraft, setRouteDepartureTimeDraft] = useState(routeDepartureTimeValue);
   const [routePolygonPoints, setRoutePolygonPoints] = useState([]);
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
+  useEffect(() => {
+    setRouteDepartureTimeDraft(routeDepartureTimeValue);
+  }, [effectiveRoutePlan?.id, routeDepartureTimeValue]);
   const currentRouteLineId = effectiveRoutePlan?.id ?? null;
   const currentRouteRowsSource = isRouteGroupDetail || !currentRouteLineId
     ? []
@@ -2554,6 +2599,25 @@ export default function RouteDetailPage() {
       formData.set("shopifySessionToken", sessionToken);
       routeActionFetcher.submit(formData, { method: "post" });
       setActiveRouteSelector(null);
+    } catch {
+      setRouteGroupClientError(
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      );
+    }
+  };
+
+  const handleSaveRouteDepartureTime = async () => {
+    if (!effectiveRoutePlan?.id || routeGroupActionBusy || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(routeDepartureTimeDraft)) return;
+
+    try {
+      setRouteGroupClientError(null);
+      const sessionToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("_intent", "saveRouteDepartureTime");
+      formData.set("departureTime", routeDepartureTimeDraft);
+      formData.set("routePlanId", effectiveRoutePlan.id);
+      formData.set("shopifySessionToken", sessionToken);
+      routeActionFetcher.submit(formData, { method: "post" });
     } catch {
       setRouteGroupClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
@@ -3087,7 +3151,7 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (lastRouteActionIntentRef.current !== "saveRouteDriver") return;
+    if (!["saveRouteDriver", "saveRouteDepartureTime"].includes(lastRouteActionIntentRef.current)) return;
     lastRouteActionIntentRef.current = null;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) revalidator.revalidate();
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state]);
@@ -3703,6 +3767,32 @@ export default function RouteDetailPage() {
                         <span style={routeEditableValueTextStyle}>{routeDriverSummary}</span>
                         {renderRouteEditableChevron()}
                       </button>
+                    </div>
+                    <div style={routeDetailTitleMetricStyle}>
+                      <span style={routeDetailTitleMetricLabelStyle}>Departure</span>
+                      <span style={childRouteDepartureControlStyle}>
+                        <input
+                          aria-label="Route departure time"
+                          disabled={routeGroupActionBusy}
+                          onChange={(event) => setRouteDepartureTimeDraft(event.currentTarget.value)}
+                          style={childRouteDepartureInputStyle}
+                          type="time"
+                          value={routeDepartureTimeDraft}
+                        />
+                        <button
+                          disabled={routeGroupActionBusy || routeDepartureTimeDraft === (textOrUndefined(effectiveRoutePlan?.departureTime) ?? "")}
+                          onClick={handleSaveRouteDepartureTime}
+                          style={{
+                            ...childRouteDepartureSaveButtonStyle,
+                            ...(routeGroupActionBusy || routeDepartureTimeDraft === (textOrUndefined(effectiveRoutePlan?.departureTime) ?? "")
+                              ? { cursor: "not-allowed", opacity: 0.55 }
+                              : {}),
+                          }}
+                          type="button"
+                        >
+                          {saveRouteDepartureTimeBusy ? "Saving…" : "Save"}
+                        </button>
+                      </span>
                     </div>
                     {renderRouteHeaderMetric("Updated", routeUpdatedLabel)}
                   </div>

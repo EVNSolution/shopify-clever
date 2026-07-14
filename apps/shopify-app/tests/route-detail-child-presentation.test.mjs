@@ -17,6 +17,7 @@ import {
 
 const root = process.cwd();
 const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
+const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
 
 test("materialized child route guard only accepts route-plan-backed group children", () => {
   assert.equal(
@@ -248,4 +249,15 @@ test("Items and Attributes use hover and click disclosures above their trigger",
   assert.match(routeDetailSource, /\{row\.attributesSummary\}/);
   assert.match(routeDetailSource, /role=\{activeChildOrderDisclosure\.mode === "pinned" \? "dialog" : "tooltip"\}/);
   assert.doesNotMatch(routeDetailSource, /childRouteDisclosurePopoverStyle\}>\{row\.(itemsDetail|attributesDetail)\}/);
+});
+
+test("materialized child headers save a per-route departure time", () => {
+  assert.match(routeDetailSource, /const \[routeDepartureTimeDraft, setRouteDepartureTimeDraft\] = useState/);
+  assert.match(routeDetailSource, /aria-label="Route departure time"/);
+  assert.match(routeDetailSource, /type="time"/);
+  assert.match(routeDetailSource, /formData\.set\("_intent", "saveRouteDepartureTime"\)/);
+  assert.match(routeDetailSource, /formData\.set\("departureTime", routeDepartureTimeDraft\)/);
+  assert.match(routeDetailSource, /formData\.set\("routePlanId", effectiveRoutePlan\.id\)/);
+  assert.match(routeDetailServerSource, /intent === "saveRouteDepartureTime"/);
+  assert.match(routeDetailServerSource, /updateDeliveryRoutePlanDepartureTime/);
 });
