@@ -106,7 +106,12 @@ test("child order rows follow actual child sequence and use delivery serviceType
   assert.equal(rows[1].itemsSummary, "2 items");
   assert.equal(rows[1].method, "EVENING_DELIVERY");
   assert.notEqual(rows[1].method, "Visa");
-  assert.equal(rows[1].attributesSummary, "1 attr");
+  assert.equal(rows[1].attributesSummary, "1");
+  assert.deepEqual(rows[1].attributes[0], {
+    key: "Gate",
+    label: "Gate: 1234",
+    value: "1234",
+  });
   assert.match(rows[1].attributesDetail, /Gate: 1234/);
 });
 
@@ -145,11 +150,30 @@ test("child order table columns are exact and excluded columns stay out of the c
   assert.doesNotMatch(routeDetailSource, /aria-label="Remove order from route"/);
 });
 
-test("child timeline is scrollable with nonsticky Start and End units and keeps explicit Save wiring", () => {
+test("child timeline precedes the table and enforces explicit responsive minimum spacing", () => {
+  const timelineIndex = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
+  const tableIndex = routeDetailSource.indexOf('aria-label="Child route order stops"');
+
+  assert.notEqual(timelineIndex, -1);
+  assert.notEqual(tableIndex, -1);
+  assert.ok(timelineIndex < tableIndex);
+  assert.match(routeDetailSource, /const CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH = 73;/);
+  assert.match(routeDetailSource, /function getChildRouteTimelineTrackStyle\(stopCount\)/);
+  assert.match(routeDetailSource, /minWidth: `\$\{unitCount \* CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH\}px`/);
   assert.match(routeDetailSource, /const childRouteTimelineStopUnitStyle = \{/);
   assert.match(routeDetailSource, /minWidth: "73px"/);
   assert.match(routeDetailSource, /minHeight: "48px"/);
+  assert.match(routeDetailSource, /maxWidth: "100%"/);
+  assert.match(routeDetailSource, /minWidth: 0/);
   assert.match(routeDetailSource, /overflowX: "auto"/);
+  assert.match(routeDetailSource, /getChildRouteTimelineTrackStyle\(routeRow\.stops\.length\)/);
+});
+
+test("child timeline renders distinct circular Start and End markers", () => {
+  assert.match(routeDetailSource, /function renderChildRouteTimelineStartMarker\(\)/);
+  assert.match(routeDetailSource, /function renderChildRouteTimelineEndMarker\(\)/);
+  assert.match(routeDetailSource, /aria-label="Route start"/);
+  assert.match(routeDetailSource, /aria-label="Route end"/);
   assert.match(routeDetailSource, /childRouteTimelineEndStyle/);
   assert.match(routeDetailSource, />End<\/span>/);
   assert.match(routeDetailSource, /childRouteTimelineOrderLabelStyle/);
@@ -158,4 +182,23 @@ test("child timeline is scrollable with nonsticky Start and End units and keeps 
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraft\}/);
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
+});
+
+test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
+  assert.match(routeDetailSource, /createPortal/);
+  assert.match(routeDetailSource, /position: "fixed"/);
+  assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);
+  assert.match(routeDetailSource, /data-child-order-disclosure-popover="true"/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}/);
+  assert.match(routeDetailSource, /onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /onBlur=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /aria-haspopup="dialog"/);
+  assert.match(routeDetailSource, /event\.key !== "Escape"/);
+  assert.match(routeDetailSource, /childOrderDisclosureCloseButtonRef\.current\?\.focus\(\)/);
+  assert.match(routeDetailSource, /trigger\?\.focus\(\)/);
+  assert.match(routeDetailSource, /renderChildRouteInfoIcon\(\)/);
+  assert.match(routeDetailSource, /\{row\.attributesSummary\}/);
+  assert.match(routeDetailSource, /role=\{activeChildOrderDisclosure\.mode === "pinned" \? "dialog" : "tooltip"\}/);
+  assert.doesNotMatch(routeDetailSource, /childRouteDisclosurePopoverStyle\}>\{row\.(itemsDetail|attributesDetail)\}/);
 });
