@@ -21,8 +21,13 @@ import {
   readRouteOptimizedSnapshot,
   textOrUndefined,
 } from "./route-helpers";
+import {
+  attachDeliveryOrderFieldsToStops,
+  mergeCurrentChildDirectDetail,
+} from "./route-detail-enrichment.server";
 import { routeGroupChildPath } from "./route-paths";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
+import { fetchShopifyShopTimeZone } from "../shopify/shop-timezone.server";
 import { authenticate } from "../../shopify.server";
 
 function roundPerfDuration(duration) {
@@ -290,17 +295,37 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
 
   if (routeGroupIdHint) {
     const primaryDataStartedAt = getRouteDetailPerfNow();
-    const [routeGroupData, departureLocationData, driverData, orderData] = await Promise.all([
+    const [routeGroupData, routePlanData, departureLocationData, driverData, orderData, shopTimeZoneData] = await Promise.all([
       fetchDeliveryRouteGroupDetail(request, routeGroupIdHint, { cacheKey: shopifyShopCacheKey }),
+      fetchDeliveryRoutePlanDetail(request, routeId, {
+        cacheKey: shopifyShopCacheKey,
+      }),
       fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
       fetchDeliveryDrivers(request, {}),
       fetchDeliveryOrders(request, {}, { cacheKey: shopifyShopCacheKey }),
+      fetchShopifyShopTimeZone(admin, { cacheKey: shopifyShopCacheKey }),
     ]);
     const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
-    const routeChildDetails = attachDeliveryOrderItemsToRouteDetails(
+    const thinRouteChildDetails = attachDeliveryOrderItemsToRouteDetails(
       buildRouteGroupChildDetails(routeGroupData.routeGroup),
       orderData.orders,
     );
+    const directCurrentChildDetail = routePlanData.routePlan || routePlanData.stops?.length
+      ? {
+          routeGeometry: routePlanData.routeGeometry,
+          routeMetrics: routePlanData.routeMetrics ?? null,
+          routePlan: routePlanData.routePlan,
+          routePlanId: routePlanData.routePlan?.id ?? routeId,
+          routeStopPoints: routePlanData.routeStopPoints ?? [],
+          stops: attachDeliveryOrderFieldsToStops(
+            attachDeliveryOrderItemsToStops(routePlanData.stops ?? [], buildDeliveryOrderLookup(orderData.orders)),
+            orderData.orders,
+          ),
+        }
+      : null;
+    const routeChildDetails = directCurrentChildDetail
+      ? mergeCurrentChildDirectDetail(thinRouteChildDetails, directCurrentChildDetail)
+      : thinRouteChildDetails;
     const currentChildDetail = routeChildDetails.find((detail) => textOrUndefined(detail.routePlanId) === routeId) ?? null;
 
     logRouteMarkerDataDiagnostics({
@@ -318,7 +343,12 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
       routeGroupChildCount: routeGroupData.routeGroup?.children?.length ?? 0,
       stopCount: currentChildDetail?.stops?.length ?? 0,
       driverCount: driverData.drivers?.length ?? 0,
-      errorCount: (routeGroupData.errors?.length ?? 0) + (driverData.errors?.length ?? 0),
+      errorCount:
+        (routeGroupData.errors?.length ?? 0) +
+        (routePlanData.errors?.length ?? 0) +
+        (driverData.errors?.length ?? 0) +
+        (orderData.errors?.length ?? 0) +
+        (shopTimeZoneData.errors?.length ?? 0),
     });
 
     return {
@@ -329,23 +359,29 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
       stops: currentChildDetail?.stops ?? [],
       errors: [
         ...(routeGroupData.errors ?? []),
+        ...(routePlanData.errors ?? []),
         ...(driverData.errors ?? []),
+        ...(orderData.errors ?? []),
+        ...(shopTimeZoneData.errors ?? []),
       ],
       childRouteDetails: routeChildDetails,
       currentDepartureLocation: departureLocationData.departureLocation,
       drivers: driverData.drivers,
+      ianaTimezone: shopTimeZoneData.ianaTimezone,
       routeGroup: routeGroupData.routeGroup,
+      timezoneAbbreviation: shopTimeZoneData.timezoneAbbreviation,
     };
   }
 
   const primaryDataStartedAt = getRouteDetailPerfNow();
-  const [routePlanData, departureLocationData, driverData, orderData] = await Promise.all([
+  const [routePlanData, departureLocationData, driverData, orderData, shopTimeZoneData] = await Promise.all([
     fetchDeliveryRoutePlanDetail(request, routeId, {
       cacheKey: shopifyShopCacheKey,
     }),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
     fetchDeliveryDrivers(request, {}),
     fetchDeliveryOrders(request, {}, { cacheKey: shopifyShopCacheKey }),
+    fetchShopifyShopTimeZone(admin, { cacheKey: shopifyShopCacheKey }),
   ]);
   const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
   const routeGroupId = textOrUndefined(routePlanData.routePlan?.routeGroupingChild?.groupingId);
@@ -358,7 +394,10 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     routePlan: routePlanData.routePlan,
     routePlanId: routePlanData.routePlan?.id ?? routeId,
     routeStopPoints: routePlanData.routeStopPoints ?? [],
-    stops: attachDeliveryOrderItemsToStops(routePlanData.stops ?? [], buildDeliveryOrderLookup(orderData.orders)),
+    stops: attachDeliveryOrderFieldsToStops(
+      attachDeliveryOrderItemsToStops(routePlanData.stops ?? [], buildDeliveryOrderLookup(orderData.orders)),
+      orderData.orders,
+    ),
   };
   const routeChildDetails = routeGroupData.routeGroup
     ? mergeRouteGroupChildDetail(
@@ -386,7 +425,9 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     errorCount:
       (routePlanData.errors?.length ?? 0) +
       (routeGroupData.errors?.length ?? 0) +
-      (driverData.errors?.length ?? 0),
+      (driverData.errors?.length ?? 0) +
+      (orderData.errors?.length ?? 0) +
+      (shopTimeZoneData.errors?.length ?? 0),
   });
 
   return {
@@ -397,11 +438,15 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
       ...(routePlanData.errors ?? []),
       ...(routeGroupData.errors ?? []),
       ...(driverData.errors ?? []),
+      ...(orderData.errors ?? []),
+      ...(shopTimeZoneData.errors ?? []),
     ],
     childRouteDetails: routeChildDetails,
     currentDepartureLocation: departureLocationData.departureLocation,
     drivers: driverData.drivers,
+    ianaTimezone: shopTimeZoneData.ianaTimezone,
     routeGroup: routeGroupData.routeGroup,
+    timezoneAbbreviation: shopTimeZoneData.timezoneAbbreviation,
   };
 }
 

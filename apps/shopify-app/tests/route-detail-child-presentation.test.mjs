@@ -1,0 +1,161 @@
+/* eslint-env node */
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import test from "node:test";
+
+import {
+  CHILD_ROUTE_ORDER_COLUMNS,
+  buildChildRouteOrderRows,
+  formatChildDriveTimeLabel,
+  formatChildEtaLabel,
+  formatChildOrderStatus,
+  formatChildStopTimeLabel,
+  formatStoreLocalOrderDate,
+  isMaterializedChildRouteDetail,
+} from "../app/features/delivery/child-route-detail-presentation.js";
+
+const root = process.cwd();
+const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
+
+test("materialized child route guard only accepts route-plan-backed group children", () => {
+  assert.equal(
+    isMaterializedChildRouteDetail({
+      routePlan: { id: "route-1", routeGroupingChild: { groupingId: "group-1" } },
+      routeGroup: { id: "group-1" },
+    }),
+    true,
+  );
+  assert.equal(isMaterializedChildRouteDetail({ routePlan: null, routeGroup: { id: "group-1" } }), false);
+  assert.equal(isMaterializedChildRouteDetail({ routePlan: { id: "route-1" }, routeGroup: null }), false);
+});
+
+test("child row status mapper is per-order and does not reuse route lifecycle semantics", () => {
+  assert.equal(formatChildOrderStatus("preparing"), "Preparing");
+  assert.equal(formatChildOrderStatus("ready"), "Preparing");
+  assert.equal(formatChildOrderStatus("in_progress"), "In progress");
+  assert.equal(formatChildOrderStatus("completed"), "Completed");
+  assert.equal(formatChildOrderStatus("DRAFT"), "Preparing");
+  assert.equal(formatChildOrderStatus("PUBLISHED"), "Preparing");
+});
+
+test("child row date and ETA formatting uses store-local time and dynamic timezone abbreviation", () => {
+  assert.equal(
+    formatStoreLocalOrderDate("2026-06-30T18:20:00.000Z", "America/New_York"),
+    "06.30 14:20",
+  );
+  assert.equal(
+    formatChildEtaLabel("2026-01-15T16:00:00.000Z", "America/New_York", "ET"),
+    "11:00 EST",
+  );
+  assert.equal(
+    formatChildEtaLabel("2026-07-15T16:00:00.000Z", "America/New_York", "ET"),
+    "12:00 EDT",
+  );
+});
+
+test("child route compact metrics use read-only drive and stop labels", () => {
+  assert.equal(formatChildDriveTimeLabel(960, 7400), "16m · 7.4km");
+  assert.equal(formatChildDriveTimeLabel(60, 80), "1m · 80m");
+  assert.equal(formatChildStopTimeLabel(5), "5m");
+});
+
+test("child order rows follow actual child sequence and use delivery serviceType only", () => {
+  const rows = buildChildRouteOrderRows(
+    [
+      {
+        sequence: 2,
+        sourceSequence: 1,
+        orderName: "#1002",
+        status: "completed",
+        orderCreatedAt: "2026-06-30T18:20:00.000Z",
+        estimatedArrivalAt: "2026-07-15T16:00:00.000Z",
+        durationFromPreviousSeconds: 960,
+        distanceFromPreviousMeters: 7400,
+        serviceMinutes: 5,
+        recipientName: "Second Customer",
+        addressLabel: "2 Test St",
+        lineItems: [{ title: "Soup", quantity: 2 }],
+        serviceType: "EVENING_DELIVERY",
+        paymentMethodTitle: "Visa",
+        attributes: [{ key: "Gate", value: "1234" }],
+      },
+      {
+        sequence: 1,
+        sourceSequence: 2,
+        orderName: "#1001",
+        deliveryStatus: "ready",
+        orderCreatedAt: "2026-06-30T17:20:00.000Z",
+        recipientName: "First Customer",
+        addressLabel: "1 Test St",
+        serviceType: "MORNING_DELIVERY",
+        paymentMethodTitle: "Cash",
+      },
+    ],
+    { ianaTimezone: "America/New_York", timezoneAbbreviation: "ET" },
+  );
+
+  assert.deepEqual(rows.map((row) => row.order), ["#1001", "#1002"]);
+  assert.deepEqual(rows.map((row) => row.stop), [1, 2]);
+  assert.deepEqual(rows.map((row) => row.status), ["Preparing", "Completed"]);
+  assert.equal(rows[1].orderDate, "06.30 14:20");
+  assert.equal(rows[1].eta, "12:00 EDT");
+  assert.equal(rows[1].driveTime, "16m · 7.4km");
+  assert.equal(rows[1].stopTime, "5m");
+  assert.equal(rows[1].customer, "Second Customer");
+  assert.equal(rows[1].itemsSummary, "2 items");
+  assert.equal(rows[1].method, "EVENING_DELIVERY");
+  assert.notEqual(rows[1].method, "Visa");
+  assert.equal(rows[1].attributesSummary, "1 attr");
+  assert.match(rows[1].attributesDetail, /Gate: 1234/);
+});
+
+test("child order rows preserve flattened address strings from route stop normalization", () => {
+  const [row] = buildChildRouteOrderRows([
+    {
+      sequence: 1,
+      orderName: "#1219",
+      address: "1219 Flat Address Rd, Seoul",
+    },
+  ]);
+
+  assert.equal(row.address, "1219 Flat Address Rd, Seoul");
+});
+
+test("child order table columns are exact and excluded columns stay out of the child branch", () => {
+  assert.deepEqual(CHILD_ROUTE_ORDER_COLUMNS.map((column) => column.label), [
+    "Stop",
+    "Order",
+    "Status",
+    "Order date",
+    "Address",
+    "ETA",
+    "Drive time",
+    "Stop time",
+    "Customer",
+    "Items",
+    "Method",
+    "Attributes",
+  ]);
+
+  assert.match(routeDetailSource, /aria-label="Child route order stops"/);
+  assert.match(routeDetailSource, /CHILD_ROUTE_ORDER_COLUMNS\.map\(\(column\) =>/);
+  assert.match(routeDetailSource, /childRouteOrderRows\.map\(\(row\) =>/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Open Shopify order"/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Remove order from route"/);
+});
+
+test("child timeline is scrollable with nonsticky Start and End units and keeps explicit Save wiring", () => {
+  assert.match(routeDetailSource, /const childRouteTimelineStopUnitStyle = \{/);
+  assert.match(routeDetailSource, /minWidth: "73px"/);
+  assert.match(routeDetailSource, /minHeight: "48px"/);
+  assert.match(routeDetailSource, /overflowX: "auto"/);
+  assert.match(routeDetailSource, /childRouteTimelineEndStyle/);
+  assert.match(routeDetailSource, />End<\/span>/);
+  assert.match(routeDetailSource, /childRouteTimelineOrderLabelStyle/);
+  assert.match(routeDetailSource, /<span style=\{childRouteTimelineOrderLabelStyle\}>\{stop\.order\}<\/span>/);
+  assert.doesNotMatch(routeDetailSource, /position: "sticky"/);
+  assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
+  assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraft\}/);
+  assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
+});

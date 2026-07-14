@@ -23,6 +23,10 @@ const serviceErrorsSource = readFileSync(
   join(root, "app/features/service-errors.js"),
   "utf8",
 );
+const shopTimeZoneSource = readFileSync(
+  join(root, "app/features/shopify/shop-timezone.server.js"),
+  "utf8",
+);
 const deliveryOrdersSource = readFileSync(
   join(root, "app/features/delivery/orders.server.js"),
   "utf8",
@@ -585,16 +589,16 @@ test("Orders page refreshes once with a Shopify id_token after a loader token au
 });
 
 test("Orders page uses the Shopify shop timezone as today's delivery cutoff", () => {
-  assert.match(ordersPageSource, /const SHOP_TIME_ZONE_QUERY = `#graphql/);
-  assert.match(ordersPageSource, /shop \{[\s\S]*ianaTimezone[\s\S]*timezoneAbbreviation[\s\S]*\}/);
-  assert.match(ordersPageSource, /const shopTimeZoneCache = new Map\(\)/);
-  assert.match(ordersPageSource, /async function fetchShopifyShopTimeZone\(admin, options = \{\}\) \{/);
-  assert.match(ordersPageSource, /const cacheKey = textOrUndefined\(options\.cacheKey\)/);
-  assert.match(ordersPageSource, /return cached\.promise\.then\(cloneShopTimeZoneResult\)/);
-  assert.match(ordersPageSource, /admin\.graphql\(SHOP_TIME_ZONE_QUERY\)/);
+  assert.match(shopTimeZoneSource, /const SHOP_TIME_ZONE_QUERY = `#graphql/);
+  assert.match(shopTimeZoneSource, /shop \{[\s\S]*ianaTimezone[\s\S]*timezoneAbbreviation[\s\S]*\}/);
+  assert.match(shopTimeZoneSource, /const shopTimeZoneCache = new Map\(\)/);
+  assert.match(shopTimeZoneSource, /export async function fetchShopifyShopTimeZone\(admin, options = \{\}\) \{/);
+  assert.match(shopTimeZoneSource, /const cacheKey = textOrUndefined\(options\.cacheKey\)/);
+  assert.match(shopTimeZoneSource, /return cached\.promise\.then\(cloneShopTimeZoneResult\)/);
+  assert.match(shopTimeZoneSource, /admin\.graphql\(SHOP_TIME_ZONE_QUERY\)/);
   assert.match(ordersPageSource, /fetchShopifyShopTimeZone\(\s*admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\},?\s*\)/);
-  assert.match(ordersPageSource, /function getShopLocalDate\(shopTimeZoneData, date = new Date\(\)\) \{/);
-  assert.match(ordersPageSource, /getLocalDateForTimeZone\(date, shopTimeZoneData\?\.ianaTimezone\)/);
+  assert.match(shopTimeZoneSource, /export function getShopLocalDate\(shopTimeZoneData, date = new Date\(\)\) \{/);
+  assert.match(shopTimeZoneSource, /getLocalDateForTimeZone\(date, shopTimeZoneData\?\.ianaTimezone\)/);
   assert.match(ordersPageSource, /const shopLocalDate = getShopLocalDate\(shopTimeZoneData\)/);
   assert.match(ordersPageSource, /shopLocalDate,/);
   assert.match(ordersPageSource, /shopTimeZone: shopTimeZoneData\.ianaTimezone \?\? null/);
