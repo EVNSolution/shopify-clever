@@ -221,11 +221,12 @@ test("child timeline keeps breathing room and stop digits share a browser-neutra
   assert.doesNotMatch(routeDetailSource, /textBox:/);
 });
 
-test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
+test("Items and Attributes use hover and click disclosures above their trigger", () => {
   assert.match(routeDetailSource, /createPortal/);
   assert.match(routeDetailSource, /position: "fixed"/);
   assert.match(routeDetailSource, /function getChildOrderDisclosurePopoverPosition\(rect, popoverSize = \{\}\)/);
   assert.match(routeDetailSource, /popoverSize\.height \?\? CHILD_ORDER_DISCLOSURE_HEIGHT/);
+  assert.match(routeDetailSource, /const top = Math\.max\([\s\S]*rect\.top - height - CHILD_ORDER_DISCLOSURE_GAP/);
   assert.match(routeDetailSource, /childOrderDisclosurePopoverRef\.current[\s\S]*popoverNode\.offsetHeight[\s\S]*popoverNode\.offsetWidth/);
   assert.match(routeDetailSource, /window\.addEventListener\("scroll", syncChildOrderDisclosurePopover, true\)/);
   assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);

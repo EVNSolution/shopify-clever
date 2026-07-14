@@ -674,13 +674,10 @@ function getChildOrderDisclosurePopoverPosition(rect, popoverSize = {}) {
     Math.max(CHILD_ORDER_DISCLOSURE_EDGE_INSET, rect.left),
     viewportWidth - width - CHILD_ORDER_DISCLOSURE_EDGE_INSET,
   );
-  const belowTop = rect.bottom + CHILD_ORDER_DISCLOSURE_GAP;
-  const top = belowTop + height <= viewportHeight - CHILD_ORDER_DISCLOSURE_EDGE_INSET
-    ? belowTop
-    : Math.max(
-      CHILD_ORDER_DISCLOSURE_EDGE_INSET,
-      rect.top - height - CHILD_ORDER_DISCLOSURE_GAP,
-    );
+  const top = Math.max(
+    CHILD_ORDER_DISCLOSURE_EDGE_INSET,
+    rect.top - height - CHILD_ORDER_DISCLOSURE_GAP,
+  );
 
   return { left, top, width };
 }
