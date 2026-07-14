@@ -184,6 +184,14 @@ test("child timeline renders distinct circular Start and End markers", () => {
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
 });
 
+test("child timeline connectors run only between component centers", () => {
+  assert.match(routeDetailSource, /const childRouteTimelineConnectorStyle = \{/);
+  assert.match(routeDetailSource, /left: "50%"/);
+  assert.match(routeDetailSource, /width: "100%"/);
+  assert.match(routeDetailSource, /aria-hidden="true" style=\{childRouteTimelineConnectorStyle\}/);
+  assert.doesNotMatch(routeDetailSource, /backgroundSize: `calc\(100% - \$\{CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH\}px\) 2px`/);
+});
+
 test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
   assert.match(routeDetailSource, /createPortal/);
   assert.match(routeDetailSource, /position: "fixed"/);

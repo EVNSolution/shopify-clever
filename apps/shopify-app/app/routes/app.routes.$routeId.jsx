@@ -612,10 +612,6 @@ const childRouteTimelineRowsStyle = {
 
 const childRouteTimelineTrackStyle = {
   alignItems: "stretch",
-  backgroundImage: "linear-gradient(var(--route-line-color, #0b84d8), var(--route-line-color, #0b84d8))",
-  backgroundPosition: "center 32px",
-  backgroundRepeat: "no-repeat",
-  backgroundSize: `calc(100% - ${CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH}px) 2px`,
   display: "grid",
   width: "100%",
 };
@@ -652,15 +648,30 @@ function getChildOrderDisclosurePopoverPosition(rect) {
 }
 
 const childRouteTimelineStopUnitStyle = {
+  alignContent: "center",
   alignItems: "center",
   boxSizing: "border-box",
   display: "inline-grid",
   gap: "2px",
+  gridTemplateRows: "14px 20px",
+  isolation: "isolate",
   justifyContent: "center",
   minHeight: "48px",
   minWidth: "73px",
   padding: "3px 4px",
+  position: "relative",
   textAlign: "center",
+};
+
+const childRouteTimelineConnectorStyle = {
+  background: "var(--route-line-color, #0b84d8)",
+  height: "2px",
+  left: "50%",
+  pointerEvents: "none",
+  position: "absolute",
+  top: "31px",
+  width: "100%",
+  zIndex: 0,
 };
 
 const childRouteTimelineEndpointStyle = {
@@ -678,7 +689,9 @@ const childRouteTimelineEndpointMarkerStyle = {
   flex: "0 0 auto",
   height: "20px",
   justifyContent: "center",
+  position: "relative",
   width: "20px",
+  zIndex: 1,
 };
 
 const childRouteTimelineStartMarkerStyle = {
@@ -707,8 +720,10 @@ const childRouteTimelineOrderLabelStyle = {
   lineHeight: 1.1,
   maxWidth: "65px",
   overflow: "hidden",
+  position: "relative",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  zIndex: 1,
 };
 
 const routeLineNameStyle = {
@@ -3751,6 +3766,7 @@ export default function RouteDetailPage() {
                   >
                     <span style={childRouteTimelineEndpointStyle}>
                       <span>Start</span>
+                      <span aria-hidden="true" style={childRouteTimelineConnectorStyle} />
                       {renderChildRouteTimelineStartMarker()}
                     </span>
                     {routeRow.stops.map((stop) => (
@@ -3760,6 +3776,7 @@ export default function RouteDetailPage() {
                         title={stop.order}
                       >
                         <span style={childRouteTimelineOrderLabelStyle}>{stop.order}</span>
+                        <span aria-hidden="true" style={childRouteTimelineConnectorStyle} />
                         <button
                           data-route-timeline-stop-button="true"
                           ref={(node) => setRouteTimelineStopRef(stop.id, node)}
@@ -3775,6 +3792,8 @@ export default function RouteDetailPage() {
                           aria-label={`Show ${stop.order} stop details`}
                           style={{
                             ...routeTimelineStopStyle,
+                            position: "relative",
+                            zIndex: 1,
                             ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
                           }}
                           type="button"
