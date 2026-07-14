@@ -497,19 +497,27 @@ const childRouteOrderRowStyle = {
 };
 
 const childRouteTableStopMarkerStyle = {
+  alignItems: "center",
   background: "var(--route-marker-color, #0b84d8)",
   borderRadius: "999px",
+  boxSizing: "border-box",
   color: "#ffffff",
-  display: "inline-grid",
+  display: "flex",
+  height: "20px",
+  justifyContent: "center",
+  margin: "0 auto",
+  padding: 0,
+  width: "20px",
+};
+
+const childRouteTableStopMarkerTextStyle = {
+  display: "block",
   fontSize: "11px",
   fontWeight: 700,
   fontVariantNumeric: "tabular-nums",
   height: "20px",
-  lineHeight: 1,
-  padding: 0,
-  placeItems: "center",
+  lineHeight: "20px",
   textAlign: "center",
-  verticalAlign: "middle",
   width: "20px",
 };
 
@@ -876,6 +884,11 @@ const routeTimelineStyle = {
   maxWidth: "100%",
   minWidth: 0,
   padding: "8px 8px 0",
+};
+
+const childRouteTimelineStyle = {
+  ...routeTimelineStyle,
+  padding: "8px 8px 16px",
 };
 
 const routeTimelineRowsStyle = {
@@ -1326,6 +1339,7 @@ const childRouteOrderCellStyle = {
 
 const childRouteStopCellStyle = {
   ...childRouteOrderCellStyle,
+  padding: "8px 0",
   textAlign: "center",
 };
 
@@ -3802,7 +3816,7 @@ export default function RouteDetailPage() {
           </section>
 
           {isMaterializedChildRouteDetail ? (
-            <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
+            <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>
               <div style={{ ...childRouteTimelineRowsStyle, minHeight: "48px" }}>
                 {timelineRouteRows.map((routeRow) => (
                   <div
@@ -3886,7 +3900,7 @@ export default function RouteDetailPage() {
                 <tbody>
                   {childRouteOrderRows.map((row) => (
                     <tr key={row.id} style={childRouteOrderRowStyle}>
-                      <td style={childRouteStopCellStyle}><span style={childRouteTableStopMarkerStyle}>{row.stop}</span></td>
+                      <td style={childRouteStopCellStyle}><span style={childRouteTableStopMarkerStyle}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
                       <td style={childRouteOrderCellStyle}>{row.order}</td>
                       <td style={childRouteOrderCellStyle}>{row.status}</td>
                       <td style={childRouteOrderCellStyle}>{row.orderDate}</td>

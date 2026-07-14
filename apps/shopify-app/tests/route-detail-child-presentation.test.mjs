@@ -196,7 +196,7 @@ test("child order stop rows reuse the route color marker and a taller row", () =
   assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{/);
   assert.match(routeDetailSource, /background: "var\(--route-marker-color, #0b84d8\)"/);
   assert.match(routeDetailSource, /const childRouteOrderRowStyle = \{[\s\S]*height: "40px"/);
-  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}>\{row\.stop\}<\/span>/);
+  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span>/);
   assert.match(routeDetailSource, /"--route-marker-color": currentTimelineRouteRow\?\.color \?\? routeLineColor/);
 });
 
@@ -206,8 +206,16 @@ test("child timeline and order table share explicit centered alignment axes", ()
   assert.match(routeDetailSource, /const childRouteTimelineStopMarkerStyle = \{[\s\S]*display: "grid"[\s\S]*placeItems: "center"/);
   assert.match(routeDetailSource, /const childRouteOrderHeaderCellStyle = \{[\s\S]*textAlign: "center"[\s\S]*verticalAlign: "middle"/);
   assert.match(routeDetailSource, /const childRouteOrderCellStyle = \{[\s\S]*textAlign: "center"/);
-  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "inline-grid"[\s\S]*placeItems: "center"[\s\S]*textAlign: "center"/);
+  assert.match(routeDetailSource, /const childRouteStopCellStyle = \{[\s\S]*padding: "8px 0"[\s\S]*textAlign: "center"/);
   assert.match(routeDetailSource, /<th key=\{column\.key\} style=\{childRouteOrderHeaderCellStyle\}>\{column\.label\}<\/th>/);
+});
+
+test("child timeline keeps breathing room and stop digits use an explicit centered line box", () => {
+  assert.match(routeDetailSource, /const childRouteTimelineStyle = \{[\s\S]*padding: "8px 8px 16px"/);
+  assert.match(routeDetailSource, /aria-label="Child route stop timeline"[\s\S]*style=\{childRouteTimelineStyle\}/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "flex"[\s\S]*margin: "0 auto"/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*height: "20px"[\s\S]*lineHeight: "20px"[\s\S]*textAlign: "center"[\s\S]*width: "20px"/);
+  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
 });
 
 test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
