@@ -29,19 +29,13 @@ import {
   roundPerfDuration,
   textOrUndefined,
 } from "./orders-page.shared";
+import {
+  fetchShopifyShopTimeZone,
+  getShopLocalDate,
+} from "../shopify/shop-timezone.server";
 
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
-const SHOP_TIME_ZONE_QUERY = `#graphql
-  query CleverShopTimeZone {
-    shop {
-      ianaTimezone
-      timezoneAbbreviation
-    }
-  }
-`;
-const DEFAULT_SHOP_TIME_ZONE_CACHE_TTL_MS = 30_000;
-const shopTimeZoneCache = new Map();
 
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
@@ -114,85 +108,6 @@ function buildFirstRouteDraftPayload(routeGroup, addedOrderIds = []) {
   ];
 
   return { routes };
-}
-
-async function fetchShopifyShopTimeZone(admin, options = {}) {
-  const cacheKey = textOrUndefined(options.cacheKey);
-  if (!cacheKey) return loadShopifyShopTimeZone(admin);
-
-  const now = Date.now();
-  const cached = shopTimeZoneCache.get(cacheKey);
-  if (cached && cached.expiresAt > now) {
-    return cached.promise.then(cloneShopTimeZoneResult);
-  }
-
-  const cacheEntry = {
-    expiresAt: now + DEFAULT_SHOP_TIME_ZONE_CACHE_TTL_MS,
-    promise: loadShopifyShopTimeZone(admin).then((result) => {
-      if (!result.ianaTimezone && !result.timezoneAbbreviation) {
-        shopTimeZoneCache.delete(cacheKey);
-      }
-
-      return result;
-    }),
-  };
-  shopTimeZoneCache.set(cacheKey, cacheEntry);
-
-  return cloneShopTimeZoneResult(await cacheEntry.promise);
-}
-
-async function loadShopifyShopTimeZone(admin) {
-  try {
-    const response = await admin.graphql(SHOP_TIME_ZONE_QUERY);
-    const payload = await response.json();
-    const shop = payload?.data?.shop;
-
-    return {
-      ianaTimezone: textOrUndefined(shop?.ianaTimezone),
-      timezoneAbbreviation: textOrUndefined(shop?.timezoneAbbreviation),
-    };
-  } catch {
-    return {
-      ianaTimezone: undefined,
-      timezoneAbbreviation: undefined,
-    };
-  }
-}
-
-function cloneShopTimeZoneResult(result) {
-  return { ...result };
-}
-
-function getLocalDateForTimeZone(date, timeZone) {
-  if (!timeZone) return undefined;
-
-  try {
-    const parts = new Intl.DateTimeFormat("en-CA", {
-      day: "2-digit",
-      month: "2-digit",
-      timeZone,
-      year: "numeric",
-    }).formatToParts(date);
-    const partMap = Object.fromEntries(
-      parts
-        .filter((part) => part.type !== "literal")
-        .map((part) => [part.type, part.value]),
-    );
-
-    if (!partMap.year || !partMap.month || !partMap.day) return undefined;
-
-    return `${partMap.year}-${partMap.month}-${partMap.day}`;
-  } catch {
-    return undefined;
-  }
-}
-
-function getShopLocalDate(shopTimeZoneData, date = new Date()) {
-  return (
-    getLocalDateForTimeZone(date, shopTimeZoneData?.ianaTimezone) ??
-    getLocalDateForTimeZone(date, "UTC") ??
-    date.toISOString().slice(0, 10)
-  );
 }
 
 export const action = async ({ request }) => {
