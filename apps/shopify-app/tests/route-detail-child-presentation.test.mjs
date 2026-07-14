@@ -106,7 +106,12 @@ test("child order rows follow actual child sequence and use delivery serviceType
   assert.equal(rows[1].itemsSummary, "2 items");
   assert.equal(rows[1].method, "EVENING_DELIVERY");
   assert.notEqual(rows[1].method, "Visa");
-  assert.equal(rows[1].attributesSummary, "1 attr");
+  assert.equal(rows[1].attributesSummary, "1");
+  assert.deepEqual(rows[1].attributes[0], {
+    key: "Gate",
+    label: "Gate: 1234",
+    value: "1234",
+  });
   assert.match(rows[1].attributesDetail, /Gate: 1234/);
 });
 
@@ -145,11 +150,30 @@ test("child order table columns are exact and excluded columns stay out of the c
   assert.doesNotMatch(routeDetailSource, /aria-label="Remove order from route"/);
 });
 
-test("child timeline is scrollable with nonsticky Start and End units and keeps explicit Save wiring", () => {
+test("child timeline precedes the table and enforces explicit responsive minimum spacing", () => {
+  const timelineIndex = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
+  const tableIndex = routeDetailSource.indexOf('aria-label="Child route order stops"');
+
+  assert.notEqual(timelineIndex, -1);
+  assert.notEqual(tableIndex, -1);
+  assert.ok(timelineIndex < tableIndex);
+  assert.match(routeDetailSource, /const CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH = 73;/);
+  assert.match(routeDetailSource, /function getChildRouteTimelineTrackStyle\(stopCount\)/);
+  assert.match(routeDetailSource, /minWidth: `\$\{unitCount \* CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH\}px`/);
   assert.match(routeDetailSource, /const childRouteTimelineStopUnitStyle = \{/);
   assert.match(routeDetailSource, /minWidth: "73px"/);
   assert.match(routeDetailSource, /minHeight: "48px"/);
+  assert.match(routeDetailSource, /maxWidth: "100%"/);
+  assert.match(routeDetailSource, /minWidth: 0/);
   assert.match(routeDetailSource, /overflowX: "auto"/);
+  assert.match(routeDetailSource, /getChildRouteTimelineTrackStyle\(routeRow\.stops\.length\)/);
+});
+
+test("child timeline renders distinct circular Start and End markers", () => {
+  assert.match(routeDetailSource, /function renderChildRouteTimelineStartMarker\(\)/);
+  assert.match(routeDetailSource, /function renderChildRouteTimelineEndMarker\(\)/);
+  assert.match(routeDetailSource, /aria-label="Route start"/);
+  assert.match(routeDetailSource, /aria-label="Route end"/);
   assert.match(routeDetailSource, /childRouteTimelineEndStyle/);
   assert.match(routeDetailSource, />End<\/span>/);
   assert.match(routeDetailSource, /childRouteTimelineOrderLabelStyle/);
@@ -158,4 +182,60 @@ test("child timeline is scrollable with nonsticky Start and End units and keeps 
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraft\}/);
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
+});
+
+test("child timeline connectors run only between component centers", () => {
+  assert.match(routeDetailSource, /const childRouteTimelineConnectorStyle = \{/);
+  assert.match(routeDetailSource, /left: "50%"/);
+  assert.match(routeDetailSource, /width: "100%"/);
+  assert.match(routeDetailSource, /aria-hidden="true" style=\{childRouteTimelineConnectorStyle\}/);
+  assert.doesNotMatch(routeDetailSource, /backgroundSize: `calc\(100% - \$\{CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH\}px\) 2px`/);
+});
+
+test("child order stop rows reuse the route color marker and a taller row", () => {
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{/);
+  assert.match(routeDetailSource, /background: "var\(--route-marker-color, #0b84d8\)"/);
+  assert.match(routeDetailSource, /const childRouteOrderRowStyle = \{[\s\S]*height: "40px"/);
+  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span>/);
+  assert.match(routeDetailSource, /"--route-marker-color": currentTimelineRouteRow\?\.color \?\? routeLineColor/);
+});
+
+test("child timeline and order table share explicit centered alignment axes", () => {
+  assert.match(routeDetailSource, /const childRouteTimelineStopUnitStyle = \{[\s\S]*justifyItems: "center"[\s\S]*width: "100%"/);
+  assert.match(routeDetailSource, /const childRouteTimelineOrderLabelStyle = \{[\s\S]*textAlign: "center"[\s\S]*width: "100%"/);
+  assert.match(routeDetailSource, /const childRouteTimelineStopMarkerStyle = \{[\s\S]*display: "grid"[\s\S]*placeItems: "center"/);
+  assert.match(routeDetailSource, /const childRouteOrderHeaderCellStyle = \{[\s\S]*textAlign: "center"[\s\S]*verticalAlign: "middle"/);
+  assert.match(routeDetailSource, /const childRouteOrderCellStyle = \{[\s\S]*textAlign: "center"/);
+  assert.match(routeDetailSource, /const childRouteStopCellStyle = \{[\s\S]*padding: "8px 0"[\s\S]*textAlign: "center"/);
+  assert.match(routeDetailSource, /<th key=\{column\.key\} style=\{childRouteOrderHeaderCellStyle\}>\{column\.label\}<\/th>/);
+});
+
+test("child timeline keeps breathing room and stop digits share a browser-neutral optical correction", () => {
+  assert.match(routeDetailSource, /const childRouteTimelineStyle = \{[\s\S]*padding: "8px 8px 16px"/);
+  assert.match(routeDetailSource, /aria-label="Child route stop timeline"[\s\S]*style=\{childRouteTimelineStyle\}/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "flex"[\s\S]*margin: "0 auto"/);
+  assert.match(routeDetailSource, /const routeNumberMarkerGlyphStyle = \{[\s\S]*lineHeight: 1[\s\S]*transform: "translateY\(0\.1em\)"/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "11px"[\s\S]*fontWeight: 700/);
+  assert.match(routeDetailSource, /<span style=\{routeNumberMarkerGlyphStyle\}>\{stop\.stop\}<\/span>/);
+  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
+  assert.doesNotMatch(routeDetailSource, /textBox:/);
+});
+
+test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
+  assert.match(routeDetailSource, /createPortal/);
+  assert.match(routeDetailSource, /position: "fixed"/);
+  assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);
+  assert.match(routeDetailSource, /data-child-order-disclosure-popover="true"/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}/);
+  assert.match(routeDetailSource, /onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /onBlur=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /aria-haspopup="dialog"/);
+  assert.match(routeDetailSource, /event\.key !== "Escape"/);
+  assert.match(routeDetailSource, /childOrderDisclosureCloseButtonRef\.current\?\.focus\(\)/);
+  assert.match(routeDetailSource, /trigger\?\.focus\(\)/);
+  assert.match(routeDetailSource, /renderChildRouteInfoIcon\(\)/);
+  assert.match(routeDetailSource, /\{row\.attributesSummary\}/);
+  assert.match(routeDetailSource, /role=\{activeChildOrderDisclosure\.mode === "pinned" \? "dialog" : "tooltip"\}/);
+  assert.doesNotMatch(routeDetailSource, /childRouteDisclosurePopoverStyle\}>\{row\.(itemsDetail|attributesDetail)\}/);
 });

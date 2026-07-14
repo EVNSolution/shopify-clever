@@ -243,22 +243,23 @@ function getCustomerName(stop) {
 }
 
 function normalizeAttributes(attributes) {
-  if (typeof attributes === "string") return attributes.trim() ? [{ label: attributes.trim() }] : [];
+  if (typeof attributes === "string") {
+    const value = attributes.trim();
+    return value ? [{ key: null, label: value, value }] : [];
+  }
   if (!Array.isArray(attributes)) return [];
   return attributes
     .map((attribute) => {
       const key = firstText(attribute?.key, attribute?.name);
       const value = firstText(attribute?.value);
       const label = key && value ? `${key}: ${value}` : value ?? key;
-      return label ? { label } : null;
+      return label ? { key: key ?? null, label, value: value ?? key ?? null } : null;
     })
     .filter(Boolean);
 }
 
 function formatAttributesSummary(attributes) {
-  if (attributes.length === 0) return EMPTY_LABEL;
-  if (attributes.length === 1) return "1 attr";
-  return `${attributes.length} attrs`;
+  return String(attributes.length);
 }
 
 function getOrderDateSource(stop) {

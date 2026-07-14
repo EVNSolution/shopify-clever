@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { flushSync } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -58,6 +58,11 @@ const ROUTE_TIMELINE_STOP_POPOVER_GAP = 4;
 const ROUTE_TIMELINE_STOP_POPOVER_HEIGHT = 260;
 const ROUTE_TIMELINE_STOP_POPOVER_WIDTH = 320;
 const ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET = 12;
+const CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH = 73;
+const CHILD_ORDER_DISCLOSURE_EDGE_INSET = 12;
+const CHILD_ORDER_DISCLOSURE_GAP = 6;
+const CHILD_ORDER_DISCLOSURE_HEIGHT = 260;
+const CHILD_ORDER_DISCLOSURE_WIDTH = 300;
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -487,6 +492,37 @@ const childRouteOrderColumnWidths = [
   "94px",
 ];
 
+const childRouteOrderRowStyle = {
+  height: "40px",
+};
+
+const childRouteTableStopMarkerStyle = {
+  alignItems: "center",
+  background: "var(--route-marker-color, #0b84d8)",
+  borderRadius: "999px",
+  boxSizing: "border-box",
+  color: "#ffffff",
+  display: "flex",
+  height: "20px",
+  justifyContent: "center",
+  margin: "0 auto",
+  padding: 0,
+  width: "20px",
+};
+
+const routeNumberMarkerGlyphStyle = {
+  display: "block",
+  lineHeight: 1,
+  transform: "translateY(0.1em)",
+};
+
+const childRouteTableStopMarkerTextStyle = {
+  ...routeNumberMarkerGlyphStyle,
+  fontSize: "11px",
+  fontWeight: 700,
+  fontVariantNumeric: "tabular-nums",
+};
+
 const childRouteDisclosureCellStyle = {
   borderBottomColor: "#ececec",
   borderBottomStyle: "solid",
@@ -494,33 +530,45 @@ const childRouteDisclosureCellStyle = {
   color: "#303030",
   fontSize: "14px",
   lineHeight: 1.2,
-  overflow: "visible",
-  padding: "4px",
+  overflow: "hidden",
+  padding: "8px 4px",
   position: "relative",
+  textAlign: "center",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
 };
 
 const childRouteDisclosureButtonStyle = {
+  alignItems: "center",
   background: "transparent",
   border: 0,
+  borderRadius: "5px",
   color: "#303030",
   cursor: "pointer",
   display: "inline-flex",
   fontFamily: "inherit",
-  fontSize: "14px",
+  fontSize: "13px",
   fontWeight: 600,
+  gap: "5px",
+  justifyContent: "center",
   lineHeight: 1.2,
+  margin: "0 auto",
   maxWidth: "100%",
   minWidth: 0,
   overflow: "hidden",
-  padding: 0,
-  textAlign: "left",
-  textDecoration: "underline",
-  textDecorationColor: "#c9cccf",
+  padding: "2px 3px",
+  textAlign: "center",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+};
+
+const childRouteDisclosureInfoIconStyle = {
+  color: "#6d7175",
+  display: "block",
+  flex: "0 0 auto",
+  height: "14px",
+  width: "14px",
 };
 
 const childRouteDisclosurePopoverStyle = {
@@ -531,45 +579,142 @@ const childRouteDisclosurePopoverStyle = {
   color: "#303030",
   display: "grid",
   fontSize: "13px",
-  gap: "6px",
+  gap: "8px",
   left: 0,
   lineHeight: 1.35,
-  maxHeight: "240px",
-  minWidth: "240px",
+  maxHeight: `${CHILD_ORDER_DISCLOSURE_HEIGHT}px`,
   overflowY: "auto",
-  padding: "10px",
-  position: "absolute",
-  top: "calc(100% + 4px)",
-  whiteSpace: "pre-line",
-  zIndex: 40,
+  padding: "12px",
+  position: "fixed",
+  top: 0,
+  width: `${CHILD_ORDER_DISCLOSURE_WIDTH}px`,
+  zIndex: 100020,
+};
+
+const childRouteDisclosurePopoverHeaderStyle = {
+  alignItems: "center",
+  display: "flex",
+  fontSize: "13px",
+  fontWeight: 750,
+  justifyContent: "space-between",
+};
+
+const childRouteDisclosureListStyle = {
+  display: "grid",
+  gap: "6px",
+  listStyle: "none",
+  margin: 0,
+  padding: 0,
+};
+
+const childRouteDisclosureListItemStyle = {
+  alignItems: "start",
+  borderTop: "1px solid #f1f1f1",
+  display: "grid",
+  gap: "8px",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  paddingTop: "6px",
+};
+
+const childRouteDisclosureAttributeStyle = {
+  borderTop: "1px solid #f1f1f1",
+  display: "grid",
+  gap: "3px",
+  gridTemplateColumns: "minmax(72px, auto) minmax(0, 1fr)",
+  margin: 0,
+  paddingTop: "6px",
+};
+
+const childRouteDisclosureAttributeKeyStyle = {
+  color: "#6d7175",
+  fontWeight: 650,
+};
+
+const childRouteDisclosureEmptyStyle = {
+  color: "#6d7175",
 };
 
 const childRouteTimelineRowsStyle = {
   display: "grid",
   gap: "6px",
+  maxWidth: "100%",
+  minWidth: 0,
   overflowX: "auto",
   overflowY: "hidden",
+  width: "100%",
 };
 
 const childRouteTimelineTrackStyle = {
   alignItems: "stretch",
   display: "grid",
-  gridAutoColumns: "minmax(73px, 1fr)",
-  gridAutoFlow: "column",
-  minWidth: "max-content",
   width: "100%",
 };
 
+function getChildRouteTimelineTrackStyle(stopCount) {
+  const unitCount = Math.max(2, Number(stopCount) + 2);
+  return {
+    ...childRouteTimelineTrackStyle,
+    gridTemplateColumns: `repeat(${unitCount}, minmax(${CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH}px, 1fr))`,
+    minWidth: `${unitCount * CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH}px`,
+  };
+}
+
+function getChildOrderDisclosurePopoverPosition(rect) {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = Math.min(
+    CHILD_ORDER_DISCLOSURE_WIDTH,
+    viewportWidth - CHILD_ORDER_DISCLOSURE_EDGE_INSET * 2,
+  );
+  const left = Math.min(
+    Math.max(CHILD_ORDER_DISCLOSURE_EDGE_INSET, rect.left),
+    viewportWidth - width - CHILD_ORDER_DISCLOSURE_EDGE_INSET,
+  );
+  const belowTop = rect.bottom + CHILD_ORDER_DISCLOSURE_GAP;
+  const top = belowTop + CHILD_ORDER_DISCLOSURE_HEIGHT <= viewportHeight - CHILD_ORDER_DISCLOSURE_EDGE_INSET
+    ? belowTop
+    : Math.max(
+      CHILD_ORDER_DISCLOSURE_EDGE_INSET,
+      rect.top - CHILD_ORDER_DISCLOSURE_HEIGHT - CHILD_ORDER_DISCLOSURE_GAP,
+    );
+
+  return { left, top, width };
+}
+
 const childRouteTimelineStopUnitStyle = {
+  alignContent: "center",
   alignItems: "center",
   boxSizing: "border-box",
-  display: "inline-grid",
+  display: "grid",
   gap: "2px",
-  justifyContent: "center",
+  gridTemplateRows: "14px 20px",
+  isolation: "isolate",
+  justifyItems: "center",
   minHeight: "48px",
   minWidth: "73px",
   padding: "3px 4px",
+  position: "relative",
   textAlign: "center",
+  width: "100%",
+};
+
+const childRouteTimelineStopMarkerStyle = {
+  display: "grid",
+  fontVariantNumeric: "tabular-nums",
+  justifySelf: "center",
+  lineHeight: 1,
+  placeItems: "center",
+};
+
+const childRouteTimelineConnectorStyle = {
+  background: "var(--route-line-color, #0b84d8)",
+  height: "2px",
+  left: "50%",
+  pointerEvents: "none",
+  position: "absolute",
+  top: "31px",
+  width: "100%",
+  zIndex: 0,
 };
 
 const childRouteTimelineEndpointStyle = {
@@ -579,8 +724,35 @@ const childRouteTimelineEndpointStyle = {
   fontWeight: 700,
 };
 
+const childRouteTimelineEndpointMarkerStyle = {
+  alignItems: "center",
+  borderRadius: "999px",
+  boxSizing: "border-box",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  height: "20px",
+  justifyContent: "center",
+  position: "relative",
+  width: "20px",
+  zIndex: 1,
+};
+
+const childRouteTimelineStartMarkerStyle = {
+  ...childRouteTimelineEndpointMarkerStyle,
+  background: "#0f8f72",
+  color: "#ffffff",
+};
+
 const childRouteTimelineEndStyle = {
   ...childRouteTimelineEndpointStyle,
+};
+
+const childRouteTimelineEndMarkerStyle = {
+  ...childRouteTimelineEndpointMarkerStyle,
+  backgroundColor: "#ffffff",
+  backgroundImage: "conic-gradient(#202223 25%, #ffffff 0 50%, #202223 0 75%, #ffffff 0)",
+  backgroundSize: "6px 6px",
+  border: "1px solid #202223",
 };
 
 const childRouteTimelineOrderLabelStyle = {
@@ -591,8 +763,12 @@ const childRouteTimelineOrderLabelStyle = {
   lineHeight: 1.1,
   maxWidth: "65px",
   overflow: "hidden",
+  position: "relative",
+  textAlign: "center",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  width: "100%",
+  zIndex: 1,
 };
 
 const routeLineNameStyle = {
@@ -707,7 +883,14 @@ const routeTimelineStyle = {
   borderTop: "1px solid #ececec",
   display: "grid",
   gap: "6px",
+  maxWidth: "100%",
+  minWidth: 0,
   padding: "8px 8px 0",
+};
+
+const childRouteTimelineStyle = {
+  ...routeTimelineStyle,
+  padding: "8px 8px 16px",
 };
 
 const routeTimelineRowsStyle = {
@@ -1120,6 +1303,12 @@ const routesDetailHeaderCellStyle = {
   whiteSpace: "nowrap",
 };
 
+const childRouteOrderHeaderCellStyle = {
+  ...routesDetailHeaderCellStyle,
+  textAlign: "center",
+  verticalAlign: "middle",
+};
+
 const routeStatusHeaderCellStyle = {
   ...routesDetailHeaderCellStyle,
   textAlign: "center",
@@ -1142,6 +1331,18 @@ const routesDetailCellStyle = {
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
+};
+
+const childRouteOrderCellStyle = {
+  ...routesDetailCellStyle,
+  padding: "8px 4px",
+  textAlign: "center",
+};
+
+const childRouteStopCellStyle = {
+  ...childRouteOrderCellStyle,
+  padding: "8px 0",
+  textAlign: "center",
 };
 
 const routeStatusCellStyle = {
@@ -1921,6 +2122,29 @@ function renderRouteTimelineStartIcon() {
   );
 }
 
+function renderChildRouteTimelineStartMarker() {
+  return (
+    <span aria-label="Route start" role="img" style={childRouteTimelineStartMarkerStyle}>
+      <svg aria-hidden="true" style={routeTimelineStartIconStyle} viewBox="0 0 20 20">
+        <path d="m10 2.8 2.2 4.45 4.9.72-3.55 3.46.84 4.88L10 14l-4.39 2.31.84-4.88L2.9 7.97l4.9-.72L10 2.8Z" />
+      </svg>
+    </span>
+  );
+}
+
+function renderChildRouteTimelineEndMarker() {
+  return <span aria-label="Route end" role="img" style={childRouteTimelineEndMarkerStyle} />;
+}
+
+function renderChildRouteInfoIcon() {
+  return (
+    <svg aria-hidden="true" fill="none" style={childRouteDisclosureInfoIconStyle} viewBox="0 0 16 16">
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.5" />
+      <path d="M8 7.25v3.5M8 5.1h.01" stroke="currentColor" strokeLinecap="round" strokeWidth="1.5" />
+    </svg>
+  );
+}
+
 export default function RouteDetailPage() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -2010,6 +2234,9 @@ export default function RouteDetailPage() {
   const markersRef = useRef([]);
   const routeTimelineStopRefs = useRef(new Map());
   const routeTimelineStopPopoverRef = useRef(null);
+  const childOrderDisclosureCloseTimerRef = useRef(null);
+  const childOrderDisclosureCloseButtonRef = useRef(null);
+  const childOrderDisclosureTriggerRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
   const routeTimelineDragSnapshotRef = useRef(null);
   const routeTimelineDropCommittedRef = useRef(false);
@@ -2094,6 +2321,9 @@ export default function RouteDetailPage() {
   const childRouteOrderRows = isMaterializedChildRouteDetail
     ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { ianaTimezone, timezoneAbbreviation })
     : [];
+  const activeChildOrderDisclosureRow = activeChildOrderDisclosure
+    ? childRouteOrderRows.find((row) => row.id === activeChildOrderDisclosure.rowId) ?? null
+    : null;
   const activeRouteTimelineStop = activeRouteTimelineStopPopover
     ? timelineRouteRows.flatMap((routeRow) => routeRow.stops).find((stop) => stop.id === activeRouteTimelineStopPopover.stopId)
     : null;
@@ -2468,9 +2698,40 @@ export default function RouteDetailPage() {
     ));
   };
 
-  const handleToggleChildOrderDisclosure = (rowId, type) => {
+  const cancelChildOrderDisclosureClose = () => {
+    if (childOrderDisclosureCloseTimerRef.current == null) return;
+    window.clearTimeout(childOrderDisclosureCloseTimerRef.current);
+    childOrderDisclosureCloseTimerRef.current = null;
+  };
+
+  const getChildOrderDisclosureState = (event, rowId, type, mode) => ({
+    ...getChildOrderDisclosurePopoverPosition(event.currentTarget.getBoundingClientRect()),
+    mode,
+    rowId,
+    type,
+  });
+
+  const handleChildOrderDisclosureMouseEnter = (event, rowId, type) => {
+    cancelChildOrderDisclosureClose();
+    const next = getChildOrderDisclosureState(event, rowId, type, "hover");
+    setActiveChildOrderDisclosure((current) => current?.mode === "pinned" ? current : next);
+  };
+
+  const handleChildOrderDisclosureMouseLeave = () => {
+    cancelChildOrderDisclosureClose();
+    childOrderDisclosureCloseTimerRef.current = window.setTimeout(() => {
+      childOrderDisclosureCloseTimerRef.current = null;
+      setActiveChildOrderDisclosure((current) => current?.mode === "hover" ? null : current);
+    }, 120);
+  };
+
+  const handleToggleChildOrderDisclosure = (event, rowId, type) => {
+    event.stopPropagation();
+    cancelChildOrderDisclosureClose();
+    const next = getChildOrderDisclosureState(event, rowId, type, "pinned");
+    childOrderDisclosureTriggerRef.current = event.currentTarget;
     setActiveChildOrderDisclosure((current) => (
-      current?.rowId === rowId && current.type === type ? null : { rowId, type }
+      current?.mode === "pinned" && current.rowId === rowId && current.type === type ? null : next
     ));
   };
 
@@ -2501,6 +2762,56 @@ export default function RouteDetailPage() {
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
   }, [activeRouteTimelineStopPopover?.mode]);
+
+  useEffect(() => {
+    if (activeChildOrderDisclosure?.mode !== "pinned") return undefined;
+
+    const focusFrame = window.requestAnimationFrame(() => childOrderDisclosureCloseButtonRef.current?.focus());
+    const closeAndRestoreFocus = () => {
+      const trigger = childOrderDisclosureTriggerRef.current;
+      setActiveChildOrderDisclosure(null);
+      window.requestAnimationFrame(() => trigger?.focus());
+    };
+    const handleDocumentPointerDown = (event) => {
+      if (event.target?.closest?.('[data-child-order-disclosure-trigger="true"]')) return;
+      if (event.target?.closest?.('[data-child-order-disclosure-popover="true"]')) return;
+      setActiveChildOrderDisclosure(null);
+    };
+    const handleDocumentKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeAndRestoreFocus();
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("keydown", handleDocumentKeyDown);
+    };
+  }, [activeChildOrderDisclosure?.mode]);
+
+  useEffect(() => {
+    if (!activeChildOrderDisclosure) return undefined;
+
+    const closeDisclosure = (event) => {
+      if (event.type === "scroll" && event.target?.closest?.('[data-child-order-disclosure-popover="true"]')) return;
+      setActiveChildOrderDisclosure(null);
+    };
+    window.addEventListener("resize", closeDisclosure);
+    window.addEventListener("scroll", closeDisclosure, true);
+    return () => {
+      window.removeEventListener("resize", closeDisclosure);
+      window.removeEventListener("scroll", closeDisclosure, true);
+    };
+  }, [activeChildOrderDisclosure]);
+
+  useEffect(() => () => {
+    if (childOrderDisclosureCloseTimerRef.current != null) {
+      window.clearTimeout(childOrderDisclosureCloseTimerRef.current);
+    }
+  }, []);
 
   const restoreRouteTimelineDragPreview = useCallback(() => {
     const snapshot = routeTimelineDragSnapshotRef.current;
@@ -3507,7 +3818,74 @@ export default function RouteDetailPage() {
           </section>
 
           {isMaterializedChildRouteDetail ? (
-            <div style={routesDetailTableFrameStyle}>
+            <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>
+              <div style={{ ...childRouteTimelineRowsStyle, minHeight: "48px" }}>
+                {timelineRouteRows.map((routeRow) => (
+                  <div
+                    key={routeRow.id}
+                    onDragEnter={(event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
+                    onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+                    onDrop={(event) => handleRouteTimelineRouteDrop(event, routeRow)}
+                    style={{
+                      ...getChildRouteTimelineTrackStyle(routeRow.stops.length),
+                      "--route-line-color": softenRouteColor(routeRow.color),
+                      "--route-marker-color": routeRow.color,
+                    }}
+                  >
+                    <span style={childRouteTimelineEndpointStyle}>
+                      <span>Start</span>
+                      <span aria-hidden="true" style={childRouteTimelineConnectorStyle} />
+                      {renderChildRouteTimelineStartMarker()}
+                    </span>
+                    {routeRow.stops.map((stop) => (
+                      <span
+                        key={stop.id}
+                        style={childRouteTimelineStopUnitStyle}
+                        title={stop.order}
+                      >
+                        <span style={childRouteTimelineOrderLabelStyle}>{stop.order}</span>
+                        <span aria-hidden="true" style={childRouteTimelineConnectorStyle} />
+                        <button
+                          data-route-timeline-stop-button="true"
+                          ref={(node) => setRouteTimelineStopRef(stop.id, node)}
+                          draggable
+                          onDragEnd={handleRouteTimelineDragEnd}
+                          onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
+                          onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+                          onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                          onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+                          onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
+                          onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
+                          aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
+                          aria-label={`Show ${stop.order} stop details`}
+                          style={{
+                            ...routeTimelineStopStyle,
+                            ...childRouteTimelineStopMarkerStyle,
+                            position: "relative",
+                            zIndex: 1,
+                            ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
+                          }}
+                          type="button"
+                        ><span style={routeNumberMarkerGlyphStyle}>{stop.stop}</span></button>
+                      </span>
+                    ))}
+                    <span style={childRouteTimelineEndStyle}>
+                      <span>End</span>
+                      {renderChildRouteTimelineEndMarker()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {isMaterializedChildRouteDetail ? (
+            <div
+              style={{
+                ...routesDetailTableFrameStyle,
+                "--route-marker-color": currentTimelineRouteRow?.color ?? routeLineColor,
+              }}
+            >
               <table aria-label="Child route order stops" style={childRouteOrderTableStyle}>
                 <colgroup>
                   {childRouteOrderColumnWidths.map((width, index) => (
@@ -3517,50 +3895,56 @@ export default function RouteDetailPage() {
                 <thead>
                   <tr>
                     {CHILD_ROUTE_ORDER_COLUMNS.map((column) => (
-                      <th key={column.key} style={routesDetailHeaderCellStyle}>{column.label}</th>
+                      <th key={column.key} style={childRouteOrderHeaderCellStyle}>{column.label}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {childRouteOrderRows.map((row) => (
-                    <tr key={row.id}>
-                      <td style={routesDetailCellStyle}>{row.stop}</td>
-                      <td style={routesDetailCellStyle}>{row.order}</td>
-                      <td style={routesDetailCellStyle}>{row.status}</td>
-                      <td style={routesDetailCellStyle}>{row.orderDate}</td>
-                      <td style={routesDetailCellStyle}>{row.address}</td>
-                      <td style={routesDetailCellStyle}>{row.eta}</td>
-                      <td style={routesDetailCellStyle}>{row.driveTime}</td>
-                      <td style={routesDetailCellStyle}>{row.stopTime}</td>
-                      <td style={routesDetailCellStyle}>{row.customer}</td>
-                      <td style={childRouteDisclosureCellStyle}>
+                    <tr key={row.id} style={childRouteOrderRowStyle}>
+                      <td style={childRouteStopCellStyle}><span style={childRouteTableStopMarkerStyle}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
+                      <td style={childRouteOrderCellStyle}>{row.order}</td>
+                      <td style={childRouteOrderCellStyle}>{row.status}</td>
+                      <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
+                      <td style={childRouteOrderCellStyle}>{row.address}</td>
+                      <td style={childRouteOrderCellStyle}>{row.eta}</td>
+                      <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
+                      <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
+                      <td style={childRouteOrderCellStyle}>{row.customer}</td>
+                      <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "items"}
+                          aria-haspopup="dialog"
                           aria-label={`Show ${row.order} item details`}
-                          onClick={() => handleToggleChildOrderDisclosure(row.id, "items")}
+                          data-child-order-disclosure-trigger="true"
+                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.id, "items")}
+                          onBlur={handleChildOrderDisclosureMouseLeave}
+                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
+                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
                           style={childRouteDisclosureButtonStyle}
                           type="button"
                         >
-                          {row.itemsSummary}
+                          <span>{row.itemsSummary}</span>
+                          {renderChildRouteInfoIcon()}
                         </button>
-                        {activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "items" ? (
-                          <div role="tooltip" style={childRouteDisclosurePopoverStyle}>{row.itemsDetail}</div>
-                        ) : null}
                       </td>
-                      <td style={routesDetailCellStyle}>{row.method}</td>
-                      <td style={childRouteDisclosureCellStyle}>
+                      <td style={childRouteOrderCellStyle}>{row.method}</td>
+                      <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "attributes"}
+                          aria-haspopup="dialog"
                           aria-label={`Show ${row.order} attributes`}
-                          onClick={() => handleToggleChildOrderDisclosure(row.id, "attributes")}
+                          data-child-order-disclosure-trigger="true"
+                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.id, "attributes")}
+                          onBlur={handleChildOrderDisclosureMouseLeave}
+                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
+                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
                           style={childRouteDisclosureButtonStyle}
                           type="button"
                         >
-                          {row.attributesSummary}
+                          <span>{row.attributesSummary}</span>
+                          {renderChildRouteInfoIcon()}
                         </button>
-                        {activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "attributes" ? (
-                          <div role="tooltip" style={childRouteDisclosurePopoverStyle}>{row.attributesDetail}</div>
-                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -3653,55 +4037,8 @@ export default function RouteDetailPage() {
             </div>
           )}
 
-          <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
-            {isMaterializedChildRouteDetail ? (
-              <div style={{ ...childRouteTimelineRowsStyle, minHeight: "48px" }}>
-                {timelineRouteRows.map((routeRow) => (
-                  <div
-                    key={routeRow.id}
-                    onDragEnter={(event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
-                    onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                    onDrop={(event) => handleRouteTimelineRouteDrop(event, routeRow)}
-                    style={{
-                      ...childRouteTimelineTrackStyle,
-                      "--route-line-color": softenRouteColor(routeRow.color),
-                      "--route-marker-color": routeRow.color,
-                    }}
-                  >
-                    <span style={childRouteTimelineEndpointStyle}>Start</span>
-                    {routeRow.stops.map((stop) => (
-                      <span
-                        key={stop.id}
-                        style={childRouteTimelineStopUnitStyle}
-                        title={stop.order}
-                      >
-                        <span style={childRouteTimelineOrderLabelStyle}>{stop.order}</span>
-                        <button
-                          data-route-timeline-stop-button="true"
-                          ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                          draggable
-                          onDragEnd={handleRouteTimelineDragEnd}
-                          onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
-                          onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                          onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
-                          onClick={(event) => handleRouteTimelineStopClick(event, stop)}
-                          onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
-                          onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
-                          aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
-                          aria-label={`Show ${stop.order} stop details`}
-                          style={{
-                            ...routeTimelineStopStyle,
-                            ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
-                          }}
-                          type="button"
-                        >{stop.stop}</button>
-                      </span>
-                    ))}
-                    <span style={childRouteTimelineEndStyle}>End</span>
-                  </div>
-                ))}
-              </div>
-            ) : (
+          {!isMaterializedChildRouteDetail ? (
+            <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
               <>
                 <div style={{ ...routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight }}>
                   {timelineRouteRows.map((routeRow) => (
@@ -3757,7 +4094,8 @@ export default function RouteDetailPage() {
                   <div style={routeTimelineDropHintStyle}>Drop orders here to remove them from the route</div>
                 </div>
               </>
-            )}
+            </section>
+          ) : null}
             {activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
               <>
                 <div
@@ -3804,7 +4142,64 @@ export default function RouteDetailPage() {
                 </div>
               </>
             ) : null}
-          </section>
+          {activeChildOrderDisclosure && activeChildOrderDisclosureRow && typeof document !== "undefined" ? createPortal(
+            <div
+              data-child-order-disclosure-popover="true"
+              onMouseEnter={cancelChildOrderDisclosureClose}
+              onMouseLeave={handleChildOrderDisclosureMouseLeave}
+              role={activeChildOrderDisclosure.mode === "pinned" ? "dialog" : "tooltip"}
+              aria-label={`${activeChildOrderDisclosure.type === "items" ? "Items" : "Attributes"} for ${activeChildOrderDisclosureRow.order}`}
+              style={{
+                ...childRouteDisclosurePopoverStyle,
+                transform: `translate3d(${Math.round(activeChildOrderDisclosure.left)}px, ${Math.round(activeChildOrderDisclosure.top)}px, 0)`,
+                width: `${Math.round(activeChildOrderDisclosure.width)}px`,
+              }}
+            >
+              <div style={childRouteDisclosurePopoverHeaderStyle}>
+                <span>{activeChildOrderDisclosure.type === "items" ? "Items" : "Attributes"} · {activeChildOrderDisclosureRow.order}</span>
+                {activeChildOrderDisclosure.mode === "pinned" ? (
+                  <button
+                    aria-label="Close order detail"
+                    onClick={() => {
+                      const trigger = childOrderDisclosureTriggerRef.current;
+                      setActiveChildOrderDisclosure(null);
+                      window.requestAnimationFrame(() => trigger?.focus());
+                    }}
+                    ref={childOrderDisclosureCloseButtonRef}
+                    style={routeTimelineStopPopoverCloseStyle}
+                    type="button"
+                  >×</button>
+                ) : null}
+              </div>
+              {activeChildOrderDisclosure.type === "items" ? (
+                activeChildOrderDisclosureRow.items.length > 0 ? (
+                  <ul style={childRouteDisclosureListStyle}>
+                    {activeChildOrderDisclosureRow.items.map((item, itemIndex) => (
+                      <li key={`${item.name}-${itemIndex}`} style={childRouteDisclosureListItemStyle}>
+                        <span>
+                          {item.name}
+                          {item.sku ? <small style={{ color: "#6d7175", display: "block" }}>SKU {item.sku}</small> : null}
+                        </span>
+                        <strong>×{item.quantity}</strong>
+                      </li>
+                    ))}
+                  </ul>
+                ) : <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.itemsDetail}</span>
+              ) : (
+                activeChildOrderDisclosureRow.attributes.length > 0 ? (
+                  <div style={childRouteDisclosureListStyle}>
+                    {activeChildOrderDisclosureRow.attributes.map((attribute, attributeIndex) => (
+                      <div key={`${attribute.label}-${attributeIndex}`} style={childRouteDisclosureAttributeStyle}>
+                        <span style={childRouteDisclosureAttributeKeyStyle}>{attribute.key ?? "Attribute"}</span>
+                        <span>{attribute.value}</span>
+                      </div>
+                    ))}
+                  </div>
+                ) : <span style={childRouteDisclosureEmptyStyle}>No attributes</span>
+              )}
+            </div>,
+            document.body,
+          ) : null}
         </section>
 
         {isRouteDraftExitDialogOpen ? (
