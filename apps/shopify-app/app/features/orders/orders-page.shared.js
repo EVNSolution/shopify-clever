@@ -15,3 +15,23 @@ export function roundPerfDuration(duration) {
 export function getSafePerformanceNow() {
   return typeof performance === "undefined" ? 0 : performance.now();
 }
+
+export function withPromiseTimeout(promise, timeoutMs, message) {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(
+      () => reject(new Error(message)),
+      timeoutMs,
+    );
+
+    Promise.resolve(promise).then(
+      (value) => {
+        clearTimeout(timeout);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      },
+    );
+  });
+}
