@@ -1240,7 +1240,7 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
 });
 
 test("Orders map shows the Shopify departure location as the route start point", () => {
-  assert.match(ordersPageSource, /const \{ orders, inventories, routeGroups, errors, departureLocation/);
+  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation/);
   assert.match(ordersPageSource, /import \{ createDepartureMarkerElement \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
   assert.match(ordersPageSource, /import \{ addMapPinImage, createMapPinSymbolLayer, createPaletteMapPinImageData \} from "(?:\.\.\/features\/maps|\.\.\/maps)\/map-markers"/);
   assert.match(mapMarkersSource, /function createDepartureMarkerElement\(departureLocation, options = \{\}\)/);
@@ -1384,7 +1384,7 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate \} = loaderData/);
+  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate \} = loaderData/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
@@ -1526,6 +1526,8 @@ test("Shopify order mapping reads only the Customer note and keeps coordinate me
 test("Orders page exposes inventory as an Orders subview with the side-card shortcut", () => {
   assert.match(ordersPageSource, /fetchDeliveryInventories/);
   assert.match(ordersPageSource, />Inventory<\/button>/);
+  assert.match(ordersPageSource, /ordersLoaded: shouldLoadOrders/);
+  assert.match(ordersPageSource, /if \(activeOrdersView === "orders" && !ordersLoaded\)/);
   assert.match(ordersPageSource, /aria-label="Inventory list"/);
   assert.match(ordersPageSource, /Order count/);
   assert.match(ordersPageSource, /Item count/);

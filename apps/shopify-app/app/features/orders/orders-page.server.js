@@ -692,6 +692,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
 
   return {
     orders: mergedOrders,
+    ordersLoaded: shouldLoadOrders,
     inventories: inventoryData.inventories,
     routeGroups: routeGroupData.routeGroups,
     needsSessionTokenRefresh: hasSessionTokenRefreshError([serverOrderData, inventoryData]),
