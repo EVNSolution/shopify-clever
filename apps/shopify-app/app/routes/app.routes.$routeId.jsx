@@ -60,7 +60,7 @@ const ROUTE_TIMELINE_STOP_POPOVER_WIDTH = 320;
 const ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET = 12;
 const CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH = 73;
 const CHILD_ORDER_DISCLOSURE_EDGE_INSET = 12;
-const CHILD_ORDER_DISCLOSURE_GAP = 6;
+const CHILD_ORDER_DISCLOSURE_GAP = 2;
 const CHILD_ORDER_DISCLOSURE_HEIGHT = 260;
 const CHILD_ORDER_DISCLOSURE_WIDTH = 300;
 
@@ -469,6 +469,37 @@ const childRouteHeaderDriverButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const childRouteDepartureControlStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  gap: "4px",
+};
+
+const childRouteDepartureInputStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "6px",
+  color: "#1f1f1f",
+  font: "inherit",
+  fontSize: "13px",
+  height: "26px",
+  padding: "2px 5px",
+  width: "92px",
+};
+
+const childRouteDepartureSaveButtonStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "6px",
+  color: "#303030",
+  cursor: "pointer",
+  font: "inherit",
+  fontSize: "12px",
+  fontWeight: 650,
+  height: "26px",
+  padding: "2px 7px",
+};
+
 const childRouteOrderTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
@@ -659,24 +690,25 @@ function getChildRouteTimelineTrackStyle(stopCount) {
   };
 }
 
-function getChildOrderDisclosurePopoverPosition(rect) {
+function getChildOrderDisclosurePopoverPosition(rect, popoverSize = {}) {
   const viewportWidth = window.innerWidth;
   const viewportHeight = window.innerHeight;
   const width = Math.min(
-    CHILD_ORDER_DISCLOSURE_WIDTH,
+    popoverSize.width ?? CHILD_ORDER_DISCLOSURE_WIDTH,
     viewportWidth - CHILD_ORDER_DISCLOSURE_EDGE_INSET * 2,
+  );
+  const height = Math.min(
+    popoverSize.height ?? CHILD_ORDER_DISCLOSURE_HEIGHT,
+    viewportHeight - CHILD_ORDER_DISCLOSURE_EDGE_INSET * 2,
   );
   const left = Math.min(
     Math.max(CHILD_ORDER_DISCLOSURE_EDGE_INSET, rect.left),
     viewportWidth - width - CHILD_ORDER_DISCLOSURE_EDGE_INSET,
   );
-  const belowTop = rect.bottom + CHILD_ORDER_DISCLOSURE_GAP;
-  const top = belowTop + CHILD_ORDER_DISCLOSURE_HEIGHT <= viewportHeight - CHILD_ORDER_DISCLOSURE_EDGE_INSET
-    ? belowTop
-    : Math.max(
-      CHILD_ORDER_DISCLOSURE_EDGE_INSET,
-      rect.top - CHILD_ORDER_DISCLOSURE_HEIGHT - CHILD_ORDER_DISCLOSURE_GAP,
-    );
+  const top = Math.max(
+    CHILD_ORDER_DISCLOSURE_EDGE_INSET,
+    rect.top - height - CHILD_ORDER_DISCLOSURE_GAP,
+  );
 
   return { left, top, width };
 }
@@ -1428,6 +1460,14 @@ function getRouteStartDateTimeValue(routePlan) {
   const departureTime = textOrUndefined(routePlan?.departureTime);
   if (date && departureTime) return `${date}T${departureTime}`;
   return date ? `${date}T09:00` : "";
+}
+
+function getRouteDepartureTimeValue(routePlan) {
+  const departureTime = textOrUndefined(routePlan?.departureTime);
+  if (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(departureTime ?? "")) return departureTime;
+
+  const dateTime = textOrUndefined(routePlan?.scheduledStartAt ?? routePlan?.startTime);
+  return dateTime?.match(/T(\d{2}:\d{2})/)?.[1] ?? "09:00";
 }
 
 function getRouteStartTimeLabel(value) {
@@ -2198,6 +2238,7 @@ export default function RouteDetailPage() {
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
+  const routeDepartureTimeValue = getRouteDepartureTimeValue(effectiveRoutePlan);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
@@ -2227,6 +2268,7 @@ export default function RouteDetailPage() {
   const addEmptyRouteBranchBusy = false;
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
+  const saveRouteDepartureTimeBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDepartureTime";
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const mapLibraryRef = useRef(null);
@@ -2236,6 +2278,7 @@ export default function RouteDetailPage() {
   const routeTimelineStopPopoverRef = useRef(null);
   const childOrderDisclosureCloseTimerRef = useRef(null);
   const childOrderDisclosureCloseButtonRef = useRef(null);
+  const childOrderDisclosurePopoverRef = useRef(null);
   const childOrderDisclosureTriggerRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
   const routeTimelineDragSnapshotRef = useRef(null);
@@ -2274,10 +2317,14 @@ export default function RouteDetailPage() {
   const [activeChildOrderDisclosure, setActiveChildOrderDisclosure] = useState(null);
   const [activeRouteSelector, setActiveRouteSelector] = useState(null);
   const [routeSelectorQuery, setRouteSelectorQuery] = useState("");
+  const [routeDepartureTimeDraft, setRouteDepartureTimeDraft] = useState(routeDepartureTimeValue);
   const [routePolygonPoints, setRoutePolygonPoints] = useState([]);
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
+  useEffect(() => {
+    setRouteDepartureTimeDraft(routeDepartureTimeValue);
+  }, [effectiveRoutePlan?.id, routeDepartureTimeValue]);
   const currentRouteLineId = effectiveRoutePlan?.id ?? null;
   const currentRouteRowsSource = isRouteGroupDetail || !currentRouteLineId
     ? []
@@ -2559,6 +2606,25 @@ export default function RouteDetailPage() {
     }
   };
 
+  const handleSaveRouteDepartureTime = async () => {
+    if (!effectiveRoutePlan?.id || routeGroupActionBusy || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(routeDepartureTimeDraft)) return;
+
+    try {
+      setRouteGroupClientError(null);
+      const sessionToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("_intent", "saveRouteDepartureTime");
+      formData.set("departureTime", routeDepartureTimeDraft);
+      formData.set("routePlanId", effectiveRoutePlan.id);
+      formData.set("shopifySessionToken", sessionToken);
+      routeActionFetcher.submit(formData, { method: "post" });
+    } catch {
+      setRouteGroupClientError(
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      );
+    }
+  };
+
   const handleSaveRouteLineEditor = () => {
     const title = routeLineDraftTitle.trim() || defaultRouteCandidateTitle;
     const usedColors = new Set(routeRows
@@ -2704,12 +2770,15 @@ export default function RouteDetailPage() {
     childOrderDisclosureCloseTimerRef.current = null;
   };
 
-  const getChildOrderDisclosureState = (event, rowId, type, mode) => ({
-    ...getChildOrderDisclosurePopoverPosition(event.currentTarget.getBoundingClientRect()),
-    mode,
-    rowId,
-    type,
-  });
+  const getChildOrderDisclosureState = (event, rowId, type, mode) => {
+    childOrderDisclosureTriggerRef.current = event.currentTarget;
+    return {
+      ...getChildOrderDisclosurePopoverPosition(event.currentTarget.getBoundingClientRect()),
+      mode,
+      rowId,
+      type,
+    };
+  };
 
   const handleChildOrderDisclosureMouseEnter = (event, rowId, type) => {
     cancelChildOrderDisclosureClose();
@@ -2722,18 +2791,29 @@ export default function RouteDetailPage() {
     childOrderDisclosureCloseTimerRef.current = window.setTimeout(() => {
       childOrderDisclosureCloseTimerRef.current = null;
       setActiveChildOrderDisclosure((current) => current?.mode === "hover" ? null : current);
-    }, 120);
+    }, 40);
   };
 
   const handleToggleChildOrderDisclosure = (event, rowId, type) => {
     event.stopPropagation();
     cancelChildOrderDisclosureClose();
     const next = getChildOrderDisclosureState(event, rowId, type, "pinned");
-    childOrderDisclosureTriggerRef.current = event.currentTarget;
     setActiveChildOrderDisclosure((current) => (
       current?.mode === "pinned" && current.rowId === rowId && current.type === type ? null : next
     ));
   };
+
+  const positionChildOrderDisclosurePopover = useCallback(() => {
+    const triggerNode = childOrderDisclosureTriggerRef.current;
+    const popoverNode = childOrderDisclosurePopoverRef.current;
+    if (!triggerNode || !popoverNode) return;
+
+    const nextPosition = getChildOrderDisclosurePopoverPosition(triggerNode.getBoundingClientRect(), {
+      height: popoverNode.offsetHeight,
+      width: popoverNode.offsetWidth,
+    });
+    popoverNode.style.transform = `translate3d(${Math.round(nextPosition.left)}px, ${Math.round(nextPosition.top)}px, 0)`;
+  }, []);
 
   const activeRouteTimelineStopPopoverId = activeRouteTimelineStopPopover?.stopId;
 
@@ -2795,17 +2875,15 @@ export default function RouteDetailPage() {
   useEffect(() => {
     if (!activeChildOrderDisclosure) return undefined;
 
-    const closeDisclosure = (event) => {
-      if (event.type === "scroll" && event.target?.closest?.('[data-child-order-disclosure-popover="true"]')) return;
-      setActiveChildOrderDisclosure(null);
-    };
-    window.addEventListener("resize", closeDisclosure);
-    window.addEventListener("scroll", closeDisclosure, true);
+    const syncChildOrderDisclosurePopover = () => positionChildOrderDisclosurePopover();
+    positionChildOrderDisclosurePopover();
+    window.addEventListener("resize", syncChildOrderDisclosurePopover);
+    window.addEventListener("scroll", syncChildOrderDisclosurePopover, true);
     return () => {
-      window.removeEventListener("resize", closeDisclosure);
-      window.removeEventListener("scroll", closeDisclosure, true);
+      window.removeEventListener("resize", syncChildOrderDisclosurePopover);
+      window.removeEventListener("scroll", syncChildOrderDisclosurePopover, true);
     };
-  }, [activeChildOrderDisclosure]);
+  }, [activeChildOrderDisclosure, positionChildOrderDisclosurePopover]);
 
   useEffect(() => () => {
     if (childOrderDisclosureCloseTimerRef.current != null) {
@@ -3073,7 +3151,7 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (lastRouteActionIntentRef.current !== "saveRouteDriver") return;
+    if (!["saveRouteDriver", "saveRouteDepartureTime"].includes(lastRouteActionIntentRef.current)) return;
     lastRouteActionIntentRef.current = null;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) revalidator.revalidate();
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state]);
@@ -3690,6 +3768,32 @@ export default function RouteDetailPage() {
                         {renderRouteEditableChevron()}
                       </button>
                     </div>
+                    <div style={routeDetailTitleMetricStyle}>
+                      <span style={routeDetailTitleMetricLabelStyle}>Departure</span>
+                      <span style={childRouteDepartureControlStyle}>
+                        <input
+                          aria-label="Route departure time"
+                          disabled={routeGroupActionBusy}
+                          onChange={(event) => setRouteDepartureTimeDraft(event.currentTarget.value)}
+                          style={childRouteDepartureInputStyle}
+                          type="time"
+                          value={routeDepartureTimeDraft}
+                        />
+                        <button
+                          disabled={routeGroupActionBusy || routeDepartureTimeDraft === (textOrUndefined(effectiveRoutePlan?.departureTime) ?? "")}
+                          onClick={handleSaveRouteDepartureTime}
+                          style={{
+                            ...childRouteDepartureSaveButtonStyle,
+                            ...(routeGroupActionBusy || routeDepartureTimeDraft === (textOrUndefined(effectiveRoutePlan?.departureTime) ?? "")
+                              ? { cursor: "not-allowed", opacity: 0.55 }
+                              : {}),
+                          }}
+                          type="button"
+                        >
+                          {saveRouteDepartureTimeBusy ? "Saving…" : "Save"}
+                        </button>
+                      </span>
+                    </div>
                     {renderRouteHeaderMetric("Updated", routeUpdatedLabel)}
                   </div>
                 ) : (
@@ -3911,7 +4015,7 @@ export default function RouteDetailPage() {
                       <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.customer}</td>
-                      <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
+                      <td style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "items"}
                           aria-haspopup="dialog"
@@ -3921,6 +4025,7 @@ export default function RouteDetailPage() {
                           onBlur={handleChildOrderDisclosureMouseLeave}
                           onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
                           onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
+                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
                           style={childRouteDisclosureButtonStyle}
                           type="button"
                         >
@@ -3929,7 +4034,7 @@ export default function RouteDetailPage() {
                         </button>
                       </td>
                       <td style={childRouteOrderCellStyle}>{row.method}</td>
-                      <td onMouseLeave={handleChildOrderDisclosureMouseLeave} style={childRouteDisclosureCellStyle}>
+                      <td style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "attributes"}
                           aria-haspopup="dialog"
@@ -3939,6 +4044,7 @@ export default function RouteDetailPage() {
                           onBlur={handleChildOrderDisclosureMouseLeave}
                           onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
                           onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
+                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
                           style={childRouteDisclosureButtonStyle}
                           type="button"
                         >
@@ -4147,6 +4253,7 @@ export default function RouteDetailPage() {
               data-child-order-disclosure-popover="true"
               onMouseEnter={cancelChildOrderDisclosureClose}
               onMouseLeave={handleChildOrderDisclosureMouseLeave}
+              ref={childOrderDisclosurePopoverRef}
               role={activeChildOrderDisclosure.mode === "pinned" ? "dialog" : "tooltip"}
               aria-label={`${activeChildOrderDisclosure.type === "items" ? "Items" : "Attributes"} for ${activeChildOrderDisclosureRow.order}`}
               style={{

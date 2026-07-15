@@ -12,6 +12,7 @@ import {
   assignDeliveryRoutePlanDriver,
   deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
+  updateDeliveryRoutePlanDepartureTime,
 } from "./route-plans.server";
 import {
   firstArray,
@@ -480,6 +481,18 @@ export const routeDetailAction = async ({ params, request }) => {
       request,
       targetRouteId,
       { driverId },
+      { sessionToken: shopifySessionToken },
+    );
+  }
+
+  if (intent === "saveRouteDepartureTime") {
+    const departureTime = textOrUndefined(formData.get("departureTime"));
+    const targetRouteId = textOrUndefined(formData.get("routePlanId")) ?? routeId;
+
+    return updateDeliveryRoutePlanDepartureTime(
+      request,
+      targetRouteId,
+      { departureTime },
       { sessionToken: shopifySessionToken },
     );
   }

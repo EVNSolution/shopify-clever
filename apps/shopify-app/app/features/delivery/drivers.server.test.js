@@ -6,6 +6,7 @@ import {
   createPendingDeliveryDriver,
   deleteDeliveryDriver,
   fetchDeliveryDrivers,
+  updateDeliveryDriverName,
 } from "./drivers.server.js";
 
 test("creates a pending delivery driver with a plain app download link", async () => {
@@ -132,6 +133,39 @@ test("deletes a delivery driver through the delivery Admin API", async () => {
   assert.equal(calls[0].options.body, undefined);
   assert.deepEqual(result, {
     driverId: "driver id/with spaces",
+    errors: [],
+  });
+});
+
+test("updates a delivery driver name through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+
+  const result = await updateDeliveryDriverName(
+    new Request("https://app.example/app/drivers-vehicles"),
+    "driver id/with spaces",
+    { displayName: "  Mina Kim  " },
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({
+          data: { driver: { displayName: "Mina Kim", id: "driver id/with spaces" } },
+          error: null,
+        });
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/drivers/driver%20id%2Fwith%20spaces");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { displayName: "Mina Kim" });
+  assert.deepEqual(result, {
+    driver: { displayName: "Mina Kim", id: "driver id/with spaces" },
     errors: [],
   });
 });

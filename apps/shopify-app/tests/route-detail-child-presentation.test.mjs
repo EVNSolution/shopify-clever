@@ -17,6 +17,7 @@ import {
 
 const root = process.cwd();
 const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
+const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
 
 test("materialized child route guard only accepts route-plan-backed group children", () => {
   assert.equal(
@@ -221,13 +222,23 @@ test("child timeline keeps breathing room and stop digits share a browser-neutra
   assert.doesNotMatch(routeDetailSource, /textBox:/);
 });
 
-test("Items and Attributes use hover and click disclosures in a fixed portal overlay", () => {
+test("Items and Attributes use hover and click disclosures above their trigger", () => {
+  assert.match(routeDetailSource, /const CHILD_ORDER_DISCLOSURE_GAP = 2;/);
   assert.match(routeDetailSource, /createPortal/);
   assert.match(routeDetailSource, /position: "fixed"/);
+  assert.match(routeDetailSource, /function getChildOrderDisclosurePopoverPosition\(rect, popoverSize = \{\}\)/);
+  assert.match(routeDetailSource, /popoverSize\.height \?\? CHILD_ORDER_DISCLOSURE_HEIGHT/);
+  assert.match(routeDetailSource, /const top = Math\.max\([\s\S]*rect\.top - height - CHILD_ORDER_DISCLOSURE_GAP/);
+  assert.match(routeDetailSource, /childOrderDisclosurePopoverRef\.current[\s\S]*popoverNode\.offsetHeight[\s\S]*popoverNode\.offsetWidth/);
+  assert.match(routeDetailSource, /window\.addEventListener\("scroll", syncChildOrderDisclosurePopover, true\)/);
+  assert.match(routeDetailSource, /setTimeout\([\s\S]*setActiveChildOrderDisclosure[\s\S]*}, 40\);/);
   assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);
+  assert.doesNotMatch(routeDetailSource, /<td onMouseLeave=\{handleChildOrderDisclosureMouseLeave\} style=\{childRouteDisclosureCellStyle\}>/);
   assert.match(routeDetailSource, /data-child-order-disclosure-popover="true"/);
   assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onBlur=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /aria-haspopup="dialog"/);
@@ -238,4 +249,15 @@ test("Items and Attributes use hover and click disclosures in a fixed portal ove
   assert.match(routeDetailSource, /\{row\.attributesSummary\}/);
   assert.match(routeDetailSource, /role=\{activeChildOrderDisclosure\.mode === "pinned" \? "dialog" : "tooltip"\}/);
   assert.doesNotMatch(routeDetailSource, /childRouteDisclosurePopoverStyle\}>\{row\.(itemsDetail|attributesDetail)\}/);
+});
+
+test("materialized child headers save a per-route departure time", () => {
+  assert.match(routeDetailSource, /const \[routeDepartureTimeDraft, setRouteDepartureTimeDraft\] = useState/);
+  assert.match(routeDetailSource, /aria-label="Route departure time"/);
+  assert.match(routeDetailSource, /type="time"/);
+  assert.match(routeDetailSource, /formData\.set\("_intent", "saveRouteDepartureTime"\)/);
+  assert.match(routeDetailSource, /formData\.set\("departureTime", routeDepartureTimeDraft\)/);
+  assert.match(routeDetailSource, /formData\.set\("routePlanId", effectiveRoutePlan\.id\)/);
+  assert.match(routeDetailServerSource, /intent === "saveRouteDepartureTime"/);
+  assert.match(routeDetailServerSource, /updateDeliveryRoutePlanDepartureTime/);
 });

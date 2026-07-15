@@ -33,12 +33,28 @@ test("Drivers table uses compact support columns and separates joined date", () 
   assert.match(source, /<col style=\{\{ width: "14\.4%" \}\} \/>/);
   assert.doesNotMatch(source, /<col style=\{\{ width: "18%" \}\} \/>/);
   assert.match(source, /<col style=\{\{ width: "96px" \}\} \/>/);
-  assert.match(source, /<col style=\{\{ width: "154px" \}\} \/>/);
+  assert.doesNotMatch(source, /<col style=\{\{ width: "154px" \}\} \/>/);
   assert.match(source, /<col style=\{\{ width: "110px" \}\} \/>/);
   assert.match(source, /<th style=\{tableHeaderCellStyle\}>Joined<\/th>/);
   assert.match(source, /<td style=\{tableCellStyle\}>\{driver\.joinedAt\}<\/td>/);
   assert.match(source, /joinedAt: formatDriverTimestamp\(driver\.createdAt\) \?\? "—"/);
   assert.doesNotMatch(source, /<span style=\{\{ color: "#616161", fontSize: "12px" \}\}>\{driver\.lastSeenAt\}<\/span>/);
+});
+
+test("Drivers table exposes a blank-header edit action immediately after the driver name", () => {
+  assert.match(source, /updateDeliveryDriverName/);
+  assert.match(source, /const driverUpdateFetcher = useFetcher\(\)/);
+  assert.match(source, /intent === "updateDriverName"/);
+  assert.match(source, /updateDeliveryDriverName\(request, driverId, \{ displayName \}, \{ sessionToken: shopifySessionToken \}\)/);
+  assert.match(source, /<th aria-label="Edit driver name" style=\{editHeaderCellStyle\}><\/th>/);
+  assert.match(source, /aria-label=\{`Edit \$\{driver\.displayName\} name`\}/);
+  assert.match(source, /<s-icon type="edit"/);
+  assert.match(source, /onClick=\{\(\) => openDriverNameEditor\(driver\)\}/);
+  assert.match(source, /aria-label="Edit driver name" style=\{modalStyle\}/);
+  assert.match(source, /<label[^>]*htmlFor="driver-display-name"/);
+  assert.match(source, /id="driver-display-name"/);
+  assert.match(source, /maxLength=\{80\}/);
+  assert.match(source, /<td colSpan=\{8\}/);
 });
 
 test("Drivers assigned route is informational text, not a clickable route link", () => {
@@ -50,12 +66,12 @@ test("Drivers assigned route is informational text, not a clickable route link",
   assert.doesNotMatch(source, /const routeLinkStyle = \{/);
 });
 
-test("Drivers tab separates operational status from app access state", () => {
+test("Drivers tab keeps app access state internal and places invite actions beside the phone", () => {
   assert.match(driversPageDataSource, /isInvitePending: false/);
   assert.match(driversPageDataSource, /isInvitePending: true/);
   assert.match(source, /const invitePending = authStatusValue === "INVITE_PENDING" \|\| statusValue === "PENDING"/);
   assert.match(source, /status: formatOperationalDriverStatus\(driver\.status, \{ invitePending \}\)/);
-  assert.match(source, /authStatus: invitePending \? "Invite pending" : appLinked \? "App linked" : "Not linked"/);
+  assert.doesNotMatch(source, /authStatus: invitePending \? "Invite pending" : appLinked \? "App linked" : "Not linked"/);
   assert.match(source, /isInvitePending: invitePending/);
   assert.match(source, /isAppLinked: appLinked/);
   assert.match(source, /function canShowDriverInviteActions\(driver\)/);
@@ -63,7 +79,7 @@ test("Drivers tab separates operational status from app access state", () => {
   assert.match(source, /driverDownloadLink: getDriverDownloadLink\(\)/);
   assert.doesNotMatch(source, /https:\/\/clever\.delivery\/driver\/download/);
   assert.match(source, /driver\?\.isInvitePending === true/);
-  assert.match(source, /normalizeSearchText\(driver\?\.authStatus\) === "invite pending"/);
+  assert.doesNotMatch(source, /normalizeSearchText\(driver\?\.authStatus\) === "invite pending"/);
   assert.match(source, /function canShowDriverReloginAction\(driver\)/);
   assert.match(source, /driver\?\.isAppLinked === true && driver\?\.isInvitePending !== true/);
   assert.doesNotMatch(source, /status:\s*invitePending \? "Pending"/);
@@ -72,7 +88,10 @@ test("Drivers tab separates operational status from app access state", () => {
   assert.match(source, /visibleDrivers\.filter\(\(driver\) => normalizeSearchText\(driver\.status\) === "active"\)\.length/);
   assert.doesNotMatch(source, /visibleDrivers\.filter\(\(driver\) => driver\.status !== "Inactive"\)\.length/);
   assert.doesNotMatch(source, /normalizeSearchText\(driver\?\.status\) === "pending"/);
-  assert.match(source, /<td style=\{appAccessCellStyle\}>/);
+  assert.doesNotMatch(source, />App access<\/th>/);
+  assert.doesNotMatch(source, /\{driver\.authStatus\}/);
+  assert.doesNotMatch(source, /"Invite pending"|"App linked"|"Not linked"/);
+  assert.match(source, /<td style=\{appAccessCellStyle\}>\s*<span style=\{appAccessInlineStyle\}>\s*<span>\{driver\.phone\}<\/span>/);
   assert.match(source, /<span style=\{appAccessInlineStyle\}>/);
   assert.match(source, /canShowDriverReloginAction\(driver\) \? \(/);
   assert.match(source, /재로그인/);

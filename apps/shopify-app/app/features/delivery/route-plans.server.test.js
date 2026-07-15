@@ -14,6 +14,7 @@ import {
   getDeliveryApiBaseUrl,
   getShopifySessionBearer,
   updateDeliveryRoutePlanStops,
+  updateDeliveryRoutePlanDepartureTime,
   assignDeliveryRoutePlanDriver,
 } from "./route-plans.server.js";
 
@@ -543,6 +544,36 @@ test("updates route plan stops through the delivery Admin API", async () => {
   assert.equal(result.routePlan.id, "route 1");
   assert.equal(result.stops[0].sequence, 1);
   assert.equal(result.routeStopPoints[0].snapDistanceMeters, 54.16);
+  assert.deepEqual(result.errors, []);
+});
+
+test("updates a child route departure time through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+  const result = await updateDeliveryRoutePlanDepartureTime(
+    new Request("https://app.example/app/routes/route-1"),
+    "route 1",
+    { departureTime: "08:30" },
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({
+          data: { routePlan: { departureTime: "08:30", id: "route 1" } },
+          error: null,
+        });
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route%201/departure-time");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { departureTime: "08:30" });
+  assert.equal(result.routePlan.departureTime, "08:30");
   assert.deepEqual(result.errors, []);
 });
 

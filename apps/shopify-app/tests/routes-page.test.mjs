@@ -145,7 +145,8 @@ test("Routes page keeps copied controls out while using checkbox route selection
   assert.match(routesPageSource, /const singleRouteTableStyle = \{/);
   assert.match(routesPageSource, /minWidth: "996px"/);
   assert.match(routesPageSource, /padding: "7px 8px"/);
-  assert.match(routesPageSource, /padding: "8px 8px"/);
+  assert.match(routesPageSource, /const routeTableCellStyle = \{[\s\S]*padding: "6px 8px"/);
+  assert.match(routesPageSource, /const routeCheckboxCellStyle = \{[\s\S]*padding: "6px 3px"/);
   assert.match(routesPageSource, /<table style=\{singleRouteTableStyle\}>/);
   assert.match(routesPageSource, /<colgroup>/);
   assert.match(routesPageSource, /routeColumnWidths\.map\(\(width, index\) =>/);
@@ -170,6 +171,10 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.doesNotMatch(routesPageSource, />Missing<\/th>/);
   assert.doesNotMatch(routesPageSource, />Created<\/th>/);
   assert.match(routesPageSource, /formatRouteStatus\(route\.status\)/);
+  assert.match(routesPageSource, /const routePublishedBadgeStyle = \{/);
+  assert.match(routesPageSource, /const routeCancelledBadgeStyle = \{/);
+  assert.match(routesPageSource, /case "Published":\s+return routePublishedBadgeStyle/);
+  assert.match(routesPageSource, /case "Cancelled":\s+return routeCancelledBadgeStyle/);
   assert.match(routeListRowsSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
   assert.match(routeListRowsSource, /const routeGroupRows = routeGroupEntries\.map/);
   assert.match(routeListRowsSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
