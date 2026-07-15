@@ -342,9 +342,9 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
   assert.match(ordersPageSource, /select: "2\.5%"/);
   assert.match(ordersPageSource, /name: "64px"/);
-  assert.match(ordersPageSource, /address: "calc\(37% - 64px\)"/);
-  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,\s*\.\.\.SORTABLE_ORDER_COLUMNS\.map/);
-  assert.doesNotMatch(ordersPageSource, /notes: "3%"/);
+  assert.match(ordersPageSource, /notes: "32px"/);
+  assert.match(ordersPageSource, /address: "calc\(37% - 96px\)"/);
+  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.flatMap/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
   assert.match(ordersPageSource, /const checkboxChecked = orderIsPlanned \|\| checkedOrderIdSet\.has\(order\.id\)/);
@@ -356,8 +356,9 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
 
 test("Orders column uses the order number itself as a neutral transparent button area", () => {
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{/);
-  assert.match(ordersPageSource, /width:\s*"auto"/);
-  assert.match(ordersPageSource, /padding:\s*"0 4px"/);
+  assert.match(ordersPageSource, /width:\s*"100%"/);
+  assert.match(ordersPageSource, /padding:\s*0/);
+  assert.match(ordersPageSource, /justifyContent:\s*"center"/);
   assert.match(ordersPageSource, /className="order-number-button"/);
   assert.match(ordersPageSource, /aria-label=\{`View \${order\.name}`\}/);
   assert.match(ordersPageSource, /style=\{orderNumberButtonStyle\}/);
@@ -376,17 +377,15 @@ test("Orders order-number button shows a subtle rounded hover state", () => {
   assert.match(globalCssSource, /background-color:\s*rgba\(0, 0, 0, 0\.06\)/);
 });
 
-test("Orders ID and note keep independent left-right positions while Address stays wide", () => {
+test("Orders ID stays centered while Note uses a separate headerless column", () => {
   assert.match(ordersPageSource, /\{ key: "name", label: "ID" \}/);
-  assert.match(ordersPageSource, /const orderIdCellStyle = \{[\s\S]*?padding:\s*"6px 4px"/);
-  assert.match(ordersPageSource, /const orderIdentityStyle = \{[\s\S]*?display:\s*"grid"[\s\S]*?gridTemplateColumns:\s*"minmax\(0, 1fr\) auto"[\s\S]*?width:\s*"100%"/);
-  assert.match(ordersPageSource, /const orderNoteSlotStyle = \{[\s\S]*?justifySelf:\s*"end"/);
-  assert.match(ordersPageSource, /const orderNumberButtonStyle = \{[\s\S]*?justifySelf:\s*"start"/);
+  assert.match(ordersPageSource, /const noteCellStyle = \{[\s\S]*?textAlign:\s*"center"/);
   assert.match(ordersPageSource, /column\.key !== "name" && columnIndex < SORTABLE_ORDER_COLUMNS\.length - 1/);
   assert.match(ordersPageSource, /const addressCellStyle = \{[\s\S]*?textAlign:\s*"left"/);
-  assert.match(ordersPageSource, /<td style=\{orderIdCellStyle\}>[\s\S]*?className="order-number-button"[\s\S]*?data-order-notes-popover-root="true" style=\{orderNoteSlotStyle\}[\s\S]*?<\/td>\s*<td style=\{deliveryInfoCellStyle\}>/);
+  assert.match(ordersPageSource, /<th key="notes" scope="col" aria-label="Notes" style=\{checkboxHeaderCellStyle\} \/>/);
+  assert.match(ordersPageSource, /<td style=\{tableCellStyle\}>[\s\S]*?className="order-number-button"[\s\S]*?<\/td>\s*<td style=\{noteCellStyle\}>[\s\S]*?data-order-notes-popover-root="true"/);
+  assert.doesNotMatch(ordersPageSource, /const orderIdentityStyle = \{/);
   assert.match(ordersPageSource, /<td style=\{addressCellStyle\}>\{order\.address\}<\/td>/);
-  assert.doesNotMatch(ordersPageSource, /<th key="notes"/);
   assert.match(ordersPageSource, /overflowX:\s*"auto"/);
   assert.match(ordersPageSource, /const \[hoveredNoteOrderId, setHoveredNoteOrderId\] = useState\(null\)/);
   assert.match(ordersPageSource, /const \[pinnedNoteOrderId, setPinnedNoteOrderId\] = useState\(null\)/);
@@ -1424,7 +1423,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /<span style=\{columnResizeHandleLineStyle\} \/>/);
   assert.match(ordersPageSource, /columnIndex < SORTABLE_ORDER_COLUMNS\.length - 1/);
   assert.match(ordersPageSource, /key=\{columnIndex\}/);
-  assert.match(ordersPageSource, /onPointerDown=\{\(event\) => handleColumnResizeStart\(columnIndex \+ 1, event\)\}/);
+  assert.match(ordersPageSource, /onPointerDown=\{\(event\) => handleColumnResizeStart\(columnIndex \+ 1 \+ \(columnIndex > 0 \? 1 : 0\), event\)\}/);
   assert.match(ordersPageSource, /function getTableColumnFitWidth\(tableElement, columnIndex\) \{/);
   assert.match(ordersPageSource, /querySelectorAll\(\s*`thead th:nth-child/);
   assert.match(ordersPageSource, /const handleColumnAutoFit = \(columnIndex, event\) => \{/);
@@ -1434,7 +1433,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /clone\.querySelectorAll\("\*"\)\.forEach/);
   assert.match(ordersPageSource, /clone\.getBoundingClientRect\(\)\.width/);
   assert.doesNotMatch(ordersPageSource, /cell\.scrollWidth/);
-  assert.match(ordersPageSource, /onDoubleClick=\{\(event\) => handleColumnAutoFit\(columnIndex \+ 1, event\)\}/);
+  assert.match(ordersPageSource, /onDoubleClick=\{\(event\) => handleColumnAutoFit\(columnIndex \+ 1 \+ \(columnIndex > 0 \? 1 : 0\), event\)\}/);
   assert.doesNotMatch(ordersPageSource, /handleColumnResizeStart\(0, event\)/);
   assert.match(ordersPageSource, /const tableHeaderButtonStyle = \{[\s\S]*?padding:\s*0/);
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{[\s\S]*?padding:\s*0/);
