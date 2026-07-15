@@ -56,6 +56,7 @@ import { InfoPill } from "../../ui/info-pill";
 import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
 import { TabLayout } from "../../ui/tab-layout";
 import {
+  buildOrderTimelineDetails,
   buildOrdersViewNavigationMetric,
   DEFAULT_ROUTE_PLAN_TITLE,
   getSafePerformanceNow,
@@ -1031,7 +1032,7 @@ const tableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
   fontSize: "13px",
-  minWidth: "960px",
+  minWidth: "1520px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -1171,14 +1172,43 @@ const orderNumberButtonStyle = {
   cursor: "pointer",
   display: "flex",
   font: "inherit",
-  justifyContent: "center",
+  justifyContent: "flex-start",
+  justifySelf: "start",
+  maxWidth: "100%",
   minHeight: "26px",
+  minWidth: 0,
   overflow: "hidden",
-  padding: 0,
+  padding: "0 4px",
   textAlign: "center",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+  width: "auto",
+};
+
+const orderIdCellStyle = {
+  ...tableCellStyle,
+  overflow: "visible",
+  padding: "6px 4px",
+};
+
+const orderIdentityStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "4px",
+  gridTemplateColumns: "minmax(0, 1fr) auto",
+  maxWidth: "100%",
+  minWidth: 0,
   width: "100%",
+};
+
+const orderNoteSlotStyle = {
+  display: "inline-flex",
+  justifySelf: "end",
+};
+
+const addressCellStyle = {
+  ...tableCellStyle,
+  textAlign: "left",
 };
 
 const editablePillButtonStyle = {
@@ -1193,12 +1223,6 @@ const itemCellStyle = {
   ...tableCellStyle,
   overflow: "visible",
   position: "relative",
-};
-
-const noteCellStyle = {
-  ...itemCellStyle,
-  padding: "6px 2px",
-  textAlign: "center",
 };
 
 const itemInfoButtonStyle = {
@@ -1642,10 +1666,6 @@ function formatInfoPillTitle(label, values) {
 function formatInfoDetail(label, value) {
   const text = textOrUndefined(value);
   return text ? `${label}: ${text}` : undefined;
-}
-
-function getOrderOrderedDatePillTitle(order) {
-  return formatInfoPillTitle("Ordered", [order?.orderedDate]);
 }
 
 function getOrderAreaPillDetails(order) {
@@ -2296,6 +2316,7 @@ function OrdersPageContent({ loaderData }) {
   const [searchParams, setSearchParams] = useSearchParams();
   const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
   const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = loaderData;
+  const { deliveryCycle, shopTimeZone } = loaderData;
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
@@ -2652,8 +2673,9 @@ function OrdersPageContent({ loaderData }) {
     };
   }, [syncNotePopover, visibleNoteOrderId]);
 
-  const renderDetailPill = ({ children, details, detailKey, label, tone }) => {
-    if (!isAttentionPillTone(tone) || details.length === 0) {
+  const renderDetailPill = ({ children, details, detailKey, interactive = false, label, tone }) => {
+    const showDetails = details.length > 0 && (interactive || isAttentionPillTone(tone));
+    if (!showDetails) {
       return <InfoPill title="" tone={tone}>{children}</InfoPill>;
     }
 
@@ -4924,7 +4946,7 @@ function OrdersPageContent({ loaderData }) {
                       onChange={toggleAllVisibleOrderChecks}
                     />
                   </th>
-                  {SORTABLE_ORDER_COLUMNS.flatMap((column, columnIndex) => [
+                  {SORTABLE_ORDER_COLUMNS.map((column, columnIndex) => (
                     <th
                       key={column.key}
                       scope="col"
@@ -4941,21 +4963,18 @@ function OrdersPageContent({ loaderData }) {
                           {getSortIndicator(column.key)}
                         </span>
                       </button>
-                      {columnIndex < SORTABLE_ORDER_COLUMNS.length - 1 ? (
+                      {column.key !== "name" && columnIndex < SORTABLE_ORDER_COLUMNS.length - 1 ? (
                         <span
                           aria-hidden="true"
                           style={columnResizeHandleStyle}
-                          onPointerDown={(event) => handleColumnResizeStart(columnIndex + 1 + (columnIndex > 0 ? 1 : 0), event)}
-                          onDoubleClick={(event) => handleColumnAutoFit(columnIndex + 1 + (columnIndex > 0 ? 1 : 0), event)}
+                          onPointerDown={(event) => handleColumnResizeStart(columnIndex + 1, event)}
+                          onDoubleClick={(event) => handleColumnAutoFit(columnIndex + 1, event)}
                         >
                           <span style={columnResizeHandleLineStyle} />
                         </span>
                       ) : null}
-                    </th>,
-                    column.key === "name" ? (
-                      <th key="notes" scope="col" aria-label="Notes" style={checkboxHeaderCellStyle} />
-                    ) : null,
-                  ])}
+                    </th>
+                  ))}
                 </tr>
               </thead>
               <tbody>
@@ -4972,6 +4991,7 @@ function OrdersPageContent({ loaderData }) {
                     label: "Delivery details",
                     tone: getOrderDeliveryPillTone(order),
                   });
+                  const orderedPillDetails = buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone });
                   const statePillDetails = getOrderDeliveryStatePillDetails(order, orderFilterReferenceDate);
                   const paymentPillDetails = getOrderPaymentPillDetails(order);
                   const orderNote = getOrderNote(order);
@@ -4993,64 +5013,69 @@ function OrdersPageContent({ loaderData }) {
                           onChange={() => toggleOrderCheck(order.id)}
                         />
                       </td>
-                      <td style={tableCellStyle}>
-                        <button
-                          type="button"
-                          className="order-number-button"
-                          aria-label={`View ${order.name}`}
-                          style={orderNumberButtonStyle}
-                          onClick={() => handleSelectOrder(order.id)}
-                        >
-                          {order.name}
-                        </button>
-                      </td>
-                      <td style={noteCellStyle}>
-                        {orderNote || customerNote ? (
-                          <span data-order-notes-popover-root="true">
-                            <button
-                              type="button"
-                              aria-expanded={visibleNoteOrderId === order.id}
-                              aria-label={`${visibleNoteOrderId === order.id ? "Hide" : "Show"} notes for ${order.name}`}
-                              style={noteButtonStyle}
-                              onMouseEnter={(event) => openNotePopover(event, order.id)}
-                              onMouseLeave={() => closeHoveredNotePopover(order.id)}
-                              onClick={(event) => togglePinnedNotePopover(event, order.id)}
-                            >
-                              <s-icon type="note" size="base" color="subdued"></s-icon>
-                            </button>
-                            {visibleNoteOrderId === order.id && notePopoverPosition && typeof document !== "undefined" ? createPortal(
-                              <div
-                                ref={notePopoverRef}
-                                data-order-notes-popover-root="true"
-                                role="dialog"
-                                aria-label={`Notes for ${order.name}`}
-                                style={{
-                                  ...notePopoverStyle,
-                                  left: `${Math.round(notePopoverPosition.left)}px`,
-                                  top: `${Math.round(notePopoverPosition.top)}px`,
-                                  transform: "none",
-                                  width: `${Math.round(notePopoverPosition.width)}px`,
-                                }}
+                      <td style={orderIdCellStyle}>
+                        <span style={orderIdentityStyle}>
+                          <button
+                            type="button"
+                            className="order-number-button"
+                            aria-label={`View ${order.name}`}
+                            style={orderNumberButtonStyle}
+                            onClick={() => handleSelectOrder(order.id)}
+                          >
+                            {order.name}
+                          </button>
+                          {orderNote || customerNote ? (
+                            <span data-order-notes-popover-root="true" style={orderNoteSlotStyle}>
+                              <button
+                                type="button"
+                                aria-expanded={visibleNoteOrderId === order.id}
+                                aria-label={`${visibleNoteOrderId === order.id ? "Hide" : "Show"} notes for ${order.name}`}
+                                style={noteButtonStyle}
+                                onMouseEnter={(event) => openNotePopover(event, order.id)}
+                                onMouseLeave={() => closeHoveredNotePopover(order.id)}
+                                onClick={(event) => togglePinnedNotePopover(event, order.id)}
                               >
-                                <div style={itemPopoverTitleStyle}>Order Note</div>
-                                <div style={noteCardStyle}>
-                                  <ul style={noteListStyle}>
-                                    {orderNote ? <li style={noteListItemStyle}>{orderNote}</li> : null}
-                                    {customerNote ? <li style={noteListItemStyle}>{customerNote}</li> : null}
-                                  </ul>
+                                <s-icon type="note" size="base" color="subdued"></s-icon>
+                              </button>
+                              {visibleNoteOrderId === order.id && notePopoverPosition && typeof document !== "undefined" ? createPortal(
+                                <div
+                                  ref={notePopoverRef}
+                                  data-order-notes-popover-root="true"
+                                  role="dialog"
+                                  aria-label={`Notes for ${order.name}`}
+                                  style={{
+                                    ...notePopoverStyle,
+                                    left: `${Math.round(notePopoverPosition.left)}px`,
+                                    top: `${Math.round(notePopoverPosition.top)}px`,
+                                    transform: "none",
+                                    width: `${Math.round(notePopoverPosition.width)}px`,
+                                  }}
+                                >
+                                  <div style={itemPopoverTitleStyle}>Order Note</div>
+                                  <div style={noteCardStyle}>
+                                    <ul style={noteListStyle}>
+                                      {orderNote ? <li style={noteListItemStyle}>{orderNote}</li> : null}
+                                      {customerNote ? <li style={noteListItemStyle}>{customerNote}</li> : null}
+                                    </ul>
+                                  </div>
                                 </div>
-                              </div>
-                            , document.body) : null}
-                          </span>
-                        ) : null}
+                              , document.body) : null}
+                            </span>
+                          ) : null}
+                        </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <InfoPill title={getOrderOrderedDatePillTitle(order)}>
-                          {formatDeliveryValue(order.orderedDate)}
-                        </InfoPill>
+                        {renderDetailPill({
+                          children: formatDeliveryValue(order.orderedDate),
+                          details: orderedPillDetails,
+                          detailKey: `${order.id}:ordered`,
+                          interactive: true,
+                          label: "Ordered timeline",
+                          tone: "neutral",
+                        })}
                       </td>
                       <td style={tableCellStyle}>{order.customer}</td>
-                      <td style={tableCellStyle}>{order.address}</td>
+                      <td style={addressCellStyle}>{order.address}</td>
                       <td style={itemCellStyle}>
                         {getOrderItemCount(order)}
                         <span data-order-items-popover-root="true">
