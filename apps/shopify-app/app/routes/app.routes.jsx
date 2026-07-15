@@ -178,7 +178,7 @@ const routeTableCellStyle = {
   fontSize: "13px",
   lineHeight: 1.35,
   overflow: "hidden",
-  padding: "8px 8px",
+  padding: "6px 8px",
   textOverflow: "ellipsis",
   verticalAlign: "middle",
   whiteSpace: "nowrap",
@@ -202,7 +202,7 @@ const routeNumberCellStyle = {
 const routeCheckboxCellStyle = {
   ...routeTableCellStyle,
   overflow: "visible",
-  padding: "8px 3px",
+  padding: "6px 3px",
   textAlign: "center",
   textOverflow: "clip",
 };
@@ -290,19 +290,25 @@ const routeDisabledActionButtonStyle = {
 };
 
 const routeStatusBadgeStyle = {
-  background: "#eaf4ff",
+  background: "#f1f1f1",
   borderRadius: "999px",
-  color: "#174a7c",
+  color: "#616161",
   display: "inline-flex",
   fontSize: "12px",
   fontWeight: 650,
   padding: "3px 8px",
 };
 
-const routeWaitingBadgeStyle = {
+const routePublishedBadgeStyle = {
   ...routeStatusBadgeStyle,
-  background: "#f1f1f1",
-  color: "#616161",
+  background: "#e3f1df",
+  color: "#205c20",
+};
+
+const routeCancelledBadgeStyle = {
+  ...routeStatusBadgeStyle,
+  background: "#fee9e8",
+  color: "#8e1f0b",
 };
 
 const routesErrorStyle = {
@@ -561,7 +567,14 @@ function filterRouteRows(routeRows, routeFilters) {
 }
 
 function getStatusBadgeStyle(status) {
-  return formatRouteStatus(status) === "DRAFT" ? routeStatusBadgeStyle : routeWaitingBadgeStyle;
+  switch (formatRouteStatus(status)) {
+    case "Published":
+      return routePublishedBadgeStyle;
+    case "Cancelled":
+      return routeCancelledBadgeStyle;
+    default:
+      return routeStatusBadgeStyle;
+  }
 }
 
 function createRouteDetailHref(route, idToken) {
