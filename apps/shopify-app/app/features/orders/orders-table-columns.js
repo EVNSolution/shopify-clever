@@ -1,10 +1,10 @@
 export const ORDER_TABLE_COLUMN_WIDTHS = {
   select: "2.5%",
   name: "64px",
-  notes: "32px",
+  notes: "24px",
   orderedDate: "8%",
   customer: "9%",
-  address: "calc(37% - 96px)",
+  address: "calc(37% - 88px)",
   itemCount: "5%",
   deliveryArea: "8%",
   deliveryLabel: "9%",

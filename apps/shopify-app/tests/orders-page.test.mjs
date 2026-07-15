@@ -342,8 +342,8 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
   assert.match(ordersPageSource, /select: "2\.5%"/);
   assert.match(ordersPageSource, /name: "64px"/);
-  assert.match(ordersPageSource, /notes: "32px"/);
-  assert.match(ordersPageSource, /address: "calc\(37% - 96px\)"/);
+  assert.match(ordersPageSource, /notes: "24px"/);
+  assert.match(ordersPageSource, /address: "calc\(37% - 88px\)"/);
   assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.flatMap/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
@@ -421,6 +421,12 @@ test("Ordered pill exposes order timing and delivery-cycle sequence on hover", (
   assert.match(ordersPageSource, /formatTimelineDetail\("Route sequence"/);
   assert.match(ordersPageSource, /const orderedPillDetails = buildOrderTimelineDetails\(\{ deliveryCycle, order, shopTimeZone \}\)/);
   assert.match(ordersPageSource, /children: formatDeliveryValue\(order\.orderedDate\),[\s\S]*?details: orderedPillDetails,[\s\S]*?interactive: true,[\s\S]*?label: "Ordered timeline"/);
+});
+
+test("Order popovers use border-box sizing for idempotent scroll repositioning", () => {
+  assert.match(ordersPageSource, /const itemPopoverStyle = \{\s*[\s\S]*?boxSizing:\s*"border-box"/);
+  assert.match(ordersPageSource, /height: popoverNode\?\.offsetHeight,\s*[\s\S]*?width: popoverNode\?\.offsetWidth/);
+  assert.match(ordersPageSource, /width: `\$\{Math\.round\(activeDetailPopover\.position\.width\)\}px`/);
 });
 
 test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop time", () => {
