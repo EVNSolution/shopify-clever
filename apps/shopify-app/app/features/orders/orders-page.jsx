@@ -2852,9 +2852,16 @@ function OrdersPageContent({ loaderData }) {
       .filter((row) => row.reasons.length > 0),
     [checkedOrders, plannedOrderIdSet],
   );
+  const pillOrderDataOrder = activeOrderDataOrderId && checkedOrders.length === 0
+    ? displayOrderById.get(activeOrderDataOrderId) ?? null
+    : null;
   const orderDataRows = orderDataReviewRows.length > 0
     ? orderDataReviewRows
-    : checkedOrders.map((order) => ({ order, reasons: ["Selected"] }));
+    : checkedOrders.length > 0
+      ? checkedOrders.map((order) => ({ order, reasons: ["Selected"] }))
+      : pillOrderDataOrder
+        ? [{ order: pillOrderDataOrder, reasons: getOrderDataIssueReasons(pillOrderDataOrder, plannedOrderIdSet) }]
+        : [];
   const activeOrderDataOrder = activeOrderDataOrderId
     ? orderDataRows.find((row) => row.order.id === activeOrderDataOrderId)?.order ?? orderDataRows[0]?.order ?? null
     : orderDataRows[0]?.order ?? null;
@@ -3566,7 +3573,7 @@ function OrdersPageContent({ loaderData }) {
 
   const handleOpenOrderDataAction = (order) => {
     setBulkUpdateClientError(null);
-    setCheckedOrderIds([order.id]);
+    setCheckedOrderIds([]);
     setOrderActionField(ORDER_DATA_FIX_ACTION);
     setOrderActionValue("");
     selectOrderDataOrder(order);
@@ -4990,13 +4997,20 @@ function OrdersPageContent({ loaderData }) {
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        {renderDetailPill({
-                          children: formatAreaValue(order),
-                          details: areaPillDetails,
-                          detailKey: `${order.id}:area`,
-                          label: "Area details",
-                          tone: getOrderAreaPillTone(order),
-                        })}
+                        <button
+                          type="button"
+                          aria-label={`Edit delivery area for ${order.name}`}
+                          style={editablePillButtonStyle}
+                          onClick={() => handleOpenOrderDataAction(order)}
+                        >
+                          {renderDetailPill({
+                            children: formatAreaValue(order),
+                            details: areaPillDetails,
+                            detailKey: `${order.id}:area`,
+                            label: "Area details",
+                            tone: getOrderAreaPillTone(order),
+                          })}
+                        </button>
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         {deliveryLabel === "Date pending" ? (
