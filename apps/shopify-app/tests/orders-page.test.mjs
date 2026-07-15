@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
+import { buildOrderTimelineDetails } from "../app/features/orders/orders-page.shared.js";
 
 const root = process.cwd();
 
@@ -324,11 +325,11 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
 
 test("Orders table uses a compact centered layout", () => {
   assert.match(ordersPageSource, /width:\s*"100%"/);
-  assert.match(ordersPageSource, /minWidth:\s*"960px"/);
+  assert.match(ordersPageSource, /minWidth:\s*"1520px"/);
   assert.match(ordersPageSource, /tableLayout:\s*"fixed"/);
   assert.match(ordersPageSource, /const tableCellStyle = \{/);
   assert.match(ordersPageSource, /padding:\s*"6px 8px"/);
-  assert.match(ordersPageSource, /textAlign:\s*"left"/);
+  assert.match(ordersPageSource, /textAlign:\s*"center"/);
   assert.match(ordersPageSource, /whiteSpace:\s*"nowrap"/);
   assert.match(ordersPageSource, /overflow:\s*"hidden"/);
   assert.match(ordersPageSource, /textOverflow:\s*"ellipsis"/);
@@ -339,12 +340,11 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const \[checkedOrderIds, setCheckedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
-  assert.match(ordersPageSource, /address: "21\.4%"/);
-  assert.match(ordersPageSource, /notes: "3%"/);
-  assert.match(ordersPageSource, /itemCount: "6\.4%"/);
-  assert.match(ordersPageSource, /planningStatus: "7\.4%"/);
-  assert.match(ordersPageSource, /hasCoordinates: "6\.4%"/);
-  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.flatMap/);
+  assert.match(ordersPageSource, /select: "2\.5%"/);
+  assert.match(ordersPageSource, /name: "64px"/);
+  assert.match(ordersPageSource, /address: "calc\(37% - 64px\)"/);
+  assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,\s*\.\.\.SORTABLE_ORDER_COLUMNS\.map/);
+  assert.doesNotMatch(ordersPageSource, /notes: "3%"/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
   assert.match(ordersPageSource, /const checkboxChecked = orderIsPlanned \|\| checkedOrderIdSet\.has\(order\.id\)/);
@@ -356,7 +356,8 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
 
 test("Orders column uses the order number itself as a neutral transparent button area", () => {
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{/);
-  assert.match(ordersPageSource, /width:\s*"100%"/);
+  assert.match(ordersPageSource, /width:\s*"auto"/);
+  assert.match(ordersPageSource, /padding:\s*"0 4px"/);
   assert.match(ordersPageSource, /className="order-number-button"/);
   assert.match(ordersPageSource, /aria-label=\{`View \${order\.name}`\}/);
   assert.match(ordersPageSource, /style=\{orderNumberButtonStyle\}/);
@@ -375,9 +376,18 @@ test("Orders order-number button shows a subtle rounded hover state", () => {
   assert.match(globalCssSource, /background-color:\s*rgba\(0, 0, 0, 0\.06\)/);
 });
 
-test("Orders table shows a headerless note toggle only when a note exists", () => {
-  assert.match(ordersPageSource, /notes: "3%"/);
-  assert.match(ordersPageSource, /aria-label="Notes"/);
+test("Orders ID and note keep independent left-right positions while Address stays wide", () => {
+  assert.match(ordersPageSource, /\{ key: "name", label: "ID" \}/);
+  assert.match(ordersPageSource, /const orderIdCellStyle = \{[\s\S]*?padding:\s*"6px 4px"/);
+  assert.match(ordersPageSource, /const orderIdentityStyle = \{[\s\S]*?display:\s*"grid"[\s\S]*?gridTemplateColumns:\s*"minmax\(0, 1fr\) auto"[\s\S]*?width:\s*"100%"/);
+  assert.match(ordersPageSource, /const orderNoteSlotStyle = \{[\s\S]*?justifySelf:\s*"end"/);
+  assert.match(ordersPageSource, /const orderNumberButtonStyle = \{[\s\S]*?justifySelf:\s*"start"/);
+  assert.match(ordersPageSource, /column\.key !== "name" && columnIndex < SORTABLE_ORDER_COLUMNS\.length - 1/);
+  assert.match(ordersPageSource, /const addressCellStyle = \{[\s\S]*?textAlign:\s*"left"/);
+  assert.match(ordersPageSource, /<td style=\{orderIdCellStyle\}>[\s\S]*?className="order-number-button"[\s\S]*?data-order-notes-popover-root="true" style=\{orderNoteSlotStyle\}[\s\S]*?<\/td>\s*<td style=\{deliveryInfoCellStyle\}>/);
+  assert.match(ordersPageSource, /<td style=\{addressCellStyle\}>\{order\.address\}<\/td>/);
+  assert.doesNotMatch(ordersPageSource, /<th key="notes"/);
+  assert.match(ordersPageSource, /overflowX:\s*"auto"/);
   assert.match(ordersPageSource, /const \[hoveredNoteOrderId, setHoveredNoteOrderId\] = useState\(null\)/);
   assert.match(ordersPageSource, /const \[pinnedNoteOrderId, setPinnedNoteOrderId\] = useState\(null\)/);
   assert.match(ordersPageSource, /const visibleNoteOrderId = pinnedNoteOrderId \?\? hoveredNoteOrderId/);
@@ -398,6 +408,64 @@ test("Orders table shows a headerless note toggle only when a note exists", () =
   assert.match(ordersPageSource, /<ul style=\{noteListStyle\}>/);
   assert.match(ordersPageSource, /<li style=\{noteListItemStyle\}>\{orderNote\}<\/li>/);
   assert.match(ordersPageSource, /<li style=\{noteListItemStyle\}>\{customerNote\}<\/li>/);
+});
+
+test("Ordered pill exposes order timing and delivery-cycle sequence on hover", () => {
+  assert.match(ordersPageSource, /deliveryCycle: preferencesData\.appPreferences\.deliveryCycle \?\? null/);
+  assert.match(ordersPageSource, /export function buildOrderTimelineDetails\(\{ deliveryCycle, order, shopTimeZone \}\) \{/);
+  assert.match(ordersPageSource, /formatTimelineDetail\(\s*"Ordered date"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Ordered time"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Processed"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Last updated"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Cycle cutoff"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Delivery cycle"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Route sequence"/);
+  assert.match(ordersPageSource, /const orderedPillDetails = buildOrderTimelineDetails\(\{ deliveryCycle, order, shopTimeZone \}\)/);
+  assert.match(ordersPageSource, /children: formatDeliveryValue\(order\.orderedDate\),[\s\S]*?details: orderedPillDetails,[\s\S]*?interactive: true,[\s\S]*?label: "Ordered timeline"/);
+});
+
+test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop time", () => {
+  assert.deepEqual(
+    buildOrderTimelineDetails({
+      deliveryCycle: {
+        cutoffTime: "12:00",
+        cutoffWeekday: "TUESDAY",
+        timeZone: "America/Toronto",
+      },
+      order: {
+        deliveryDate: "2026-07-16",
+        deliveryDay: "THURSDAY",
+        deliveryLabel: "Thu 07/16",
+        deliverySession: "DAY",
+        orderCreatedAt: "2026-07-14T16:05:00.000Z",
+        orderedDate: "2026-07-14",
+        processedAt: "2026-07-14T16:10:00.000Z",
+        routeSequence: 4,
+        timeWindowEnd: "14:00",
+        timeWindowStart: "12:00",
+        updatedAt: "2026-07-14T16:30:00.000Z",
+      },
+      shopTimeZone: "America/Toronto",
+    }),
+    [
+      "Ordered date: 2026-07-14",
+      "Ordered time: 12:05 EDT",
+      "Processed: 2026-07-14, 12:10 EDT",
+      "Last updated: 2026-07-14, 12:30 EDT",
+      "Cycle cutoff: TUESDAY · 12:00 · America/Toronto",
+      "Delivery cycle: 2026-07-16 · Thu 07/16 · THURSDAY · DAY · 12:00-14:00",
+      "Route sequence: 4",
+    ],
+  );
+
+  assert.deepEqual(
+    buildOrderTimelineDetails({
+      order: {
+        orderedDate: "2026-07-14",
+      },
+    }),
+    ["Ordered date: 2026-07-14"],
+  );
 });
 
 
@@ -817,7 +885,8 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /const belowTop = rect\.bottom \+ window\.scrollY \+ gap/);
   assert.match(ordersPageSource, /aboveTop >= viewportTop \+ gap/);
   assert.match(ordersPageSource, /\? aboveTop\s*: clampPopoverPosition\(belowTop/);
-  assert.match(ordersPageSource, /if \(!isAttentionPillTone\(tone\) \|\| details\.length === 0\) \{/);
+  assert.match(ordersPageSource, /const showDetails = details\.length > 0 && \(interactive \|\| isAttentionPillTone\(tone\)\)/);
+  assert.match(ordersPageSource, /if \(!showDetails\) \{/);
   assert.match(ordersPageSource, /data-order-detail-popover-root="true"/);
   assert.match(ordersPageSource, /onMouseEnter=\{\(event\) => openOrderDetailPopover\(event, \{ detailKey, details, label \}\)\}/);
   assert.match(ordersPageSource, /onMouseLeave=\{\(\) => closeOrderDetailPopover\(detailKey\)\}/);
@@ -1355,7 +1424,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /<span style=\{columnResizeHandleLineStyle\} \/>/);
   assert.match(ordersPageSource, /columnIndex < SORTABLE_ORDER_COLUMNS\.length - 1/);
   assert.match(ordersPageSource, /key=\{columnIndex\}/);
-  assert.match(ordersPageSource, /onPointerDown=\{\(event\) => handleColumnResizeStart\(columnIndex \+ 1 \+ \(columnIndex > 0 \? 1 : 0\), event\)\}/);
+  assert.match(ordersPageSource, /onPointerDown=\{\(event\) => handleColumnResizeStart\(columnIndex \+ 1, event\)\}/);
   assert.match(ordersPageSource, /function getTableColumnFitWidth\(tableElement, columnIndex\) \{/);
   assert.match(ordersPageSource, /querySelectorAll\(\s*`thead th:nth-child/);
   assert.match(ordersPageSource, /const handleColumnAutoFit = \(columnIndex, event\) => \{/);
@@ -1365,7 +1434,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /clone\.querySelectorAll\("\*"\)\.forEach/);
   assert.match(ordersPageSource, /clone\.getBoundingClientRect\(\)\.width/);
   assert.doesNotMatch(ordersPageSource, /cell\.scrollWidth/);
-  assert.match(ordersPageSource, /onDoubleClick=\{\(event\) => handleColumnAutoFit\(columnIndex \+ 1 \+ \(columnIndex > 0 \? 1 : 0\), event\)\}/);
+  assert.match(ordersPageSource, /onDoubleClick=\{\(event\) => handleColumnAutoFit\(columnIndex \+ 1, event\)\}/);
   assert.doesNotMatch(ordersPageSource, /handleColumnResizeStart\(0, event\)/);
   assert.match(ordersPageSource, /const tableHeaderButtonStyle = \{[\s\S]*?padding:\s*0/);
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{[\s\S]*?padding:\s*0/);

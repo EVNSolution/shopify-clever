@@ -701,6 +701,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
       { ignoredCodes: [DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE] },
     ),
     departureLocation: departureLocationData.departureLocation,
+    deliveryCycle: preferencesData.appPreferences.deliveryCycle ?? null,
     shopLocalDate,
     shopTimeZone: shopTimeZoneData.ianaTimezone ?? null,
     perf: {

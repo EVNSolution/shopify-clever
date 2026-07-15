@@ -16,6 +16,112 @@ export function textOrUndefined(value) {
   return text.length > 0 ? text : undefined;
 }
 
+export function buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone }) {
+  const orderedAt = getOrderTimestampValue(order, ["orderCreatedAt", "createdAt"]);
+  const processedAt = getOrderTimestampValue(order, ["processedAt"]);
+  const updatedAt = getOrderTimestampValue(order, ["updatedAt", "updatedAtShopify"]);
+  const routeSequence =
+    order?.routeSequence ??
+    order?.rawPayload?.routeSequence ??
+    order?.shopifyOrderSnapshot?.routeSequence;
+
+  return getUniqueTimelineDetails([
+    formatTimelineDetail(
+      "Ordered date",
+      order?.orderedDate ?? formatOrderDateTimePart(orderedAt, shopTimeZone, {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+      }),
+    ),
+    formatTimelineDetail("Ordered time", formatOrderTime(orderedAt, shopTimeZone)),
+    formatTimelineDetail("Processed", formatOrderDateTime(processedAt, shopTimeZone)),
+    formatTimelineDetail("Last updated", formatOrderDateTime(updatedAt, shopTimeZone)),
+    formatTimelineDetail("Cycle cutoff", formatDeliveryCycleCutoff(deliveryCycle)),
+    formatTimelineDetail("Delivery cycle", formatOrderDeliveryCycle(order)),
+    formatTimelineDetail("Route sequence", routeSequence),
+  ]);
+}
+
+function getOrderTimestampValue(order, keys) {
+  for (const key of keys) {
+    const value =
+      order?.[key] ??
+      order?.rawPayload?.[key] ??
+      order?.shopifyOrderSnapshot?.[key];
+    const text = textOrUndefined(value);
+    if (text) return text;
+  }
+
+  return undefined;
+}
+
+function formatOrderDateTimePart(value, shopTimeZone, options) {
+  const text = textOrUndefined(value);
+  if (!text) return undefined;
+
+  const date = new Date(text);
+  if (Number.isNaN(date.getTime())) return text;
+
+  return new Intl.DateTimeFormat("en-CA", {
+    ...options,
+    ...(shopTimeZone ? { timeZone: shopTimeZone } : {}),
+  }).format(date);
+}
+
+function formatOrderDateTime(value, shopTimeZone) {
+  return formatOrderDateTimePart(value, shopTimeZone, {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    timeZoneName: "short",
+    year: "numeric",
+  });
+}
+
+function formatOrderTime(value, shopTimeZone) {
+  return formatOrderDateTimePart(value, shopTimeZone, {
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    timeZoneName: "short",
+  });
+}
+
+function formatDeliveryCycleCutoff(deliveryCycle) {
+  if (!deliveryCycle) return undefined;
+
+  return getUniqueTimelineDetails([
+    deliveryCycle.cutoffWeekday,
+    deliveryCycle.cutoffTime,
+    deliveryCycle.timeZone,
+  ]).join(" · ") || undefined;
+}
+
+function formatOrderDeliveryCycle(order) {
+  const timeWindowStart = textOrUndefined(order?.timeWindowStart);
+  const timeWindowEnd = textOrUndefined(order?.timeWindowEnd);
+
+  return getUniqueTimelineDetails([
+    order?.deliveryDate,
+    order?.deliveryLabel,
+    order?.deliveryDay,
+    order?.deliverySession,
+    timeWindowStart && timeWindowEnd ? `${timeWindowStart}-${timeWindowEnd}` : undefined,
+  ]).join(" · ") || undefined;
+}
+
+function formatTimelineDetail(label, value) {
+  const text = textOrUndefined(value);
+  return text ? `${label}: ${text}` : undefined;
+}
+
+function getUniqueTimelineDetails(values) {
+  return Array.from(new Set(values.map(textOrUndefined).filter(Boolean)));
+}
+
 export function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
 }
