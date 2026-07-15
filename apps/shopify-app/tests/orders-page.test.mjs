@@ -412,15 +412,31 @@ test("Orders ID stays centered while Note uses a separate headerless column", ()
 test("Ordered pill exposes order timing and delivery-cycle sequence on hover", () => {
   assert.match(ordersPageSource, /deliveryCycle: preferencesData\.appPreferences\.deliveryCycle \?\? null/);
   assert.match(ordersPageSource, /export function buildOrderTimelineDetails\(\{ deliveryCycle, order, shopTimeZone \}\) \{/);
-  assert.match(ordersPageSource, /formatTimelineDetail\(\s*"Ordered date"/);
-  assert.match(ordersPageSource, /formatTimelineDetail\("Ordered time"/);
-  assert.match(ordersPageSource, /formatTimelineDetail\("Processed"/);
-  assert.match(ordersPageSource, /formatTimelineDetail\("Last updated"/);
-  assert.match(ordersPageSource, /formatTimelineDetail\("Cycle cutoff"/);
-  assert.match(ordersPageSource, /formatTimelineDetail\("Delivery cycle"/);
-  assert.match(ordersPageSource, /formatTimelineDetail\("Route sequence"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\(\s*"Ordered"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\(\s*"Processed"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\(\s*"Updated"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Cutoff"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Delivery"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Stop"/);
+  assert.match(ordersPageSource, /formatTimelineDetail\("Time zone"/);
   assert.match(ordersPageSource, /const orderedPillDetails = buildOrderTimelineDetails\(\{ deliveryCycle, order, shopTimeZone \}\)/);
   assert.match(ordersPageSource, /children: formatDeliveryValue\(order\.orderedDate\),[\s\S]*?details: orderedPillDetails,[\s\S]*?interactive: true,[\s\S]*?label: "Ordered timeline"/);
+});
+
+test("Area pill distinguishes delivery attention, valid delivery, and pickup rows", () => {
+  assert.match(infoPillSource, /const INFO_PILL_TONES = new Set\(\["neutral", "success", "warning", "critical", "pickup"\]\)/);
+  assert.match(globalCssSource, /\.info-pill--pickup \{[\s\S]*?background: rgba\(0, 91, 211, 0\.12\);[\s\S]*?color: #005bd3/);
+  assert.match(ordersPageSource, /function formatAreaValue\(order\) \{\s*if \(order\?\.serviceType === "PICKUP"\) return "Pickup";\s*return textOrUndefined\(order\?\.deliveryArea\) \?\? "Null";\s*\}/);
+  assert.match(ordersPageSource, /function getOrderAreaPillTone\(order\) \{\s*if \(order\?\.serviceType === "PICKUP"\) return "pickup";\s*if \(textOrUndefined\(order\?\.deliveryArea\)\) return "neutral";\s*return "warning";\s*\}/);
+  assert.match(ordersPageSource, /function getOrderAreaPillDetails\(order\) \{\s*const tone = getOrderAreaPillTone\(order\);\s*if \(!isAttentionPillTone\(tone\)\) return \[\];/);
+  assert.match(ordersPageSource, /const areaPillTone = getOrderAreaPillTone\(order\);[\s\S]*?const areaPill = renderDetailPill\(\{[\s\S]*?children: formatAreaValue\(order\),[\s\S]*?details: areaPillDetails,[\s\S]*?tone: areaPillTone/);
+  assert.match(ordersPageSource, /isAttentionPillTone\(areaPillTone\) \? \(\s*<button[\s\S]*?aria-label=\{`Edit delivery area for \$\{order\.name\}`\}[\s\S]*?\{areaPill\}[\s\S]*?<\/button>\s*\) : areaPill/);
+});
+
+test("Area data issues exclude pickup and include missing delivery areas", () => {
+  assert.match(ordersPageSource, /function getOrderAreaPillTone\(order\) \{\s*if \(order\?\.serviceType === "PICKUP"\) return "pickup";\s*if \(textOrUndefined\(order\?\.deliveryArea\)\) return "neutral";\s*return "warning";\s*\}/);
+  assert.match(ordersPageSource, /function isAttentionPillTone\(tone\) \{\s*return tone === "warning" \|\| tone === "critical";\s*\}/);
+  assert.match(ordersPageSource, /if \(isAttentionPillTone\(getOrderAreaPillTone\(order\)\)\) reasons\.push\("Area"\)/);
 });
 
 test("Order popovers use border-box sizing for idempotent scroll repositioning", () => {
@@ -429,39 +445,56 @@ test("Order popovers use border-box sizing for idempotent scroll repositioning",
   assert.match(ordersPageSource, /width: `\$\{Math\.round\(activeDetailPopover\.position\.width\)\}px`/);
 });
 
+test("Order items popover wraps long rows without changing note or ordered popovers", () => {
+  assert.match(ordersPageSource, /const orderedItemsPopoverStyle = \{\s*[\s\S]*?\.\.\.itemPopoverStyle[\s\S]*?width:\s*"clamp\(360px, 60vw, 640px\)"[\s\S]*?maxWidth:\s*"calc\(100vw - 16px\)"[\s\S]*?minWidth:\s*0[\s\S]*?maxHeight:\s*"calc\(100vh - 16px\)"[\s\S]*?overflowY:\s*"auto"[\s\S]*?overscrollBehavior:\s*"contain"/);
+  assert.match(ordersPageSource, /const itemPopoverTableStyle = \{\s*[\s\S]*?tableLayout:\s*"fixed"[\s\S]*?width:\s*"100%"/);
+  assert.match(ordersPageSource, /const itemPopoverCellStyle = \{\s*[\s\S]*?overflowWrap:\s*"anywhere"[\s\S]*?verticalAlign:\s*"top"[\s\S]*?whiteSpace:\s*"normal"/);
+  assert.match(ordersPageSource, /const itemPopoverQtyCellStyle = \{\s*[\s\S]*?textAlign:\s*"right"[\s\S]*?whiteSpace:\s*"nowrap"/);
+  assert.match(ordersPageSource, /<colgroup>\s*<col style=\{\{ width: "55%" \}\} \/>\s*<col style=\{\{ width: "20%" \}\} \/>\s*<col style=\{\{ width: "15%" \}\} \/>\s*<col style=\{\{ width: "10%" \}\} \/>\s*<\/colgroup>/);
+  assert.match(ordersPageSource, /style=\{\{\s*\.\.\.orderedItemsPopoverStyle,[\s\S]*?left: `\$\{Math\.round\(itemPopoverPosition\.left\)\}px`,[\s\S]*?top: `\$\{Math\.round\(itemPopoverPosition\.top\)\}px`,[\s\S]*?transform: "none",[\s\S]*?\}\}/);
+  assert.doesNotMatch(ordersPageSource, /style=\{\{\s*\.\.\.orderedItemsPopoverStyle,[\s\S]*?width: `\$\{Math\.round\(itemPopoverPosition\.width\)\}px`/);
+});
+
+test("Order items popover keeps order total out of the fixed Qty column", () => {
+  assert.doesNotMatch(ordersPageSource, /<td style=\{itemPopoverCellStyle\} colSpan=\{3\}>Order total<\/td>\s*<td style=\{itemPopoverQtyCellStyle\}>\{formatOrderTotal\(order\)\}<\/td>/);
+  assert.match(ordersPageSource, /<\/table>\s*<div style=\{itemPopoverFooterStyle\}>\s*<span>Order total<\/span>\s*<span style=\{itemPopoverFooterValueStyle\}>\{formatOrderTotal\(order\)\}<\/span>\s*<\/div>/);
+  assert.match(ordersPageSource, /const itemPopoverFooterStyle = \{\s*[\s\S]*?display:\s*"flex"[\s\S]*?justifyContent:\s*"space-between"[\s\S]*?width:\s*"100%"/);
+  assert.match(ordersPageSource, /const itemPopoverFooterValueStyle = \{\s*[\s\S]*?minWidth:\s*0[\s\S]*?overflowWrap:\s*"anywhere"[\s\S]*?textAlign:\s*"right"[\s\S]*?whiteSpace:\s*"normal"/);
+});
+
 test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop time", () => {
-  assert.deepEqual(
-    buildOrderTimelineDetails({
-      deliveryCycle: {
-        cutoffTime: "12:00",
-        cutoffWeekday: "TUESDAY",
-        timeZone: "America/Toronto",
-      },
-      order: {
-        deliveryDate: "2026-07-16",
-        deliveryDay: "THURSDAY",
-        deliveryLabel: "Thu 07/16",
-        deliverySession: "DAY",
-        orderCreatedAt: "2026-07-14T16:05:00.000Z",
-        orderedDate: "2026-07-14",
-        processedAt: "2026-07-14T16:10:00.000Z",
-        routeSequence: 4,
-        timeWindowEnd: "14:00",
-        timeWindowStart: "12:00",
-        updatedAt: "2026-07-14T16:30:00.000Z",
-      },
-      shopTimeZone: "America/Toronto",
-    }),
-    [
-      "Ordered date: 2026-07-14",
-      "Ordered time: 12:05 EDT",
-      "Processed: 2026-07-14, 12:10 EDT",
-      "Last updated: 2026-07-14, 12:30 EDT",
-      "Cycle cutoff: TUESDAY · 12:00 · America/Toronto",
-      "Delivery cycle: 2026-07-16 · Thu 07/16 · THURSDAY · DAY · 12:00-14:00",
-      "Route sequence: 4",
-    ],
-  );
+  const timelineDetails = buildOrderTimelineDetails({
+    deliveryCycle: {
+      cutoffTime: "12:00",
+      cutoffWeekday: "TUESDAY",
+      timeZone: "America/Toronto",
+    },
+    order: {
+      deliveryDate: "2026-07-16",
+      deliveryDay: "THURSDAY",
+      deliveryLabel: "Thu 07/16",
+      deliverySession: "DAY",
+      orderCreatedAt: "2026-07-14T16:05:00.000Z",
+      orderedDate: "2026-07-14",
+      processedAt: "2026-07-14T16:10:00.000Z",
+      routeSequence: 4,
+      timeWindowEnd: "14:00",
+      timeWindowStart: "12:00",
+      updatedAt: "2026-07-14T16:30:00.000Z",
+    },
+    shopTimeZone: "America/Toronto",
+  });
+
+  assert.deepEqual(timelineDetails, [
+    "Ordered: 2026-07-14, 12:05",
+    "Processed: 12:10",
+    "Updated: 12:30",
+    "Cutoff: Tue, 12:00",
+    "Delivery: Thu, 2026-07-16, 12:00–14:00 (Day)",
+    "Stop: 4",
+    "Time zone: America/Toronto",
+  ]);
+  assert.equal(timelineDetails.some((detail) => detail.includes(" · ")), false);
 
   assert.deepEqual(
     buildOrderTimelineDetails({
@@ -469,7 +502,42 @@ test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop tim
         orderedDate: "2026-07-14",
       },
     }),
-    ["Ordered date: 2026-07-14"],
+    ["Ordered: 2026-07-14"],
+  );
+
+  assert.deepEqual(
+    buildOrderTimelineDetails({
+      order: {
+        orderCreatedAt: "2026-07-14T16:05:00.000Z",
+        orderedDate: "2026-07-14",
+        processedAt: "2026-07-14T16:10:00.000Z",
+        updatedAt: "2026-07-14T16:10:00.000Z",
+      },
+      shopTimeZone: "America/Toronto",
+    }),
+    [
+      "Ordered: 2026-07-14, 12:05",
+      "Processed: 12:10",
+      "Time zone: America/Toronto",
+    ],
+  );
+
+  assert.deepEqual(
+    buildOrderTimelineDetails({
+      order: {
+        orderCreatedAt: "2026-07-14T16:05:00.000Z",
+        orderedDate: "2026-07-14",
+        processedAt: "2026-07-15T16:10:00.000Z",
+        updatedAt: "2026-07-15T16:30:00.000Z",
+      },
+      shopTimeZone: "America/Toronto",
+    }),
+    [
+      "Ordered: 2026-07-14, 12:05",
+      "Processed: 2026-07-15, 12:10",
+      "Updated: 2026-07-15, 12:30",
+      "Time zone: America/Toronto",
+    ],
   );
 });
 
@@ -878,7 +946,7 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /Cancelled/);
   assert.match(ordersPageSource, /formatDeliveryValue\(order\.orderedDate\)/);
   assert.match(ordersPageSource, /function formatAreaValue\(order\)/);
-  assert.match(ordersPageSource, /order\?\.serviceType === "PICKUP" \? "Pickup" : "Null"/);
+  assert.match(ordersPageSource, /if \(order\?\.serviceType === "PICKUP"\) return "Pickup"/);
   assert.doesNotMatch(ordersPageSource, new RegExp("diag" + "nostic", "i"));
   assert.match(ordersPageSource, /const \[activeOrderDetailPopover, setActiveOrderDetailPopover\] = useState\(null\)/);
   assert.match(ordersPageSource, /function isAttentionPillTone\(tone\) \{/);
@@ -906,7 +974,8 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /label: "State details"/);
   assert.match(ordersPageSource, /label: "Payment details"/);
   assert.match(ordersPageSource, /function getOrderAreaPillDetails\(order\)/);
-  assert.match(ordersPageSource, /tone: getOrderAreaPillTone\(order\)/);
+  assert.match(ordersPageSource, /const areaPillTone = getOrderAreaPillTone\(order\)/);
+  assert.match(ordersPageSource, /tone: areaPillTone/);
   assert.match(ordersPageSource, /Delivery area is missing/);
   assert.match(ordersPageSource, /Raw Delivery Area missing/);
   assert.match(ordersPageSource, /function getOrderDeliveryPillDetails\(order\)/);
