@@ -1233,6 +1233,7 @@ const itemPopoverStyle = {
   background: "#ffffff",
   border: "1px solid #d6dce5",
   borderRadius: "10px",
+  boxSizing: "border-box",
   boxShadow: "0 10px 28px rgba(0, 0, 0, 0.16)",
   left: "50%",
   minWidth: "360px",
