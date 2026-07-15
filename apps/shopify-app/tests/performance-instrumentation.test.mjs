@@ -2,7 +2,12 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { withPromiseTimeout } from "../app/features/orders/orders-page.shared.js";
+import {
+  buildOrdersViewNavigationMetric,
+  shouldRequestOrdersData,
+  shouldRevalidateOrdersRoute,
+  withPromiseTimeout,
+} from "../app/features/orders/orders-page.shared.js";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
@@ -74,6 +79,119 @@ test("Orders loading leaves the skeleton for a retryable error when data stalls"
   assert.match(ordersPageSource, /const revalidator = useRevalidator\(\)/);
   assert.match(ordersPageSource, /onClick=\{\(\) => revalidator\.revalidate\(\)\}/);
   assert.match(ordersPageSource, /Shopify and delivery data are loading asynchronously/);
+});
+
+test("Orders UI-only query changes keep loaded Orders and Inventory data", () => {
+  const routeArgs = (currentPath, nextPath, overrides = {}) => ({
+    currentUrl: new URL(`https://admin.example${currentPath}`),
+    nextUrl: new URL(`https://admin.example${nextPath}`),
+    defaultShouldRevalidate: true,
+    formMethod: undefined,
+    ...overrides,
+  });
+
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders?view=inventory")),
+    false,
+  );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders?view=inventory", "/app/orders")),
+    false,
+  );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders?deliveryArea=North")),
+    false,
+  );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders?id_token=next-token")),
+    true,
+  );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders?unexpected=1")),
+    true,
+  );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders")),
+    true,
+    "explicit revalidation on the same URL must remain available",
+  );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders?view=inventory", { formMethod: "POST" })),
+    true,
+  );
+
+  assert.match(ordersPageSource, /export function shouldRevalidate\(args\) \{/);
+  assert.match(ordersPageSource, /return shouldRevalidateOrdersRoute\(args\)/);
+});
+
+test("direct Inventory entry loads Orders once only when the Orders tab is selected", () => {
+  const initialOrdersSelection = {
+    activeOrdersView: "orders",
+    ordersLoaded: false,
+    requestPending: false,
+    revalidationState: "idle",
+  };
+
+  assert.equal(shouldRequestOrdersData(initialOrdersSelection), true);
+  assert.equal(
+    shouldRequestOrdersData({ ...initialOrdersSelection, activeOrdersView: "inventory" }),
+    false,
+  );
+  assert.equal(
+    shouldRequestOrdersData({ ...initialOrdersSelection, requestPending: true }),
+    false,
+    "the request guard prevents duplicate manual revalidation",
+  );
+  assert.equal(
+    shouldRequestOrdersData({ ...initialOrdersSelection, ordersLoaded: true }),
+    false,
+    "loaded Orders data must not revalidate again",
+  );
+  assert.equal(
+    shouldRequestOrdersData({ ...initialOrdersSelection, revalidationState: "loading" }),
+    false,
+  );
+
+  assert.match(ordersPageSource, /ordersLoaded: shouldLoadOrders/);
+  assert.match(ordersPageSource, /const \{[\s\S]*ordersLoaded[\s\S]*\} = loaderData/);
+  assert.match(ordersPageSource, /const ordersLoadRequestedRef = useRef\(false\)/);
+  assert.match(ordersPageSource, /const shouldRequestOrders = shouldRequestOrdersData\(\{/);
+  assert.match(ordersPageSource, /ordersLoadRequestedRef\.current = true;[\s\S]*revalidator\.revalidate\(\)/);
+  assert.match(ordersPageSource, /aria-label="Shopify orders are loading"/);
+});
+
+test("Orders view transitions emit query-safe performance metrics", () => {
+  const metric = buildOrdersViewNavigationMetric({
+    activeOrdersView: "inventory",
+    observedAt: 112.5,
+    pendingNavigation: {
+      fromView: "orders",
+      startedAt: 100,
+      toView: "inventory",
+      url: "/app/orders?view=inventory&id_token=secret",
+    },
+  });
+
+  assert.deepEqual(metric, {
+    name: "orders.view.navigation",
+    category: "orders-view-navigation",
+    durationMs: 12.5,
+    fromView: "orders",
+    toView: "inventory",
+  });
+  assert.equal(JSON.stringify(metric).includes("id_token"), false);
+  assert.equal(
+    buildOrdersViewNavigationMetric({
+      activeOrdersView: "orders",
+      observedAt: 112.5,
+      pendingNavigation: { fromView: "orders", startedAt: 100, toView: "inventory" },
+    }),
+    null,
+  );
+
+  assert.match(ordersPageSource, /const pendingOrdersViewNavigationRef = useRef\(null\)/);
+  assert.match(ordersPageSource, /emitPerformanceMetric\(navigationMetric\)/);
+  assert.match(ordersPageSource, /pendingOrdersViewNavigationRef\.current = null/);
 });
 
 test("performance capture endpoint stores browser metrics outside app data", () => {

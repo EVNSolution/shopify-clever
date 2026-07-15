@@ -56,9 +56,11 @@ import { InfoPill } from "../../ui/info-pill";
 import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
 import { TabLayout } from "../../ui/tab-layout";
 import {
+  buildOrdersViewNavigationMetric,
   DEFAULT_ROUTE_PLAN_TITLE,
   getSafePerformanceNow,
   roundPerfDuration,
+  shouldRequestOrdersData,
   textOrUndefined,
 } from "./orders-page.shared";
 
@@ -2259,6 +2261,17 @@ function OrdersPageLoadError() {
   );
 }
 
+function OrdersViewDataLoading() {
+  return (
+    <div aria-label="Shopify orders are loading" style={ordersLoadingPanelStyle}>
+      <div style={ordersLoadingStatusStyle}>
+        <strong>Shopify orders are loading asynchronously</strong>
+        <span>The Inventory list remains available while Orders data is prepared.</span>
+      </div>
+    </div>
+  );
+}
+
 export default function OrdersPage() {
   const { ordersPageData } = useLoaderData();
 
@@ -2279,8 +2292,10 @@ function OrdersPageContent({ loaderData }) {
   const ordersSyncFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
+  const revalidator = useRevalidator();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = loaderData;
+  const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
+  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = loaderData;
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
@@ -2481,6 +2496,8 @@ function OrdersPageContent({ loaderData }) {
   const initialMapFitAppliedRef = useRef(false);
   const initialMapCenterRef = useRef(DEFAULT_CENTER);
   const initialPerfEmittedRef = useRef(false);
+  const ordersLoadRequestedRef = useRef(false);
+  const pendingOrdersViewNavigationRef = useRef(null);
   const initialRenderStartedAtRef = useRef(getSafePerformanceNow());
   const submittedRouteSessionTokenRef = useRef(null);
   const submittedInventorySessionTokenRef = useRef(null);
@@ -2692,8 +2709,14 @@ function OrdersPageContent({ loaderData }) {
     visibleInventoryIds.length > 0 &&
     visibleInventoryIds.every((inventoryId) => checkedInventoryIdSet.has(inventoryId));
   const inventoryDeleteDisabled = checkedInventoryIds.length === 0 || isDeletingInventory;
-  const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
   const handleOrdersViewChange = useCallback((nextView) => {
+    if (nextView === activeOrdersView) return;
+
+    pendingOrdersViewNavigationRef.current = {
+      fromView: activeOrdersView,
+      startedAt: getSafePerformanceNow(),
+      toView: nextView,
+    };
     const nextSearchParams = new URLSearchParams(searchParams);
     if (nextView === "inventory") {
       nextSearchParams.set("view", "inventory");
@@ -2702,7 +2725,37 @@ function OrdersPageContent({ loaderData }) {
     }
 
     setSearchParams(nextSearchParams, { preventScrollReset: true, replace: true });
-  }, [searchParams, setSearchParams]);
+  }, [activeOrdersView, searchParams, setSearchParams]);
+
+  useEffect(() => {
+    const pendingNavigation = pendingOrdersViewNavigationRef.current;
+    const navigationMetric = buildOrdersViewNavigationMetric({
+      activeOrdersView,
+      observedAt: getSafePerformanceNow(),
+      pendingNavigation,
+    });
+    if (!navigationMetric) return;
+
+    emitPerformanceMetric(navigationMetric);
+    pendingOrdersViewNavigationRef.current = null;
+  }, [activeOrdersView]);
+
+  useEffect(() => {
+    if (ordersLoaded) {
+      ordersLoadRequestedRef.current = false;
+      return;
+    }
+    const shouldRequestOrders = shouldRequestOrdersData({
+      activeOrdersView,
+      ordersLoaded,
+      requestPending: ordersLoadRequestedRef.current,
+      revalidationState: revalidator.state,
+    });
+    if (!shouldRequestOrders) return;
+
+    ordersLoadRequestedRef.current = true;
+    revalidator.revalidate();
+  }, [activeOrdersView, ordersLoaded, revalidator]);
   const openInventoryDetail = useCallback((inventoryId) => {
     if (!inventoryId) return;
     navigate(`/app/orders/inventory?id=${encodeURIComponent(inventoryId)}`);
@@ -3886,24 +3939,26 @@ function OrdersPageContent({ loaderData }) {
     if (navigationTimingMetric) {
       emitPerformanceMetric(navigationTimingMetric);
     }
+  }, []);
 
-    if (perf?.loader) {
-      emitPerformanceMetric({
-        name: "orders.loader",
-        category: "orders-loader",
-        ...perf.loader,
-      });
-    }
+  useEffect(() => {
+    if (!perf?.loader) return;
+
+    emitPerformanceMetric({
+      name: "orders.loader",
+      category: "orders-loader",
+      ...perf.loader,
+    });
 
     emitPerformanceMetric({
       name: "orders.render.commit",
       category: "orders-render",
       durationMs: roundPerfDuration(getSafePerformanceNow() - initialRenderStartedAtRef.current),
-      activeOrdersView,
+      activeOrdersView: perf.loader.activeOrdersView,
       inventoryCount: safeInventories.length,
       orderCount: safeOrders.length,
     });
-  }, [activeOrdersView, perf, safeInventories.length, safeOrders.length]);
+  }, [perf?.loader, safeInventories.length, safeOrders.length]);
 
   useEffect(() => () => {
     clearMapRecoveryTimer();
@@ -4212,6 +4267,16 @@ function OrdersPageContent({ loaderData }) {
       window.cancelAnimationFrame(secondResizeFrame);
     };
   }, [isMapReady, isMapWide]);
+
+  if (activeOrdersView === "orders" && !ordersLoaded) {
+    return (
+      <TabLayout
+        primaryExpanded={true}
+        notice={ordersLayoutNotice}
+        primary={<OrdersViewDataLoading />}
+      />
+    );
+  }
 
   if (activeOrdersView === "inventory") {
     return (
