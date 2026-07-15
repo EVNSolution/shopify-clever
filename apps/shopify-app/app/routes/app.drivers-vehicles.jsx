@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { createPendingDeliveryDriver, deleteDeliveryDriver, fetchDeliveryDrivers, regenerateDeliveryDriverInviteCode } from "../features/delivery/drivers.server";
+import {
+  createPendingDeliveryDriver,
+  deleteDeliveryDriver,
+  fetchDeliveryDrivers,
+  regenerateDeliveryDriverInviteCode,
+  updateDeliveryDriverName,
+} from "../features/delivery/drivers.server";
 import {
   formatInvitePhoneInput,
   formatSavedDriverPhone,
@@ -160,6 +166,12 @@ const checkboxHeaderCellStyle = {
   textAlign: "center",
 };
 
+const editHeaderCellStyle = {
+  ...tableHeaderCellStyle,
+  padding: 0,
+  textAlign: "center",
+};
+
 const tableCellStyle = {
   borderBottom: "1px solid #ebebeb",
   color: "#303030",
@@ -173,6 +185,26 @@ const checkboxCellStyle = {
   ...tableCellStyle,
   padding: "8px 8px",
   textAlign: "center",
+};
+
+const editCellStyle = {
+  ...tableCellStyle,
+  padding: 0,
+  textAlign: "center",
+};
+
+const editButtonStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  borderRadius: "6px",
+  color: "#616161",
+  cursor: "pointer",
+  display: "inline-flex",
+  height: "28px",
+  justifyContent: "center",
+  padding: 0,
+  width: "28px",
 };
 
 const appAccessCellStyle = {
@@ -394,6 +426,23 @@ const phoneInputStyle = {
   width: "100%",
 };
 
+const driverNameInputStyle = {
+  ...searchInputStyle,
+  boxSizing: "border-box",
+  flex: "0 0 auto",
+  minHeight: "40px",
+  minWidth: 0,
+  width: "100%",
+};
+
+const fieldLabelStyle = {
+  color: "#303030",
+  display: "grid",
+  fontSize: "13px",
+  fontWeight: 700,
+  gap: "6px",
+};
+
 const modalHelpStyle = {
   color: "#616161",
   fontSize: "13px",
@@ -570,6 +619,18 @@ export const action = async ({ request }) => {
     };
   }
 
+  if (intent === "updateDriverName") {
+    const driverId = formText(formData.get("driverId"));
+    const displayName = formText(formData.get("displayName"));
+    const shopifySessionToken = formText(formData.get("shopifySessionToken"));
+
+    if (!driverId || !displayName || displayName.length > 80) {
+      return { driver: null, errors: [{ message: "1~80자의 배송원 이름을 입력해주세요." }] };
+    }
+
+    return updateDeliveryDriverName(request, driverId, { displayName }, { sessionToken: shopifySessionToken });
+  }
+
   if (intent === "regenerateInviteCode") {
     const driverId = formText(formData.get("driverId"));
     if (!driverId) return { driver: null, errors: [{ message: "배송원 ID가 필요합니다." }] };
@@ -600,6 +661,7 @@ export default function DriversVehiclesPage() {
   const { driverDownloadLink = "", drivers = [], errors = [] } = useLoaderData();
   const driverInviteFetcher = useFetcher();
   const driverDeleteFetcher = useFetcher();
+  const driverUpdateFetcher = useFetcher();
   const shopify = useAppBridge();
   const [searchText, setSearchText] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -610,6 +672,10 @@ export default function DriversVehiclesPage() {
   const [pendingDownloadLink, setPendingDownloadLink] = useState("");
   const [checkedDriverIds, setCheckedDriverIds] = useState([]);
   const [deletedDriverIds, setDeletedDriverIds] = useState([]);
+  const [editingDriver, setEditingDriver] = useState(null);
+  const [editingDriverName, setEditingDriverName] = useState("");
+  const [driverNameError, setDriverNameError] = useState("");
+  const [pendingDriverNameId, setPendingDriverNameId] = useState("");
 
   const serverDriverRows = useMemo(
     () => (Array.isArray(drivers) ? drivers : []).map(mapDeliveryDriverToRow).filter(Boolean),
@@ -619,10 +685,14 @@ export default function DriversVehiclesPage() {
     () => mapDeliveryDriverToRow(driverInviteFetcher.data?.driver),
     [driverInviteFetcher.data?.driver],
   );
+  const submittedUpdatedDriverRow = useMemo(
+    () => mapDeliveryDriverToRow(driverUpdateFetcher.data?.driver),
+    [driverUpdateFetcher.data?.driver],
+  );
   const baseDriverRows = serverDriverRows.length > 0 || errors.length === 0 ? serverDriverRows : driverRows;
   const allDrivers = useMemo(
-    () => mergeDriverRows(baseDriverRows, submittedDriverRow),
-    [baseDriverRows, submittedDriverRow],
+    () => mergeDriverRows(mergeDriverRows(baseDriverRows, submittedDriverRow), submittedUpdatedDriverRow),
+    [baseDriverRows, submittedDriverRow, submittedUpdatedDriverRow],
   );
   const deletedDriverIdSet = useMemo(() => new Set(deletedDriverIds), [deletedDriverIds]);
   const visibleDrivers = useMemo(
@@ -644,7 +714,8 @@ export default function DriversVehiclesPage() {
     selectableDriverRows.every((driver) => checkedDriverIdSet.has(driver.id));
   const driverDeleteDisabled = checkedDriverIds.length === 0 || driverDeleteFetcher.state !== "idle";
   const driverDeleteErrors = Array.isArray(driverDeleteFetcher.data?.errors) ? driverDeleteFetcher.data.errors : [];
-  const visibleErrors = [...errors, ...driverDeleteErrors];
+  const driverUpdateErrors = Array.isArray(driverUpdateFetcher.data?.errors) ? driverUpdateFetcher.data.errors : [];
+  const visibleErrors = [...errors, ...driverDeleteErrors, ...driverUpdateErrors];
 
   const selectedCountryCode = countryDialCodeOptions.find((option) => option.id === selectedCountryCodeId) ?? countryDialCodeOptions[0];
   const currentInviteDriver = driverInviteFetcher.data?.driver ?? null;
@@ -658,6 +729,42 @@ export default function DriversVehiclesPage() {
     setInviteOpen(true);
     setCountryCodeOpen(false);
     setCopyStatus("");
+  };
+
+  const openDriverNameEditor = (driver) => {
+    setEditingDriver(driver);
+    setEditingDriverName(driver.displayName);
+    setDriverNameError("");
+  };
+
+  const closeDriverNameEditor = () => {
+    if (driverUpdateFetcher.state !== "idle") return;
+    setEditingDriver(null);
+    setEditingDriverName("");
+    setDriverNameError("");
+  };
+
+  const saveDriverName = async () => {
+    const displayName = editingDriverName.trim();
+    if (!editingDriver?.id || !displayName || displayName.length > 80) {
+      setDriverNameError("1~80자의 배송원 이름을 입력해주세요.");
+      return;
+    }
+    if (driverUpdateFetcher.state !== "idle") return;
+
+    try {
+      const sessionToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("_intent", "updateDriverName");
+      formData.set("driverId", editingDriver.id);
+      formData.set("displayName", displayName);
+      formData.set("shopifySessionToken", sessionToken);
+      setPendingDriverNameId(editingDriver.id);
+      setDriverNameError("");
+      driverUpdateFetcher.submit(formData, { method: "post" });
+    } catch {
+      setDriverNameError("Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.");
+    }
   };
 
   const getCurrentInvite = () => {
@@ -740,6 +847,23 @@ export default function DriversVehiclesPage() {
     setDeletedDriverIds((currentDriverIds) => Array.from(new Set([...currentDriverIds, ...deletedIds])));
     setCheckedDriverIds([]);
   }, [driverDeleteFetcher.data, driverDeleteFetcher.state]);
+
+  useEffect(() => {
+    if (!pendingDriverNameId || driverUpdateFetcher.state !== "idle" || !driverUpdateFetcher.data) return;
+
+    const updateErrors = Array.isArray(driverUpdateFetcher.data.errors) ? driverUpdateFetcher.data.errors : [];
+    if (updateErrors.length > 0) {
+      setDriverNameError(updateErrors[0]?.message ?? "배송원 이름을 수정하지 못했습니다.");
+      setPendingDriverNameId("");
+      return;
+    }
+
+    if (!driverUpdateFetcher.data.driver) return;
+    setEditingDriver(null);
+    setEditingDriverName("");
+    setDriverNameError("");
+    setPendingDriverNameId("");
+  }, [driverUpdateFetcher.data, driverUpdateFetcher.state, pendingDriverNameId]);
 
   const regenerateInviteCode = async (driverId) => {
     const sessionToken = await shopify.idToken();
@@ -833,6 +957,7 @@ export default function DriversVehiclesPage() {
             <colgroup>
               <col style={{ width: "40px" }} />
               <col style={{ width: "14.4%" }} />
+              <col style={{ width: "40px" }} />
               <col style={{ width: "250px" }} />
               <col style={{ width: "96px" }} />
               <col style={{ width: "110px" }} />
@@ -851,6 +976,7 @@ export default function DriversVehiclesPage() {
                   />
                 </th>
                 <th style={tableHeaderCellStyle}>Driver</th>
+                <th aria-label="Edit driver name" style={editHeaderCellStyle}></th>
                 <th style={tableHeaderCellStyle}>Phone</th>
                 <th style={tableHeaderCellStyle}>Status</th>
                 <th style={tableHeaderCellStyle}>Joined</th>
@@ -871,6 +997,16 @@ export default function DriversVehiclesPage() {
                   </td>
                   <td style={tableCellStyle}>
                     <strong>{driver.displayName}</strong>
+                  </td>
+                  <td style={editCellStyle}>
+                    <button
+                      type="button"
+                      aria-label={`Edit ${driver.displayName} name`}
+                      style={editButtonStyle}
+                      onClick={() => openDriverNameEditor(driver)}
+                    >
+                      <s-icon type="edit" size="base" color="subdued"></s-icon>
+                    </button>
                   </td>
                   <td style={appAccessCellStyle}>
                     <span style={appAccessInlineStyle}>
@@ -921,13 +1057,55 @@ export default function DriversVehiclesPage() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={7} style={emptyRowStyle}>No drivers match this search.</td>
+                  <td colSpan={8} style={emptyRowStyle}>No drivers match this search.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
+
+      {editingDriver ? (
+        <div style={modalBackdropStyle} role="presentation">
+          <div role="dialog" aria-modal="true" aria-label="Edit driver name" style={modalStyle}>
+            <div style={modalHeaderStyle}>
+              <h2 style={modalTitleStyle}>Edit driver</h2>
+              <button type="button" aria-label="Close edit driver" style={closeButtonStyle} onClick={closeDriverNameEditor}>×</button>
+            </div>
+            <div style={modalBodyStyle}>
+              <label style={fieldLabelStyle} htmlFor="driver-display-name">
+                Driver name
+                <input
+                  id="driver-display-name"
+                  maxLength={80}
+                  style={driverNameInputStyle}
+                  type="text"
+                  value={editingDriverName}
+                  onChange={(event) => {
+                    setEditingDriverName(event.currentTarget.value);
+                    setDriverNameError("");
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") saveDriverName();
+                  }}
+                />
+              </label>
+              {driverNameError ? <p style={modalHelpStyle} role="alert">{driverNameError}</p> : null}
+            </div>
+            <div style={modalFooterStyle}>
+              <button type="button" style={secondaryButtonStyle} onClick={closeDriverNameEditor}>Cancel</button>
+              <button
+                type="button"
+                style={editingDriverName.trim() && driverUpdateFetcher.state === "idle" ? primaryButtonStyle : disabledActionButtonStyle}
+                disabled={!editingDriverName.trim() || driverUpdateFetcher.state !== "idle"}
+                onClick={saveDriverName}
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
 
       {inviteOpen ? (
         <div style={modalBackdropStyle} role="presentation">

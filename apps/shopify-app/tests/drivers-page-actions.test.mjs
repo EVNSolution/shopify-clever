@@ -25,7 +25,7 @@ test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
   assert.match(source, />\s*Delete selected\s*<\/button>/);
   const [, pageActionsBlock = ""] = source.match(/<div style=\{pageActionsStyle\}>([\s\S]*?)<\/div>/) ?? [];
   assert.match(pageActionsBlock, /Invite driver[\s\S]*Delete selected/);
-  assert.match(source, /<td colSpan=\{7\}/);
+  assert.match(source, /<td colSpan=\{8\}/);
 });
 
 test("Drivers table uses compact support columns and separates joined date", () => {
@@ -39,6 +39,22 @@ test("Drivers table uses compact support columns and separates joined date", () 
   assert.match(source, /<td style=\{tableCellStyle\}>\{driver\.joinedAt\}<\/td>/);
   assert.match(source, /joinedAt: formatDriverTimestamp\(driver\.createdAt\) \?\? "—"/);
   assert.doesNotMatch(source, /<span style=\{\{ color: "#616161", fontSize: "12px" \}\}>\{driver\.lastSeenAt\}<\/span>/);
+});
+
+test("Drivers table exposes a blank-header edit action immediately after the driver name", () => {
+  assert.match(source, /updateDeliveryDriverName/);
+  assert.match(source, /const driverUpdateFetcher = useFetcher\(\)/);
+  assert.match(source, /intent === "updateDriverName"/);
+  assert.match(source, /updateDeliveryDriverName\(request, driverId, \{ displayName \}, \{ sessionToken: shopifySessionToken \}\)/);
+  assert.match(source, /<th aria-label="Edit driver name" style=\{editHeaderCellStyle\}><\/th>/);
+  assert.match(source, /aria-label=\{`Edit \$\{driver\.displayName\} name`\}/);
+  assert.match(source, /<s-icon type="edit"/);
+  assert.match(source, /onClick=\{\(\) => openDriverNameEditor\(driver\)\}/);
+  assert.match(source, /aria-label="Edit driver name" style=\{modalStyle\}/);
+  assert.match(source, /<label[^>]*htmlFor="driver-display-name"/);
+  assert.match(source, /id="driver-display-name"/);
+  assert.match(source, /maxLength=\{80\}/);
+  assert.match(source, /<td colSpan=\{8\}/);
 });
 
 test("Drivers assigned route is informational text, not a clickable route link", () => {
