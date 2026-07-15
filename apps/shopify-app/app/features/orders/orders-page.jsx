@@ -1,8 +1,8 @@
 /* eslint-disable react/prop-types */
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { Await, useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { appendIdToken, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
@@ -92,6 +92,73 @@ const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 const ordersMapCanvasStyle = {
   minHeight: "420px",
+};
+
+const ordersLoadingPanelStyle = {
+  minHeight: "420px",
+  display: "grid",
+  placeItems: "center",
+  padding: "24px",
+  color: "#616161",
+  background: "#f7f7f7",
+};
+
+const ordersLoadingPlanStyle = {
+  display: "grid",
+  alignContent: "start",
+  gap: "14px",
+  minHeight: "420px",
+  padding: "16px",
+};
+
+const ordersLoadingTableStyle = {
+  display: "grid",
+  gap: "10px",
+  padding: "12px",
+};
+
+const ordersLoadingControlsStyle = {
+  display: "grid",
+  gridTemplateColumns: "repeat(5, minmax(96px, 1fr))",
+  gap: "8px",
+};
+
+const ordersLoadingTableHeaderStyle = {
+  display: "grid",
+  gridTemplateColumns: "80px 120px 150px minmax(240px, 1fr) 80px",
+  gap: "12px",
+  padding: "8px 12px",
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 600,
+};
+
+const ordersLoadingTableRowStyle = {
+  display: "grid",
+  gridTemplateColumns: "80px 120px 150px minmax(240px, 1fr) 80px",
+  gap: "12px",
+  alignItems: "center",
+  minHeight: "42px",
+  padding: "0 12px",
+  borderTop: "1px solid #ebebeb",
+};
+
+const ordersLoadingBlockStyle = {
+  height: "12px",
+  borderRadius: "6px",
+  background: "#e5e5e5",
+};
+
+const ordersLoadingControlStyle = {
+  ...ordersLoadingBlockStyle,
+  height: "34px",
+  borderRadius: "8px",
+};
+
+const ordersLoadingStatusStyle = {
+  display: "grid",
+  justifyItems: "center",
+  gap: "6px",
 };
 
 const routePlanPanelStyle = {
@@ -2085,7 +2152,81 @@ function buildRoutePlanTitleFromOrders(orders) {
     : DEFAULT_ROUTE_PLAN_TITLE;
 }
 
+function OrdersPageLoading() {
+  return (
+    <TabLayout
+      primary={
+        <div aria-busy="true" style={ordersLoadingPanelStyle}>
+          <div style={ordersLoadingStatusStyle}>
+            <strong>Orders</strong>
+            <span>Preparing the map…</span>
+          </div>
+        </div>
+      }
+      secondary={
+        <div aria-hidden="true" style={ordersLoadingPlanStyle}>
+          <div style={{ ...ordersLoadingBlockStyle, width: "70%" }} />
+          <div style={{ ...ordersLoadingControlStyle, width: "100%" }} />
+          <div style={{ ...ordersLoadingBlockStyle, width: "45%" }} />
+          <div style={{ ...ordersLoadingControlStyle, width: "100%" }} />
+          <div style={{ ...ordersLoadingControlStyle, width: "100%" }} />
+        </div>
+      }
+      lower={
+        <div
+          aria-busy="true"
+          aria-label="Orders are loading"
+          aria-live="polite"
+          role="status"
+          style={ordersLoadingTableStyle}
+        >
+          <div aria-hidden="true" style={ordersLoadingControlsStyle}>
+            {Array.from({ length: 5 }, (_, index) => (
+              <div key={index} style={ordersLoadingControlStyle} />
+            ))}
+          </div>
+          <div aria-hidden="true" style={ordersLoadingTableHeaderStyle}>
+            <span>Order</span>
+            <span>Ordered</span>
+            <span>Recipient</span>
+            <span>Address</span>
+            <span>Items</span>
+          </div>
+          <div aria-hidden="true">
+            {Array.from({ length: 5 }, (_, rowIndex) => (
+              <div key={rowIndex} style={ordersLoadingTableRowStyle}>
+                {Array.from({ length: 5 }, (_, cellIndex) => (
+                  <div
+                    key={cellIndex}
+                    style={{
+                      ...ordersLoadingBlockStyle,
+                      width: cellIndex === 3 ? "92%" : `${58 + ((rowIndex + cellIndex) % 3) * 12}%`,
+                    }}
+                  />
+                ))}
+              </div>
+            ))}
+          </div>
+          <span style={{ color: "#616161", fontSize: "13px" }}>Loading orders…</span>
+        </div>
+      }
+    />
+  );
+}
+
 export default function OrdersPage() {
+  const { ordersPageData } = useLoaderData();
+
+  return (
+    <Suspense fallback={<OrdersPageLoading />}>
+      <Await resolve={ordersPageData}>
+        {(loaderData) => <OrdersPageContent loaderData={loaderData} />}
+      </Await>
+    </Suspense>
+  );
+}
+
+function OrdersPageContent({ loaderData }) {
   const routePlanFetcher = useFetcher();
   const inventoryFetcher = useFetcher();
   const inventoryDeleteFetcher = useFetcher();
@@ -2094,7 +2235,7 @@ export default function OrdersPage() {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { orders, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = useLoaderData();
+  const { orders, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = loaderData;
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
