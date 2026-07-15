@@ -47,6 +47,19 @@ test("performance evaluator captures real browser Orders navigation timings", ()
   assert.match(perfScriptSource, /ordersSourceRetry/);
 });
 
+test("Orders route renders its shell while slow loader data is still pending", () => {
+  assert.match(ordersPageSource, /async function loadOrdersPageData\(/);
+  assert.match(
+    ordersPageSource,
+    /export const loader = async \(\{ request \}\) => \{[\s\S]*authenticate\.admin\(request\)[\s\S]*ordersPageData: loadOrdersPageData\(/,
+  );
+  assert.doesNotMatch(ordersPageSource, /ordersPageData:\s*await loadOrdersPageData\(/);
+  assert.match(ordersPageSource, /<Suspense fallback=\{<OrdersPageLoading \/>\}>/);
+  assert.match(ordersPageSource, /<Await resolve=\{ordersPageData\}>/);
+  assert.match(ordersPageSource, /function OrdersPageContent\(\{ loaderData \}\)/);
+  assert.match(ordersPageSource, /aria-label="Orders are loading"/);
+});
+
 test("performance capture endpoint stores browser metrics outside app data", () => {
   assert.equal(existsSync(perfRoutePath), true, "app/routes/perf.jsx should exist");
 

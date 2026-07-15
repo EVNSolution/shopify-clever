@@ -531,6 +531,18 @@ async function resolvePlannedOrdersForAction({
 export const loader = async ({ request }) => {
   const loaderStartedAt = getSafePerformanceNow();
   const { admin, session } = await authenticate.admin(request);
+
+  return {
+    ordersPageData: loadOrdersPageData({
+      admin,
+      loaderStartedAt,
+      request,
+      session,
+    }),
+  };
+};
+
+async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) {
   const shopifyShopCacheKey = session?.shop;
   const activeOrdersView = new URL(request.url).searchParams.get("view") === "inventory"
     ? "inventory"
@@ -699,7 +711,7 @@ export const loader = async ({ request }) => {
       },
     },
   };
-};
+}
 
 function hasSessionTokenRefreshError(results) {
   return results.some((result) =>
