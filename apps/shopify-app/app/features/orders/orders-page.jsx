@@ -1244,6 +1244,16 @@ const itemPopoverStyle = {
   zIndex: 20,
 };
 
+const orderedItemsPopoverStyle = {
+  ...itemPopoverStyle,
+  width: "clamp(360px, 60vw, 640px)",
+  maxWidth: "calc(100vw - 16px)",
+  minWidth: 0,
+  maxHeight: "calc(100vh - 16px)",
+  overflowY: "auto",
+  overscrollBehavior: "contain",
+};
+
 const notePopoverStyle = {
   ...itemPopoverStyle,
   minWidth: "240px",
@@ -1284,20 +1294,44 @@ const itemPopoverTitleStyle = {
 const itemPopoverTableStyle = {
   borderCollapse: "collapse",
   fontSize: "11px",
+  tableLayout: "fixed",
   width: "100%",
 };
 
 const itemPopoverCellStyle = {
   borderTop: "1px solid #edf0f3",
+  overflowWrap: "anywhere",
   padding: "5px 6px",
   textAlign: "left",
-  whiteSpace: "nowrap",
+  verticalAlign: "top",
+  whiteSpace: "normal",
 };
 
 const itemPopoverQtyCellStyle = {
   ...itemPopoverCellStyle,
   fontWeight: 700,
   textAlign: "right",
+  whiteSpace: "nowrap",
+};
+
+const itemPopoverFooterStyle = {
+  alignItems: "flex-start",
+  borderTop: "1px solid #edf0f3",
+  boxSizing: "border-box",
+  display: "flex",
+  fontSize: "11px",
+  fontWeight: 700,
+  gap: "12px",
+  justifyContent: "space-between",
+  padding: "7px 6px 0",
+  width: "100%",
+};
+
+const itemPopoverFooterValueStyle = {
+  minWidth: 0,
+  overflowWrap: "anywhere",
+  textAlign: "right",
+  whiteSpace: "normal",
 };
 
 const detailPillRootStyle = {
@@ -1626,7 +1660,8 @@ const PICKUP_HINT_PATTERN = /픽업|pickup/iu;
 const LINE_ITEM_DATE_RANGE_PATTERN = /\b(\d{1,2}[./-]\d{1,2}\s*(?:-|~|–)\s*(?:\d{1,2}[./-])?\d{1,2})\b/u;
 
 function formatAreaValue(order) {
-  return textOrUndefined(order?.deliveryArea) ?? (order?.serviceType === "PICKUP" ? "Pickup" : "Null");
+  if (order?.serviceType === "PICKUP") return "Pickup";
+  return textOrUndefined(order?.deliveryArea) ?? "Null";
 }
 
 function getUniqueInfoDetails(values) {
@@ -1652,7 +1687,8 @@ function formatInfoDetail(label, value) {
 }
 
 function getOrderAreaPillDetails(order) {
-  if (getOrderAreaPillTone(order) === "neutral") return [];
+  const tone = getOrderAreaPillTone(order);
+  if (!isAttentionPillTone(tone)) return [];
 
   const rawArea = getOrderRawAttributeValue(order, DELIVERY_AREA_ATTRIBUTE_KEYS);
 
@@ -1663,7 +1699,9 @@ function getOrderAreaPillDetails(order) {
 }
 
 function getOrderAreaPillTone(order) {
-  return textOrUndefined(order?.deliveryArea) || order?.serviceType === "PICKUP" ? "neutral" : "warning";
+  if (order?.serviceType === "PICKUP") return "pickup";
+  if (textOrUndefined(order?.deliveryArea)) return "neutral";
+  return "warning";
 }
 
 function getOrderDeliveryPillDetails(order) {
@@ -1762,7 +1800,7 @@ function getOrderDataIssueReasons(order, plannedOrderIdSet) {
   const reasons = [];
   if (!isOrderRouteCreated(order) && !plannedOrderIdSet?.has(order?.id)) reasons.push("Unassigned");
   if (getOrderDeliveryPillTone(order) !== "neutral") reasons.push("Delivery date");
-  if (getOrderAreaPillTone(order) !== "neutral") reasons.push("Area");
+  if (isAttentionPillTone(getOrderAreaPillTone(order))) reasons.push("Area");
   return reasons;
 }
 
@@ -4967,7 +5005,15 @@ function OrdersPageContent({ loaderData }) {
                 {tableOrders.map((order) => {
                   const orderIsPlanned = plannedOrderIdSet.has(order.id);
                   const checkboxChecked = orderIsPlanned || checkedOrderIdSet.has(order.id);
+                  const areaPillTone = getOrderAreaPillTone(order);
                   const areaPillDetails = getOrderAreaPillDetails(order);
+                  const areaPill = renderDetailPill({
+                    children: formatAreaValue(order),
+                    details: areaPillDetails,
+                    detailKey: `${order.id}:area`,
+                    label: "Area details",
+                    tone: areaPillTone,
+                  });
                   const deliveryPillDetails = getOrderDeliveryPillDetails(order);
                   const deliveryLabel = formatOrderDeliveryLabel(order);
                   const deliveryPill = renderDetailPill({
@@ -5080,15 +5126,20 @@ function OrdersPageContent({ loaderData }) {
                               ref={itemPopoverRef}
                               data-order-items-popover-root="true"
                               style={{
-                                ...itemPopoverStyle,
+                                ...orderedItemsPopoverStyle,
                                 left: `${Math.round(itemPopoverPosition.left)}px`,
                                 top: `${Math.round(itemPopoverPosition.top)}px`,
                                 transform: "none",
-                                width: `${Math.round(itemPopoverPosition.width)}px`,
                               }}
                             >
                               <div style={itemPopoverTitleStyle}>Ordered items</div>
                             <table style={itemPopoverTableStyle}>
+                              <colgroup>
+                                <col style={{ width: "55%" }} />
+                                <col style={{ width: "20%" }} />
+                                <col style={{ width: "15%" }} />
+                                <col style={{ width: "10%" }} />
+                              </colgroup>
                               <thead>
                                 <tr>
                                   <th style={itemPopoverCellStyle}>Item</th>
@@ -5106,32 +5157,28 @@ function OrdersPageContent({ loaderData }) {
                                     <td style={itemPopoverQtyCellStyle}>{item.quantity}</td>
                                   </tr>
                                 ))}
-                                <tr>
-                                  <td style={itemPopoverCellStyle} colSpan={3}>Order total</td>
-                                  <td style={itemPopoverQtyCellStyle}>{formatOrderTotal(order)}</td>
-                                </tr>
                               </tbody>
                             </table>
+                            <div style={itemPopoverFooterStyle}>
+                              <span>Order total</span>
+                              <span style={itemPopoverFooterValueStyle}>{formatOrderTotal(order)}</span>
+                            </div>
                             </div>,
                             document.body,
                           ) : null}
                         </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <button
-                          type="button"
-                          aria-label={`Edit delivery area for ${order.name}`}
-                          style={editablePillButtonStyle}
-                          onClick={() => handleOpenOrderDataAction(order)}
-                        >
-                          {renderDetailPill({
-                            children: formatAreaValue(order),
-                            details: areaPillDetails,
-                            detailKey: `${order.id}:area`,
-                            label: "Area details",
-                            tone: getOrderAreaPillTone(order),
-                          })}
-                        </button>
+                        {isAttentionPillTone(areaPillTone) ? (
+                          <button
+                            type="button"
+                            aria-label={`Edit delivery area for ${order.name}`}
+                            style={editablePillButtonStyle}
+                            onClick={() => handleOpenOrderDataAction(order)}
+                          >
+                            {areaPill}
+                          </button>
+                        ) : areaPill}
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         {deliveryLabel === "Date pending" ? (

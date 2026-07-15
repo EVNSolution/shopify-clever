@@ -20,28 +20,46 @@ export function buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone }
   const orderedAt = getOrderTimestampValue(order, ["orderCreatedAt", "createdAt"]);
   const processedAt = getOrderTimestampValue(order, ["processedAt"]);
   const updatedAt = getOrderTimestampValue(order, ["updatedAt", "updatedAtShopify"]);
+  const orderedDate =
+    textOrUndefined(order?.orderedDate) ??
+    formatOrderDateTimePart(orderedAt, shopTimeZone, DATE_FORMAT_OPTIONS);
+  const orderedTime = formatOrderDateTimePart(orderedAt, shopTimeZone, TIME_FORMAT_OPTIONS);
+  const timeZone = textOrUndefined(deliveryCycle?.timeZone) ?? textOrUndefined(shopTimeZone);
   const routeSequence =
     order?.routeSequence ??
     order?.rawPayload?.routeSequence ??
     order?.shopifyOrderSnapshot?.routeSequence;
 
   return getUniqueTimelineDetails([
+    formatTimelineDetail("Ordered", formatOrderedDateTime(orderedDate, orderedTime)),
     formatTimelineDetail(
-      "Ordered date",
-      order?.orderedDate ?? formatOrderDateTimePart(orderedAt, shopTimeZone, {
-        day: "2-digit",
-        month: "2-digit",
-        year: "numeric",
-      }),
+      "Processed",
+      formatRelativeOrderDateTime(processedAt, shopTimeZone, orderedDate),
     ),
-    formatTimelineDetail("Ordered time", formatOrderTime(orderedAt, shopTimeZone)),
-    formatTimelineDetail("Processed", formatOrderDateTime(processedAt, shopTimeZone)),
-    formatTimelineDetail("Last updated", formatOrderDateTime(updatedAt, shopTimeZone)),
-    formatTimelineDetail("Cycle cutoff", formatDeliveryCycleCutoff(deliveryCycle)),
-    formatTimelineDetail("Delivery cycle", formatOrderDeliveryCycle(order)),
-    formatTimelineDetail("Route sequence", routeSequence),
+    isSameOrderInstant(processedAt, updatedAt)
+      ? undefined
+      : formatTimelineDetail(
+          "Updated",
+          formatRelativeOrderDateTime(updatedAt, shopTimeZone, orderedDate),
+        ),
+    formatTimelineDetail("Cutoff", formatDeliveryCycleCutoff(deliveryCycle)),
+    formatTimelineDetail("Delivery", formatOrderDeliveryCycle(order)),
+    formatTimelineDetail("Stop", routeSequence),
+    formatTimelineDetail("Time zone", timeZone),
   ]);
 }
+
+const DATE_FORMAT_OPTIONS = {
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+};
+
+const TIME_FORMAT_OPTIONS = {
+  hour: "2-digit",
+  hour12: false,
+  minute: "2-digit",
+};
 
 function getOrderTimestampValue(order, keys) {
   for (const key of keys) {
@@ -69,48 +87,113 @@ function formatOrderDateTimePart(value, shopTimeZone, options) {
   }).format(date);
 }
 
-function formatOrderDateTime(value, shopTimeZone) {
-  return formatOrderDateTimePart(value, shopTimeZone, {
-    day: "2-digit",
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    month: "2-digit",
-    timeZoneName: "short",
-    year: "numeric",
-  });
+function formatOrderedDateTime(date, time) {
+  if (!date) return undefined;
+  return time ? `${date}, ${time}` : date;
 }
 
-function formatOrderTime(value, shopTimeZone) {
-  return formatOrderDateTimePart(value, shopTimeZone, {
-    hour: "2-digit",
-    hour12: false,
-    minute: "2-digit",
-    timeZoneName: "short",
-  });
+function formatRelativeOrderDateTime(value, shopTimeZone, orderedDate) {
+  const text = textOrUndefined(value);
+  if (!text) return undefined;
+
+  const date = formatOrderDateTimePart(text, shopTimeZone, DATE_FORMAT_OPTIONS);
+  const time = formatOrderDateTimePart(text, shopTimeZone, TIME_FORMAT_OPTIONS);
+  if (!date || !time) return text;
+
+  return date === orderedDate ? time : `${date}, ${time}`;
+}
+
+function isSameOrderInstant(firstValue, secondValue) {
+  const firstText = textOrUndefined(firstValue);
+  const secondText = textOrUndefined(secondValue);
+  if (!firstText || !secondText) return false;
+
+  const firstDate = new Date(firstText);
+  const secondDate = new Date(secondText);
+  if (Number.isNaN(firstDate.getTime()) || Number.isNaN(secondDate.getTime())) {
+    return firstText === secondText;
+  }
+
+  return firstDate.getTime() === secondDate.getTime();
 }
 
 function formatDeliveryCycleCutoff(deliveryCycle) {
   if (!deliveryCycle) return undefined;
 
   return getUniqueTimelineDetails([
-    deliveryCycle.cutoffWeekday,
+    formatCompactWeekday(deliveryCycle.cutoffWeekday),
     deliveryCycle.cutoffTime,
-    deliveryCycle.timeZone,
-  ]).join(" · ") || undefined;
+  ]).join(", ") || undefined;
 }
 
 function formatOrderDeliveryCycle(order) {
+  const deliveryDate = textOrUndefined(order?.deliveryDate);
+  if (!deliveryDate) return undefined;
+
   const timeWindowStart = textOrUndefined(order?.timeWindowStart);
   const timeWindowEnd = textOrUndefined(order?.timeWindowEnd);
+  const timeWindow =
+    timeWindowStart && timeWindowEnd ? `${timeWindowStart}–${timeWindowEnd}` : undefined;
+  const deliverySession = formatTitleCase(order?.deliverySession);
+  const deliveryWindow = [
+    timeWindow,
+    deliverySession ? `(${deliverySession})` : undefined,
+  ].filter(Boolean).join(" ");
 
   return getUniqueTimelineDetails([
-    order?.deliveryDate,
-    order?.deliveryLabel,
-    order?.deliveryDay,
-    order?.deliverySession,
-    timeWindowStart && timeWindowEnd ? `${timeWindowStart}-${timeWindowEnd}` : undefined,
-  ]).join(" · ") || undefined;
+    formatCompactWeekday(order?.deliveryDay) ?? formatWeekdayFromDate(deliveryDate),
+    deliveryDate,
+    deliveryWindow,
+  ]).join(", ") || undefined;
+}
+
+function formatCompactWeekday(value) {
+  const text = textOrUndefined(value);
+  if (!text) return undefined;
+
+  const weekdays = new Map([
+    ["sun", "Sun"],
+    ["sunday", "Sun"],
+    ["mon", "Mon"],
+    ["monday", "Mon"],
+    ["tue", "Tue"],
+    ["tues", "Tue"],
+    ["tuesday", "Tue"],
+    ["wed", "Wed"],
+    ["wednesday", "Wed"],
+    ["thu", "Thu"],
+    ["thur", "Thu"],
+    ["thurs", "Thu"],
+    ["thursday", "Thu"],
+    ["fri", "Fri"],
+    ["friday", "Fri"],
+    ["sat", "Sat"],
+    ["saturday", "Sat"],
+  ]);
+
+  return weekdays.get(text.toLowerCase()) ?? text;
+}
+
+function formatWeekdayFromDate(value) {
+  const text = textOrUndefined(value);
+  if (!text) return undefined;
+
+  const date = new Date(`${text}T00:00:00Z`);
+  if (Number.isNaN(date.getTime())) return undefined;
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "short",
+  }).format(date);
+}
+
+function formatTitleCase(value) {
+  const text = textOrUndefined(value);
+  if (!text) return undefined;
+
+  return text
+    .toLowerCase()
+    .replace(/\b[a-z]/g, (letter) => letter.toUpperCase());
 }
 
 function formatTimelineDetail(label, value) {

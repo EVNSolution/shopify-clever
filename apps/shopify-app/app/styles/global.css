@@ -82,6 +82,11 @@ s-badge {
   color: #b42318;
 }
 
+.info-pill--pickup {
+  background: rgba(0, 91, 211, 0.12);
+  color: #005bd3;
+}
+
 .route-plan-address-button {
   font-size: 12px !important;
   line-height: 1.35 !important;
