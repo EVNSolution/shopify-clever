@@ -550,12 +550,14 @@ test("Orders data fix suggests a nearby delivery area without saving it", () => 
   assert.match(ordersPageSource, />Apply<\/button>/);
 });
 
-test("Date pending pill opens Fix data for that order", () => {
+test("Area and Date pending pills open Fix data without keeping the row selected", () => {
   assert.match(ordersPageSource, /const handleOpenOrderDataAction = \(order\) => \{/);
-  assert.match(ordersPageSource, /setCheckedOrderIds\(\[order\.id\]\)/);
+  assert.match(ordersPageSource, /const pillOrderDataOrder = activeOrderDataOrderId && checkedOrders\.length === 0/);
+  assert.match(ordersPageSource, /setCheckedOrderIds\(\[\]\)/);
   assert.match(ordersPageSource, /setOrderActionField\(ORDER_DATA_FIX_ACTION\)/);
   assert.match(ordersPageSource, /selectOrderDataOrder\(order\)/);
   assert.match(ordersPageSource, /setOrderActionModalOpen\(true\)/);
+  assert.match(ordersPageSource, /aria-label=\{`Edit delivery area for \$\{order\.name\}`\}/);
   assert.match(ordersPageSource, /aria-label=\{`Edit delivery date for \$\{order\.name\}`\}/);
   assert.match(ordersPageSource, /onClick=\{\(\) => handleOpenOrderDataAction\(order\)\}/);
 });
