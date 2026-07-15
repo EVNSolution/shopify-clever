@@ -28,6 +28,7 @@ import {
   getSafePerformanceNow,
   roundPerfDuration,
   textOrUndefined,
+  withPromiseTimeout,
 } from "./orders-page.shared";
 import {
   fetchShopifyShopTimeZone,
@@ -36,6 +37,7 @@ import {
 
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
+const ORDERS_PAGE_LOAD_TIMEOUT_MS = 15_000;
 
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
@@ -533,12 +535,16 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
 
   return {
-    ordersPageData: loadOrdersPageData({
-      admin,
-      loaderStartedAt,
-      request,
-      session,
-    }),
+    ordersPageData: withPromiseTimeout(
+      loadOrdersPageData({
+        admin,
+        loaderStartedAt,
+        request,
+        session,
+      }),
+      ORDERS_PAGE_LOAD_TIMEOUT_MS,
+      "Orders data loading timed out.",
+    ),
   };
 };
 

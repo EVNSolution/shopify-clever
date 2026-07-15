@@ -2,7 +2,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Await, useFetcher, useLoaderData, useNavigate, useSearchParams } from "react-router";
+import { Await, useFetcher, useLoaderData, useNavigate, useRevalidator, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { appendIdToken, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
@@ -159,6 +159,19 @@ const ordersLoadingStatusStyle = {
   display: "grid",
   justifyItems: "center",
   gap: "6px",
+};
+
+const ordersLoadingRetryButtonStyle = {
+  appearance: "none",
+  background: "#303030",
+  border: 0,
+  borderRadius: "8px",
+  color: "#ffffff",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: 650,
+  marginTop: "8px",
+  padding: "8px 14px",
 };
 
 const routePlanPanelStyle = {
@@ -2207,7 +2220,39 @@ function OrdersPageLoading() {
               </div>
             ))}
           </div>
-          <span style={{ color: "#616161", fontSize: "13px" }}>Loading orders…</span>
+          <span style={{ color: "#616161", fontSize: "13px" }}>
+            Shopify and delivery data are loading asynchronously. Please wait.
+          </span>
+        </div>
+      }
+    />
+  );
+}
+
+function OrdersPageLoadError() {
+  const revalidator = useRevalidator();
+  const retrying = revalidator.state !== "idle";
+
+  return (
+    <TabLayout
+      primaryExpanded
+      primary={
+        <div aria-live="assertive" role="alert" style={ordersLoadingPanelStyle}>
+          <div style={ordersLoadingStatusStyle}>
+            <strong>Orders loading stopped</strong>
+            <span>The asynchronous request did not finish within 15 seconds.</span>
+            <button
+              type="button"
+              disabled={retrying}
+              style={{
+                ...ordersLoadingRetryButtonStyle,
+                ...(retrying ? { cursor: "wait", opacity: 0.55 } : {}),
+              }}
+              onClick={() => revalidator.revalidate()}
+            >
+              {retrying ? "Retrying…" : "Retry"}
+            </button>
+          </div>
         </div>
       }
     />
@@ -2219,7 +2264,7 @@ export default function OrdersPage() {
 
   return (
     <Suspense fallback={<OrdersPageLoading />}>
-      <Await resolve={ordersPageData}>
+      <Await resolve={ordersPageData} errorElement={<OrdersPageLoadError />}>
         {(loaderData) => <OrdersPageContent loaderData={loaderData} />}
       </Await>
     </Suspense>

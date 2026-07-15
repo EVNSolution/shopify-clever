@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { withPromiseTimeout } from "../app/features/orders/orders-page.shared.js";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
@@ -51,13 +52,28 @@ test("Orders route renders its shell while slow loader data is still pending", (
   assert.match(ordersPageSource, /async function loadOrdersPageData\(/);
   assert.match(
     ordersPageSource,
-    /export const loader = async \(\{ request \}\) => \{[\s\S]*authenticate\.admin\(request\)[\s\S]*ordersPageData: loadOrdersPageData\(/,
+    /export const loader = async \(\{ request \}\) => \{[\s\S]*authenticate\.admin\(request\)[\s\S]*ordersPageData: withPromiseTimeout\([\s\S]*loadOrdersPageData\(/,
   );
   assert.doesNotMatch(ordersPageSource, /ordersPageData:\s*await loadOrdersPageData\(/);
   assert.match(ordersPageSource, /<Suspense fallback=\{<OrdersPageLoading \/>\}>/);
-  assert.match(ordersPageSource, /<Await resolve=\{ordersPageData\}>/);
+  assert.match(ordersPageSource, /<Await resolve=\{ordersPageData\} errorElement=\{<OrdersPageLoadError \/>\}>/);
   assert.match(ordersPageSource, /function OrdersPageContent\(\{ loaderData \}\)/);
   assert.match(ordersPageSource, /aria-label="Orders are loading"/);
+});
+
+test("Orders loading leaves the skeleton for a retryable error when data stalls", async () => {
+  await assert.rejects(
+    withPromiseTimeout(new Promise(() => {}), 5, "Orders data loading timed out."),
+    /Orders data loading timed out\./,
+  );
+
+  assert.match(ordersPageSource, /const ORDERS_PAGE_LOAD_TIMEOUT_MS = 15_000/);
+  assert.match(ordersPageSource, /ordersPageData: withPromiseTimeout\(/);
+  assert.match(ordersPageSource, /<Await resolve=\{ordersPageData\} errorElement=\{<OrdersPageLoadError \/>\}>/);
+  assert.match(ordersPageSource, /function OrdersPageLoadError\(\)/);
+  assert.match(ordersPageSource, /const revalidator = useRevalidator\(\)/);
+  assert.match(ordersPageSource, /onClick=\{\(\) => revalidator\.revalidate\(\)\}/);
+  assert.match(ordersPageSource, /Shopify and delivery data are loading asynchronously/);
 });
 
 test("performance capture endpoint stores browser metrics outside app data", () => {
