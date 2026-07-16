@@ -63,7 +63,6 @@ import {
   roundPerfDuration,
   shouldRequestOrdersData,
   textOrUndefined,
-  updateOrderSelection,
 } from "./orders-page.shared";
 
 const PERF_ENDPOINT = "/perf";
@@ -2558,7 +2557,6 @@ function OrdersPageContent({ loaderData }) {
   const notePopoverRef = useRef(null);
   const orderDetailAnchorRef = useRef(null);
   const orderDetailPopoverRef = useRef(null);
-  const orderSelectionAnchorRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapRenderKey, setMapRenderKey] = useState(0);
   const [mapSourceSyncRequest, setMapSourceSyncRequest] = useState(0);
@@ -3075,15 +3073,6 @@ function OrdersPageContent({ loaderData }) {
     [plannedOrderIdSet, tableOrders],
   );
 
-  useEffect(() => {
-    const anchorOrderId = orderSelectionAnchorRef.current;
-    if (
-      anchorOrderId &&
-      !selectableTableOrders.some((order) => order.id === anchorOrderId)
-    ) {
-      orderSelectionAnchorRef.current = null;
-    }
-  }, [selectableTableOrders]);
   const plannedLocatedOrders = useMemo(() => plannedOrders.filter((order) => order.hasCoordinates), [plannedOrders]);
   const initialMapCenter = useMemo(
     () => departureLocation?.hasCoordinates ? departureLocation.coordinates : DEFAULT_CENTER,
@@ -3641,24 +3630,16 @@ function OrdersPageContent({ loaderData }) {
   }, [isMapReady]);
 
 
-  const toggleOrderCheck = (orderId, { checked, shiftKey = false }) => {
+  const toggleOrderCheck = (orderId, checked) => {
     if (plannedOrderIdSet.has(orderId)) return;
 
-    setCheckedOrderIds((currentOrderIds) => updateOrderSelection({
-      anchorOrderId: orderSelectionAnchorRef.current,
-      checked,
-      currentOrderIds,
-      orderId,
-      orderedSelectableOrderIds: selectableTableOrders.map((order) => order.id),
-      shiftKey,
-    }));
-    orderSelectionAnchorRef.current = orderId;
+    setCheckedOrderIds((currentOrderIds) => checked
+      ? Array.from(new Set([...currentOrderIds, orderId]))
+      : currentOrderIds.filter((selectedOrderId) => selectedOrderId !== orderId));
     setCreateRouteClientError(null);
   };
 
   const toggleAllVisibleOrderChecks = () => {
-    orderSelectionAnchorRef.current = null;
-
     if (!allVisibleOrdersChecked) {
       setCheckedOrderIds((currentOrderIds) =>
         Array.from(
@@ -5083,11 +5064,7 @@ function OrdersPageContent({ loaderData }) {
                           title={orderIsPlanned ? "Already added to map" : ""}
                           checked={checkboxChecked}
                           disabled={orderIsPlanned}
-                          onChange={() => {}}
-                          onClick={(event) => toggleOrderCheck(order.id, {
-                            checked: event.currentTarget.checked,
-                            shiftKey: event.shiftKey,
-                          })}
+                          onChange={(event) => toggleOrderCheck(order.id, event.currentTarget.checked)}
                         />
                       </td>
                       <td style={tableCellStyle}>
