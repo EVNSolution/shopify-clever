@@ -8,6 +8,7 @@ import {
   PROTECTED_ORDER_ACCESS_ERROR_CODE,
   SHOPIFY_ORDERS_QUERY,
   SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE,
+  assertReadOnlyShopifyOrdersOperation,
   mapShopifyOrdersResponse,
 } from "./shopify-orders.server.js";
 
@@ -36,6 +37,16 @@ test("orders query reads order and customer notes", () => {
   assert.match(SHOPIFY_ORDERS_QUERY, /province/);
   assert.match(SHOPIFY_ORDERS_QUERY, /provinceCode/);
   assert.match(SHOPIFY_ORDERS_QUERY, /longitude/);
+});
+
+test("orders integration rejects Shopify mutations", () => {
+  assert.throws(
+    () => assertReadOnlyShopifyOrdersOperation(`mutation UpdateCustomer {
+      customerUpdate(input: {id: "gid://shopify/Customer/1"}) { customer { id } }
+    }`),
+    /Shopify order and customer mutations are disabled/,
+  );
+  assert.doesNotThrow(() => assertReadOnlyShopifyOrdersOperation(SHOPIFY_ORDERS_QUERY));
 });
 
 test("retries orders without customer notes when read_customers is not approved", async () => {
