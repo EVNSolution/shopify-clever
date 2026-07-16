@@ -257,7 +257,8 @@ test("materialized child headers save a per-route departure time", () => {
   assert.match(routeDetailSource, /type="time"/);
   assert.match(routeDetailSource, /formData\.set\("_intent", "saveRouteDepartureTime"\)/);
   assert.match(routeDetailSource, /formData\.set\("departureTime", routeDepartureTimeDraft\)/);
-  assert.match(routeDetailSource, /formData\.set\("routePlanId", effectiveRoutePlan\.id\)/);
+  assert.match(routeDetailSource, /const targetRoutePlanId = activeRouteSelector\?\.type === "startTime"[\s\S]*?: effectiveRoutePlan\?\.id/);
+  assert.match(routeDetailSource, /formData\.set\("routePlanId", targetRoutePlanId\)/);
   assert.match(routeDetailServerSource, /intent === "saveRouteDepartureTime"/);
   assert.match(routeDetailServerSource, /updateDeliveryRoutePlanDepartureTime/);
 });

@@ -262,7 +262,7 @@ export function buildRouteRows(routePlans, routeGroups = []) {
     const totalOrders = getRouteGroupTotalOrders(routeGroup);
     const groupSummary = formatRouteGroupSummary(children.length, totalOrders);
     return {
-      childRows: children.length > 1 ? buildRouteChildRows(routeGroup, children, groupAccentColor, groupSummary) : [],
+      childRows: buildRouteChildRows(routeGroup, children, groupAccentColor, groupSummary),
       children,
       groupAccentColor,
       groupSummary,

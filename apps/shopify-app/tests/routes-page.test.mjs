@@ -171,10 +171,15 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.doesNotMatch(routesPageSource, />Missing<\/th>/);
   assert.doesNotMatch(routesPageSource, />Created<\/th>/);
   assert.match(routesPageSource, /formatRouteStatus\(route\.status\)/);
-  assert.match(routesPageSource, /const routePublishedBadgeStyle = \{/);
+  assert.match(routesPageSource, /const routeReadyBadgeStyle = \{/);
+  assert.match(routesPageSource, /const routeInProgressBadgeStyle = \{/);
+  assert.match(routesPageSource, /const routeCompletedBadgeStyle = \{/);
   assert.match(routesPageSource, /const routeCancelledBadgeStyle = \{/);
-  assert.match(routesPageSource, /case "Published":\s+return routePublishedBadgeStyle/);
+  assert.match(routesPageSource, /case "Ready":\s+return routeReadyBadgeStyle/);
+  assert.match(routesPageSource, /case "In progress":\s+return routeInProgressBadgeStyle/);
+  assert.match(routesPageSource, /case "Completed":\s+return routeCompletedBadgeStyle/);
   assert.match(routesPageSource, /case "Cancelled":\s+return routeCancelledBadgeStyle/);
+  assert.match(routesPageSource, /return formatRouteStatus\(status\)\.toUpperCase\(\)\.replace/);
   assert.match(routeListRowsSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
   assert.match(routeListRowsSource, /const routeGroupRows = routeGroupEntries\.map/);
   assert.match(routeListRowsSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
@@ -183,6 +188,7 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routeHelpersSource, /rightRouteIdx = numberOrUndefined\(right\.child\?\.routeIdx\)/);
   assert.match(routeListRowsSource, /isRouteGroup: true/);
   assert.match(routeListRowsSource, /isDeletable: true/);
+  assert.match(routeListRowsSource, /childRows: buildRouteChildRows\(routeGroup, children, groupAccentColor, groupSummary\)/);
   assert.match(routeListRowsSource, /formatRouteGroupDate\(routeGroup\)/);
   assert.doesNotMatch(routesPageSource, /routeIndex: routeIndex \+ 1/);
   assert.match(routeListRowsSource, /formatRouteValues\(routePlan\.deliveryAreas\)/);
@@ -1021,6 +1027,12 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
+  assert.match(routeDetailSource, /onClick=\{\(\) => handleOpenRouteSelector\("startTime", routeRow\)\}/);
+  assert.match(routeDetailSource, /departureTime: getRouteDepartureTimeValue\(childRoutePlan\)/);
+  assert.match(routeDetailSource, /if \(selectorType === "startTime"\) setRouteDepartureTimeDraft\(routeRow\.departureTime\)/);
+  assert.match(routeDetailSource, /const targetRoutePlanId = activeRouteSelector\?\.type === "startTime"[\s\S]*?activeRouteSelector\.routePlanId[\s\S]*?: effectiveRoutePlan\?\.id/);
+  assert.match(routeDetailSource, /formData\.set\("routePlanId", targetRoutePlanId\)/);
+  assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? \([\s\S]*?aria-label="Route start time"[\s\S]*?type="time"/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
