@@ -98,6 +98,7 @@ test("child order rows follow actual child sequence and use delivery serviceType
         addressLabel: "2 Test St",
         lineItems: [{ title: "Soup", quantity: 2 }],
         serviceType: "EVENING_DELIVERY",
+        paymentStatus: "PAID",
         paymentMethodTitle: "Visa",
         attributes: [{ key: "Gate", value: "1234" }],
       },
@@ -110,6 +111,7 @@ test("child order rows follow actual child sequence and use delivery serviceType
         recipientName: "First Customer",
         addressLabel: "1 Test St",
         serviceType: "MORNING_DELIVERY",
+        financialStatus: "PENDING",
         paymentMethodTitle: "Cash",
       },
     ],
@@ -127,6 +129,7 @@ test("child order rows follow actual child sequence and use delivery serviceType
   assert.equal(rows[1].itemsSummary, "2 items");
   assert.equal(rows[1].method, "EVENING_DELIVERY");
   assert.notEqual(rows[1].method, "Visa");
+  assert.deepEqual(rows.map((row) => row.payment), ["Pending", "Paid"]);
   assert.equal(rows[1].attributesSummary, "1");
   assert.deepEqual(rows[1].attributes[0], {
     key: "Gate",
@@ -161,12 +164,14 @@ test("child order table columns are exact and excluded columns stay out of the c
     "Customer",
     "Items",
     "Method",
+    "Payment",
     "Attributes",
   ]);
 
   assert.match(routeDetailSource, /aria-label="Child route order stops"/);
   assert.match(routeDetailSource, /CHILD_ROUTE_ORDER_COLUMNS\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /childRouteOrderRows\.map\(\(row\) =>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
   assert.doesNotMatch(routeDetailSource, /aria-label="Open Shopify order"/);
   assert.doesNotMatch(routeDetailSource, /aria-label="Remove order from route"/);
 });

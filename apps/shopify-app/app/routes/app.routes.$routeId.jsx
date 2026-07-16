@@ -505,7 +505,7 @@ const childRouteDepartureSaveButtonStyle = {
 const childRouteOrderTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1320px",
+  minWidth: "1424px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -522,6 +522,7 @@ const childRouteOrderColumnWidths = [
   "142px",
   "96px",
   "132px",
+  "104px",
   "94px",
 ];
 
@@ -4049,6 +4050,7 @@ export default function RouteDetailPage() {
                         </button>
                       </td>
                       <td style={childRouteOrderCellStyle}>{row.method}</td>
+                      <td style={childRouteOrderCellStyle}>{row.payment}</td>
                       <td style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "attributes"}
