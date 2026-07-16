@@ -39,6 +39,36 @@ const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
 const ORDERS_PAGE_LOAD_TIMEOUT_MS = 15_000;
 
+function shouldFetchShopifyOrders() {
+  return process.env.CLEVER_ORDERS_SOURCE_MODE !== "delivery_only";
+}
+
+function getDeliveryOnlyDepartureLocationData() {
+  const latitude = Number(process.env.CLEVER_DELIVERY_ONLY_DEPOT_LATITUDE);
+  const longitude = Number(process.env.CLEVER_DELIVERY_ONLY_DEPOT_LONGITUDE);
+  const hasCoordinates = Number.isFinite(latitude) && Number.isFinite(longitude);
+
+  return {
+    departureLocation: {
+      id: "clever-delivery-only-depot",
+      name: process.env.CLEVER_DELIVERY_ONLY_DEPOT_NAME || "CLEVER Depot",
+      address: process.env.CLEVER_DELIVERY_ONLY_DEPOT_ADDRESS || "No location address",
+      coordinates: hasCoordinates ? [longitude, latitude] : [undefined, undefined],
+      hasCoordinates,
+      source: "CLEVER Settings",
+      isActive: true,
+    },
+    errors: [],
+  };
+}
+
+function getDeliveryOnlyShopTimeZoneData() {
+  return {
+    ianaTimezone: process.env.CLEVER_DELIVERY_ONLY_TIME_ZONE || "Asia/Seoul",
+    timezoneAbbreviation: "KST",
+  };
+}
+
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
 
@@ -436,8 +466,12 @@ async function resolvePlannedOrdersForAction({
   const shopifyDataStartedAt = getSafePerformanceNow();
   const preferencesData = await fetchShopifyAppPreferences(admin);
   const [orderData, departureLocationData] = await Promise.all([
-    fetchShopifyOrders(admin, { deliveryCycle: preferencesData.appPreferences.deliveryCycle }),
-    fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
+    shouldFetchShopifyOrders()
+      ? fetchShopifyOrders(admin, { deliveryCycle: preferencesData.appPreferences.deliveryCycle })
+      : Promise.resolve({ orders: [], errors: [] }),
+    shouldFetchShopifyOrders()
+      ? fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey })
+      : Promise.resolve(getDeliveryOnlyDepartureLocationData()),
   ]);
   timings.shopifyDataMs = roundPerfDuration(getSafePerformanceNow() - shopifyDataStartedAt);
 
@@ -554,6 +588,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
     ? "inventory"
     : "orders";
   const shouldLoadOrders = activeOrdersView !== "inventory";
+  const shouldLoadShopifyOrders = shouldLoadOrders && shouldFetchShopifyOrders();
 
   const preferencesStartedAt = getSafePerformanceNow();
   const preferencesDataPromise = shouldLoadOrders
@@ -564,7 +599,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
     : Promise.resolve({ data: { appPreferences: { deliveryCycle: undefined }, errors: [] }, durationMs: 0 });
 
   const ordersStartedAt = getSafePerformanceNow();
-  const orderDataPromise = shouldLoadOrders
+  const orderDataPromise = shouldLoadShopifyOrders
     ? preferencesDataPromise.then(({ data: preferencesData }) => fetchShopifyOrders(admin, {
         cacheKey: shopifyShopCacheKey,
         deliveryCycle: preferencesData.appPreferences.deliveryCycle,
@@ -576,10 +611,9 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
 
   const departureLocationStartedAt = getSafePerformanceNow();
   const departureLocationDataPromise = shouldLoadOrders
-    ? fetchShopifyDepartureLocation(
-        admin,
-        { cacheKey: shopifyShopCacheKey },
-      ).then((departureLocationData) => ({
+    ? (shouldLoadShopifyOrders
+      ? fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey })
+      : Promise.resolve(getDeliveryOnlyDepartureLocationData())).then((departureLocationData) => ({
         data: departureLocationData,
         durationMs: roundPerfDuration(getSafePerformanceNow() - departureLocationStartedAt),
       }))
@@ -590,10 +624,9 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
   const routeGroupsStartedAt = getSafePerformanceNow();
   const shopTimeZoneStartedAt = getSafePerformanceNow();
   const shopTimeZoneDataPromise = shouldLoadOrders
-    ? fetchShopifyShopTimeZone(
-        admin,
-        { cacheKey: shopifyShopCacheKey },
-      ).then((shopTimeZoneData) => ({
+    ? (shouldLoadShopifyOrders
+      ? fetchShopifyShopTimeZone(admin, { cacheKey: shopifyShopCacheKey })
+      : Promise.resolve(getDeliveryOnlyShopTimeZoneData())).then((shopTimeZoneData) => ({
         data: shopTimeZoneData,
         durationMs: roundPerfDuration(getSafePerformanceNow() - shopTimeZoneStartedAt),
       }))

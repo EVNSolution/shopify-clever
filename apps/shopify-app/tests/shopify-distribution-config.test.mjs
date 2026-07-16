@@ -50,6 +50,13 @@ test("public, dev/custom-store, and KFood env examples declare their intended di
   assert.match(devEnvExample, /^SHOPIFY_APP_DISTRIBUTION=single_merchant$/m);
   assert.match(kfoodEnvExample, /^SHOPIFY_APP_DISTRIBUTION=single_merchant$/m);
   assert.match(kfoodEnvExample, /^CLEVER_APP_ID=clever-route-kfood$/m);
+  assert.match(devEnvExample, /^CLEVER_ORDERS_SOURCE_MODE=delivery_only$/m);
+  assert.match(devEnvExample, /^CLEVER_DELIVERY_ONLY_DEPOT_ADDRESS=서울특별시 동작구 노량진로 10$/m);
+  assert.match(devEnvExample, /^CLEVER_DELIVERY_ONLY_DEPOT_LATITUDE=37\.5124328$/m);
+  assert.match(devEnvExample, /^CLEVER_DELIVERY_ONLY_DEPOT_LONGITUDE=126\.9269873$/m);
+  assert.match(devEnvExample, /^CLEVER_DELIVERY_ONLY_TIME_ZONE=Asia\/Seoul$/m);
+  assert.doesNotMatch(publicEnvExample, /^CLEVER_ORDERS_SOURCE_MODE=/m);
+  assert.doesNotMatch(kfoodEnvExample, /^CLEVER_ORDERS_SOURCE_MODE=/m);
 });
 
 test("Shopify app configs have explicit distinct production, dev, and KFood identities", () => {
