@@ -15,6 +15,7 @@ import {
   getShopifySessionBearer,
   updateDeliveryRoutePlanStops,
   updateDeliveryRoutePlanDepartureTime,
+  updateDeliveryRoutePlanScheduledStart,
   assignDeliveryRoutePlanDriver,
 } from "./route-plans.server.js";
 
@@ -575,6 +576,42 @@ test("updates a child route departure time through the delivery Admin API", asyn
   assert.deepEqual(JSON.parse(calls[0].options.body), { departureTime: "08:30" });
   assert.equal(result.routePlan.departureTime, "08:30");
   assert.deepEqual(result.errors, []);
+});
+
+test("updates or clears a child route scheduled start through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+  const request = new Request("https://app.example/app/routes/route-1");
+  const fetch = async (url, options) => {
+    calls.push({ url, options });
+    return Response.json({
+      data: { routePlan: { id: "route 1", scheduledStartAt: JSON.parse(options.body).scheduledStartAt } },
+      error: null,
+    });
+  };
+
+  const saved = await updateDeliveryRoutePlanScheduledStart(
+    request,
+    "route 1",
+    { scheduledStartAt: "2026-07-16T16:30:00.000Z" },
+    { fetch, sessionToken: "client-session-token" },
+  );
+  const cleared = await updateDeliveryRoutePlanScheduledStart(
+    request,
+    "route 1",
+    { scheduledStartAt: null },
+    { fetch, sessionToken: "client-session-token" },
+  );
+
+  process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route%201/start-time");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].options.body), { scheduledStartAt: "2026-07-16T16:30:00.000Z" });
+  assert.deepEqual(JSON.parse(calls[1].options.body), { scheduledStartAt: null });
+  assert.equal(saved.routePlan.scheduledStartAt, "2026-07-16T16:30:00.000Z");
+  assert.equal(cleared.routePlan.scheduledStartAt, null);
 });
 
 

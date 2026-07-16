@@ -6,7 +6,7 @@ export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "status", label: "Status" },
   { key: "orderDate", label: "Order date" },
   { key: "address", label: "Address" },
-  { key: "eta", label: "ETA" },
+  { key: "eta", label: "ETA (est.)" },
   { key: "driveTime", label: "Drive time" },
   { key: "stopTime", label: "Stop time" },
   { key: "customer", label: "Customer" },
@@ -100,6 +100,69 @@ export function formatStoreLocalOrderDate(value, ianaTimezone) {
   });
   if (!parts?.month || !parts?.day || !parts?.hour || !parts?.minute) return EMPTY_LABEL;
   return `${parts.month}.${parts.day} ${parts.hour}:${parts.minute}`;
+}
+
+export function formatStoreLocalDateTimeInput(value, ianaTimezone) {
+  if (value === null || value === undefined || value === "" || !textOrUndefined(ianaTimezone)) return "";
+  const parts = formatDateParts(value, ianaTimezone, {
+    day: "2-digit",
+    hour: "2-digit",
+    hourCycle: "h23",
+    minute: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+  if (!parts?.year || !parts?.month || !parts?.day || !parts?.hour || !parts?.minute) return "";
+  return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`;
+}
+
+export function storeLocalDateTimeToIso(value, ianaTimezone) {
+  const timeZone = textOrUndefined(ianaTimezone);
+  const match = textOrUndefined(value)?.match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/);
+  if (!timeZone || !match) return null;
+
+  const [, yearText, monthText, dayText, hourText, minuteText] = match;
+  const expected = {
+    day: Number(dayText),
+    hour: Number(hourText),
+    minute: Number(minuteText),
+    month: Number(monthText),
+    year: Number(yearText),
+  };
+  const targetUtcMs = Date.UTC(expected.year, expected.month - 1, expected.day, expected.hour, expected.minute);
+  const targetDate = new Date(targetUtcMs);
+  if (
+    targetDate.getUTCFullYear() !== expected.year ||
+    targetDate.getUTCMonth() + 1 !== expected.month ||
+    targetDate.getUTCDate() !== expected.day ||
+    targetDate.getUTCHours() !== expected.hour ||
+    targetDate.getUTCMinutes() !== expected.minute
+  ) return null;
+
+  let candidateMs = targetUtcMs;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    const parts = formatDateParts(candidateMs, timeZone, {
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+    });
+    if (!parts) return null;
+    const renderedUtcMs = Date.UTC(
+      Number(parts.year),
+      Number(parts.month) - 1,
+      Number(parts.day),
+      Number(parts.hour),
+      Number(parts.minute),
+    );
+    const adjustmentMs = targetUtcMs - renderedUtcMs;
+    if (adjustmentMs === 0) return new Date(candidateMs).toISOString();
+    candidateMs += adjustmentMs;
+  }
+
+  return null;
 }
 
 function getTimeZoneAbbreviationForInstant(ianaTimezone, instant, fallbackAbbreviation) {

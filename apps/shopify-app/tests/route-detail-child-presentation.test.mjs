@@ -11,8 +11,10 @@ import {
   formatChildEtaLabel,
   formatChildOrderStatus,
   formatChildStopTimeLabel,
+  formatStoreLocalDateTimeInput,
   formatStoreLocalOrderDate,
   isMaterializedChildRouteDetail,
+  storeLocalDateTimeToIso,
 } from "../app/features/delivery/child-route-detail-presentation.js";
 
 const root = process.cwd();
@@ -53,6 +55,24 @@ test("child row date and ETA formatting uses store-local time and dynamic timezo
     formatChildEtaLabel("2026-07-15T16:00:00.000Z", "America/New_York", "ET"),
     "12:00 EDT",
   );
+});
+
+test("route start date-time input round-trips through the store timezone without inferring a date", () => {
+  assert.equal(
+    formatStoreLocalDateTimeInput("2026-07-16T16:30:00.000Z", "America/Toronto"),
+    "2026-07-16T12:30",
+  );
+  assert.equal(
+    storeLocalDateTimeToIso("2026-07-16T12:30", "America/Toronto"),
+    "2026-07-16T16:30:00.000Z",
+  );
+  assert.equal(
+    storeLocalDateTimeToIso("2026-07-16T12:30", "Asia/Seoul"),
+    "2026-07-16T03:30:00.000Z",
+  );
+  assert.equal(formatStoreLocalDateTimeInput(null, "America/Toronto"), "");
+  assert.equal(storeLocalDateTimeToIso("2026-07-16", "America/Toronto"), null);
+  assert.equal(storeLocalDateTimeToIso("2026-07-16T12:30", null), null);
 });
 
 test("child route compact metrics use read-only drive and stop labels", () => {
@@ -135,7 +155,7 @@ test("child order table columns are exact and excluded columns stay out of the c
     "Status",
     "Order date",
     "Address",
-    "ETA",
+    "ETA (est.)",
     "Drive time",
     "Stop time",
     "Customer",
@@ -251,14 +271,14 @@ test("Items and Attributes use hover and click disclosures above their trigger",
   assert.doesNotMatch(routeDetailSource, /childRouteDisclosurePopoverStyle\}>\{row\.(itemsDetail|attributesDetail)\}/);
 });
 
-test("materialized child headers save a per-route departure time", () => {
-  assert.match(routeDetailSource, /const \[routeDepartureTimeDraft, setRouteDepartureTimeDraft\] = useState/);
-  assert.match(routeDetailSource, /aria-label="Route departure time"/);
-  assert.match(routeDetailSource, /type="time"/);
-  assert.match(routeDetailSource, /formData\.set\("_intent", "saveRouteDepartureTime"\)/);
-  assert.match(routeDetailSource, /formData\.set\("departureTime", routeDepartureTimeDraft\)/);
+test("materialized child headers save a complete per-route start date and time", () => {
+  assert.match(routeDetailSource, /const \[routeStartDateTimeDraft, setRouteStartDateTimeDraft\] = useState/);
+  assert.match(routeDetailSource, /aria-label="Route start date and time"/);
+  assert.match(routeDetailSource, /type="datetime-local"/);
+  assert.match(routeDetailSource, /formData\.set\("_intent", "saveRouteStartTime"\)/);
+  assert.match(routeDetailSource, /formData\.set\("scheduledStartAt", scheduledStartAt \?\? ""\)/);
   assert.match(routeDetailSource, /const targetRoutePlanId = activeRouteSelector\?\.type === "startTime"[\s\S]*?: effectiveRoutePlan\?\.id/);
   assert.match(routeDetailSource, /formData\.set\("routePlanId", targetRoutePlanId\)/);
-  assert.match(routeDetailServerSource, /intent === "saveRouteDepartureTime"/);
-  assert.match(routeDetailServerSource, /updateDeliveryRoutePlanDepartureTime/);
+  assert.match(routeDetailServerSource, /intent === "saveRouteStartTime"/);
+  assert.match(routeDetailServerSource, /updateDeliveryRoutePlanScheduledStart/);
 });

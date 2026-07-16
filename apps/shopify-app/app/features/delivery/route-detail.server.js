@@ -12,7 +12,7 @@ import {
   assignDeliveryRoutePlanDriver,
   deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
-  updateDeliveryRoutePlanDepartureTime,
+  updateDeliveryRoutePlanScheduledStart,
 } from "./route-plans.server";
 import {
   firstArray,
@@ -485,14 +485,15 @@ export const routeDetailAction = async ({ params, request }) => {
     );
   }
 
-  if (intent === "saveRouteDepartureTime") {
-    const departureTime = textOrUndefined(formData.get("departureTime"));
+  if (intent === "saveRouteStartTime") {
+    const scheduledStartAtValue = formData.get("scheduledStartAt");
+    const scheduledStartAt = scheduledStartAtValue === "" ? null : textOrUndefined(scheduledStartAtValue);
     const targetRouteId = textOrUndefined(formData.get("routePlanId")) ?? routeId;
 
-    return updateDeliveryRoutePlanDepartureTime(
+    return updateDeliveryRoutePlanScheduledStart(
       request,
       targetRouteId,
-      { departureTime },
+      { scheduledStartAt },
       { sessionToken: shopifySessionToken },
     );
   }

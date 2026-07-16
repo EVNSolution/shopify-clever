@@ -260,6 +260,43 @@ export async function updateDeliveryRoutePlanDepartureTime(request, routePlanId,
   };
 }
 
+export async function updateDeliveryRoutePlanScheduledStart(request, routePlanId, payload, options = {}) {
+  const normalizedRoutePlanId = textOrNull(routePlanId);
+
+  if (!normalizedRoutePlanId) {
+    return {
+      routePlan: null,
+      errors: [
+        {
+          code: DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE,
+          message: "수정할 route plan ID가 없어 출발 일시를 저장하지 못했습니다.",
+        },
+      ],
+    };
+  }
+
+  const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/start-time`,
+    {
+      body: JSON.stringify({ scheduledStartAt: textOrNull(payload?.scheduledStartAt) }),
+      fetch: options.fetch,
+      method: "PATCH",
+      sessionToken: options.sessionToken,
+    },
+  );
+
+  return {
+    routePlan: result.data?.routePlan ?? null,
+    routeGeometry: result.data?.routeGeometry ?? null,
+    routeMetrics: result.data?.routeMetrics ?? null,
+    routeStopPoints: result.data?.routeStopPoints ?? [],
+    stops: result.data?.stops ?? [],
+    errors: result.errors,
+  };
+}
+
 export async function assignDeliveryRoutePlanDriver(request, routePlanId, payload, options = {}) {
   const normalizedRoutePlanId = textOrNull(routePlanId);
 
