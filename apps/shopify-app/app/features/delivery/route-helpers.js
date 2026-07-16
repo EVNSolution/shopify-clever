@@ -63,19 +63,9 @@ export function formatRouteDeliveryScope(routePlan, emptyLabel = "-") {
 }
 
 export function formatRouteStatus(status) {
-  const value = textOrUndefined(status)?.toUpperCase();
-  if (!value || ["DRAFT", "UNAVAILABLE", "UNSTARTED", "READY", "CHANGED", "OPTIMIZED"].includes(value)) {
-    return "Draft";
-  }
-  if (["PUBLISHED", "ASSIGNED", "IN_PROGRESS", "COMPLETED"].includes(value)) {
-    return "Published";
-  }
+  const value = textOrUndefined(status)?.toUpperCase().replace(/[\s-]+/g, "_");
+  if (value === "IN_PROGRESS") return "In progress";
+  if (value === "COMPLETED") return "Completed";
   if (value === "CANCELLED") return "Cancelled";
-
-  return value
-    .toLowerCase()
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
+  return "Ready";
 }

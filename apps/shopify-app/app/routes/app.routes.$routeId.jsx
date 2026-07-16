@@ -1856,6 +1856,7 @@ function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
     attemptedCount: countRouteStopsByStatus(routeStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
     color: MAP_MARKER_PALETTE.plannedOrder.color,
     createdLabel: getRouteCreatedLabel(routeGroup),
+    departureTime: "",
     deliveredCount: countRouteStopsByStatus(routeStops, ["DELIVERED", "FULFILLED"]),
     driverLabel: "Unassigned",
     driveTimeLabel: ROUTE_EMPTY_LABEL,
@@ -1903,6 +1904,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       attemptedCount: countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
       color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[index % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
       createdLabel: getRouteCreatedLabel(childRoutePlan),
+      departureTime: getRouteDepartureTimeValue(childRoutePlan),
       deliveredCount: countRouteStopsByStatus(stops, ["DELIVERED", "FULFILLED"]),
       driverLabel: textOrUndefined(child?.driverName ?? childRoutePlan?.driver?.displayName) ?? "Unassigned",
       driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(childRouteMetrics?.durationSeconds)),
@@ -2333,6 +2335,7 @@ export default function RouteDetailPage() {
         attemptedCount: routeAttemptedCount,
         color: routeLineColor,
         createdLabel: routeCreatedLabel,
+        departureTime: routeDepartureTimeValue,
         deliveredCount: routeDeliveredCount,
         driverLabel: routeDriverSummary,
         driveTimeLabel: routeTotalDriveTime,
@@ -2578,11 +2581,13 @@ export default function RouteDetailPage() {
 
   const handleOpenRouteSelector = (selectorType, routeRow) => {
     setActiveRouteSelector({
+      departureTime: routeRow.departureTime,
       routePlanId: routeRow.routePlanId,
       routeTitle: routeRow.title,
-      title: selectorType === "vehicle" ? "Vehicle" : "Driver",
+      title: selectorType === "vehicle" ? "Vehicle" : selectorType === "startTime" ? "Start time" : "Driver",
       type: selectorType,
     });
+    if (selectorType === "startTime") setRouteDepartureTimeDraft(routeRow.departureTime);
     setRouteSelectorQuery("");
   };
 
@@ -2607,7 +2612,10 @@ export default function RouteDetailPage() {
   };
 
   const handleSaveRouteDepartureTime = async () => {
-    if (!effectiveRoutePlan?.id || routeGroupActionBusy || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(routeDepartureTimeDraft)) return;
+    const targetRoutePlanId = activeRouteSelector?.type === "startTime"
+      ? activeRouteSelector.routePlanId
+      : effectiveRoutePlan?.id;
+    if (!targetRoutePlanId || routeGroupActionBusy || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(routeDepartureTimeDraft)) return;
 
     try {
       setRouteGroupClientError(null);
@@ -2615,9 +2623,10 @@ export default function RouteDetailPage() {
       const formData = new FormData();
       formData.set("_intent", "saveRouteDepartureTime");
       formData.set("departureTime", routeDepartureTimeDraft);
-      formData.set("routePlanId", effectiveRoutePlan.id);
+      formData.set("routePlanId", targetRoutePlanId);
       formData.set("shopifySessionToken", sessionToken);
       routeActionFetcher.submit(formData, { method: "post" });
+      if (activeRouteSelector?.type === "startTime") setActiveRouteSelector(null);
     } catch {
       setRouteGroupClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
@@ -3019,6 +3028,7 @@ export default function RouteDetailPage() {
         attemptedCount: 0,
         color: draft.color,
         createdLabel: ROUTE_EMPTY_LABEL,
+        departureTime: "",
         deliveredCount: 0,
         driverLabel: "Unassigned",
         driveTimeLabel: ROUTE_EMPTY_LABEL,
@@ -4123,7 +4133,16 @@ export default function RouteDetailPage() {
                         </button>
                       </td>
                       <td style={routesDetailCellStyle}>
-                        <button aria-label="Change route start time" style={routeEditableValueStyle} type="button">
+                        <button
+                          aria-label="Change route start time"
+                          disabled={!routeRow.routePlanId || routeGroupActionBusy}
+                          onClick={() => handleOpenRouteSelector("startTime", routeRow)}
+                          style={{
+                            ...routeEditableValueStyle,
+                            ...(!routeRow.routePlanId || routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                          }}
+                          type="button"
+                        >
                           <span style={routeEditableValueTextStyle}>{routeRow.startTimeLabel ?? routeStartTimeLabel}</span>
                           {renderRouteEditableChevron()}
                         </button>
@@ -4374,40 +4393,67 @@ export default function RouteDetailPage() {
             >
               <h2 style={routeLineEditorTitleStyle}>Change {activeRouteSelector.title}</h2>
               <div style={routeLineEditorLabelStyle}>{activeRouteSelector.routeTitle}</div>
-              <input
-                aria-label={`Search ${activeRouteSelector.title.toLowerCase()}`}
-                onChange={(event) => setRouteSelectorQuery(event.target.value)}
-                placeholder={`Search ${activeRouteSelector.title.toLowerCase()}`}
-                style={routeLineEditorInputStyle}
-                type="search"
-                value={routeSelectorQuery}
-              />
-              <div role="listbox" style={routeSelectorListStyle}>
-                {routeSelectorOptions.length > 0 ? (
-                  routeSelectorOptions.map((option) => (
-                    <button
-                      disabled={activeRouteSelector.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy}
-                      key={option.id}
-                      onClick={() => handleSelectRouteDriver(option.id)}
-                      aria-selected="false"
-                      role="option"
-                      style={{
-                        ...routeSelectorOptionStyle,
-                        ...(activeRouteSelector.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy
-                          ? { cursor: "not-allowed", opacity: 0.55 }
-                          : null),
-                      }}
-                      type="button"
-                    >
-                      {option.label}
-                    </button>
-                  ))
-                ) : (
-                  <div style={routeSelectorEmptyStyle}>{routeSelectorEmptyMessage}</div>
-                )}
-              </div>
+              {activeRouteSelector.type === "startTime" ? (
+                <input
+                  aria-label="Route start time"
+                  disabled={routeGroupActionBusy}
+                  onChange={(event) => setRouteDepartureTimeDraft(event.currentTarget.value)}
+                  style={routeLineEditorInputStyle}
+                  type="time"
+                  value={routeDepartureTimeDraft}
+                />
+              ) : (
+                <>
+                  <input
+                    aria-label={`Search ${activeRouteSelector.title.toLowerCase()}`}
+                    onChange={(event) => setRouteSelectorQuery(event.target.value)}
+                    placeholder={`Search ${activeRouteSelector.title.toLowerCase()}`}
+                    style={routeLineEditorInputStyle}
+                    type="search"
+                    value={routeSelectorQuery}
+                  />
+                  <div role="listbox" style={routeSelectorListStyle}>
+                    {routeSelectorOptions.length > 0 ? (
+                      routeSelectorOptions.map((option) => (
+                        <button
+                          disabled={activeRouteSelector.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy}
+                          key={option.id}
+                          onClick={() => handleSelectRouteDriver(option.id)}
+                          aria-selected="false"
+                          role="option"
+                          style={{
+                            ...routeSelectorOptionStyle,
+                            ...(activeRouteSelector.type !== "driver" || !activeRouteSelector.routePlanId || routeGroupActionBusy
+                              ? { cursor: "not-allowed", opacity: 0.55 }
+                              : null),
+                          }}
+                          type="button"
+                        >
+                          {option.label}
+                        </button>
+                      ))
+                    ) : (
+                      <div style={routeSelectorEmptyStyle}>{routeSelectorEmptyMessage}</div>
+                    )}
+                  </div>
+                </>
+              )}
               <div style={routeLineEditorActionsStyle}>
                 <button onClick={() => setActiveRouteSelector(null)} style={routeActionButtonStyle} type="button">Close</button>
+                {activeRouteSelector.type === "startTime" ? (
+                  <button
+                    disabled={
+                      routeGroupActionBusy ||
+                      routeDepartureTimeDraft === activeRouteSelector.departureTime ||
+                      !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(routeDepartureTimeDraft)
+                    }
+                    onClick={handleSaveRouteDepartureTime}
+                    style={routeLineEditorPrimaryButtonStyle}
+                    type="button"
+                  >
+                    {saveRouteDepartureTimeBusy ? "Saving…" : "Save"}
+                  </button>
+                ) : null}
               </div>
             </div>
           </div>

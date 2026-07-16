@@ -299,7 +299,19 @@ const routeStatusBadgeStyle = {
   padding: "3px 8px",
 };
 
-const routePublishedBadgeStyle = {
+const routeReadyBadgeStyle = {
+  ...routeStatusBadgeStyle,
+  background: "#f1f1f1",
+  color: "#616161",
+};
+
+const routeInProgressBadgeStyle = {
+  ...routeStatusBadgeStyle,
+  background: "#e0f0ff",
+  color: "#00527c",
+};
+
+const routeCompletedBadgeStyle = {
   ...routeStatusBadgeStyle,
   background: "#e3f1df",
   color: "#205c20",
@@ -520,7 +532,7 @@ function getRouteFilters(searchParams) {
 }
 
 function normalizeRouteStatus(status) {
-  return String(status ?? "").trim().toUpperCase().replace(/\s+/g, "_");
+  return formatRouteStatus(status).toUpperCase().replace(/\s+/g, "_");
 }
 
 function filterRouteRows(routeRows, routeFilters) {
@@ -550,7 +562,7 @@ function filterRouteRows(routeRows, routeFilters) {
         isClickable: false,
         isDeletable: false,
         route: "No matching routes",
-        status: routeFilters.status ?? "Filtered",
+        status: routeFilters.status ? formatRouteStatus(routeFilters.status) : "Filtered",
         orders: 0,
         coordinates: "0/0",
         missingCoordinates: 0,
@@ -568,8 +580,12 @@ function filterRouteRows(routeRows, routeFilters) {
 
 function getStatusBadgeStyle(status) {
   switch (formatRouteStatus(status)) {
-    case "Published":
-      return routePublishedBadgeStyle;
+    case "Ready":
+      return routeReadyBadgeStyle;
+    case "In progress":
+      return routeInProgressBadgeStyle;
+    case "Completed":
+      return routeCompletedBadgeStyle;
     case "Cancelled":
       return routeCancelledBadgeStyle;
     default:

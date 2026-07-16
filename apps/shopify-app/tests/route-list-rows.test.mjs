@@ -10,7 +10,7 @@ import {
   toggleRouteSelection,
 } from "../app/features/delivery/route-list-rows.js";
 
-test("route list shows an unsplit route group as the group row only", () => {
+test("route list shows a created child route immediately below its group", () => {
   const rows = buildRouteRows(
     [
       { id: "route-child-3", name: "Thu 07/02–Sat 07/04 orders — #3", stopsCount: 7 },
@@ -32,14 +32,52 @@ test("route list shows an unsplit route group as the group row only", () => {
     ],
   );
 
-  assert.deepEqual(rows.map((row) => row.rowKey), ["routeGroup:group-1"]);
+  assert.deepEqual(rows.map((row) => row.rowKey), ["routeGroup:group-1", "routePlan:route-child-3"]);
   assert.equal(rows[0].route, "Thu 07/02–Sat 07/04 orders");
   assert.equal(rows[0].href, "/app/routes/groups/group-1");
   assert.equal(rows[0].deleteKey, "routeGroup:group-1");
-  assert.equal(rows.some((row) => row.deleteKey === "routePlan:route-child-3"), false);
+  assert.equal(rows[0].isSummaryRoute, false);
+  assert.equal(rows[1].route, "#3");
+  assert.equal(rows[1].href, "/app/routes/groups/group-1/routes/route-child-3");
+  assert.equal(rows[1].deleteKey, "routeGroupChild:group-1:route-child-3");
+  assert.equal(rows[1].status, "DRAFT");
+  assert.equal(rows[1].driver, "-");
   assert.equal(rows[0].distanceMeters, 1200);
   assert.equal(rows[0].driveTimeSeconds, 600);
-  assert.equal(rows[0].isSummaryRoute, true);
+});
+
+test("route list reveals a single child after a driver is assigned", () => {
+  const rows = buildRouteRows(
+    [],
+    [
+      {
+        id: "group-1",
+        name: "Thu 07/16 orders",
+        assignments: Array.from({ length: 4 }, (_, index) => ({ id: `order-${index + 1}` })),
+        children: [
+          {
+            driverId: "driver-1",
+            driverName: "Driver One",
+            routeIdx: 3,
+            routePlanId: "route-child-3",
+            routePlan: {
+              id: "route-child-3",
+              name: "Thu 07/16 orders — #3",
+              stopsCount: 4,
+            },
+          },
+        ],
+      },
+    ],
+  );
+
+  assert.deepEqual(rows.map((row) => row.rowKey), [
+    "routeGroup:group-1",
+    "routePlan:route-child-3",
+  ]);
+  assert.equal(rows[0].isSummaryRoute, false);
+  assert.equal(rows[1].route, "#3");
+  assert.equal(rows[1].driver, "Driver One");
 });
 
 test("route list does not show collapsed route group children as standalone routes", () => {

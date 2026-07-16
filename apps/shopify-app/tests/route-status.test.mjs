@@ -4,18 +4,17 @@ import test from "node:test";
 
 import { formatRouteStatus } from "../app/features/delivery/route-helpers.js";
 
-test("route status labels collapse legacy lifecycle values into the three canonical states", () => {
-  for (const status of [null, "DRAFT", "UNAVAILABLE", "UNSTARTED", "READY", "CHANGED", "OPTIMIZED"]) {
-    assert.equal(formatRouteStatus(status), "Draft");
+test("route status labels collapse legacy lifecycle values into canonical admin states", () => {
+  for (const status of [null, "DRAFT", "PUBLISHED", "OPTIMIZED", "ASSIGNED", "UNAVAILABLE", "UNSTARTED", "READY", "CHANGED"]) {
+    assert.equal(formatRouteStatus(status), "Ready");
   }
 
-  for (const status of ["PUBLISHED", "ASSIGNED", "IN_PROGRESS", "COMPLETED"]) {
-    assert.equal(formatRouteStatus(status), "Published");
-  }
-
+  assert.equal(formatRouteStatus("IN_PROGRESS"), "In progress");
+  assert.equal(formatRouteStatus("in progress"), "In progress");
+  assert.equal(formatRouteStatus("COMPLETED"), "Completed");
   assert.equal(formatRouteStatus("CANCELLED"), "Cancelled");
 });
 
-test("route status labels humanize an unexpected value instead of exposing raw enum text", () => {
-  assert.equal(formatRouteStatus("AWAITING_DRIVER"), "Awaiting Driver");
+test("route status labels keep unexpected backend values inside canonical presentation", () => {
+  assert.equal(formatRouteStatus("AWAITING_DRIVER"), "Ready");
 });
