@@ -59,6 +59,16 @@ test("public, dev/custom-store, and KFood env examples declare their intended di
   assert.doesNotMatch(kfoodEnvExample, /^CLEVER_ORDERS_SOURCE_MODE=/m);
 });
 
+test("local CleverRoute Dev preview uses the same synthetic Seoul order source as EC2", () => {
+  const devLocalScript = packageJson.scripts["dev:local"];
+
+  assert.match(devLocalScript, /CLEVER_ORDERS_SOURCE_MODE=.*delivery_only/);
+  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_DEPOT_ADDRESS=.*서울특별시 동작구 노량진로 10/);
+  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_DEPOT_LATITUDE=.*37\.5124328/);
+  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_DEPOT_LONGITUDE=.*126\.9269873/);
+  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_TIME_ZONE=.*Asia\/Seoul/);
+});
+
 test("Shopify app configs have explicit distinct production, dev, and KFood identities", () => {
   assert.equal(readTomlString(publicShopifyAppConfig, "client_id"), "6994f8bd771cebdac03a800f20e1de86");
   assert.equal(readTomlString(publicShopifyAppConfig, "name"), "CLEVER");
