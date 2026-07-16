@@ -104,6 +104,15 @@ export function clearShopifyOrdersCache() {
   shopifyOrdersCache.clear();
 }
 
+export function assertReadOnlyShopifyOrdersOperation(operation) {
+  const withoutComments = String(operation ?? "").replace(/#[^\r\n]*/gu, " ");
+  if (/\bmutation\b/u.test(withoutComments)) {
+    throw new Error(
+      "Shopify order and customer mutations are disabled; save operational corrections in CLEVER DB.",
+    );
+  }
+}
+
 export async function fetchShopifyOrders(admin, options = {}) {
   const cacheKey = normalizeShopifyOrdersCacheKey(
     [options.cacheKey, buildDeliveryCycleCacheScope(options.deliveryCycle)].filter(Boolean).join("|"),
@@ -150,10 +159,12 @@ async function loadShopifyOrders(admin, options = {}) {
       const variables = { after, first: SHOPIFY_ORDERS_PAGE_SIZE };
       let response;
       try {
+        assertReadOnlyShopifyOrdersOperation(ordersQuery);
         response = await admin.graphql(ordersQuery, { variables });
       } catch (error) {
         if (ordersQuery !== SHOPIFY_ORDERS_QUERY || !isCustomerScopeAccessError(error)) throw error;
         ordersQuery = SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE;
+        assertReadOnlyShopifyOrdersOperation(ordersQuery);
         response = await admin.graphql(ordersQuery, { variables });
       }
       const payload = await response.json();
