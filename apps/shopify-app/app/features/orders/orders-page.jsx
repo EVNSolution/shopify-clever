@@ -5083,9 +5083,10 @@ function OrdersPageContent({ loaderData }) {
                           title={orderIsPlanned ? "Already added to map" : ""}
                           checked={checkboxChecked}
                           disabled={orderIsPlanned}
-                          onChange={(event) => toggleOrderCheck(order.id, {
+                          onChange={() => {}}
+                          onClick={(event) => toggleOrderCheck(order.id, {
                             checked: event.currentTarget.checked,
-                            shiftKey: event.nativeEvent?.shiftKey === true,
+                            shiftKey: event.shiftKey,
                           })}
                         />
                       </td>

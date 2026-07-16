@@ -410,7 +410,9 @@ test("Orders checkboxes select or clear a contiguous range with Shift + click", 
   );
 
   assert.match(ordersPageSource, /orderSelectionAnchorRef/);
-  assert.match(ordersPageSource, /shiftKey:\s*event\.nativeEvent\?\.shiftKey === true/);
+  assert.match(ordersPageSource, /onClick=\{\(event\) => toggleOrderCheck\(order\.id,/);
+  assert.match(ordersPageSource, /shiftKey:\s*event\.shiftKey/);
+  assert.doesNotMatch(ordersPageSource, /event\.nativeEvent\?\.shiftKey/);
 });
 
 test("Orders column uses the order number itself as a neutral transparent button area", () => {
