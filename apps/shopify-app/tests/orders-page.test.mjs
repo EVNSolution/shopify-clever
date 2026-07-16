@@ -446,13 +446,36 @@ test("Order popovers use border-box sizing for idempotent scroll repositioning",
 });
 
 test("Order items popover wraps long rows without changing note or ordered popovers", () => {
+  const itemPopoverTableStyleSource = ordersPageSource.match(
+    /const itemPopoverTableStyle = \{[\s\S]*?\n\};/,
+  )?.[0] ?? "";
+  const itemPopoverTableSource = ordersPageSource.match(
+    /<table style=\{itemPopoverTableStyle\}>[\s\S]*?<\/table>/,
+  )?.[0] ?? "";
+
   assert.match(ordersPageSource, /const orderedItemsPopoverStyle = \{\s*[\s\S]*?\.\.\.itemPopoverStyle[\s\S]*?width:\s*"clamp\(360px, 60vw, 640px\)"[\s\S]*?maxWidth:\s*"calc\(100vw - 16px\)"[\s\S]*?minWidth:\s*0[\s\S]*?maxHeight:\s*"calc\(100vh - 16px\)"[\s\S]*?overflowY:\s*"auto"[\s\S]*?overscrollBehavior:\s*"contain"/);
-  assert.match(ordersPageSource, /const itemPopoverTableStyle = \{\s*[\s\S]*?tableLayout:\s*"fixed"[\s\S]*?width:\s*"100%"/);
+  assert.match(itemPopoverTableStyleSource, /width:\s*"100%"/);
+  assert.doesNotMatch(itemPopoverTableStyleSource, /tableLayout:\s*"fixed"/);
   assert.match(ordersPageSource, /const itemPopoverCellStyle = \{\s*[\s\S]*?overflowWrap:\s*"anywhere"[\s\S]*?verticalAlign:\s*"top"[\s\S]*?whiteSpace:\s*"normal"/);
-  assert.match(ordersPageSource, /const itemPopoverQtyCellStyle = \{\s*[\s\S]*?textAlign:\s*"right"[\s\S]*?whiteSpace:\s*"nowrap"/);
-  assert.match(ordersPageSource, /<colgroup>\s*<col style=\{\{ width: "55%" \}\} \/>\s*<col style=\{\{ width: "20%" \}\} \/>\s*<col style=\{\{ width: "15%" \}\} \/>\s*<col style=\{\{ width: "10%" \}\} \/>\s*<\/colgroup>/);
+  assert.match(ordersPageSource, /const itemPopoverCompactCellStyle = \{\s*[\s\S]*?\.\.\.itemPopoverCellStyle[\s\S]*?whiteSpace:\s*"nowrap"[\s\S]*?width:\s*"1%"/);
+  assert.match(ordersPageSource, /const itemPopoverQtyCellStyle = \{\s*[\s\S]*?\.\.\.itemPopoverCompactCellStyle[\s\S]*?textAlign:\s*"right"/);
+  assert.doesNotMatch(itemPopoverTableSource, /<colgroup>/);
+  assert.match(ordersPageSource, /<th style=\{itemPopoverCompactCellStyle\}>Options<\/th>[\s\S]*?<th style=\{itemPopoverCompactCellStyle\}>SKU<\/th>/);
+  assert.match(ordersPageSource, /<td style=\{itemPopoverCompactCellStyle\}>\{item\.options\}<\/td>[\s\S]*?<td style=\{itemPopoverCompactCellStyle\}>\{item\.sku\}<\/td>/);
   assert.match(ordersPageSource, /style=\{\{\s*\.\.\.orderedItemsPopoverStyle,[\s\S]*?left: `\$\{Math\.round\(itemPopoverPosition\.left\)\}px`,[\s\S]*?top: `\$\{Math\.round\(itemPopoverPosition\.top\)\}px`,[\s\S]*?transform: "none",[\s\S]*?\}\}/);
   assert.doesNotMatch(ordersPageSource, /style=\{\{\s*\.\.\.orderedItemsPopoverStyle,[\s\S]*?width: `\$\{Math\.round\(itemPopoverPosition\.width\)\}px`/);
+});
+
+test("Order items popover stays hidden until its responsive size is measured", () => {
+  assert.match(ordersPageSource, /setItemPopoverPosition\(\{\s*\.\.\.getOrderDetailPopoverPosition\([\s\S]*?measured:\s*false,?\s*\}\)/);
+  assert.match(ordersPageSource, /setItemPopoverPosition\(\{\s*\.\.\.getOrderDetailPopoverPosition\([\s\S]*?measured:\s*true,?\s*\}\)/);
+  assert.match(ordersPageSource, /visibility:\s*itemPopoverPosition\.measured \? "visible" : "hidden"/);
+});
+
+test("Ordered and other detail pill popovers stay hidden until measured", () => {
+  assert.match(ordersPageSource, /setActiveOrderDetailPopover\(\{\s*\.\.\.detail,[\s\S]*?position:\s*\{\s*\.\.\.getOrderDetailPopoverPosition\([\s\S]*?measured:\s*false,?\s*\}/);
+  assert.match(ordersPageSource, /setActiveOrderDetailPopover\(\(current\) => current \? \{[\s\S]*?position:\s*\{\s*\.\.\.position,[\s\S]*?measured:\s*true,?\s*\}/);
+  assert.match(ordersPageSource, /visibility:\s*activeDetailPopover\.position\.measured \? "visible" : "hidden"/);
 });
 
 test("Order items popover keeps order total out of the fixed Qty column", () => {
