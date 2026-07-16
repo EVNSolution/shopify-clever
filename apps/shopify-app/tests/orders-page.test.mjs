@@ -4,10 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
-import {
-  buildOrderTimelineDetails,
-  updateOrderSelection,
-} from "../app/features/orders/orders-page.shared.js";
+import { buildOrderTimelineDetails } from "../app/features/orders/orders-page.shared.js";
 
 const root = process.cwd();
 
@@ -369,50 +366,12 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /`Select \${order\.name} for plan`/);
   assert.match(ordersPageSource, /checked=\{checkboxChecked\}/);
   assert.match(ordersPageSource, /disabled=\{orderIsPlanned\}/);
+  assert.match(
+    ordersPageSource,
+    /onChange=\{\(event\) => toggleOrderCheck\(order\.id, event\.currentTarget\.checked\)\}/,
+  );
+  assert.doesNotMatch(ordersPageSource, /Shift range|orderSelectionAnchorRef|handleOrderRowShiftSelect/);
   assert.doesNotMatch(ordersPageSource, /routePlanningUnavailable/);
-});
-
-test("Orders checkboxes select or clear a contiguous range with Shift + click", () => {
-  assert.deepEqual(
-    updateOrderSelection({
-      anchorOrderId: "order-2",
-      checked: true,
-      currentOrderIds: ["order-2", "outside-filter"],
-      orderId: "order-5",
-      orderedSelectableOrderIds: [
-        "order-1",
-        "order-2",
-        "order-3",
-        "order-4",
-        "order-5",
-      ],
-      shiftKey: true,
-    }),
-    ["order-2", "outside-filter", "order-3", "order-4", "order-5"],
-  );
-
-  assert.deepEqual(
-    updateOrderSelection({
-      anchorOrderId: "order-2",
-      checked: false,
-      currentOrderIds: ["order-1", "order-2", "order-3", "order-4", "order-5"],
-      orderId: "order-4",
-      orderedSelectableOrderIds: [
-        "order-1",
-        "order-2",
-        "order-3",
-        "order-4",
-        "order-5",
-      ],
-      shiftKey: true,
-    }),
-    ["order-1", "order-5"],
-  );
-
-  assert.match(ordersPageSource, /orderSelectionAnchorRef/);
-  assert.match(ordersPageSource, /onClick=\{\(event\) => toggleOrderCheck\(order\.id,/);
-  assert.match(ordersPageSource, /shiftKey:\s*event\.shiftKey/);
-  assert.doesNotMatch(ordersPageSource, /event\.nativeEvent\?\.shiftKey/);
 });
 
 test("Orders column uses the order number itself as a neutral transparent button area", () => {

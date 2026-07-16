@@ -16,38 +16,6 @@ export function textOrUndefined(value) {
   return text.length > 0 ? text : undefined;
 }
 
-export function updateOrderSelection({
-  anchorOrderId,
-  checked,
-  currentOrderIds,
-  orderId,
-  orderedSelectableOrderIds,
-  shiftKey,
-}) {
-  const currentIds = Array.isArray(currentOrderIds) ? currentOrderIds : [];
-  const selectableIds = Array.isArray(orderedSelectableOrderIds)
-    ? orderedSelectableOrderIds
-    : [];
-  const orderIndex = selectableIds.indexOf(orderId);
-
-  if (orderIndex < 0) return currentIds;
-
-  const anchorIndex = shiftKey ? selectableIds.indexOf(anchorOrderId) : -1;
-  const affectedIds = anchorIndex < 0
-    ? [orderId]
-    : selectableIds.slice(
-        Math.min(anchorIndex, orderIndex),
-        Math.max(anchorIndex, orderIndex) + 1,
-      );
-
-  if (checked) {
-    return Array.from(new Set([...currentIds, ...affectedIds]));
-  }
-
-  const affectedIdSet = new Set(affectedIds);
-  return currentIds.filter((currentOrderId) => !affectedIdSet.has(currentOrderId));
-}
-
 export function buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone }) {
   const orderedAt = getOrderTimestampValue(order, ["orderCreatedAt", "createdAt"]);
   const processedAt = getOrderTimestampValue(order, ["processedAt"]);
