@@ -1294,7 +1294,6 @@ const itemPopoverTitleStyle = {
 const itemPopoverTableStyle = {
   borderCollapse: "collapse",
   fontSize: "11px",
-  tableLayout: "fixed",
   width: "100%",
 };
 
@@ -1307,11 +1306,16 @@ const itemPopoverCellStyle = {
   whiteSpace: "normal",
 };
 
-const itemPopoverQtyCellStyle = {
+const itemPopoverCompactCellStyle = {
   ...itemPopoverCellStyle,
+  whiteSpace: "nowrap",
+  width: "1%",
+};
+
+const itemPopoverQtyCellStyle = {
+  ...itemPopoverCompactCellStyle,
   fontWeight: 700,
   textAlign: "right",
-  whiteSpace: "nowrap",
 };
 
 const itemPopoverFooterStyle = {
@@ -2578,30 +2582,39 @@ function OrdersPageContent({ loaderData }) {
     if (!anchor) return;
 
     const popoverNode = itemPopoverRef.current;
-    setItemPopoverPosition(getOrderDetailPopoverPosition(anchor.getBoundingClientRect(), {
-      height: popoverNode?.offsetHeight ?? ITEM_POPOVER_HEIGHT,
-      width: popoverNode?.offsetWidth ?? ITEM_POPOVER_WIDTH,
-    }));
+    setItemPopoverPosition({
+      ...getOrderDetailPopoverPosition(anchor.getBoundingClientRect(), {
+        height: popoverNode?.offsetHeight ?? ITEM_POPOVER_HEIGHT,
+        width: popoverNode?.offsetWidth ?? ITEM_POPOVER_WIDTH,
+      }),
+      measured: true,
+    });
   }, []);
   const openItemPopover = useCallback((event, orderId) => {
     if (pinnedItemPopoverOrderId && pinnedItemPopoverOrderId !== orderId) return;
 
     itemPopoverAnchorRef.current = event.currentTarget;
     setHoveredItemPopoverOrderId(orderId);
-    setItemPopoverPosition(getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect(), {
-      height: ITEM_POPOVER_HEIGHT,
-      width: ITEM_POPOVER_WIDTH,
-    }));
+    setItemPopoverPosition({
+      ...getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect(), {
+        height: ITEM_POPOVER_HEIGHT,
+        width: ITEM_POPOVER_WIDTH,
+      }),
+      measured: false,
+    });
   }, [pinnedItemPopoverOrderId]);
   const closeHoveredItemPopover = useCallback((orderId) => {
     setHoveredItemPopoverOrderId((currentOrderId) => currentOrderId === orderId ? null : currentOrderId);
   }, []);
   const togglePinnedItemPopover = useCallback((event, orderId) => {
     itemPopoverAnchorRef.current = event.currentTarget;
-    setItemPopoverPosition(getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect(), {
-      height: ITEM_POPOVER_HEIGHT,
-      width: ITEM_POPOVER_WIDTH,
-    }));
+    setItemPopoverPosition({
+      ...getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect(), {
+        height: ITEM_POPOVER_HEIGHT,
+        width: ITEM_POPOVER_WIDTH,
+      }),
+      measured: false,
+    });
     setPinnedItemPopoverOrderId((currentOrderId) => currentOrderId === orderId ? null : orderId);
   }, []);
   const syncNotePopover = useCallback(() => {
@@ -2638,13 +2651,22 @@ function OrdersPageContent({ loaderData }) {
       height: popoverNode?.offsetHeight,
       width: popoverNode?.offsetWidth,
     });
-    setActiveOrderDetailPopover((current) => current ? { ...current, position } : current);
+    setActiveOrderDetailPopover((current) => current ? {
+      ...current,
+      position: {
+        ...position,
+        measured: true,
+      },
+    } : current);
   }, []);
   const openOrderDetailPopover = useCallback((event, detail) => {
     orderDetailAnchorRef.current = event.currentTarget;
     setActiveOrderDetailPopover({
       ...detail,
-      position: getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect()),
+      position: {
+        ...getOrderDetailPopoverPosition(event.currentTarget.getBoundingClientRect()),
+        measured: false,
+      },
     });
   }, []);
   const closeOrderDetailPopover = useCallback((detailKey) => {
@@ -2721,6 +2743,7 @@ function OrdersPageContent({ loaderData }) {
               ...detailPopoverStyle,
               left: `${Math.round(activeDetailPopover.position.left)}px`,
               top: `${Math.round(activeDetailPopover.position.top)}px`,
+              visibility: activeDetailPopover.position.measured ? "visible" : "hidden",
               width: `${Math.round(activeDetailPopover.position.width)}px`,
             }}
           >
@@ -5130,39 +5153,34 @@ function OrdersPageContent({ loaderData }) {
                                 left: `${Math.round(itemPopoverPosition.left)}px`,
                                 top: `${Math.round(itemPopoverPosition.top)}px`,
                                 transform: "none",
+                                visibility: itemPopoverPosition.measured ? "visible" : "hidden",
                               }}
                             >
                               <div style={itemPopoverTitleStyle}>Ordered items</div>
-                            <table style={itemPopoverTableStyle}>
-                              <colgroup>
-                                <col style={{ width: "55%" }} />
-                                <col style={{ width: "20%" }} />
-                                <col style={{ width: "15%" }} />
-                                <col style={{ width: "10%" }} />
-                              </colgroup>
-                              <thead>
-                                <tr>
-                                  <th style={itemPopoverCellStyle}>Item</th>
-                                  <th style={itemPopoverCellStyle}>Options</th>
-                                  <th style={itemPopoverCellStyle}>SKU</th>
-                                  <th style={itemPopoverQtyCellStyle}>Qty</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {getOrderLineItems(order).map((item, itemIndex) => (
-                                  <tr key={`${item.name}-${itemIndex}`}>
-                                    <td style={itemPopoverCellStyle}>{item.name}</td>
-                                    <td style={itemPopoverCellStyle}>{item.options}</td>
-                                    <td style={itemPopoverCellStyle}>{item.sku}</td>
-                                    <td style={itemPopoverQtyCellStyle}>{item.quantity}</td>
+                              <table style={itemPopoverTableStyle}>
+                                <thead>
+                                  <tr>
+                                    <th style={itemPopoverCellStyle}>Item</th>
+                                    <th style={itemPopoverCompactCellStyle}>Options</th>
+                                    <th style={itemPopoverCompactCellStyle}>SKU</th>
+                                    <th style={itemPopoverQtyCellStyle}>Qty</th>
                                   </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                            <div style={itemPopoverFooterStyle}>
-                              <span>Order total</span>
-                              <span style={itemPopoverFooterValueStyle}>{formatOrderTotal(order)}</span>
-                            </div>
+                                </thead>
+                                <tbody>
+                                  {getOrderLineItems(order).map((item, itemIndex) => (
+                                    <tr key={`${item.name}-${itemIndex}`}>
+                                      <td style={itemPopoverCellStyle}>{item.name}</td>
+                                      <td style={itemPopoverCompactCellStyle}>{item.options}</td>
+                                      <td style={itemPopoverCompactCellStyle}>{item.sku}</td>
+                                      <td style={itemPopoverQtyCellStyle}>{item.quantity}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                              <div style={itemPopoverFooterStyle}>
+                                <span>Order total</span>
+                                <span style={itemPopoverFooterValueStyle}>{formatOrderTotal(order)}</span>
+                              </div>
                             </div>,
                             document.body,
                           ) : null}
