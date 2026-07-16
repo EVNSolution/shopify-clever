@@ -88,6 +88,21 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.equal(packageJson.dependencies.pmtiles?.length > 0, true);
 });
 
+test("Orders loader can isolate CLEVER delivery orders for synthetic dev data", () => {
+  assert.match(
+    ordersPageSource,
+    /process\.env\.CLEVER_ORDERS_SOURCE_MODE\s*!==\s*"delivery_only"/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const shouldLoadShopifyOrders = shouldLoadOrders && shouldFetchShopifyOrders\(\)/,
+  );
+  assert.match(
+    ordersPageSource,
+    /shouldFetchShopifyOrders\(\)\s*\?\s*fetchShopifyOrders/,
+  );
+});
+
 test("Orders map defers MapLibre initialization until after initial navigation paint", () => {
   assert.match(ordersPageSource, /function scheduleIdleTask\(callback\) \{/);
   assert.match(ordersPageSource, /window\.requestIdleCallback/);
