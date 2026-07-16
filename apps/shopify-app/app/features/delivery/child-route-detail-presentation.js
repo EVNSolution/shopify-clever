@@ -12,6 +12,7 @@ export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "customer", label: "Customer" },
   { key: "items", label: "Items" },
   { key: "method", label: "Method" },
+  { key: "payment", label: "Payment" },
   { key: "attributes", label: "Attributes" },
 ];
 
@@ -347,6 +348,23 @@ function getOrderStatusSource(stop) {
   );
 }
 
+function formatPaymentStatus(stop) {
+  const status = firstText(
+    stop?.payment,
+    stop?.paymentStatus,
+    stop?.financialStatus,
+    stop?.order?.paymentStatus,
+    stop?.shopifyOrderSnapshot?.displayFinancialStatus,
+    stop?.rawPayload?.displayFinancialStatus,
+  );
+  if (!status) return EMPTY_LABEL;
+
+  const normalized = status.replace(/\s+/g, "_").toUpperCase();
+  if (normalized === "PAID") return "Paid";
+  if (normalized === "PENDING") return "Pending";
+  return status;
+}
+
 export function buildChildRouteOrderRows(stops, { ianaTimezone, timezoneAbbreviation } = {}) {
   return sortChildStopsByActualSequence(Array.isArray(stops) ? stops : []).map((stop, index) => {
     const items = normalizeItems(stop);
@@ -368,6 +386,7 @@ export function buildChildRouteOrderRows(stops, { ianaTimezone, timezoneAbbrevia
       itemsSummary: formatItemsSummary(items, stop?.itemCount ?? stop?.itemsCount),
       itemsDetail: formatItemsDetail(items, stop?.itemCount ?? stop?.itemsCount),
       method: serviceType ?? EMPTY_LABEL,
+      payment: formatPaymentStatus(stop),
       attributes,
       attributesSummary: formatAttributesSummary(attributes),
       attributesDetail: attributes.length > 0 ? attributes.map((attribute) => attribute.label).join("\n") : EMPTY_LABEL,
