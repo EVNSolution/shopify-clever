@@ -6,8 +6,10 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildRouteOrderRows,
+  formatStoreLocalDateTimeInput,
   formatStoreLocalOrderDate,
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
+  storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
 import {
   firstArray,
@@ -484,7 +486,7 @@ const childRouteDepartureInputStyle = {
   fontSize: "13px",
   height: "26px",
   padding: "2px 5px",
-  width: "92px",
+  width: "176px",
 };
 
 const childRouteDepartureSaveButtonStyle = {
@@ -816,6 +818,17 @@ const routeLineTitleStyle = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+};
+
+const routeLineTitleButtonStyle = {
+  ...routeLineTitleStyle,
+  background: "transparent",
+  border: 0,
+  color: "inherit",
+  cursor: "pointer",
+  font: "inherit",
+  padding: 0,
+  textAlign: "left",
 };
 
 const routeStatusDotStyle = {
@@ -1449,25 +1462,8 @@ function getRouteDriverId(routePlan) {
   return textOrUndefined(routePlan?.driverId ?? routePlan?.driver?.id) ?? "";
 }
 
-function getRouteStartDateTimeValue(routePlan) {
-  const value = textOrUndefined(
-    routePlan?.scheduledStartAt ?? routePlan?.startTime ?? routePlan?.startedAt,
-  );
-
-  if (value?.includes("T")) return value.slice(0, 16);
-
-  const date = textOrUndefined(routePlan?.routeScope?.deliveryDate ?? routePlan?.deliveryDate ?? routePlan?.planDate);
-  const departureTime = textOrUndefined(routePlan?.departureTime);
-  if (date && departureTime) return `${date}T${departureTime}`;
-  return date ? `${date}T09:00` : "";
-}
-
-function getRouteDepartureTimeValue(routePlan) {
-  const departureTime = textOrUndefined(routePlan?.departureTime);
-  if (/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(departureTime ?? "")) return departureTime;
-
-  const dateTime = textOrUndefined(routePlan?.scheduledStartAt ?? routePlan?.startTime);
-  return dateTime?.match(/T(\d{2}:\d{2})/)?.[1] ?? "09:00";
+function getRouteStartDateTimeValue(routePlan, ianaTimezone) {
+  return formatStoreLocalDateTimeInput(routePlan?.scheduledStartAt, ianaTimezone);
 }
 
 function getRouteStartTimeLabel(value) {
@@ -1856,7 +1852,7 @@ function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
     attemptedCount: countRouteStopsByStatus(routeStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
     color: MAP_MARKER_PALETTE.plannedOrder.color,
     createdLabel: getRouteCreatedLabel(routeGroup),
-    departureTime: "",
+    startDateTime: "",
     deliveredCount: countRouteStopsByStatus(routeStops, ["DELIVERED", "FULFILLED"]),
     driverLabel: "Unassigned",
     driveTimeLabel: ROUTE_EMPTY_LABEL,
@@ -1880,7 +1876,7 @@ function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
   };
 }
 
-function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = []) {
+function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = [], ianaTimezone) {
   const routeGroupChildRows = getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
     const routeIdx = numberOrUndefined(child?.routeIdx);
     const routeIndex = routeIdx ?? numberOrUndefined(child?.sortOrder) ?? index + 1;
@@ -1904,7 +1900,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       attemptedCount: countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
       color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[index % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
       createdLabel: getRouteCreatedLabel(childRoutePlan),
-      departureTime: getRouteDepartureTimeValue(childRoutePlan),
+      startDateTime: getRouteStartDateTimeValue(childRoutePlan, ianaTimezone),
       deliveredCount: countRouteStopsByStatus(stops, ["DELIVERED", "FULFILLED"]),
       driverLabel: textOrUndefined(child?.driverName ?? childRoutePlan?.driver?.displayName) ?? "Unassigned",
       driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(childRouteMetrics?.durationSeconds)),
@@ -1916,7 +1912,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       routeKey: routePlanId ? `routePlan:${routePlanId}` : `routeIdx:${routeIndex}`,
       routeIndex,
       routePlanId: routePlanId ?? null,
-      startTimeLabel: getRouteStartTimeLabel(getRouteStartDateTimeValue(childRoutePlan)),
+      startTimeLabel: getRouteStartTimeLabel(getRouteStartDateTimeValue(childRoutePlan, ianaTimezone)),
       status: formatRouteStatus(childRoutePlan?.status ?? child?.displayStatus ?? child?.status),
       stops,
       stopsCount: stops.length || orderIds.length,
@@ -2235,12 +2231,14 @@ export default function RouteDetailPage() {
     [childRouteDetails, orderedRouteStops, routeGroup],
   );
   const routeGroupStopsSource = routeGroup ? allRouteGroupStops : orderedRouteStops;
-  const routeGroupChildRows = useMemo(() => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource), [routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource]);
+  const routeGroupChildRows = useMemo(
+    () => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource, ianaTimezone),
+    [ianaTimezone, routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource],
+  );
   const siblingRouteRows = routeGroupChildRows.filter((routeRow) => routeRow.routePlanId);
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
-  const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan);
+  const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan, ianaTimezone);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
-  const routeDepartureTimeValue = getRouteDepartureTimeValue(effectiveRoutePlan);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
@@ -2270,7 +2268,7 @@ export default function RouteDetailPage() {
   const addEmptyRouteBranchBusy = false;
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
-  const saveRouteDepartureTimeBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDepartureTime";
+  const saveRouteStartTimeBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteStartTime";
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const mapLibraryRef = useRef(null);
@@ -2319,14 +2317,14 @@ export default function RouteDetailPage() {
   const [activeChildOrderDisclosure, setActiveChildOrderDisclosure] = useState(null);
   const [activeRouteSelector, setActiveRouteSelector] = useState(null);
   const [routeSelectorQuery, setRouteSelectorQuery] = useState("");
-  const [routeDepartureTimeDraft, setRouteDepartureTimeDraft] = useState(routeDepartureTimeValue);
+  const [routeStartDateTimeDraft, setRouteStartDateTimeDraft] = useState(routeStartDateTimeValue);
   const [routePolygonPoints, setRoutePolygonPoints] = useState([]);
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
   useEffect(() => {
-    setRouteDepartureTimeDraft(routeDepartureTimeValue);
-  }, [effectiveRoutePlan?.id, routeDepartureTimeValue]);
+    setRouteStartDateTimeDraft(routeStartDateTimeValue);
+  }, [effectiveRoutePlan?.id, routeStartDateTimeValue]);
   const currentRouteLineId = effectiveRoutePlan?.id ?? null;
   const currentRouteRowsSource = isRouteGroupDetail || !currentRouteLineId
     ? []
@@ -2335,7 +2333,7 @@ export default function RouteDetailPage() {
         attemptedCount: routeAttemptedCount,
         color: routeLineColor,
         createdLabel: routeCreatedLabel,
-        departureTime: routeDepartureTimeValue,
+        startDateTime: routeStartDateTimeValue,
         deliveredCount: routeDeliveredCount,
         driverLabel: routeDriverSummary,
         driveTimeLabel: routeTotalDriveTime,
@@ -2581,13 +2579,13 @@ export default function RouteDetailPage() {
 
   const handleOpenRouteSelector = (selectorType, routeRow) => {
     setActiveRouteSelector({
-      departureTime: routeRow.departureTime,
+      startDateTime: routeRow.startDateTime ?? "",
       routePlanId: routeRow.routePlanId,
       routeTitle: routeRow.title,
       title: selectorType === "vehicle" ? "Vehicle" : selectorType === "startTime" ? "Start time" : "Driver",
       type: selectorType,
     });
-    if (selectorType === "startTime") setRouteDepartureTimeDraft(routeRow.departureTime);
+    if (selectorType === "startTime") setRouteStartDateTimeDraft(routeRow.startDateTime ?? "");
     setRouteSelectorQuery("");
   };
 
@@ -2611,18 +2609,25 @@ export default function RouteDetailPage() {
     }
   };
 
-  const handleSaveRouteDepartureTime = async () => {
+  const handleSaveRouteStartTime = async () => {
     const targetRoutePlanId = activeRouteSelector?.type === "startTime"
       ? activeRouteSelector.routePlanId
       : effectiveRoutePlan?.id;
-    if (!targetRoutePlanId || routeGroupActionBusy || !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(routeDepartureTimeDraft)) return;
+    if (!targetRoutePlanId || routeGroupActionBusy) return;
+    const scheduledStartAt = routeStartDateTimeDraft === ""
+      ? null
+      : storeLocalDateTimeToIso(routeStartDateTimeDraft, ianaTimezone);
+    if (routeStartDateTimeDraft !== "" && scheduledStartAt === null) {
+      setRouteGroupClientError("출발 날짜와 시간을 모두 선택해주세요.");
+      return;
+    }
 
     try {
       setRouteGroupClientError(null);
       const sessionToken = await shopify.idToken();
       const formData = new FormData();
-      formData.set("_intent", "saveRouteDepartureTime");
-      formData.set("departureTime", routeDepartureTimeDraft);
+      formData.set("_intent", "saveRouteStartTime");
+      formData.set("scheduledStartAt", scheduledStartAt ?? "");
       formData.set("routePlanId", targetRoutePlanId);
       formData.set("shopifySessionToken", sessionToken);
       routeActionFetcher.submit(formData, { method: "post" });
@@ -3028,7 +3033,7 @@ export default function RouteDetailPage() {
         attemptedCount: 0,
         color: draft.color,
         createdLabel: ROUTE_EMPTY_LABEL,
-        departureTime: "",
+        startDateTime: "",
         deliveredCount: 0,
         driverLabel: "Unassigned",
         driveTimeLabel: ROUTE_EMPTY_LABEL,
@@ -3161,7 +3166,7 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (!["saveRouteDriver", "saveRouteDepartureTime"].includes(lastRouteActionIntentRef.current)) return;
+    if (!["saveRouteDriver", "saveRouteStartTime"].includes(lastRouteActionIntentRef.current)) return;
     lastRouteActionIntentRef.current = null;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) revalidator.revalidate();
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state]);
@@ -3779,28 +3784,28 @@ export default function RouteDetailPage() {
                       </button>
                     </div>
                     <div style={routeDetailTitleMetricStyle}>
-                      <span style={routeDetailTitleMetricLabelStyle}>Departure</span>
+                      <span style={routeDetailTitleMetricLabelStyle}>Start</span>
                       <span style={childRouteDepartureControlStyle}>
                         <input
-                          aria-label="Route departure time"
+                          aria-label="Route start date and time"
                           disabled={routeGroupActionBusy}
-                          onChange={(event) => setRouteDepartureTimeDraft(event.currentTarget.value)}
+                          onChange={(event) => setRouteStartDateTimeDraft(event.currentTarget.value)}
                           style={childRouteDepartureInputStyle}
-                          type="time"
-                          value={routeDepartureTimeDraft}
+                          type="datetime-local"
+                          value={routeStartDateTimeDraft}
                         />
                         <button
-                          disabled={routeGroupActionBusy || routeDepartureTimeDraft === (textOrUndefined(effectiveRoutePlan?.departureTime) ?? "")}
-                          onClick={handleSaveRouteDepartureTime}
+                          disabled={routeGroupActionBusy || routeStartDateTimeDraft === routeStartDateTimeValue}
+                          onClick={handleSaveRouteStartTime}
                           style={{
                             ...childRouteDepartureSaveButtonStyle,
-                            ...(routeGroupActionBusy || routeDepartureTimeDraft === (textOrUndefined(effectiveRoutePlan?.departureTime) ?? "")
+                            ...(routeGroupActionBusy || routeStartDateTimeDraft === routeStartDateTimeValue
                               ? { cursor: "not-allowed", opacity: 0.55 }
                               : {}),
                           }}
                           type="button"
                         >
-                          {saveRouteDepartureTimeBusy ? "Saving…" : "Save"}
+                          {saveRouteStartTimeBusy ? "Saving…" : "Save"}
                         </button>
                       </span>
                     </div>
@@ -4098,7 +4103,14 @@ export default function RouteDetailPage() {
                       <td style={routeNameCellStyle}>
                         <span style={routeLineNameStyle}>
                           <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: routeRow.color }}></span>
-                          <span style={routeLineTitleStyle}>{routeRow.title}</span>
+                          <button
+                            aria-label={`Open ${routeRow.title} route detail`}
+                            onClick={() => navigate(routeGroupChildPath(routeGroupId, routeRow.routePlanId))}
+                            style={routeLineTitleButtonStyle}
+                            type="button"
+                          >
+                            {routeRow.title}
+                          </button>
                           <button
                             aria-label={`Edit ${routeRow.title} name`}
                             onClick={() => handleOpenRouteLineEditor(routeRow)}
@@ -4395,12 +4407,12 @@ export default function RouteDetailPage() {
               <div style={routeLineEditorLabelStyle}>{activeRouteSelector.routeTitle}</div>
               {activeRouteSelector.type === "startTime" ? (
                 <input
-                  aria-label="Route start time"
+                  aria-label="Route start date and time"
                   disabled={routeGroupActionBusy}
-                  onChange={(event) => setRouteDepartureTimeDraft(event.currentTarget.value)}
+                  onChange={(event) => setRouteStartDateTimeDraft(event.currentTarget.value)}
                   style={routeLineEditorInputStyle}
-                  type="time"
-                  value={routeDepartureTimeDraft}
+                  type="datetime-local"
+                  value={routeStartDateTimeDraft}
                 />
               ) : (
                 <>
@@ -4444,14 +4456,14 @@ export default function RouteDetailPage() {
                   <button
                     disabled={
                       routeGroupActionBusy ||
-                      routeDepartureTimeDraft === activeRouteSelector.departureTime ||
-                      !/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(routeDepartureTimeDraft)
+                      routeStartDateTimeDraft === activeRouteSelector.startDateTime ||
+                      (routeStartDateTimeDraft !== "" && storeLocalDateTimeToIso(routeStartDateTimeDraft, ianaTimezone) === null)
                     }
-                    onClick={handleSaveRouteDepartureTime}
+                    onClick={handleSaveRouteStartTime}
                     style={routeLineEditorPrimaryButtonStyle}
                     type="button"
                   >
-                    {saveRouteDepartureTimeBusy ? "Saving…" : "Save"}
+                    {saveRouteStartTimeBusy ? "Saving…" : "Save"}
                   </button>
                 ) : null}
               </div>

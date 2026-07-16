@@ -971,7 +971,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /const assignmentStops = buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
   assert.match(routeDetailSource, /const allRouteGroupStops = useMemo/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
-  assert.match(routeDetailSource, /function buildRouteGroupChildRows\(routeGroup, childDetailsByRoutePlanId = new Map\(\), routeStops = \[\]\) \{/);
+  assert.match(routeDetailSource, /function buildRouteGroupChildRows\(routeGroup, childDetailsByRoutePlanId = new Map\(\), routeStops = \[\], ianaTimezone\) \{/);
   assert.match(routeDetailSource, /getVisibleRouteGroupChildren\(routeGroup\)\.map/);
   assert.match(routeDetailSource, /const routeIdx = numberOrUndefined\(child\?\.routeIdx\)/);
   assert.match(routeDetailSource, /routeIdx: routeIdx \?\? null/);
@@ -1020,7 +1020,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /const defaultRouteCandidateTitle = isRouteGroupDetail \? "#1" : routeDetailTitle/);
   assert.match(routeDetailSource, /const childRoutePlan = detail\?\.routePlan \?\? child\?\.routePlan \?\? null/);
   assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, childRoutePlan, index\)/);
-  assert.match(routeDetailSource, /startTimeLabel: getRouteStartTimeLabel\(getRouteStartDateTimeValue\(childRoutePlan\)\)/);
+  assert.match(routeDetailSource, /startTimeLabel: getRouteStartTimeLabel\(getRouteStartDateTimeValue\(childRoutePlan, ianaTimezone\)\)/);
   assert.match(routeDetailSource, /totalItems: getRouteTotalItems\(childRoutePlan, stops\)/);
   assert.match(routeDetailSource, /routePlan\?\.itemSummary\?\.totalQuantity \?\? routePlan\?\.totalItems/);
   assert.match(routeDetailSource, /routeRow\.startTimeLabel \?\? routeStartTimeLabel/);
@@ -1028,11 +1028,13 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
   assert.match(routeDetailSource, /onClick=\{\(\) => handleOpenRouteSelector\("startTime", routeRow\)\}/);
-  assert.match(routeDetailSource, /departureTime: getRouteDepartureTimeValue\(childRoutePlan\)/);
-  assert.match(routeDetailSource, /if \(selectorType === "startTime"\) setRouteDepartureTimeDraft\(routeRow\.departureTime\)/);
+  assert.match(routeDetailSource, /startDateTime: getRouteStartDateTimeValue\(childRoutePlan, ianaTimezone\)/);
+  assert.match(routeDetailSource, /if \(selectorType === "startTime"\) setRouteStartDateTimeDraft\(routeRow\.startDateTime \?\? ""\)/);
   assert.match(routeDetailSource, /const targetRoutePlanId = activeRouteSelector\?\.type === "startTime"[\s\S]*?activeRouteSelector\.routePlanId[\s\S]*?: effectiveRoutePlan\?\.id/);
   assert.match(routeDetailSource, /formData\.set\("routePlanId", targetRoutePlanId\)/);
-  assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? \([\s\S]*?aria-label="Route start time"[\s\S]*?type="time"/);
+  assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? \([\s\S]*?aria-label="Route start date and time"[\s\S]*?type="datetime-local"/);
+  assert.match(routeDetailSource, /aria-label=\{`Open \$\{routeRow\.title\} route detail`\}/);
+  assert.match(routeDetailSource, /navigate\(routeGroupChildPath\(routeGroupId, routeRow\.routePlanId\)\)/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
@@ -1087,7 +1089,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /setRouteLineEdits\(\(currentEdits\) => \(\{/);
   assert.match(routeDetailSource, /viewBox="0 0 10 10"/);
   assert.doesNotMatch(routeDetailSource, />⌄<\/span>/);
-  assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);
+  assert.doesNotMatch(routeDetailSource, /T09:00/);
+  assert.doesNotMatch(routeDetailSource, /getRouteDepartureTimeValue/);
   assert.match(routeDetailSource, /borderRight: "1px solid #d6d6d6"/);
   assert.match(routeDetailSource, /marginRight: "6px"/);
   assert.match(routeDetailSource, /minWidth: "64px"/);
