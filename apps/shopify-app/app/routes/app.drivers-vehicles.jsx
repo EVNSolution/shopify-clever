@@ -74,6 +74,14 @@ const secondaryButtonStyle = {
   color: "#303030",
 };
 
+const downloadLinkButtonStyle = {
+  ...secondaryButtonStyle,
+  alignItems: "center",
+  display: "inline-flex",
+  justifyContent: "center",
+  textDecoration: "none",
+};
+
 const dangerButtonStyle = {
   ...secondaryButtonStyle,
   borderColor: "#d72c0d",
@@ -922,6 +930,15 @@ export default function DriversVehiclesPage() {
         <h1 style={pageTitleStyle}>Drivers</h1>
         <div style={pageActionsStyle}>
           <button type="button" style={primaryButtonStyle} onClick={openInviteModal}>Invite driver</button>
+          <a
+            aria-label="Download driver app"
+            href={getDriverDownloadLink(driverDownloadLink)}
+            rel="noreferrer"
+            style={downloadLinkButtonStyle}
+            target="_blank"
+          >
+            Download app
+          </a>
           <button
             type="button"
             style={driverDeleteDisabled ? disabledActionButtonStyle : dangerButtonStyle}

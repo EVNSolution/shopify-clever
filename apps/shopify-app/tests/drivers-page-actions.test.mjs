@@ -24,7 +24,10 @@ test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
   assert.match(source, /onChange=\{\(\) => toggleDriverCheck\(driver\.id\)\}/);
   assert.match(source, />\s*Delete selected\s*<\/button>/);
   const [, pageActionsBlock = ""] = source.match(/<div style=\{pageActionsStyle\}>([\s\S]*?)<\/div>/) ?? [];
-  assert.match(pageActionsBlock, /Invite driver[\s\S]*Delete selected/);
+  assert.match(pageActionsBlock, /Invite driver[\s\S]*Download app[\s\S]*Delete selected/);
+  assert.match(pageActionsBlock, /href=\{getDriverDownloadLink\(driverDownloadLink\)\}/);
+  assert.match(pageActionsBlock, /target="_blank"/);
+  assert.match(pageActionsBlock, /rel="noreferrer"/);
   assert.match(source, /<td colSpan=\{8\}/);
 });
 
