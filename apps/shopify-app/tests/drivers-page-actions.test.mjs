@@ -31,6 +31,17 @@ test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
   assert.match(source, /<td colSpan=\{8\}/);
 });
 
+test("Drivers actions use the app compact button height", () => {
+  const [, primaryButtonBlock = ""] = source.match(/const primaryButtonStyle = \{([\s\S]*?)\n\};/) ?? [];
+
+  assert.match(primaryButtonBlock, /alignItems: "center"/);
+  assert.match(primaryButtonBlock, /boxSizing: "border-box"/);
+  assert.match(primaryButtonBlock, /display: "inline-flex"/);
+  assert.match(primaryButtonBlock, /lineHeight: 1\.2/);
+  assert.match(primaryButtonBlock, /minHeight: "30px"/);
+  assert.match(primaryButtonBlock, /padding: "4px 12px"/);
+});
+
 test("Drivers table uses compact support columns and separates joined date", () => {
   assert.match(source, /<col style=\{\{ width: "40px" \}\} \/>/);
   assert.match(source, /<col style=\{\{ width: "14\.4%" \}\} \/>/);
