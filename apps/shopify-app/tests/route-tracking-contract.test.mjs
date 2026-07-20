@@ -3,12 +3,18 @@ import test from "node:test";
 
 import {
   consumeRouteTrackingSseChunk,
+  getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingFreshness,
+  getRouteTrackingPresentation,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
+  normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
 } from "../app/features/delivery/route-tracking.js";
-import { proxyDeliveryRouteTrackingStream } from "../app/features/delivery/route-tracking.server.js";
+import {
+  proxyDeliveryRouteTrackingSnapshot,
+  proxyDeliveryRouteTrackingStream,
+} from "../app/features/delivery/route-tracking.server.js";
 
 const policy = {
   liveThresholdMs: 60_000,
@@ -66,6 +72,50 @@ test("freshness uses server-provided thresholds", () => {
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:00:30.000Z")).key, "LIVE");
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:02:00.000Z")).key, "DELAYED");
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:04:00.000Z")).key, "OFFLINE");
+});
+
+test("route execution status controls live, inactive, and historical tracking presentation", () => {
+  const noHistory = normalizeRouteTrackingSnapshot({ policy, recentPositions: [] });
+  const history = normalizeRouteTrackingSnapshot({
+    policy,
+    latestPosition: {
+      eventId: "position-1",
+      latitude: 37.5,
+      longitude: 127,
+      occurredAt: "2026-07-20T04:00:00.000Z",
+    },
+  });
+
+  assert.equal(normalizeRouteExecutionStatus("published"), "READY");
+  assert.deepEqual(getRouteTrackingPresentation("READY", noHistory), {
+    connectionLabel: "inactive",
+    driverStage: "READY",
+    mode: "inactive",
+    trackingLabel: "Not started",
+  });
+  assert.deepEqual(getRouteTrackingPresentation("READY", history), {
+    connectionLabel: "closed",
+    driverStage: "READY",
+    mode: "history",
+    trackingLabel: "Tracking stopped",
+  });
+  assert.deepEqual(getRouteTrackingPresentation("COMPLETED", history), {
+    connectionLabel: "closed",
+    driverStage: "COMPLETED",
+    mode: "history",
+    trackingLabel: "Completed",
+  });
+  assert.equal(
+    getRouteTrackingPresentation("IN_PROGRESS", history, Date.parse("2026-07-20T04:00:30.000Z")).trackingLabel,
+    "Live",
+  );
+});
+
+test("route lifecycle progress events update the displayed execution status", () => {
+  assert.equal(getRouteExecutionStatusFromTrackingEvent("READY", { eventType: "ROUTE_STARTED" }), "IN_PROGRESS");
+  assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "ROUTE_PAUSED" }), "READY");
+  assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "ROUTE_COMPLETED" }), "COMPLETED");
+  assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "STOP_DELIVERED" }), "IN_PROGRESS");
 });
 
 test("tracking progress keeps the current driver stage and completed stop ids", () => {
@@ -132,4 +182,24 @@ test("tracking proxy forwards authentication and streams the upstream body witho
   assert.equal(upstreamRequest.options.signal, request.signal);
   assert.equal(response.headers.get("cache-control"), "no-store, no-transform");
   assert.match(await response.text(), /tracking_snapshot/);
+});
+
+test("tracking snapshot proxy reads historical positions without opening an SSE stream", async () => {
+  const request = new Request("https://app.test/app/route-tracking/route-1?mode=snapshot", {
+    headers: { authorization: "Bearer shopify-token" },
+  });
+  let upstreamRequest = null;
+  const response = await proxyDeliveryRouteTrackingSnapshot(request, "route-1", {
+    appId: "clever-route-dev",
+    baseUrl: "https://delivery.test",
+    fetch: async (url, options) => {
+      upstreamRequest = { url, options };
+      return Response.json({ data: { recentPositions: [] }, error: null });
+    },
+  });
+
+  assert.equal(upstreamRequest.url, "https://delivery.test/admin/route-plans/route-1/tracking");
+  assert.equal(upstreamRequest.options.headers.accept, "application/json");
+  assert.equal(response.headers.get("cache-control"), "no-store");
+  assert.deepEqual(await response.json(), { data: { recentPositions: [] }, error: null });
 });

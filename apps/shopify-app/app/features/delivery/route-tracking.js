@@ -11,6 +11,12 @@ function textOrNull(value) {
   return text || null;
 }
 
+function normalizeRouteExecutionStatus(status) {
+  const value = textOrNull(status)?.toUpperCase().replace(/[\s-]+/g, "_");
+  if (value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELLED") return value;
+  return "READY";
+}
+
 function normalizeTrackingPosition(position) {
   const latitude = numberOrNull(position?.latitude);
   const longitude = numberOrNull(position?.longitude);
@@ -216,11 +222,65 @@ function getRouteTrackingFreshness(snapshot, now = Date.now()) {
   return { key: "OFFLINE", label: "Offline", ageMs };
 }
 
+function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
+  const status = normalizeRouteExecutionStatus(currentStatus);
+  const eventType = textOrNull(event?.eventType);
+  if (eventType === "ROUTE_STARTED") return "IN_PROGRESS";
+  if (eventType === "ROUTE_PAUSED") return "READY";
+  if (eventType === "ROUTE_COMPLETED") return "COMPLETED";
+  return status;
+}
+
+function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
+  const executionStatus = normalizeRouteExecutionStatus(routeStatus);
+  const hasHistory = Boolean(snapshot?.latestPosition) || (snapshot?.recentPositions?.length ?? 0) > 0;
+  if (executionStatus === "IN_PROGRESS") {
+    return {
+      connectionLabel: null,
+      driverStage: snapshot?.progress?.currentStage ?? "DRIVING",
+      mode: "live",
+      trackingLabel: getRouteTrackingFreshness(snapshot, now).label,
+    };
+  }
+  if (executionStatus === "COMPLETED") {
+    return {
+      connectionLabel: "closed",
+      driverStage: "COMPLETED",
+      mode: "history",
+      trackingLabel: "Completed",
+    };
+  }
+  if (executionStatus === "CANCELLED") {
+    return {
+      connectionLabel: "closed",
+      driverStage: "READY",
+      mode: hasHistory ? "history" : "inactive",
+      trackingLabel: "Cancelled",
+    };
+  }
+  return hasHistory
+    ? {
+        connectionLabel: "closed",
+        driverStage: "READY",
+        mode: "history",
+        trackingLabel: "Tracking stopped",
+      }
+    : {
+        connectionLabel: "inactive",
+        driverStage: "READY",
+        mode: "inactive",
+        trackingLabel: "Not started",
+      };
+}
+
 export {
   consumeRouteTrackingSseChunk,
+  getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingFreshness,
+  getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
+  normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
 };

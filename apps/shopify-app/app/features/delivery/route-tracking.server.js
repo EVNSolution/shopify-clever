@@ -45,4 +45,36 @@ async function proxyDeliveryRouteTrackingStream(request, routePlanId, options = 
   });
 }
 
-export { proxyDeliveryRouteTrackingStream };
+async function proxyDeliveryRouteTrackingSnapshot(request, routePlanId, options = {}) {
+  const safeRoutePlanId = String(routePlanId ?? "").trim();
+  if (!safeRoutePlanId) return trackingProxyError("Route plan ID is required.", 400);
+
+  const authorization = getShopifySessionBearer(request);
+  if (!authorization) return trackingProxyError("Shopify session token is required.", 401);
+
+  const baseUrl = options.baseUrl ?? getDeliveryApiBaseUrl();
+  const fetchImpl = options.fetch ?? fetch;
+  const upstreamResponse = await fetchImpl(
+    `${baseUrl}/admin/route-plans/${safeRoutePlanId}/tracking`,
+    {
+      headers: {
+        accept: "application/json",
+        authorization,
+        "x-clever-app-id": options.appId ?? getCleverAppId(),
+      },
+      cache: "no-store",
+      signal: request.signal,
+    },
+  );
+
+  return new Response(upstreamResponse.body, {
+    status: upstreamResponse.status,
+    statusText: upstreamResponse.statusText,
+    headers: {
+      "cache-control": "no-store",
+      "content-type": upstreamResponse.headers.get("content-type") ?? "application/json; charset=utf-8",
+    },
+  });
+}
+
+export { proxyDeliveryRouteTrackingSnapshot, proxyDeliveryRouteTrackingStream };
