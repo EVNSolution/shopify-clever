@@ -6,6 +6,7 @@ import { fetchDeliveryRouteGroupDetail } from "../features/delivery/route-groups
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
 import { authenticate } from "../shopify.server";
 import { buildRouteGroupChildDetails, cleanRoutePathParam, routeDetailAction } from "../features/delivery/route-detail.server";
+import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "../features/delivery/route-timezone.server";
 import RouteDetailPage from "./app.routes.$routeId";
 
 function getTopLevelKeys(value) {
@@ -43,15 +44,22 @@ export const loader = async ({ params, request }) => {
   const { admin, session } = await authenticate.admin(request);
   const cacheKey = session?.shop;
   const routeGroupId = cleanRoutePathParam(params.routeGroupId);
-  const [routeGroupData, departureLocationData, driverData] = await Promise.all([
+  const [routeGroupData, departureLocationData, driverData, fallbackTimeZoneData] = await Promise.all([
     fetchDeliveryRouteGroupDetail(request, routeGroupId, { cacheKey }),
     fetchShopifyDepartureLocation(admin, { cacheKey }),
     fetchDeliveryDrivers(request, {}),
+    fetchRouteFallbackTimeZone(admin, cacheKey),
   ]);
+  const routeTimeZoneData = await resolveRouteTimeZone({
+    departureLocation: departureLocationData.departureLocation,
+    fallbackTimeZoneData,
+    routePlan: null,
+  });
   const childRouteDetails = buildRouteGroupChildDetails(routeGroupData.routeGroup);
   const errors = [
     ...(routeGroupData.errors ?? []),
     ...(driverData.errors ?? []),
+    ...(routeTimeZoneData.errors ?? []),
   ];
   logRouteGroupApiSummary({ routeGroupData, departureLocationData, driverData });
   return {
@@ -59,6 +67,7 @@ export const loader = async ({ params, request }) => {
     childRouteDetails,
     currentDepartureLocation: departureLocationData.departureLocation,
     drivers: driverData.drivers,
+    ianaTimezone: routeTimeZoneData.ianaTimezone,
     routeDetailTitleOverride: routeGroupData.routeGroup?.name ?? null,
     routeGroup: routeGroupData.routeGroup,
     routeGeometry: null,
@@ -66,6 +75,8 @@ export const loader = async ({ params, request }) => {
     routePlan: null,
     routeStopPoints: [],
     stops: routeGroupData.routeGroup?.assignments ?? [],
+    timezoneAbbreviation: routeTimeZoneData.timezoneAbbreviation,
+    timezoneSource: routeTimeZoneData.timezoneSource,
   };
 };
 

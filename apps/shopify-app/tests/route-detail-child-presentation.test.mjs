@@ -276,14 +276,22 @@ test("Items and Attributes use hover and click disclosures above their trigger",
   assert.doesNotMatch(routeDetailSource, /childRouteDisclosurePopoverStyle\}>\{row\.(itemsDetail|attributesDetail)\}/);
 });
 
-test("materialized child headers save a complete per-route start date and time", () => {
-  assert.match(routeDetailSource, /const \[routeStartDateTimeDraft, setRouteStartDateTimeDraft\] = useState/);
-  assert.match(routeDetailSource, /aria-label="Route start date and time"/);
-  assert.match(routeDetailSource, /type="datetime-local"/);
-  assert.match(routeDetailSource, /formData\.set\("_intent", "saveRouteStartTime"\)/);
-  assert.match(routeDetailSource, /formData\.set\("scheduledStartAt", scheduledStartAt \?\? ""\)/);
-  assert.match(routeDetailSource, /const targetRoutePlanId = activeRouteSelector\?\.type === "startTime"[\s\S]*?: effectiveRoutePlan\?\.id/);
-  assert.match(routeDetailSource, /formData\.set\("routePlanId", targetRoutePlanId\)/);
-  assert.match(routeDetailServerSource, /intent === "saveRouteStartTime"/);
-  assert.match(routeDetailServerSource, /updateDeliveryRoutePlanScheduledStart/);
+test("materialized child headers stage a complete per-route start date and time for global save", () => {
+  assert.match(routeDetailSource, /import \{[\s\S]*RouteStartTimePicker[\s\S]*\} from "\.\.\/features\/delivery\/route-start-time-picker"/);
+  assert.match(routeDetailSource, /const \[routeStartTimeDraft, setRouteStartTimeDraft\] = useState/);
+  assert.match(routeDetailSource, /aria-label="Change route start time"/);
+  assert.match(routeDetailSource, /handleOpenRouteSelector\("startTime"/);
+  assert.match(routeDetailSource, /currentTimelineRouteRow\?\.startTimeLabel \?\? routeStartTimeLabel/);
+  assert.match(routeDetailSource, /<RouteStartTimePicker[\s\S]*draft=\{routeStartTimeDraft\}[\s\S]*onDraftChange=\{setRouteStartTimeDraft\}/);
+  assert.match(routeDetailSource, /routeTitle=\{activeRouteSelector\.routeTitle\}/);
+  assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? routeStartTimeDialogStyle : null/);
+  assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);
+  assert.match(routeDetailSource, /const targetRouteRowId = activeRouteSelector\?\.type === "startTime"/);
+  assert.match(routeDetailSource, /setRouteLineEdits\(\(currentEdits\) => \(\{[\s\S]*scheduledStartAt,[\s\S]*startDateTime: routeStartDateTimeDraftValue/);
+  assert.match(routeDetailSource, /scheduledStartTimeZone: scheduledStartAt === null \? null : routeStartTimeDraft\.timezone \|\| ianaTimezone/);
+  assert.match(routeDetailSource, /scheduledStartAt: routeRow\.scheduledStartAt \?\? null/);
+  assert.match(routeDetailSource, />\s*Apply\s*<\/button>/);
+  assert.doesNotMatch(routeDetailSource, /formData\.set\("_intent", "saveRouteStartTime"\)/);
+  assert.doesNotMatch(routeDetailServerSource, /intent === "saveRouteStartTime"/);
+  assert.doesNotMatch(routeDetailServerSource, /updateDeliveryRoutePlanScheduledStart/);
 });

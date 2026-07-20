@@ -9,10 +9,8 @@ import {
   saveDeliveryRouteGroupDraft,
 } from "./route-groups.server";
 import {
-  assignDeliveryRoutePlanDriver,
   deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
-  updateDeliveryRoutePlanScheduledStart,
 } from "./route-plans.server";
 import {
   firstArray,
@@ -28,8 +26,9 @@ import {
 } from "./route-detail-enrichment.server";
 import { routeGroupChildPath } from "./route-paths";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
-import { fetchShopifyShopTimeZone } from "../shopify/shop-timezone.server";
 import { authenticate } from "../../shopify.server";
+import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "./route-timezone.server";
+import { readRouteDraftPayload } from "./route-draft";
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -296,7 +295,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
 
   if (routeGroupIdHint) {
     const primaryDataStartedAt = getRouteDetailPerfNow();
-    const [routeGroupData, routePlanData, departureLocationData, driverData, orderData, shopTimeZoneData] = await Promise.all([
+    const [routeGroupData, routePlanData, departureLocationData, driverData, orderData, fallbackTimeZoneData] = await Promise.all([
       fetchDeliveryRouteGroupDetail(request, routeGroupIdHint, { cacheKey: shopifyShopCacheKey }),
       fetchDeliveryRoutePlanDetail(request, routeId, {
         cacheKey: shopifyShopCacheKey,
@@ -304,8 +303,13 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
       fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
       fetchDeliveryDrivers(request, {}),
       fetchDeliveryOrders(request, {}, { cacheKey: shopifyShopCacheKey }),
-      fetchShopifyShopTimeZone(admin, { cacheKey: shopifyShopCacheKey }),
+      fetchRouteFallbackTimeZone(admin, shopifyShopCacheKey),
     ]);
+    const shopTimeZoneData = await resolveRouteTimeZone({
+      departureLocation: departureLocationData.departureLocation,
+      fallbackTimeZoneData,
+      routePlan: routePlanData.routePlan,
+    });
     const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
     const thinRouteChildDetails = attachDeliveryOrderItemsToRouteDetails(
       buildRouteGroupChildDetails(routeGroupData.routeGroup),
@@ -371,19 +375,25 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
       ianaTimezone: shopTimeZoneData.ianaTimezone,
       routeGroup: routeGroupData.routeGroup,
       timezoneAbbreviation: shopTimeZoneData.timezoneAbbreviation,
+      timezoneSource: shopTimeZoneData.timezoneSource,
     };
   }
 
   const primaryDataStartedAt = getRouteDetailPerfNow();
-  const [routePlanData, departureLocationData, driverData, orderData, shopTimeZoneData] = await Promise.all([
+  const [routePlanData, departureLocationData, driverData, orderData, fallbackTimeZoneData] = await Promise.all([
     fetchDeliveryRoutePlanDetail(request, routeId, {
       cacheKey: shopifyShopCacheKey,
     }),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
     fetchDeliveryDrivers(request, {}),
     fetchDeliveryOrders(request, {}, { cacheKey: shopifyShopCacheKey }),
-    fetchShopifyShopTimeZone(admin, { cacheKey: shopifyShopCacheKey }),
+    fetchRouteFallbackTimeZone(admin, shopifyShopCacheKey),
   ]);
+  const shopTimeZoneData = await resolveRouteTimeZone({
+    departureLocation: departureLocationData.departureLocation,
+    fallbackTimeZoneData,
+    routePlan: routePlanData.routePlan,
+  });
   const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
   const routeGroupId = textOrUndefined(routePlanData.routePlan?.routeGroupingChild?.groupingId);
   const routeGroupData = routeGroupId
@@ -448,6 +458,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     ianaTimezone: shopTimeZoneData.ianaTimezone,
     routeGroup: routeGroupData.routeGroup,
     timezoneAbbreviation: shopTimeZoneData.timezoneAbbreviation,
+    timezoneSource: shopTimeZoneData.timezoneSource,
   };
 }
 
@@ -471,31 +482,6 @@ export const routeDetailAction = async ({ params, request }) => {
       return deleteDeliveryRouteGroup(request, routeGroupIdFromParams, { sessionToken: shopifySessionToken });
     }
     return deleteDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
-  }
-
-  if (intent === "saveRouteDriver") {
-    const driverId = textOrUndefined(formData.get("driverId")) ?? null;
-    const targetRouteId = textOrUndefined(formData.get("routePlanId")) ?? routeId;
-
-    return assignDeliveryRoutePlanDriver(
-      request,
-      targetRouteId,
-      { driverId },
-      { sessionToken: shopifySessionToken },
-    );
-  }
-
-  if (intent === "saveRouteStartTime") {
-    const scheduledStartAtValue = formData.get("scheduledStartAt");
-    const scheduledStartAt = scheduledStartAtValue === "" ? null : textOrUndefined(scheduledStartAtValue);
-    const targetRouteId = textOrUndefined(formData.get("routePlanId")) ?? routeId;
-
-    return updateDeliveryRoutePlanScheduledStart(
-      request,
-      targetRouteId,
-      { scheduledStartAt },
-      { sessionToken: shopifySessionToken },
-    );
   }
 
   if (intent === "previewRouteOptimization") {
@@ -550,27 +536,4 @@ function logRouteGroupActionResult(name, routeId, routeGroupId, result) {
     childRoutePlanIds: (routeGroup?.children ?? []).map(getRouteGroupChildRoutePlanId).filter(Boolean),
     errorCount: result?.errors?.length ?? 0,
   });
-}
-
-function readRouteDraftPayload(value) {
-  try {
-    const parsed = JSON.parse(String(value ?? "{}"));
-    if (!Array.isArray(parsed?.routes)) return { routes: [] };
-    return {
-      routes: parsed.routes.map((route) => ({
-        color: textOrUndefined(route?.color) ?? null,
-        label: textOrUndefined(route?.label) ?? null,
-        ...(route?.optimized === undefined ? {} : { optimized: route?.optimized && typeof route.optimized === "object" ? route.optimized : null }),
-        orderIds: Array.isArray(route?.orderIds) ? route.orderIds.map(textOrUndefined).filter(Boolean) : [],
-        routeIdx: Number.isFinite(Number(route?.routeIdx)) ? Number(route.routeIdx) : undefined,
-        routeKey: textOrUndefined(route?.routeKey),
-        routePlanId: textOrUndefined(route?.routePlanId) ?? null,
-        sortOrder: Number.isFinite(Number(route?.sortOrder)) ? Number(route.sortOrder) : undefined,
-        tempId: textOrUndefined(route?.tempId) ?? null,
-      })),
-      mode: textOrUndefined(parsed.mode),
-    };
-  } catch {
-    return { routes: [] };
-  }
 }
