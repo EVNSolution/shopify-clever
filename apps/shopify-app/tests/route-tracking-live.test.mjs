@@ -20,7 +20,10 @@ test("Shopify proxies the authenticated delivery tracking stream without exposin
   const resourceSource = readIfPresent(trackingResourcePath);
 
   assert.match(resourceSource, /authenticate\.admin\(request\)/);
+  assert.match(resourceSource, /mode === "snapshot"/);
+  assert.match(resourceSource, /proxyDeliveryRouteTrackingSnapshot\(request, params\.routePlanId\)/);
   assert.match(resourceSource, /proxyDeliveryRouteTrackingStream\(request, params\.routePlanId\)/);
+  assert.match(proxySource, /\/admin\/route-plans\/\$\{safeRoutePlanId\}\/tracking`/);
   assert.match(proxySource, /\/admin\/route-plans\/\$\{safeRoutePlanId\}\/tracking\/stream/);
   assert.match(proxySource, /authorization/);
   assert.match(proxySource, /"x-clever-app-id"/);
@@ -33,17 +36,20 @@ test("child route detail subscribes with a fresh Shopify token and reconnects th
   const routeDetailSource = readIfPresent(routeDetailPath);
 
   assert.match(routeDetailSource, /shopifyRef\.current\.idToken\(\)/);
-  assert.match(routeDetailSource, /fetch\(`\/app\/route-tracking\/\$\{encodeURIComponent\(trackingRoutePlanId\)\}`/);
+  assert.match(routeDetailSource, /fetch\(`\/app\/route-tracking\/\$\{encodeURIComponent\(liveTrackingRoutePlanId\)\}`/);
   assert.match(routeDetailSource, /Authorization: `Bearer \$\{sessionToken\}`/);
   assert.match(routeDetailSource, /consumeRouteTrackingSseChunk/);
   assert.match(routeDetailSource, /tracking_snapshot/);
   assert.match(routeDetailSource, /tracking_position/);
   assert.match(routeDetailSource, /tracking_progress/);
+  assert.match(routeDetailSource, /const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS"/);
+  assert.match(routeDetailSource, /\?mode=snapshot/);
+  assert.match(routeDetailSource, /getRouteExecutionStatusFromTrackingEvent/);
   assert.match(routeDetailSource, /document\.visibilityState/);
   assert.match(routeDetailSource, /AbortController/);
   assert.match(routeDetailSource, /trackingReconnectDelayMs/);
   assert.match(routeDetailSource, /const isCurrentController = streamController === controller/);
-  assert.doesNotMatch(routeDetailSource, /\}, \[shopify, trackingRoutePlanId\]\)/);
+  assert.doesNotMatch(routeDetailSource, /\}, \[shopify, liveTrackingRoutePlanId\]\)/);
 });
 
 test("live tracking updates MapLibre sources instead of rebuilding the child map", () => {
@@ -62,10 +68,13 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, routeTrackingSnapshot/);
 });
 
-test("Tracking tab presents server-owned freshness policy and the latest received position", () => {
+test("Tracking tab presents status-aware live or historical tracking and the latest received position", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
 
-  assert.match(routeDetailSource, /getRouteTrackingFreshness/);
+  assert.match(routeDetailSource, /getRouteTrackingPresentation/);
+  assert.match(routeDetailSource, /routeTrackingPresentation\.mode === "live"/);
+  assert.match(routeDetailSource, /routeTrackingPresentation\.trackingLabel/);
+  assert.match(routeDetailSource, /routeTrackingConnectionLabel/);
   assert.match(routeDetailSource, /routeTrackingSnapshot\?\.policy/);
   assert.match(routeDetailSource, /Latest position/);
   assert.match(routeDetailSource, /Last received/);

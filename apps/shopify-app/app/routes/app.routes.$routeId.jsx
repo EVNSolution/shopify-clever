@@ -52,10 +52,12 @@ import {
 } from "../features/delivery/route-detail-map";
 import {
   consumeRouteTrackingSseChunk,
-  getRouteTrackingFreshness,
+  getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
+  normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
 } from "../features/delivery/route-tracking";
 import { MAP_MARKER_PALETTE } from "../features/maps/map-markers";
@@ -2403,6 +2405,7 @@ export default function RouteDetailPage() {
   const trackingRoutePlanId = isMaterializedChildRouteDetail
     ? textOrUndefined(effectiveRoutePlan?.id)
     : null;
+  const loaderRouteExecutionStatus = normalizeRouteExecutionStatus(effectiveRoutePlan?.status);
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan, routeGroup), [effectiveRoutePlan, routeGroup]);
   const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? (isRouteGroupDetail ? textOrUndefined(routeGroup?.name) : textOrUndefined(routeDetail.route)) ?? "Route";
   const departureLocation = useMemo(
@@ -2525,7 +2528,14 @@ export default function RouteDetailPage() {
   const [routeTrackingSnapshot, setRouteTrackingSnapshot] = useState(null);
   const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
+  const [routeExecutionStatus, setRouteExecutionStatus] = useState(loaderRouteExecutionStatus);
   routeTrackingSnapshotRef.current = routeTrackingSnapshot;
+  useEffect(() => {
+    setRouteExecutionStatus(loaderRouteExecutionStatus);
+    routeTrackingSnapshotRef.current = null;
+    setRouteTrackingSnapshot(null);
+    setTrackingConnectionState("idle");
+  }, [effectiveRoutePlan?.id, loaderRouteExecutionStatus]);
   useEffect(() => {
     setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
   }, [effectiveRoutePlan?.id, routeStartDateTimeValue, routeStartTimeZone]);
@@ -2555,7 +2565,7 @@ export default function RouteDetailPage() {
         scheduledStartAt: effectiveRoutePlan?.scheduledStartAt ?? null,
         scheduledStartTimeZone: textOrUndefined(effectiveRoutePlan?.scheduledStartTimeZone) ?? null,
         startTimeLabel: routeStartTimeLabel,
-        status: formatRouteStatus(effectiveRoutePlan?.status),
+        status: formatRouteStatus(routeExecutionStatus),
         stops: orderedRouteStops,
         stopsCount: orderedRouteStops.length,
         title: routeCandidateTitle,
@@ -2577,10 +2587,16 @@ export default function RouteDetailPage() {
   const childRouteOrderRows = isMaterializedChildRouteDetail
     ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { ianaTimezone, timezoneAbbreviation })
     : [];
-  const routeTrackingFreshness = useMemo(
-    () => getRouteTrackingFreshness(routeTrackingSnapshot, routeTrackingClock),
-    [routeTrackingClock, routeTrackingSnapshot],
+  const routeTrackingPresentation = useMemo(
+    () => getRouteTrackingPresentation(routeExecutionStatus, routeTrackingSnapshot, routeTrackingClock),
+    [routeExecutionStatus, routeTrackingClock, routeTrackingSnapshot],
   );
+  const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS" ? trackingRoutePlanId : null;
+  const routeTrackingConnectionLabel = routeTrackingPresentation.mode === "live"
+    ? trackingConnectionState
+    : ["loading", "unavailable"].includes(trackingConnectionState)
+      ? trackingConnectionState
+      : routeTrackingPresentation.connectionLabel;
   const routeTrackingPolicy = routeTrackingSnapshot?.policy;
   const routeTrackingProgress = routeTrackingSnapshot?.progress;
   const latestTrackingPosition = routeTrackingSnapshot?.latestPosition ?? null;
@@ -2684,12 +2700,46 @@ export default function RouteDetailPage() {
   const savedRouteStopPoints = routeGeometryStopPoints;
 
   useEffect(() => {
-    if (!trackingRoutePlanId) {
-      routeTrackingSnapshotRef.current = null;
-      setRouteTrackingSnapshot(null);
-      setTrackingConnectionState("idle");
-      return undefined;
-    }
+    if (!trackingRoutePlanId || liveTrackingRoutePlanId) return undefined;
+
+    let isDisposed = false;
+    const controller = new AbortController();
+    const loadTrackingSnapshot = async () => {
+      if (!routeTrackingSnapshotRef.current) setTrackingConnectionState("loading");
+      try {
+        const sessionToken = await shopifyRef.current.idToken();
+        if (isDisposed || controller.signal.aborted) return;
+        const response = await fetch(`/app/route-tracking/${encodeURIComponent(trackingRoutePlanId)}?mode=snapshot`, {
+          headers: {
+            Accept: "application/json",
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok) throw new Error(`Tracking snapshot failed with ${response.status}.`);
+        const payload = await response.json();
+        const snapshot = normalizeRouteTrackingSnapshot(payload?.data?.snapshot ?? payload?.data ?? payload);
+        routeTrackingSnapshotRef.current = snapshot;
+        setRouteTrackingSnapshot(snapshot);
+        setTrackingConnectionState("idle");
+      } catch (error) {
+        if (!isDisposed && !controller.signal.aborted) {
+          console.warn("Route tracking snapshot is unavailable.", error);
+          setTrackingConnectionState("unavailable");
+        }
+      }
+    };
+
+    loadTrackingSnapshot();
+    return () => {
+      isDisposed = true;
+      controller.abort();
+    };
+  }, [liveTrackingRoutePlanId, trackingRoutePlanId]);
+
+  useEffect(() => {
+    if (!liveTrackingRoutePlanId) return undefined;
 
     let isDisposed = false;
     let lastFailureStatus = null;
@@ -2728,10 +2778,12 @@ export default function RouteDetailPage() {
         return;
       }
       if (trackingEvent.event === "tracking_progress") {
+        const progressEvent = trackingEvent.data?.progress ?? trackingEvent.data;
+        setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingEvent(currentStatus, progressEvent));
         setRouteTrackingSnapshot((currentSnapshot) => {
           const nextSnapshot = mergeRouteTrackingProgress(
             currentSnapshot,
-            trackingEvent.data?.progress ?? trackingEvent.data,
+            progressEvent,
           );
           routeTrackingSnapshotRef.current = nextSnapshot;
           return nextSnapshot;
@@ -2751,7 +2803,7 @@ export default function RouteDetailPage() {
       try {
         const sessionToken = await shopifyRef.current.idToken();
         if (isDisposed || controller.signal.aborted) return;
-        const response = await fetch(`/app/route-tracking/${encodeURIComponent(trackingRoutePlanId)}`, {
+        const response = await fetch(`/app/route-tracking/${encodeURIComponent(liveTrackingRoutePlanId)}`, {
           headers: {
             Accept: "text/event-stream",
             Authorization: `Bearer ${sessionToken}`,
@@ -2812,13 +2864,13 @@ export default function RouteDetailPage() {
       streamController?.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [trackingRoutePlanId]);
+  }, [liveTrackingRoutePlanId]);
 
   useEffect(() => {
-    if (!trackingRoutePlanId) return undefined;
+    if (!liveTrackingRoutePlanId) return undefined;
     const clock = window.setInterval(() => setRouteTrackingClock(Date.now()), 10_000);
     return () => window.clearInterval(clock);
-  }, [trackingRoutePlanId]);
+  }, [liveTrackingRoutePlanId]);
 
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
@@ -4240,7 +4292,9 @@ export default function RouteDetailPage() {
                     {renderRouteLineEditIcon()}
                   </button>
                 ) : null}
-                <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
+                <span style={routeStatusBadgeStyle}>
+                  {isMaterializedChildRouteDetail ? formatRouteStatus(routeExecutionStatus) : routeDetail.status}
+                </span>
                 {!isMaterializedChildRouteDetail ? (
                   <div aria-label="Route summary" className="route-overview-summary">
                     {renderRouteHeaderMetric("Orders", routeDetail.orders)}
@@ -4328,7 +4382,7 @@ export default function RouteDetailPage() {
                   {renderRouteEditableChevron()}
                 </button>
               </div>
-              <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
+              <span style={routeStatusBadgeStyle}>{formatRouteStatus(routeExecutionStatus)}</span>
             </section>
           ) : null}
 
@@ -4581,24 +4635,28 @@ export default function RouteDetailPage() {
             <section aria-label="Child route tracking" style={routeChildTrackingStyle}>
               <div style={routeChildTrackingSummaryStyle}>
                 <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Live tracking</span>
+                  <span style={routeChildTrackingMetricLabelStyle}>
+                    {routeTrackingPresentation.mode === "live" ? "Live tracking" : "Tracking"}
+                  </span>
                   <strong
                     style={routeChildTrackingMetricValueStyle}
-                    title={routeTrackingPolicy
+                    title={routeTrackingPresentation.mode === "live" && routeTrackingPolicy
                       ? `Server policy: live ${routeTrackingPolicy.liveThresholdMs ?? ROUTE_EMPTY_LABEL}ms, delayed ${routeTrackingPolicy.delayedThresholdMs ?? ROUTE_EMPTY_LABEL}ms`
-                      : "Waiting for server tracking policy"}
-                  >{routeTrackingFreshness.label}</strong>
+                      : routeTrackingPresentation.mode === "live"
+                        ? "Waiting for server tracking policy"
+                        : "Live tracking is available only while the route is in progress"}
+                  >{routeTrackingPresentation.trackingLabel}</strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
                   <span style={routeChildTrackingMetricLabelStyle}>Connection</span>
                   <strong style={{ ...routeChildTrackingMetricValueStyle, textTransform: "capitalize" }}>
-                    {trackingConnectionState}
+                    {routeTrackingConnectionLabel}
                   </strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
                   <span style={routeChildTrackingMetricLabelStyle}>Driver stage</span>
                   <strong style={routeChildTrackingMetricValueStyle}>
-                    {formatTrackingDriverStage(routeTrackingProgress?.currentStage)}
+                    {formatTrackingDriverStage(routeTrackingPresentation.driverStage)}
                   </strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
