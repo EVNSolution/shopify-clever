@@ -295,3 +295,32 @@ test("materialized child headers stage a complete per-route start date and time 
   assert.doesNotMatch(routeDetailServerSource, /intent === "saveRouteStartTime"/);
   assert.doesNotMatch(routeDetailServerSource, /updateDeliveryRoutePlanScheduledStart/);
 });
+
+test("child detail uses a flat reference-style title area and keeps inventory separate", () => {
+  assert.match(routeDetailSource, /const routeChildOverviewHeaderStyle = \{/);
+  assert.match(routeDetailSource, /Updated on \{routeUpdatedLabel\}/);
+  assert.match(routeDetailSource, /aria-label="Edit child route name"/);
+  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
+  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*View inventory/);
+  assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
+});
+
+test("child detail tabs connect the map to Stops and Tracking table views", () => {
+  const tabsIndex = routeDetailSource.indexOf('aria-label="Child route detail sections"');
+  const mapIndex = routeDetailSource.indexOf('ariaLabel="Route stop location map"');
+  const timelineIndex = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
+  const trackingIndex = routeDetailSource.indexOf('aria-label="Child route tracking"');
+
+  assert.ok(tabsIndex >= 0 && tabsIndex < mapIndex);
+  assert.ok(mapIndex < timelineIndex);
+  assert.ok(mapIndex < trackingIndex);
+  assert.match(routeDetailSource, /const \[childDetailTab, setChildDetailTab\] = useState\("stops"\)/);
+  assert.match(routeDetailSource, /role="tablist"/);
+  assert.match(routeDetailSource, /setChildDetailTab\("stops"\)/);
+  assert.match(routeDetailSource, /setChildDetailTab\("tracking"\)/);
+  assert.match(routeDetailSource, />Stops<\/span>/);
+  assert.match(routeDetailSource, />Tracking<\/span>/);
+  assert.match(routeDetailSource, /childDetailTab === "stops"/);
+  assert.match(routeDetailSource, /childDetailTab === "tracking"/);
+  assert.match(routeDetailSource, /aria-label="Child route tracking"/);
+});

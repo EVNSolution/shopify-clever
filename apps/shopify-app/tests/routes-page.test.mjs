@@ -857,6 +857,7 @@ test("Route detail renders every stop as a route-colored source-layer teardrop",
 });
 test("Route detail renders OSRM snapped stop points as route-colored circle layers", () => {
   assert.match(routeDetailMapSource, /const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1/);
+  assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_MIN_ZOOM = 15/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_SOURCE_ID = "route-detail-snapped-stop-points"/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points"/);
   assert.match(routeDetailMapSource, /function buildRouteStopPointMarker\(stop, routeStopPoint\) \{/);
@@ -871,6 +872,8 @@ test("Route detail renders OSRM snapped stop points as route-colored circle laye
   assert.match(routeDetailMapSource, /"circle-color": \["coalesce", \["get", "color"\], routeColor\]/);
   assert.match(routeDetailMapSource, /"circle-radius": ROUTE_DETAIL_STOP_POINT_RADIUS/);
   assert.match(routeDetailMapSource, /"circle-stroke-width": ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH/);
+  assert.match(routeDetailMapSource, /minzoom: ROUTE_DETAIL_STOP_POINT_MIN_ZOOM/);
+  assert.match(routeDetailMapSource, /map\.moveLayer\?\.\(ROUTE_DETAIL_STOP_POINT_LAYER_ID, ROUTE_DETAIL_DEPARTURE_LAYER_ID\)/);
   assert.doesNotMatch(routeDetailSource, /createRouteStopPointMarkerElement|const snappedStopPointMarker = new maplibregl\.Marker|function shouldRenderRouteStopPoints|zoomend/);
 });
 test("Route detail uses WebGL stop layers so marker projection follows the map", () => {
@@ -1171,7 +1174,10 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /<span>Back to routes<\/span>/);
   assert.match(routeDetailSource, /aria-label="Back to routes list"/);
   assert.match(routeDetailSource, /const routeOverviewTopBarStyle = \{/);
-  assert.match(routeDetailSource, /<header className="route-overview-header" style=\{routeOverviewHeaderStyle\}>[\s\S]*style=\{routeOverviewTopBarStyle\}[\s\S]*aria-label="Back to routes list"/);
+  assert.match(routeDetailSource, /className=\{isMaterializedChildRouteDetail \? "route-child-overview-header" : "route-overview-header"\}/);
+  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
+  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle\}/);
+  assert.match(routeDetailSource, /aria-label="Back to routes list"/);
   assert.match(routeDetailSource, /const routeDetailBackButtonStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailBackIconStyle = \{/);
   assert.match(routeDetailSource, /background: "transparent"/);

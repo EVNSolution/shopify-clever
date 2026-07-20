@@ -32,6 +32,7 @@ import { routeDetailAction, routeDetailLoader } from "../features/delivery/route
 import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
+  ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
   findRouteStopPoint,
@@ -45,9 +46,18 @@ import {
   removeRouteEditPolygon,
   softenRouteColor,
   syncRouteDetailMapMarkerLayers,
+  syncRouteDetailLiveTracking,
   syncRouteDetailRouteLine,
   syncRouteEditPolygon,
 } from "../features/delivery/route-detail-map";
+import {
+  consumeRouteTrackingSseChunk,
+  getRouteTrackingFreshness,
+  getRouteTrackingReconnectDelayMs,
+  mergeRouteTrackingProgress,
+  mergeRouteTrackingPosition,
+  normalizeRouteTrackingSnapshot,
+} from "../features/delivery/route-tracking";
 import { MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
@@ -124,6 +134,55 @@ const routeOverviewHeaderStyle = {
   display: "grid",
   gap: "10px",
   padding: "14px 16px",
+};
+
+const routeChildOverviewHeaderStyle = {
+  alignItems: "start",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "12px",
+  justifyContent: "space-between",
+  padding: "14px 4px 10px",
+};
+
+const routeChildOverviewTopBarStyle = {
+  alignItems: "center",
+  display: "flex",
+  justifyContent: "flex-end",
+  order: 2,
+};
+
+const routeChildOverviewMainStyle = {
+  flex: "1 1 420px",
+  minWidth: 0,
+  order: 1,
+};
+
+const routeChildTitleBlockStyle = {
+  display: "grid",
+  gap: "2px",
+  minWidth: 0,
+};
+
+const routeChildUpdatedStyle = {
+  color: "#6d7175",
+  fontSize: "12px",
+  lineHeight: 1.35,
+  marginLeft: "32px",
+};
+
+const routeChildTitleEditButtonStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  color: "#8a8a8a",
+  cursor: "pointer",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  height: "24px",
+  justifyContent: "center",
+  padding: 0,
+  width: "24px",
 };
 
 const routeOverviewTopBarStyle = {
@@ -351,6 +410,118 @@ const routesDetailCardStyle = {
   overflow: "hidden",
 };
 
+const routeChildTabsStyle = {
+  alignItems: "center",
+  borderBottom: "1px solid #e3e3e3",
+  display: "flex",
+  gap: "2px",
+  minHeight: "44px",
+  padding: "0 12px",
+};
+
+const routeChildTabStyle = {
+  alignItems: "center",
+  alignSelf: "stretch",
+  background: "transparent",
+  border: 0,
+  borderBottom: "2px solid transparent",
+  color: "#616161",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontFamily: "inherit",
+  fontSize: "13px",
+  fontWeight: 650,
+  gap: "7px",
+  padding: "0 12px",
+};
+
+const routeChildTabActiveStyle = {
+  borderBottomColor: "#303030",
+  color: "#202223",
+  fontWeight: 750,
+};
+
+const routeChildTabCountStyle = {
+  alignItems: "center",
+  background: "#ededed",
+  borderRadius: "999px",
+  color: "#616161",
+  display: "inline-flex",
+  fontSize: "11px",
+  fontWeight: 700,
+  justifyContent: "center",
+  minWidth: "22px",
+  padding: "2px 6px",
+};
+
+const routeChildSelectionBarStyle = {
+  alignItems: "center",
+  borderBottom: "1px solid #ececec",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  justifyContent: "space-between",
+  minHeight: "48px",
+  padding: "7px 12px",
+};
+
+const routeChildSelectionGroupStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+};
+
+const routeChildSelectionButtonStyle = {
+  alignItems: "center",
+  background: "#ffffff",
+  border: "1px solid #c9c9c9",
+  borderRadius: "8px",
+  color: "#303030",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontFamily: "inherit",
+  fontSize: "13px",
+  fontWeight: 650,
+  gap: "5px",
+  minHeight: "32px",
+  padding: "4px 10px",
+};
+
+const routeChildTrackingStyle = {
+  borderTop: "1px solid #ececec",
+  display: "grid",
+};
+
+const routeChildTrackingSummaryStyle = {
+  display: "grid",
+  gap: "8px",
+  gridTemplateColumns: "repeat(7, minmax(120px, 1fr))",
+  overflowX: "auto",
+  padding: "12px",
+};
+
+const routeChildTrackingMetricStyle = {
+  background: "#f7f7f7",
+  borderRadius: "8px",
+  display: "grid",
+  gap: "3px",
+  minWidth: "120px",
+  padding: "9px 10px",
+};
+
+const routeChildTrackingMetricLabelStyle = {
+  color: "#6d7175",
+  fontSize: "11px",
+  fontWeight: 650,
+};
+
+const routeChildTrackingMetricValueStyle = {
+  color: "#303030",
+  fontSize: "13px",
+  fontWeight: 750,
+};
+
 const routeDetailMapFrameStyle = {
   height: "440px",
 };
@@ -448,33 +619,6 @@ const routePlanRowsColumnWidths = [
   "96px",
   "116px",
 ];
-
-const childRouteHeaderSummaryStyle = {
-  alignItems: "center",
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "12px",
-};
-
-const childRouteHeaderDriverButtonStyle = {
-  alignItems: "center",
-  background: "transparent",
-  border: 0,
-  color: "#1f1f1f",
-  cursor: "pointer",
-  display: "inline-flex",
-  fontFamily: "inherit",
-  fontSize: "13px",
-  fontWeight: 700,
-  gap: "2px",
-  lineHeight: 1.15,
-  maxWidth: "100%",
-  minWidth: 0,
-  overflow: "hidden",
-  padding: 0,
-  textAlign: "left",
-  whiteSpace: "nowrap",
-};
 
 const childRouteOrderTableStyle = {
   borderCollapse: "separate",
@@ -1458,6 +1602,39 @@ function getRouteCreatedLabel(routePlan) {
   return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL;
 }
 
+function formatTrackingTimestamp(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return ROUTE_EMPTY_LABEL;
+  return new Intl.DateTimeFormat(undefined, {
+    dateStyle: "short",
+    timeStyle: "medium",
+  }).format(date);
+}
+
+function formatTrackingPosition(position) {
+  const latitude = numberOrUndefined(position?.latitude);
+  const longitude = numberOrUndefined(position?.longitude);
+  if (latitude == null || longitude == null) return ROUTE_EMPTY_LABEL;
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
+function formatTrackingDriverStage(stage) {
+  return {
+    AT_STOP: "At stop",
+    COMPLETED: "Completed",
+    DRIVING: "Driving",
+    PAUSED: "Paused",
+    READY: "Ready",
+  }[stage] ?? "Ready";
+}
+
+function getLiveTrackingStopStatus(row, progress) {
+  if (progress?.completedStopIds?.includes(row.id)) return "Delivered";
+  if (progress?.failedStopIds?.includes(row.id)) return "Failed";
+  if (progress?.currentStage === "AT_STOP" && progress.currentStopId === row.id) return "At stop";
+  return row.status;
+}
+
 function countRouteStopsByStatus(routeStops, statuses) {
   const statusSet = new Set(statuses);
 
@@ -2223,6 +2400,9 @@ export default function RouteDetailPage() {
     routeGroup,
     routePlan: effectiveRoutePlan,
   });
+  const trackingRoutePlanId = isMaterializedChildRouteDetail
+    ? textOrUndefined(effectiveRoutePlan?.id)
+    : null;
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan, routeGroup), [effectiveRoutePlan, routeGroup]);
   const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? (isRouteGroupDetail ? textOrUndefined(routeGroup?.name) : textOrUndefined(routeDetail.route)) ?? "Route";
   const departureLocation = useMemo(
@@ -2283,6 +2463,9 @@ export default function RouteDetailPage() {
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
+  const routeMapRef = mapRef;
+  const shopifyRef = useRef(shopify);
+  shopifyRef.current = shopify;
   const mapLibraryRef = useRef(null);
   const routeMapCenterRef = useRef(DEFAULT_CENTER);
   const markersRef = useRef([]);
@@ -2307,6 +2490,7 @@ export default function RouteDetailPage() {
   const mapRecoveryTimerRef = useRef(null);
   const markerDiagnosticCountRef = useRef(0);
   const hasInitialRouteMapFitRef = useRef(false);
+  const routeTrackingSnapshotRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapStatus, setMapStatus] = useState("loading");
   const [mapRenderKey, setMapRenderKey] = useState(0);
@@ -2319,6 +2503,7 @@ export default function RouteDetailPage() {
   const [deletedRoutePlanIds, setDeletedRoutePlanIds] = useState([]);
   const [removedOrderIds, setRemovedOrderIds] = useState([]);
   const [pendingRouteDraftHref, setPendingRouteDraftHref] = useState(null);
+  const [childDetailTab, setChildDetailTab] = useState("stops");
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
@@ -2337,6 +2522,10 @@ export default function RouteDetailPage() {
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
+  const [routeTrackingSnapshot, setRouteTrackingSnapshot] = useState(null);
+  const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
+  const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
+  routeTrackingSnapshotRef.current = routeTrackingSnapshot;
   useEffect(() => {
     setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
   }, [effectiveRoutePlan?.id, routeStartDateTimeValue, routeStartTimeZone]);
@@ -2388,6 +2577,13 @@ export default function RouteDetailPage() {
   const childRouteOrderRows = isMaterializedChildRouteDetail
     ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { ianaTimezone, timezoneAbbreviation })
     : [];
+  const routeTrackingFreshness = useMemo(
+    () => getRouteTrackingFreshness(routeTrackingSnapshot, routeTrackingClock),
+    [routeTrackingClock, routeTrackingSnapshot],
+  );
+  const routeTrackingPolicy = routeTrackingSnapshot?.policy;
+  const routeTrackingProgress = routeTrackingSnapshot?.progress;
+  const latestTrackingPosition = routeTrackingSnapshot?.latestPosition ?? null;
   const activeChildOrderDisclosureRow = activeChildOrderDisclosure
     ? childRouteOrderRows.find((row) => row.id === activeChildOrderDisclosure.rowId) ?? null
     : null;
@@ -2419,13 +2615,32 @@ export default function RouteDetailPage() {
     () => new Set(isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds),
     [isPolygonTargetPickerOpen, polygonCandidateOrderIds, polygonSelectedOrderIds],
   );
+  const completedTrackingStopIds = useMemo(() => {
+    const completedStopIds = new Set(routeTrackingProgress?.completedStopIds ?? []);
+    for (const routeRow of timelineRouteRows) {
+      for (const stop of routeRow.stops) {
+        if ([stop.status, stop.deliveryStatus, stop.deliveryStopStatus]
+          .some((status) => ["COMPLETED", "DELIVERED", "FULFILLED"].includes(String(status ?? "").toUpperCase()))) {
+          if (stop.id) completedStopIds.add(stop.id);
+          if (stop.deliveryStopId) completedStopIds.add(stop.deliveryStopId);
+        }
+      }
+    }
+    return completedStopIds;
+  }, [routeTrackingProgress?.completedStopIds, timelineRouteRows]);
   const routeStopColorById = useMemo(() => new Map(timelineRouteRows.flatMap((routeRow) => (
-    routeRow.stops.flatMap((stop) => [
-      [stop.id, routeRow.color],
-      ...(stop.deliveryStopId ? [[stop.deliveryStopId, routeRow.color]] : []),
-      ...(stop.orderId ? [[stop.orderId, routeRow.color]] : []),
-    ])
-  ))), [timelineRouteRows]);
+    routeRow.stops.flatMap((stop) => {
+      const isCompleted = completedTrackingStopIds.has(stop.id)
+        || completedTrackingStopIds.has(stop.deliveryStopId);
+      const stopColor = isCompleted ? ROUTE_DETAIL_COMPLETED_STOP_COLOR : routeRow.color;
+      return [
+        [stop.id, stopColor],
+        ...(stop.deliveryStopId ? [[stop.deliveryStopId, stopColor]] : []),
+        ...(stop.orderId ? [[stop.orderId, stopColor]] : []),
+      ];
+    })
+  ))), [completedTrackingStopIds, timelineRouteRows]);
+  const trackingDeliveredCount = childRouteOrderRows.filter((row) => completedTrackingStopIds.has(row.id)).length;
   const routeMapStops = useMemo(() => {
     if (timelineRouteRows.length > 0) {
       return timelineRouteRows.flatMap((routeRow) =>
@@ -2467,6 +2682,144 @@ export default function RouteDetailPage() {
   const routePathColor = softenRouteColor(routeLineColor);
   const savedRouteGeometryRows = routeGeometryRows;
   const savedRouteStopPoints = routeGeometryStopPoints;
+
+  useEffect(() => {
+    if (!trackingRoutePlanId) {
+      routeTrackingSnapshotRef.current = null;
+      setRouteTrackingSnapshot(null);
+      setTrackingConnectionState("idle");
+      return undefined;
+    }
+
+    let isDisposed = false;
+    let lastFailureStatus = null;
+    let reconnectTimer = null;
+    let streamController = null;
+
+    const clearReconnectTimer = () => {
+      if (reconnectTimer == null) return;
+      window.clearTimeout(reconnectTimer);
+      reconnectTimer = null;
+    };
+    const scheduleReconnect = () => {
+      if (isDisposed || document.visibilityState !== "visible") return;
+      clearReconnectTimer();
+      const trackingReconnectDelayMs = [404, 501].includes(lastFailureStatus)
+        ? 30_000
+        : getRouteTrackingReconnectDelayMs(routeTrackingSnapshotRef.current);
+      reconnectTimer = window.setTimeout(connect, trackingReconnectDelayMs);
+    };
+    const applyTrackingEvent = (trackingEvent) => {
+      if (trackingEvent.event === "tracking_snapshot") {
+        const snapshot = normalizeRouteTrackingSnapshot(trackingEvent.data?.snapshot ?? trackingEvent.data);
+        routeTrackingSnapshotRef.current = snapshot;
+        setRouteTrackingSnapshot(snapshot);
+        return;
+      }
+      if (trackingEvent.event === "tracking_position") {
+        setRouteTrackingSnapshot((currentSnapshot) => {
+          const nextSnapshot = mergeRouteTrackingPosition(
+            currentSnapshot,
+            trackingEvent.data?.position ?? trackingEvent.data,
+          );
+          routeTrackingSnapshotRef.current = nextSnapshot;
+          return nextSnapshot;
+        });
+        return;
+      }
+      if (trackingEvent.event === "tracking_progress") {
+        setRouteTrackingSnapshot((currentSnapshot) => {
+          const nextSnapshot = mergeRouteTrackingProgress(
+            currentSnapshot,
+            trackingEvent.data?.progress ?? trackingEvent.data,
+          );
+          routeTrackingSnapshotRef.current = nextSnapshot;
+          return nextSnapshot;
+        });
+      }
+    };
+    async function connect() {
+      if (isDisposed || document.visibilityState !== "visible") return;
+      clearReconnectTimer();
+      streamController?.abort();
+      streamController = new AbortController();
+      const controller = streamController;
+      if (![404, 501].includes(lastFailureStatus)) {
+        setTrackingConnectionState(routeTrackingSnapshotRef.current ? "reconnecting" : "connecting");
+      }
+
+      try {
+        const sessionToken = await shopifyRef.current.idToken();
+        if (isDisposed || controller.signal.aborted) return;
+        const response = await fetch(`/app/route-tracking/${encodeURIComponent(trackingRoutePlanId)}`, {
+          headers: {
+            Accept: "text/event-stream",
+            Authorization: `Bearer ${sessionToken}`,
+          },
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        if (!response.ok || !response.body) {
+          lastFailureStatus = response.status;
+          throw new Error(`Tracking stream failed with ${response.status}.`);
+        }
+
+        lastFailureStatus = null;
+        setTrackingConnectionState("connected");
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        while (!isDisposed && !controller.signal.aborted) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const parsed = consumeRouteTrackingSseChunk(buffer, decoder.decode(value, { stream: true }));
+          buffer = parsed.remainder;
+          parsed.events.forEach(applyTrackingEvent);
+        }
+        if (!isDisposed && !controller.signal.aborted) {
+          throw new Error("Tracking stream ended unexpectedly.");
+        }
+      } catch (error) {
+        if (!isDisposed && !controller.signal.aborted) {
+          console.warn("Route tracking stream disconnected.", error);
+          setTrackingConnectionState([404, 501].includes(lastFailureStatus) ? "unavailable" : "disconnected");
+        }
+      } finally {
+        const isCurrentController = streamController === controller;
+        if (isCurrentController) streamController = null;
+        if (isCurrentController && !isDisposed && document.visibilityState === "visible") scheduleReconnect();
+      }
+    }
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible") {
+        clearReconnectTimer();
+        streamController?.abort();
+        setTrackingConnectionState("paused");
+        return;
+      }
+      connect();
+    };
+
+    routeTrackingSnapshotRef.current = null;
+    setRouteTrackingSnapshot(null);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    if (document.visibilityState === "visible") connect();
+    else setTrackingConnectionState("paused");
+
+    return () => {
+      isDisposed = true;
+      clearReconnectTimer();
+      streamController?.abort();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [trackingRoutePlanId]);
+
+  useEffect(() => {
+    if (!trackingRoutePlanId) return undefined;
+    const clock = window.setInterval(() => setRouteTrackingClock(Date.now()), 10_000);
+    return () => window.clearInterval(clock);
+  }, [trackingRoutePlanId]);
+
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
 
@@ -3491,6 +3844,22 @@ export default function RouteDetailPage() {
 
 
   useEffect(() => {
+    if (!isMapReady || !routeMapRef.current) return undefined;
+
+    const map = routeMapRef.current;
+    const syncTracking = () => {
+      syncRouteDetailLiveTracking(routeMapRef.current, routeTrackingSnapshot);
+    };
+    syncTracking();
+    map.on("styledata", syncTracking);
+
+    return () => {
+      map.off("styledata", syncTracking);
+    };
+  }, [isMapReady, routeMapRef, routeTrackingSnapshot]);
+
+
+  useEffect(() => {
     if (!isMapReady || !mapRef.current) return undefined;
 
     const map = mapRef.current;
@@ -3712,9 +4081,12 @@ export default function RouteDetailPage() {
         </div>
       ) : null}
       <div style={routesDetailContentStyle}>
-        <header className="route-overview-header" style={routeOverviewHeaderStyle}>
-          <div style={routeOverviewTopBarStyle}>
-            <div style={routeDetailNavigationStyle}>
+        <header
+          className={isMaterializedChildRouteDetail ? "route-child-overview-header" : "route-overview-header"}
+          style={isMaterializedChildRouteDetail ? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle}
+        >
+          <div style={isMaterializedChildRouteDetail ? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle}>
+            {!isMaterializedChildRouteDetail ? <div style={routeDetailNavigationStyle}>
               <button
                 aria-label="Back to routes list"
                 onClick={handleBackToRoutes}
@@ -3734,7 +4106,7 @@ export default function RouteDetailPage() {
                 </span>
                 <span>Back to routes</span>
               </button>
-            </div>
+            </div> : null}
             <div style={routeHeaderRightStyle}>
               {routeGroupId && currentSiblingRouteIndex >= 0 && siblingRouteRows.length > 1 ? (
                 <div
@@ -3830,63 +4202,56 @@ export default function RouteDetailPage() {
             </div>
           </div>
 
-          <div className="route-overview-main">
-            <div style={routeOverviewTitleBlockStyle}>
+          <div
+            className="route-overview-main"
+            style={isMaterializedChildRouteDetail ? routeChildOverviewMainStyle : undefined}
+          >
+            <div style={isMaterializedChildRouteDetail ? routeChildTitleBlockStyle : routeOverviewTitleBlockStyle}>
               <div style={routeOverviewTitleLineStyle}>
-                <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetailTitle}</h1>
-                <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
                 {isMaterializedChildRouteDetail ? (
-                  <div aria-label="Child route summary" className="route-overview-summary" style={childRouteHeaderSummaryStyle}>
-                    {renderRouteHeaderMetric("Route Name", routeDetailTitle)}
-                    <div style={routeDetailTitleMetricStyle}>
-                      <span style={routeDetailTitleMetricLabelStyle}>Driver</span>
-                      <button
-                        aria-label="Change route driver"
-                        onClick={() => handleOpenRouteSelector("driver", currentTimelineRouteRow ?? {
-                          routePlanId: effectiveRoutePlan?.id,
-                          title: routeDetailTitle,
-                        })}
-                        style={childRouteHeaderDriverButtonStyle}
-                        type="button"
-                      >
-                        <span style={routeEditableValueTextStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
-                        {renderRouteEditableChevron()}
-                      </button>
-                    </div>
-                    <div style={routeDetailTitleMetricStyle}>
-                      <span style={routeDetailTitleMetricLabelStyle}>Start</span>
-                      <button
-                        aria-label="Change route start time"
-                        disabled={routeGroupActionBusy}
-                        onClick={() => handleOpenRouteSelector("startTime", currentTimelineRouteRow ?? {
-                          routePlanId: effectiveRoutePlan?.id,
-                          startDateTime: routeStartDateTimeValue,
-                          title: routeDetailTitle,
-                        })}
-                        style={{
-                          ...childRouteHeaderDriverButtonStyle,
-                          ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                        }}
-                        type="button"
-                      >
-                        <span style={routeEditableValueTextStyle}>{
-                          (currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel) === ROUTE_EMPTY_LABEL
-                            ? "Set start time"
-                            : currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel
-                        }</span>
-                        {renderRouteEditableChevron()}
-                      </button>
-                    </div>
-                    {renderRouteHeaderMetric("Updated", routeUpdatedLabel)}
-                  </div>
-                ) : (
+                  <button
+                    aria-label="Back to routes list"
+                    onClick={handleBackToRoutes}
+                    style={routeDetailBackButtonStyle}
+                    type="button"
+                  >
+                    <span aria-hidden="true" style={routeDetailBackIconStyle}>
+                      <svg fill="none" viewBox="0 0 20 20">
+                        <path
+                          d="M12.5 4.5 7 10l5.5 5.5"
+                          stroke="currentColor"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth="1.8"
+                        />
+                      </svg>
+                    </span>
+                  </button>
+                ) : null}
+                <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetailTitle}</h1>
+                {isMaterializedChildRouteDetail ? (
+                  <button
+                    aria-label="Edit child route name"
+                    disabled={!currentTimelineRouteRow}
+                    onClick={() => currentTimelineRouteRow && handleOpenRouteLineEditor(currentTimelineRouteRow)}
+                    style={routeChildTitleEditButtonStyle}
+                    type="button"
+                  >
+                    {renderRouteLineEditIcon()}
+                  </button>
+                ) : null}
+                <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
+                {!isMaterializedChildRouteDetail ? (
                   <div aria-label="Route summary" className="route-overview-summary">
                     {renderRouteHeaderMetric("Orders", routeDetail.orders)}
                     {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
                     {renderRouteHeaderMetric("Driver", routeDriverSummary)}
                   </div>
-                )}
+                ) : null}
               </div>
+              {isMaterializedChildRouteDetail ? (
+                <div style={routeChildUpdatedStyle}>Updated on {routeUpdatedLabel}</div>
+              ) : null}
             </div>
           </div>
         </header>
@@ -3896,6 +4261,77 @@ export default function RouteDetailPage() {
         ) : null}
 
         <section style={routesDetailCardStyle}>
+          {isMaterializedChildRouteDetail ? (
+            <div aria-label="Child route detail sections" role="tablist" style={routeChildTabsStyle}>
+              <button
+                aria-selected={childDetailTab === "stops"}
+                onClick={() => setChildDetailTab("stops")}
+                role="tab"
+                style={{
+                  ...routeChildTabStyle,
+                  ...(childDetailTab === "stops" ? routeChildTabActiveStyle : null),
+                }}
+                type="button"
+              >
+                <span>Stops</span>
+                <span style={routeChildTabCountStyle}>{childRouteOrderRows.length}</span>
+              </button>
+              <button
+                aria-selected={childDetailTab === "tracking"}
+                onClick={() => setChildDetailTab("tracking")}
+                role="tab"
+                style={{
+                  ...routeChildTabStyle,
+                  ...(childDetailTab === "tracking" ? routeChildTabActiveStyle : null),
+                }}
+                type="button"
+              >
+                <span>Tracking</span>
+              </button>
+            </div>
+          ) : null}
+
+          {isMaterializedChildRouteDetail ? (
+            <section aria-label="Child route controls" style={routeChildSelectionBarStyle}>
+              <div style={routeChildSelectionGroupStyle}>
+                <button
+                  aria-label="Change route start time"
+                  disabled={routeGroupActionBusy}
+                  onClick={() => handleOpenRouteSelector("startTime", currentTimelineRouteRow ?? {
+                    routePlanId: effectiveRoutePlan?.id,
+                    startDateTime: routeStartDateTimeValue,
+                    title: routeDetailTitle,
+                  })}
+                  style={{
+                    ...routeChildSelectionButtonStyle,
+                    ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                  }}
+                  type="button"
+                >
+                  <span>{
+                    (currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel) === ROUTE_EMPTY_LABEL
+                      ? "Set start time"
+                      : currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel
+                  }</span>
+                  {renderRouteEditableChevron()}
+                </button>
+                <button
+                  aria-label="Change route driver"
+                  onClick={() => handleOpenRouteSelector("driver", currentTimelineRouteRow ?? {
+                    routePlanId: effectiveRoutePlan?.id,
+                    title: routeDetailTitle,
+                  })}
+                  style={routeChildSelectionButtonStyle}
+                  type="button"
+                >
+                  <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
+                  {renderRouteEditableChevron()}
+                </button>
+              </div>
+              <span style={routeStatusBadgeStyle}>{routeDetail.status}</span>
+            </section>
+          ) : null}
+
           <MapPanel
             ariaLabel="Route stop location map"
             canvasKey={mapRenderKey}
@@ -4004,7 +4440,7 @@ export default function RouteDetailPage() {
             </div>
           </section>
 
-          {isMaterializedChildRouteDetail ? (
+          {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
             <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>
               <div style={{ ...childRouteTimelineRowsStyle, minHeight: "48px" }}>
                 {timelineRouteRows.map((routeRow) => (
@@ -4066,7 +4502,7 @@ export default function RouteDetailPage() {
             </section>
           ) : null}
 
-          {isMaterializedChildRouteDetail ? (
+          {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
             <div
               style={{
                 ...routesDetailTableFrameStyle,
@@ -4141,6 +4577,87 @@ export default function RouteDetailPage() {
                 </tbody>
               </table>
             </div>
+          ) : isMaterializedChildRouteDetail && childDetailTab === "tracking" ? (
+            <section aria-label="Child route tracking" style={routeChildTrackingStyle}>
+              <div style={routeChildTrackingSummaryStyle}>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Live tracking</span>
+                  <strong
+                    style={routeChildTrackingMetricValueStyle}
+                    title={routeTrackingPolicy
+                      ? `Server policy: live ${routeTrackingPolicy.liveThresholdMs ?? ROUTE_EMPTY_LABEL}ms, delayed ${routeTrackingPolicy.delayedThresholdMs ?? ROUTE_EMPTY_LABEL}ms`
+                      : "Waiting for server tracking policy"}
+                  >{routeTrackingFreshness.label}</strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Connection</span>
+                  <strong style={{ ...routeChildTrackingMetricValueStyle, textTransform: "capitalize" }}>
+                    {trackingConnectionState}
+                  </strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Driver stage</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>
+                    {formatTrackingDriverStage(routeTrackingProgress?.currentStage)}
+                  </strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Latest position</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>
+                    {formatTrackingPosition(latestTrackingPosition)}
+                  </strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Last received</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>
+                    {formatTrackingTimestamp(latestTrackingPosition?.receivedAt ?? latestTrackingPosition?.occurredAt)}
+                  </strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Driver</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Progress</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>{
+                    `${trackingDeliveredCount} / ${childRouteOrderRows.length} delivered`
+                  }</strong>
+                </div>
+              </div>
+              <div style={routesDetailTableFrameStyle}>
+                <table aria-label="Child route tracking stops" style={childRouteOrderTableStyle}>
+                  <thead>
+                    <tr>
+                      {[
+                        ["Stop", "64px"],
+                        ["Order", "96px"],
+                        ["Status", "120px"],
+                        ["ETA", "120px"],
+                        ["Customer", "160px"],
+                        ["Address", "360px"],
+                      ].map(([label, width]) => (
+                        <th key={label} style={{ ...childRouteOrderHeaderCellStyle, width }}>{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {childRouteOrderRows.map((row) => (
+                      <tr key={row.id} style={childRouteOrderRowStyle}>
+                        <td style={childRouteStopCellStyle}><span style={{
+                          ...childRouteTableStopMarkerStyle,
+                          ...(completedTrackingStopIds.has(row.id) ? { background: ROUTE_DETAIL_COMPLETED_STOP_COLOR } : null),
+                        }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
+                        <td style={childRouteOrderCellStyle}>{row.order}</td>
+                        <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
+                        <td style={childRouteOrderCellStyle}>{row.eta}</td>
+                        <td style={childRouteOrderCellStyle}>{row.customer}</td>
+                        <td style={childRouteOrderCellStyle}>{row.address}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
           ) : (
             <div className="route-group-detail-scroll" style={routesDetailTableFrameStyle}>
               <table aria-label="Driver route rows" style={routePlanRowsTableStyle}>
