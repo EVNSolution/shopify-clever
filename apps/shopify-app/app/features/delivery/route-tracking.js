@@ -231,6 +231,11 @@ function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
   return status;
 }
 
+function doesTrackingEventRefreshEta(event) {
+  const eventType = textOrNull(event?.eventType);
+  return eventType === "ROUTE_STARTED" || eventType === "STOP_ARRIVED";
+}
+
 function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
   const executionStatus = normalizeRouteExecutionStatus(routeStatus);
   const hasHistory = Boolean(snapshot?.latestPosition) || (snapshot?.recentPositions?.length ?? 0) > 0;
@@ -275,6 +280,7 @@ function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
 
 export {
   consumeRouteTrackingSseChunk,
+  doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingFreshness,
   getRouteTrackingPresentation,
