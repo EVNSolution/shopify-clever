@@ -52,6 +52,7 @@ import {
 } from "../features/delivery/route-detail-map";
 import {
   consumeRouteTrackingSseChunk,
+  doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
@@ -2469,6 +2470,8 @@ export default function RouteDetailPage() {
   const routeMapRef = mapRef;
   const shopifyRef = useRef(shopify);
   shopifyRef.current = shopify;
+  const revalidatorRef = useRef(revalidator);
+  revalidatorRef.current = revalidator;
   const mapLibraryRef = useRef(null);
   const routeMapCenterRef = useRef(DEFAULT_CENTER);
   const markersRef = useRef([]);
@@ -2532,10 +2535,12 @@ export default function RouteDetailPage() {
   routeTrackingSnapshotRef.current = routeTrackingSnapshot;
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
+  }, [loaderRouteExecutionStatus]);
+  useEffect(() => {
     routeTrackingSnapshotRef.current = null;
     setRouteTrackingSnapshot(null);
     setTrackingConnectionState("idle");
-  }, [effectiveRoutePlan?.id, loaderRouteExecutionStatus]);
+  }, [effectiveRoutePlan?.id]);
   useEffect(() => {
     setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
   }, [effectiveRoutePlan?.id, routeStartDateTimeValue, routeStartTimeZone]);
@@ -2592,6 +2597,9 @@ export default function RouteDetailPage() {
     [routeExecutionStatus, routeTrackingClock, routeTrackingSnapshot],
   );
   const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS" ? trackingRoutePlanId : null;
+  const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
+    ? trackingRoutePlanId
+    : null;
   const routeTrackingConnectionLabel = routeTrackingPresentation.mode === "live"
     ? trackingConnectionState
     : ["loading", "unavailable"].includes(trackingConnectionState)
@@ -2700,7 +2708,7 @@ export default function RouteDetailPage() {
   const savedRouteStopPoints = routeGeometryStopPoints;
 
   useEffect(() => {
-    if (!trackingRoutePlanId || liveTrackingRoutePlanId) return undefined;
+    if (!trackingRoutePlanId || trackingStreamRoutePlanId) return undefined;
 
     let isDisposed = false;
     const controller = new AbortController();
@@ -2736,10 +2744,10 @@ export default function RouteDetailPage() {
       isDisposed = true;
       controller.abort();
     };
-  }, [liveTrackingRoutePlanId, trackingRoutePlanId]);
+  }, [trackingRoutePlanId, trackingStreamRoutePlanId]);
 
   useEffect(() => {
-    if (!liveTrackingRoutePlanId) return undefined;
+    if (!trackingStreamRoutePlanId) return undefined;
 
     let isDisposed = false;
     let lastFailureStatus = null;
@@ -2780,6 +2788,9 @@ export default function RouteDetailPage() {
       if (trackingEvent.event === "tracking_progress") {
         const progressEvent = trackingEvent.data?.progress ?? trackingEvent.data;
         setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingEvent(currentStatus, progressEvent));
+        if (doesTrackingEventRefreshEta(progressEvent)) {
+          revalidatorRef.current.revalidate();
+        }
         setRouteTrackingSnapshot((currentSnapshot) => {
           const nextSnapshot = mergeRouteTrackingProgress(
             currentSnapshot,
@@ -2803,7 +2814,7 @@ export default function RouteDetailPage() {
       try {
         const sessionToken = await shopifyRef.current.idToken();
         if (isDisposed || controller.signal.aborted) return;
-        const response = await fetch(`/app/route-tracking/${encodeURIComponent(liveTrackingRoutePlanId)}`, {
+        const response = await fetch(`/app/route-tracking/${encodeURIComponent(trackingStreamRoutePlanId)}`, {
           headers: {
             Accept: "text/event-stream",
             Authorization: `Bearer ${sessionToken}`,
@@ -2864,7 +2875,7 @@ export default function RouteDetailPage() {
       streamController?.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [liveTrackingRoutePlanId]);
+  }, [trackingStreamRoutePlanId]);
 
   useEffect(() => {
     if (!liveTrackingRoutePlanId) return undefined;
@@ -4690,7 +4701,7 @@ export default function RouteDetailPage() {
                         ["Stop", "64px"],
                         ["Order", "96px"],
                         ["Status", "120px"],
-                        ["ETA", "120px"],
+                        ["ETA (est.)", "120px"],
                         ["Customer", "160px"],
                         ["Address", "360px"],
                       ].map(([label, width]) => (

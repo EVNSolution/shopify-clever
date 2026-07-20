@@ -3,6 +3,7 @@ import test from "node:test";
 
 import {
   consumeRouteTrackingSseChunk,
+  doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingFreshness,
   getRouteTrackingPresentation,
@@ -116,6 +117,14 @@ test("route lifecycle progress events update the displayed execution status", ()
   assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "ROUTE_PAUSED" }), "READY");
   assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "ROUTE_COMPLETED" }), "COMPLETED");
   assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "STOP_DELIVERED" }), "IN_PROGRESS");
+});
+
+test("only server ETA lifecycle events refresh route detail ETAs", () => {
+  assert.equal(doesTrackingEventRefreshEta({ eventType: "ROUTE_STARTED" }), true);
+  assert.equal(doesTrackingEventRefreshEta({ eventType: "STOP_ARRIVED" }), true);
+  assert.equal(doesTrackingEventRefreshEta({ eventType: "STOP_DELIVERED" }), false);
+  assert.equal(doesTrackingEventRefreshEta({ eventType: "LOCATION_UPDATED" }), false);
+  assert.equal(doesTrackingEventRefreshEta(null), false);
 });
 
 test("tracking progress keeps the current driver stage and completed stop ids", () => {

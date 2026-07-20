@@ -31,25 +31,35 @@ test("Shopify proxies the authenticated delivery tracking stream without exposin
   assert.match(proxySource, /"cache-control": "no-store, no-transform"/);
 });
 
-test("child route detail subscribes with a fresh Shopify token and reconnects the SSE stream", () => {
+test("ready and in-progress child routes observe lifecycle events with a fresh Shopify token", () => {
   assert.ok(existsSync(trackingContractPath));
   const routeDetailSource = readIfPresent(routeDetailPath);
 
   assert.match(routeDetailSource, /shopifyRef\.current\.idToken\(\)/);
-  assert.match(routeDetailSource, /fetch\(`\/app\/route-tracking\/\$\{encodeURIComponent\(liveTrackingRoutePlanId\)\}`/);
+  assert.match(routeDetailSource, /fetch\(`\/app\/route-tracking\/\$\{encodeURIComponent\(trackingStreamRoutePlanId\)\}`/);
   assert.match(routeDetailSource, /Authorization: `Bearer \$\{sessionToken\}`/);
   assert.match(routeDetailSource, /consumeRouteTrackingSseChunk/);
   assert.match(routeDetailSource, /tracking_snapshot/);
   assert.match(routeDetailSource, /tracking_position/);
   assert.match(routeDetailSource, /tracking_progress/);
   assert.match(routeDetailSource, /const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS"/);
+  assert.match(routeDetailSource, /const trackingStreamRoutePlanId = \["READY", "IN_PROGRESS"\]\.includes\(routeExecutionStatus\)/);
   assert.match(routeDetailSource, /\?mode=snapshot/);
   assert.match(routeDetailSource, /getRouteExecutionStatusFromTrackingEvent/);
   assert.match(routeDetailSource, /document\.visibilityState/);
   assert.match(routeDetailSource, /AbortController/);
   assert.match(routeDetailSource, /trackingReconnectDelayMs/);
   assert.match(routeDetailSource, /const isCurrentController = streamController === controller/);
-  assert.doesNotMatch(routeDetailSource, /\}, \[shopify, liveTrackingRoutePlanId\]\)/);
+  assert.doesNotMatch(routeDetailSource, /\}, \[shopify, trackingStreamRoutePlanId\]\)/);
+});
+
+test("server ETA lifecycle events revalidate route detail for both Stops and Tracking tables", () => {
+  const routeDetailSource = readIfPresent(routeDetailPath);
+
+  assert.match(routeDetailSource, /doesTrackingEventRefreshEta\(progressEvent\)/);
+  assert.match(routeDetailSource, /revalidatorRef\.current\.revalidate\(\)/);
+  assert.match(routeDetailSource, /\["ETA \(est\.\)", "120px"\]/);
+  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.eta\}<\/td>/);
 });
 
 test("live tracking updates MapLibre sources instead of rebuilding the child map", () => {
