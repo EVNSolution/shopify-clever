@@ -54,17 +54,24 @@ const pageActionsStyle = {
 };
 
 const primaryButtonStyle = {
+  alignItems: "center",
   background: "#303030",
   borderColor: "#303030",
   borderRadius: "8px",
   borderStyle: "solid",
   borderWidth: "1px",
+  boxSizing: "border-box",
   color: "#ffffff",
   cursor: "pointer",
+  display: "inline-flex",
+  fontFamily: "inherit",
   fontSize: "13px",
   fontWeight: 650,
-  minHeight: "32px",
-  padding: "5px 12px",
+  justifyContent: "center",
+  lineHeight: 1.2,
+  minHeight: "30px",
+  padding: "4px 12px",
+  whiteSpace: "nowrap",
 };
 
 const secondaryButtonStyle = {
