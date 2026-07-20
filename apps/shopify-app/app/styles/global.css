@@ -670,6 +670,349 @@ s-badge {
   min-width: 0;
 }
 
+.route-group-detail-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.route-group-detail-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.route-start-time-picker {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.route-start-time-picker__summary {
+  align-items: center;
+  color: #303030;
+  font-size: 12px;
+  min-width: 0;
+}
+
+.route-start-time-picker__summary {
+  background: #f7f7f7;
+  border-radius: 8px;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  padding: 8px 10px;
+}
+
+.route-start-time-picker__summary-route {
+  font-weight: 750;
+}
+
+.route-start-time-picker__summary-start {
+  color: #616161;
+  text-align: right;
+}
+
+.route-start-time-picker__body {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(300px, 1fr) 200px;
+}
+
+.route-start-time-picker__date-panel {
+  border: 1px solid #e3e3e3;
+  border-radius: 10px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+  padding: 10px;
+}
+
+.route-start-time-picker__time-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  position: relative;
+}
+
+.route-start-time-picker__calendar-header {
+  align-items: center;
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 32px minmax(0, 1fr) 32px;
+}
+
+.route-start-time-picker__month-button,
+.route-start-time-picker__clear {
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  color: #303030;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  min-height: 32px;
+}
+
+.route-start-time-picker__month-button:disabled,
+.route-start-time-picker__clear:disabled,
+.route-start-time-picker__field select:disabled,
+.route-start-time-picker__day:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.route-start-time-picker__month-label {
+  color: #303030;
+  font-size: 14px;
+  font-weight: 750;
+  text-align: center;
+}
+
+.route-start-time-picker__calendar {
+  display: grid;
+  gap: 2px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.route-start-time-picker__weekday {
+  color: #616161;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 0;
+  text-align: center;
+}
+
+.route-start-time-picker__day {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: #303030;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  height: 32px;
+  min-width: 0;
+  padding: 0;
+  place-items: center;
+}
+
+.route-start-time-picker__day:hover {
+  background: #f1f1f1;
+}
+
+.route-start-time-picker__day--selected {
+  background: #1f1f1f;
+  color: #ffffff;
+}
+
+.route-start-time-picker__day--selected:hover {
+  background: #1f1f1f;
+}
+
+.route-start-time-picker__day--empty {
+  background: transparent;
+  border-color: transparent;
+}
+
+.route-start-time-picker__field {
+  color: #616161;
+  display: grid;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 4px;
+}
+
+.route-start-time-picker__time-inputs input {
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  color: #303030;
+  font: inherit;
+  font-size: 13px;
+  min-height: 34px;
+  padding: 4px 8px;
+  width: 100%;
+}
+
+.route-start-time-picker__timezone-picker {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  position: relative;
+}
+
+.route-start-time-picker__timezone-heading {
+  align-items: center;
+  color: #616161;
+  display: flex;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 6px;
+  justify-content: space-between;
+}
+
+.route-start-time-picker__timezone-heading small {
+  color: #8a8a8a;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.route-start-time-picker__timezone-trigger {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  color: #303030;
+  cursor: pointer;
+  display: grid;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  min-height: 34px;
+  padding: 5px 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.route-start-time-picker__timezone-trigger > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-start-time-picker__timezone-trigger small {
+  color: #616161;
+  font-size: 10px;
+}
+
+.route-start-time-picker__timezone-chevron {
+  color: #616161;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.route-start-time-picker__timezone-popover {
+  background: #ffffff;
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.16);
+  box-sizing: border-box;
+  display: grid;
+  gap: 6px;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 5px);
+  width: 270px;
+  z-index: 20;
+}
+
+.route-start-time-picker__timezone-search {
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+  border-radius: 7px;
+  box-sizing: border-box;
+  color: #303030;
+  font: inherit;
+  font-size: 12px;
+  min-height: 32px;
+  padding: 5px 8px;
+  width: 100%;
+}
+
+.route-start-time-picker__timezone-options {
+  display: grid;
+  gap: 2px;
+  max-height: 190px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.route-start-time-picker__timezone-option {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #303030;
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  min-height: 30px;
+  padding: 5px 7px;
+  text-align: left;
+}
+
+.route-start-time-picker__timezone-option:hover,
+.route-start-time-picker__timezone-option--selected {
+  background: #f1f1f1;
+}
+
+.route-start-time-picker__timezone-option--selected {
+  font-weight: 750;
+}
+
+.route-start-time-picker__timezone-empty {
+  color: #8a8a8a;
+  font-size: 12px;
+  padding: 8px;
+  text-align: center;
+}
+
+.route-start-time-picker__period {
+  display: flex;
+  gap: 8px;
+}
+
+.route-start-time-picker__period-button {
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  color: #303030;
+  cursor: pointer;
+  flex: 1 1 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  min-height: 34px;
+}
+
+.route-start-time-picker__period-button--selected {
+  background: #303030;
+  border-color: #303030;
+  color: #ffffff;
+}
+
+.route-start-time-picker__time-inputs {
+  align-items: center;
+  display: grid;
+  gap: 6px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+.route-start-time-picker__time-inputs input {
+  box-sizing: border-box;
+  font-size: 16px;
+  font-weight: 700;
+  min-width: 0;
+  text-align: center;
+}
+
+.route-start-time-picker__time-inputs span {
+  color: #616161;
+  font-size: 16px;
+  font-weight: 750;
+}
+
+.route-start-time-picker__clear {
+  width: 100%;
+  padding: 4px 10px;
+}
+
 @media (max-width: 900px) {
   .route-overview-main {
     grid-template-columns: 1fr;

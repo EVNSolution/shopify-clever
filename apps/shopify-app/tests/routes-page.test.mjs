@@ -354,14 +354,14 @@ test("Route detail drive metrics are OSRM-only and use child DTO metrics", () =>
   assert.doesNotMatch(routeDetailSource, /effectiveRoutePlan\?\.distance/);
 });
 
-test("Route detail keeps the server driver action but removes the header assignment UI", () => {
-  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver/);
-  assert.match(routeDetailServerSource, /intent === "saveRouteDriver"/);
-  assert.match(routeDetailServerSource, /formData\.get\("driverId"\)/);
-  assert.match(routeDetailServerSource, /const targetRouteId = textOrUndefined\(formData\.get\("routePlanId"\)\) \?\? routeId/);
-  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver\(\s+request,\s+targetRouteId,\s+\{ driverId \},\s+\{ sessionToken: shopifySessionToken \},\s+\)/);
+test("Route detail stages driver assignment for the global route draft save", () => {
+  assert.doesNotMatch(routeDetailServerSource, /assignDeliveryRoutePlanDriver/);
+  assert.doesNotMatch(routeDetailServerSource, /intent === "saveRouteDriver"/);
   assert.match(routeDetailSource, /buildRouteDriverOptions\(drivers, effectiveRoutePlan\?\.driver\)/);
-  assert.match(routeDetailSource, /Invite pending/);
+  assert.match(routeDetailSource, /\{ id: "", label: "Unassigned" \}/);
+  assert.doesNotMatch(routeDetailSource, /Invite pending/);
+  assert.match(routeDetailSource, /driverId: driverId \|\| null/);
+  assert.match(routeDetailSource, /driverId: routeRow\.driverId \?\? null/);
   assert.doesNotMatch(routeDetailSource, /const routeDriverSaveFetcher = useFetcher\(\)/);
   assert.doesNotMatch(routeDetailSource, /routeDriverSaveFetcher\.submit/);
   assert.doesNotMatch(routeDetailSource, />No driver<\/option>/);
@@ -399,8 +399,8 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = false/);
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
   assert.match(routeDetailSource, /\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeExistingOptimized: true \}\)\),/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{\s+draft: JSON\.stringify\(buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeExistingOptimized: false \}\)\),/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{[\s\S]*includeExistingOptimized: true/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{[\s\S]*includeExistingOptimized: false/);
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
   assert.match(routeDetailSource, /setClientRouteRows\(\(rows\) => \[/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
@@ -418,8 +418,8 @@ test("Route detail exposes inventory and delete header actions", () => {
   assert.match(routeDetailSource, /const inventoryDetailHref = linkedInventoryId \? `\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(linkedInventoryId\)\}` : null/);
   assert.match(routeDetailSource, /disabled=\{!inventoryDetailHref\}/);
   assert.match(routeDetailSource, /View inventory/);
-  assert.match(routeDetailSource, /if \(inventoryDetailHref\) navigate\(inventoryDetailHref\)/);
-  assert.match(routeDetailSource, /window\.confirm\(`Delete \$\{routeDetailTitle\}\?`\)/);
+  assert.match(routeDetailSource, /if \(inventoryDetailHref\) requestRouteNavigation\(inventoryDetailHref\)/);
+  assert.match(routeDetailSource, /Delete \$\{routeDetailTitle\} on the next global Save\?/);
   assert.match(routeDetailSource, /formData\.set\("_intent", "deleteRoute"\)/);
   assert.match(routeDetailSource, /lastRouteActionIntentRef\.current !== "deleteRoute"/);
   assert.match(routeDetailSource, /navigate\(ROUTES_ROOT_PATH\)/);
@@ -477,6 +477,9 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routeGroupDetailSource, /childCount: routeGroupData\.routeGroup\?\.children\?\.length \?\? 0/);
   assert.match(routeGroupDetailSource, /driverCount: driverData\.drivers\?\.length \?\? 0/);
   assert.match(routeGroupDetailSource, /logRouteGroupApiSummary\(\{ routeGroupData, departureLocationData, driverData \}\)/);
+  assert.match(routeGroupDetailSource, /resolveRouteTimeZone\(\{[\s\S]*departureLocation: departureLocationData\.departureLocation,[\s\S]*routePlan: null/);
+  assert.match(routeGroupDetailSource, /ianaTimezone: routeTimeZoneData\.ianaTimezone/);
+  assert.match(routeGroupDetailSource, /timezoneSource: routeTimeZoneData\.timezoneSource/);
   assert.doesNotMatch(routeGroupDetailSource, /route_group_detail\.api\.raw|route_group_detail\.api\.list|JSON\.stringify\(data, null, 2\)/);
   assert.match(routeGroupDetailSource, /routeDetailTitleOverride: routeGroupData\.routeGroup\?\.name \?\? null/);
   assert.doesNotMatch(routeGroupDetailSource, /redirect\(childRoutePlanId/);
@@ -489,7 +492,7 @@ test("Route group detail keeps its own page instead of becoming a child route", 
 
 test("Route detail loader reads the selected persisted route plan", () => {
   assert.match(routeDetailServerSource, /import \{ fetchDeliveryOrders \} from "\.\/orders\.server"/);
-  assert.match(routeDetailServerSource, /assignDeliveryRoutePlanDriver,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\/route-plans\.server"/);
+  assert.match(routeDetailServerSource, /deleteDeliveryRoutePlan,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\/route-plans\.server"/);
   assert.doesNotMatch(routeDetailServerSource, /updateDeliveryRoutePlanStops/);
   assert.match(routeDetailServerSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/locations\/shopify-locations\.server"/);
   assert.match(routeDetailServerSource, /import \{ authenticate \} from "\.\.\/\.\.\/shopify\.server"/);
@@ -541,6 +544,19 @@ test("Route detail separates group and child titles", () => {
   assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, childRoutePlan, index\)/);
   assert.match(routeDetailServerSource, /routePlan: currentChildDetail\?\.routePlan \?\? routePlanData\.routePlan/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
+});
+
+test("Route group detail hides scrollbar chrome without disabling horizontal scrolling", () => {
+  assert.match(
+    routeDetailSource,
+    /className="route-group-detail-scroll" style=\{routesDetailTableFrameStyle\}/,
+  );
+  assert.match(
+    routeDetailSource,
+    /className="route-group-detail-scroll" style=\{\{ \.\.\.routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight \}\}/,
+  );
+  assert.match(globalCssSource, /\.route-group-detail-scroll \{[\s\S]*scrollbar-width: none;[\s\S]*\}/);
+  assert.match(globalCssSource, /\.route-group-detail-scroll::-webkit-scrollbar \{[\s\S]*display: none;[\s\S]*\}/);
 });
 
 test("Route detail renders a compact route overview panel with inline summary", () => {
@@ -955,7 +971,11 @@ test("Route detail draft payload is child-only and treats routeIdx as server ass
   assert.match(payloadBuilder, /routeIdx:/);
   assert.match(payloadBuilder, /routePlanId: routeRow\.routePlanId \?\? null/);
   assert.match(payloadBuilder, /tempId: routeRow\.tempId \?\? null/);
-  assert.doesNotMatch(payloadBuilder, /branchId:/);
+  assert.match(payloadBuilder, /branchId: null/);
+  assert.match(payloadBuilder, /driverId: routeRow\.driverId \?\? null/);
+  assert.match(payloadBuilder, /scheduledStartTimeZone: routeRow\.scheduledStartTimeZone \?\? null/);
+  assert.match(payloadBuilder, /deletedRoutePlanIds/);
+  assert.match(payloadBuilder, /removedOrderIds/);
   assert.doesNotMatch(routeDetailSource, /routeKey: "root"/);
   assert.doesNotMatch(routeDetailSource, /if \(routeRow\.isCurrent\) return "root"/);
 });
@@ -997,7 +1017,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /if \(routeRow\.routePlanId && !includeExistingOptimized\) return undefined/);
   assert.match(routeDetailSource, /function shouldIncludeRouteDraftRow\(routeRow, includeEmptyTempRoutes\) \{/);
   assert.match(routeDetailSource, /return !\(routeRow\.tempId && !routeRow\.routePlanId && routeRow\.stops\.length === 0\)/);
-  assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{ includeExistingOptimized: false \}\)/);
+  assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{[\s\S]*includeExistingOptimized: false/);
   assert.ok(
     routeDetailSource.indexOf("const [routeCandidateTitle") < routeDetailSource.indexOf("const currentRouteRowsSource ="),
     "routeRows reads route line state after the state is initialized",
@@ -1006,7 +1026,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Name<\/th>/);
   assert.match(routeDetailSource, />Status<\/th>/);
   assert.match(routeDetailSource, />Driver<\/th>/);
-  assert.match(routeDetailSource, />Vehicle<\/th>/);
+  assert.doesNotMatch(routeDetailSource, />Vehicle<\/th>/);
   assert.match(routeDetailSource, />Start time<\/th>/);
   assert.match(routeDetailSource, /"160px"/);
   assert.match(routeDetailSource, />Stops<\/th>/);
@@ -1025,16 +1045,20 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /routePlan\?\.itemSummary\?\.totalQuantity \?\? routePlan\?\.totalItems/);
   assert.match(routeDetailSource, /routeRow\.startTimeLabel \?\? routeStartTimeLabel/);
   assert.match(routeDetailSource, /aria-label="Change route driver"/);
-  assert.match(routeDetailSource, /aria-label="Change route vehicle"/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Change route vehicle"/);
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
   assert.match(routeDetailSource, /onClick=\{\(\) => handleOpenRouteSelector\("startTime", routeRow\)\}/);
   assert.match(routeDetailSource, /startDateTime: getRouteStartDateTimeValue\(childRoutePlan, ianaTimezone\)/);
-  assert.match(routeDetailSource, /if \(selectorType === "startTime"\) setRouteStartDateTimeDraft\(routeRow\.startDateTime \?\? ""\)/);
-  assert.match(routeDetailSource, /const targetRoutePlanId = activeRouteSelector\?\.type === "startTime"[\s\S]*?activeRouteSelector\.routePlanId[\s\S]*?: effectiveRoutePlan\?\.id/);
-  assert.match(routeDetailSource, /formData\.set\("routePlanId", targetRoutePlanId\)/);
-  assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? \([\s\S]*?aria-label="Route start date and time"[\s\S]*?type="datetime-local"/);
+  assert.match(routeDetailSource, /setRouteStartTimeDraft\(buildRouteStartDraft\([\s\S]*routeRow\.scheduledStartTimeZone \?\? ianaTimezone/);
+  assert.match(routeDetailSource, /routeRowId: routeRow\.id/);
+  assert.match(routeDetailSource, /const targetRouteRowId = activeRouteSelector\?\.type === "startTime"[\s\S]*?activeRouteSelector\.routeRowId[\s\S]*?: currentRouteLineId/);
+  assert.match(routeDetailSource, /scheduledStartAt: routeRow\.scheduledStartAt \?\? null/);
+  assert.doesNotMatch(routeDetailSource, /formData\.set\("routePlanId", targetRoutePlanId\)/);
+  assert.match(routeDetailSource, /import \{[\s\S]*RouteStartTimePicker[\s\S]*\} from "\.\.\/features\/delivery\/route-start-time-picker"/);
+  assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? \([\s\S]*?<RouteStartTimePicker[\s\S]*storeTimezone=\{ianaTimezone\}[\s\S]*timezoneAbbreviation=\{timezoneAbbreviation\}[\s\S]*timezoneSource=\{timezoneSource\}/);
+  assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);
   assert.match(routeDetailSource, /aria-label=\{`Open \$\{routeRow\.title\} route detail`\}/);
-  assert.match(routeDetailSource, /navigate\(routeGroupChildPath\(routeGroupId, routeRow\.routePlanId\)\)/);
+  assert.match(routeDetailSource, /requestRouteNavigation\(routeGroupChildPath\(routeGroupId, routeRow\.routePlanId\)\)/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
@@ -1112,14 +1136,14 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.doesNotMatch(routeDetailSource, /Save order/);
 });
 
-test("Route detail opens driver and vehicle selectors even with empty saved data", () => {
+test("Route detail opens the driver selector and removes the unfinished vehicle affordance", () => {
   assert.match(routeDetailSource, /const \[activeRouteSelector, setActiveRouteSelector\] = useState\(null\)/);
   assert.match(routeDetailSource, /function getRouteSelectorEmptyMessage\(selectorType, query, options\) \{/);
   assert.match(routeDetailSource, /return "No matching driver"/);
   assert.match(routeDetailSource, /return "No driver found"/);
-  assert.match(routeDetailSource, /return "No vehicle found"/);
   assert.match(routeDetailSource, /onClick=\{\(\) => handleOpenRouteSelector\("driver", routeRow\)\}/);
-  assert.match(routeDetailSource, /onClick=\{\(\) => handleOpenRouteSelector\("vehicle", routeRow\)\}/);
+  assert.doesNotMatch(routeDetailSource, /handleOpenRouteSelector\("vehicle"/);
+  assert.doesNotMatch(routeDetailSource, /Change route vehicle/);
   assert.match(routeDetailSource, /aria-label=\{`\$\{activeRouteSelector\.title\} selector`\}/);
   assert.match(routeDetailSource, /routeSelectorOptions\.length > 0 \? \(/);
   assert.match(routeDetailSource, /routeSelectorEmptyMessage/);
@@ -1130,14 +1154,16 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = ROUTES_ROOT_PATH/);
+  assert.match(routeDetailSource, /const requestRouteNavigation = \(href\) => \{/);
   assert.match(routeDetailSource, /const handleBackToRoutes = \(\) => \{/);
-  assert.match(routeDetailSource, /if \(hasRouteAllocationDraft\) \{\s*setIsRouteDraftExitDialogOpen\(true\);\s*return;\s*\}/);
-  assert.match(routeDetailSource, /navigate\(routesListHref\)/);
+  assert.match(routeDetailSource, /setPendingRouteDraftHref\(href\)/);
+  assert.match(routeDetailSource, /requestRouteNavigation\(routesListHref\)/);
   assert.match(routeDetailSource, /aria-label="Unsaved route changes"/);
   assert.match(routeDetailSource, /아직 남은 변경이 있습니다/);
   assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraftAndLeave\}/);
   assert.match(routeDetailSource, /onClick=\{handleDiscardRouteDraftAndLeave\}/);
-  assert.match(routeDetailSource, /navigateAfterRouteDraftSaveRef\.current = true/);
+  assert.match(routeDetailSource, /navigateAfterRouteDraftSaveRef\.current = pendingRouteDraftHref \?\? routesListHref/);
+  assert.match(routeDetailSource, /window\.addEventListener\("beforeunload", handleBeforeUnload\)/);
   assert.match(routeDetailSource, /onClick=\{handleBackToRoutes\}/);
   assert.match(routeDetailSource, /<span aria-hidden="true" style=\{routeDetailBackIconStyle\}>/);
   assert.match(routeDetailSource, /viewBox="0 0 20 20"/);
@@ -1152,13 +1178,13 @@ test("Route detail page provides page navigation back to the route list", () => 
 });
 
 test("Route detail can move between child routes in the same route group", () => {
-  assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath \} from "\.\.\/features\/delivery\/route-paths"/);
+  assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath \} from "\.\.\/features\/delivery\/route-paths"/);
   assert.match(routeDetailSource, /const siblingRouteRows = routeGroupChildRows\.filter\(\(routeRow\) => routeRow\.routePlanId\)/);
   assert.match(routeDetailSource, /const currentSiblingRouteIndex = siblingRouteRows\.findIndex/);
   assert.match(routeDetailSource, /const previousSiblingRoute = siblingRouteRows\[currentSiblingRouteIndex - 1\]/);
   assert.match(routeDetailSource, /const nextSiblingRoute = siblingRouteRows\[currentSiblingRouteIndex \+ 1\]/);
   assert.match(routeDetailSource, /const handleSiblingRouteChange = \(routePlanId\) => \{/);
-  assert.match(routeDetailSource, /navigate\(routeGroupChildPath\(routeGroupId, routePlanId\)\)/);
+  assert.match(routeDetailSource, /requestRouteNavigation\(routeGroupChildPath\(routeGroupId, routePlanId\)\)/);
   assert.match(routeDetailSource, /aria-label="Previous route in group"/);
   assert.match(routeDetailSource, /aria-label="All routes in group"/);
   assert.match(routeDetailSource, /aria-label="Next route in group"/);
@@ -1167,8 +1193,8 @@ test("Route detail can move between child routes in the same route group", () =>
   assert.doesNotMatch(routeDetailSource, /M5 5h10M5 10h10M5 15h10/);
   assert.match(routeDetailSource, /aria-current=\{routeRow\.routePlanId === effectiveRoutePlan\?\.id \? "page" : undefined\}/);
   assert.match(routeDetailSource, /background: routeRow\.color/);
-  assert.match(routeDetailSource, /disabled=\{hasRouteAllocationDraft \|\| !previousSiblingRoute\}/);
-  assert.match(routeDetailSource, /disabled=\{hasRouteAllocationDraft \|\| !nextSiblingRoute\}/);
+  assert.match(routeDetailSource, /disabled=\{!previousSiblingRoute\}/);
+  assert.match(routeDetailSource, /disabled=\{!nextSiblingRoute\}/);
   assert.match(routeDetailSource, /routeGroupId && currentSiblingRouteIndex >= 0 && siblingRouteRows\.length > 1/);
   assert.match(routeDetailSource, /siblingRouteRows\.map\(\(routeRow\) => \(/);
   assert.doesNotMatch(routeDetailSource, /<select[\s\S]*aria-label="Route in group"/);
