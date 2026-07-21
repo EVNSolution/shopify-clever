@@ -390,10 +390,17 @@ function syncRouteDetailMapViewEmphasis(map, isTrackingView = false) {
 }
 
 function getRouteTrackingFitLocations(trackingSnapshot) {
-  return getRouteTrackingPathPoints(trackingSnapshot).map((point) => ({
+  const pathLocations = getRouteTrackingPathPoints(trackingSnapshot).map((point) => ({
     coordinates: point.coordinates,
     hasCoordinates: true,
   }));
+  if (pathLocations.length > 0) return pathLocations;
+
+  const latestCoordinates = normalizeLngLat(
+    trackingSnapshot?.latestPosition?.latitude,
+    trackingSnapshot?.latestPosition?.longitude,
+  );
+  return latestCoordinates ? [{ coordinates: latestCoordinates, hasCoordinates: true }] : [];
 }
 
 function removeRouteEditPolygon(map) {

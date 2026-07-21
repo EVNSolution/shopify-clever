@@ -2558,6 +2558,7 @@ export default function RouteDetailPage() {
   const mapRecoveryTimerRef = useRef(null);
   const markerDiagnosticCountRef = useRef(0);
   const hasInitialRouteMapFitRef = useRef(false);
+  const hasTrackingGpsFitRef = useRef(false);
   const routeTrackingPopupRef = useRef(null);
   const routeTrackingSnapshotRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -3783,6 +3784,7 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     hasInitialRouteMapFitRef.current = false;
+    hasTrackingGpsFitRef.current = false;
   }, [isTrackingMapView, mapRenderKey]);
 
   useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
@@ -4262,7 +4264,19 @@ export default function RouteDetailPage() {
     hasInitialRouteMapFitRef.current = true;
     mapRef.current.resize();
     fitRouteDetailMap(mapRef.current, maplibregl, routeMapFitLocations);
-  }, [isMapReady, routeMapFitLocations]);
+    if (isTrackingMapView && routeTrackingMapLocations.length > 0) {
+      hasTrackingGpsFitRef.current = true;
+    }
+  }, [isMapReady, isTrackingMapView, routeMapFitLocations, routeTrackingMapLocations.length]);
+
+  useEffect(() => {
+    if (!isTrackingMapView || !isMapReady || routeTrackingMapLocations.length === 0) return;
+    if (hasTrackingGpsFitRef.current || !mapRef.current || !mapLibraryRef.current) return;
+
+    hasTrackingGpsFitRef.current = true;
+    mapRef.current.resize();
+    fitRouteDetailMap(mapRef.current, mapLibraryRef.current, routeTrackingMapLocations);
+  }, [isMapReady, isTrackingMapView, routeTrackingMapLocations]);
 
   return (
     <main style={routesDetailPageStyle}>

@@ -13,6 +13,19 @@ function readIfPresent(path) {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
 }
 
+test("Tracking map fits the latest GPS position when no recorded path exists yet", () => {
+  const routeMapSource = readIfPresent(routeMapPath);
+  const routeDetailSource = readIfPresent(routeDetailPath);
+
+  assert.match(routeMapSource, /const pathLocations = getRouteTrackingPathPoints\(trackingSnapshot\)\.map/);
+  assert.match(routeMapSource, /if \(pathLocations\.length > 0\) return pathLocations/);
+  assert.match(routeMapSource, /trackingSnapshot\?\.latestPosition\?\.latitude/);
+  assert.match(routeMapSource, /return latestCoordinates \? \[\{ coordinates: latestCoordinates, hasCoordinates: true \}\] : \[\]/);
+  assert.match(routeDetailSource, /const hasTrackingGpsFitRef = useRef\(false\)/);
+  assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| routeTrackingMapLocations\.length === 0\) return/);
+  assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, mapLibraryRef\.current, routeTrackingMapLocations\)/);
+});
+
 test("Shopify proxies the authenticated delivery tracking stream without exposing the delivery API", () => {
   assert.ok(existsSync(trackingProxyPath));
   assert.ok(existsSync(trackingResourcePath));
