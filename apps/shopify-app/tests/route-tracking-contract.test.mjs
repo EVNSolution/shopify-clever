@@ -9,8 +9,10 @@ import {
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
   getRouteTrackingPresentation,
+  getRouteTrackingStreamInactivityMs,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
+  mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
 } from "../app/features/delivery/route-tracking.js";
@@ -95,6 +97,232 @@ test("recorded route geometry preserves more than 1000 compressed GPS points wit
   });
 });
 
+test("live GPS extends the server recorded path without dropping past positions", () => {
+  const recordedPositions = [
+    {
+      driverId: "driver-1",
+      eventId: "past-1",
+      occurredAt: "2026-07-21T00:00:00.000Z",
+      receivedAt: "2026-07-21T00:00:01.000Z",
+    },
+    {
+      driverId: "driver-1",
+      eventId: "past-2",
+      occurredAt: "2026-07-21T00:01:00.000Z",
+      receivedAt: "2026-07-21T00:01:01.000Z",
+    },
+  ];
+  const snapshot = normalizeRouteTrackingSnapshot({
+    latestPosition: {
+      ...recordedPositions[1],
+      latitude: 37.501,
+      longitude: 126.901,
+    },
+    policy,
+    recordedPath: {
+      firstOccurredAt: recordedPositions[0].occurredAt,
+      geometry: {
+        coordinates: [[126.9, 37.5], [126.901, 37.501]],
+        type: "LineString",
+      },
+      geometryPointCount: 2,
+      lastOccurredAt: recordedPositions[1].occurredAt,
+      lastReceivedAt: recordedPositions[1].receivedAt,
+      samples: recordedPositions,
+      schemaVersion: "route_tracking_geometry.v1",
+      sourcePointCount: 2,
+    },
+    recentPositions: recordedPositions.map((position, index) => ({
+      ...position,
+      latitude: 37.5 + index * 0.001,
+      longitude: 126.9 + index * 0.001,
+    })),
+  });
+  const livePosition = {
+    driverId: "driver-1",
+    eventId: "live-1",
+    latitude: 37.501,
+    longitude: 126.903,
+    occurredAt: "2026-07-21T00:02:00.000Z",
+    receivedAt: "2026-07-21T00:02:01.000Z",
+  };
+
+  const merged = mergeRouteTrackingPosition(snapshot, livePosition);
+
+  assert.deepEqual(
+    getRouteTrackingPathPoints(merged).map((point) => point.eventId),
+    ["past-1", "past-2", "live-1"],
+  );
+  assert.equal(merged.latestPosition.eventId, "live-1");
+  assert.equal(merged.recordedPath.sourcePointCount, 3);
+  assert.equal(merged.recordedPath.lastOccurredAt, livePosition.occurredAt);
+});
+
+test("live GPS extends recent server history when recorded geometry is not available yet", () => {
+  const recentPositions = [
+    {
+      driverId: "driver-1",
+      eventId: "past-1",
+      latitude: 37.5,
+      longitude: 126.9,
+      occurredAt: "2026-07-21T00:00:00.000Z",
+      receivedAt: "2026-07-21T00:00:01.000Z",
+    },
+    {
+      driverId: "driver-1",
+      eventId: "past-2",
+      latitude: 37.501,
+      longitude: 126.901,
+      occurredAt: "2026-07-21T00:01:00.000Z",
+      receivedAt: "2026-07-21T00:01:01.000Z",
+    },
+  ];
+  const snapshot = normalizeRouteTrackingSnapshot({
+    latestPosition: recentPositions[1],
+    policy,
+    recentPositions,
+  });
+
+  const merged = mergeRouteTrackingPosition(snapshot, {
+    driverId: "driver-1",
+    eventId: "live-1",
+    latitude: 37.501,
+    longitude: 126.903,
+    occurredAt: "2026-07-21T00:02:00.000Z",
+    receivedAt: "2026-07-21T00:02:01.000Z",
+  });
+
+  assert.deepEqual(
+    getRouteTrackingPathPoints(merged).map((point) => point.eventId),
+    ["past-1", "past-2", "live-1"],
+  );
+});
+
+test("a refreshed server snapshot keeps live GPS that arrived after the snapshot", () => {
+  const serverSnapshot = normalizeRouteTrackingSnapshot({
+    latestPosition: {
+      driverId: "driver-1",
+      eventId: "past-1",
+      latitude: 37.5,
+      longitude: 126.9,
+      occurredAt: "2026-07-21T00:00:00.000Z",
+      receivedAt: "2026-07-21T00:00:01.000Z",
+    },
+    policy,
+    recordedPath: {
+      firstOccurredAt: "2026-07-21T00:00:00.000Z",
+      geometry: { coordinates: [[126.9, 37.5]], type: "LineString" },
+      geometryPointCount: 1,
+      lastOccurredAt: "2026-07-21T00:00:00.000Z",
+      lastReceivedAt: "2026-07-21T00:00:01.000Z",
+      samples: [{
+        driverId: "driver-1",
+        eventId: "past-1",
+        occurredAt: "2026-07-21T00:00:00.000Z",
+        receivedAt: "2026-07-21T00:00:01.000Z",
+      }],
+      schemaVersion: "route_tracking_geometry.v1",
+      sourcePointCount: 1,
+    },
+    recentPositions: [],
+  });
+  const withLivePosition = mergeRouteTrackingPosition(serverSnapshot, {
+    driverId: "driver-1",
+    eventId: "live-1",
+    latitude: 37.501,
+    longitude: 126.901,
+    occurredAt: "2026-07-21T00:01:00.000Z",
+    receivedAt: "2026-07-21T00:01:01.000Z",
+  });
+
+  const merged = mergeRouteTrackingSnapshot(withLivePosition, serverSnapshot);
+  const latestOnly = normalizeRouteTrackingSnapshot({
+    latestPosition: withLivePosition.latestPosition,
+    policy,
+    recentPositions: [],
+  });
+  const mergedLatestOnly = mergeRouteTrackingSnapshot(latestOnly, serverSnapshot);
+
+  assert.deepEqual(
+    getRouteTrackingPathPoints(merged).map((point) => point.eventId),
+    ["past-1", "live-1"],
+  );
+  assert.equal(merged.latestPosition.eventId, "live-1");
+  assert.equal(mergedLatestOnly.latestPosition.eventId, "live-1");
+});
+
+test("a lower fidelity stream snapshot cannot replace a richer server past path", () => {
+  const richSnapshot = normalizeRouteTrackingSnapshot({
+    latestPosition: {
+      driverId: "driver-1",
+      eventId: "past-2",
+      latitude: 37.501,
+      longitude: 126.901,
+      occurredAt: "2026-07-21T00:01:00.000Z",
+      receivedAt: "2026-07-21T00:01:01.000Z",
+    },
+    policy,
+    recordedPath: {
+      firstOccurredAt: "2026-07-21T00:00:00.000Z",
+      geometry: { coordinates: [[126.9, 37.5], [126.901, 37.501]], type: "LineString" },
+      geometryPointCount: 2,
+      lastOccurredAt: "2026-07-21T00:01:00.000Z",
+      lastReceivedAt: "2026-07-21T00:01:01.000Z",
+      samples: [
+        {
+          driverId: "driver-1",
+          eventId: "past-1",
+          occurredAt: "2026-07-21T00:00:00.000Z",
+          receivedAt: "2026-07-21T00:00:01.000Z",
+        },
+        {
+          driverId: "driver-1",
+          eventId: "past-2",
+          occurredAt: "2026-07-21T00:01:00.000Z",
+          receivedAt: "2026-07-21T00:01:01.000Z",
+        },
+      ],
+      sourcePointCount: 2,
+    },
+    recentPositions: [],
+  });
+  const livePosition = {
+    driverId: "driver-1",
+    eventId: "live-1",
+    latitude: 37.501,
+    longitude: 126.903,
+    occurredAt: "2026-07-21T00:02:00.000Z",
+    receivedAt: "2026-07-21T00:02:01.000Z",
+  };
+
+  const merged = mergeRouteTrackingSnapshot(richSnapshot, {
+    latestPosition: livePosition,
+    policy,
+    recentPositions: [livePosition],
+  });
+
+  assert.deepEqual(
+    getRouteTrackingPathPoints(merged).map((point) => point.eventId),
+    ["past-1", "past-2", "live-1"],
+  );
+
+  const mergedEqualSizeWindow = mergeRouteTrackingSnapshot(richSnapshot, {
+    latestPosition: livePosition,
+    policy,
+    recentPositions: [
+      {
+        ...richSnapshot.latestPosition,
+        eventId: "past-2",
+      },
+      livePosition,
+    ],
+  });
+  assert.deepEqual(
+    getRouteTrackingPathPoints(mergedEqualSizeWindow).map((point) => point.eventId),
+    ["past-1", "past-2", "live-1"],
+  );
+});
+
 test("freshness uses server-provided thresholds", () => {
   const snapshot = normalizeRouteTrackingSnapshot({
     policy,
@@ -109,6 +337,12 @@ test("freshness uses server-provided thresholds", () => {
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:00:30.000Z")).key, "LIVE");
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:02:00.000Z")).key, "DELAYED");
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:04:00.000Z")).key, "OFFLINE");
+});
+
+test("stream inactivity recovery waits for three missed server heartbeats", () => {
+  assert.equal(getRouteTrackingStreamInactivityMs({ policy: { heartbeatMs: 15_000 } }), 45_000);
+  assert.equal(getRouteTrackingStreamInactivityMs({ policy: { heartbeatMs: 20_000 } }), 60_000);
+  assert.equal(getRouteTrackingStreamInactivityMs(null), 45_000);
 });
 
 test("route execution status controls live, inactive, and historical tracking presentation", () => {

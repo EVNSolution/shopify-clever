@@ -66,6 +66,25 @@ test("ready and in-progress child routes observe lifecycle events with a fresh S
   assert.doesNotMatch(routeDetailSource, /\}, \[shopify, trackingStreamRoutePlanId\]\)/);
 });
 
+test("live tracking keeps the server past-path snapshot while the stream connects and reconnects", () => {
+  const routeDetailSource = readIfPresent(routeDetailPath);
+
+  assert.match(routeDetailSource, /\?mode=snapshot/);
+  assert.doesNotMatch(
+    routeDetailSource,
+    /if \(!trackingRoutePlanId \|\| trackingStreamRoutePlanId\) return undefined/,
+  );
+  assert.doesNotMatch(
+    routeDetailSource,
+    /routeTrackingSnapshotRef\.current = null;\s*setRouteTrackingSnapshot\(null\);\s*document\.addEventListener\("visibilitychange"/,
+  );
+  assert.match(routeDetailSource, /mergeRouteTrackingPosition\(/);
+  assert.match(routeDetailSource, /getRouteTrackingStreamInactivityMs\(routeTrackingSnapshotRef\.current\)/);
+  assert.match(routeDetailSource, /armStreamInactivityTimer\(controller\)/);
+  assert.match(routeDetailSource, /streamController !== controller/);
+  assert.match(routeDetailSource, /setTrackingConnectionState\("reconnecting"\);\s*controller\.abort\(\)/);
+});
+
 test("server ETA lifecycle events revalidate route detail for both Stops and Tracking tables", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
 
