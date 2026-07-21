@@ -311,6 +311,11 @@ const orderViewDetailsStyle = {
   padding: "8px",
 };
 
+const orderViewPaymentOnlyDetailsStyle = {
+  ...orderViewDetailsStyle,
+  padding: "2px 8px 4px",
+};
+
 const orderViewNoteStyle = {
   display: "grid",
   gap: "3px",
@@ -560,6 +565,7 @@ const PRINT_ORDER_ITEMS_PADDING_PX = 5 * CSS_PX_PER_MM;
 const PRINT_ORDER_ITEM_LINE_HEIGHT_PX = 17;
 const PRINT_ORDER_ITEM_GAP_PX = 1 * CSS_PX_PER_MM;
 const PRINT_ORDER_DETAILS_PADDING_PX = 4 * CSS_PX_PER_MM;
+const PRINT_ORDER_PAYMENT_ONLY_PADDING_PX = 1 * CSS_PX_PER_MM;
 const PRINT_ORDER_DETAILS_PAYMENT_HEIGHT_PX = 18;
 const PRINT_ORDER_NOTE_LABEL_HEIGHT_PX = 16;
 const PRINT_ORDER_NOTE_GAP_PX = 1 * CSS_PX_PER_MM;
@@ -606,6 +612,7 @@ const printCss = `
   .inventory-detail-order-payment { font-size: 12px !important; line-height: 16px !important; padding: 0 2mm !important; }
   .inventory-detail-order-customer { display: grid !important; gap: 1mm !important; line-height: 17px !important; overflow: visible !important; }
   .inventory-detail-order-details { align-items: start !important; background: transparent !important; border-bottom: 0 !important; break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 3mm !important; grid-template-columns: max-content minmax(0, 1fr) !important; line-height: 17px !important; padding: 2mm 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-details--payment-only { padding: 0 0 1mm !important; }
   .inventory-detail-order-note { display: grid !important; gap: 1mm !important; min-width: 0 !important; }
   .inventory-detail-order-note-text { overflow-wrap: anywhere !important; white-space: pre-wrap !important; }
   .inventory-detail-order-items { break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 2mm 0 3mm !important; page-break-inside: avoid !important; }
@@ -636,8 +643,9 @@ function getPrintOrderHeightPx(card) {
   const noteHeight = note
     ? PRINT_ORDER_NOTE_LABEL_HEIGHT_PX + PRINT_ORDER_NOTE_GAP_PX + noteLines * PRINT_ORDER_NOTE_LINE_HEIGHT_PX
     : 0;
+  const detailsPadding = note ? PRINT_ORDER_DETAILS_PADDING_PX : PRINT_ORDER_PAYMENT_ONLY_PADDING_PX;
   const detailsHeight = details
-    ? PRINT_ORDER_DETAILS_PADDING_PX + Math.max(PRINT_ORDER_DETAILS_PAYMENT_HEIGHT_PX, noteHeight)
+    ? detailsPadding + Math.max(PRINT_ORDER_DETAILS_PAYMENT_HEIGHT_PX, noteHeight)
     : 0;
   return Math.ceil(
     rowHeight +
@@ -1159,7 +1167,10 @@ export default function InventoryDetailPage() {
                           ))}
                         </div>
                         {order.payment !== "-" || order.customerNote ? (
-                          <div className="inventory-detail-order-details" style={orderViewDetailsStyle}>
+                          <div
+                            className={`inventory-detail-order-details${order.customerNote ? "" : " inventory-detail-order-details--payment-only"}`}
+                            style={order.customerNote ? orderViewDetailsStyle : orderViewPaymentOnlyDetailsStyle}
+                          >
                             {order.payment !== "-" ? <span className="inventory-detail-order-payment" style={getOrderViewPaymentPillStyle(order.payment)}>{order.payment}</span> : null}
                             {order.customerNote ? (
                               <div
