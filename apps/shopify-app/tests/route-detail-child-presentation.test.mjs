@@ -324,10 +324,9 @@ test("child detail tabs remount a GPS-focused map for Tracking instead of sharin
   assert.match(routeDetailSource, /childDetailTab === "tracking"/);
   assert.match(routeDetailSource, /ariaLabel=\{isTrackingMapView \? "Recorded GPS tracking map" : "Route stop location map"\}/);
   assert.match(routeDetailSource, /key=\{routeMapViewKey\}/);
-  assert.match(routeDetailSource, /Road-matched GPS path/);
-  assert.match(routeDetailSource, /Unconfirmed GPS movement/);
-  assert.doesNotMatch(routeDetailSource, /Current GPS position/);
-  assert.match(routeDetailSource, /Planned route reference/);
+  assert.match(routeDetailSource, />Planned route</);
+  assert.match(routeDetailSource, />Actual GPS tracking</);
+  assert.doesNotMatch(routeDetailSource, /Road-matched GPS path|Unconfirmed GPS movement|Current GPS position/);
   assert.match(routeDetailSource, /\[isTrackingMapView, mapRenderKey, scheduleMapRecovery\]/);
   assert.match(routeDetailSource, /aria-label="Child route tracking"/);
 });

@@ -98,7 +98,7 @@ test("recorded route geometry preserves more than 1000 compressed GPS points wit
   });
 });
 
-test("road-matched tracking renders only open solid and dashed line segments", () => {
+test("road-matched tracking renders only open GPS line segments", () => {
   const snapshot = normalizeRouteTrackingSnapshot({
     policy,
     recordedPath: {
