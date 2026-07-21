@@ -1257,7 +1257,8 @@ test("Orders map popup uses a left-center overlay and can add the order to the r
   assert.match(ordersPageSource, /handleAddOrderToPlan\(activeOrderPopup\.id\)/);
   assert.match(ordersPageSource, /const activeOrderPopupShopifyUrl = activeOrderPopup \? getShopifyAdminOrderUrl\(activeOrderPopup\) : null/);
   assert.match(ordersPageSource, /href=\{activeOrderPopupShopifyUrl\}/);
-  assert.match(ordersPageSource, /target="_top"/);
+  assert.match(ordersPageSource, /target="_blank"/);
+  assert.match(ordersPageSource, /rel="noopener noreferrer"/);
   assert.match(ordersPageSource, />View in Shopify<\/a>/);
   assert.match(ordersPageSource, /onClick=\{\(\) => setActiveOrderPopup\(null\)\}/);
   assert.match(ordersPageSource, /const handleUserMapMoveStart = \(event\) => \{/);

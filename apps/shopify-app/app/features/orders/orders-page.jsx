@@ -4484,7 +4484,8 @@ function OrdersPageContent({ loaderData }) {
                     <a
                       className="order-marker-popup__action order-marker-popup__action--secondary"
                       href={activeOrderPopupShopifyUrl}
-                      target="_top"
+                      rel="noopener noreferrer"
+                      target="_blank"
                     >View in Shopify</a>
                   ) : null}
                 </div>
