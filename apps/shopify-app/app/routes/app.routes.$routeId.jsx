@@ -61,8 +61,10 @@ import {
   getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
+  getRouteTrackingStreamInactivityMs,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
+  mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
 } from "../features/delivery/route-tracking";
@@ -2785,12 +2787,21 @@ export default function RouteDetailPage() {
   const savedRouteStopPoints = routeGeometryStopPoints;
 
   useEffect(() => {
-    if (!trackingRoutePlanId || trackingStreamRoutePlanId) return undefined;
+    if (!trackingRoutePlanId) return undefined;
+    const hasTrackingStream = Boolean(trackingStreamRoutePlanId);
+
+    if (
+      routeTrackingSnapshotRef.current?.routePlanId
+      && routeTrackingSnapshotRef.current.routePlanId !== trackingRoutePlanId
+    ) {
+      routeTrackingSnapshotRef.current = null;
+      setRouteTrackingSnapshot(null);
+    }
 
     let isDisposed = false;
     const controller = new AbortController();
     const loadTrackingSnapshot = async () => {
-      if (!routeTrackingSnapshotRef.current) setTrackingConnectionState("loading");
+      if (!hasTrackingStream && !routeTrackingSnapshotRef.current) setTrackingConnectionState("loading");
       try {
         const sessionToken = await shopifyRef.current.idToken();
         if (isDisposed || controller.signal.aborted) return;
@@ -2805,13 +2816,16 @@ export default function RouteDetailPage() {
         if (!response.ok) throw new Error(`Tracking snapshot failed with ${response.status}.`);
         const payload = await response.json();
         const snapshot = normalizeRouteTrackingSnapshot(payload?.data?.snapshot ?? payload?.data ?? payload);
-        routeTrackingSnapshotRef.current = snapshot;
-        setRouteTrackingSnapshot(snapshot);
-        setTrackingConnectionState("idle");
+        setRouteTrackingSnapshot((currentSnapshot) => {
+          const nextSnapshot = mergeRouteTrackingSnapshot(currentSnapshot, snapshot);
+          routeTrackingSnapshotRef.current = nextSnapshot;
+          return nextSnapshot;
+        });
+        if (!hasTrackingStream) setTrackingConnectionState("idle");
       } catch (error) {
         if (!isDisposed && !controller.signal.aborted) {
           console.warn("Route tracking snapshot is unavailable.", error);
-          setTrackingConnectionState("unavailable");
+          if (!hasTrackingStream) setTrackingConnectionState("unavailable");
         }
       }
     };
@@ -2829,12 +2843,27 @@ export default function RouteDetailPage() {
     let isDisposed = false;
     let lastFailureStatus = null;
     let reconnectTimer = null;
+    let streamInactivityTimer = null;
     let streamController = null;
 
     const clearReconnectTimer = () => {
       if (reconnectTimer == null) return;
       window.clearTimeout(reconnectTimer);
       reconnectTimer = null;
+    };
+    const clearStreamInactivityTimer = () => {
+      if (streamInactivityTimer == null) return;
+      window.clearTimeout(streamInactivityTimer);
+      streamInactivityTimer = null;
+    };
+    const armStreamInactivityTimer = (controller) => {
+      clearStreamInactivityTimer();
+      streamInactivityTimer = window.setTimeout(() => {
+        if (isDisposed || streamController !== controller || controller.signal.aborted) return;
+        streamInactivityTimer = null;
+        setTrackingConnectionState("reconnecting");
+        controller.abort();
+      }, getRouteTrackingStreamInactivityMs(routeTrackingSnapshotRef.current));
     };
     const scheduleReconnect = () => {
       if (isDisposed || document.visibilityState !== "visible") return;
@@ -2847,8 +2876,11 @@ export default function RouteDetailPage() {
     const applyTrackingEvent = (trackingEvent) => {
       if (trackingEvent.event === "tracking_snapshot") {
         const snapshot = normalizeRouteTrackingSnapshot(trackingEvent.data?.snapshot ?? trackingEvent.data);
-        routeTrackingSnapshotRef.current = snapshot;
-        setRouteTrackingSnapshot(snapshot);
+        setRouteTrackingSnapshot((currentSnapshot) => {
+          const nextSnapshot = mergeRouteTrackingSnapshot(currentSnapshot, snapshot);
+          routeTrackingSnapshotRef.current = nextSnapshot;
+          return nextSnapshot;
+        });
         return;
       }
       if (trackingEvent.event === "tracking_position") {
@@ -2881,6 +2913,7 @@ export default function RouteDetailPage() {
     async function connect() {
       if (isDisposed || document.visibilityState !== "visible") return;
       clearReconnectTimer();
+      clearStreamInactivityTimer();
       streamController?.abort();
       streamController = new AbortController();
       const controller = streamController;
@@ -2906,12 +2939,14 @@ export default function RouteDetailPage() {
 
         lastFailureStatus = null;
         setTrackingConnectionState("connected");
+        armStreamInactivityTimer(controller);
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
         let buffer = "";
         while (!isDisposed && !controller.signal.aborted) {
           const { done, value } = await reader.read();
           if (done) break;
+          armStreamInactivityTimer(controller);
           const parsed = consumeRouteTrackingSseChunk(buffer, decoder.decode(value, { stream: true }));
           buffer = parsed.remainder;
           parsed.events.forEach(applyTrackingEvent);
@@ -2926,13 +2961,17 @@ export default function RouteDetailPage() {
         }
       } finally {
         const isCurrentController = streamController === controller;
-        if (isCurrentController) streamController = null;
+        if (isCurrentController) {
+          clearStreamInactivityTimer();
+          streamController = null;
+        }
         if (isCurrentController && !isDisposed && document.visibilityState === "visible") scheduleReconnect();
       }
     }
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible") {
         clearReconnectTimer();
+        clearStreamInactivityTimer();
         streamController?.abort();
         setTrackingConnectionState("paused");
         return;
@@ -2940,8 +2979,6 @@ export default function RouteDetailPage() {
       connect();
     };
 
-    routeTrackingSnapshotRef.current = null;
-    setRouteTrackingSnapshot(null);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     if (document.visibilityState === "visible") connect();
     else setTrackingConnectionState("paused");
@@ -2949,6 +2986,7 @@ export default function RouteDetailPage() {
     return () => {
       isDisposed = true;
       clearReconnectTimer();
+      clearStreamInactivityTimer();
       streamController?.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };

@@ -1,4 +1,5 @@
 const FALLBACK_RECONNECT_DELAY_MS = 3_000;
+const FALLBACK_STREAM_INACTIVITY_MS = 45_000;
 const EARTH_RADIUS_METERS = 6_371_000;
 
 function numberOrNull(value) {
@@ -134,6 +135,11 @@ function mergeRouteTrackingPosition(snapshot, position) {
   const normalizedPosition = normalizeTrackingPosition(position);
   if (!normalizedPosition) return normalizedSnapshot;
 
+  const recordedPath = normalizedSnapshot.recordedPath ?? normalizedSnapshot.recentPositions.reduce(
+    (path, recentPosition) => mergeRecordedPathPosition(path, recentPosition, normalizedSnapshot.policy),
+    null,
+  );
+
   const recentPositions = normalizedSnapshot.recentPositions.filter((recentPosition) => (
     normalizedPosition.eventId == null || recentPosition.eventId !== normalizedPosition.eventId
   ));
@@ -149,9 +155,86 @@ function mergeRouteTrackingPosition(snapshot, position) {
     routePlanId: normalizedSnapshot.routePlanId ?? normalizedPosition.routePlanId,
     status: "LIVE",
     latestPosition,
-    recordedPath: mergeRecordedPathPosition(normalizedSnapshot.recordedPath, normalizedPosition, normalizedSnapshot.policy),
+    recordedPath: mergeRecordedPathPosition(recordedPath, normalizedPosition, normalizedSnapshot.policy),
     recentPositions,
   };
+}
+
+function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
+  const incomingSnapshot = normalizeRouteTrackingSnapshot(serverSnapshot);
+  if (!currentSnapshot) return incomingSnapshot;
+
+  const current = normalizeRouteTrackingSnapshot(currentSnapshot);
+  if (
+    current.routePlanId
+    && incomingSnapshot.routePlanId
+    && current.routePlanId !== incomingSnapshot.routePlanId
+  ) {
+    return incomingSnapshot;
+  }
+
+  const currentHistorySize = getRouteTrackingHistorySize(current);
+  const incomingHistorySize = getRouteTrackingHistorySize(incomingSnapshot);
+  const historyBase = incomingHistorySize === currentHistorySize
+    ? current.recordedPath && !incomingSnapshot.recordedPath
+      ? current
+      : incomingSnapshot
+    : incomingHistorySize > currentHistorySize ? incomingSnapshot : current;
+  const mergedBase = normalizeRouteTrackingSnapshot({
+    ...historyBase,
+    policy: incomingSnapshot.policy ?? current.policy,
+    progress: incomingSnapshot.progress,
+    routePlanId: incomingSnapshot.routePlanId ?? current.routePlanId,
+    schemaVersion: incomingSnapshot.schemaVersion,
+    serverTime: incomingSnapshot.serverTime ?? current.serverTime,
+    status: incomingSnapshot.status,
+  });
+  const baseLatestTimestamp = getRouteTrackingLatestTimestamp(mergedBase);
+  const positionsByKey = new Map();
+  for (const position of [...getRouteTrackingSnapshotPositions(current), ...getRouteTrackingSnapshotPositions(incomingSnapshot)]) {
+    if (getPositionTimestamp(position) <= baseLatestTimestamp) continue;
+    positionsByKey.set(getRouteTrackingPositionKey(position), position);
+  }
+  const newerPositions = [...positionsByKey.values()].sort((left, right) => (
+    getPositionTimestamp(left) - getPositionTimestamp(right)
+    || (left.eventId ?? "").localeCompare(right.eventId ?? "")
+  ));
+  const mergedSnapshot = newerPositions.reduce(
+    (snapshot, position) => mergeRouteTrackingPosition(snapshot, position),
+    mergedBase,
+  );
+  const currentProgressEvent = current.progress.latestEvent;
+  if (
+    currentProgressEvent
+    && getPositionTimestamp(currentProgressEvent) > getPositionTimestamp(mergedSnapshot.progress.latestEvent)
+  ) {
+    return mergeRouteTrackingProgress(mergedSnapshot, currentProgressEvent);
+  }
+  return mergedSnapshot;
+}
+
+function getRouteTrackingHistorySize(snapshot) {
+  return snapshot.recordedPath?.sourcePointCount
+    ?? Math.max(snapshot.recentPositions.length, snapshot.latestPosition ? 1 : 0);
+}
+
+function getRouteTrackingLatestTimestamp(snapshot) {
+  const recordedPathTimestamp = Date.parse(snapshot.recordedPath?.lastOccurredAt ?? "");
+  return Math.max(
+    getPositionTimestamp(snapshot.latestPosition),
+    Number.isFinite(recordedPathTimestamp) ? recordedPathTimestamp : 0,
+  );
+}
+
+function getRouteTrackingSnapshotPositions(snapshot) {
+  const positions = [...snapshot.recentPositions];
+  if (snapshot.latestPosition) positions.push(snapshot.latestPosition);
+  return positions;
+}
+
+function getRouteTrackingPositionKey(position) {
+  return position.eventId
+    ?? `${position.occurredAt ?? position.receivedAt ?? ""}:${position.latitude}:${position.longitude}`;
 }
 
 function normalizeRecordedPath(recordedPath, latestPosition) {
@@ -398,6 +481,13 @@ function getRouteTrackingReconnectDelayMs(snapshot) {
     : FALLBACK_RECONNECT_DELAY_MS;
 }
 
+function getRouteTrackingStreamInactivityMs(snapshot) {
+  const heartbeatMs = numberOrNull(snapshot?.policy?.heartbeatMs);
+  return heartbeatMs != null && heartbeatMs >= 1_000
+    ? Math.max(FALLBACK_STREAM_INACTIVITY_MS, heartbeatMs * 3)
+    : FALLBACK_STREAM_INACTIVITY_MS;
+}
+
 function getRouteTrackingFreshness(snapshot, now = Date.now()) {
   const latestPosition = snapshot?.latestPosition;
   if (!latestPosition) {
@@ -486,8 +576,10 @@ export {
   getRouteTrackingFreshness,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
+  getRouteTrackingStreamInactivityMs,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
+  mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
 };
