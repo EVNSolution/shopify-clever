@@ -177,6 +177,9 @@ const ordersLoadingRetryButtonStyle = {
   padding: "8px 14px",
 };
 
+const ORDERS_AUTO_RETRY_DELAY_MS = 750;
+let ordersLoadAutoRetryAttempted = false;
+
 const routePlanPanelStyle = {
   boxSizing: "border-box",
   display: "flex",
@@ -2278,7 +2281,22 @@ function OrdersPageLoading() {
 
 function OrdersPageLoadError() {
   const revalidator = useRevalidator();
-  const retrying = revalidator.state !== "idle";
+  const [automaticRetryPending, setAutomaticRetryPending] = useState(
+    () => !ordersLoadAutoRetryAttempted,
+  );
+  const retrying = automaticRetryPending || revalidator.state !== "idle";
+
+  useEffect(() => {
+    if (ordersLoadAutoRetryAttempted) return undefined;
+
+    setAutomaticRetryPending(true);
+    const timeoutId = window.setTimeout(() => {
+      ordersLoadAutoRetryAttempted = true;
+      revalidator.revalidate();
+    }, ORDERS_AUTO_RETRY_DELAY_MS);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [revalidator]);
 
   return (
     <TabLayout
@@ -2286,8 +2304,12 @@ function OrdersPageLoadError() {
       primary={
         <div aria-live="assertive" role="alert" style={ordersLoadingPanelStyle}>
           <div style={ordersLoadingStatusStyle}>
-            <strong>Orders loading stopped</strong>
-            <span>The asynchronous request did not finish within 15 seconds.</span>
+            <strong>{retrying ? "Orders are taking longer than usual" : "Orders loading stopped"}</strong>
+            <span>
+              {retrying
+                ? "The first request exceeded 15 seconds. Retrying automatically…"
+                : "The automatic retry also did not finish. Retry when ready."}
+            </span>
             <button
               type="button"
               disabled={retrying}
@@ -2338,6 +2360,10 @@ function OrdersPageContent({ loaderData }) {
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
+
+  useEffect(() => {
+    ordersLoadAutoRetryAttempted = false;
+  }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
   const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = loaderData;

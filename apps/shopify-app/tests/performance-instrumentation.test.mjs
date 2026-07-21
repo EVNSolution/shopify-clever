@@ -25,6 +25,7 @@ const routeDetailServerSource = readFileSync(
 );
 const settingsPageSource = readFileSync(join(root, "app/routes/app.settings.jsx"), "utf8");
 const rootSource = readFileSync(join(root, "app/root.jsx"), "utf8");
+const entryServerSource = readFileSync(join(root, "app/entry.server.jsx"), "utf8");
 const perfRoutePath = join(root, "app/routes/perf.jsx");
 const perfScriptPath = join(root, "scripts/perf-orders.mjs");
 
@@ -77,8 +78,19 @@ test("Orders loading leaves the skeleton for a retryable error when data stalls"
   assert.match(ordersPageSource, /<Await resolve=\{ordersPageData\} errorElement=\{<OrdersPageLoadError \/>\}>/);
   assert.match(ordersPageSource, /function OrdersPageLoadError\(\)/);
   assert.match(ordersPageSource, /const revalidator = useRevalidator\(\)/);
+  assert.match(ordersPageSource, /ordersLoadAutoRetryAttempted/);
+  assert.match(
+    ordersPageSource,
+    /window\.setTimeout\(\(\) => \{[\s\S]*ordersLoadAutoRetryAttempted = true;[\s\S]*revalidator\.revalidate\(\);[\s\S]*\}, ORDERS_AUTO_RETRY_DELAY_MS\)/,
+  );
+  assert.match(ordersPageSource, /ordersLoadAutoRetryAttempted = false/);
   assert.match(ordersPageSource, /onClick=\{\(\) => revalidator\.revalidate\(\)\}/);
   assert.match(ordersPageSource, /Shopify and delivery data are loading asynchronously/);
+});
+
+test("SSR keeps the stream open long enough to flush the Orders timeout boundary", () => {
+  assert.match(entryServerSource, /export const streamTimeout = 30_000/);
+  assert.match(entryServerSource, /setTimeout\(abort, streamTimeout \+ 1000\)/);
 });
 
 test("Orders UI-only query changes keep loaded Orders and Inventory data", () => {
