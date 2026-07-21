@@ -1815,7 +1815,11 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, />\{"Order\\u00a0id"\}<\/span>[\s\S]*>Address<\/span>[\s\S]*>ETA<\/span>[\s\S]*>\{"Drive\\u00a0time"\}<\/span>[\s\S]*>\{"Stop\\u00a0time"\}<\/span>[\s\S]*>Customer<\/span>[\s\S]*>Price<\/span>/);
   assert.match(inventoryDetailSource, /Shipping phone:/);
   assert.match(inventoryDetailSource, /inventory\.linkedRoutes/);
-  assert.match(inventoryDetailSource, /Order Note is intentionally not rendered/);
+  assert.match(inventoryDetailSource, /customerNote: getInventoryOrderCustomerNote\(order\)/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-order-note"/);
+  assert.match(inventoryDetailSource, />Customer Note<\/span>/);
+  assert.match(inventoryDetailSource, /data-print-line-count=\{getInventoryPrintTextLineCount\(order\.customerNote\)\}/);
+  assert.doesNotMatch(inventoryDetailSource, /Order Note is intentionally not rendered/);
   assert.match(inventoryDetailSource, /`\$\{quantity\} EA ·/);
   assert.match(inventoryDetailSource, /className="inventory-detail-order-meta"/);
   assert.match(inventoryDetailSource, /className="inventory-detail-orders-list"/);
@@ -1828,6 +1832,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /className="inventory-detail-order-payment"/);
   assert.match(inventoryDetailSource, /className="inventory-detail-order-customer"/);
   assert.match(inventoryDetailSource, /className="inventory-detail-order-phone"/);
+  assert.match(inventoryDetailSource, /inventory-detail-order-customer[\s\S]*Shipping phone:[\s\S]*inventory-detail-order-note[\s\S]*inventory-detail-order-items/);
   assert.match(inventoryDetailSource, /addressLines: getInventoryOrderAddressLines\(order\)/);
   assert.match(inventoryDetailSource, /const cityIndex = parts\.length >= 5 \? parts\.length - 4 : parts\.length - 3/);
   assert.match(inventoryDetailSource, /parts\.slice\(0, cityIndex\)\.join\(", "\)/);
@@ -1849,6 +1854,8 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /const PRINT_ORDER_LIST_GAP_PX = 8 \* CSS_PX_PER_MM/);
   assert.match(inventoryDetailSource, /function getPrintOrderHeightPx\(card\)/);
   assert.match(inventoryDetailSource, /card\.querySelectorAll\("\.inventory-detail-order-items > div"\)\.length/);
+  assert.match(inventoryDetailSource, /card\.querySelector\("\.inventory-detail-order-note"\)/);
+  assert.match(inventoryDetailSource, /noteLines \* PRINT_ORDER_NOTE_LINE_HEIGHT_PX/);
   assert.match(inventoryDetailSource, /function applyInventoryOrderPrintBreaks/);
   assert.match(inventoryDetailSource, /function textOrDisplay\(value, fallback = "-"\)/);
   assert.match(inventoryDetailSource, /order\.payment !== "-"/);
