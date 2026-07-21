@@ -1,6 +1,6 @@
 import { addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers";
 import { numberOrUndefined, textOrUndefined } from "./route-helpers";
-import { getRouteTrackingPathPoints } from "./route-tracking";
+import { getRouteTrackingLineFeatures, getRouteTrackingPathPoints } from "./route-tracking";
 
 const DEFAULT_CENTER = [-79.3832, 43.6532];
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
@@ -12,8 +12,7 @@ const ROUTE_DETAIL_STOP_POINT_SOURCE_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking";
 const ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID = "route-detail-live-tracking-trail";
-const ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID = "route-detail-live-tracking-history";
-const ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID = "route-detail-live-tracking-position";
+const ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID = "route-detail-live-tracking-connector";
 const ROUTE_DETAIL_COMPLETED_STOP_COLOR = "#8c9196";
 const ROUTE_DETAIL_DEPARTURE_IMAGE_ID = "route-detail-departure-pin";
 const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon";
@@ -240,72 +239,10 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
 }
 
 function buildRouteDetailLiveTrackingData(trackingSnapshot) {
-  const recentPoints = getRouteTrackingPathPoints(trackingSnapshot)
-    .map((position, index) => ({
-      coordinates: normalizeLngLatPair(position.coordinates),
-      eventId: textOrUndefined(position.eventId) ?? `recorded-position-${index + 1}`,
-      occurredAt: textOrUndefined(position.occurredAt),
-      occurredAtMs: Date.parse(position?.occurredAt ?? position?.receivedAt ?? ""),
-      receivedAt: textOrUndefined(position.receivedAt),
-      sequence: index + 1,
-    }))
-    .filter((point) => point.coordinates);
-  const recentCoordinates = recentPoints.map((point) => point.coordinates);
-  const latestCoordinates = normalizeLngLat(
-    trackingSnapshot?.latestPosition?.latitude,
-    trackingSnapshot?.latestPosition?.longitude,
-  ) ?? recentCoordinates.at(-1) ?? null;
-  const features = [];
-  const gapThresholdMs = Number(trackingSnapshot?.policy?.delayedThresholdMs) || 180_000;
-  const trailSegments = recentPoints.reduce((segments, point, index) => {
-    const previousPoint = recentPoints[index - 1];
-    const hasGap = previousPoint
-      && Number.isFinite(point.occurredAtMs)
-      && Number.isFinite(previousPoint.occurredAtMs)
-      && point.occurredAtMs - previousPoint.occurredAtMs > gapThresholdMs;
-    if (segments.length === 0 || hasGap) segments.push([]);
-    segments.at(-1).push(point.coordinates);
-    return segments;
-  }, []).filter((segment) => segment.length >= 2);
-
-  if (trailSegments.length > 0) {
-    features.push({
-      type: "Feature",
-      geometry: trailSegments.length === 1
-        ? { type: "LineString", coordinates: trailSegments[0] }
-        : { type: "MultiLineString", coordinates: trailSegments },
-      properties: { trackingType: "trackingTrail" },
-    });
-  }
-  for (const point of recentPoints.slice(0, -1)) {
-    features.push({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: point.coordinates },
-      properties: {
-        eventId: point.eventId,
-        occurredAt: point.occurredAt ?? "",
-        receivedAt: point.receivedAt ?? "",
-        sequence: point.sequence,
-        trackingType: "trackingHistoryPoint",
-      },
-    });
-  }
-  if (latestCoordinates) {
-    const latestPoint = recentPoints.at(-1);
-    features.push({
-      type: "Feature",
-      geometry: { type: "Point", coordinates: latestCoordinates },
-      properties: {
-        eventId: latestPoint?.eventId ?? "latest-position",
-        occurredAt: latestPoint?.occurredAt ?? trackingSnapshot?.latestPosition?.occurredAt ?? "",
-        receivedAt: latestPoint?.receivedAt ?? trackingSnapshot?.latestPosition?.receivedAt ?? "",
-        sequence: latestPoint?.sequence ?? recentPoints.length,
-        trackingType: "trackingPosition",
-      },
-    });
-  }
-
-  return { type: "FeatureCollection", features };
+  return {
+    type: "FeatureCollection",
+    features: getRouteTrackingLineFeatures(trackingSnapshot),
+  };
 }
 
 function syncRouteDetailLiveTracking(map, trackingSnapshot) {
@@ -330,42 +267,27 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       filter: ["==", ["get", "trackingType"], "trackingTrail"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#7c3aed",
+        "line-color": "#0b84d8",
         "line-opacity": 0.92,
         "line-width": 4.5,
       },
     }, beforeMarkerLayerId);
   }
-  if (!map.getLayer?.(ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID)) {
+  if (!map.getLayer?.(ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID)) {
     map.addLayer({
-      id: ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID,
-      type: "circle",
+      id: ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
+      type: "line",
       source: ROUTE_DETAIL_TRACKING_SOURCE_ID,
-      filter: ["==", ["get", "trackingType"], "trackingHistoryPoint"],
+      filter: ["==", ["get", "trackingType"], "trackingConnector"],
+      layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "circle-color": "#7c3aed",
-        "circle-opacity": 0.82,
-        "circle-radius": 3,
-        "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 0.75,
+        "line-color": "#0b84d8",
+        "line-dasharray": [1.5, 1.25],
+        "line-opacity": 0.9,
+        "line-width": 3.5,
       },
     }, beforeMarkerLayerId);
   }
-  if (!map.getLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID)) {
-    map.addLayer({
-      id: ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
-      type: "circle",
-      source: ROUTE_DETAIL_TRACKING_SOURCE_ID,
-      filter: ["==", ["get", "trackingType"], "trackingPosition"],
-      paint: {
-        "circle-color": "#0b84d8",
-        "circle-radius": 8.5,
-        "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 3,
-      },
-    });
-  }
-  map.moveLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID);
 
   return true;
 }
@@ -891,8 +813,6 @@ function getRouteStopFromMapFeature(feature, routeStops) {
 }
 
 export {
-  ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID,
-  ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
   buildRouteDetailLiveTrackingData,
   DEFAULT_CENTER,
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,

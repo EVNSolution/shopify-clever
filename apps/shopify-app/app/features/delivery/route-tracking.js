@@ -1,6 +1,8 @@
 const FALLBACK_RECONNECT_DELAY_MS = 3_000;
 const FALLBACK_STREAM_INACTIVITY_MS = 45_000;
 const EARTH_RADIUS_METERS = 6_371_000;
+const RAW_FALLBACK_MIN_MOVEMENT_METERS = 12;
+const RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND = 55;
 
 function numberOrNull(value) {
   const number = Number(value);
@@ -90,6 +92,7 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     policy: snapshot?.policy && typeof snapshot.policy === "object" ? { ...snapshot.policy } : null,
     progress: normalizeTrackingProgress(snapshot?.progress),
     recordedPath,
+    roadMatchedPath: normalizeRoadMatchedPath(snapshot?.roadMatchedPath),
     status: textOrNull(snapshot?.status) ?? (latestPosition ? "LIVE" : "NO_DATA"),
     serverTime: textOrNull(snapshot?.serverTime),
     latestPosition,
@@ -184,6 +187,7 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
     ...historyBase,
     policy: incomingSnapshot.policy ?? current.policy,
     progress: incomingSnapshot.progress,
+    roadMatchedPath: getNewestRoadMatchedPath(current.roadMatchedPath, incomingSnapshot.roadMatchedPath),
     routePlanId: incomingSnapshot.routePlanId ?? current.routePlanId,
     schemaVersion: incomingSnapshot.schemaVersion,
     serverTime: incomingSnapshot.serverTime ?? current.serverTime,
@@ -287,6 +291,63 @@ function normalizeCoordinatePair(coordinate) {
   return [longitude, latitude];
 }
 
+function normalizeMultiLineGeometry(geometry) {
+  const rawLines = geometry?.type === "MultiLineString"
+    ? geometry.coordinates
+    : geometry?.type === "LineString"
+      ? [geometry.coordinates]
+      : [];
+  const coordinates = (Array.isArray(rawLines) ? rawLines : [])
+    .map((line) => (Array.isArray(line) ? line.map(normalizeCoordinatePair).filter(Boolean) : []))
+    .filter((line) => line.length >= 2);
+  return coordinates.length > 0 ? { coordinates, type: "MultiLineString" } : null;
+}
+
+function normalizeRoadMatchedPath(roadMatchedPath) {
+  if (!roadMatchedPath || typeof roadMatchedPath !== "object") return null;
+
+  const matchedGeometry = normalizeMultiLineGeometry(roadMatchedPath.matchedGeometry);
+  const uncertainGeometry = normalizeMultiLineGeometry(roadMatchedPath.uncertainGeometry);
+  const lastMatchedLatitude = numberOrNull(roadMatchedPath.lastMatchedPosition?.latitude);
+  const lastMatchedLongitude = numberOrNull(roadMatchedPath.lastMatchedPosition?.longitude);
+  const lastMatchedPosition = lastMatchedLatitude != null
+    && lastMatchedLongitude != null
+    && lastMatchedLatitude >= -90
+    && lastMatchedLatitude <= 90
+    && lastMatchedLongitude >= -180
+    && lastMatchedLongitude <= 180
+    ? {
+        latitude: lastMatchedLatitude,
+        longitude: lastMatchedLongitude,
+        occurredAt: textOrNull(roadMatchedPath.lastMatchedPosition?.occurredAt),
+      }
+    : null;
+  if (!matchedGeometry && !uncertainGeometry && !lastMatchedPosition) return null;
+
+  return {
+    coverage: textOrNull(roadMatchedPath.coverage),
+    inputPointCount: Math.max(0, numberOrNull(roadMatchedPath.inputPointCount) ?? 0),
+    lastInputOccurredAt: textOrNull(roadMatchedPath.lastInputOccurredAt),
+    lastMatchedPosition,
+    matchedGeometry,
+    matchedPointCount: Math.max(0, numberOrNull(roadMatchedPath.matchedPointCount) ?? 0),
+    schemaVersion: textOrNull(roadMatchedPath.schemaVersion) ?? "route_tracking_road_match.v1",
+    uncertainGeometry,
+    watermark: textOrNull(roadMatchedPath.watermark),
+  };
+}
+
+function getNewestRoadMatchedPath(currentPath, incomingPath) {
+  if (!currentPath) return incomingPath;
+  if (!incomingPath) return currentPath;
+  const currentTimestamp = Date.parse(currentPath.lastInputOccurredAt ?? "");
+  const incomingTimestamp = Date.parse(incomingPath.lastInputOccurredAt ?? "");
+  if (Number.isFinite(currentTimestamp) && Number.isFinite(incomingTimestamp)) {
+    return incomingTimestamp >= currentTimestamp ? incomingPath : currentPath;
+  }
+  return incomingPath.inputPointCount >= currentPath.inputPointCount ? incomingPath : currentPath;
+}
+
 function mergeRecordedPathPosition(recordedPath, position, policy) {
   const current = recordedPath ?? {
     firstOccurredAt: position.occurredAt ?? position.receivedAt,
@@ -387,6 +448,128 @@ function getRouteTrackingPathPoints(snapshot) {
     occurredAt: position.occurredAt,
     receivedAt: position.receivedAt,
   }));
+}
+
+function getRouteTrackingLineFeatures(snapshot) {
+  const normalized = normalizeRouteTrackingSnapshot(snapshot);
+  const roadMatchedPath = normalized.roadMatchedPath;
+  if (!roadMatchedPath) return getRawTrackingConnectorFeatures(normalized);
+
+  const features = [];
+  if (roadMatchedPath.matchedGeometry) {
+    features.push({
+      type: "Feature",
+      geometry: roadMatchedPath.matchedGeometry,
+      properties: { trackingType: "trackingTrail" },
+    });
+  }
+  if (roadMatchedPath.uncertainGeometry) {
+    features.push({
+      type: "Feature",
+      geometry: roadMatchedPath.uncertainGeometry,
+      properties: { trackingType: "trackingConnector" },
+    });
+  }
+
+  const lastMatchedTimestamp = Date.parse(roadMatchedPath.lastMatchedPosition?.occurredAt ?? "");
+  const lastInputTimestamp = Date.parse(roadMatchedPath.lastInputOccurredAt ?? "");
+  const tailStartTimestamp = Number.isFinite(lastMatchedTimestamp)
+    ? lastMatchedTimestamp
+    : lastInputTimestamp;
+  const gapThresholdMs = numberOrNull(normalized.policy?.delayedThresholdMs) ?? 180_000;
+  const tailPoints = getRouteTrackingPathPoints(normalized)
+    .map((point) => ({ ...point, timestamp: getPositionTimestamp(point) }))
+    .filter((point) => point.timestamp > (Number.isFinite(tailStartTimestamp) ? tailStartTimestamp : Number.POSITIVE_INFINITY));
+  const seed = roadMatchedPath.lastMatchedPosition
+    ? {
+        coordinates: [roadMatchedPath.lastMatchedPosition.longitude, roadMatchedPath.lastMatchedPosition.latitude],
+        timestamp: Number.isFinite(tailStartTimestamp)
+          ? tailStartTimestamp
+          : getPositionTimestamp(roadMatchedPath.lastMatchedPosition),
+      }
+    : null;
+  const tailSegments = [];
+  let currentSegment = seed ? [seed] : [];
+  for (const point of tailPoints) {
+    const previousPoint = currentSegment.at(-1);
+    if (previousPoint && point.timestamp - previousPoint.timestamp > gapThresholdMs) {
+      if (currentSegment.length >= 2) tailSegments.push(currentSegment);
+      currentSegment = [];
+    }
+    if (!currentSegment.at(-1) || !areCoordinatesEqual(currentSegment.at(-1).coordinates, point.coordinates)) {
+      currentSegment.push(point);
+    }
+  }
+  if (currentSegment.length >= 2) tailSegments.push(currentSegment);
+
+  for (const segment of tailSegments) {
+    const coordinates = segment.map((point) => point.coordinates);
+    if (coordinates.length < 2 || areCoordinatesEqual(coordinates[0], coordinates.at(-1))) continue;
+    features.push({
+      type: "Feature",
+      geometry: { coordinates, type: "LineString" },
+      properties: { trackingType: "trackingConnector" },
+    });
+  }
+  return features;
+}
+
+function getRawTrackingConnectorFeatures(snapshot) {
+  const gapThresholdMs = numberOrNull(snapshot.policy?.delayedThresholdMs) ?? 180_000;
+  const points = getRouteTrackingPathPoints(snapshot)
+    .map((point) => ({ ...point, timestamp: getPositionTimestamp(point) }));
+  const segments = [];
+  let currentSegment = [];
+  for (const point of points) {
+    const previousPoint = currentSegment.at(-1);
+    if (!previousPoint) {
+      currentSegment = [point];
+      continue;
+    }
+
+    const elapsedMs = point.timestamp - previousPoint.timestamp;
+    const distanceMeters = distanceBetweenCoordinatesMeters(previousPoint.coordinates, point.coordinates);
+    const hasGap = Number.isFinite(elapsedMs) && elapsedMs > gapThresholdMs;
+    const isImplausibleJump = elapsedMs > 0
+      && distanceMeters / (elapsedMs / 1000) > RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND;
+    if (hasGap || isImplausibleJump) {
+      if (currentSegment.length >= 2) segments.push(currentSegment);
+      currentSegment = [point];
+      continue;
+    }
+    if (distanceMeters < RAW_FALLBACK_MIN_MOVEMENT_METERS) continue;
+    currentSegment.push(point);
+  }
+  if (currentSegment.length >= 2) segments.push(currentSegment);
+
+  const coordinates = segments
+    .map((segment) => segment.map((point) => point.coordinates))
+    .filter((line) => line.length >= 2 && !areCoordinatesEqual(line[0], line.at(-1)));
+  return coordinates.length === 0
+    ? []
+    : [{
+        type: "Feature",
+        geometry: { coordinates, type: "MultiLineString" },
+        properties: { trackingType: "trackingConnector" },
+      }];
+}
+
+function areCoordinatesEqual(left, right) {
+  return Array.isArray(left)
+    && Array.isArray(right)
+    && Math.abs(left[0] - right[0]) < 0.0000001
+    && Math.abs(left[1] - right[1]) < 0.0000001;
+}
+
+function distanceBetweenCoordinatesMeters(left, right) {
+  if (!Array.isArray(left) || !Array.isArray(right)) return Number.POSITIVE_INFINITY;
+  const leftLatitude = toRadians(left[1]);
+  const rightLatitude = toRadians(right[1]);
+  const latitudeDelta = rightLatitude - leftLatitude;
+  const longitudeDelta = toRadians(right[0] - left[0]);
+  const halfChord = Math.sin(latitudeDelta / 2) ** 2
+    + Math.cos(leftLatitude) * Math.cos(rightLatitude) * Math.sin(longitudeDelta / 2) ** 2;
+  return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(halfChord)));
 }
 
 function getRouteTrackingPathSummary(snapshot) {
@@ -571,6 +754,7 @@ export {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingLineFeatures,
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,

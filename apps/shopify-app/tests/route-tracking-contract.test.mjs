@@ -5,6 +5,7 @@ import {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingLineFeatures,
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
@@ -95,6 +96,94 @@ test("recorded route geometry preserves more than 1000 compressed GPS points wit
     lastOccurredAt: samples.at(-1).occurredAt,
     sourcePointCount: 1_500,
   });
+});
+
+test("road-matched tracking renders only open solid and dashed line segments", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: {
+      firstOccurredAt: "2026-07-21T00:00:00.000Z",
+      geometry: {
+        coordinates: [[127, 37.5], [127.001, 37.501], [127.002, 37.502], [127.003, 37.503]],
+        type: "LineString",
+      },
+      geometryPointCount: 4,
+      lastOccurredAt: "2026-07-21T00:03:00.000Z",
+      lastReceivedAt: "2026-07-21T00:03:01.000Z",
+      samples: [0, 1, 2, 3].map((index) => ({
+        driverId: "driver-1",
+        eventId: `position-${index}`,
+        occurredAt: `2026-07-21T00:0${index}:00.000Z`,
+        receivedAt: `2026-07-21T00:0${index}:01.000Z`,
+      })),
+      schemaVersion: "route_tracking_geometry.v1",
+      sourcePointCount: 4,
+    },
+    roadMatchedPath: {
+      coverage: "korea",
+      inputPointCount: 3,
+      lastInputOccurredAt: "2026-07-21T00:03:00.000Z",
+      lastMatchedPosition: {
+        latitude: 37.502,
+        longitude: 127.002,
+        occurredAt: "2026-07-21T00:02:00.000Z",
+      },
+      matchedGeometry: {
+        coordinates: [[[127, 37.5], [127.0005, 37.5005], [127.002, 37.502]]],
+        type: "MultiLineString",
+      },
+      matchedPointCount: 3,
+      schemaVersion: "route_tracking_road_match.v1",
+      uncertainGeometry: {
+        coordinates: [[[127.002, 37.502], [127.0022, 37.5022]]],
+        type: "MultiLineString",
+      },
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingTrail",
+    "trackingConnector",
+    "trackingConnector",
+  ]);
+  assert.equal(features.some((feature) => feature.geometry.type === "Point"), false);
+  assert.deepEqual(features.at(-1).geometry.coordinates, [
+    [127.002, 37.502],
+    [127.003, 37.503],
+  ]);
+  assert.notDeepEqual(
+    features.at(-1).geometry.coordinates.at(-1),
+    features.at(-1).geometry.coordinates[0],
+  );
+});
+
+test("raw GPS remains visible only as a filtered dashed path while road matching is unavailable", () => {
+  const samples = [0, 1, 2, 3].map((index) => ({
+    driverId: "driver-1",
+    eventId: `raw-${index}`,
+    occurredAt: `2026-07-21T00:0${index}:00.000Z`,
+    receivedAt: `2026-07-21T00:0${index}:01.000Z`,
+  }));
+  const features = getRouteTrackingLineFeatures({
+    policy,
+    recordedPath: {
+      geometry: {
+        coordinates: [[127, 37.5], [127.00001, 37.50001], [127.001, 37.501], [127.002, 37.502]],
+        type: "LineString",
+      },
+      samples,
+      sourcePointCount: 4,
+    },
+  });
+
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingConnector"]);
+  assert.equal(features.some((feature) => feature.geometry.type === "Point"), false);
+  assert.deepEqual(features[0].geometry.coordinates, [[
+    [127, 37.5],
+    [127.001, 37.501],
+    [127.002, 37.502],
+  ]]);
 });
 
 test("live GPS extends the server recorded path without dropping past positions", () => {
