@@ -8,6 +8,8 @@ import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../feat
 import { getInventoryPrintTextLineCount } from "../features/delivery/inventory-print";
 import { getServiceErrorNotice } from "../features/service-errors";
 
+export const meta = ({ data }) => [{ title: data?.inventory?.name ?? "Inventory" }];
+
 const pageStyle = {
   boxSizing: "border-box",
   display: "grid",
@@ -262,7 +264,7 @@ const orderViewPriceCellStyle = {
   ...orderViewCellStyle,
   alignContent: "start",
   display: "grid",
-  gap: "3px",
+  whiteSpace: "nowrap",
 };
 
 const orderViewPaymentPillBaseStyle = {
@@ -279,9 +281,8 @@ const orderViewPhoneLineStyle = {
   color: "#6b7280",
   fontSize: "10px",
   lineHeight: "14px",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
+  overflowWrap: "anywhere",
+  whiteSpace: "normal",
 };
 
 const orderViewCustomerCellStyle = {
@@ -290,16 +291,27 @@ const orderViewCustomerCellStyle = {
   gap: "2px",
 };
 
-const orderViewNoteStyle = {
+const orderViewDetailsStyle = {
   alignItems: "start",
   background: "#f8f8f8",
   borderBottom: "1px solid #e5e7eb",
   display: "grid",
   fontSize: "11px",
-  gap: "8px",
-  gridTemplateColumns: "92px minmax(0, 1fr)",
+  gap: "10px",
+  gridTemplateColumns: "max-content minmax(0, 1fr)",
   lineHeight: "17px",
-  padding: "7px 10px",
+  padding: "10px",
+};
+
+const orderViewNoteStyle = {
+  display: "grid",
+  gap: "3px",
+  minWidth: 0,
+};
+
+const orderViewNoteFullWidthStyle = {
+  ...orderViewNoteStyle,
+  gridColumn: "1 / -1",
 };
 
 const orderViewNoteLabelStyle = {
@@ -529,12 +541,19 @@ const PRINT_CONTENT_HEIGHT_MM = PRINT_PAGE_HEIGHT_MM - PRINT_PAGE_MARGIN_MM * 2;
 const CSS_PX_PER_MM = 96 / 25.4;
 const PRINT_ORDER_LIST_GAP_PX = 8 * CSS_PX_PER_MM;
 const PRINT_ORDER_HEADER_HEIGHT_PX = 16 + 3 * CSS_PX_PER_MM + 2;
-const PRINT_ORDER_ROW_HEIGHT_PX = 8 * CSS_PX_PER_MM + 53 + 2;
+const PRINT_ORDER_ROW_VERTICAL_PADDING_PX = 8 * CSS_PX_PER_MM;
+const PRINT_ORDER_ROW_BASE_CONTENT_HEIGHT_PX = 53;
+const PRINT_ORDER_ROW_BORDER_PX = 2;
+const PRINT_ORDER_CUSTOMER_LINE_HEIGHT_PX = 17;
+const PRINT_ORDER_CUSTOMER_GAP_PX = 1 * CSS_PX_PER_MM;
+const PRINT_ORDER_CUSTOMER_TEXT_UNITS_PER_LINE = 14;
 const PRINT_ORDER_ITEMS_PADDING_PX = 7 * CSS_PX_PER_MM;
 const PRINT_ORDER_ITEM_LINE_HEIGHT_PX = 17;
 const PRINT_ORDER_ITEM_GAP_PX = 1 * CSS_PX_PER_MM;
-const PRINT_ORDER_NOTE_PADDING_PX = 6 * CSS_PX_PER_MM;
+const PRINT_ORDER_DETAILS_PADDING_PX = 6 * CSS_PX_PER_MM;
+const PRINT_ORDER_DETAILS_PAYMENT_HEIGHT_PX = 18;
 const PRINT_ORDER_NOTE_LABEL_HEIGHT_PX = 16;
+const PRINT_ORDER_NOTE_GAP_PX = 1 * CSS_PX_PER_MM;
 const PRINT_ORDER_NOTE_LINE_HEIGHT_PX = 17;
 const PRINT_ORDER_BREAK_SAFETY_PX = 12;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
@@ -555,7 +574,7 @@ const printCss = `
   .inventory-detail-page { box-sizing: border-box !important; display: block !important; margin: 0 !important; max-width: none !important; min-height: 0 !important; min-width: 0 !important; padding: 0 !important; width: 100% !important; }
   .inventory-detail-sheet { box-sizing: border-box !important; font-size: 13px !important; max-width: none !important; min-height: 0 !important; min-width: 0 !important; width: 100% !important; }
   .inventory-detail-history { display: none !important; }
-  .inventory-detail-panel { border: 0 !important; border-radius: 0 !important; }
+  .inventory-detail-panel { border: 0 !important; border-radius: 0 !important; overflow: visible !important; }
   .inventory-detail-table-wrap { overflow: visible !important; }
   .inventory-detail-table { font-size: 13px !important; width: 100% !important; }
   .inventory-detail-table th, .inventory-detail-table td { line-height: 17px !important; padding: 5px 6px !important; }
@@ -573,13 +592,14 @@ const printCss = `
   .inventory-detail-order-row { border-bottom: 1px solid #e5e7eb !important; font-size: 12px !important; line-height: 17px !important; padding: 4mm 0 !important; }
   .inventory-detail-order-address { line-height: 17px !important; max-height: 53px !important; overflow: hidden !important; }
   .inventory-detail-order-address > span { display: block !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
-  .inventory-detail-order-price { display: grid !important; gap: 1mm !important; justify-items: end !important; text-align: right !important; }
+  .inventory-detail-order-price { display: grid !important; justify-items: end !important; text-align: right !important; white-space: nowrap !important; }
   .inventory-detail-order-payment { font-size: 12px !important; line-height: 16px !important; padding: 0 2mm !important; }
-  .inventory-detail-order-customer { display: grid !important; gap: 1mm !important; line-height: 17px !important; max-height: 35px !important; overflow: hidden !important; }
-  .inventory-detail-order-note { align-items: start !important; background: transparent !important; break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 2mm !important; grid-template-columns: 24mm minmax(0, 1fr) !important; line-height: 17px !important; padding: 3mm 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-customer { display: grid !important; gap: 1mm !important; line-height: 17px !important; overflow: visible !important; }
+  .inventory-detail-order-details { align-items: start !important; background: transparent !important; break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 3mm !important; grid-template-columns: max-content minmax(0, 1fr) !important; line-height: 17px !important; padding: 3mm 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-note { display: grid !important; gap: 1mm !important; min-width: 0 !important; }
   .inventory-detail-order-note-text { overflow-wrap: anywhere !important; white-space: pre-wrap !important; }
   .inventory-detail-order-items { break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 3mm 0 4mm !important; page-break-inside: avoid !important; }
-  .inventory-detail-order-phone { font-size: 12px !important; line-height: 17px !important; white-space: nowrap !important; }
+  .inventory-detail-order-phone { font-size: 12px !important; line-height: 17px !important; overflow: visible !important; overflow-wrap: anywhere !important; white-space: normal !important; }
   .inventory-detail-order-items > div { break-inside: avoid !important; page-break-inside: avoid !important; }
   .inventory-detail-order-meta { break-inside: avoid !important; page-break-inside: avoid !important; }
   @page { size: A4 portrait; margin: 10mm; }
@@ -593,17 +613,28 @@ function getPrintContentHeightPx() {
 
 function getPrintOrderHeightPx(card) {
   const itemLines = Math.max(1, card.querySelectorAll(".inventory-detail-order-items > div").length);
+  const customer = card.querySelector(".inventory-detail-order-customer");
+  const customerLines = Number.parseInt(customer?.dataset.printLineCount ?? "0", 10) || 0;
+  const customerHeight = customerLines * PRINT_ORDER_CUSTOMER_LINE_HEIGHT_PX +
+    Math.max(0, customerLines - 1) * PRINT_ORDER_CUSTOMER_GAP_PX;
+  const rowHeight = PRINT_ORDER_ROW_VERTICAL_PADDING_PX +
+    Math.max(PRINT_ORDER_ROW_BASE_CONTENT_HEIGHT_PX, customerHeight) +
+    PRINT_ORDER_ROW_BORDER_PX;
+  const details = card.querySelector(".inventory-detail-order-details");
   const note = card.querySelector(".inventory-detail-order-note");
   const noteLines = Number.parseInt(note?.dataset.printLineCount ?? "0", 10) || 0;
   const noteHeight = note
-    ? PRINT_ORDER_NOTE_PADDING_PX + Math.max(PRINT_ORDER_NOTE_LABEL_HEIGHT_PX, noteLines * PRINT_ORDER_NOTE_LINE_HEIGHT_PX)
+    ? PRINT_ORDER_NOTE_LABEL_HEIGHT_PX + PRINT_ORDER_NOTE_GAP_PX + noteLines * PRINT_ORDER_NOTE_LINE_HEIGHT_PX
+    : 0;
+  const detailsHeight = details
+    ? PRINT_ORDER_DETAILS_PADDING_PX + Math.max(PRINT_ORDER_DETAILS_PAYMENT_HEIGHT_PX, noteHeight)
     : 0;
   return Math.ceil(
-    PRINT_ORDER_ROW_HEIGHT_PX +
-    noteHeight +
+    rowHeight +
     PRINT_ORDER_ITEMS_PADDING_PX +
     itemLines * PRINT_ORDER_ITEM_LINE_HEIGHT_PX +
     Math.max(0, itemLines - 1) * PRINT_ORDER_ITEM_GAP_PX +
+    detailsHeight +
     PRINT_ORDER_BREAK_SAFETY_PX,
   );
 }
@@ -784,7 +815,7 @@ function formatInventoryOrderLineItem(item) {
   const name = textOrDisplay(item?.name ?? item?.title ?? item?.productTitle, "Item");
   const options = formatInventoryOrderOptions(item?.options) || textOrUndefined(item?.variantTitle);
   const quantity = Math.abs(Number(item?.quantityDelta ?? item?.quantity ?? item?.currentQuantity) || 1);
-  return `${quantity} EA · ${options ? `${name} (${options})` : name}`;
+  return `${quantity} EA ${options ? `${name} (${options})` : name}`;
 }
 
 function formatInventoryOrderOptions(options) {
@@ -1093,30 +1124,41 @@ export default function InventoryDetailPage() {
                           <div style={orderViewCenterCellStyle}>{order.eta}</div>
                           <div style={orderViewCenterCellStyle}>{order.driveTime}</div>
                           <div style={orderViewCenterCellStyle}>{order.stopTime}</div>
-                          <div className="inventory-detail-order-customer" style={orderViewCustomerCellStyle}>
+                          <div
+                            className="inventory-detail-order-customer"
+                            data-print-line-count={getInventoryPrintTextLineCount(
+                              [order.customer, order.phone].filter(Boolean).join("\n"),
+                              PRINT_ORDER_CUSTOMER_TEXT_UNITS_PER_LINE,
+                            )}
+                            style={orderViewCustomerCellStyle}
+                          >
                             <span>{order.customer}</span>
-                            {order.phone ? <span className="inventory-detail-order-phone" style={orderViewPhoneLineStyle}>Shipping phone: {order.phone}</span> : null}
+                            {order.phone ? <span className="inventory-detail-order-phone" style={orderViewPhoneLineStyle}>{order.phone}</span> : null}
                           </div>
                           <div className="inventory-detail-order-price" style={orderViewPriceCellStyle}>
                             <span>{order.price}</span>
-                            {order.payment !== "-" ? <span className="inventory-detail-order-payment" style={getOrderViewPaymentPillStyle(order.payment)}>{order.payment}</span> : null}
                           </div>
                         </div>
-                        {order.customerNote ? (
-                          <div
-                            className="inventory-detail-order-note"
-                            data-print-line-count={getInventoryPrintTextLineCount(order.customerNote)}
-                            style={orderViewNoteStyle}
-                          >
-                            <span style={orderViewNoteLabelStyle}>Customer Note</span>
-                            <span className="inventory-detail-order-note-text" style={orderViewNoteTextStyle}>{order.customerNote}</span>
-                          </div>
-                        ) : null}
                         <div className="inventory-detail-order-items" style={orderViewItemsCellStyle}>
                           {(order.items.length > 0 ? order.items : ["No items"]).map((item, itemIndex) => (
                             <div key={`${order.orderId}-${itemIndex}`} style={orderViewItemLineStyle}>{item}</div>
                           ))}
                         </div>
+                        {order.payment !== "-" || order.customerNote ? (
+                          <div className="inventory-detail-order-details" style={orderViewDetailsStyle}>
+                            {order.payment !== "-" ? <span className="inventory-detail-order-payment" style={getOrderViewPaymentPillStyle(order.payment)}>{order.payment}</span> : null}
+                            {order.customerNote ? (
+                              <div
+                                className="inventory-detail-order-note"
+                                data-print-line-count={getInventoryPrintTextLineCount(order.customerNote)}
+                                style={order.payment !== "-" ? orderViewNoteStyle : orderViewNoteFullWidthStyle}
+                              >
+                                <span style={orderViewNoteLabelStyle}>Customer Note</span>
+                                <span className="inventory-detail-order-note-text" style={orderViewNoteTextStyle}>{order.customerNote}</span>
+                              </div>
+                            ) : null}
+                          </div>
+                        ) : null}
                       </article>
                     ))}
                   </div>
