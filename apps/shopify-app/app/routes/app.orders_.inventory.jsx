@@ -195,7 +195,7 @@ const orderViewColumns = "70px minmax(190px, 260px) 52px 70px 68px minmax(112px,
 
 const orderViewOrdersListStyle = {
   display: "grid",
-  gap: "14px",
+  gap: "10px",
   width: "100%",
 };
 
@@ -308,7 +308,7 @@ const orderViewDetailsStyle = {
   gap: "10px",
   gridTemplateColumns: "max-content minmax(0, 1fr)",
   lineHeight: "17px",
-  padding: "10px",
+  padding: "8px",
 };
 
 const orderViewNoteStyle = {
@@ -336,7 +336,7 @@ const orderViewNoteTextStyle = {
 const orderViewItemsCellStyle = {
   display: "grid",
   gap: "2px",
-  padding: "8px 0 10px",
+  padding: "6px 0 8px",
 };
 
 const orderViewItemLineStyle = {
@@ -547,18 +547,19 @@ const PRINT_PAGE_HEIGHT_MM = 297;
 const PRINT_PAGE_MARGIN_MM = 10;
 const PRINT_CONTENT_HEIGHT_MM = PRINT_PAGE_HEIGHT_MM - PRINT_PAGE_MARGIN_MM * 2;
 const CSS_PX_PER_MM = 96 / 25.4;
-const PRINT_ORDER_LIST_GAP_PX = 8 * CSS_PX_PER_MM;
+const PRINT_ORDER_SECTION_GAP_MM = 4;
+const PRINT_ORDER_LIST_GAP_PX = PRINT_ORDER_SECTION_GAP_MM * CSS_PX_PER_MM;
 const PRINT_ORDER_HEADER_HEIGHT_PX = 16 + 3 * CSS_PX_PER_MM + 2;
-const PRINT_ORDER_ROW_VERTICAL_PADDING_PX = 8 * CSS_PX_PER_MM;
+const PRINT_ORDER_ROW_VERTICAL_PADDING_PX = 6 * CSS_PX_PER_MM;
 const PRINT_ORDER_ROW_BASE_CONTENT_HEIGHT_PX = 53;
 const PRINT_ORDER_ROW_BORDER_PX = 2;
 const PRINT_ORDER_CUSTOMER_LINE_HEIGHT_PX = 17;
 const PRINT_ORDER_CUSTOMER_GAP_PX = 1 * CSS_PX_PER_MM;
 const PRINT_ORDER_CUSTOMER_TEXT_UNITS_PER_LINE = 14;
-const PRINT_ORDER_ITEMS_PADDING_PX = 7 * CSS_PX_PER_MM;
+const PRINT_ORDER_ITEMS_PADDING_PX = 5 * CSS_PX_PER_MM;
 const PRINT_ORDER_ITEM_LINE_HEIGHT_PX = 17;
 const PRINT_ORDER_ITEM_GAP_PX = 1 * CSS_PX_PER_MM;
-const PRINT_ORDER_DETAILS_PADDING_PX = 6 * CSS_PX_PER_MM;
+const PRINT_ORDER_DETAILS_PADDING_PX = 4 * CSS_PX_PER_MM;
 const PRINT_ORDER_DETAILS_PAYMENT_HEIGHT_PX = 18;
 const PRINT_ORDER_NOTE_LABEL_HEIGHT_PX = 16;
 const PRINT_ORDER_NOTE_GAP_PX = 1 * CSS_PX_PER_MM;
@@ -593,21 +594,21 @@ const printCss = `
   .inventory-detail-row-header { position: static !important; }
   .inventory-detail-orders-list { display: block !important; width: 100% !important; }
   .inventory-detail-orders-head, .inventory-detail-order-row { column-gap: 1mm !important; display: grid !important; grid-template-columns: 17mm minmax(0, 1fr) 9mm 24mm 23mm 20mm 19mm !important; }
-  .inventory-detail-orders-head { border-bottom: ${strongDividerStyle} !important; font-size: 12px !important; font-weight: 750 !important; line-height: 16px !important; margin-bottom: 8mm !important; padding: 0 0 3mm !important; }
+  .inventory-detail-orders-head { border-bottom: ${strongDividerStyle} !important; font-size: 12px !important; font-weight: 750 !important; line-height: 16px !important; margin-bottom: ${PRINT_ORDER_SECTION_GAP_MM}mm !important; padding: 0 0 3mm !important; }
   .inventory-detail-orders-head > span { white-space: nowrap !important; }
   .inventory-detail-orders-head > span:last-child { text-align: right !important; }
-  .inventory-detail-order-card { -webkit-column-break-inside: avoid !important; border-top: ${strongDividerStyle} !important; break-inside: avoid !important; break-inside: avoid-page !important; display: block !important; gap: 0 !important; margin: 0 0 8mm !important; padding: 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-card { -webkit-column-break-inside: avoid !important; border-top: ${strongDividerStyle} !important; break-inside: avoid !important; break-inside: avoid-page !important; display: block !important; gap: 0 !important; margin: 0 0 ${PRINT_ORDER_SECTION_GAP_MM}mm !important; padding: 0 !important; page-break-inside: avoid !important; }
   .inventory-detail-order-card:first-of-type { border-top: 0 !important; }
-  .inventory-detail-order-row { border-bottom: ${subtleDividerStyle} !important; font-size: 12px !important; line-height: 17px !important; padding: 4mm 0 !important; }
+  .inventory-detail-order-row { border-bottom: ${subtleDividerStyle} !important; font-size: 12px !important; line-height: 17px !important; padding: 3mm 0 !important; }
   .inventory-detail-order-address { line-height: 17px !important; max-height: 53px !important; overflow: hidden !important; }
   .inventory-detail-order-address > span { display: block !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
   .inventory-detail-order-price { display: grid !important; justify-items: end !important; text-align: right !important; white-space: nowrap !important; }
   .inventory-detail-order-payment { font-size: 12px !important; line-height: 16px !important; padding: 0 2mm !important; }
   .inventory-detail-order-customer { display: grid !important; gap: 1mm !important; line-height: 17px !important; overflow: visible !important; }
-  .inventory-detail-order-details { align-items: start !important; background: transparent !important; border-bottom: 0 !important; break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 3mm !important; grid-template-columns: max-content minmax(0, 1fr) !important; line-height: 17px !important; padding: 3mm 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-details { align-items: start !important; background: transparent !important; border-bottom: 0 !important; break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 3mm !important; grid-template-columns: max-content minmax(0, 1fr) !important; line-height: 17px !important; padding: 2mm 0 !important; page-break-inside: avoid !important; }
   .inventory-detail-order-note { display: grid !important; gap: 1mm !important; min-width: 0 !important; }
   .inventory-detail-order-note-text { overflow-wrap: anywhere !important; white-space: pre-wrap !important; }
-  .inventory-detail-order-items { break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 3mm 0 4mm !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-items { break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 2mm 0 3mm !important; page-break-inside: avoid !important; }
   .inventory-detail-order-phone { font-size: 12px !important; line-height: 17px !important; overflow: visible !important; overflow-wrap: anywhere !important; white-space: normal !important; }
   .inventory-detail-order-items > div { break-inside: avoid !important; page-break-inside: avoid !important; }
   .inventory-detail-order-meta { break-inside: avoid !important; page-break-inside: avoid !important; }
