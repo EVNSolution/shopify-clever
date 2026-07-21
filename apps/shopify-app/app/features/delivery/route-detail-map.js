@@ -1,5 +1,6 @@
 import { addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers";
 import { numberOrUndefined, textOrUndefined } from "./route-helpers";
+import { getRouteTrackingPathPoints } from "./route-tracking";
 
 const DEFAULT_CENTER = [-79.3832, 43.6532];
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
@@ -195,7 +196,7 @@ function softenRouteColor(routeColor) {
   return `rgb(${mix(color.slice(0, 2))}, ${mix(color.slice(2, 4))}, ${mix(color.slice(4, 6))})`;
 }
 
-function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900") {
+function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", options = {}) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
   const routeLineData = buildRouteDetailRouteLineData(routeLines, routeColor);
@@ -205,10 +206,14 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900") {
   }
 
   const existingSource = map.getSource?.(ROUTE_DETAIL_ROUTE_SOURCE_ID);
+  const routeLineOpacity = options.isTrackingReference ? 0.22 : 0.78;
+  const routeLineWidth = options.isTrackingReference ? 1.5 : 2.5;
   if (existingSource?.setData) {
     existingSource.setData(routeLineData);
     if (map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) {
       map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", ["coalesce", ["get", "routeColor"], routeColor]);
+      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-opacity", routeLineOpacity);
+      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-width", routeLineWidth);
     }
     return true;
   }
@@ -227,23 +232,25 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900") {
     },
     paint: {
       "line-color": ["coalesce", ["get", "routeColor"], routeColor],
-      "line-opacity": 0.78,
-      "line-width": 2.5,
+      "line-opacity": routeLineOpacity,
+      "line-width": routeLineWidth,
     },
   });
   return true;
 }
 
 function buildRouteDetailLiveTrackingData(trackingSnapshot) {
-  const recentPoints = (Array.isArray(trackingSnapshot?.recentPositions) ? trackingSnapshot.recentPositions : [])
-    .map((position) => ({
-      coordinates: normalizeLngLat(position?.latitude, position?.longitude),
+  const recentPoints = getRouteTrackingPathPoints(trackingSnapshot)
+    .map((position, index) => ({
+      coordinates: normalizeLngLatPair(position.coordinates),
+      eventId: textOrUndefined(position.eventId) ?? `recorded-position-${index + 1}`,
+      occurredAt: textOrUndefined(position.occurredAt),
       occurredAtMs: Date.parse(position?.occurredAt ?? position?.receivedAt ?? ""),
+      receivedAt: textOrUndefined(position.receivedAt),
+      sequence: index + 1,
     }))
     .filter((point) => point.coordinates);
-  const recentCoordinates = recentPoints
-    .map((point) => point.coordinates)
-    .filter(Boolean);
+  const recentCoordinates = recentPoints.map((point) => point.coordinates);
   const latestCoordinates = normalizeLngLat(
     trackingSnapshot?.latestPosition?.latitude,
     trackingSnapshot?.latestPosition?.longitude,
@@ -270,18 +277,31 @@ function buildRouteDetailLiveTrackingData(trackingSnapshot) {
       properties: { trackingType: "trackingTrail" },
     });
   }
-  for (const coordinates of recentCoordinates.slice(0, -1)) {
+  for (const point of recentPoints.slice(0, -1)) {
     features.push({
       type: "Feature",
-      geometry: { type: "Point", coordinates },
-      properties: { trackingType: "trackingHistoryPoint" },
+      geometry: { type: "Point", coordinates: point.coordinates },
+      properties: {
+        eventId: point.eventId,
+        occurredAt: point.occurredAt ?? "",
+        receivedAt: point.receivedAt ?? "",
+        sequence: point.sequence,
+        trackingType: "trackingHistoryPoint",
+      },
     });
   }
   if (latestCoordinates) {
+    const latestPoint = recentPoints.at(-1);
     features.push({
       type: "Feature",
       geometry: { type: "Point", coordinates: latestCoordinates },
-      properties: { trackingType: "trackingPosition" },
+      properties: {
+        eventId: latestPoint?.eventId ?? "latest-position",
+        occurredAt: latestPoint?.occurredAt ?? trackingSnapshot?.latestPosition?.occurredAt ?? "",
+        receivedAt: latestPoint?.receivedAt ?? trackingSnapshot?.latestPosition?.receivedAt ?? "",
+        sequence: latestPoint?.sequence ?? recentPoints.length,
+        trackingType: "trackingPosition",
+      },
     });
   }
 
@@ -311,9 +331,8 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": "#7c3aed",
-        "line-dasharray": [1.5, 1.5],
-        "line-opacity": 0.72,
-        "line-width": 3.5,
+        "line-opacity": 0.92,
+        "line-width": 4.5,
       },
     }, beforeMarkerLayerId);
   }
@@ -325,8 +344,8 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       filter: ["==", ["get", "trackingType"], "trackingHistoryPoint"],
       paint: {
         "circle-color": "#7c3aed",
-        "circle-opacity": 0.62,
-        "circle-radius": 2.5,
+        "circle-opacity": 0.82,
+        "circle-radius": 3,
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 0.75,
       },
@@ -349,6 +368,13 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
   map.moveLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID);
 
   return true;
+}
+
+function getRouteTrackingFitLocations(trackingSnapshot) {
+  return getRouteTrackingPathPoints(trackingSnapshot).map((point) => ({
+    coordinates: point.coordinates,
+    hasCoordinates: true,
+  }));
 }
 
 function removeRouteEditPolygon(map) {
@@ -839,6 +865,9 @@ function getRouteStopFromMapFeature(feature, routeStops) {
 }
 
 export {
+  ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
+  buildRouteDetailLiveTrackingData,
   DEFAULT_CENTER,
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
@@ -848,6 +877,7 @@ export {
   fitRouteStopAndSnappedPoint,
   getRouteMapCenter,
   getRouteMapLocations,
+  getRouteTrackingFitLocations,
   getRouteStopFromMapFeature,
   isLngLatInPolygon,
   normalizeLngLat,
