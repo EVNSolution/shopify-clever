@@ -152,20 +152,23 @@ const hiddenStyle = {
   display: "none",
 };
 
+const strongDividerStyle = "1px solid var(--app-divider-strong)";
+const subtleDividerStyle = "1px solid var(--app-divider-subtle)";
+
 const orderViewStyle = {
   display: "grid",
   gap: "8px",
 };
 
 const orderViewMetaStyle = {
-  border: "1px solid #e5e7eb",
+  border: subtleDividerStyle,
   display: "grid",
   fontSize: "11px",
   gridTemplateColumns: "repeat(6, minmax(0, 1fr))",
 };
 
 const orderViewMetaCellStyle = {
-  borderRight: "1px solid #e5e7eb",
+  borderRight: subtleDividerStyle,
   display: "grid",
   gap: "2px",
   minWidth: 0,
@@ -198,7 +201,7 @@ const orderViewOrdersListStyle = {
 
 const orderViewHeaderRowStyle = {
   alignItems: "start",
-  borderBottom: "1px solid #d1d5db",
+  borderBottom: strongDividerStyle,
   color: "#374151",
   display: "grid",
   fontSize: "11px",
@@ -215,16 +218,21 @@ const orderViewHeaderCellStyle = {
 };
 
 const orderViewOrderCardStyle = {
-  borderTop: "1px solid #d1d5db",
+  borderTop: strongDividerStyle,
   breakInside: "avoid",
   display: "grid",
   gap: 0,
   pageBreakInside: "avoid",
 };
 
+const firstOrderViewOrderCardStyle = {
+  ...orderViewOrderCardStyle,
+  borderTop: 0,
+};
+
 const orderViewOrderRowStyle = {
   alignItems: "start",
-  borderBottom: "1px solid #e5e7eb",
+  borderBottom: subtleDividerStyle,
   display: "grid",
   fontSize: "11px",
   gap: "0 10px",
@@ -294,7 +302,7 @@ const orderViewCustomerCellStyle = {
 const orderViewDetailsStyle = {
   alignItems: "start",
   background: "#f8f8f8",
-  borderBottom: "1px solid #e5e7eb",
+  borderBottom: 0,
   display: "grid",
   fontSize: "11px",
   gap: "10px",
@@ -585,17 +593,18 @@ const printCss = `
   .inventory-detail-row-header { position: static !important; }
   .inventory-detail-orders-list { display: block !important; width: 100% !important; }
   .inventory-detail-orders-head, .inventory-detail-order-row { column-gap: 1mm !important; display: grid !important; grid-template-columns: 17mm minmax(0, 1fr) 9mm 24mm 23mm 20mm 19mm !important; }
-  .inventory-detail-orders-head { border-bottom: 1px solid #111 !important; font-size: 12px !important; font-weight: 750 !important; line-height: 16px !important; margin-bottom: 8mm !important; padding: 0 0 3mm !important; }
+  .inventory-detail-orders-head { border-bottom: ${strongDividerStyle} !important; font-size: 12px !important; font-weight: 750 !important; line-height: 16px !important; margin-bottom: 8mm !important; padding: 0 0 3mm !important; }
   .inventory-detail-orders-head > span { white-space: nowrap !important; }
   .inventory-detail-orders-head > span:last-child { text-align: right !important; }
-  .inventory-detail-order-card { -webkit-column-break-inside: avoid !important; border-top: 1px solid #c7c7c7 !important; break-inside: avoid !important; break-inside: avoid-page !important; display: block !important; gap: 0 !important; margin: 0 0 8mm !important; padding: 0 !important; page-break-inside: avoid !important; }
-  .inventory-detail-order-row { border-bottom: 1px solid #e5e7eb !important; font-size: 12px !important; line-height: 17px !important; padding: 4mm 0 !important; }
+  .inventory-detail-order-card { -webkit-column-break-inside: avoid !important; border-top: ${strongDividerStyle} !important; break-inside: avoid !important; break-inside: avoid-page !important; display: block !important; gap: 0 !important; margin: 0 0 8mm !important; padding: 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-card:first-of-type { border-top: 0 !important; }
+  .inventory-detail-order-row { border-bottom: ${subtleDividerStyle} !important; font-size: 12px !important; line-height: 17px !important; padding: 4mm 0 !important; }
   .inventory-detail-order-address { line-height: 17px !important; max-height: 53px !important; overflow: hidden !important; }
   .inventory-detail-order-address > span { display: block !important; overflow: hidden !important; text-overflow: ellipsis !important; white-space: nowrap !important; }
   .inventory-detail-order-price { display: grid !important; justify-items: end !important; text-align: right !important; white-space: nowrap !important; }
   .inventory-detail-order-payment { font-size: 12px !important; line-height: 16px !important; padding: 0 2mm !important; }
   .inventory-detail-order-customer { display: grid !important; gap: 1mm !important; line-height: 17px !important; overflow: visible !important; }
-  .inventory-detail-order-details { align-items: start !important; background: transparent !important; break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 3mm !important; grid-template-columns: max-content minmax(0, 1fr) !important; line-height: 17px !important; padding: 3mm 0 !important; page-break-inside: avoid !important; }
+  .inventory-detail-order-details { align-items: start !important; background: transparent !important; border-bottom: 0 !important; break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 3mm !important; grid-template-columns: max-content minmax(0, 1fr) !important; line-height: 17px !important; padding: 3mm 0 !important; page-break-inside: avoid !important; }
   .inventory-detail-order-note { display: grid !important; gap: 1mm !important; min-width: 0 !important; }
   .inventory-detail-order-note-text { overflow-wrap: anywhere !important; white-space: pre-wrap !important; }
   .inventory-detail-order-items { break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 3mm 0 4mm !important; page-break-inside: avoid !important; }
@@ -1114,8 +1123,12 @@ export default function InventoryDetailPage() {
                       <span style={orderViewHeaderCellStyle}>Customer</span>
                       <span style={orderViewHeaderCellStyle}>Price</span>
                     </div>
-                    {orderViewRows.map((order) => (
-                      <article className="inventory-detail-order-card" key={order.orderId} style={orderViewOrderCardStyle}>
+                    {orderViewRows.map((order, orderIndex) => (
+                      <article
+                        className="inventory-detail-order-card"
+                        key={order.orderId}
+                        style={orderIndex === 0 ? firstOrderViewOrderCardStyle : orderViewOrderCardStyle}
+                      >
                         <div className="inventory-detail-order-row" style={orderViewOrderRowStyle}>
                           <div style={orderViewCellStyle}><strong>{order.orderId}</strong></div>
                           <div className="inventory-detail-order-address" style={orderViewAddressCellStyle}>
