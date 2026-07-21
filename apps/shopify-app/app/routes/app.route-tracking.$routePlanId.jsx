@@ -1,6 +1,3 @@
-import { useRouteError } from "react-router";
-import { boundary } from "@shopify/shopify-app-react-router/server";
-
 import { authenticate } from "../shopify.server";
 import {
   proxyDeliveryRouteTrackingSnapshot,
@@ -13,9 +10,3 @@ export const loader = async ({ request, params }) => {
   if (mode === "snapshot") return proxyDeliveryRouteTrackingSnapshot(request, params.routePlanId);
   return proxyDeliveryRouteTrackingStream(request, params.routePlanId);
 };
-
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
-
-export const headers = (headersArgs) => boundary.headers(headersArgs);
