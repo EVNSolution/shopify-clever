@@ -4,6 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
+import { mapCanonicalOrdersToOrderRows } from "../app/features/orders/canonical-orders.js";
 import { buildOrderTimelineDetails } from "../app/features/orders/orders-page.shared.js";
 
 const root = process.cwd();
@@ -585,11 +586,12 @@ test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop tim
 });
 
 
-test("Orders page creates grouped child routes from scoped planned orders", () => {
+test("Orders page creates a childless route group from scoped planned orders", () => {
   assert.match(ordersPageSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useRevalidator, useSearchParams \} from "react-router"/);
   assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-plans\.server"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*createDeliveryRouteGroup[\s\S]*generateDeliveryRouteGroupChildRoutes[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-groups\.server"/);
+  assert.match(ordersPageSource, /import \{[\s\S]*createDeliveryRouteGroup[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-groups\.server"/);
+  assert.doesNotMatch(ordersPageSource, /generateDeliveryRouteGroupChildRoutes/);
   assert.match(ordersPageSource, /import \{ buildRouteScopeFromOrders \} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-scope"/);
   assert.match(ordersPageSource, /export const action = async \(\{ request \}\) => \{/);
   assert.match(ordersPageSource, /const formData = await request\.formData\(\)/);
@@ -602,9 +604,8 @@ test("Orders page creates grouped child routes from scoped planned orders", () =
   assert.match(ordersPageSource, /routeName,/);
   assert.match(ordersPageSource, /routeScope,/);
   assert.match(ordersPageSource, /createDeliveryRouteGroup\(\s*request,\s*buildCreateRouteGroupPayload\(\{/s);
-  assert.match(ordersPageSource, /generateDeliveryRouteGroupChildRoutes\(\s*request,\s*routeGroup\.id,/s);
-  assert.match(ordersPageSource, /const routePlan = getFirstRouteGroupRoutePlan\(generatedRouteGroup\)/);
-  assert.match(ordersPageSource, /return \{ routePlan, routeGroup: generatedRouteGroup, errors: \[\] \}/);
+  assert.match(ordersPageSource, /const routePlan = getFirstRouteGroupRoutePlan\(routeGroup\)/);
+  assert.match(ordersPageSource, /return \{ routePlan, routeGroup, errors: \[\] \}/);
   assert.match(ordersPageSource, /const routePlanFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /const shopify = useAppBridge\(\)/);
   assert.match(ordersPageSource, /const navigate = useNavigate\(\)/);
@@ -643,6 +644,7 @@ test("Orders page adds planned orders to an existing route group first child", (
   assert.match(ordersPageSource, /if \(intent === "addOrdersToRouteGroup"\) \{/);
   assert.match(ordersPageSource, /addOrderIds,/);
   assert.match(ordersPageSource, /expectedUpdatedAt/);
+  assert.match(ordersPageSource, /if \(!draftPayload\) return \{ routeGroup: addResult\.routeGroup, errors: \[\] \}/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "addOrdersToRouteGroup"\)/);
   assert.match(ordersPageSource, /formData\.set\("routeGroupId", selectedRouteGroup\.id\)/);
   assert.match(ordersPageSource, /const handleOpenAddRoutePreview = \(\) => \{/);
@@ -761,6 +763,24 @@ test("Orders loader merges delivery server planning state before background sync
   assert.match(ordersPageSource, /DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE/);
   assert.match(ordersPageSource, /INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token"/);
   assert.match(ordersPageSource, /error\?\.code === "UNAUTHORIZED"[\s\S]*error\?\.message === INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE/);
+});
+
+test("Orders preserve every server-owned route membership while keeping a primary route", () => {
+  const [order] = mapCanonicalOrdersToOrderRows([{
+    orderId: "order-1",
+    routePlanId: "route-live",
+    routeMemberships: [
+      { routePlanId: "route-live", status: "IN_PROGRESS" },
+      { routePlanId: "route-ready", status: "READY" },
+    ],
+    shopifyOrderGid: "gid://shopify/Order/1",
+  }]);
+
+  assert.equal(order.routePlanId, "route-live");
+  assert.deepEqual(order.routeMemberships, [
+    { routePlanId: "route-live", status: "IN_PROGRESS" },
+    { routePlanId: "route-ready", status: "READY" },
+  ]);
 });
 
 test("Orders page refreshes once with a Shopify id_token after a loader token auth error", () => {

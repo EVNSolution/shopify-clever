@@ -81,6 +81,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       readiness: textOrUndefined(order?.readiness),
       reviewReasons: Array.isArray(order?.reviewReasons) ? order.reviewReasons : [],
       planningStatus: textOrUndefined(order?.planningStatus),
+      routeMemberships: Array.isArray(order?.routeMemberships) ? order.routeMemberships : [],
       serviceType,
       ...(routePlanId ? { routePlanId } : {}),
       ...(routeStatus ? { routeStatus } : {}),

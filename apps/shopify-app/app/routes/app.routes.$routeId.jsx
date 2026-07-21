@@ -2065,6 +2065,7 @@ function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
     driveTimeLabel: ROUTE_EMPTY_LABEL,
     id: `routeGroup:${routeGroup.id}:routeIdx:1`,
     isCurrent: false,
+    isPreviewOnly: true,
     optimized: null,
     orderIds: routeStops.map((stop) => stop.orderId).filter(Boolean),
     routeIdx: 1,
@@ -2316,6 +2317,7 @@ function getRouteDraftOptimized(routeRow, includeExistingOptimized) {
 }
 
 function shouldIncludeRouteDraftRow(routeRow, includeEmptyTempRoutes) {
+  if (routeRow.isPreviewOnly) return false;
   if (includeEmptyTempRoutes) return true;
   return !(routeRow.tempId && !routeRow.routePlanId && routeRow.stops.length === 0);
 }
@@ -2632,7 +2634,8 @@ export default function RouteDetailPage() {
         totalWeightLabel: routeTotalWeight,
       },
     ];
-  const groupRouteRowsSource = routeGroupChildRows;
+  const hasMaterializedClientRoute = clientRouteRows.some((routeRow) => routeRow.isMaterializedDraft);
+  const groupRouteRowsSource = hasMaterializedClientRoute ? [] : routeGroupChildRows;
   const displayRouteRowsSource = isRouteGroupDetail ? groupRouteRowsSource : currentRouteRowsSource;
   const contextRouteRowsSource = isRouteGroupDetail
     ? groupRouteRowsSource
@@ -2677,13 +2680,18 @@ export default function RouteDetailPage() {
     ? getRouteSelectorEmptyMessage(activeRouteSelector.type, routeSelectorQuery, routeSelectorBaseOptions)
     : "";
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
+  const hasEditableRouteRows = contextTimelineRouteRows.some((routeRow) => !routeRow.isPreviewOnly);
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || clientRouteRows.length > 0
     || deletedRoutePlanIds.length > 0
     || Object.keys(routeLineEdits).length > 0
     || Object.keys(routePreviewByKey).length > 0
     || removedOrderIds.length > 0;
-  const canSaveRouteDraft = hasRouteAllocationDraft && !routeGroupActionBusy && !isRoutePolygonEditMode && !isRouteLineEditorOpen;
+  const canSaveRouteDraft = hasEditableRouteRows
+    && hasRouteAllocationDraft
+    && !routeGroupActionBusy
+    && !isRoutePolygonEditMode
+    && !isRouteLineEditorOpen;
   const routePolygonSourceStops = timelineRouteRows.length > 0
     ? timelineRouteRows.flatMap((routeRow) => routeRow.stops)
     : isRouteGroupDetail ? routeGroupStopsSource : [];
@@ -2691,7 +2699,7 @@ export default function RouteDetailPage() {
     ? routePolygonSourceStops.filter((stop) => stop.orderId && stop.hasCoordinates && isLngLatInPolygon(stop.coordinates, routePolygonPoints))
     : [];
   const polygonCandidateOrderIds = polygonCandidateStops.map((stop) => stop.orderId);
-  const canSaveRoutePolygon = polygonCandidateOrderIds.length > 0;
+  const canSaveRoutePolygon = hasEditableRouteRows && polygonCandidateOrderIds.length > 0;
   const polygonHighlightedOrderIds = useMemo(
     () => new Set(isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds),
     [isPolygonTargetPickerOpen, polygonCandidateOrderIds, polygonSelectedOrderIds],
@@ -3082,6 +3090,7 @@ export default function RouteDetailPage() {
   };
 
   const handleToggleRoutePolygonEditMode = () => {
+    if (!hasEditableRouteRows) return;
     setIsRoutePolygonEditMode((currentMode) => {
       if (currentMode) resetRoutePolygonDraft();
       return !currentMode;
@@ -3103,7 +3112,7 @@ export default function RouteDetailPage() {
   };
 
   const handleAssignPolygonToRoute = (targetRouteRow) => {
-    if (polygonSelectedOrderIds.length === 0) return;
+    if (targetRouteRow.isPreviewOnly || polygonSelectedOrderIds.length === 0) return;
 
     const selectedOrderIdSet = new Set(polygonSelectedOrderIds);
     const selectedStopIds = timelineRouteRows
@@ -3122,6 +3131,7 @@ export default function RouteDetailPage() {
   };
 
   const handleOpenRouteLineEditor = (routeRow) => {
+    if (routeRow.isPreviewOnly) return;
     setActiveRouteLineId(routeRow.id);
     setRouteLineDraftTitle(routeRow.title);
     setRouteLineDraftColor(routeRow.color);
@@ -3129,6 +3139,7 @@ export default function RouteDetailPage() {
   };
 
   const handleOpenRouteSelector = (selectorType, routeRow) => {
+    if (routeRow.isPreviewOnly) return;
     setActiveRouteSelector({
       routeRowId: routeRow.id,
       startDateTime: routeRow.startDateTime ?? "",
@@ -3288,6 +3299,7 @@ export default function RouteDetailPage() {
   }, [animateRouteTimelineChange, routeRows]);
 
   const handleRouteTimelineDragStart = (event, routeRow, stop) => {
+    if (routeRow.isPreviewOnly) return;
     const drag = { routeId: routeRow.id, stopId: stop.id };
     routeTimelineDragRef.current = drag;
     routeTimelineDragSnapshotRef.current = {
@@ -3501,6 +3513,7 @@ export default function RouteDetailPage() {
   };
 
   const handleRouteTimelineEmptyRouteDragEnter = (event, routeRow) => {
+    if (routeRow.isPreviewOnly) return;
     event.preventDefault();
     if (routeRow.stops.length > 0) return;
     moveDraggedTimelineStop(routeRow.id);
@@ -3520,6 +3533,7 @@ export default function RouteDetailPage() {
   };
 
   const handleRouteTimelineRouteDrop = (event, routeRow) => {
+    if (routeRow.isPreviewOnly) return;
     event.preventDefault();
     routeTimelineDropCommittedRef.current = true;
     moveDraggedTimelineStop(routeRow.id);
@@ -3582,6 +3596,26 @@ export default function RouteDetailPage() {
   }, []);
 
   const handleAddEmptyRoute = () => {
+    const previewRouteRow = contextRouteRows.find((routeRow) => routeRow.isPreviewOnly);
+    if (previewRouteRow) {
+      const tempId = `temp:${Date.now()}-${Math.random().toString(16).slice(2)}`;
+      setClientRouteRows((rows) => [
+        ...rows,
+        {
+          ...previewRouteRow,
+          id: tempId,
+          isMaterializedDraft: true,
+          isPreviewOnly: false,
+          routeKey: tempId,
+          routePlanId: null,
+          routeIdx: previewRouteRow.routeIdx,
+          stops: previewRouteRow.stops,
+          tempId,
+        },
+      ]);
+      return;
+    }
+
     const draft = getNextChildRouteDraft(contextRouteRows);
     const tempId = `temp:${Date.now()}-${Math.random().toString(16).slice(2)}`;
     setClientRouteRows((rows) => [
@@ -4562,7 +4596,7 @@ export default function RouteDetailPage() {
                         <div style={routePolygonTargetTitleStyle}>
                           {polygonSelectedOrderIds.length} orders → route
                         </div>
-                        {timelineRouteRows.map((routeRow) => (
+                        {timelineRouteRows.filter((routeRow) => !routeRow.isPreviewOnly).map((routeRow) => (
                           <button
                             key={routeRow.id}
                             onClick={() => handleAssignPolygonToRoute(routeRow)}
@@ -4601,6 +4635,7 @@ export default function RouteDetailPage() {
                     },
                     ...(!isTrackingMapView ? [{
                       ariaLabel: isRoutePolygonEditMode ? "Stop editing route polygon" : "Edit route polygon",
+                      disabled: !hasEditableRouteRows,
                       icon: renderRoutePolygonEditIcon(),
                       onClick: handleToggleRoutePolygonEditMode,
                     }] : []),
@@ -4645,9 +4680,12 @@ export default function RouteDetailPage() {
               </section>
               <div aria-label="Route actions" style={routeActionColumnStyle}>
                 <button
-                  disabled={routeGroupActionBusy}
+                  disabled={routeGroupActionBusy || !hasEditableRouteRows}
                   onClick={handlePreviewRouteOptimization}
-                  style={routeActionButtonStyle}
+                  style={{
+                    ...routeActionButtonStyle,
+                    ...(!hasEditableRouteRows ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                  }}
                   type="button"
                 >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
                 <button
@@ -4933,17 +4971,25 @@ export default function RouteDetailPage() {
                         <span style={routeLineNameStyle}>
                           <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: routeRow.color }}></span>
                           <button
-                            aria-label={`Open ${routeRow.title} route detail`}
-                            onClick={() => requestRouteNavigation(routeGroupChildPath(routeGroupId, routeRow.routePlanId))}
-                            style={routeLineTitleButtonStyle}
+                            aria-label={routeRow.routePlanId ? `Open ${routeRow.title} route detail` : `${routeRow.title} route preview`}
+                            disabled={!routeRow.routePlanId}
+                            onClick={() => routeRow.routePlanId ? requestRouteNavigation(routeGroupChildPath(routeGroupId, routeRow.routePlanId)) : undefined}
+                            style={{
+                              ...routeLineTitleButtonStyle,
+                              ...(routeRow.isPreviewOnly ? { cursor: "default" } : null),
+                            }}
                             type="button"
                           >
                             {routeRow.title}
                           </button>
                           <button
                             aria-label={`Edit ${routeRow.title} name`}
+                            disabled={routeRow.isPreviewOnly}
                             onClick={() => handleOpenRouteLineEditor(routeRow)}
-                            style={routeLineEditButtonStyle}
+                            style={{
+                              ...routeLineEditButtonStyle,
+                              ...(routeRow.isPreviewOnly ? { cursor: "default", opacity: 0.4 } : null),
+                            }}
                             type="button"
                           >
                             {renderRouteLineEditIcon()}
@@ -4954,8 +5000,12 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>
                         <button
                           aria-label="Change route driver"
+                          disabled={routeRow.isPreviewOnly}
                           onClick={() => handleOpenRouteSelector("driver", routeRow)}
-                          style={routeEditableValueStyle}
+                          style={{
+                            ...routeEditableValueStyle,
+                            ...(routeRow.isPreviewOnly ? { cursor: "default", opacity: 0.65 } : null),
+                          }}
                           type="button"
                         >
                           <span style={routeEditableValueTextStyle}>{routeRow.driverLabel}</span>
@@ -4965,11 +5015,11 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>
                         <button
                           aria-label="Change route start time"
-                          disabled={routeGroupActionBusy}
+                          disabled={routeGroupActionBusy || routeRow.isPreviewOnly}
                           onClick={() => handleOpenRouteSelector("startTime", routeRow)}
                           style={{
                             ...routeEditableValueStyle,
-                            ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                            ...(routeGroupActionBusy || routeRow.isPreviewOnly ? { cursor: "not-allowed", opacity: 0.55 } : null),
                           }}
                           type="button"
                         >
@@ -4999,9 +5049,9 @@ export default function RouteDetailPage() {
                   {timelineRouteRows.map((routeRow) => (
                     <div
                       key={routeRow.id}
-                      onDragEnter={(event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
-                      onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                      onDrop={(event) => handleRouteTimelineRouteDrop(event, routeRow)}
+                      onDragEnter={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
+                      onDragOver={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+                      onDrop={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDrop(event, routeRow)}
                       style={{
                         ...routeTimelineLaneStyle,
                         "--route-line-color": softenRouteColor(routeRow.color),
@@ -5020,11 +5070,11 @@ export default function RouteDetailPage() {
                           <button
                             data-route-timeline-stop-button="true"
                             ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                            draggable
+                            draggable={!routeRow.isPreviewOnly}
                             onDragEnd={handleRouteTimelineDragEnd}
                             onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
                             onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                            onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                            onDragStart={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
                             onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                             onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                             onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
