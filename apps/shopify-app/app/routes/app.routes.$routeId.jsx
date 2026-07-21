@@ -35,11 +35,14 @@ import {
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
   getRouteMapCenter,
   getRouteMapLocations,
+  getRouteTrackingFitLocations,
   getRouteStopFromMapFeature,
   isLngLatInPolygon,
   normalizeLngLat,
@@ -54,6 +57,7 @@ import {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
   mergeRouteTrackingProgress,
@@ -499,7 +503,8 @@ const routeChildTrackingStyle = {
 const routeChildTrackingSummaryStyle = {
   display: "grid",
   gap: "8px",
-  gridTemplateColumns: "repeat(7, minmax(120px, 1fr))",
+  gridAutoColumns: "minmax(132px, 1fr)",
+  gridAutoFlow: "column",
   overflowX: "auto",
   padding: "12px",
 };
@@ -2496,6 +2501,8 @@ export default function RouteDetailPage() {
   const mapRecoveryTimerRef = useRef(null);
   const markerDiagnosticCountRef = useRef(0);
   const hasInitialRouteMapFitRef = useRef(false);
+  const hasTrackingRouteMapFitRef = useRef(false);
+  const routeTrackingPopupRef = useRef(null);
   const routeTrackingSnapshotRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapStatus, setMapStatus] = useState("loading");
@@ -2608,6 +2615,10 @@ export default function RouteDetailPage() {
   const routeTrackingPolicy = routeTrackingSnapshot?.policy;
   const routeTrackingProgress = routeTrackingSnapshot?.progress;
   const latestTrackingPosition = routeTrackingSnapshot?.latestPosition ?? null;
+  const routeTrackingPathSummary = useMemo(
+    () => getRouteTrackingPathSummary(routeTrackingSnapshot),
+    [routeTrackingSnapshot],
+  );
   const activeChildOrderDisclosureRow = activeChildOrderDisclosure
     ? childRouteOrderRows.find((row) => row.id === activeChildOrderDisclosure.rowId) ?? null
     : null;
@@ -2693,6 +2704,13 @@ export default function RouteDetailPage() {
     () => getRouteMapLocations(departureLocation, routeMapLocationsSource),
     [departureLocation, routeMapLocationsSource],
   );
+  const routeTrackingMapLocations = useMemo(
+    () => getRouteTrackingFitLocations(routeTrackingSnapshot),
+    [routeTrackingSnapshot],
+  );
+  const routeMapFitLocations = childDetailTab === "tracking" && routeTrackingMapLocations.length > 0
+    ? routeTrackingMapLocations
+    : routeMapLocations;
   const routeGeometryRows = useMemo(
     () => buildRouteGeometryRows(timelineRouteRows, routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints),
     [routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints, timelineRouteRows],
@@ -2920,7 +2938,7 @@ export default function RouteDetailPage() {
   const handleFitRouteMap = () => {
     if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return;
 
-    fitRouteDetailMap(mapRef.current, mapLibraryRef.current, routeMapLocations);
+    fitRouteDetailMap(mapRef.current, mapLibraryRef.current, routeMapFitLocations);
   };
 
   const handleZoomInMap = () => {
@@ -3793,7 +3811,9 @@ export default function RouteDetailPage() {
       if (routeLineRetryTimer != null) return;
       routeLineRetryTimer = window.setTimeout(() => {
         routeLineRetryTimer = null;
-        syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor);
+        syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor, {
+          isTrackingReference: childDetailTab === "tracking",
+        });
       }, 80);
     };
 
@@ -3839,7 +3859,9 @@ export default function RouteDetailPage() {
     const syncRouteDetailMap = () => {
       const syncStartedAt = performance.now();
       const routeLineStartedAt = performance.now();
-      const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor);
+      const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor, {
+        isTrackingReference: childDetailTab === "tracking",
+      });
       if (!didSyncRouteLine) {
         scheduleRouteLineRetry();
       }
@@ -3868,7 +3890,9 @@ export default function RouteDetailPage() {
       });
     };
     const handleRouteDetailStyleData = () => {
-      if (!syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor)) {
+      if (!syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor, {
+        isTrackingReference: childDetailTab === "tracking",
+      })) {
         scheduleRouteLineRetry();
       }
       if (syncRouteDetailMapMarkerLayers(map, departureLocation, routeMapStops, savedRouteStopPoints, routeLineColor, routeStopColorById, (metric) => emitMarkerDiagnostics({ ...metric, trigger: "styledata" }))) {
@@ -3892,6 +3916,7 @@ export default function RouteDetailPage() {
     };
   }, [
     departureLocation,
+    childDetailTab,
     isMapReady,
     routeMapStops,
     routeLineColor,
@@ -3910,16 +3935,70 @@ export default function RouteDetailPage() {
     if (!isMapReady || !routeMapRef.current) return undefined;
 
     const map = routeMapRef.current;
+    let didBindHistory = false;
+    let didBindPosition = false;
+    const hideTrackingPopup = () => {
+      routeTrackingPopupRef.current?.remove();
+      routeTrackingPopupRef.current = null;
+      const canvas = map.getCanvas?.();
+      if (canvas) canvas.style.cursor = "";
+    };
+    const showTrackingPopup = (event) => {
+      if (childDetailTab !== "tracking") return;
+      const feature = event.features?.[0];
+      const coordinates = feature?.geometry?.coordinates;
+      if (!Array.isArray(coordinates) || coordinates.length < 2 || !mapLibraryRef.current?.Popup) return;
+      hideTrackingPopup();
+      const content = document.createElement("div");
+      content.style.cssText = "display:grid;gap:4px;min-width:170px;padding:2px 0;font:12px/1.35 system-ui,sans-serif;color:#303030";
+      const title = document.createElement("strong");
+      title.textContent = `GPS record #${feature.properties?.sequence ?? "–"}`;
+      const occurred = document.createElement("span");
+      occurred.textContent = `Recorded ${formatTrackingTimestamp(feature.properties?.occurredAt)}`;
+      const received = document.createElement("span");
+      received.textContent = `Received ${formatTrackingTimestamp(feature.properties?.receivedAt)}`;
+      content.append(title, occurred, received);
+      routeTrackingPopupRef.current = new mapLibraryRef.current.Popup({
+        closeButton: false,
+        closeOnClick: false,
+        offset: 10,
+      }).setLngLat(coordinates).setDOMContent(content).addTo(map);
+      const canvas = map.getCanvas?.();
+      if (canvas) canvas.style.cursor = "pointer";
+    };
+    const bindTrackingHandlers = () => {
+      if (childDetailTab !== "tracking") return;
+      if (!didBindHistory && map.getLayer?.(ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID)) {
+        map.on("mouseenter", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, showTrackingPopup);
+        map.on("mouseleave", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, hideTrackingPopup);
+        didBindHistory = true;
+      }
+      if (!didBindPosition && map.getLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID)) {
+        map.on("mouseenter", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, showTrackingPopup);
+        map.on("mouseleave", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, hideTrackingPopup);
+        didBindPosition = true;
+      }
+    };
     const syncTracking = () => {
       syncRouteDetailLiveTracking(routeMapRef.current, routeTrackingSnapshot);
+      bindTrackingHandlers();
     };
     syncTracking();
     map.on("styledata", syncTracking);
 
     return () => {
       map.off("styledata", syncTracking);
+      if (didBindHistory) {
+        map.off("mouseenter", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, showTrackingPopup);
+        map.off("mouseleave", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, hideTrackingPopup);
+      }
+      if (didBindPosition) {
+        map.off("mouseenter", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, showTrackingPopup);
+        map.off("mouseleave", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, hideTrackingPopup);
+      }
+      hideTrackingPopup();
     };
-  }, [isMapReady, routeMapRef, routeTrackingSnapshot]);
+  }, [childDetailTab, isMapReady, routeMapRef, routeTrackingSnapshot]);
 
 
   useEffect(() => {
@@ -4113,6 +4192,18 @@ export default function RouteDetailPage() {
     mapRef.current.resize();
     fitRouteDetailMap(mapRef.current, maplibregl, routeMapLocations);
   }, [isMapReady, routeMapLocations]);
+
+  useEffect(() => {
+    if (childDetailTab !== "tracking") {
+      hasTrackingRouteMapFitRef.current = false;
+      return;
+    }
+    if (!isMapReady || !mapRef.current || !mapLibraryRef.current || routeTrackingMapLocations.length === 0) return;
+    if (hasTrackingRouteMapFitRef.current) return;
+    hasTrackingRouteMapFitRef.current = true;
+    mapRef.current.resize();
+    fitRouteDetailMap(mapRef.current, mapLibraryRef.current, routeTrackingMapLocations);
+  }, [childDetailTab, isMapReady, routeTrackingMapLocations]);
 
   return (
     <main style={routesDetailPageStyle}>
@@ -4452,8 +4543,8 @@ export default function RouteDetailPage() {
                       onClick: handleZoomOutMap,
                     },
                     {
-                      ariaLabel: "Fit highlighted map markers",
-                      disabled: routeMapLocations.length === 0,
+                      ariaLabel: childDetailTab === "tracking" ? "Fit recorded GPS path" : "Fit highlighted map markers",
+                      disabled: routeMapFitLocations.length === 0,
                       icon: renderMapFitIcon(),
                       onClick: handleFitRouteMap,
                     },
@@ -4691,6 +4782,26 @@ export default function RouteDetailPage() {
                   <strong style={routeChildTrackingMetricValueStyle}>{
                     `${trackingDeliveredCount} / ${childRouteOrderRows.length} delivered`
                   }</strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>GPS records</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.sourcePointCount}</strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Displayed points</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>Recorded range</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>{
+                    routeTrackingPathSummary.firstOccurredAt
+                      ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt)}`
+                      : ROUTE_EMPTY_LABEL
+                  }</strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>GPS gaps</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.gapCount}</strong>
                 </div>
               </div>
               <div style={routesDetailTableFrameStyle}>

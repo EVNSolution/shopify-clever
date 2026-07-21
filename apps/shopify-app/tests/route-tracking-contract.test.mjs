@@ -5,6 +5,8 @@ import {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingPathPoints,
+  getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
   getRouteTrackingPresentation,
   mergeRouteTrackingProgress,
@@ -56,7 +58,41 @@ test("tracking positions are deduplicated and an older event cannot replace late
   const duplicate = mergeRouteTrackingPosition(merged, newest);
 
   assert.equal(merged.latestPosition.eventId, "new");
+  assert.deepEqual(getRouteTrackingPathPoints(merged).map((point) => point.eventId), ["old", "new"]);
   assert.equal(duplicate.recentPositions.length, 2);
+});
+
+test("recorded route geometry preserves more than 1000 compressed GPS points without truncation", () => {
+  const coordinates = Array.from({ length: 1_205 }, (_, index) => [126.9 + index * 0.0001, 37.5 + (index % 2) * 0.001]);
+  const samples = coordinates.map((_, index) => ({
+    driverId: "driver-1",
+    eventId: `event-${index}`,
+    occurredAt: new Date(Date.parse("2026-07-21T00:00:00.000Z") + index * 30_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-07-21T00:00:01.000Z") + index * 30_000).toISOString(),
+  }));
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: {
+      firstOccurredAt: samples[0].occurredAt,
+      geometry: { coordinates, type: "LineString" },
+      geometryPointCount: coordinates.length,
+      lastOccurredAt: samples.at(-1).occurredAt,
+      lastReceivedAt: samples.at(-1).receivedAt,
+      samples,
+      schemaVersion: "route_tracking_geometry.v1",
+      sourcePointCount: 1_500,
+    },
+    recentPositions: [],
+  });
+
+  assert.equal(getRouteTrackingPathPoints(snapshot).length, 1_205);
+  assert.deepEqual(getRouteTrackingPathSummary(snapshot), {
+    firstOccurredAt: samples[0].occurredAt,
+    gapCount: 0,
+    geometryPointCount: 1_205,
+    lastOccurredAt: samples.at(-1).occurredAt,
+    sourcePointCount: 1_500,
+  });
 });
 
 test("freshness uses server-provided thresholds", () => {

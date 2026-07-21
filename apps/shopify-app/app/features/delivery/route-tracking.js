@@ -1,5 +1,5 @@
-const MAX_RECENT_TRACKING_POSITIONS = 1_000;
 const FALLBACK_RECONNECT_DELAY_MS = 3_000;
+const EARTH_RADIUS_METERS = 6_371_000;
 
 function numberOrNull(value) {
   const number = Number(value);
@@ -79,15 +79,16 @@ function normalizeRouteTrackingSnapshot(snapshot) {
   const recentPositions = (Array.isArray(snapshot?.recentPositions) ? snapshot.recentPositions : [])
     .map(normalizeTrackingPosition)
     .filter(Boolean)
-    .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right))
-    .slice(-MAX_RECENT_TRACKING_POSITIONS);
+    .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
   const latestPosition = normalizeTrackingPosition(snapshot?.latestPosition) ?? recentPositions.at(-1) ?? null;
+  const recordedPath = normalizeRecordedPath(snapshot?.recordedPath, latestPosition);
 
   return {
     schemaVersion: textOrNull(snapshot?.schemaVersion) ?? "route_tracking.v1",
     routePlanId: textOrNull(snapshot?.routePlanId),
     policy: snapshot?.policy && typeof snapshot.policy === "object" ? { ...snapshot.policy } : null,
     progress: normalizeTrackingProgress(snapshot?.progress),
+    recordedPath,
     status: textOrNull(snapshot?.status) ?? (latestPosition ? "LIVE" : "NO_DATA"),
     serverTime: textOrNull(snapshot?.serverTime),
     latestPosition,
@@ -148,8 +149,206 @@ function mergeRouteTrackingPosition(snapshot, position) {
     routePlanId: normalizedSnapshot.routePlanId ?? normalizedPosition.routePlanId,
     status: "LIVE",
     latestPosition,
-    recentPositions: recentPositions.slice(-MAX_RECENT_TRACKING_POSITIONS),
+    recordedPath: mergeRecordedPathPosition(normalizedSnapshot.recordedPath, normalizedPosition, normalizedSnapshot.policy),
+    recentPositions,
   };
+}
+
+function normalizeRecordedPath(recordedPath, latestPosition) {
+  if (!recordedPath || typeof recordedPath !== "object") return null;
+  const geometryCoordinates = recordedPath.geometry?.type === "LineString" && Array.isArray(recordedPath.geometry.coordinates)
+    ? recordedPath.geometry.coordinates.map(normalizeCoordinatePair).filter(Boolean)
+    : [];
+  const samples = (Array.isArray(recordedPath.samples) ? recordedPath.samples : [])
+    .map(normalizeRecordedPathSample)
+    .filter(Boolean);
+  const coordinates = geometryCoordinates.length === 0 && samples.length === 1 && latestPosition
+    ? [[latestPosition.longitude, latestPosition.latitude]]
+    : geometryCoordinates;
+  const usableLength = Math.min(coordinates.length, samples.length);
+  if (usableLength === 0) return null;
+
+  return {
+    firstOccurredAt: textOrNull(recordedPath.firstOccurredAt) ?? samples[0]?.occurredAt ?? null,
+    geometry: {
+      coordinates: coordinates.slice(0, usableLength),
+      type: "LineString",
+    },
+    geometryPointCount: usableLength,
+    lastOccurredAt: textOrNull(recordedPath.lastOccurredAt) ?? samples[usableLength - 1]?.occurredAt ?? null,
+    lastReceivedAt: textOrNull(recordedPath.lastReceivedAt) ?? samples[usableLength - 1]?.receivedAt ?? null,
+    samples: samples.slice(0, usableLength),
+    schemaVersion: textOrNull(recordedPath.schemaVersion) ?? "route_tracking_geometry.v1",
+    sourcePointCount: Math.max(numberOrNull(recordedPath.sourcePointCount) ?? usableLength, usableLength),
+  };
+}
+
+function normalizeRecordedPathSample(sample) {
+  const eventId = textOrNull(sample?.eventId);
+  const occurredAt = textOrNull(sample?.occurredAt);
+  const receivedAt = textOrNull(sample?.receivedAt);
+  if (!eventId || !occurredAt || !receivedAt) return null;
+  return {
+    driverId: textOrNull(sample?.driverId),
+    eventId,
+    occurredAt,
+    receivedAt,
+  };
+}
+
+function normalizeCoordinatePair(coordinate) {
+  if (!Array.isArray(coordinate) || coordinate.length < 2) return null;
+  const longitude = numberOrNull(coordinate[0]);
+  const latitude = numberOrNull(coordinate[1]);
+  if (latitude == null || longitude == null || latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
+  return [longitude, latitude];
+}
+
+function mergeRecordedPathPosition(recordedPath, position, policy) {
+  const current = recordedPath ?? {
+    firstOccurredAt: position.occurredAt ?? position.receivedAt,
+    geometry: { coordinates: [], type: "LineString" },
+    geometryPointCount: 0,
+    lastOccurredAt: null,
+    lastReceivedAt: null,
+    samples: [],
+    schemaVersion: "route_tracking_geometry.v1",
+    sourcePointCount: 0,
+  };
+  if (current.samples.some((sample) => sample.eventId === position.eventId)) return current;
+  const coordinate = [position.longitude, position.latitude];
+  const sample = {
+    driverId: position.driverId,
+    eventId: position.eventId,
+    occurredAt: position.occurredAt ?? position.receivedAt,
+    receivedAt: position.receivedAt ?? position.occurredAt,
+  };
+  const latestSample = current.samples.at(-1);
+  if (latestSample && getPositionTimestamp(sample) < getPositionTimestamp(latestSample)) {
+    const orderedPoints = current.samples
+      .map((existingSample, index) => ({
+        coordinate: current.geometry.coordinates[index],
+        sample: existingSample,
+      }))
+      .filter((point) => point.coordinate)
+      .concat({ coordinate, sample })
+      .sort((left, right) => (
+        getPositionTimestamp(left.sample) - getPositionTimestamp(right.sample)
+        || left.sample.eventId.localeCompare(right.sample.eventId)
+      ));
+    const rebuilt = orderedPoints.reduce((path, point) => {
+      appendCompressedTrackingPoint(path.coordinates, path.samples, point.coordinate, point.sample, policy);
+      return path;
+    }, { coordinates: [], samples: [] });
+    return buildMergedRecordedPath(current, rebuilt.coordinates, rebuilt.samples, current.sourcePointCount + 1);
+  }
+
+  const coordinates = [...current.geometry.coordinates];
+  const samples = [...current.samples];
+  appendCompressedTrackingPoint(coordinates, samples, coordinate, sample, policy);
+  return buildMergedRecordedPath(current, coordinates, samples, current.sourcePointCount + 1);
+}
+
+function appendCompressedTrackingPoint(coordinates, samples, coordinate, sample, policy) {
+  const previousSample = samples.at(-1);
+  const gapThresholdMs = numberOrNull(policy?.delayedThresholdMs) ?? 180_000;
+  const simplificationToleranceMeters = numberOrNull(policy?.geometrySimplificationToleranceMeters) ?? 5;
+  const hasGap = previousSample
+    && getPositionTimestamp(sample) - getPositionTimestamp(previousSample) > gapThresholdMs;
+  const canReplaceTail = !hasGap
+    && coordinates.length >= 2
+    && distancePointToSegmentMeters(coordinates.at(-1), coordinates.at(-2), coordinate) <= simplificationToleranceMeters;
+
+  if (canReplaceTail) {
+    coordinates[coordinates.length - 1] = coordinate;
+    samples[samples.length - 1] = sample;
+  } else {
+    coordinates.push(coordinate);
+    samples.push(sample);
+  }
+}
+
+function buildMergedRecordedPath(current, coordinates, samples, sourcePointCount) {
+  const first = samples[0];
+  const last = samples.at(-1);
+  return {
+    ...current,
+    firstOccurredAt: first?.occurredAt ?? current.firstOccurredAt,
+    geometry: { coordinates, type: "LineString" },
+    geometryPointCount: coordinates.length,
+    lastOccurredAt: last?.occurredAt ?? current.lastOccurredAt,
+    lastReceivedAt: last?.receivedAt ?? current.lastReceivedAt,
+    samples,
+    sourcePointCount,
+  };
+}
+
+function getRouteTrackingPathPoints(snapshot) {
+  const normalized = normalizeRouteTrackingSnapshot(snapshot);
+  if (normalized.recordedPath) {
+    return normalized.recordedPath.geometry.coordinates.map((coordinate, index) => {
+      const sample = normalized.recordedPath.samples[index];
+      return {
+        coordinates: coordinate,
+        driverId: sample?.driverId ?? null,
+        eventId: sample?.eventId ?? null,
+        occurredAt: sample?.occurredAt ?? null,
+        receivedAt: sample?.receivedAt ?? null,
+      };
+    });
+  }
+  return normalized.recentPositions.map((position) => ({
+    coordinates: [position.longitude, position.latitude],
+    driverId: position.driverId,
+    eventId: position.eventId,
+    occurredAt: position.occurredAt,
+    receivedAt: position.receivedAt,
+  }));
+}
+
+function getRouteTrackingPathSummary(snapshot) {
+  const normalized = normalizeRouteTrackingSnapshot(snapshot);
+  const points = getRouteTrackingPathPoints(normalized);
+  const gapThresholdMs = numberOrNull(normalized.policy?.delayedThresholdMs) ?? 180_000;
+  const gapCount = points.reduce((count, point, index) => {
+    const previous = points[index - 1];
+    if (!previous) return count;
+    return getPositionTimestamp(point) - getPositionTimestamp(previous) > gapThresholdMs ? count + 1 : count;
+  }, 0);
+  return {
+    firstOccurredAt: normalized.recordedPath?.firstOccurredAt ?? points[0]?.occurredAt ?? null,
+    gapCount,
+    geometryPointCount: normalized.recordedPath?.geometryPointCount ?? points.length,
+    lastOccurredAt: normalized.recordedPath?.lastOccurredAt ?? points.at(-1)?.occurredAt ?? null,
+    sourcePointCount: normalized.recordedPath?.sourcePointCount ?? points.length,
+  };
+}
+
+function distancePointToSegmentMeters(point, segmentStart, segmentEnd) {
+  const referenceLatitude = toRadians((point[1] + segmentStart[1] + segmentEnd[1]) / 3);
+  const project = ([longitude, latitude]) => [
+    EARTH_RADIUS_METERS * toRadians(longitude) * Math.cos(referenceLatitude),
+    EARTH_RADIUS_METERS * toRadians(latitude),
+  ];
+  const projectedPoint = project(point);
+  const projectedStart = project(segmentStart);
+  const projectedEnd = project(segmentEnd);
+  const deltaX = projectedEnd[0] - projectedStart[0];
+  const deltaY = projectedEnd[1] - projectedStart[1];
+  const lengthSquared = deltaX * deltaX + deltaY * deltaY;
+  if (lengthSquared === 0) return Math.hypot(projectedPoint[0] - projectedStart[0], projectedPoint[1] - projectedStart[1]);
+  const ratio = Math.max(0, Math.min(1, (
+    (projectedPoint[0] - projectedStart[0]) * deltaX
+    + (projectedPoint[1] - projectedStart[1]) * deltaY
+  ) / lengthSquared));
+  return Math.hypot(
+    projectedPoint[0] - (projectedStart[0] + ratio * deltaX),
+    projectedPoint[1] - (projectedStart[1] + ratio * deltaY),
+  );
+}
+
+function toRadians(degrees) {
+  return degrees * Math.PI / 180;
 }
 
 function parseSseFrame(frame) {
@@ -282,6 +481,8 @@ export {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingPathPoints,
+  getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
