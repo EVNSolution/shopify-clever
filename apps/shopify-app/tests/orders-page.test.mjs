@@ -1817,7 +1817,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.doesNotMatch(inventoryDetailSource, /Shipping phone:/);
   assert.match(inventoryDetailSource, /inventory\.linkedRoutes/);
   assert.match(inventoryDetailSource, /customerNote: getInventoryOrderCustomerNote\(order\)/);
-  assert.match(inventoryDetailSource, /className=\{`inventory-detail-order-details\$\{order\.customerNote \? "" : " inventory-detail-order-details--payment-only"\}`\}/);
+  assert.match(inventoryDetailSource, /className="inventory-detail-order-details"/);
   assert.match(inventoryDetailSource, /className="inventory-detail-order-note"/);
   assert.match(inventoryDetailSource, />Customer Note<\/span>/);
   assert.match(inventoryDetailSource, /data-print-line-count=\{getInventoryPrintTextLineCount\(order\.customerNote\)\}/);
@@ -1861,8 +1861,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /card\.querySelector\("\.inventory-detail-order-customer"\)/);
   assert.match(inventoryDetailSource, /card\.querySelector\("\.inventory-detail-order-details"\)/);
   assert.match(inventoryDetailSource, /card\.querySelector\("\.inventory-detail-order-note"\)/);
-  assert.match(inventoryDetailSource, /const PRINT_ORDER_PAYMENT_ONLY_PADDING_PX = 1 \* CSS_PX_PER_MM/);
-  assert.match(inventoryDetailSource, /const detailsPadding = note \? PRINT_ORDER_DETAILS_PADDING_PX : PRINT_ORDER_PAYMENT_ONLY_PADDING_PX/);
+  assert.match(inventoryDetailSource, /const PRINT_ORDER_DETAILS_PADDING_PX = 1 \* CSS_PX_PER_MM/);
   assert.match(inventoryDetailSource, /customerLines \* PRINT_ORDER_CUSTOMER_LINE_HEIGHT_PX/);
   assert.match(inventoryDetailSource, /noteLines \* PRINT_ORDER_NOTE_LINE_HEIGHT_PX/);
   assert.match(inventoryDetailSource, /function applyInventoryOrderPrintBreaks/);
@@ -1887,9 +1886,9 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /const subtleDividerStyle = "1px solid var\(--app-divider-subtle\)"/);
   assert.match(inventoryDetailSource, /borderRight: subtleDividerStyle/);
   assert.match(inventoryDetailSource, /const orderViewOrdersListStyle = \{[\s\S]*?gap: "10px"/);
-  assert.match(inventoryDetailSource, /const orderViewDetailsStyle = \{[\s\S]*?padding: "8px"/);
-  assert.match(inventoryDetailSource, /const orderViewPaymentOnlyDetailsStyle = \{[\s\S]*?padding: "2px 8px 4px"/);
-  assert.match(inventoryDetailSource, /const orderViewItemsCellStyle = \{[\s\S]*?padding: "6px 0 8px"/);
+  assert.match(inventoryDetailSource, /const orderViewDetailsStyle = \{[\s\S]*?padding: "2px 8px 4px"/);
+  assert.doesNotMatch(inventoryDetailSource, /orderViewPaymentOnlyDetailsStyle/);
+  assert.match(inventoryDetailSource, /const orderViewItemsCellStyle = \{[\s\S]*?padding: "6px 0 4px"/);
   assert.match(inventoryDetailSource, /textAlign: "center"/);
   assert.match(inventoryDetailSource, /aria-hidden="true"/);
   assert.match(inventoryDetailSource, /width: "70px"/);
@@ -1917,11 +1916,10 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /margin: 0 0 \$\{PRINT_ORDER_SECTION_GAP_MM\}mm !important/);
   assert.match(inventoryDetailSource, /\.inventory-detail-order-row \{ border-bottom: \$\{subtleDividerStyle\} !important; font-size: 12px !important; line-height: 17px !important; padding: 3mm 0 !important; \}/);
   assert.match(inventoryDetailSource, /\.inventory-detail-order-details \{[^}]*border-bottom: 0 !important;/);
-  assert.match(inventoryDetailSource, /\.inventory-detail-order-details \{[^}]*padding: 2mm 0 !important;/);
-  assert.match(inventoryDetailSource, /\.inventory-detail-order-details--payment-only \{ padding: 0 0 1mm !important; \}/);
-  assert.match(inventoryDetailSource, /inventory-detail-order-details--payment-only/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-order-details \{[^}]*padding: 0 0 1mm !important;/);
+  assert.doesNotMatch(inventoryDetailSource, /inventory-detail-order-details--payment-only/);
   assert.doesNotMatch(inventoryDetailSource, /border-bottom: 1px solid #111/);
-  assert.match(inventoryDetailSource, /\.inventory-detail-order-items \{ break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 2mm 0 3mm !important; page-break-inside: avoid !important; \}/);
+  assert.match(inventoryDetailSource, /\.inventory-detail-order-items \{ break-inside: avoid !important; display: grid !important; font-size: 12px !important; gap: 1mm !important; line-height: 17px !important; padding: 2mm 0 1mm !important; page-break-inside: avoid !important; \}/);
   assert.match(inventoryDetailSource, /box-sizing: border-box !important; display: block !important/);
   assert.match(inventoryDetailSource, /min-width: 0 !important; padding: 0 !important; width: 100% !important/);
   assert.match(inventoryDetailSource, /maxHeight: "28px"/);
