@@ -333,6 +333,11 @@ const modalStyle = {
   width: "100%",
 };
 
+const downloadModalStyle = {
+  ...modalStyle,
+  maxWidth: "420px",
+};
+
 const modalHeaderStyle = {
   alignItems: "center",
   borderBottom: "1px solid #e3e3e3",
@@ -362,6 +367,27 @@ const modalBodyStyle = {
   display: "grid",
   gap: "10px",
   padding: "16px",
+};
+
+const downloadModalBodyStyle = {
+  ...modalBodyStyle,
+  justifyItems: "center",
+  textAlign: "center",
+};
+
+const downloadQrFrameStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "12px",
+  boxSizing: "border-box",
+  padding: "12px",
+};
+
+const downloadQrImageStyle = {
+  display: "block",
+  height: "220px",
+  maxWidth: "100%",
+  width: "220px",
 };
 
 const phoneFieldStyle = {
@@ -680,6 +706,8 @@ export default function DriversVehiclesPage() {
   const shopify = useAppBridge();
   const [searchText, setSearchText] = useState("");
   const [inviteOpen, setInviteOpen] = useState(false);
+  const [downloadOpen, setDownloadOpen] = useState(false);
+  const [downloadCopyStatus, setDownloadCopyStatus] = useState("");
   const [invitePhone, setInvitePhone] = useState("");
   const [selectedCountryCodeId, setSelectedCountryCodeId] = useState(countryDialCodeOptions[0].id);
   const [countryCodeOpen, setCountryCodeOpen] = useState(false);
@@ -733,10 +761,11 @@ export default function DriversVehiclesPage() {
   const visibleErrors = [...errors, ...driverDeleteErrors, ...driverUpdateErrors];
 
   const selectedCountryCode = countryDialCodeOptions.find((option) => option.id === selectedCountryCodeId) ?? countryDialCodeOptions[0];
+  const driverAppDownloadUrl = getDriverDownloadLink(driverDownloadLink);
   const currentInviteDriver = driverInviteFetcher.data?.driver ?? null;
   const currentInviteCode = currentInviteDriver?.inviteCode;
   const inviteMessagePreview = buildDriverInviteMessage({
-    downloadLink: getDriverDownloadLink(driverDownloadLink),
+    downloadLink: driverAppDownloadUrl,
     inviteCode: currentInviteCode,
   });
 
@@ -745,6 +774,25 @@ export default function DriversVehiclesPage() {
     setCountryCodeOpen(false);
     setCopyStatus("");
   };
+
+  function openDownloadModal() {
+    setDownloadCopyStatus("");
+    setDownloadOpen(true);
+  }
+
+  async function copyDriverDownloadLink() {
+    if (!navigator.clipboard?.writeText) {
+      setDownloadCopyStatus("Copy is not available. Use Open download page instead.");
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(driverAppDownloadUrl);
+      setDownloadCopyStatus("Download link copied.");
+    } catch {
+      setDownloadCopyStatus("Copy failed. Use Open download page instead.");
+    }
+  }
 
   const openDriverNameEditor = (driver) => {
     setEditingDriver(driver);
@@ -785,7 +833,7 @@ export default function DriversVehiclesPage() {
   const getCurrentInvite = () => {
     const normalizedPhone = normalizeInvitePhone(selectedCountryCode.dialCode, invitePhone);
     return {
-      downloadLink: getDriverDownloadLink(driverDownloadLink),
+      downloadLink: driverAppDownloadUrl,
       normalizedPhone,
     };
   };
@@ -937,15 +985,9 @@ export default function DriversVehiclesPage() {
         <h1 style={pageTitleStyle}>Drivers</h1>
         <div style={pageActionsStyle}>
           <button type="button" style={primaryButtonStyle} onClick={openInviteModal}>Invite driver</button>
-          <a
-            aria-label="Download driver app"
-            href={getDriverDownloadLink(driverDownloadLink)}
-            rel="noreferrer"
-            style={downloadLinkButtonStyle}
-            target="_blank"
-          >
+          <button type="button" style={secondaryButtonStyle} onClick={openDownloadModal}>
             Download app
-          </a>
+          </button>
           <button
             type="button"
             style={driverDeleteDisabled ? disabledActionButtonStyle : dangerButtonStyle}
@@ -1126,6 +1168,35 @@ export default function DriversVehiclesPage() {
               >
                 Save
               </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {downloadOpen ? (
+        <div style={modalBackdropStyle} role="presentation">
+          <div role="dialog" aria-modal="true" aria-label="Download driver app" style={downloadModalStyle}>
+            <div style={modalHeaderStyle}>
+              <h2 style={modalTitleStyle}>Download driver app</h2>
+              <button type="button" aria-label="Close driver app download" style={closeButtonStyle} onClick={() => setDownloadOpen(false)}>×</button>
+            </div>
+            <div style={downloadModalBodyStyle}>
+              <p style={modalHelpStyle}>Scan this QR code with the phone that will run the driver app.</p>
+              <div style={downloadQrFrameStyle}>
+                <img
+                  alt="QR code for the driver app download page"
+                  height="220"
+                  src="/icons/driver-download-qr.svg"
+                  style={downloadQrImageStyle}
+                  width="220"
+                />
+              </div>
+              {downloadCopyStatus ? <p style={modalHelpStyle} role="status">{downloadCopyStatus}</p> : null}
+            </div>
+            <div style={modalFooterStyle}>
+              <button type="button" style={secondaryButtonStyle} onClick={() => setDownloadOpen(false)}>Close</button>
+              <button type="button" style={secondaryButtonStyle} onClick={copyDriverDownloadLink}>Copy download link</button>
+              <a href={driverAppDownloadUrl} rel="noreferrer" style={downloadLinkButtonStyle} target="_blank">Open download page</a>
             </div>
           </div>
         </div>

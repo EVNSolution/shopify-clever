@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -25,10 +25,25 @@ test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
   assert.match(source, />\s*Delete selected\s*<\/button>/);
   const [, pageActionsBlock = ""] = source.match(/<div style=\{pageActionsStyle\}>([\s\S]*?)<\/div>/) ?? [];
   assert.match(pageActionsBlock, /Invite driver[\s\S]*Download app[\s\S]*Delete selected/);
-  assert.match(pageActionsBlock, /href=\{getDriverDownloadLink\(driverDownloadLink\)\}/);
-  assert.match(pageActionsBlock, /target="_blank"/);
-  assert.match(pageActionsBlock, /rel="noreferrer"/);
+  assert.match(pageActionsBlock, /onClick=\{openDownloadModal\}/);
+  assert.doesNotMatch(pageActionsBlock, /href=|target="_blank"/);
   assert.match(source, /<td colSpan=\{8\}/);
+});
+
+test("Drivers download action opens a QR modal without navigating the admin page", () => {
+  assert.match(source, /const \[downloadOpen, setDownloadOpen\] = useState\(false\)/);
+  assert.match(source, /function openDownloadModal\(\)/);
+  assert.match(source, /aria-label="Download driver app" style=\{downloadModalStyle\}/);
+  assert.match(source, /src="\/icons\/driver-download-qr\.svg"/);
+  assert.match(source, /alt="QR code for the driver app download page"/);
+  assert.match(source, />Copy download link<\/button>/);
+  assert.match(source, />Open download page<\/a>/);
+  assert.match(source, /href=\{driverAppDownloadUrl\}/);
+  assert.match(source, /target="_blank"/);
+  assert.match(source, /rel="noreferrer"/);
+  const qrAssetPath = join(root, "public/icons/driver-download-qr.svg");
+  assert.equal(existsSync(qrAssetPath), true);
+  assert.match(readFileSync(qrAssetPath, "utf8"), /https:\/\/drive\.google\.com\/file\/d\/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2\/view\?usp=sharing/);
 });
 
 test("Drivers actions use the app compact button height", () => {
