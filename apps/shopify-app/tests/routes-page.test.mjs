@@ -962,8 +962,22 @@ test("Route group detail keeps an unsplit group visible as route #1", () => {
   assert.match(routeDetailSource, /if \(!routeGroup \|\| routeStops\.length === 0\) return null/);
   assert.match(routeDetailSource, /routeKey: "routeIdx:1"/);
   assert.match(routeDetailSource, /routePlanId: null/);
+  assert.match(routeDetailSource, /isPreviewOnly: true/);
   assert.match(routeDetailSource, /title: "#1"/);
   assert.match(routeDetailSource, /return routeGroupChildRows\.length > 0 \? routeGroupChildRows : \[buildUnsplitRouteGroupRow\(routeGroup, routeStops\)\]\.filter\(Boolean\)/);
+});
+
+test("Route group detail materializes the preview only after Add Empty Route", () => {
+  assert.match(routeDetailSource, /const previewRouteRow = contextRouteRows\.find\(\(routeRow\) => routeRow\.isPreviewOnly\)/);
+  assert.match(routeDetailSource, /stops: previewRouteRow\.stops/);
+  assert.match(routeDetailSource, /routeIdx: previewRouteRow\.routeIdx/);
+  assert.match(routeDetailSource, /isMaterializedDraft: true/);
+  assert.match(routeDetailSource, /const hasMaterializedClientRoute = clientRouteRows\.some\(\(routeRow\) => routeRow\.isMaterializedDraft\)/);
+  assert.match(routeDetailSource, /hasMaterializedClientRoute \? \[\] : routeGroupChildRows/);
+  assert.match(routeDetailSource, /const canSaveRoutePolygon = hasEditableRouteRows && polygonCandidateOrderIds\.length > 0/);
+  assert.match(routeDetailSource, /if \(targetRouteRow\.isPreviewOnly \|\| polygonSelectedOrderIds\.length === 0\) return/);
+  assert.match(routeDetailSource, /timelineRouteRows\.filter\(\(routeRow\) => !routeRow\.isPreviewOnly\)\.map/);
+  assert.match(routeDetailSource, /disabled=\{!routeRow\.routePlanId\}/);
 });
 
 test("Route detail draft payload is child-only and treats routeIdx as server assertion", () => {
@@ -1019,6 +1033,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /function getRouteDraftOptimized\(routeRow, includeExistingOptimized\) \{/);
   assert.match(routeDetailSource, /if \(routeRow\.routePlanId && !includeExistingOptimized\) return undefined/);
   assert.match(routeDetailSource, /function shouldIncludeRouteDraftRow\(routeRow, includeEmptyTempRoutes\) \{/);
+  assert.match(routeDetailSource, /if \(routeRow\.isPreviewOnly\) return false/);
   assert.match(routeDetailSource, /return !\(routeRow\.tempId && !routeRow\.routePlanId && routeRow\.stops\.length === 0\)/);
   assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{[\s\S]*includeExistingOptimized: false/);
   assert.ok(
@@ -1060,8 +1075,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /import \{[\s\S]*RouteStartTimePicker[\s\S]*\} from "\.\.\/features\/delivery\/route-start-time-picker"/);
   assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? \([\s\S]*?<RouteStartTimePicker[\s\S]*storeTimezone=\{ianaTimezone\}[\s\S]*timezoneAbbreviation=\{timezoneAbbreviation\}[\s\S]*timezoneSource=\{timezoneSource\}/);
   assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);
-  assert.match(routeDetailSource, /aria-label=\{`Open \$\{routeRow\.title\} route detail`\}/);
-  assert.match(routeDetailSource, /requestRouteNavigation\(routeGroupChildPath\(routeGroupId, routeRow\.routePlanId\)\)/);
+  assert.match(routeDetailSource, /aria-label=\{routeRow\.routePlanId \? `Open \$\{routeRow\.title\} route detail` : `\$\{routeRow\.title\} route preview`\}/);
+  assert.match(routeDetailSource, /routeRow\.routePlanId \? requestRouteNavigation\(routeGroupChildPath\(routeGroupId, routeRow\.routePlanId\)\) : undefined/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);

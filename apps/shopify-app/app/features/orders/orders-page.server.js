@@ -8,7 +8,6 @@ import {
 import {
   createDeliveryRouteGroup,
   fetchDeliveryRouteGroups,
-  generateDeliveryRouteGroupChildRoutes,
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupOrders,
 } from "../delivery/route-groups.server";
@@ -350,9 +349,7 @@ async function handleOrdersAction(request) {
     }
 
     const draftPayload = buildFirstRouteDraftPayload(addResult.routeGroup, addOrderIds);
-    if (!draftPayload) {
-      return { routeGroup: addResult.routeGroup, errors: [{ message: "주문을 배정할 child route가 없습니다." }] };
-    }
+    if (!draftPayload) return { routeGroup: addResult.routeGroup, errors: [] };
 
     const draftResult = await saveDeliveryRouteGroupDraft(
       request,
@@ -419,20 +416,8 @@ async function handleOrdersAction(request) {
     { sessionToken: shopifySessionToken },
   );
 
-  const generatedRouteGroupData = routeGroup?.id
-    ? await generateDeliveryRouteGroupChildRoutes(
-        request,
-        routeGroup.id,
-        { confirmRisk: false },
-        { sessionToken: shopifySessionToken },
-      )
-    : { routeGroup: null, errors: [] };
-  const generatedRouteGroup = generatedRouteGroupData.routeGroup ?? routeGroup;
-  const routePlan = getFirstRouteGroupRoutePlan(generatedRouteGroup);
-  const routePlanErrors = [
-    ...(routeGroupErrors ?? []),
-    ...(generatedRouteGroupData.errors ?? []),
-  ];
+  const routePlan = getFirstRouteGroupRoutePlan(routeGroup);
+  const routePlanErrors = routeGroupErrors ?? [];
   createTimings.createRoutePlanMs = roundPerfDuration(getSafePerformanceNow() - createRoutePlanStartedAt);
   logDevPerformanceMetric("orders.create_route.action", {
     ...createTimings,
@@ -440,13 +425,13 @@ async function handleOrdersAction(request) {
     plannedOrderCount: plannedOrders.length,
     syncedOrderCount,
     canonicalOrderCount,
-    routeGroupId: generatedRouteGroup?.id ?? null,
+    routeGroupId: routeGroup?.id ?? null,
     routePlanId: routePlan?.id ?? null,
     errorCount: routePlanErrors.length,
   });
 
-  if (generatedRouteGroup?.id) {
-    return { routePlan, routeGroup: generatedRouteGroup, errors: [] };
+  if (routeGroup?.id) {
+    return { routePlan, routeGroup, errors: [] };
   }
 
   return {
