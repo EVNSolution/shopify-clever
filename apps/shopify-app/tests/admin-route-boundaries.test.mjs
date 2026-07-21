@@ -13,10 +13,10 @@ function walkFiles(dir) {
   });
 }
 
-test("routes that authenticate admin requests export Shopify boundary helpers", () => {
+test("document routes that authenticate admin requests export Shopify boundary helpers", () => {
   const authenticatedRouteFiles = walkFiles(routesDir).filter((filePath) => {
     const source = fs.readFileSync(filePath, "utf8");
-    return source.includes("authenticate.admin(");
+    return source.includes("authenticate.admin(") && /export\s+default\b/.test(source);
   });
 
   assert.ok(authenticatedRouteFiles.length > 0, "expected authenticated route coverage");

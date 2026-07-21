@@ -44,6 +44,14 @@ test("Shopify proxies the authenticated delivery tracking stream without exposin
   assert.match(proxySource, /"cache-control": "no-store, no-transform"/);
 });
 
+test("tracking proxy remains a React Router resource route", () => {
+  const resourceSource = readIfPresent(trackingResourcePath);
+
+  assert.doesNotMatch(resourceSource, /export\s+default\b/);
+  assert.doesNotMatch(resourceSource, /export\s+(?:function|const)\s+ErrorBoundary\b/);
+  assert.doesNotMatch(resourceSource, /export\s+const\s+headers\b/);
+});
+
 test("ready and in-progress child routes observe lifecycle events with a fresh Shopify token", () => {
   assert.ok(existsSync(trackingContractPath));
   const routeDetailSource = readIfPresent(routeDetailPath);
