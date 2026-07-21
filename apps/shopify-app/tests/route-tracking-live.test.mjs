@@ -112,8 +112,10 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /trackingTrail/);
   assert.match(routeMapSource, /trackingConnector/);
   assert.match(routeMapSource, /getRouteTrackingLineFeatures/);
-  assert.match(routeMapSource, /"line-width": 4\.5/);
-  assert.match(routeMapSource, /"line-dasharray"/);
+  assert.match(routeMapSource, /const routeLineOpacity = options\.isTrackingReference \? 0\.22 : 0\.78/);
+  assert.match(routeMapSource, /const routeLineWidth = 2\.5/);
+  assert.equal((routeMapSource.match(/"line-dasharray": \[1\.5, 1\.25\]/g) ?? []).length, 2);
+  assert.doesNotMatch(routeMapSource, /"line-width": 4\.5/);
   assert.match(routeMapSource, /isTrackingReference/);
   assert.doesNotMatch(routeMapSource, /trackingPosition|trackingHistoryPoint/);
   assert.doesNotMatch(routeMapSource, /ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID|ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID/);

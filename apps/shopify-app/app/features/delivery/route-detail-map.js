@@ -206,7 +206,7 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
 
   const existingSource = map.getSource?.(ROUTE_DETAIL_ROUTE_SOURCE_ID);
   const routeLineOpacity = options.isTrackingReference ? 0.22 : 0.78;
-  const routeLineWidth = options.isTrackingReference ? 1.5 : 2.5;
+  const routeLineWidth = 2.5;
   if (existingSource?.setData) {
     existingSource.setData(routeLineData);
     if (map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) {
@@ -268,8 +268,9 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": "#0b84d8",
-        "line-opacity": 0.92,
-        "line-width": 4.5,
+        "line-dasharray": [1.5, 1.25],
+        "line-opacity": 0.9,
+        "line-width": 3.5,
       },
     }, beforeMarkerLayerId);
   }

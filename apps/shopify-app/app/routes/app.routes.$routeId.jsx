@@ -571,24 +571,16 @@ const routeTrackingMapLegendItemStyle = {
   lineHeight: 1.2,
 };
 
-const routeTrackingMapTrailKeyStyle = {
-  background: "#0b84d8",
-  borderRadius: "999px",
-  height: "4px",
-  width: "22px",
-};
-
-const routeTrackingMapConnectorKeyStyle = {
+const routeTrackingMapGpsKeyStyle = {
   borderTop: "3px dashed #0b84d8",
   height: 0,
   width: "22px",
 };
 
 const routeTrackingMapReferenceKeyStyle = {
-  background: "#8c9196",
   borderRadius: "999px",
-  height: "2px",
-  opacity: 0.55,
+  height: "3px",
+  opacity: 0.22,
   width: "22px",
 };
 
@@ -4630,16 +4622,15 @@ export default function RouteDetailPage() {
             {isTrackingMapView ? (
               <div aria-label="Tracking map legend" style={routeTrackingMapLegendStyle}>
                 <span style={routeTrackingMapLegendItemStyle}>
-                  <span aria-hidden="true" style={routeTrackingMapTrailKeyStyle} />
-                  <span>Road-matched GPS path</span>
+                  <span
+                    aria-hidden="true"
+                    style={{ ...routeTrackingMapReferenceKeyStyle, background: routePathColor }}
+                  />
+                  <span>Planned route</span>
                 </span>
                 <span style={routeTrackingMapLegendItemStyle}>
-                  <span aria-hidden="true" style={routeTrackingMapConnectorKeyStyle} />
-                  <span>Unconfirmed GPS movement</span>
-                </span>
-                <span style={routeTrackingMapLegendItemStyle}>
-                  <span aria-hidden="true" style={routeTrackingMapReferenceKeyStyle} />
-                  <span>Planned route reference</span>
+                  <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
+                  <span>Actual GPS tracking</span>
                 </span>
               </div>
             ) : null}
