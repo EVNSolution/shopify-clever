@@ -9,4 +9,5 @@ test("inventory print line estimates count explicit lines and wide customer-note
   assert.equal(getInventoryPrintTextLineCount("First line\nSecond line"), 2);
   assert.equal(getInventoryPrintTextLineCount("가".repeat(45)), 2);
   assert.equal(getInventoryPrintTextLineCount("a".repeat(89)), 2);
+  assert.equal(getInventoryPrintTextLineCount("1234567890", 5), 2);
 });
