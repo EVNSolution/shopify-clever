@@ -77,7 +77,10 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /map\.moveLayer\?\.\(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID\)/);
   assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);
+  assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
   assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, routeTrackingSnapshot/);
+  assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
+  assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
 });
 
 test("Tracking tab presents status-aware live or historical tracking and the latest received position", () => {

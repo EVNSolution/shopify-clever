@@ -305,22 +305,28 @@ test("child detail uses a flat reference-style title area and keeps inventory se
   assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
 });
 
-test("child detail tabs connect the map to Stops and Tracking table views", () => {
+test("child detail tabs remount a GPS-focused map for Tracking instead of sharing the Stops map", () => {
   const tabsIndex = routeDetailSource.indexOf('aria-label="Child route detail sections"');
-  const mapIndex = routeDetailSource.indexOf('ariaLabel="Route stop location map"');
   const timelineIndex = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
   const trackingIndex = routeDetailSource.indexOf('aria-label="Child route tracking"');
 
-  assert.ok(tabsIndex >= 0 && tabsIndex < mapIndex);
-  assert.ok(mapIndex < timelineIndex);
-  assert.ok(mapIndex < trackingIndex);
+  assert.ok(tabsIndex >= 0 && tabsIndex < timelineIndex);
+  assert.ok(tabsIndex < trackingIndex);
   assert.match(routeDetailSource, /const \[childDetailTab, setChildDetailTab\] = useState\("stops"\)/);
+  assert.match(routeDetailSource, /const isTrackingMapView = isMaterializedChildRouteDetail && childDetailTab === "tracking"/);
+  assert.match(routeDetailSource, /const routeMapViewKey = `\$\{isTrackingMapView \? "tracking" : "stops"\}-\$\{mapRenderKey\}`/);
   assert.match(routeDetailSource, /role="tablist"/);
-  assert.match(routeDetailSource, /setChildDetailTab\("stops"\)/);
-  assert.match(routeDetailSource, /setChildDetailTab\("tracking"\)/);
+  assert.match(routeDetailSource, /handleChildDetailTabChange\("stops"\)/);
+  assert.match(routeDetailSource, /handleChildDetailTabChange\("tracking"\)/);
   assert.match(routeDetailSource, />Stops<\/span>/);
   assert.match(routeDetailSource, />Tracking<\/span>/);
   assert.match(routeDetailSource, /childDetailTab === "stops"/);
   assert.match(routeDetailSource, /childDetailTab === "tracking"/);
+  assert.match(routeDetailSource, /ariaLabel=\{isTrackingMapView \? "Recorded GPS tracking map" : "Route stop location map"\}/);
+  assert.match(routeDetailSource, /key=\{routeMapViewKey\}/);
+  assert.match(routeDetailSource, /Recorded GPS path/);
+  assert.match(routeDetailSource, /Current GPS position/);
+  assert.match(routeDetailSource, /Planned route reference/);
+  assert.match(routeDetailSource, /\[isTrackingMapView, mapRenderKey, scheduleMapRecovery\]/);
   assert.match(routeDetailSource, /aria-label="Child route tracking"/);
 });

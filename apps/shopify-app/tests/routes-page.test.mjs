@@ -455,7 +455,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /const savedRouteGeometryRows = routeGeometryRows/);
   assert.match(routeDetailSource, /const savedRouteStopPoints = routeGeometryStopPoints/);
   assert.match(routeDetailSource, /const routePathColor = softenRouteColor\(routeLineColor\)/);
-  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: childDetailTab === "tracking",\s+\}\)/);
+  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan, routeGroup\)/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
@@ -727,7 +727,7 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailMapSource, /map\.addSource\(ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailMapSource, /map\.addLayer\(\{/);
   assert.match(routeDetailMapSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
-  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: childDetailTab === "tracking",\s+\}\)/);
+  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
   assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Start free trial/);
 });
@@ -739,7 +739,7 @@ test("Route detail does not let route-line style readiness block marker renderin
   assert.match(routeDetailMapSource, /return Boolean\(map\.getStyle\(\)\)/);
   assert.match(routeDetailMapSource, /catch \{\s+return false;\s+\}/);
   assert.match(routeDetailMapSource, /return true/);
-  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: childDetailTab === "tracking",\s+\}\)/);
+  assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(
     routeDetailSource,
     /const didSyncMarkerLayers = syncRouteDetailMapMarkerLayers\([\s\S]*?trigger: "initial-sync"[\s\S]*?\);/,
@@ -789,7 +789,7 @@ test("Route detail places stop and departure markers through MapLibre source lay
   assert.match(routeDetailMapSource, /id: ROUTE_DETAIL_DEPARTURE_LAYER_ID,[\s\S]*iconSize: 1,/);
   assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick\)/);
   assert.match(routeDetailSource, /fitRouteStopAndSnappedPoint\(/);
-  assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, maplibregl, routeMapLocations\)/);
+  assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, maplibregl, routeMapFitLocations\)/);
   assert.doesNotMatch(routeDetailSource, /createRouteStopMarkerElement|createDepartureMarkerElement\(departureLocation\)|const stopMarker = new maplibregl\.Marker|const snappedStopPointMarker = new maplibregl\.Marker/);
 });
 test("Route detail falls back to route stop point coordinates before dropping stop markers", () => {
@@ -834,7 +834,7 @@ test("Route detail only auto-fits the map on initial map readiness", () => {
   assert.doesNotMatch(routeDetailSource, /routeStopSaveFetcher/);
   assert.match(routeDetailSource, /const hasInitialRouteMapFitRef = useRef\(false\)/);
   assert.match(routeDetailSource, /const routeMapCenterRef = useRef\(DEFAULT_CENTER\)/);
-  assert.match(routeDetailSource, /routeMapCenterRef\.current = routeMapCenter/);
+  assert.match(routeDetailSource, /routeMapCenterRef\.current = routeMapFitLocations\.at\(-1\)\?\.coordinates \?\? routeMapCenter/);
   assert.match(routeDetailSource, /center: routeMapCenterRef\.current/);
   assert.doesNotMatch(routeDetailSource, /\}, \[mapRenderKey, routeMapCenter, scheduleMapRecovery\]\)/);
   assert.match(routeDetailSource, /hasInitialRouteMapFitRef\.current = false/);
@@ -921,10 +921,10 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
   assert.match(routeDetailSource, /setMapRenderKey\(\(currentRenderKey\) => currentRenderKey \+ 1\)/);
   assert.match(routeDetailSource, /scheduleMapRecovery\(\)/);
   assert.match(routeDetailSource, /ariaLabel: "Refresh route map"/);
-  assert.match(routeDetailSource, /ariaLabel: childDetailTab === "tracking" \? "Fit recorded GPS path" : "Fit highlighted map markers"/);
+  assert.match(routeDetailSource, /ariaLabel: isTrackingMapView \? "Fit recorded GPS path" : "Fit highlighted map markers"/);
   assert.doesNotMatch(routeDetailSource, /Zoom route map to store|handleFitStoreMap/);
   assert.doesNotMatch(routeDetailSource, />Zoom to fit<|>Fit<|>Zoom<|>줌/);
-  assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
+  assert.match(routeDetailSource, /canvasKey=\{routeMapViewKey\}/);
   assert.doesNotMatch(routeDetailSource, />Loading map</);
   assert.doesNotMatch(routeDetailSource, />Map unavailable</);
 });
@@ -1067,7 +1067,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
   assert.match(routeDetailSource, /src="\/icons\/route-polygon-edit\.png"/);
   assert.match(routeDetailSource, /ariaLabel: isRoutePolygonEditMode \? "Stop editing route polygon" : "Edit route polygon"/);
-  assert.match(routeDetailSource, /wheelHintEnabled=\{!isRoutePolygonEditMode\}/);
+  assert.match(routeDetailSource, /wheelHintEnabled=\{isTrackingMapView \|\| !isRoutePolygonEditMode\}/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon"/);
   assert.match(routeDetailMapSource, /function syncRouteEditPolygon\(map, points, isClosed\) \{/);
   assert.ok(

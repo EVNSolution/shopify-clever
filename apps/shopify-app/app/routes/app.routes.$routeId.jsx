@@ -49,6 +49,7 @@ import {
   removeRouteEditPolygon,
   softenRouteColor,
   syncRouteDetailMapMarkerLayers,
+  syncRouteDetailMapViewEmphasis,
   syncRouteDetailLiveTracking,
   syncRouteDetailRouteLine,
   syncRouteEditPolygon,
@@ -536,6 +537,62 @@ const routeDetailMapFrameStyle = {
 
 const routeDetailMapCanvasStyle = {
   minHeight: "490px",
+};
+
+const routeTrackingMapFrameStyle = {
+  height: "520px",
+};
+
+const routeTrackingMapCanvasStyle = {
+  minHeight: "570px",
+};
+
+const routeTrackingMapLegendStyle = {
+  background: "rgba(255, 255, 255, 0.94)",
+  border: "1px solid rgba(138, 138, 138, 0.55)",
+  borderRadius: "10px",
+  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.12)",
+  display: "grid",
+  gap: "7px",
+  left: "12px",
+  padding: "9px 11px",
+  position: "absolute",
+  top: "12px",
+  zIndex: 2,
+};
+
+const routeTrackingMapLegendItemStyle = {
+  alignItems: "center",
+  color: "#303030",
+  display: "flex",
+  fontSize: "12px",
+  fontWeight: 650,
+  gap: "8px",
+  lineHeight: 1.2,
+};
+
+const routeTrackingMapTrailKeyStyle = {
+  background: "#7c3aed",
+  borderRadius: "999px",
+  height: "4px",
+  width: "22px",
+};
+
+const routeTrackingMapPositionKeyStyle = {
+  background: "#0b84d8",
+  border: "2px solid #ffffff",
+  borderRadius: "999px",
+  boxShadow: "0 0 0 1px #0b84d8",
+  height: "10px",
+  width: "10px",
+};
+
+const routeTrackingMapReferenceKeyStyle = {
+  background: "#8c9196",
+  borderRadius: "999px",
+  height: "2px",
+  opacity: 0.55,
+  width: "22px",
 };
 
 const routeMetaActionsStyle = {
@@ -2501,7 +2558,6 @@ export default function RouteDetailPage() {
   const mapRecoveryTimerRef = useRef(null);
   const markerDiagnosticCountRef = useRef(0);
   const hasInitialRouteMapFitRef = useRef(false);
-  const hasTrackingRouteMapFitRef = useRef(false);
   const routeTrackingPopupRef = useRef(null);
   const routeTrackingSnapshotRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
@@ -2517,6 +2573,7 @@ export default function RouteDetailPage() {
   const [removedOrderIds, setRemovedOrderIds] = useState([]);
   const [pendingRouteDraftHref, setPendingRouteDraftHref] = useState(null);
   const [childDetailTab, setChildDetailTab] = useState("stops");
+  const isTrackingMapView = isMaterializedChildRouteDetail && childDetailTab === "tracking";
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
@@ -2708,9 +2765,10 @@ export default function RouteDetailPage() {
     () => getRouteTrackingFitLocations(routeTrackingSnapshot),
     [routeTrackingSnapshot],
   );
-  const routeMapFitLocations = childDetailTab === "tracking" && routeTrackingMapLocations.length > 0
+  const routeMapFitLocations = isTrackingMapView && routeTrackingMapLocations.length > 0
     ? routeTrackingMapLocations
     : routeMapLocations;
+  const routeMapViewKey = `${isTrackingMapView ? "tracking" : "stops"}-${mapRenderKey}`;
   const routeGeometryRows = useMemo(
     () => buildRouteGeometryRows(timelineRouteRows, routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints),
     [routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints, timelineRouteRows],
@@ -2983,6 +3041,19 @@ export default function RouteDetailPage() {
     setRoutePolygonClosed(false);
     setIsPolygonTargetPickerOpen(false);
     setPolygonSelectedOrderIds([]);
+  };
+
+  const handleChildDetailTabChange = (nextTab) => {
+    if (childDetailTab === nextTab) return;
+    if (isRoutePolygonEditMode) {
+      resetRoutePolygonDraft();
+      setIsRoutePolygonEditMode(false);
+    }
+    clearMapRecoveryTimer();
+    mapLoadedRef.current = false;
+    setIsMapReady(false);
+    setMapStatus("loading");
+    setChildDetailTab(nextTab);
   };
 
   const handleToggleRoutePolygonEditMode = () => {
@@ -3707,12 +3778,12 @@ export default function RouteDetailPage() {
   }, [defaultRouteLineColor]);
 
   useEffect(() => {
-    routeMapCenterRef.current = routeMapCenter;
-  }, [routeMapCenter]);
+    routeMapCenterRef.current = routeMapFitLocations.at(-1)?.coordinates ?? routeMapCenter;
+  }, [routeMapCenter, routeMapFitLocations]);
 
   useEffect(() => {
     hasInitialRouteMapFitRef.current = false;
-  }, [mapRenderKey]);
+  }, [isTrackingMapView, mapRenderKey]);
 
   useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
 
@@ -3796,7 +3867,7 @@ export default function RouteDetailPage() {
       mapLibraryRef.current = null;
       mapLoadedRef.current = false;
     };
-  }, [mapRenderKey, scheduleMapRecovery]);
+  }, [isTrackingMapView, mapRenderKey, scheduleMapRecovery]);
 
 
   useEffect(() => {
@@ -3812,7 +3883,7 @@ export default function RouteDetailPage() {
       routeLineRetryTimer = window.setTimeout(() => {
         routeLineRetryTimer = null;
         syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor, {
-          isTrackingReference: childDetailTab === "tracking",
+          isTrackingReference: isTrackingMapView,
         });
       }, 80);
     };
@@ -3860,7 +3931,7 @@ export default function RouteDetailPage() {
       const syncStartedAt = performance.now();
       const routeLineStartedAt = performance.now();
       const didSyncRouteLine = syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor, {
-        isTrackingReference: childDetailTab === "tracking",
+        isTrackingReference: isTrackingMapView,
       });
       if (!didSyncRouteLine) {
         scheduleRouteLineRetry();
@@ -3876,6 +3947,7 @@ export default function RouteDetailPage() {
         routeStopColorById,
         (metric) => emitMarkerDiagnostics({ ...metric, trigger: "initial-sync" }),
       );
+      syncRouteDetailMapViewEmphasis(map, isTrackingMapView);
       bindStopLayerHandlers();
       const markerCreateMs = roundPerfDuration(performance.now() - markerStartedAt);
       logRouteDetailPerformance("routes.detail.map.sync", {
@@ -3891,11 +3963,12 @@ export default function RouteDetailPage() {
     };
     const handleRouteDetailStyleData = () => {
       if (!syncRouteDetailRouteLine(map, savedRouteGeometryRows, routePathColor, {
-        isTrackingReference: childDetailTab === "tracking",
+        isTrackingReference: isTrackingMapView,
       })) {
         scheduleRouteLineRetry();
       }
       if (syncRouteDetailMapMarkerLayers(map, departureLocation, routeMapStops, savedRouteStopPoints, routeLineColor, routeStopColorById, (metric) => emitMarkerDiagnostics({ ...metric, trigger: "styledata" }))) {
+        syncRouteDetailMapViewEmphasis(map, isTrackingMapView);
         bindStopLayerHandlers();
       }
     };
@@ -3916,7 +3989,7 @@ export default function RouteDetailPage() {
     };
   }, [
     departureLocation,
-    childDetailTab,
+    isTrackingMapView,
     isMapReady,
     routeMapStops,
     routeLineColor,
@@ -3932,7 +4005,7 @@ export default function RouteDetailPage() {
 
 
   useEffect(() => {
-    if (!isMapReady || !routeMapRef.current) return undefined;
+    if (!isTrackingMapView || !isMapReady || !routeMapRef.current) return undefined;
 
     const map = routeMapRef.current;
     let didBindHistory = false;
@@ -3944,7 +4017,6 @@ export default function RouteDetailPage() {
       if (canvas) canvas.style.cursor = "";
     };
     const showTrackingPopup = (event) => {
-      if (childDetailTab !== "tracking") return;
       const feature = event.features?.[0];
       const coordinates = feature?.geometry?.coordinates;
       if (!Array.isArray(coordinates) || coordinates.length < 2 || !mapLibraryRef.current?.Popup) return;
@@ -3967,7 +4039,6 @@ export default function RouteDetailPage() {
       if (canvas) canvas.style.cursor = "pointer";
     };
     const bindTrackingHandlers = () => {
-      if (childDetailTab !== "tracking") return;
       if (!didBindHistory && map.getLayer?.(ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID)) {
         map.on("mouseenter", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, showTrackingPopup);
         map.on("mouseleave", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, hideTrackingPopup);
@@ -3998,7 +4069,7 @@ export default function RouteDetailPage() {
       }
       hideTrackingPopup();
     };
-  }, [childDetailTab, isMapReady, routeMapRef, routeTrackingSnapshot]);
+  }, [isMapReady, isTrackingMapView, routeMapRef, routeTrackingSnapshot]);
 
 
   useEffect(() => {
@@ -4190,20 +4261,8 @@ export default function RouteDetailPage() {
     const maplibregl = mapLibraryRef.current;
     hasInitialRouteMapFitRef.current = true;
     mapRef.current.resize();
-    fitRouteDetailMap(mapRef.current, maplibregl, routeMapLocations);
-  }, [isMapReady, routeMapLocations]);
-
-  useEffect(() => {
-    if (childDetailTab !== "tracking") {
-      hasTrackingRouteMapFitRef.current = false;
-      return;
-    }
-    if (!isMapReady || !mapRef.current || !mapLibraryRef.current || routeTrackingMapLocations.length === 0) return;
-    if (hasTrackingRouteMapFitRef.current) return;
-    hasTrackingRouteMapFitRef.current = true;
-    mapRef.current.resize();
-    fitRouteDetailMap(mapRef.current, mapLibraryRef.current, routeTrackingMapLocations);
-  }, [childDetailTab, isMapReady, routeTrackingMapLocations]);
+    fitRouteDetailMap(mapRef.current, maplibregl, routeMapFitLocations);
+  }, [isMapReady, routeMapFitLocations]);
 
   return (
     <main style={routesDetailPageStyle}>
@@ -4421,7 +4480,7 @@ export default function RouteDetailPage() {
             <div aria-label="Child route detail sections" role="tablist" style={routeChildTabsStyle}>
               <button
                 aria-selected={childDetailTab === "stops"}
-                onClick={() => setChildDetailTab("stops")}
+                onClick={() => handleChildDetailTabChange("stops")}
                 role="tab"
                 style={{
                   ...routeChildTabStyle,
@@ -4434,7 +4493,7 @@ export default function RouteDetailPage() {
               </button>
               <button
                 aria-selected={childDetailTab === "tracking"}
-                onClick={() => setChildDetailTab("tracking")}
+                onClick={() => handleChildDetailTabChange("tracking")}
                 role="tab"
                 style={{
                   ...routeChildTabStyle,
@@ -4489,15 +4548,16 @@ export default function RouteDetailPage() {
           ) : null}
 
           <MapPanel
-            ariaLabel="Route stop location map"
-            canvasKey={mapRenderKey}
+            ariaLabel={isTrackingMapView ? "Recorded GPS tracking map" : "Route stop location map"}
+            canvasKey={routeMapViewKey}
             canvasRef={mapContainerRef}
-            canvasStyle={routeDetailMapCanvasStyle}
-            frameStyle={routeDetailMapFrameStyle}
-            wheelHintEnabled={!isRoutePolygonEditMode}
+            canvasStyle={isTrackingMapView ? routeTrackingMapCanvasStyle : routeDetailMapCanvasStyle}
+            frameStyle={isTrackingMapView ? routeTrackingMapFrameStyle : routeDetailMapFrameStyle}
+            key={routeMapViewKey}
+            wheelHintEnabled={isTrackingMapView || !isRoutePolygonEditMode}
             toolbar={
               <>
-                {isRoutePolygonEditMode ? (
+                {!isTrackingMapView && isRoutePolygonEditMode ? (
                   <>
                     <div aria-hidden="true" style={routePolygonEditOverlayStyle}></div>
                     <button
@@ -4543,7 +4603,7 @@ export default function RouteDetailPage() {
                       onClick: handleZoomOutMap,
                     },
                     {
-                      ariaLabel: childDetailTab === "tracking" ? "Fit recorded GPS path" : "Fit highlighted map markers",
+                      ariaLabel: isTrackingMapView ? "Fit recorded GPS path" : "Fit highlighted map markers",
                       disabled: routeMapFitLocations.length === 0,
                       icon: renderMapFitIcon(),
                       onClick: handleFitRouteMap,
@@ -4553,11 +4613,11 @@ export default function RouteDetailPage() {
                       icon: renderMapRefreshIcon(),
                       onClick: handleRefreshMap,
                     },
-                    {
+                    ...(!isTrackingMapView ? [{
                       ariaLabel: isRoutePolygonEditMode ? "Stop editing route polygon" : "Edit route polygon",
                       icon: renderRoutePolygonEditIcon(),
                       onClick: handleToggleRoutePolygonEditMode,
-                    },
+                    }] : []),
                   ]}
                   statusGlyph={mapStatus === "failed" ? "!" : "…"}
                   statusLabel={
@@ -4572,29 +4632,48 @@ export default function RouteDetailPage() {
                 />
               </>
             }
-          />
+          >
+            {isTrackingMapView ? (
+              <div aria-label="Tracking map legend" style={routeTrackingMapLegendStyle}>
+                <span style={routeTrackingMapLegendItemStyle}>
+                  <span aria-hidden="true" style={routeTrackingMapTrailKeyStyle} />
+                  <span>Recorded GPS path</span>
+                </span>
+                <span style={routeTrackingMapLegendItemStyle}>
+                  <span aria-hidden="true" style={routeTrackingMapPositionKeyStyle} />
+                  <span>Current GPS position</span>
+                </span>
+                <span style={routeTrackingMapLegendItemStyle}>
+                  <span aria-hidden="true" style={routeTrackingMapReferenceKeyStyle} />
+                  <span>Planned route reference</span>
+                </span>
+              </div>
+            ) : null}
+          </MapPanel>
 
-          <section style={routeMetaActionsStyle}>
-            <section aria-label="Route timing" style={routeMetaGridStyle}>
-              <div style={routeMetaItemStyle}>Route start: {departureLocation.address}</div>
-              <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
-              <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
+          {!isTrackingMapView ? (
+            <section style={routeMetaActionsStyle}>
+              <section aria-label="Route timing" style={routeMetaGridStyle}>
+                <div style={routeMetaItemStyle}>Route start: {departureLocation.address}</div>
+                <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
+                <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
+              </section>
+              <div aria-label="Route actions" style={routeActionColumnStyle}>
+                <button
+                  disabled={routeGroupActionBusy}
+                  onClick={handlePreviewRouteOptimization}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
+                <button
+                  disabled={routeGroupActionBusy}
+                  onClick={handleAddEmptyRoute}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
+              </div>
             </section>
-            <div aria-label="Route actions" style={routeActionColumnStyle}>
-              <button
-                disabled={routeGroupActionBusy}
-                onClick={handlePreviewRouteOptimization}
-                style={routeActionButtonStyle}
-                type="button"
-              >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
-              <button
-                disabled={routeGroupActionBusy}
-                onClick={handleAddEmptyRoute}
-                style={routeActionButtonStyle}
-                type="button"
-              >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
-            </div>
-          </section>
+          ) : null}
 
           {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
             <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>

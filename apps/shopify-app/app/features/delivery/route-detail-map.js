@@ -370,6 +370,25 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
   return true;
 }
 
+function syncRouteDetailMapViewEmphasis(map, isTrackingView = false) {
+  if (!isRouteDetailMapStyleReady(map)) return false;
+
+  const stopOpacity = isTrackingView ? 0.42 : 1;
+  const departureOpacity = isTrackingView ? 0.65 : 1;
+  const stopPointOpacity = isTrackingView ? 0.3 : 1;
+  if (map.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID)) {
+    map.setPaintProperty?.(ROUTE_DETAIL_STOP_LAYER_ID, "icon-opacity", stopOpacity);
+  }
+  if (map.getLayer?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID)) {
+    map.setPaintProperty?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID, "icon-opacity", departureOpacity);
+  }
+  if (map.getLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID)) {
+    map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-opacity", stopPointOpacity);
+    map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-stroke-opacity", stopPointOpacity);
+  }
+  return true;
+}
+
 function getRouteTrackingFitLocations(trackingSnapshot) {
   return getRouteTrackingPathPoints(trackingSnapshot).map((point) => ({
     coordinates: point.coordinates,
@@ -884,6 +903,7 @@ export {
   removeRouteEditPolygon,
   softenRouteColor,
   syncRouteDetailMapMarkerLayers,
+  syncRouteDetailMapViewEmphasis,
   syncRouteDetailLiveTracking,
   syncRouteDetailRouteLine,
   syncRouteEditPolygon,
