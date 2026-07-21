@@ -35,8 +35,6 @@ import {
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
-  ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID,
-  ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
@@ -574,19 +572,16 @@ const routeTrackingMapLegendItemStyle = {
 };
 
 const routeTrackingMapTrailKeyStyle = {
-  background: "#7c3aed",
+  background: "#0b84d8",
   borderRadius: "999px",
   height: "4px",
   width: "22px",
 };
 
-const routeTrackingMapPositionKeyStyle = {
-  background: "#0b84d8",
-  border: "2px solid #ffffff",
-  borderRadius: "999px",
-  boxShadow: "0 0 0 1px #0b84d8",
-  height: "10px",
-  width: "10px",
+const routeTrackingMapConnectorKeyStyle = {
+  borderTop: "3px dashed #0b84d8",
+  height: 0,
+  width: "22px",
 };
 
 const routeTrackingMapReferenceKeyStyle = {
@@ -2561,7 +2556,6 @@ export default function RouteDetailPage() {
   const markerDiagnosticCountRef = useRef(0);
   const hasInitialRouteMapFitRef = useRef(false);
   const hasTrackingGpsFitRef = useRef(false);
-  const routeTrackingPopupRef = useRef(null);
   const routeTrackingSnapshotRef = useRef(null);
   const [isMapReady, setIsMapReady] = useState(false);
   const [mapStatus, setMapStatus] = useState("loading");
@@ -4048,66 +4042,14 @@ export default function RouteDetailPage() {
     if (!isTrackingMapView || !isMapReady || !routeMapRef.current) return undefined;
 
     const map = routeMapRef.current;
-    let didBindHistory = false;
-    let didBindPosition = false;
-    const hideTrackingPopup = () => {
-      routeTrackingPopupRef.current?.remove();
-      routeTrackingPopupRef.current = null;
-      const canvas = map.getCanvas?.();
-      if (canvas) canvas.style.cursor = "";
-    };
-    const showTrackingPopup = (event) => {
-      const feature = event.features?.[0];
-      const coordinates = feature?.geometry?.coordinates;
-      if (!Array.isArray(coordinates) || coordinates.length < 2 || !mapLibraryRef.current?.Popup) return;
-      hideTrackingPopup();
-      const content = document.createElement("div");
-      content.style.cssText = "display:grid;gap:4px;min-width:170px;padding:2px 0;font:12px/1.35 system-ui,sans-serif;color:#303030";
-      const title = document.createElement("strong");
-      title.textContent = `GPS record #${feature.properties?.sequence ?? "–"}`;
-      const occurred = document.createElement("span");
-      occurred.textContent = `Recorded ${formatTrackingTimestamp(feature.properties?.occurredAt)}`;
-      const received = document.createElement("span");
-      received.textContent = `Received ${formatTrackingTimestamp(feature.properties?.receivedAt)}`;
-      content.append(title, occurred, received);
-      routeTrackingPopupRef.current = new mapLibraryRef.current.Popup({
-        closeButton: false,
-        closeOnClick: false,
-        offset: 10,
-      }).setLngLat(coordinates).setDOMContent(content).addTo(map);
-      const canvas = map.getCanvas?.();
-      if (canvas) canvas.style.cursor = "pointer";
-    };
-    const bindTrackingHandlers = () => {
-      if (!didBindHistory && map.getLayer?.(ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID)) {
-        map.on("mouseenter", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, showTrackingPopup);
-        map.on("mouseleave", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, hideTrackingPopup);
-        didBindHistory = true;
-      }
-      if (!didBindPosition && map.getLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID)) {
-        map.on("mouseenter", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, showTrackingPopup);
-        map.on("mouseleave", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, hideTrackingPopup);
-        didBindPosition = true;
-      }
-    };
     const syncTracking = () => {
       syncRouteDetailLiveTracking(routeMapRef.current, routeTrackingSnapshot);
-      bindTrackingHandlers();
     };
     syncTracking();
     map.on("styledata", syncTracking);
 
     return () => {
       map.off("styledata", syncTracking);
-      if (didBindHistory) {
-        map.off("mouseenter", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, showTrackingPopup);
-        map.off("mouseleave", ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID, hideTrackingPopup);
-      }
-      if (didBindPosition) {
-        map.off("mouseenter", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, showTrackingPopup);
-        map.off("mouseleave", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, hideTrackingPopup);
-      }
-      hideTrackingPopup();
     };
   }, [isMapReady, isTrackingMapView, routeMapRef, routeTrackingSnapshot]);
 
@@ -4689,11 +4631,11 @@ export default function RouteDetailPage() {
               <div aria-label="Tracking map legend" style={routeTrackingMapLegendStyle}>
                 <span style={routeTrackingMapLegendItemStyle}>
                   <span aria-hidden="true" style={routeTrackingMapTrailKeyStyle} />
-                  <span>Recorded GPS path</span>
+                  <span>Road-matched GPS path</span>
                 </span>
                 <span style={routeTrackingMapLegendItemStyle}>
-                  <span aria-hidden="true" style={routeTrackingMapPositionKeyStyle} />
-                  <span>Current GPS position</span>
+                  <span aria-hidden="true" style={routeTrackingMapConnectorKeyStyle} />
+                  <span>Unconfirmed GPS movement</span>
                 </span>
                 <span style={routeTrackingMapLegendItemStyle}>
                   <span aria-hidden="true" style={routeTrackingMapReferenceKeyStyle} />

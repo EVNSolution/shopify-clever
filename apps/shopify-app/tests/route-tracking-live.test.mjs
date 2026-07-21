@@ -110,11 +110,13 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /function syncRouteDetailLiveTracking\(map, trackingSnapshot/);
   assert.match(routeMapSource, /existingSource\?\.setData/);
   assert.match(routeMapSource, /trackingTrail/);
-  assert.match(routeMapSource, /trackingPosition/);
-  assert.match(routeMapSource, /getRouteTrackingPathPoints/);
+  assert.match(routeMapSource, /trackingConnector/);
+  assert.match(routeMapSource, /getRouteTrackingLineFeatures/);
   assert.match(routeMapSource, /"line-width": 4\.5/);
+  assert.match(routeMapSource, /"line-dasharray"/);
   assert.match(routeMapSource, /isTrackingReference/);
-  assert.match(routeMapSource, /map\.moveLayer\?\.\(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID\)/);
+  assert.doesNotMatch(routeMapSource, /trackingPosition|trackingHistoryPoint/);
+  assert.doesNotMatch(routeMapSource, /ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID|ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID/);
   assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
@@ -138,5 +140,5 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.match(routeDetailSource, /routeTrackingSnapshot\?\.progress/);
   assert.match(routeDetailSource, /GPS records/);
   assert.match(routeDetailSource, /Fit recorded GPS path/);
-  assert.match(routeDetailSource, /GPS record #/);
+  assert.doesNotMatch(routeDetailSource, /GPS record #/);
 });
