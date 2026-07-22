@@ -133,7 +133,8 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID/);
   assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID/);
   assert.match(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted \|\| isRouteStopCompleted\(stop\)\)/);
-  assert.match(routeMapSource, /"circle-translate": \[-8, -23\]/);
+  assert.match(routeMapSource, /"circle-translate": \[-10, -28\]/);
+  assert.match(routeMapSource, /"text-translate": \[-10, -28\]/);
   assert.match(routeMapSource, /"text-field": "✓"/);
   assert.doesNotMatch(routeMapSource, /const stopOpacity = isTrackingView \? 0\.42 : 1/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);

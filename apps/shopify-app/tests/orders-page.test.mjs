@@ -1513,11 +1513,11 @@ test("Orders map renders planned markers above overlapping unplanned markers", (
   assert.doesNotMatch(ordersPageSource, /sortedLocatedOrders/);
 });
 
-test("Orders map keeps planned pins the same size and centers the planned number", () => {
+test("Orders map keeps planned pins two display steps larger and centers the planned number", () => {
   assert.match(mapMarkersSource, /export const MAP_PIN_PIXEL_RATIO = 2/);
   assert.match(mapMarkersSource, /const width = \(options\.width \?\? 40\) \* pixelRatio/);
   assert.match(mapMarkersSource, /const height = \(options\.height \?\? 52\) \* pixelRatio/);
-  assert.match(mapMarkersSource, /export const MAP_PIN_ICON_SIZE = 0\.54/);
+  assert.match(mapMarkersSource, /export const MAP_PIN_ICON_SIZE = 0\.66/);
   assert.match(mapMarkersSource, /"icon-size": MAP_PIN_ICON_SIZE/);
   assert.match(mapMarkersSource, /function createMapPinSymbolLayer\(\{ id, source, iconImage/);
   assert.match(ordersPageSource, /createMapPinSymbolLayer\(\{\s+id: ORDERS_MAP_ORDER_LAYER_ID,\s+source: ORDERS_MAP_SOURCE_ID,\s+\}\)/);
