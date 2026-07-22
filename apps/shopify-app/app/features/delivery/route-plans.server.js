@@ -182,6 +182,29 @@ export async function fetchDeliveryRoutePlanDetail(request, routePlanId, options
   };
 }
 
+export async function refreshDeliveryRoutePlanOrderData(request, routePlanId, options = {}) {
+  const safeRoutePlanId = encodeURIComponent(routePlanId ?? "");
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/refresh-order-data`,
+    {
+      fetch: options.fetch,
+      method: "POST",
+      sessionToken: options.sessionToken,
+    },
+  );
+  clearDeliveryApiResponseCache();
+
+  return {
+    routePlan: result.data?.routePlan ?? null,
+    routeGeometry: result.data?.routeGeometry ?? null,
+    routeMetrics: result.data?.routeMetrics ?? null,
+    routeStopPoints: result.data?.routeStopPoints ?? [],
+    stops: result.data?.stops ?? [],
+    errors: result.errors,
+  };
+}
+
 export async function updateDeliveryRoutePlanStops(request, routePlanId, payload, options = {}) {
   const normalizedRoutePlanId = textOrNull(routePlanId);
 

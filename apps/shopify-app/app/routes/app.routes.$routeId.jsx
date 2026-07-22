@@ -2518,6 +2518,8 @@ export default function RouteDetailPage() {
   const addEmptyRouteBranchBusy = false;
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
+  const refreshRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "refreshRouteOrders";
+  const canRefreshRouteOrders = Boolean(effectiveRoutePlan?.id) || siblingRouteRows.length > 0;
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const routeMapRef = mapRef;
@@ -3561,18 +3563,13 @@ export default function RouteDetailPage() {
     handleRouteTimelineDragEnd();
   };
 
-  const submitRouteGroupAction = async (intent, fields = {}) => {
-    if (!routeGroupId) {
-      setRouteGroupClientError("Route group id가 없어 작업을 실행할 수 없습니다.");
-      return;
-    }
-
+  const submitRouteAction = async (intent, fields = {}) => {
     try {
       setRouteGroupClientError(null);
       const sessionToken = await shopify.idToken();
       const formData = new FormData();
       formData.set("_intent", intent);
-      formData.set("routeGroupId", routeGroupId);
+      if (routeGroupId) formData.set("routeGroupId", routeGroupId);
       formData.set("shopifySessionToken", sessionToken);
       for (const [key, value] of Object.entries(fields)) formData.set(key, value);
       routeActionFetcher.submit(formData, { method: "post" });
@@ -3581,6 +3578,14 @@ export default function RouteDetailPage() {
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
     }
+  };
+
+  const submitRouteGroupAction = async (intent, fields = {}) => {
+    if (!routeGroupId) {
+      setRouteGroupClientError("Route group id가 없어 작업을 실행할 수 없습니다.");
+      return;
+    }
+    return submitRouteAction(intent, fields);
   };
 
   const resetRouteDraftChanges = useCallback(() => {
@@ -3713,6 +3718,15 @@ export default function RouteDetailPage() {
     if (inventoryDetailHref) requestRouteNavigation(inventoryDetailHref);
   };
 
+  const handleRefreshRouteOrders = () => {
+    if (!canRefreshRouteOrders || routeGroupActionBusy) return;
+    if (hasRouteAllocationDraft) {
+      setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
+      return;
+    }
+    submitRouteAction("refreshRouteOrders");
+  };
+
   const handleDeleteRoute = async () => {
     if (routeGroupActionBusy) return;
     if (isMaterializedChildRouteDetail) {
@@ -3797,11 +3811,19 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (lastRouteActionIntentRef.current !== "saveRouteDraft") {
-      lastRouteActionIntentRef.current = null;
-      navigateAfterRouteDraftSaveRef.current = null;
-      return;
-    }
+    if (lastRouteActionIntentRef.current !== "refreshRouteOrders") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+
+    const updatedOrders = Number(routeActionFetcher.data?.updatedOrders ?? 0);
+    const refreshedRoutes = Number(routeActionFetcher.data?.refreshedRoutes ?? 0);
+    shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes`);
+    revalidator.revalidate();
+  }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;
     lastRouteActionIntentRef.current = null;
     const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
     navigateAfterRouteDraftSaveRef.current = null;
@@ -4414,6 +4436,19 @@ export default function RouteDetailPage() {
                 </div>
               ) : null}
               <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
+                <button
+                  disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
+                  onClick={handleRefreshRouteOrders}
+                  style={canRefreshRouteOrders && !routeGroupActionBusy && !hasRouteAllocationDraft
+                    ? routeActionButtonStyle
+                    : routeDisabledActionButtonStyle}
+                  title={hasRouteAllocationDraft
+                    ? "Save or revert Route changes before updating"
+                    : "Update this Route from the latest Shopify order data"}
+                  type="button"
+                >
+                  {refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
+                </button>
                 <button
                   disabled={!inventoryDetailHref}
                   onClick={handleViewInventory}

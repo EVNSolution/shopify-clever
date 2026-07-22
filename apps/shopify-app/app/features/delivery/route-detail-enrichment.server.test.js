@@ -7,6 +7,10 @@ import {
   attachDeliveryOrderFieldsToRouteDetails,
   mergeCurrentChildDirectDetail,
 } from "./route-detail-enrichment.server.js";
+import {
+  collectRouteRefreshOrderGids,
+  getRoutePlanIdsForOrderRefresh,
+} from "./route-order-refresh.js";
 import { getTimeZoneAbbreviationForInstant } from "../shopify/shop-timezone.server.js";
 
 test("merges authoritative direct route-plan stops into only the current child", () => {
@@ -96,5 +100,37 @@ test("derives timezone abbreviation from the ETA instant, including DST changes"
   assert.equal(
     getTimeZoneAbbreviationForInstant("America/New_York", "2026-07-15T16:00:00.000Z", "ET"),
     "EDT",
+  );
+});
+
+test("collects unique materialized child routes and Shopify orders for route refresh", () => {
+  assert.deepEqual(
+    getRoutePlanIdsForOrderRefresh({
+      children: [
+        { routePlanId: "route-1" },
+        { routePlan: { id: "route-2" } },
+        { routePlanId: "route-1" },
+        { tempId: "preview-only" },
+      ],
+    }),
+    ["route-1", "route-2"],
+  );
+
+  assert.deepEqual(
+    collectRouteRefreshOrderGids([
+      {
+        stops: [
+          { shopifyOrderGid: "gid://shopify/Order/1" },
+          { shopifyOrderGid: "gid://shopify/Order/2" },
+        ],
+      },
+      {
+        stops: [
+          { shopifyOrderGid: "gid://shopify/Order/2" },
+          { orderId: "canonical-only" },
+        ],
+      },
+    ]),
+    ["gid://shopify/Order/1", "gid://shopify/Order/2"],
   );
 });

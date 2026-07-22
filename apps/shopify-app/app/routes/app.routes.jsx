@@ -12,8 +12,9 @@ import {
   toggleRouteSelection,
 } from "../features/delivery/route-list-rows";
 import { appendIdToken } from "../features/delivery/route-paths";
-import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
+import { clearDeliveryApiResponseCache, deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
+import { refreshRouteOrders } from "../features/delivery/route-detail.server";
 import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 
@@ -364,9 +365,35 @@ export const loader = async ({ request }) => {
 };
 
 export const action = async ({ request }) => {
-  await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const intent = formData.get("_intent");
+  const shopifySessionToken = formData.get("shopifySessionToken");
+
+  if (intent === "refreshAllRoutes") {
+    clearDeliveryApiResponseCache();
+    const routePlanData = await fetchDeliveryRoutePlans(request, {
+      cacheKey: session?.shop,
+      sessionToken: shopifySessionToken,
+    });
+    if ((routePlanData.errors ?? []).length > 0) {
+      return {
+        errors: routePlanData.errors,
+        refreshedRoutes: 0,
+        routePlanIds: [],
+        sync: null,
+        updatedOrders: 0,
+      };
+    }
+
+    return refreshRouteOrders({
+      admin,
+      request,
+      routePlanIds: (routePlanData.routePlans ?? []).map((routePlan) => routePlan.id),
+      sessionToken: shopifySessionToken,
+      shopifyShopCacheKey: session?.shop,
+    });
+  }
 
   if (intent !== "deleteRoutePlan") {
     return {
@@ -376,8 +403,6 @@ export const action = async ({ request }) => {
   }
 
   const routeDeleteTargets = parseRouteDeleteTargets(formData.get("routePlanIds"));
-  const shopifySessionToken = formData.get("shopifySessionToken");
-
   if (routeDeleteTargets.length === 0) {
     return {
       routePlanIds: [],
@@ -604,6 +629,7 @@ export default function RoutesPage() {
   const { routeGroups = [], routePlans = [], errors = [] } = useLoaderData();
   const shopify = useAppBridge();
   const routeDeleteFetcher = useFetcher();
+  const routeRefreshFetcher = useFetcher();
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
   const [routeGroupMarkerTooltip, setRouteGroupMarkerTooltip] = useState(null);
   const allRouteRows = buildRouteRows(routePlans, routeGroups);
@@ -620,7 +646,13 @@ export default function RoutesPage() {
     selectableRouteRows.every((route) => checkedRouteIdSet.has(route.deleteKey));
   const routeDeleteDisabled =
     routeDeleteTargetIds.length === 0 || routeDeleteFetcher.state !== "idle";
-  const actionErrors = routeDeleteFetcher.data?.errors ?? [];
+  const routeRefreshDisabled =
+    routePlans.length === 0 || routeRefreshFetcher.state !== "idle" || routeDeleteFetcher.state !== "idle";
+  const routeRefreshBusy = routeRefreshFetcher.state !== "idle";
+  const actionErrors = [
+    ...(routeDeleteFetcher.data?.errors ?? []),
+    ...(routeRefreshFetcher.data?.errors ?? []),
+  ];
   const visibleErrors = [...errors, ...actionErrors];
   const routesNoticeMessage = getServiceErrorNotice(
     [{ errors: visibleErrors }],
@@ -633,6 +665,15 @@ export default function RoutesPage() {
 
     setCheckedRouteIds([]);
   }, [routeDeleteFetcher.data, routeDeleteFetcher.state]);
+
+  useEffect(() => {
+    if (routeRefreshFetcher.state !== "idle" || !routeRefreshFetcher.data) return;
+    if ((routeRefreshFetcher.data.errors ?? []).length > 0) return;
+
+    const updatedOrders = Number(routeRefreshFetcher.data.updatedOrders ?? 0);
+    const refreshedRoutes = Number(routeRefreshFetcher.data.refreshedRoutes ?? 0);
+    shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes`);
+  }, [routeRefreshFetcher.data, routeRefreshFetcher.state, shopify]);
 
   function navigateRouteDetail(route) {
     const fallbackIdToken = searchParams.get("id_token");
@@ -659,6 +700,19 @@ export default function RoutesPage() {
 
   function handleCreateRoutesClick() {
     navigate("/app/orders");
+  }
+
+  async function handleRefreshAllRoutes() {
+    if (routeRefreshDisabled) return;
+
+    const formData = new FormData();
+    formData.set("_intent", "refreshAllRoutes");
+    try {
+      formData.set("shopifySessionToken", await shopify.idToken());
+    } catch {
+      // The server action returns the actionable authentication error.
+    }
+    routeRefreshFetcher.submit(formData, { method: "post" });
   }
 
   function openRouteGroupMarkerTooltip(event, route) {
@@ -725,6 +779,12 @@ export default function RoutesPage() {
           <div style={routesHeaderBarStyle}>
             <h1 style={routesTitleStyle}>Routes</h1>
             <div style={routesHeaderActionsStyle}>
+              <button
+                type="button"
+                style={routeRefreshDisabled ? routeDisabledActionButtonStyle : routeActionButtonStyle}
+                disabled={routeRefreshDisabled}
+                onClick={handleRefreshAllRoutes}
+              >{routeRefreshBusy ? "Updating…" : "Update all routes"}</button>
               <span style={routeSelectionSummaryStyle}>
                 {selectedRouteCount} selected
               </span>
