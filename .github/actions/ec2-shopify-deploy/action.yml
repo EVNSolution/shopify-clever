@@ -93,6 +93,7 @@ runs:
           --exclude 'infra/compose/.env*' \
           --exclude 'infra/compose/*.env' \
           --exclude 'data/' \
+          --exclude 'backups/' \
           --exclude '.DS_Store' \
           -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
           ./ "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}:${{ inputs.deploy-path }}/"

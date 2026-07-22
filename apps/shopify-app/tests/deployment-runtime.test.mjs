@@ -30,6 +30,7 @@ test("Shopify compose files run only the app containers on the route-server netw
   assert.doesNotMatch(workflowSource, /up -d postgres/);
   const deployAction = readRepoFile(".github/actions/ec2-shopify-deploy/action.yml");
   assert.match(deployAction, /up -d --remove-orphans/);
+  assert.match(deployAction, /--exclude 'backups\/'/);
 });
 
 test("manual Shopify deploys reuse a successful main validation instead of running CI again", () => {
