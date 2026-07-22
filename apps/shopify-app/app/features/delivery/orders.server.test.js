@@ -26,6 +26,7 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
           data: {
             orders: [{ id: "delivery-order-1", shopifyOrderGid: orders[0].id }],
             sync: { created: 1, updated: 0 },
+            warnings: [{ code: "ORDER_SYNC_SNAPSHOT_SKIPPED", message: "invalid line item" }],
           },
           error: null,
         });
@@ -54,6 +55,7 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
   assert.deepEqual(result, {
     orders: [{ id: "delivery-order-1", shopifyOrderGid: orders[0].id }],
     sync: { created: 1, updated: 0 },
+    warnings: [{ code: "ORDER_SYNC_SNAPSHOT_SKIPPED", message: "invalid line item" }],
     errors: [],
   });
 });

@@ -38,6 +38,7 @@ export async function syncDeliveryOrders(request, payload = {}, options = {}) {
   return {
     orders: result.data?.orders ?? [],
     sync: result.data?.sync ?? null,
+    warnings: result.data?.warnings ?? [],
     errors: result.errors,
   };
 }
