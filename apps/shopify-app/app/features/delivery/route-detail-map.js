@@ -32,6 +32,7 @@ const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1;
 const ROUTE_DETAIL_STOP_POINT_MIN_ZOOM = 15;
 const ROUTE_DETAIL_STOP_POINT_RADIUS = 2.5;
 const ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH = 1.5;
+const ROUTE_DETAIL_ARRIVAL_GROUP_DISTANCE_METERS = 12;
 
 function emitRouteDetailMarkerDiagnostics(onDiagnostics, metric) {
   if (typeof onDiagnostics !== "function") return;
@@ -255,28 +256,84 @@ function buildRouteDetailLiveTrackingData(trackingSnapshot) {
   };
 }
 
+function getRouteDetailArrivalTimestamp(arrival) {
+  const timestamp = Date.parse(arrival?.occurredAt ?? "");
+  return Number.isFinite(timestamp) ? timestamp : Number.POSITIVE_INFINITY;
+}
+
+function areRouteDetailArrivalsAtSameLocation(firstArrival, secondArrival) {
+  const distanceMeters = calculateLngLatDistanceMeters(firstArrival.coordinates, secondArrival.coordinates);
+  return distanceMeters != null && distanceMeters <= ROUTE_DETAIL_ARRIVAL_GROUP_DISTANCE_METERS;
+}
+
 function buildRouteDetailTrackingArrivalData(trackingSnapshot, routeStops) {
   const stopByDeliveryStopId = new Map((Array.isArray(routeStops) ? routeStops : []).flatMap((stop) => {
     const deliveryStopId = textOrUndefined(stop?.deliveryStopId ?? stop?.id);
     return deliveryStopId ? [[deliveryStopId, stop]] : [];
   }));
-  const features = (Array.isArray(trackingSnapshot?.stopArrivals) ? trackingSnapshot.stopArrivals : []).flatMap((arrival) => {
+  const arrivalByDeliveryStopId = new Map();
+  for (const arrival of Array.isArray(trackingSnapshot?.stopArrivals) ? trackingSnapshot.stopArrivals : []) {
     const coordinates = normalizeLngLat(arrival?.latitude, arrival?.longitude);
-    if (!coordinates || arrival?.positionSource === "unavailable") return [];
-    const routeStop = stopByDeliveryStopId.get(textOrUndefined(arrival?.deliveryStopId));
+    const deliveryStopId = textOrUndefined(arrival?.deliveryStopId);
+    if (!coordinates || !deliveryStopId || arrival?.positionSource === "unavailable") continue;
+    const routeStop = stopByDeliveryStopId.get(deliveryStopId);
     const stopNumber = numberOrUndefined(arrival?.stopSequence ?? routeStop?.stop);
-    if (!Number.isInteger(stopNumber) || stopNumber < 1) return [];
-    return [{
+    if (!Number.isInteger(stopNumber) || stopNumber < 1) continue;
+
+    const candidate = {
+      arrivalEventCount: 1,
+      coordinates,
+      deliveryStopId,
+      eventId: textOrUndefined(arrival?.eventId),
+      occurredAt: textOrUndefined(arrival?.occurredAt),
+      stopNumber,
+    };
+    const existing = arrivalByDeliveryStopId.get(deliveryStopId);
+    if (!existing) {
+      arrivalByDeliveryStopId.set(deliveryStopId, candidate);
+      continue;
+    }
+
+    existing.arrivalEventCount += 1;
+    if (getRouteDetailArrivalTimestamp(candidate) < getRouteDetailArrivalTimestamp(existing)) {
+      candidate.arrivalEventCount = existing.arrivalEventCount;
+      arrivalByDeliveryStopId.set(deliveryStopId, candidate);
+    }
+  }
+
+  const arrivalGroups = [];
+  for (const arrival of [...arrivalByDeliveryStopId.values()].sort((left, right) => (
+    getRouteDetailArrivalTimestamp(left) - getRouteDetailArrivalTimestamp(right)
+    || left.stopNumber - right.stopNumber
+  ))) {
+    const group = arrivalGroups.find((candidateGroup) => (
+      candidateGroup.arrivals.every((candidate) => areRouteDetailArrivalsAtSameLocation(candidate, arrival))
+    ));
+    if (group) {
+      group.arrivals.push(arrival);
+    } else {
+      arrivalGroups.push({ arrivals: [arrival], coordinates: arrival.coordinates });
+    }
+  }
+
+  const features = arrivalGroups.map((group) => {
+    const arrivals = [...group.arrivals].sort((left, right) => left.stopNumber - right.stopNumber);
+    const stopLabel = [...new Set(arrivals.map((arrival) => arrival.stopNumber))].join(" · ");
+    return {
       type: "Feature",
-      geometry: { type: "Point", coordinates },
+      geometry: { type: "Point", coordinates: group.coordinates },
       properties: {
-        deliveryStopId: arrival.deliveryStopId,
-        eventId: arrival.eventId,
+        arrivalEventCount: arrivals.reduce((total, arrival) => total + arrival.arrivalEventCount, 0),
+        deliveryStopId: arrivals.map((arrival) => arrival.deliveryStopId).join(","),
+        eventId: arrivals.map((arrival) => arrival.eventId).filter(Boolean).join(","),
         featureType: "stopArrival",
-        occurredAt: arrival.occurredAt,
-        stopNumber,
+        occurredAt: group.arrivals[0].occurredAt,
+        stopCount: arrivals.length,
+        stopLabel,
+        stopLabelLength: stopLabel.length,
+        stopNumber: arrivals[0].stopNumber,
       },
-    }];
+    };
   });
   return { type: "FeatureCollection", features };
 }
@@ -341,7 +398,15 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot, routeStops) {
       source: ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID,
       paint: {
         "circle-color": "#0b84d8",
-        "circle-radius": 11,
+        "circle-radius": [
+          "interpolate",
+          ["linear"],
+          ["get", "stopLabelLength"],
+          1, 11,
+          3, 14,
+          6, 20,
+          10, 28,
+        ],
         "circle-stroke-color": "#ffffff",
         "circle-stroke-width": 2,
       },
@@ -354,8 +419,8 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot, routeStops) {
       source: ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID,
       layout: {
         "text-allow-overlap": true,
-        "text-field": ["to-string", ["get", "stopNumber"]],
-        "text-size": 11,
+        "text-field": ["to-string", ["get", "stopLabel"]],
+        "text-size": ["case", [">", ["get", "stopLabelLength"], 6], 10, 11],
       },
       paint: { "text-color": "#ffffff" },
     });
