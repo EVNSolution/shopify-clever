@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getRouteDetailPopupPanOffset,
   getRouteDetailTrackingArrivalItems,
+  getRouteTrackingArrivalListMaxHeight,
   syncRouteDetailLiveTracking,
   syncRouteDetailRouteLine,
   syncRouteDetailTrackingVisibility,
@@ -51,6 +53,29 @@ function createFakeMap() {
   };
   return { calls, layers, map, sources };
 }
+
+test("arrival popup sizing stays inside the visible tracking map viewport", () => {
+  assert.equal(getRouteTrackingArrivalListMaxHeight(520), 260);
+  assert.equal(getRouteTrackingArrivalListMaxHeight(240), 138);
+  assert.equal(getRouteTrackingArrivalListMaxHeight(180), 78);
+});
+
+test("arrival popup pan correction uses only the overflow outside the visible frame", () => {
+  const frameRect = { bottom: 520, left: 0, right: 800, top: 0 };
+
+  assert.deepEqual(
+    getRouteDetailPopupPanOffset(frameRect, { bottom: 480, left: 200, right: 434, top: 180 }),
+    [0, 0],
+  );
+  assert.deepEqual(
+    getRouteDetailPopupPanOffset(frameRect, { bottom: 558, left: 200, right: 434, top: 258 }),
+    [0, 50],
+  );
+  assert.deepEqual(
+    getRouteDetailPopupPanOffset(frameRect, { bottom: 260, left: -24, right: 210, top: -18 }),
+    [-36, -30],
+  );
+});
 
 test("tracking layers reuse their sources and toggle together between tabs", () => {
   const fake = createFakeMap();
