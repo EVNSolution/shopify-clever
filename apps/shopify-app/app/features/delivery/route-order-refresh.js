@@ -22,6 +22,29 @@ export function collectRouteRefreshOrderGids(routeDetails) {
     .filter(Boolean))];
 }
 
+export function findRouteRefreshStopsMissingShopifyOrderGid(routeDetails) {
+  return (routeDetails ?? []).flatMap((detail) => {
+    const routePlanId = textOrUndefined(detail?.routePlan?.id ?? detail?.routePlanId) ?? null;
+    return (detail?.stops ?? []).flatMap((stop) => {
+      if (textOrUndefined(stop?.shopifyOrderGid)) return [];
+      return [{
+        deliveryStopId: textOrUndefined(stop?.deliveryStopId) ?? null,
+        orderId: textOrUndefined(stop?.orderId) ?? null,
+        orderName: textOrUndefined(stop?.orderName) ?? null,
+        routePlanId,
+      }];
+    });
+  });
+}
+
+export function collectRouteRefreshRoutePlanIdsFromOrders(orders) {
+  return [...new Set((orders ?? [])
+    .flatMap((order) => order?.routeMemberships ?? [])
+    .filter((membership) => isRefreshableRouteStatus(membership?.status))
+    .map((membership) => textOrUndefined(membership?.id))
+    .filter(Boolean))];
+}
+
 export function getBulkRefreshRoutePlanIds(routePlans) {
   return [...new Set((routePlans ?? [])
     .filter((routePlan) => isRefreshableRouteStatus(routePlan?.status, false))
@@ -30,7 +53,7 @@ export function getBulkRefreshRoutePlanIds(routePlans) {
 }
 
 export function partitionRefreshableRouteDetails(routeDetails, options = {}) {
-  const allowInProgress = options.allowInProgress !== false;
+  const allowInProgress = options.allowInProgress === true;
   const refreshable = [];
   const skipped = [];
 

@@ -9,6 +9,8 @@ import {
 } from "./route-detail-enrichment.server.js";
 import {
   collectRouteRefreshOrderGids,
+  collectRouteRefreshRoutePlanIdsFromOrders,
+  findRouteRefreshStopsMissingShopifyOrderGid,
   getBulkRefreshRoutePlanIds,
   getRoutePlanIdsForOrderRefresh,
   partitionRefreshableRouteDetails,
@@ -151,7 +153,7 @@ test("bulk order refresh targets only ready-compatible routes", () => {
   );
 });
 
-test("explicit refresh permits active routes but skips terminal routes", () => {
+test("explicit refresh skips active and terminal routes", () => {
   const partitioned = partitionRefreshableRouteDetails([
     { routePlan: { id: "ready", status: "READY" } },
     { routePlan: { id: "active", status: "IN_PROGRESS" } },
@@ -159,9 +161,41 @@ test("explicit refresh permits active routes but skips terminal routes", () => {
     { routePlan: { id: "unknown", status: "SOMETHING_NEW" } },
   ]);
 
-  assert.deepEqual(partitioned.refreshable.map((detail) => detail.routePlan.id), ["ready", "active"]);
+  assert.deepEqual(partitioned.refreshable.map((detail) => detail.routePlan.id), ["ready"]);
   assert.deepEqual(partitioned.skipped, [
+    { routePlanId: "active", status: "IN_PROGRESS" },
     { routePlanId: "done", status: "COMPLETED" },
     { routePlanId: "unknown", status: "SOMETHING_NEW" },
   ]);
+});
+
+test("route refresh fails closed when a materialized stop has no Shopify GID", () => {
+  assert.deepEqual(
+    findRouteRefreshStopsMissingShopifyOrderGid([
+      {
+        routePlan: { id: "route-1" },
+        stops: [
+          { deliveryStopId: "stop-1", orderName: "#1001", shopifyOrderGid: "gid://shopify/Order/1001" },
+          { deliveryStopId: "stop-2", orderId: "canonical-order-2", orderName: "#1002" },
+        ],
+      },
+    ]),
+    [{ deliveryStopId: "stop-2", orderId: "canonical-order-2", orderName: "#1002", routePlanId: "route-1" }],
+  );
+});
+
+test("route refresh expands to every ready sibling route membership", () => {
+  assert.deepEqual(
+    collectRouteRefreshRoutePlanIdsFromOrders([
+      {
+        routeMemberships: [
+          { id: "route-1", status: "READY" },
+          { id: "route-2", status: "PUBLISHED" },
+          { id: "route-active", status: "IN_PROGRESS" },
+        ],
+      },
+      { routeMemberships: [{ id: "route-2", status: "PUBLISHED" }, { id: "route-3", status: "ASSIGNED" }] },
+    ]),
+    ["route-1", "route-2", "route-3"],
+  );
 });

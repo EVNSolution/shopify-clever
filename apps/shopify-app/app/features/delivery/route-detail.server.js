@@ -36,6 +36,8 @@ import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "./route-timezo
 import { readRouteDraftPayload } from "./route-draft";
 import {
   collectRouteRefreshOrderGids,
+  collectRouteRefreshRoutePlanIdsFromOrders,
+  findRouteRefreshStopsMissingShopifyOrderGid,
   getRoutePlanIdsForOrderRefresh,
   partitionRefreshableRouteDetails,
 } from "./route-order-refresh";
@@ -550,7 +552,7 @@ export const routeDetailAction = async ({ params, request }) => {
 };
 
 export async function refreshRouteOrders({
-  allowInProgress = true,
+  allowInProgress = false,
   admin,
   request,
   routeGroupId,
@@ -611,6 +613,21 @@ export async function refreshRouteOrders({
   }
 
   const routeOrderGids = collectRouteRefreshOrderGids(refreshableRouteDetails);
+  const missingShopifyOrderGids = findRouteRefreshStopsMissingShopifyOrderGid(refreshableRouteDetails);
+  if (missingShopifyOrderGids.length > 0) {
+    return {
+      errors: [{
+        code: "ROUTE_REFRESH_ORDER_ID_MISSING",
+        message: `Shopify 주문 ID가 없는 stop ${missingShopifyOrderGids.length}개가 있어 경로 업데이트를 중단했습니다.`,
+        details: missingShopifyOrderGids,
+      }],
+      refreshedRoutes: 0,
+      routePlanIds,
+      skippedRoutes,
+      sync: null,
+      updatedOrders: 0,
+    };
+  }
   let sync = null;
   let updatedOrders = 0;
   if (routeOrderGids.length > 0) {
@@ -628,8 +645,16 @@ export async function refreshRouteOrders({
       { cacheKey: shopifyShopCacheKey, sessionToken },
     );
     errors.push(...(syncedOrderData.errors ?? []));
+    errors.push(...(syncedOrderData.warnings ?? []).map((warning) => ({
+      ...warning,
+      code: warning.code ?? "ORDER_SYNC_SNAPSHOT_SKIPPED",
+    })));
     sync = syncedOrderData.sync;
     updatedOrders = syncedOrderData.orders.length;
+    routePlanIds = [...new Set([
+      ...routePlanIds,
+      ...collectRouteRefreshRoutePlanIdsFromOrders(syncedOrderData.orders),
+    ])];
   }
 
   if (errors.length > 0) return { errors, routePlanIds, skippedRoutes, sync, updatedOrders };
