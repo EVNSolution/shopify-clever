@@ -114,11 +114,12 @@ test("arrival markers keep one marker for repeated Arrived events at the same st
   assert.equal(arrivalFeatures.length, 1);
   assert.deepEqual(arrivalFeatures[0].geometry.coordinates, [126.929, 37.515]);
   assert.equal(arrivalFeatures[0].properties.stopLabel, "8");
-  assert.equal(arrivalFeatures[0].properties.stopCount, 1);
+  assert.equal(arrivalFeatures[0].properties.collisionCount, 1);
+  assert.deepEqual(arrivalFeatures[0].properties.badgeOffset, [0, 0]);
   assert.equal(arrivalFeatures[0].properties.arrivalEventCount, 2);
 });
 
-test("arrival markers combine stop numbers that share one physical destination", () => {
+test("arrival markers spread independent stop badges around one physical destination", () => {
   const fake = createFakeMap();
   const routeStops = [
     {
@@ -159,15 +160,26 @@ test("arrival markers combine stop numbers that share one physical destination",
   }, routeStops);
 
   const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
-  assert.equal(arrivalFeatures.length, 1);
-  assert.equal(arrivalFeatures[0].properties.stopLabel, "3 · 8");
-  assert.equal(arrivalFeatures[0].properties.stopCount, 2);
-  assert.equal(arrivalFeatures[0].properties.arrivalEventCount, 2);
+  assert.equal(arrivalFeatures.length, 2);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.stopLabel), ["3", "8"]);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.collisionCount), [2, 2]);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.badgeOffset), [[-16, 0], [16, 0]]);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.geometry.coordinates), [
+    [126.929, 37.515],
+    [126.92902, 37.51502],
+  ]);
   assert.equal(
     fake.layers.get("route-detail-tracking-arrival-labels").layout["text-field"][1][1],
-    "stopLabel",
+    "stopNumber",
   );
-  assert.ok(Array.isArray(fake.layers.get("route-detail-tracking-arrival-circles").paint["circle-radius"]));
+  assert.equal(
+    fake.layers.get("route-detail-tracking-arrival-labels").layout["icon-image"],
+    "route-detail-tracking-arrival-badge",
+  );
+  assert.deepEqual(
+    fake.layers.get("route-detail-tracking-arrival-labels").layout["icon-offset"],
+    ["array", "number", 2, ["get", "badgeOffset"]],
+  );
 });
 
 test("arrival markers keep distinct GPS locations separate", () => {
@@ -199,6 +211,7 @@ test("arrival markers keep distinct GPS locations separate", () => {
   const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
   assert.equal(arrivalFeatures.length, 2);
   assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.stopLabel), ["3", "8"]);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.badgeOffset), [[0, 0], [0, 0]]);
 });
 
 test("arrival marker groups do not chain locations beyond the collision distance", () => {
@@ -237,8 +250,13 @@ test("arrival marker groups do not chain locations beyond the collision distance
   }, []);
 
   const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
-  assert.equal(arrivalFeatures.length, 2);
-  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.stopLabel), ["1 · 2", "3"]);
+  assert.equal(arrivalFeatures.length, 3);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.stopLabel), ["1", "2", "3"]);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.badgeOffset), [
+    [-16, 0],
+    [16, 0],
+    [0, 0],
+  ]);
 });
 
 test("planned route sync recreates a missing layer when its source still exists", () => {
