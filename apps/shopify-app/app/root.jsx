@@ -10,7 +10,10 @@ import globalStyles from "./styles/global.css?url";
 
 export const meta = () => [{ title: "clever" }];
 
-export const links = () => [{ rel: "stylesheet", href: globalStyles }];
+export const links = () => [
+  { rel: "stylesheet", href: globalStyles },
+  { rel: "stylesheet", href: "/vendor/maplibre-gl.css" },
+];
 
 export const loader = () => ({
   // eslint-disable-next-line no-undef

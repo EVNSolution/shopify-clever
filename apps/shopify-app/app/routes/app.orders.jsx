@@ -5,8 +5,6 @@ import { shouldRevalidateOrdersRoute } from "../features/orders/orders-page.shar
 
 export { action, loader } from "../features/orders/orders-page.server";
 
-export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
-
 export default OrdersPage;
 
 export function shouldRevalidate(args) {

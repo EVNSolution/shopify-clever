@@ -8,6 +8,7 @@ const trackingProxyPath = new URL("features/delivery/route-tracking.server.js", 
 const trackingResourcePath = new URL("routes/app.route-tracking.$routePlanId.jsx", appRoot);
 const routeDetailPath = new URL("routes/app.routes.$routeId.jsx", appRoot);
 const routeMapPath = new URL("features/delivery/route-detail-map.js", appRoot);
+const globalCssPath = new URL("styles/global.css", appRoot);
 
 function readIfPresent(path) {
   return existsSync(path) ? readFileSync(path, "utf8") : "";
@@ -105,6 +106,7 @@ test("server ETA lifecycle events revalidate route detail for both Stops and Tra
 test("live tracking updates MapLibre sources instead of rebuilding the child map", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
   const routeMapSource = readIfPresent(routeMapPath);
+  const globalCssSource = readIfPresent(globalCssPath);
 
   assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking"/);
   assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID = "route-detail-tracking-arrivals"/);
@@ -134,6 +136,10 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeDetailSource, /map\.on\("click", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerClick\)/);
   assert.match(routeDetailSource, /new maplibregl\.Popup\(/);
   assert.match(routeDetailSource, /\.setDOMContent\(content\)/);
+  assert.match(routeDetailSource, /closeButton: false/);
+  assert.match(routeDetailSource, /close\.className = "route-tracking-arrival-popup__close"/);
+  assert.match(globalCssSource, /\.route-tracking-arrival-popup__stop\s*\{[\s\S]*min-width:\s*56px/);
+  assert.match(globalCssSource, /\.route-tracking-arrival-popup__close\s*\{[\s\S]*font-size:\s*16px/);
   assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
   assert.match(routeMapSource, /function syncRouteDetailTrackingVisibility\(map, isTrackingView = false\)/);

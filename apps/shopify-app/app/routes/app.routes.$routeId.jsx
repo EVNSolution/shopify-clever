@@ -76,8 +76,6 @@ import { installMissingMapImageFallback } from "../features/maps/maplibre-missin
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
 
-export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
-
 const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-clever-lite.json";
 const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
@@ -4156,7 +4154,18 @@ export default function RouteDetailPage() {
       title.textContent = arrivalItems.length > 1
         ? `Arrived stops (${arrivalItems.length})`
         : "Arrived stop";
-      content.append(title);
+
+      const close = document.createElement("button");
+      close.className = "route-tracking-arrival-popup__close";
+      close.type = "button";
+      close.setAttribute("aria-label", "Close arrival details");
+      close.textContent = "×";
+      close.onclick = () => arrivalPopup?.remove();
+
+      const header = document.createElement("div");
+      header.className = "route-tracking-arrival-popup__header";
+      header.append(title, close);
+      content.append(header);
 
       const list = document.createElement("div");
       list.className = "route-tracking-arrival-popup__list";
@@ -4180,7 +4189,7 @@ export default function RouteDetailPage() {
       arrivalPopup?.remove();
       arrivalPopup = new maplibregl.Popup({
         className: "route-tracking-arrival-popup",
-        closeButton: true,
+        closeButton: false,
         offset: 16,
       })
         .setLngLat([Number(coordinates[0]), Number(coordinates[1])])
