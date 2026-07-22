@@ -305,16 +305,19 @@ test("child detail uses a flat reference-style title area and keeps inventory se
   assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
 });
 
-test("child detail tabs remount a GPS-focused map for Tracking instead of sharing the Stops map", () => {
+test("child detail tabs reuse one map while swapping Stops and Tracking layers", () => {
   const tabsIndex = routeDetailSource.indexOf('aria-label="Child route detail sections"');
   const timelineIndex = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
   const trackingIndex = routeDetailSource.indexOf('aria-label="Child route tracking"');
+  const tabHandlerStart = routeDetailSource.indexOf("const handleChildDetailTabChange = (nextTab) => {");
+  const tabHandlerEnd = routeDetailSource.indexOf("const handleToggleRoutePolygonEditMode", tabHandlerStart);
+  const tabHandlerSource = routeDetailSource.slice(tabHandlerStart, tabHandlerEnd);
 
   assert.ok(tabsIndex >= 0 && tabsIndex < timelineIndex);
   assert.ok(tabsIndex < trackingIndex);
   assert.match(routeDetailSource, /const \[childDetailTab, setChildDetailTab\] = useState\("stops"\)/);
   assert.match(routeDetailSource, /const isTrackingMapView = isMaterializedChildRouteDetail && childDetailTab === "tracking"/);
-  assert.match(routeDetailSource, /const routeMapViewKey = `\$\{isTrackingMapView \? "tracking" : "stops"\}-\$\{mapRenderKey\}`/);
+  assert.doesNotMatch(routeDetailSource, /const routeMapViewKey =/);
   assert.match(routeDetailSource, /role="tablist"/);
   assert.match(routeDetailSource, /handleChildDetailTabChange\("stops"\)/);
   assert.match(routeDetailSource, /handleChildDetailTabChange\("tracking"\)/);
@@ -323,10 +326,15 @@ test("child detail tabs remount a GPS-focused map for Tracking instead of sharin
   assert.match(routeDetailSource, /childDetailTab === "stops"/);
   assert.match(routeDetailSource, /childDetailTab === "tracking"/);
   assert.match(routeDetailSource, /ariaLabel=\{isTrackingMapView \? "Recorded GPS tracking map" : "Route stop location map"\}/);
-  assert.match(routeDetailSource, /key=\{routeMapViewKey\}/);
+  assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
+  assert.doesNotMatch(routeDetailSource, /key=\{routeMapViewKey\}/);
   assert.match(routeDetailSource, />Planned route</);
   assert.match(routeDetailSource, />Actual GPS tracking</);
   assert.doesNotMatch(routeDetailSource, /Road-matched GPS path|Unconfirmed GPS movement|Current GPS position/);
-  assert.match(routeDetailSource, /\[isTrackingMapView, mapRenderKey, scheduleMapRecovery\]/);
+  assert.match(routeDetailSource, /\[mapRenderKey, scheduleMapRecovery\]/);
+  assert.doesNotMatch(routeDetailSource, /\[isTrackingMapView, mapRenderKey, scheduleMapRecovery\]/);
+  assert.ok(tabHandlerStart >= 0 && tabHandlerEnd > tabHandlerStart);
+  assert.doesNotMatch(tabHandlerSource, /clearMapRecoveryTimer|mapLoadedRef|setIsMapReady|setMapStatus/);
+  assert.match(routeDetailSource, /if \(!isTrackingMapView\) bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /aria-label="Child route tracking"/);
 });

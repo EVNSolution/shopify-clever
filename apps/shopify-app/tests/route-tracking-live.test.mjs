@@ -128,6 +128,10 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, routeTrackingSnapshot, routeMapStops\)/);
   assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
+  assert.match(routeMapSource, /function syncRouteDetailTrackingVisibility\(map, isTrackingView = false\)/);
+  assert.match(routeMapSource, /setLayoutProperty\?\.\(layerId, "visibility", visibility\)/);
+  assert.match(routeDetailSource, /syncRouteDetailTrackingVisibility\(map, isTrackingMapView\)/);
+  assert.match(routeMapSource, /syncRouteDetailTrackingVisibility\(map, true\)/);
 });
 
 test("Tracking tab presents status-aware live or historical tracking and the latest received position", () => {

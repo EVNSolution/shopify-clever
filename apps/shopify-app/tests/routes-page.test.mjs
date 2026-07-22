@@ -943,7 +943,7 @@ test("Route detail map has compact refresh and automatic recovery controls", () 
   assert.match(routeDetailSource, /ariaLabel: isTrackingMapView \? "Fit recorded GPS path" : "Fit highlighted map markers"/);
   assert.doesNotMatch(routeDetailSource, /Zoom route map to store|handleFitStoreMap/);
   assert.doesNotMatch(routeDetailSource, />Zoom to fit<|>Fit<|>Zoom<|>줌/);
-  assert.match(routeDetailSource, /canvasKey=\{routeMapViewKey\}/);
+  assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
   assert.doesNotMatch(routeDetailSource, />Loading map</);
   assert.doesNotMatch(routeDetailSource, />Map unavailable</);
 });

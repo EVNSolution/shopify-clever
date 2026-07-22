@@ -16,6 +16,12 @@ const ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID = "route-detail-live-tracking-con
 const ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID = "route-detail-tracking-arrivals";
 const ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID = "route-detail-tracking-arrival-circles";
 const ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID = "route-detail-tracking-arrival-labels";
+const ROUTE_DETAIL_TRACKING_LAYER_IDS = [
+  ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID,
+];
 const ROUTE_DETAIL_COMPLETED_STOP_COLOR = "#8c9196";
 const ROUTE_DETAIL_DEPARTURE_IMAGE_ID = "route-detail-departure-pin";
 const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon";
@@ -354,6 +360,19 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot, routeStops) {
     });
   }
 
+  syncRouteDetailTrackingVisibility(map, true);
+  return true;
+}
+
+function syncRouteDetailTrackingVisibility(map, isTrackingView = false) {
+  if (!isRouteDetailMapStyleReady(map)) return false;
+
+  const visibility = isTrackingView ? "visible" : "none";
+  for (const layerId of ROUTE_DETAIL_TRACKING_LAYER_IDS) {
+    if (map.getLayer?.(layerId)) {
+      map.setLayoutProperty?.(layerId, "visibility", visibility);
+    }
+  }
   return true;
 }
 
@@ -891,5 +910,6 @@ export {
   syncRouteDetailMapViewEmphasis,
   syncRouteDetailLiveTracking,
   syncRouteDetailRouteLine,
+  syncRouteDetailTrackingVisibility,
   syncRouteEditPolygon,
 };
