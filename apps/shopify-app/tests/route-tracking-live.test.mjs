@@ -117,8 +117,8 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /trackingTrail/);
   assert.match(routeMapSource, /trackingConnector/);
   assert.match(routeMapSource, /getRouteTrackingLineFeatures/);
-  assert.match(routeMapSource, /const routeLineOpacity = options\.isTrackingReference \? 0\.22 : 0\.78/);
-  assert.match(routeMapSource, /const routeLineWidth = 2\.5/);
+  assert.match(routeMapSource, /const routeLineOpacity = options\.isTrackingReference \? 0\.42 : 0\.78/);
+  assert.match(routeMapSource, /const routeLineWidth = options\.isTrackingReference \? 3\.5 : 2\.5/);
   assert.equal((routeMapSource.match(/"line-dasharray": \[1\.5, 1\.25\]/g) ?? []).length, 2);
   assert.doesNotMatch(routeMapSource, /"line-width": 4\.5/);
   assert.match(routeMapSource, /isTrackingReference/);
@@ -130,7 +130,15 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /arrivalDetailsJson/);
   assert.doesNotMatch(routeMapSource, /badgeOffset|labelOffset|ARRIVAL_BADGE_IMAGE_ID/);
   assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
+  assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID/);
+  assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID/);
+  assert.match(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted \|\| isRouteStopCompleted\(stop\)\)/);
+  assert.match(routeMapSource, /"circle-translate": \[-8, -23\]/);
+  assert.match(routeMapSource, /"text-field": "✓"/);
+  assert.doesNotMatch(routeMapSource, /const stopOpacity = isTrackingView \? 0\.42 : 1/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);
+  assert.match(routeDetailSource, /isTrackingCompleted: completedTrackingStopIds\.has\(stop\.id\)/);
+  assert.match(routeDetailSource, /preserveRouteColor: isTrackingMapView/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
   assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot, routeMapStops\)/);
   assert.match(routeDetailSource, /map\.on\("click", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerClick\)/);

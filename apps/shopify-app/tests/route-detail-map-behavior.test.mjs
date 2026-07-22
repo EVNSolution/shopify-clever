@@ -2,10 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildRouteDetailMarkerFeatureCollection,
   getRouteDetailPopupPanOffset,
   getRouteDetailTrackingArrivalItems,
   getRouteTrackingArrivalListMaxHeight,
   syncRouteDetailLiveTracking,
+  syncRouteDetailMapViewEmphasis,
   syncRouteDetailRouteLine,
   syncRouteDetailTrackingVisibility,
 } from "../app/features/delivery/route-detail-map.js";
@@ -20,7 +22,7 @@ const TRACKING_LAYER_IDS = [
 function createFakeMap() {
   const sources = new Map();
   const layers = new Map();
-  const calls = { addLayer: [], addSource: [], setLayoutProperty: [] };
+  const calls = { addLayer: [], addSource: [], setLayoutProperty: [], setPaintProperty: [] };
   const map = {
     addLayer(layer) {
       calls.addLayer.push(layer.id);
@@ -49,10 +51,66 @@ function createFakeMap() {
       const layer = layers.get(id);
       if (layer) layer.layout = { ...layer.layout, [property]: value };
     },
-    setPaintProperty() {},
+    setPaintProperty(id, property, value) {
+      calls.setPaintProperty.push([id, property, value]);
+      const layer = layers.get(id);
+      if (layer) layer.paint = { ...layer.paint, [property]: value };
+    },
   };
   return { calls, layers, map, sources };
 }
+
+test("Tracking keeps planned stops opaque and shows completion checks only in Tracking", () => {
+  const fake = createFakeMap();
+  fake.map.addLayer({ id: "route-detail-stop-markers", type: "symbol", paint: {} });
+  fake.map.addLayer({ id: "route-detail-departure-marker", type: "symbol", paint: {} });
+  fake.map.addLayer({ id: "route-detail-snapped-stop-points", type: "circle", paint: {} });
+  fake.map.addLayer({ id: "route-detail-stop-completion-badges", type: "circle", layout: {} });
+  fake.map.addLayer({ id: "route-detail-stop-completion-checks", type: "symbol", layout: {} });
+
+  assert.equal(syncRouteDetailMapViewEmphasis(fake.map, true), true);
+  assert.equal(fake.layers.get("route-detail-stop-markers").paint["icon-opacity"], 1);
+  assert.equal(fake.layers.get("route-detail-departure-marker").paint["icon-opacity"], 1);
+  assert.equal(fake.layers.get("route-detail-snapped-stop-points").paint["circle-opacity"], 1);
+  assert.equal(fake.layers.get("route-detail-stop-completion-badges").layout.visibility, "visible");
+  assert.equal(fake.layers.get("route-detail-stop-completion-checks").layout.visibility, "visible");
+
+  assert.equal(syncRouteDetailMapViewEmphasis(fake.map, false), true);
+  assert.equal(fake.layers.get("route-detail-stop-completion-badges").layout.visibility, "none");
+  assert.equal(fake.layers.get("route-detail-stop-completion-checks").layout.visibility, "none");
+});
+
+test("Tracking completion preserves the route-colored marker and exposes badge state", () => {
+  const markerData = buildRouteDetailMarkerFeatureCollection(null, [{
+    coordinates: [126.927, 37.512],
+    deliveryStopId: "stop-3",
+    hasCoordinates: true,
+    id: "order-3",
+    isTrackingCompleted: true,
+    preserveRouteColor: true,
+    routeColor: "#006fbb",
+    status: "DELIVERED",
+    stop: 3,
+  }], [], "#e11900", new Map());
+
+  assert.equal(markerData.features.length, 1);
+  assert.equal(markerData.features[0].properties.isCompleted, true);
+  assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-3");
+});
+
+test("Tracking planned route remains a solid, visible reference under dashed GPS", () => {
+  const fake = createFakeMap();
+  const routeGeometry = {
+    coordinates: [[126.92, 37.51], [126.93, 37.52]],
+    type: "LineString",
+  };
+
+  assert.equal(syncRouteDetailRouteLine(fake.map, routeGeometry, "#006fbb", { isTrackingReference: true }), true);
+  const routeLayer = fake.layers.get("route-detail-osrm-route-line");
+  assert.equal(routeLayer.paint["line-opacity"], 0.42);
+  assert.equal(routeLayer.paint["line-width"], 3.5);
+  assert.equal(routeLayer.paint["line-dasharray"], undefined);
+});
 
 test("arrival popup sizing stays inside the visible tracking map viewport", () => {
   assert.equal(getRouteTrackingArrivalListMaxHeight(520), 260);

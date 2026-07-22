@@ -585,7 +585,7 @@ const routeTrackingMapGpsKeyStyle = {
 const routeTrackingMapReferenceKeyStyle = {
   borderRadius: "999px",
   height: "3px",
-  opacity: 0.22,
+  opacity: 0.42,
   width: "22px",
 };
 
@@ -2743,23 +2743,22 @@ export default function RouteDetailPage() {
   }, [routeTrackingProgress?.completedStopIds, timelineRouteRows]);
   const routeStopColorById = useMemo(() => new Map(timelineRouteRows.flatMap((routeRow) => (
     routeRow.stops.flatMap((stop) => {
-      const isCompleted = completedTrackingStopIds.has(stop.id)
-        || completedTrackingStopIds.has(stop.deliveryStopId);
-      const stopColor = isCompleted ? ROUTE_DETAIL_COMPLETED_STOP_COLOR : routeRow.color;
       return [
-        [stop.id, stopColor],
-        ...(stop.deliveryStopId ? [[stop.deliveryStopId, stopColor]] : []),
-        ...(stop.orderId ? [[stop.orderId, stopColor]] : []),
+        [stop.id, routeRow.color],
+        ...(stop.deliveryStopId ? [[stop.deliveryStopId, routeRow.color]] : []),
+        ...(stop.orderId ? [[stop.orderId, routeRow.color]] : []),
       ];
     })
-  ))), [completedTrackingStopIds, timelineRouteRows]);
+  ))), [timelineRouteRows]);
   const trackingDeliveredCount = childRouteOrderRows.filter((row) => completedTrackingStopIds.has(row.id)).length;
   const routeMapStops = useMemo(() => {
     if (timelineRouteRows.length > 0) {
       return timelineRouteRows.flatMap((routeRow) =>
         routeRow.stops.map((stop) => ({
           ...stop,
+          isTrackingCompleted: completedTrackingStopIds.has(stop.id) || completedTrackingStopIds.has(stop.deliveryStopId),
           isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
+          preserveRouteColor: isTrackingMapView,
           routeColor: routeStopColorById.get(stop.id) ?? routeRow.color,
         })),
       );
@@ -2768,11 +2767,13 @@ export default function RouteDetailPage() {
     return isRouteGroupDetail
       ? routeGroupStopsSource.map((stop) => ({
         ...stop,
+        isTrackingCompleted: completedTrackingStopIds.has(stop.id) || completedTrackingStopIds.has(stop.deliveryStopId),
         isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
+        preserveRouteColor: isTrackingMapView,
         routeColor: routeLineColor,
       }))
       : [];
-  }, [isRouteGroupDetail, polygonHighlightedOrderIds, routeGroupStopsSource, routeLineColor, routeStopColorById, timelineRouteRows]);
+  }, [completedTrackingStopIds, isRouteGroupDetail, isTrackingMapView, polygonHighlightedOrderIds, routeGroupStopsSource, routeLineColor, routeStopColorById, timelineRouteRows]);
   const routeMapLocationsSource = routeMapStops.length > 0 ? routeMapStops : orderedRouteStops;
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, routeMapLocationsSource),

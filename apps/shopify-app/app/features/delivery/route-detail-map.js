@@ -8,6 +8,8 @@ const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
 const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers";
 const ROUTE_DETAIL_DEPARTURE_LAYER_ID = "route-detail-departure-marker";
 const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers";
+const ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID = "route-detail-stop-completion-badges";
+const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID = "route-detail-stop-completion-checks";
 const ROUTE_DETAIL_STOP_POINT_SOURCE_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking";
@@ -263,8 +265,8 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
   }
 
   const existingSource = map.getSource?.(ROUTE_DETAIL_ROUTE_SOURCE_ID);
-  const routeLineOpacity = options.isTrackingReference ? 0.22 : 0.78;
-  const routeLineWidth = 2.5;
+  const routeLineOpacity = options.isTrackingReference ? 0.42 : 0.78;
+  const routeLineWidth = options.isTrackingReference ? 3.5 : 2.5;
   if (existingSource?.setData) {
     existingSource.setData(routeLineData);
   } else {
@@ -512,18 +514,24 @@ function syncRouteDetailTrackingVisibility(map, isTrackingView = false) {
 function syncRouteDetailMapViewEmphasis(map, isTrackingView = false) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
-  const stopOpacity = isTrackingView ? 0.42 : 1;
-  const departureOpacity = isTrackingView ? 0.65 : 1;
-  const stopPointOpacity = isTrackingView ? 0.3 : 1;
   if (map.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID)) {
-    map.setPaintProperty?.(ROUTE_DETAIL_STOP_LAYER_ID, "icon-opacity", stopOpacity);
+    map.setPaintProperty?.(ROUTE_DETAIL_STOP_LAYER_ID, "icon-opacity", 1);
   }
   if (map.getLayer?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID)) {
-    map.setPaintProperty?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID, "icon-opacity", departureOpacity);
+    map.setPaintProperty?.(ROUTE_DETAIL_DEPARTURE_LAYER_ID, "icon-opacity", 1);
   }
   if (map.getLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID)) {
-    map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-opacity", stopPointOpacity);
-    map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-stroke-opacity", stopPointOpacity);
+    map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-opacity", 1);
+    map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-stroke-opacity", 1);
+  }
+  const completionVisibility = isTrackingView ? "visible" : "none";
+  for (const layerId of [
+    ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID,
+    ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID,
+  ]) {
+    if (map.getLayer?.(layerId)) {
+      map.setLayoutProperty?.(layerId, "visibility", completionVisibility);
+    }
   }
   return true;
 }
@@ -775,7 +783,7 @@ function fitRouteStopAndSnappedPoint(map, maplibregl, stop, routeStopPoint) {
 }
 
 function getRouteStopDisplayColor(stop, routeColor, routeStopColorById) {
-  if (isRouteStopCompleted(stop)) return ROUTE_DETAIL_COMPLETED_STOP_COLOR;
+  if (isRouteStopCompleted(stop) && !stop.preserveRouteColor) return ROUTE_DETAIL_COMPLETED_STOP_COLOR;
   return (
     routeStopColorById?.get(stop.id) ??
     routeStopColorById?.get(stop.deliveryStopId) ??
@@ -866,6 +874,7 @@ function buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, 
       },
       properties: {
         featureType: "routeStop",
+        isCompleted: Boolean(stop.isTrackingCompleted || isRouteStopCompleted(stop)),
         orderId: stop.orderId ?? "",
         pinImage: getRouteDetailStopPinImageId(stop, stopColor),
         sortKey: stop.isPolygonSelected ? 3000 : 1000 - stop.stop,
@@ -965,6 +974,51 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
       map.setFilter?.(ROUTE_DETAIL_STOP_LAYER_ID, ["==", ["get", "featureType"], "routeStop"]);
     }
 
+    const completedStopFilter = [
+      "all",
+      ["==", ["get", "featureType"], "routeStop"],
+      ["==", ["get", "isCompleted"], true],
+    ];
+    if (!map.getLayer?.(ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID)) {
+      map.addLayer({
+        id: ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID,
+        type: "circle",
+        source: ROUTE_DETAIL_MARKER_SOURCE_ID,
+        filter: completedStopFilter,
+        layout: {
+          visibility: "none",
+        },
+        paint: {
+          "circle-color": "#008060",
+          "circle-radius": 7,
+          "circle-stroke-color": "#ffffff",
+          "circle-stroke-width": 2,
+          "circle-translate": [-8, -23],
+          "circle-translate-anchor": "viewport",
+        },
+      });
+    }
+    if (!map.getLayer?.(ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID)) {
+      map.addLayer({
+        id: ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID,
+        type: "symbol",
+        source: ROUTE_DETAIL_MARKER_SOURCE_ID,
+        filter: completedStopFilter,
+        layout: {
+          "text-allow-overlap": true,
+          "text-field": "✓",
+          "text-ignore-placement": true,
+          "text-size": 10,
+          visibility: "none",
+        },
+        paint: {
+          "text-color": "#ffffff",
+          "text-translate": [-8, -23],
+          "text-translate-anchor": "viewport",
+        },
+      });
+    }
+
     const existingStopPointSource = map.getSource?.(ROUTE_DETAIL_STOP_POINT_SOURCE_ID);
     if (existingStopPointSource?.setData) {
       existingStopPointSource.setData(stopPointData);
@@ -1023,6 +1077,7 @@ function getRouteStopFromMapFeature(feature, routeStops) {
 }
 
 export {
+  buildRouteDetailMarkerFeatureCollection,
   buildRouteDetailLiveTrackingData,
   DEFAULT_CENTER,
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
