@@ -33,7 +33,7 @@ const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8"
 const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
 
 test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
-  assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.match(routesPageSource, /import \{ clearDeliveryApiResponseCache, deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
   assert.match(routesPageSource, /import \{ deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
   assert.match(routesPageSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
   assert.match(routesPageSource, /import \{ Outlet, redirect,/);
@@ -95,7 +95,7 @@ test("Routes page renders a tab-consistent title header above the route table wi
   assert.doesNotMatch(routesPageSource, /Route summary metrics show/);
 });
 
-test("Routes page adds only the top summary cards and Create routes action from the reference", () => {
+test("Routes page adds top summary cards and explicit route actions", () => {
   assert.match(routesPageSource, /const createRoutesButtonStyle = \{/);
   assert.match(routesPageSource, /const routesSummaryCardsStyle = \{/);
   assert.match(routesPageSource, /const routesSummaryCardStyle = \{/);
@@ -114,6 +114,7 @@ test("Routes page adds only the top summary cards and Create routes action from 
   assert.match(routesPageSource, /function handleCreateRoutesClick\(\) \{/);
   assert.match(routesPageSource, /navigate\("\/app\/orders"\)/);
   assert.match(routesPageSource, /<button type="button" style=\{createRoutesButtonStyle\} onClick=\{handleCreateRoutesClick\}>Create routes<\/button>/);
+  assert.match(routesPageSource, /routeRefreshBusy \? "Updating…" : "Update all routes"/);
   assert.match(routesPageSource, /<section aria-label="Routes summary" style=\{routesSummaryCardsStyle\}>/);
   assert.match(routesPageSource, /routesSummary\.map\(\(summaryItem\) =>/);
   assert.doesNotMatch(routesPageSource, /Filter routes|Recent|Add filter|Clear all/);
@@ -491,7 +492,7 @@ test("Route group detail keeps its own page instead of becoming a child route", 
 });
 
 test("Route detail loader reads the selected persisted route plan", () => {
-  assert.match(routeDetailServerSource, /import \{ fetchDeliveryOrders \} from "\.\/orders\.server"/);
+  assert.match(routeDetailServerSource, /import \{ fetchDeliveryOrders, syncDeliveryOrders \} from "\.\/orders\.server"/);
   assert.match(routeDetailServerSource, /deleteDeliveryRoutePlan,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\/route-plans\.server"/);
   assert.doesNotMatch(routeDetailServerSource, /updateDeliveryRoutePlanStops/);
   assert.match(routeDetailServerSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/locations\/shopify-locations\.server"/);
@@ -516,6 +517,24 @@ test("Route detail loader reads the selected persisted route plan", () => {
   assert.match(routeDetailServerSource, /stop\?\.orderName/);
   assert.doesNotMatch(routeDetailServerSource, /fetchShopifyOrders\(admin\)/);
   assert.doesNotMatch(routeDetailServerSource, /getRouteOrderIds/);
+});
+
+test("Route detail explicitly updates assigned orders without changing route membership", () => {
+  assert.match(routeDetailSource, /refreshRouteOrdersBusy \? "Updating…" : isRouteGroupDetail \? "Update routes" : "Update route"/);
+  assert.match(routeDetailSource, /submitRouteAction\("refreshRouteOrders"\)/);
+  assert.match(routeDetailSource, /hasRouteAllocationDraft/);
+  assert.match(routeDetailServerSource, /intent === "refreshRouteOrders"/);
+  assert.match(routeDetailServerSource, /reason: "manual_refresh"/);
+  assert.match(routeDetailServerSource, /refreshDeliveryRoutePlanOrderData\(request, routePlanId/);
+});
+
+test("Routes list explicitly updates every persisted child route", () => {
+  assert.match(routesPageSource, /import \{ refreshRouteOrders \} from "\.\.\/features\/delivery\/route-detail\.server"/);
+  assert.match(routesPageSource, /intent === "refreshAllRoutes"/);
+  assert.match(routesPageSource, /clearDeliveryApiResponseCache\(\)/);
+  assert.match(routesPageSource, /routePlanIds: \(routePlanData\.routePlans \?\? \[\]\)\.map\(\(routePlan\) => routePlan\.id\)/);
+  assert.match(routesPageSource, /formData\.set\("_intent", "refreshAllRoutes"\)/);
+  assert.match(routesPageSource, /routeRefreshFetcher\.submit\(formData, \{ method: "post" \}\)/);
 });
 
 test("Route detail summarizes delivery with the actual date label", () => {

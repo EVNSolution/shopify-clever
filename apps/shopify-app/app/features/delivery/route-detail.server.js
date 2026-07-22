@@ -1,7 +1,7 @@
 import { redirect } from "react-router";
 
 import { fetchDeliveryDrivers } from "./drivers.server";
-import { fetchDeliveryOrders } from "./orders.server";
+import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
 import {
   deleteDeliveryRouteGroup,
   fetchDeliveryRouteGroupDetail,
@@ -9,8 +9,10 @@ import {
   saveDeliveryRouteGroupDraft,
 } from "./route-groups.server";
 import {
+  clearDeliveryApiResponseCache,
   deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
+  refreshDeliveryRoutePlanOrderData,
 } from "./route-plans.server";
 import {
   firstArray,
@@ -26,9 +28,16 @@ import {
 } from "./route-detail-enrichment.server";
 import { routeGroupChildPath } from "./route-paths";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
+import { getOrderSyncSnapshots } from "../orders/canonical-orders";
+import { fetchShopifyOrdersByIds } from "../orders/shopify-orders.server";
+import { fetchShopifyAppPreferences } from "../settings/app-preferences.server";
 import { authenticate } from "../../shopify.server";
 import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "./route-timezone.server";
 import { readRouteDraftPayload } from "./route-draft";
+import {
+  collectRouteRefreshOrderGids,
+  getRoutePlanIdsForOrderRefresh,
+} from "./route-order-refresh";
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -463,7 +472,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
 }
 
 export const routeDetailAction = async ({ params, request }) => {
-  await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const routeId = cleanRoutePathParam(params.routeId);
   const routeGroupIdFromParams = cleanRoutePathParam(params.routeGroupId);
@@ -482,6 +491,17 @@ export const routeDetailAction = async ({ params, request }) => {
       return deleteDeliveryRouteGroup(request, routeGroupIdFromParams, { sessionToken: shopifySessionToken });
     }
     return deleteDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
+  }
+
+  if (intent === "refreshRouteOrders") {
+    return refreshRouteOrders({
+      admin,
+      request,
+      routeGroupId: routeGroupIdFromParams ?? routeGroupId,
+      routeId,
+      sessionToken: shopifySessionToken,
+      shopifyShopCacheKey: session?.shop,
+    });
   }
 
   if (intent === "previewRouteOptimization") {
@@ -525,6 +545,87 @@ export const routeDetailAction = async ({ params, request }) => {
     errors: [{ message: "지원하지 않는 route 작업입니다." }],
   };
 };
+
+export async function refreshRouteOrders({
+  admin,
+  request,
+  routeGroupId,
+  routeId,
+  routePlanIds: requestedRoutePlanIds = [],
+  sessionToken,
+  shopifyShopCacheKey,
+}) {
+  clearDeliveryApiResponseCache();
+
+  let routePlanIds = [...new Set([
+    ...requestedRoutePlanIds,
+    routeId,
+  ].map(textOrUndefined).filter(Boolean))];
+  const errors = [];
+  if (routePlanIds.length === 0 && routeGroupId) {
+    const routeGroupData = await fetchDeliveryRouteGroupDetail(request, routeGroupId, {
+      cacheKey: shopifyShopCacheKey,
+      sessionToken,
+    });
+    errors.push(...(routeGroupData.errors ?? []));
+    routePlanIds = getRoutePlanIdsForOrderRefresh(routeGroupData.routeGroup);
+  }
+
+  if (errors.length > 0) return { errors, routePlanIds: [], sync: null, updatedOrders: 0 };
+  if (routePlanIds.length === 0) {
+    return {
+      errors: [{ message: "업데이트할 child route가 없습니다." }],
+      routePlanIds: [],
+      sync: null,
+      updatedOrders: 0,
+    };
+  }
+
+  const routeDetails = await Promise.all(routePlanIds.map((routePlanId) =>
+    fetchDeliveryRoutePlanDetail(request, routePlanId, {
+      cacheKey: shopifyShopCacheKey,
+      sessionToken,
+    })));
+  errors.push(...routeDetails.flatMap((detail) => detail.errors ?? []));
+  if (errors.length > 0) return { errors, routePlanIds, sync: null, updatedOrders: 0 };
+
+  const routeOrderGids = collectRouteRefreshOrderGids(routeDetails);
+  let sync = null;
+  let updatedOrders = 0;
+  if (routeOrderGids.length > 0) {
+    const preferencesData = await fetchShopifyAppPreferences(admin);
+    const shopifyOrderData = await fetchShopifyOrdersByIds(admin, routeOrderGids, {
+      deliveryCycle: preferencesData.appPreferences.deliveryCycle,
+    });
+    errors.push(...(preferencesData.errors ?? []), ...(shopifyOrderData.errors ?? []));
+    if (errors.length > 0) return { errors, routePlanIds, sync: null, updatedOrders: 0 };
+
+    const snapshots = getOrderSyncSnapshots(shopifyOrderData.orders);
+    const syncedOrderData = await syncDeliveryOrders(
+      request,
+      { reason: "manual_refresh", orders: snapshots },
+      { cacheKey: shopifyShopCacheKey, sessionToken },
+    );
+    errors.push(...(syncedOrderData.errors ?? []));
+    sync = syncedOrderData.sync;
+    updatedOrders = syncedOrderData.orders.length;
+  }
+
+  if (errors.length > 0) return { errors, routePlanIds, sync, updatedOrders };
+
+  const refreshedRoutes = await Promise.all(routePlanIds.map((routePlanId) =>
+    refreshDeliveryRoutePlanOrderData(request, routePlanId, { sessionToken })));
+  errors.push(...refreshedRoutes.flatMap((detail) => detail.errors ?? []));
+
+  return {
+    errors,
+    refreshedRoutes: refreshedRoutes.filter((detail) => detail.routePlan).length,
+    routePlanIds,
+    sync,
+    updatedOrders,
+  };
+}
+
 
 function logRouteGroupActionResult(name, routeId, routeGroupId, result) {
   const routeGroup = result?.routeGroup;

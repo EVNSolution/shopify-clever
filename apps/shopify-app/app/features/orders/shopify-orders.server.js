@@ -11,6 +11,7 @@ import {
 
 const SHOPIFY_ORDERS_PAGE_SIZE = 50;
 const SHOPIFY_ORDERS_MAX_PAGES = 20;
+const SHOPIFY_ORDER_NODES_BATCH_SIZE = 100;
 
 export const SHOPIFY_ORDERS_QUERY = `#graphql
   query CleverRouteOrders($first: Int!, $after: String) {
@@ -79,6 +80,68 @@ export const SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE = SHOPIFY_ORDERS_QUERY.r
   "",
 );
 
+export const SHOPIFY_ORDERS_BY_IDS_QUERY = `#graphql
+  query CleverRouteOrdersByIds($ids: [ID!]!) {
+    nodes(ids: $ids) {
+      ... on Order {
+        id
+        legacyResourceId
+        name
+        phone
+        createdAt
+        updatedAt
+        cancelledAt
+        note
+        customer {
+          note
+        }
+        processedAt
+        displayFinancialStatus
+        paymentGatewayNames
+        displayFulfillmentStatus
+        currentTotalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        customAttributes {
+          key
+          value
+        }
+        lineItems(first: 20) {
+          nodes {
+            title
+            name
+            variantTitle
+            quantity
+            sku
+          }
+        }
+        shippingAddress {
+          name
+          address1
+          address2
+          city
+          province
+          provinceCode
+          zip
+          countryCodeV2
+          phone
+          latitude
+          longitude
+        }
+      }
+    }
+  }
+`;
+
+export const SHOPIFY_ORDERS_BY_IDS_QUERY_WITHOUT_CUSTOMER_NOTE =
+  SHOPIFY_ORDERS_BY_IDS_QUERY.replace(
+    /\n[ ]{8}customer \{\n[ ]{10}note\n[ ]{8}\}/,
+    "",
+  );
+
 export const ORDER_SCOPE_ACCESS_ERROR_CODE = "ORDER_SCOPE_ACCESS";
 export const PROTECTED_ORDER_ACCESS_ERROR_CODE = SERVICE_ERROR_CODES.PROTECTED_ORDER_ACCESS;
 
@@ -146,6 +209,45 @@ export async function fetchShopifyOrders(admin, options = {}) {
   shopifyOrdersCache.set(cacheKey, cacheEntry);
 
   return withShopifyOrdersCacheStatus(await cacheEntry.promise, "miss");
+}
+
+export async function fetchShopifyOrdersByIds(admin, orderIds, options = {}) {
+  const ids = [...new Set((orderIds ?? []).map(textOrUndefined).filter(Boolean))];
+  if (ids.length === 0) return { orders: [], errors: [] };
+
+  try {
+    let ordersQuery = SHOPIFY_ORDERS_BY_IDS_QUERY;
+    const orders = [];
+    const errors = [];
+
+    for (let index = 0; index < ids.length; index += SHOPIFY_ORDER_NODES_BATCH_SIZE) {
+      const batchIds = ids.slice(index, index + SHOPIFY_ORDER_NODES_BATCH_SIZE);
+      let response;
+      try {
+        assertReadOnlyShopifyOrdersOperation(ordersQuery);
+        response = await admin.graphql(ordersQuery, { variables: { ids: batchIds } });
+      } catch (error) {
+        if (ordersQuery !== SHOPIFY_ORDERS_BY_IDS_QUERY || !isCustomerScopeAccessError(error)) throw error;
+        ordersQuery = SHOPIFY_ORDERS_BY_IDS_QUERY_WITHOUT_CUSTOMER_NOTE;
+        assertReadOnlyShopifyOrdersOperation(ordersQuery);
+        response = await admin.graphql(ordersQuery, { variables: { ids: batchIds } });
+      }
+
+      const payload = await response.json();
+      orders.push(...mapShopifyOrderNodesResponse(payload, options));
+      errors.push(...normalizeGraphqlErrors(payload.errors));
+    }
+
+    return { orders, errors };
+  } catch (error) {
+    if (isOrderScopeAccessError(error)) {
+      return { orders: [], errors: [{ code: ORDER_SCOPE_ACCESS_ERROR_CODE, message: ORDER_SCOPE_ACCESS_MESSAGE }] };
+    }
+    if (isProtectedOrderAccessError(error)) {
+      return { orders: [], errors: [{ code: PROTECTED_ORDER_ACCESS_ERROR_CODE, message: PROTECTED_ORDER_ACCESS_MESSAGE }] };
+    }
+    throw error;
+  }
 }
 
 async function loadShopifyOrders(admin, options = {}) {
@@ -267,6 +369,12 @@ export function mapShopifyOrdersResponse(payload, options = {}) {
   if (!Array.isArray(edges)) return [];
 
   return edges.map((edge) => mapOrderNode(edge?.node, options)).filter(Boolean);
+}
+
+export function mapShopifyOrderNodesResponse(payload, options = {}) {
+  const nodes = payload?.data?.nodes;
+  if (!Array.isArray(nodes)) return [];
+  return nodes.map((node) => mapOrderNode(node, options)).filter(Boolean);
 }
 
 function mapOrderNode(order, options = {}) {

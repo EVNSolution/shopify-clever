@@ -4,8 +4,10 @@ import process from "node:process";
 import {
   clearShopifyOrdersCache,
   fetchShopifyOrders,
+  fetchShopifyOrdersByIds,
   ORDER_SCOPE_ACCESS_ERROR_CODE,
   PROTECTED_ORDER_ACCESS_ERROR_CODE,
+  SHOPIFY_ORDERS_BY_IDS_QUERY,
   SHOPIFY_ORDERS_QUERY,
   SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE,
   assertReadOnlyShopifyOrdersOperation,
@@ -76,6 +78,35 @@ test("retries orders without customer notes when read_customers is not approved"
   assert.deepEqual(queries, [SHOPIFY_ORDERS_QUERY, SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE]);
   assert.equal(result.orders[0].note, "Gate code 1234");
   assert.equal(result.orders[0].customerNote, undefined);
+});
+
+test("fetches only requested Shopify order IDs in bounded batches", async () => {
+  const ids = Array.from({ length: 251 }, (_, index) => `gid://shopify/Order/${index + 1}`);
+  const calls = [];
+  const admin = {
+    graphql: async (query, options) => {
+      calls.push({ query, ids: options.variables.ids });
+      return {
+        json: async () => ({
+          data: {
+            nodes: options.variables.ids.map((id) => ({
+              id,
+              name: `#${id.split("/").at(-1)}`,
+              shippingAddress: { name: "Route customer" },
+            })),
+          },
+        }),
+      };
+    },
+  };
+
+  const result = await fetchShopifyOrdersByIds(admin, [...ids, ids[0]]);
+
+  assert.deepEqual(calls.map((call) => call.ids.length), [100, 100, 51]);
+  assert.ok(calls.every((call) => call.query === SHOPIFY_ORDERS_BY_IDS_QUERY));
+  assert.deepEqual(calls.flatMap((call) => call.ids), ids);
+  assert.deepEqual(result.orders.map((order) => order.id), ids);
+  assert.deepEqual(result.errors, []);
 });
 
 test("maps Shopify customer notes without changing the recipient name", () => {

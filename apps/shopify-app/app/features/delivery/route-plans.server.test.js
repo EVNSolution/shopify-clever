@@ -10,6 +10,7 @@ import {
   DELIVERY_API_ENDPOINT_NOT_FOUND_ERROR_CODE,
   DELIVERY_API_ERROR_CODE,
   fetchDeliveryRoutePlanDetail,
+  refreshDeliveryRoutePlanOrderData,
   fetchDeliveryRoutePlans,
   getDeliveryApiBaseUrl,
   getShopifySessionBearer,
@@ -18,6 +19,43 @@ import {
   updateDeliveryRoutePlanScheduledStart,
   assignDeliveryRoutePlanDriver,
 } from "./route-plans.server.js";
+
+test("refreshes route order data and geometry through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+  try {
+    const result = await refreshDeliveryRoutePlanOrderData(
+      new Request("https://app.test/app/routes/route-1"),
+      "route-1",
+      {
+        sessionToken: "session-token",
+        fetch: async (url, options) => {
+          calls.push({ url, options });
+          return new Response(JSON.stringify({
+            data: {
+              routePlan: { id: "route-1" },
+              routeGeometry: { type: "LineString", coordinates: [] },
+              routeMetrics: { distanceMeters: 100 },
+              routeStopPoints: [],
+              stops: [],
+            },
+            error: null,
+          }), { status: 200, headers: { "content-type": "application/json" } });
+        },
+      },
+    );
+
+    assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route-1/refresh-order-data");
+    assert.equal(calls[0].options.method, "POST");
+    assert.equal(result.routePlan.id, "route-1");
+    assert.equal(result.routeMetrics.distanceMeters, 100);
+    assert.deepEqual(result.errors, []);
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
+    else process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  }
+});
 
 test("extracts the raw Shopify session token from Authorization or id_token", () => {
   assert.equal(
