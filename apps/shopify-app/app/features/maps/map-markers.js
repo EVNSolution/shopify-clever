@@ -143,33 +143,6 @@ export function createDepartureMarkerImageData(options = {}) {
   return context.getImageData(0, 0, width, height);
 }
 
-export function createMapBadgeImageData(color, options = {}) {
-  const pixelRatio = options.pixelRatio ?? MAP_PIN_PIXEL_RATIO;
-  const size = options.size ?? 28;
-  const center = size / 2;
-  const canvas = document.createElement("canvas");
-  canvas.width = size * pixelRatio;
-  canvas.height = size * pixelRatio;
-
-  const context = canvas.getContext("2d");
-  if (!context) return null;
-
-  context.scale(pixelRatio, pixelRatio);
-  context.beginPath();
-  context.arc(center, center, options.radius ?? 11, 0, Math.PI * 2);
-  context.fillStyle = color;
-  context.strokeStyle = options.strokeStyle ?? "#ffffff";
-  context.lineWidth = options.borderWidth ?? 2;
-  context.shadowBlur = options.shadowBlur ?? 3;
-  context.shadowColor = options.shadowColor ?? "rgba(0, 0, 0, 0.26)";
-  context.shadowOffsetY = options.shadowOffsetY ?? 1;
-  context.fill();
-  context.shadowColor = "transparent";
-  context.stroke();
-
-  return context.getImageData(0, 0, canvas.width, canvas.height);
-}
-
 export function createPaletteMapPinImageData(markerType, options = {}) {
   const paletteEntry = MAP_MARKER_PALETTE[markerType];
   if (!paletteEntry) return null;

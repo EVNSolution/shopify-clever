@@ -123,11 +123,17 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.doesNotMatch(routeMapSource, /trackingPosition|trackingHistoryPoint/);
   assert.doesNotMatch(routeMapSource, /ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID|ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID/);
   assert.match(routeMapSource, /featureType: "stopArrival"/);
-  assert.match(routeMapSource, /"text-field": \["to-string", \["get", "stopNumber"\]\]/);
+  assert.match(routeMapSource, /"text-field": \["get", "displayLabel"\]/);
+  assert.match(routeMapSource, /arrivalStopCount/);
+  assert.match(routeMapSource, /arrivalDetailsJson/);
+  assert.doesNotMatch(routeMapSource, /badgeOffset|labelOffset|ARRIVAL_BADGE_IMAGE_ID/);
   assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
   assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot, routeMapStops\)/);
+  assert.match(routeDetailSource, /map\.on\("click", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerClick\)/);
+  assert.match(routeDetailSource, /new maplibregl\.Popup\(/);
+  assert.match(routeDetailSource, /\.setDOMContent\(content\)/);
   assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
   assert.match(routeMapSource, /function syncRouteDetailTrackingVisibility\(map, isTrackingView = false\)/);

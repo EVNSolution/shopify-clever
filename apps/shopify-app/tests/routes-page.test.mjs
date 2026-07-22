@@ -792,7 +792,7 @@ test("Route detail keeps marker coordinates validated and ordered for MapLibre",
 
 test("Route detail places stop and departure markers through MapLibre source layers", () => {
   assert.match(routeDetailSource, /import \{ MAP_MARKER_PALETTE \} from "\.\.\/features\/maps\/map-markers"/);
-  assert.match(routeDetailMapSource, /import \{ addMapPinImage, createDepartureMarkerImageData, createMapBadgeImageData, createMapPinImageData, createMapPinSymbolLayer \}/);
+  assert.match(routeDetailMapSource, /import \{ addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer \}/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_DEPARTURE_LAYER_ID = "route-detail-departure-marker"/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
@@ -801,7 +801,7 @@ test("Route detail places stop and departure markers through MapLibre source lay
   assert.match(routeDetailMapSource, /featureType: "routeStop"/);
   assert.match(mapMarkersSource, /DEPARTURE_HOUSE_ICON_PATH/);
   assert.match(mapMarkersSource, /function createDepartureMarkerImageData\(options = \{\}\) \{/);
-  assert.match(mapMarkersSource, /function createMapBadgeImageData\(color, options = \{\}\) \{/);
+  assert.doesNotMatch(mapMarkersSource, /function createMapBadgeImageData\(/);
   assert.match(routeDetailMapSource, /createDepartureMarkerImageData\(\)/);
   assert.match(routeDetailMapSource, /createMapPinImageData\(stopColor, \{/);
   assert.match(routeDetailMapSource, /map\.addSource\(ROUTE_DETAIL_MARKER_SOURCE_ID/);
