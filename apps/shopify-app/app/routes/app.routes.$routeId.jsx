@@ -2084,6 +2084,7 @@ function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
     driveTimeLabel: ROUTE_EMPTY_LABEL,
     id: `routeGroup:${routeGroup.id}:routeIdx:1`,
     isCurrent: false,
+    isGeneratedTitle: true,
     isPreviewOnly: true,
     optimized: null,
     orderIds: routeStops.map((stop) => stop.orderId).filter(Boolean),
@@ -2179,6 +2180,7 @@ function applyRouteRowDraftState(routeRows, routeLineEdits, routePreviewByKey) {
         : routeRow.scheduledStartTimeZone,
       startDateTime: routeLineEdit.startDateTime ?? routeRow.startDateTime,
       startTimeLabel: routeLineEdit.startTimeLabel ?? routeRow.startTimeLabel,
+      isGeneratedTitle: Object.hasOwn(routeLineEdit, "title") ? false : routeRow.isGeneratedTitle === true,
       title: routeLineEdit.title ?? routeRow.title,
     };
   });
@@ -2230,6 +2232,7 @@ function getNextChildRouteDraft(routeRows) {
   const routeNumber = (maxRouteIdx || routeRows.length) + 1;
   return {
     color: getUnusedRouteColor(null, usedColors, routeNumber - 1),
+    isGeneratedTitle: true,
     label: `#${routeNumber}`,
     routeIdx: routeNumber,
     routeIndex: routeNumber,
@@ -2341,6 +2344,10 @@ function shouldIncludeRouteDraftRow(routeRow, includeEmptyTempRoutes) {
   return !(routeRow.tempId && !routeRow.routePlanId && routeRow.stops.length === 0);
 }
 
+function getRouteDraftLabel(routeRow) {
+  return routeRow.isGeneratedTitle ? null : routeRow.title;
+}
+
 function buildRouteDraftPayload(routeRows, {
   deletedRoutePlanIds = [],
   expectedUpdatedAt,
@@ -2364,7 +2371,7 @@ function buildRouteDraftPayload(routeRows, {
         driverId: routeRow.driverId ?? null,
         ...(routeRow.expectedChildUpdatedAt ? { expectedChildUpdatedAt: routeRow.expectedChildUpdatedAt } : {}),
         ...(routeRow.expectedRoutePlanUpdatedAt ? { expectedRoutePlanUpdatedAt: routeRow.expectedRoutePlanUpdatedAt } : {}),
-        label: routeRow.title,
+        label: getRouteDraftLabel(routeRow),
         ...(optimized === undefined ? {} : { optimized }),
         orderIds: routeRow.stops.map((stop) => stop.orderId).filter(Boolean),
         routeKey: getRouteRowDraftKey(routeRow),
@@ -2534,7 +2541,7 @@ export default function RouteDetailPage() {
   const routeGroupActionBusy = routeActionFetcher.state !== "idle";
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
   const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
-  const addEmptyRouteBranchBusy = false;
+  const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx";
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
   const refreshRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "refreshRouteOrders";
@@ -2707,6 +2714,11 @@ export default function RouteDetailPage() {
   const hasEditableRouteRows = contextTimelineRouteRows.some((routeRow) => !routeRow.isPreviewOnly);
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || clientRouteRows.length > 0
+    || deletedRoutePlanIds.length > 0
+    || Object.keys(routeLineEdits).length > 0
+    || Object.keys(routePreviewByKey).length > 0
+    || removedOrderIds.length > 0;
+  const hasIncompatibleAddEmptyDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || deletedRoutePlanIds.length > 0
     || Object.keys(routeLineEdits).length > 0
     || Object.keys(routePreviewByKey).length > 0
@@ -3628,58 +3640,59 @@ export default function RouteDetailPage() {
   }, []);
 
   const handleAddEmptyRoute = () => {
-    const previewRouteRow = contextRouteRows.find((routeRow) => routeRow.isPreviewOnly);
-    if (previewRouteRow) {
-      const tempId = `temp:${Date.now()}-${Math.random().toString(16).slice(2)}`;
-      setClientRouteRows((rows) => [
-        ...rows,
-        {
-          ...previewRouteRow,
-          id: tempId,
-          isMaterializedDraft: true,
-          isPreviewOnly: false,
-          routeKey: tempId,
-          routePlanId: null,
-          routeIdx: previewRouteRow.routeIdx,
-          stops: previewRouteRow.stops,
-          tempId,
-        },
-      ]);
+    if (routeGroupActionBusy) return;
+    if (hasIncompatibleAddEmptyDraft) {
+      setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
       return;
     }
 
-    const draft = getNextChildRouteDraft(contextRouteRows);
     const tempId = `temp:${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    setClientRouteRows((rows) => [
-      ...rows,
-      {
-        attemptedCount: 0,
-        color: draft.color,
-        createdLabel: ROUTE_EMPTY_LABEL,
-        startDateTime: "",
-        deliveredCount: 0,
-        driverId: null,
-        driverLabel: "Unassigned",
-        driveTimeLabel: ROUTE_EMPTY_LABEL,
+    const previewRouteRow = contextRouteRows.find((routeRow) => routeRow.isPreviewOnly);
+    const routeRow = previewRouteRow
+      ? {
+        ...previewRouteRow,
         id: tempId,
-        isCurrent: false,
-        orderIds: [],
+        isGeneratedTitle: previewRouteRow.isGeneratedTitle === true,
+        isMaterializedDraft: true,
+        isPreviewOnly: false,
         routeKey: tempId,
-        routeIdx: draft.routeIdx,
-        routeIndex: draft.routeIndex,
         routePlanId: null,
-        scheduledStartAt: null,
-        scheduledStartTimeZone: null,
-        startTimeLabel: ROUTE_EMPTY_LABEL,
-        stops: [],
-        stopsCount: 0,
         tempId,
-        title: draft.label,
-        totalDistanceLabel: ROUTE_EMPTY_LABEL,
-        totalItems: 0,
-        totalWeightLabel: ROUTE_EMPTY_LABEL,
-      },
-    ]);
+      }
+      : (() => {
+        const draft = getNextChildRouteDraft(contextRouteRows);
+        return {
+          attemptedCount: 0,
+          color: draft.color,
+          createdLabel: ROUTE_EMPTY_LABEL,
+          startDateTime: "",
+          deliveredCount: 0,
+          driverId: null,
+          driverLabel: "Unassigned",
+          driveTimeLabel: ROUTE_EMPTY_LABEL,
+          id: tempId,
+          isCurrent: false,
+          isGeneratedTitle: draft.isGeneratedTitle === true,
+          isMaterializedDraft: false,
+          orderIds: [],
+          routeKey: tempId,
+          routeIdx: draft.routeIdx,
+          routeIndex: draft.routeIndex,
+          routePlanId: null,
+          scheduledStartAt: null,
+          scheduledStartTimeZone: null,
+          startTimeLabel: ROUTE_EMPTY_LABEL,
+          stops: [],
+          stopsCount: 0,
+          tempId,
+          title: draft.label,
+          totalDistanceLabel: ROUTE_EMPTY_LABEL,
+          totalItems: 0,
+          totalWeightLabel: ROUTE_EMPTY_LABEL,
+        };
+      })();
+    setClientRouteRows((rows) => [...rows, routeRow]);
+    submitRouteGroupAction("queryNextRouteIdx", { tempId });
   };
 
   const handlePreviewRouteOptimization = () => {
@@ -3849,6 +3862,39 @@ export default function RouteDetailPage() {
     const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} terminal routes skipped` : "";
     shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes${skippedMessage}`);
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "queryNextRouteIdx") return;
+    lastRouteActionIntentRef.current = null;
+
+    const errors = routeActionFetcher.data?.errors ?? [];
+    const tempId = routeActionFetcher.data?.tempId;
+    const nextRouteIdx = numberOrUndefined(routeActionFetcher.data?.nextRouteIdx);
+    if (errors.length > 0 || !tempId || nextRouteIdx === undefined) {
+      setClientRouteRows((rows) => tempId ? rows.filter((routeRow) => routeRow.tempId !== tempId) : rows);
+      setRouteGroupClientError(errors[0]?.message ?? "다음 route 번호를 조회하지 못했습니다.");
+      return;
+    }
+
+    setClientRouteRows((rows) => rows.map((routeRow) => {
+      if (routeRow.tempId !== tempId) return routeRow;
+      const routeIdx = Math.max(
+        nextRouteIdx,
+        numberOrUndefined(routeRow.routeIdx) ?? numberOrUndefined(routeRow.routeIndex) ?? nextRouteIdx,
+      );
+      const routeLineEdit = routeLineEdits[routeRow.id] ?? {};
+      const isGeneratedTitle = Object.hasOwn(routeLineEdit, "title") ? false : routeRow.isGeneratedTitle === true;
+      const title = isGeneratedTitle ? `#${routeIdx}` : routeRow.title;
+      return {
+        ...routeRow,
+        isGeneratedTitle,
+        routeIdx,
+        routeIndex: routeIdx,
+        title,
+      };
+    }));
+  }, [routeActionFetcher.data, routeActionFetcher.state, routeLineEdits]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;

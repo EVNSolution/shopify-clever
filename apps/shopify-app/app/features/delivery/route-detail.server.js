@@ -5,6 +5,7 @@ import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
 import {
   deleteDeliveryRouteGroup,
   fetchDeliveryRouteGroupDetail,
+  fetchNextDeliveryRouteGroupRouteIdx,
   previewDeliveryRouteGroupOptimization,
   saveDeliveryRouteGroupDraft,
 } from "./route-groups.server";
@@ -542,6 +543,27 @@ export const routeDetailAction = async ({ params, request }) => {
     );
     logRouteGroupActionResult("routes.detail.action.saveRouteDraft", routeId, routeGroupId, result);
     return result;
+  }
+
+  if (intent === "queryNextRouteIdx") {
+    const tempId = textOrUndefined(formData.get("tempId")) ?? null;
+    logRouteDetailPerformance("routes.detail.action.queryNextRouteIdx.request", {
+      routeGroupId,
+      routeId,
+      tempId,
+    });
+    const result = await fetchNextDeliveryRouteGroupRouteIdx(
+      request,
+      routeGroupId,
+      { sessionToken: shopifySessionToken },
+    );
+    logRouteDetailPerformance("routes.detail.action.queryNextRouteIdx.done", {
+      errorCount: result.errors.length,
+      nextRouteIdx: result.nextRouteIdx,
+      routeGroupId,
+      routeId,
+    });
+    return { ...result, intent: "queryNextRouteIdx", tempId };
   }
 
   return {

@@ -10,6 +10,7 @@ import {
   deleteDeliveryRouteGroupChildRoute,
   DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE,
   fetchDeliveryRouteGroups,
+  fetchNextDeliveryRouteGroupRouteIdx,
   generateDeliveryRouteGroupChildRoutes,
   previewDeliveryRouteGroupOptimization,
   saveDeliveryRouteGroupDraft,
@@ -156,6 +157,20 @@ test("route group helper saves a batched draft allocation", async () => {
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/draft");
   assert.equal(fakeFetch.calls[0].init.method, "PATCH");
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
+});
+
+test("route group helper queries the next child route index without saving", async () => {
+  const fakeFetch = makeFetch({ data: { nextRouteIdx: 7 }, error: null });
+
+  const result = await fetchNextDeliveryRouteGroupRouteIdx(makeRequest(), "group/1", {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { nextRouteIdx: 7, errors: [] });
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/next-route-idx");
+  assert.equal(fakeFetch.calls[0].init.method, "GET");
+  assert.equal(fakeFetch.calls[0].init.body, undefined);
 });
 
 test("route group child delete draft merges deleted child orders into the first route", () => {
