@@ -426,14 +426,8 @@ s-badge {
 .route-tracking-arrival-popup .maplibregl-popup-content {
   border-radius: 10px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
-  min-width: 170px;
+  min-width: 210px;
   padding: 12px;
-}
-
-.route-tracking-arrival-popup .maplibregl-popup-close-button {
-  color: #616161;
-  font-size: 18px;
-  padding: 4px 7px;
 }
 
 .route-tracking-arrival-popup__content {
@@ -442,10 +436,27 @@ s-badge {
   gap: 8px;
 }
 
+.route-tracking-arrival-popup__header {
+  align-items: start;
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+}
+
 .route-tracking-arrival-popup__title {
   font-size: 13px;
   font-weight: 650;
-  padding-right: 18px;
+  line-height: 20px;
+}
+
+.route-tracking-arrival-popup__close {
+  background: transparent;
+  border: 0;
+  color: #6d7175;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
 }
 
 .route-tracking-arrival-popup__list {
@@ -461,11 +472,16 @@ s-badge {
 }
 
 .route-tracking-arrival-popup__stop {
+  align-items: center;
   background: #e8f4fb;
   border-radius: 999px;
+  box-sizing: border-box;
   color: #0869a6;
+  display: inline-flex;
   font-size: 12px;
   font-weight: 650;
+  justify-content: center;
+  min-width: 56px;
   padding: 3px 7px;
   white-space: nowrap;
 }

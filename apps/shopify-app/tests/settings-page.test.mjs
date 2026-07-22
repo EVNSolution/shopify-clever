@@ -82,7 +82,7 @@ test("Settings renders language as a General fieldset without card sections", ()
 });
 
 test("Settings tab lets operators preview geocoding and adjust the pin on a map", () => {
-  assert.match(settingsPageSource, /export const links = \(\) => \[\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}\]/);
+  assert.doesNotMatch(settingsPageSource, /export const links = \(\)/);
   assert.match(settingsDepartureMapSource, /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-liberty\.json"/);
   assert.match(settingsPageSource, /const geocodeFetcher = useFetcher\(\)/);
   assert.match(settingsPageSource, /const \[lastOperation, setLastOperation\] = useState\(null\)/);

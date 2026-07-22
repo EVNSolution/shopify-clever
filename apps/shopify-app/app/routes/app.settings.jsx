@@ -16,8 +16,6 @@ import { SUPPORTED_LANGUAGES, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
 import { PageShell } from "../ui/page-shell";
 
-export const links = () => [{ rel: "stylesheet", href: "/vendor/maplibre-gl.css" }];
-
 const settingsPageStyle = {
   display: "grid",
   gap: "12px",

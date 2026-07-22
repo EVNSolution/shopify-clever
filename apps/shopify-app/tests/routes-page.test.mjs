@@ -716,7 +716,7 @@ test("Route overview header has responsive CSS for inline summary", () => {
 
 
 test("Route detail uses OpenFreeMap MapLibre without copying every reference control", () => {
-  assert.match(routeDetailSource, /export const links = \(\) => \[\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}\]/);
+  assert.doesNotMatch(routeDetailSource, /export const links = \(\)/);
   assert.match(
     routeDetailSource,
     /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-clever-lite\.json"/,

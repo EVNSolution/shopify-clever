@@ -10,6 +10,7 @@ import { buildOrderTimelineDetails } from "../app/features/orders/orders-page.sh
 const root = process.cwd();
 
 const ordersPageSource = readOrdersPageSource();
+const rootDocumentSource = readFileSync(join(root, "app/root.jsx"), "utf8");
 const shopifyOrdersSource = readFileSync(
   join(root, "app/features/orders/shopify-orders.server.js"),
   "utf8",
@@ -120,9 +121,10 @@ test("Orders map assets use stable local URLs to avoid dev console load warnings
     /maplibre-gl\/dist\/maplibre-gl\.css\?url/,
   );
   assert.match(
-    ordersPageSource,
-    /export const links = \(\) => \[\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}\]/,
+    rootDocumentSource,
+    /export const links = \(\) => \[[\s\S]*\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}/,
   );
+  assert.doesNotMatch(ordersPageSource, /export const links = \(\)/);
   assert.match(
     ordersPageSource,
     /const OPENFREEMAP_STYLE_URL = "\/vendor\/openfreemap-clever-lite\.json"/,

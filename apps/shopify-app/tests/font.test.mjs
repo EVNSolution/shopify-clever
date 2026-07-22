@@ -10,6 +10,7 @@ const globalCssPath = join(root, "app/styles/global.css");
 test("root document uses Korean language and project font stylesheet", () => {
   assert.match(rootSource, /<html lang="ko">/);
   assert.match(rootSource, /import globalStyles from "\.\/styles\/global\.css\?url";/);
+  assert.match(rootSource, /\{ rel: "stylesheet", href: "\/vendor\/maplibre-gl\.css" \}/);
   assert.doesNotMatch(rootSource, /static\/fonts\/inter/);
 });
 
