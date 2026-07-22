@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
+import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRevalidator, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatRouteStatus } from "../features/delivery/route-helpers";
 import {
@@ -15,6 +15,7 @@ import { appendIdToken } from "../features/delivery/route-paths";
 import { clearDeliveryApiResponseCache, deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { refreshRouteOrders } from "../features/delivery/route-detail.server";
+import { getBulkRefreshRoutePlanIds } from "../features/delivery/route-order-refresh";
 import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 
@@ -386,13 +387,34 @@ export const action = async ({ request }) => {
       };
     }
 
-    return refreshRouteOrders({
+    const routePlans = routePlanData.routePlans ?? [];
+    const routePlanIds = getBulkRefreshRoutePlanIds(routePlans);
+    const initiallySkippedRoutes = routePlans
+      .filter((routePlan) => !routePlanIds.includes(routePlan.id))
+      .map((routePlan) => ({ routePlanId: routePlan.id, status: routePlan.status ?? "UNKNOWN" }));
+    if (routePlanIds.length === 0) {
+      return {
+        errors: [],
+        refreshedRoutes: 0,
+        routePlanIds: [],
+        skippedRoutes: initiallySkippedRoutes,
+        sync: null,
+        updatedOrders: 0,
+      };
+    }
+
+    const result = await refreshRouteOrders({
+      allowInProgress: false,
       admin,
       request,
-      routePlanIds: (routePlanData.routePlans ?? []).map((routePlan) => routePlan.id),
+      routePlanIds,
       sessionToken: shopifySessionToken,
       shopifyShopCacheKey: session?.shop,
     });
+    return {
+      ...result,
+      skippedRoutes: [...initiallySkippedRoutes, ...(result.skippedRoutes ?? [])],
+    };
   }
 
   if (intent !== "deleteRoutePlan") {
@@ -630,6 +652,7 @@ export default function RoutesPage() {
   const shopify = useAppBridge();
   const routeDeleteFetcher = useFetcher();
   const routeRefreshFetcher = useFetcher();
+  const revalidator = useRevalidator();
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
   const [routeGroupMarkerTooltip, setRouteGroupMarkerTooltip] = useState(null);
   const allRouteRows = buildRouteRows(routePlans, routeGroups);
@@ -647,7 +670,7 @@ export default function RoutesPage() {
   const routeDeleteDisabled =
     routeDeleteTargetIds.length === 0 || routeDeleteFetcher.state !== "idle";
   const routeRefreshDisabled =
-    routePlans.length === 0 || routeRefreshFetcher.state !== "idle" || routeDeleteFetcher.state !== "idle";
+    getBulkRefreshRoutePlanIds(routePlans).length === 0 || routeRefreshFetcher.state !== "idle" || routeDeleteFetcher.state !== "idle";
   const routeRefreshBusy = routeRefreshFetcher.state !== "idle";
   const actionErrors = [
     ...(routeDeleteFetcher.data?.errors ?? []),
@@ -668,12 +691,15 @@ export default function RoutesPage() {
 
   useEffect(() => {
     if (routeRefreshFetcher.state !== "idle" || !routeRefreshFetcher.data) return;
+    revalidator.revalidate();
     if ((routeRefreshFetcher.data.errors ?? []).length > 0) return;
 
     const updatedOrders = Number(routeRefreshFetcher.data.updatedOrders ?? 0);
     const refreshedRoutes = Number(routeRefreshFetcher.data.refreshedRoutes ?? 0);
-    shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes`);
-  }, [routeRefreshFetcher.data, routeRefreshFetcher.state, shopify]);
+    const skippedRoutes = routeRefreshFetcher.data.skippedRoutes?.length ?? 0;
+    const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} active or terminal routes skipped` : "";
+    shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes${skippedMessage}`);
+  }, [revalidator, routeRefreshFetcher.data, routeRefreshFetcher.state, shopify]);
 
   function navigateRouteDetail(route) {
     const fallbackIdToken = searchParams.get("id_token");

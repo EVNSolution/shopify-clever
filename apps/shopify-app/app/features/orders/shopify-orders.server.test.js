@@ -8,6 +8,7 @@ import {
   ORDER_SCOPE_ACCESS_ERROR_CODE,
   PROTECTED_ORDER_ACCESS_ERROR_CODE,
   SHOPIFY_ORDERS_BY_IDS_QUERY,
+  SHOPIFY_ORDER_LINE_ITEMS_QUERY,
   SHOPIFY_ORDERS_QUERY,
   SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE,
   assertReadOnlyShopifyOrdersOperation,
@@ -31,6 +32,7 @@ test("orders query reads order and customer notes", () => {
   assert.match(SHOPIFY_ORDERS_QUERY, /currentTotalPriceSet\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /customAttributes\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /lineItems\(first: 20\)\s*\{/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /lineItems\(first: 20\)\s*\{[\s\S]*pageInfo\s*\{[\s\S]*hasNextPage[\s\S]*endCursor/);
   assert.match(SHOPIFY_ORDERS_QUERY, /title/);
   assert.match(SHOPIFY_ORDERS_QUERY, /variantTitle/);
   assert.match(SHOPIFY_ORDERS_QUERY, /quantity/);
@@ -39,6 +41,94 @@ test("orders query reads order and customer notes", () => {
   assert.match(SHOPIFY_ORDERS_QUERY, /province/);
   assert.match(SHOPIFY_ORDERS_QUERY, /provinceCode/);
   assert.match(SHOPIFY_ORDERS_QUERY, /longitude/);
+});
+
+test("fetches every line item page before returning requested Shopify orders", async () => {
+  const orderId = "gid://shopify/Order/1001";
+  const calls = [];
+  const firstItems = Array.from({ length: 20 }, (_, index) => ({
+    name: `Item ${index + 1}`,
+    quantity: 1,
+    sku: `SKU-${index + 1}`,
+    title: `Item ${index + 1}`,
+    variantTitle: null,
+  }));
+  const admin = {
+    graphql: async (query, options) => {
+      calls.push({ query, variables: options.variables });
+      if (query === SHOPIFY_ORDERS_BY_IDS_QUERY) {
+        return {
+          json: async () => ({
+            data: {
+              nodes: [{
+                id: orderId,
+                lineItems: {
+                  nodes: firstItems,
+                  pageInfo: { endCursor: "line-20", hasNextPage: true },
+                },
+                name: "#1001",
+                shippingAddress: { name: "Route customer" },
+              }],
+            },
+          }),
+        };
+      }
+
+      assert.equal(query, SHOPIFY_ORDER_LINE_ITEMS_QUERY);
+      return {
+        json: async () => ({
+          data: {
+            node: {
+              id: orderId,
+              lineItems: {
+                nodes: [{
+                  name: "Item 21",
+                  quantity: 2,
+                  sku: "SKU-21",
+                  title: "Item 21",
+                  variantTitle: null,
+                }],
+                pageInfo: { endCursor: null, hasNextPage: false },
+              },
+            },
+          },
+        }),
+      };
+    },
+  };
+
+  const result = await fetchShopifyOrdersByIds(admin, [orderId]);
+
+  assert.equal(result.orders[0].lineItems.nodes.length, 21);
+  assert.deepEqual(result.errors, []);
+  assert.deepEqual(calls.map((call) => call.variables), [
+    { ids: [orderId] },
+    { after: "line-20", first: 100, id: orderId },
+  ]);
+});
+
+test("fails closed when Shopify omits a requested order node", async () => {
+  const existingId = "gid://shopify/Order/1001";
+  const missingId = "gid://shopify/Order/1002";
+  const admin = {
+    graphql: async () => ({
+      json: async () => ({
+        data: {
+          nodes: [{
+            id: existingId,
+            lineItems: { nodes: [], pageInfo: { endCursor: null, hasNextPage: false } },
+            name: "#1001",
+          }, null],
+        },
+      }),
+    }),
+  };
+
+  const result = await fetchShopifyOrdersByIds(admin, [existingId, missingId]);
+
+  assert.deepEqual(result.orders, []);
+  assert.equal(result.errors.length, 1);
+  assert.match(result.errors[0].message, /1002/);
 });
 
 test("orders integration rejects Shopify mutations", () => {

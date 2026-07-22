@@ -290,7 +290,7 @@ test("Routes table selection column uses checkboxes and a single delete action",
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRevalidator, useRouteError, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
   assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
@@ -528,11 +528,14 @@ test("Route detail explicitly updates assigned orders without changing route mem
   assert.match(routeDetailServerSource, /refreshDeliveryRoutePlanOrderData\(request, routePlanId/);
 });
 
-test("Routes list explicitly updates every persisted child route", () => {
+test("Routes list explicitly updates only ready-compatible persisted routes", () => {
   assert.match(routesPageSource, /import \{ refreshRouteOrders \} from "\.\.\/features\/delivery\/route-detail\.server"/);
+  assert.match(routesPageSource, /import \{ getBulkRefreshRoutePlanIds \} from "\.\.\/features\/delivery\/route-order-refresh"/);
   assert.match(routesPageSource, /intent === "refreshAllRoutes"/);
   assert.match(routesPageSource, /clearDeliveryApiResponseCache\(\)/);
-  assert.match(routesPageSource, /routePlanIds: \(routePlanData\.routePlans \?\? \[\]\)\.map\(\(routePlan\) => routePlan\.id\)/);
+  assert.match(routesPageSource, /const routePlanIds = getBulkRefreshRoutePlanIds\(routePlans\)/);
+  assert.match(routesPageSource, /allowInProgress: false/);
+  assert.match(routesPageSource, /revalidator\.revalidate\(\)/);
   assert.match(routesPageSource, /formData\.set\("_intent", "refreshAllRoutes"\)/);
   assert.match(routesPageSource, /routeRefreshFetcher\.submit\(formData, \{ method: "post" \}\)/);
 });

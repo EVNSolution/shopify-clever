@@ -3836,12 +3836,14 @@ export default function RouteDetailPage() {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "refreshRouteOrders") return;
     lastRouteActionIntentRef.current = null;
+    revalidator.revalidate();
     if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
 
     const updatedOrders = Number(routeActionFetcher.data?.updatedOrders ?? 0);
     const refreshedRoutes = Number(routeActionFetcher.data?.refreshedRoutes ?? 0);
-    shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes`);
-    revalidator.revalidate();
+    const skippedRoutes = routeActionFetcher.data?.skippedRoutes?.length ?? 0;
+    const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} terminal routes skipped` : "";
+    shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes${skippedMessage}`);
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
