@@ -15,7 +15,7 @@ export const MAP_MARKER_PALETTE = {
 export const MAP_PIN_PATH =
   "M20 50C20 50 4 31.5 4 18C4 9.16 11.16 2 20 2s16 7.16 16 16c0 13.5-16 32-16 32Z";
 export const MAP_PIN_PIXEL_RATIO = 2;
-export const MAP_PIN_ICON_SIZE = 0.54;
+export const MAP_PIN_ICON_SIZE = 0.66;
 export const MAP_PIN_SYMBOL_LAYOUT = {
   "icon-allow-overlap": true,
   "icon-anchor": "bottom",

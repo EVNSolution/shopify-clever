@@ -993,7 +993,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
           "circle-radius": 7,
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 2,
-          "circle-translate": [-8, -23],
+          "circle-translate": [-10, -28],
           "circle-translate-anchor": "viewport",
         },
       });
@@ -1013,7 +1013,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
         },
         paint: {
           "text-color": "#ffffff",
-          "text-translate": [-8, -23],
+          "text-translate": [-10, -28],
           "text-translate-anchor": "viewport",
         },
       });
