@@ -35,11 +35,13 @@ import {
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID,
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
   getRouteMapCenter,
   getRouteMapLocations,
+  getRouteDetailTrackingArrivalItems,
   getRouteTrackingFitLocations,
   getRouteStopFromMapFeature,
   isLngLatInPolygon,
@@ -4125,6 +4127,93 @@ export default function RouteDetailPage() {
       map.off("styledata", syncTracking);
     };
   }, [displayedRouteTrackingSnapshot, isMapReady, isTrackingMapView, routeMapRef, routeMapStops]);
+
+  useEffect(() => {
+    if (!isTrackingMapView || !isMapReady || !routeMapRef.current || !mapLibraryRef.current) return undefined;
+
+    const map = routeMapRef.current;
+    const maplibregl = mapLibraryRef.current;
+    let arrivalPopup = null;
+    let didBindArrivalHandlers = false;
+
+    const handleArrivalMarkerClick = (event) => {
+      const feature = event.features?.[0];
+      const coordinates = feature?.geometry?.coordinates;
+      const arrivalItems = getRouteDetailTrackingArrivalItems(feature);
+      if (
+        !Array.isArray(coordinates)
+        || coordinates.length < 2
+        || !Number.isFinite(Number(coordinates[0]))
+        || !Number.isFinite(Number(coordinates[1]))
+        || arrivalItems.length === 0
+      ) return;
+
+      const content = document.createElement("div");
+      content.className = "route-tracking-arrival-popup__content";
+
+      const title = document.createElement("div");
+      title.className = "route-tracking-arrival-popup__title";
+      title.textContent = arrivalItems.length > 1
+        ? `Arrived stops (${arrivalItems.length})`
+        : "Arrived stop";
+      content.append(title);
+
+      const list = document.createElement("div");
+      list.className = "route-tracking-arrival-popup__list";
+      for (const item of arrivalItems) {
+        const row = document.createElement("div");
+        row.className = "route-tracking-arrival-popup__row";
+
+        const stop = document.createElement("span");
+        stop.className = "route-tracking-arrival-popup__stop";
+        stop.textContent = `Stop ${item.stopNumber}`;
+
+        const time = document.createElement("span");
+        time.className = "route-tracking-arrival-popup__time";
+        time.textContent = formatStoreLocalOrderDate(item.occurredAt, ianaTimezone);
+
+        row.append(stop, time);
+        list.append(row);
+      }
+      content.append(list);
+
+      arrivalPopup?.remove();
+      arrivalPopup = new maplibregl.Popup({
+        className: "route-tracking-arrival-popup",
+        closeButton: true,
+        offset: 16,
+      })
+        .setLngLat([Number(coordinates[0]), Number(coordinates[1])])
+        .setDOMContent(content)
+        .addTo(map);
+    };
+    const handleArrivalMarkerMouseEnter = () => {
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const handleArrivalMarkerMouseLeave = () => {
+      map.getCanvas().style.cursor = "";
+    };
+    const bindArrivalHandlers = () => {
+      if (didBindArrivalHandlers || !map.getLayer?.(ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID)) return;
+      map.on("click", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerClick);
+      map.on("mouseenter", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerMouseEnter);
+      map.on("mouseleave", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerMouseLeave);
+      didBindArrivalHandlers = true;
+    };
+
+    bindArrivalHandlers();
+    map.on("styledata", bindArrivalHandlers);
+
+    return () => {
+      arrivalPopup?.remove();
+      map.off("styledata", bindArrivalHandlers);
+      if (didBindArrivalHandlers) {
+        map.off("click", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerClick);
+        map.off("mouseenter", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerMouseEnter);
+        map.off("mouseleave", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerMouseLeave);
+      }
+    };
+  }, [ianaTimezone, isMapReady, isTrackingMapView]);
 
 
   useEffect(() => {

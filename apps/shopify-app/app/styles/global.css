@@ -423,6 +423,59 @@ s-badge {
   z-index: 5000;
 }
 
+.route-tracking-arrival-popup .maplibregl-popup-content {
+  border-radius: 10px;
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);
+  min-width: 170px;
+  padding: 12px;
+}
+
+.route-tracking-arrival-popup .maplibregl-popup-close-button {
+  color: #616161;
+  font-size: 18px;
+  padding: 4px 7px;
+}
+
+.route-tracking-arrival-popup__content {
+  color: #303030;
+  display: grid;
+  gap: 8px;
+}
+
+.route-tracking-arrival-popup__title {
+  font-size: 13px;
+  font-weight: 650;
+  padding-right: 18px;
+}
+
+.route-tracking-arrival-popup__list {
+  display: grid;
+  gap: 6px;
+}
+
+.route-tracking-arrival-popup__row {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.route-tracking-arrival-popup__stop {
+  background: #e8f4fb;
+  border-radius: 999px;
+  color: #0869a6;
+  font-size: 12px;
+  font-weight: 650;
+  padding: 3px 7px;
+  white-space: nowrap;
+}
+
+.route-tracking-arrival-popup__time {
+  color: #616161;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .maplibregl-map .maplibregl-cooperative-gesture-screen {
   display: none !important;
 }

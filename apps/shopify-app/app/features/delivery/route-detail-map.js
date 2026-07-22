@@ -1,4 +1,4 @@
-import { addMapPinImage, createDepartureMarkerImageData, createMapBadgeImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers.js";
+import { addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers.js";
 import { numberOrUndefined, textOrUndefined } from "./route-helpers.js";
 import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures } from "./route-tracking.js";
 
@@ -16,7 +16,6 @@ const ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID = "route-detail-live-tracking-con
 const ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID = "route-detail-tracking-arrivals";
 const ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID = "route-detail-tracking-arrival-circles";
 const ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID = "route-detail-tracking-arrival-labels";
-const ROUTE_DETAIL_TRACKING_ARRIVAL_BADGE_IMAGE_ID = "route-detail-tracking-arrival-badge";
 const ROUTE_DETAIL_TRACKING_LAYER_IDS = [
   ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID,
   ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
@@ -267,33 +266,6 @@ function areRouteDetailArrivalsAtSameLocation(firstArrival, secondArrival) {
   return distanceMeters != null && distanceMeters <= ROUTE_DETAIL_ARRIVAL_GROUP_DISTANCE_METERS;
 }
 
-function getRouteDetailArrivalBadgeOffset(index, count) {
-  if (count <= 1) return [0, 0];
-  if (count === 2) return index === 0 ? [-16, 0] : [16, 0];
-
-  const radius = Math.max(20, Math.ceil(count * 30 / (Math.PI * 2)));
-  const angle = -Math.PI / 2 + index * Math.PI * 2 / count;
-  return [
-    Math.round(Math.cos(angle) * radius),
-    Math.round(Math.sin(angle) * radius),
-  ];
-}
-
-function getRouteDetailArrivalLabelOffset(badgeOffset) {
-  return badgeOffset.map((value) => Math.round(value / 11 * 1000) / 1000);
-}
-
-function ensureRouteDetailArrivalBadgeImage(map) {
-  if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") return true;
-  if (map.hasImage(ROUTE_DETAIL_TRACKING_ARRIVAL_BADGE_IMAGE_ID)) return true;
-
-  return addMapPinImage(
-    map,
-    ROUTE_DETAIL_TRACKING_ARRIVAL_BADGE_IMAGE_ID,
-    createMapBadgeImageData("#0b84d8"),
-  );
-}
-
 function buildRouteDetailTrackingArrivalData(trackingSnapshot, routeStops) {
   const stopByDeliveryStopId = new Map((Array.isArray(routeStops) ? routeStops : []).flatMap((stop) => {
     const deliveryStopId = textOrUndefined(stop?.deliveryStopId ?? stop?.id);
@@ -344,29 +316,52 @@ function buildRouteDetailTrackingArrivalData(trackingSnapshot, routeStops) {
     }
   }
 
-  const features = arrivalGroups.flatMap((group) => {
+  const features = arrivalGroups.map((group) => {
     const arrivals = [...group.arrivals].sort((left, right) => left.stopNumber - right.stopNumber);
-    return arrivals.map((arrival, index) => {
-      const badgeOffset = getRouteDetailArrivalBadgeOffset(index, arrivals.length);
-      return {
-        type: "Feature",
-        geometry: { type: "Point", coordinates: arrival.coordinates },
-        properties: {
-          arrivalEventCount: arrival.arrivalEventCount,
-          badgeOffset,
-          collisionCount: arrivals.length,
-          deliveryStopId: arrival.deliveryStopId,
-          eventId: arrival.eventId,
-          featureType: "stopArrival",
-          labelOffset: getRouteDetailArrivalLabelOffset(badgeOffset),
+    const representativeArrival = [...arrivals].sort((left, right) => (
+      getRouteDetailArrivalTimestamp(left) - getRouteDetailArrivalTimestamp(right)
+      || left.stopNumber - right.stopNumber
+    ))[0];
+    const arrivalStopCount = arrivals.length;
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: representativeArrival.coordinates },
+      properties: {
+        arrivalDetailsJson: JSON.stringify(arrivals.map((arrival) => ({
           occurredAt: arrival.occurredAt,
-          stopLabel: String(arrival.stopNumber),
           stopNumber: arrival.stopNumber,
-        },
-      };
-    });
+        }))),
+        arrivalEventCount: arrivals.reduce((count, arrival) => count + arrival.arrivalEventCount, 0),
+        arrivalStopCount,
+        arrivalStopNumbers: arrivals.map((arrival) => arrival.stopNumber).join(", "),
+        deliveryStopId: representativeArrival.deliveryStopId,
+        displayLabel: String(arrivalStopCount > 1 ? arrivalStopCount : representativeArrival.stopNumber),
+        eventId: representativeArrival.eventId,
+        featureType: "stopArrival",
+        occurredAt: representativeArrival.occurredAt,
+        stopNumber: representativeArrival.stopNumber,
+      },
+    };
   });
   return { type: "FeatureCollection", features };
+}
+
+function getRouteDetailTrackingArrivalItems(feature) {
+  const serializedItems = textOrUndefined(feature?.properties?.arrivalDetailsJson);
+  if (!serializedItems) return [];
+
+  try {
+    const items = JSON.parse(serializedItems);
+    if (!Array.isArray(items)) return [];
+    return items.flatMap((item) => {
+      const stopNumber = numberOrUndefined(item?.stopNumber);
+      return Number.isInteger(stopNumber) && stopNumber > 0
+        ? [{ occurredAt: textOrUndefined(item?.occurredAt) ?? null, stopNumber }]
+        : [];
+    });
+  } catch {
+    return [];
+  }
 }
 
 function syncRouteDetailLiveTracking(map, trackingSnapshot, routeStops) {
@@ -422,17 +417,16 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot, routeStops) {
   } else {
     map.addSource(ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID, { type: "geojson", data: arrivalData });
   }
-  if (!ensureRouteDetailArrivalBadgeImage(map)) return false;
   if (!map.getLayer?.(ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID)) {
     map.addLayer({
       id: ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID,
       type: "circle",
       source: ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID,
       paint: {
-        "circle-color": "#0b84d8",
-        "circle-radius": 3.5,
+        "circle-color": ["case", [">", ["get", "arrivalStopCount"], 1], "#0869a6", "#0b84d8"],
+        "circle-radius": ["case", [">", ["get", "arrivalStopCount"], 1], 13, 11],
         "circle-stroke-color": "#ffffff",
-        "circle-stroke-width": 1.5,
+        "circle-stroke-width": ["case", [">", ["get", "arrivalStopCount"], 1], 3, 2],
       },
     });
   }
@@ -442,14 +436,9 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot, routeStops) {
       type: "symbol",
       source: ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID,
       layout: {
-        "icon-allow-overlap": true,
-        "icon-ignore-placement": true,
-        "icon-image": ROUTE_DETAIL_TRACKING_ARRIVAL_BADGE_IMAGE_ID,
-        "icon-offset": ["array", "number", 2, ["get", "badgeOffset"]],
         "text-allow-overlap": true,
-        "text-field": ["to-string", ["get", "stopNumber"]],
+        "text-field": ["get", "displayLabel"],
         "text-ignore-placement": true,
-        "text-offset": ["array", "number", 2, ["get", "labelOffset"]],
         "text-size": 11,
       },
       paint: { "text-color": "#ffffff" },
@@ -991,11 +980,14 @@ export {
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID,
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
   getRouteMapCenter,
   getRouteMapLocations,
+  getRouteDetailTrackingArrivalItems,
   getRouteTrackingFitLocations,
   getRouteStopFromMapFeature,
   isLngLatInPolygon,
