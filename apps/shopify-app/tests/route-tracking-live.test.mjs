@@ -137,9 +137,15 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeDetailSource, /new maplibregl\.Popup\(/);
   assert.match(routeDetailSource, /\.setDOMContent\(content\)/);
   assert.match(routeDetailSource, /closeButton: false/);
+  assert.match(routeDetailSource, /padding: \{ bottom: 12, left: 12, right: 12, top: 12 \}/);
+  assert.match(routeDetailSource, /getRouteDetailPopupPanOffset/);
+  assert.match(routeDetailSource, /map\.panBy\(panOffset/);
+  assert.match(routeDetailSource, /const routeTrackingMapCanvasStyle = \{[\s\S]*height: "100%"[\s\S]*minHeight: 0/);
+  assert.doesNotMatch(routeDetailSource, /minHeight: "570px"/);
   assert.match(routeDetailSource, /close\.className = "route-tracking-arrival-popup__close"/);
   assert.match(globalCssSource, /\.route-tracking-arrival-popup__stop\s*\{[\s\S]*min-width:\s*56px/);
   assert.match(globalCssSource, /\.route-tracking-arrival-popup__close\s*\{[\s\S]*font-size:\s*16px/);
+  assert.match(globalCssSource, /\.route-tracking-arrival-popup__list\s*\{[\s\S]*overflow-y:\s*auto/);
   assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
   assert.match(routeMapSource, /function syncRouteDetailTrackingVisibility\(map, isTrackingView = false\)/);

@@ -33,6 +33,54 @@ const ROUTE_DETAIL_STOP_POINT_MIN_ZOOM = 15;
 const ROUTE_DETAIL_STOP_POINT_RADIUS = 2.5;
 const ROUTE_DETAIL_STOP_POINT_STROKE_WIDTH = 1.5;
 const ROUTE_DETAIL_ARRIVAL_GROUP_DISTANCE_METERS = 12;
+const ROUTE_DETAIL_POPUP_EDGE_PADDING_PX = 12;
+const ROUTE_TRACKING_ARRIVAL_LIST_MAX_HEIGHT_PX = 260;
+const ROUTE_TRACKING_ARRIVAL_LIST_MIN_HEIGHT_PX = 72;
+// Reserves frame edges, popup padding/header/tip, and the marker offset.
+const ROUTE_TRACKING_ARRIVAL_POPUP_NON_LIST_HEIGHT_PX = 102;
+
+function getRouteTrackingArrivalListMaxHeight(mapHeight) {
+  const numericMapHeight = Number(mapHeight);
+  if (!Number.isFinite(numericMapHeight) || numericMapHeight <= 0) {
+    return ROUTE_TRACKING_ARRIVAL_LIST_MAX_HEIGHT_PX;
+  }
+
+  return Math.max(
+    ROUTE_TRACKING_ARRIVAL_LIST_MIN_HEIGHT_PX,
+    Math.min(
+      ROUTE_TRACKING_ARRIVAL_LIST_MAX_HEIGHT_PX,
+      Math.floor(numericMapHeight - ROUTE_TRACKING_ARRIVAL_POPUP_NON_LIST_HEIGHT_PX),
+    ),
+  );
+}
+
+function getRouteDetailPopupPanOffset(frameRect, popupRect, edgePadding = ROUTE_DETAIL_POPUP_EDGE_PADDING_PX) {
+  const frame = [frameRect?.left, frameRect?.top, frameRect?.right, frameRect?.bottom].map(Number);
+  const popup = [popupRect?.left, popupRect?.top, popupRect?.right, popupRect?.bottom].map(Number);
+  const padding = Number(edgePadding);
+  if (![...frame, ...popup, padding].every(Number.isFinite) || padding < 0) return [0, 0];
+
+  const [frameLeft, frameTop, frameRight, frameBottom] = frame;
+  const [popupLeft, popupTop, popupRight, popupBottom] = popup;
+  const safeLeft = frameLeft + padding;
+  const safeTop = frameTop + padding;
+  const safeRight = frameRight - padding;
+  const safeBottom = frameBottom - padding;
+
+  const getAxisOffset = (start, end, safeStart, safeEnd) => {
+    if (end - start > safeEnd - safeStart) {
+      return Math.round((start + end - safeStart - safeEnd) / 2);
+    }
+    if (start < safeStart) return Math.round(start - safeStart);
+    if (end > safeEnd) return Math.round(end - safeEnd);
+    return 0;
+  };
+
+  return [
+    getAxisOffset(popupLeft, popupRight, safeLeft, safeRight),
+    getAxisOffset(popupTop, popupBottom, safeTop, safeBottom),
+  ];
+}
 
 function emitRouteDetailMarkerDiagnostics(onDiagnostics, metric) {
   if (typeof onDiagnostics !== "function") return;
@@ -985,9 +1033,11 @@ export {
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
+  getRouteDetailPopupPanOffset,
   getRouteMapCenter,
   getRouteMapLocations,
   getRouteDetailTrackingArrivalItems,
+  getRouteTrackingArrivalListMaxHeight,
   getRouteTrackingFitLocations,
   getRouteStopFromMapFeature,
   isLngLatInPolygon,

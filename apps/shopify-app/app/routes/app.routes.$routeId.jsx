@@ -39,9 +39,11 @@ import {
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
+  getRouteDetailPopupPanOffset,
   getRouteMapCenter,
   getRouteMapLocations,
   getRouteDetailTrackingArrivalItems,
+  getRouteTrackingArrivalListMaxHeight,
   getRouteTrackingFitLocations,
   getRouteStopFromMapFeature,
   isLngLatInPolygon,
@@ -546,7 +548,8 @@ const routeTrackingMapFrameStyle = {
 };
 
 const routeTrackingMapCanvasStyle = {
-  minHeight: "570px",
+  height: "100%",
+  minHeight: 0,
 };
 
 const routeTrackingMapLegendStyle = {
@@ -4134,7 +4137,38 @@ export default function RouteDetailPage() {
     const map = routeMapRef.current;
     const maplibregl = mapLibraryRef.current;
     let arrivalPopup = null;
+    let arrivalPopupFrame = null;
     let didBindArrivalHandlers = false;
+
+    const cancelArrivalPopupFrame = () => {
+      if (arrivalPopupFrame == null) return;
+      window.cancelAnimationFrame(arrivalPopupFrame);
+      arrivalPopupFrame = null;
+    };
+    const closeArrivalPopup = () => {
+      cancelArrivalPopupFrame();
+      arrivalPopup?.remove();
+      arrivalPopup = null;
+    };
+    const keepArrivalPopupInView = (popup) => {
+      cancelArrivalPopupFrame();
+      arrivalPopupFrame = window.requestAnimationFrame(() => {
+        arrivalPopupFrame = null;
+        if (arrivalPopup !== popup || !popup?.isOpen?.()) return;
+
+        const mapElement = map.getContainer?.();
+        const popupElement = popup.getElement?.();
+        if (!mapElement || !popupElement) return;
+
+        const panOffset = getRouteDetailPopupPanOffset(
+          mapElement.getBoundingClientRect(),
+          popupElement.getBoundingClientRect(),
+        );
+        if (panOffset[0] === 0 && panOffset[1] === 0) return;
+
+        map.panBy(panOffset, { duration: 180 });
+      });
+    };
 
     const handleArrivalMarkerClick = (event) => {
       const feature = event.features?.[0];
@@ -4162,7 +4196,7 @@ export default function RouteDetailPage() {
       close.type = "button";
       close.setAttribute("aria-label", "Close arrival details");
       close.textContent = "×";
-      close.onclick = () => arrivalPopup?.remove();
+      close.onclick = closeArrivalPopup;
 
       const header = document.createElement("div");
       header.className = "route-tracking-arrival-popup__header";
@@ -4171,9 +4205,14 @@ export default function RouteDetailPage() {
 
       const list = document.createElement("div");
       list.className = "route-tracking-arrival-popup__list";
+      list.setAttribute("aria-label", "Arrived stops");
+      list.setAttribute("role", "list");
+      list.tabIndex = 0;
+      list.style.maxHeight = `${getRouteTrackingArrivalListMaxHeight(map.getContainer?.()?.clientHeight)}px`;
       for (const item of arrivalItems) {
         const row = document.createElement("div");
         row.className = "route-tracking-arrival-popup__row";
+        row.setAttribute("role", "listitem");
 
         const stop = document.createElement("span");
         stop.className = "route-tracking-arrival-popup__stop";
@@ -4188,15 +4227,17 @@ export default function RouteDetailPage() {
       }
       content.append(list);
 
-      arrivalPopup?.remove();
+      closeArrivalPopup();
       arrivalPopup = new maplibregl.Popup({
         className: "route-tracking-arrival-popup",
         closeButton: false,
         offset: 16,
+        padding: { bottom: 12, left: 12, right: 12, top: 12 },
       })
         .setLngLat([Number(coordinates[0]), Number(coordinates[1])])
         .setDOMContent(content)
         .addTo(map);
+      keepArrivalPopupInView(arrivalPopup);
     };
     const handleArrivalMarkerMouseEnter = () => {
       map.getCanvas().style.cursor = "pointer";
@@ -4216,7 +4257,7 @@ export default function RouteDetailPage() {
     map.on("styledata", bindArrivalHandlers);
 
     return () => {
-      arrivalPopup?.remove();
+      closeArrivalPopup();
       map.off("styledata", bindArrivalHandlers);
       if (didBindArrivalHandlers) {
         map.off("click", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerClick);
@@ -4224,7 +4265,7 @@ export default function RouteDetailPage() {
         map.off("mouseleave", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerMouseLeave);
       }
     };
-  }, [ianaTimezone, isMapReady, isTrackingMapView]);
+  }, [ianaTimezone, isMapReady, isTrackingMapView, routeMapRef]);
 
 
   useEffect(() => {
