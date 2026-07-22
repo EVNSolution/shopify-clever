@@ -79,6 +79,168 @@ test("tracking layers reuse their sources and toggle together between tabs", () 
   assert.deepEqual(fake.calls.addLayer, TRACKING_LAYER_IDS);
 });
 
+test("arrival markers keep one marker for repeated Arrived events at the same stop", () => {
+  const fake = createFakeMap();
+  const routeStops = [{
+    address: "서울특별시 영등포구 노들로",
+    coordinates: [126.929, 37.515],
+    deliveryStopId: "stop-8",
+    hasCoordinates: true,
+    stop: 8,
+  }];
+
+  syncRouteDetailLiveTracking(fake.map, {
+    stopArrivals: [
+      {
+        deliveryStopId: "stop-8",
+        eventId: "arrival-first",
+        latitude: 37.515,
+        longitude: 126.929,
+        occurredAt: "2026-07-22T01:00:00.000Z",
+        positionSource: "event",
+      },
+      {
+        deliveryStopId: "stop-8",
+        eventId: "arrival-repeated",
+        latitude: 37.51501,
+        longitude: 126.92901,
+        occurredAt: "2026-07-22T01:01:00.000Z",
+        positionSource: "event",
+      },
+    ],
+  }, routeStops);
+
+  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
+  assert.equal(arrivalFeatures.length, 1);
+  assert.deepEqual(arrivalFeatures[0].geometry.coordinates, [126.929, 37.515]);
+  assert.equal(arrivalFeatures[0].properties.stopLabel, "8");
+  assert.equal(arrivalFeatures[0].properties.stopCount, 1);
+  assert.equal(arrivalFeatures[0].properties.arrivalEventCount, 2);
+});
+
+test("arrival markers combine stop numbers that share one physical destination", () => {
+  const fake = createFakeMap();
+  const routeStops = [
+    {
+      address: "서울특별시 영등포구 노들로",
+      coordinates: [126.929, 37.515],
+      deliveryStopId: "stop-3",
+      hasCoordinates: true,
+      stop: 3,
+    },
+    {
+      address: "서울특별시 영등포구 노들로",
+      coordinates: [126.929, 37.515],
+      deliveryStopId: "stop-8",
+      hasCoordinates: true,
+      stop: 8,
+    },
+  ];
+
+  syncRouteDetailLiveTracking(fake.map, {
+    stopArrivals: [
+      {
+        deliveryStopId: "stop-8",
+        eventId: "arrival-8",
+        latitude: 37.51502,
+        longitude: 126.92902,
+        occurredAt: "2026-07-22T01:08:00.000Z",
+        positionSource: "event",
+      },
+      {
+        deliveryStopId: "stop-3",
+        eventId: "arrival-3",
+        latitude: 37.515,
+        longitude: 126.929,
+        occurredAt: "2026-07-22T01:03:00.000Z",
+        positionSource: "event",
+      },
+    ],
+  }, routeStops);
+
+  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
+  assert.equal(arrivalFeatures.length, 1);
+  assert.equal(arrivalFeatures[0].properties.stopLabel, "3 · 8");
+  assert.equal(arrivalFeatures[0].properties.stopCount, 2);
+  assert.equal(arrivalFeatures[0].properties.arrivalEventCount, 2);
+  assert.equal(
+    fake.layers.get("route-detail-tracking-arrival-labels").layout["text-field"][1][1],
+    "stopLabel",
+  );
+  assert.ok(Array.isArray(fake.layers.get("route-detail-tracking-arrival-circles").paint["circle-radius"]));
+});
+
+test("arrival markers keep distinct GPS locations separate", () => {
+  const fake = createFakeMap();
+
+  syncRouteDetailLiveTracking(fake.map, {
+    stopArrivals: [
+      {
+        deliveryStopId: "stop-3",
+        eventId: "arrival-3",
+        latitude: 37.515,
+        longitude: 126.929,
+        occurredAt: "2026-07-22T01:03:00.000Z",
+        positionSource: "event",
+        stopSequence: 3,
+      },
+      {
+        deliveryStopId: "stop-8",
+        eventId: "arrival-8",
+        latitude: 37.516,
+        longitude: 126.93,
+        occurredAt: "2026-07-22T01:08:00.000Z",
+        positionSource: "event",
+        stopSequence: 8,
+      },
+    ],
+  }, []);
+
+  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
+  assert.equal(arrivalFeatures.length, 2);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.stopLabel), ["3", "8"]);
+});
+
+test("arrival marker groups do not chain locations beyond the collision distance", () => {
+  const fake = createFakeMap();
+
+  syncRouteDetailLiveTracking(fake.map, {
+    stopArrivals: [
+      {
+        deliveryStopId: "stop-1",
+        eventId: "arrival-1",
+        latitude: 37.515,
+        longitude: 126.929,
+        occurredAt: "2026-07-22T01:01:00.000Z",
+        positionSource: "event",
+        stopSequence: 1,
+      },
+      {
+        deliveryStopId: "stop-2",
+        eventId: "arrival-2",
+        latitude: 37.51509,
+        longitude: 126.929,
+        occurredAt: "2026-07-22T01:02:00.000Z",
+        positionSource: "event",
+        stopSequence: 2,
+      },
+      {
+        deliveryStopId: "stop-3",
+        eventId: "arrival-3",
+        latitude: 37.51518,
+        longitude: 126.929,
+        occurredAt: "2026-07-22T01:03:00.000Z",
+        positionSource: "event",
+        stopSequence: 3,
+      },
+    ],
+  }, []);
+
+  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
+  assert.equal(arrivalFeatures.length, 2);
+  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.stopLabel), ["1 · 2", "3"]);
+});
+
 test("planned route sync recreates a missing layer when its source still exists", () => {
   const fake = createFakeMap();
   fake.sources.set("route-detail-osrm-route", {
