@@ -3,6 +3,8 @@ const FALLBACK_STREAM_INACTIVITY_MS = 45_000;
 const EARTH_RADIUS_METERS = 6_371_000;
 const RAW_FALLBACK_MIN_MOVEMENT_METERS = 12;
 const RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND = 55;
+const UNCERTAIN_LOOP_MIN_LENGTH_METERS = 250;
+const UNCERTAIN_LOOP_MAX_DETOUR_RATIO = 3;
 
 function numberOrNull(value) {
   const number = Number(value);
@@ -54,6 +56,45 @@ function normalizeTrackingProgressEvent(event) {
   };
 }
 
+function normalizeTrackingStopArrival(arrival) {
+  const deliveryStopId = textOrNull(arrival?.deliveryStopId);
+  const driverId = textOrNull(arrival?.driverId);
+  const eventId = textOrNull(arrival?.eventId);
+  const occurredAt = textOrNull(arrival?.occurredAt);
+  const routePlanId = textOrNull(arrival?.routePlanId);
+  if (!deliveryStopId || !driverId || !eventId || !occurredAt || !routePlanId) return null;
+
+  const latitude = arrival?.latitude == null ? null : numberOrNull(arrival.latitude);
+  const longitude = arrival?.longitude == null ? null : numberOrNull(arrival.longitude);
+  const hasCoordinate = latitude != null
+    && longitude != null
+    && latitude >= -90
+    && latitude <= 90
+    && longitude >= -180
+    && longitude <= 180;
+  const rawStopSequence = arrival?.stopSequence == null ? null : numberOrNull(arrival.stopSequence);
+  const stopSequence = Number.isInteger(rawStopSequence) && rawStopSequence > 0 ? rawStopSequence : null;
+  const rawPositionAgeMs = arrival?.positionAgeMs == null ? null : numberOrNull(arrival.positionAgeMs);
+  const positionSource = textOrNull(arrival?.positionSource);
+
+  return {
+    deliveryStopId,
+    driverId,
+    eventId,
+    latitude: hasCoordinate ? latitude : null,
+    longitude: hasCoordinate ? longitude : null,
+    occurredAt,
+    positionAgeMs: rawPositionAgeMs != null && rawPositionAgeMs >= 0 ? rawPositionAgeMs : null,
+    positionSource: hasCoordinate && positionSource === "event"
+      ? "event"
+      : hasCoordinate ? "nearest_location" : "unavailable",
+    receivedAt: textOrNull(arrival?.receivedAt),
+    routePlanId,
+    schemaVersion: textOrNull(arrival?.schemaVersion) ?? "route_tracking_arrival.v1",
+    stopSequence,
+  };
+}
+
 function getProgressStage(eventType) {
   if (eventType === "ROUTE_COMPLETED") return "COMPLETED";
   if (eventType === "ROUTE_PAUSED") return "PAUSED";
@@ -85,6 +126,10 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
   const latestPosition = normalizeTrackingPosition(snapshot?.latestPosition) ?? recentPositions.at(-1) ?? null;
   const recordedPath = normalizeRecordedPath(snapshot?.recordedPath, latestPosition);
+  const stopArrivals = (Array.isArray(snapshot?.stopArrivals) ? snapshot.stopArrivals : [])
+    .map(normalizeTrackingStopArrival)
+    .filter(Boolean)
+    .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
 
   return {
     schemaVersion: textOrNull(snapshot?.schemaVersion) ?? "route_tracking.v1",
@@ -94,6 +139,7 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     recordedPath,
     roadMatchedPath: normalizeRoadMatchedPath(snapshot?.roadMatchedPath),
     status: textOrNull(snapshot?.status) ?? (latestPosition ? "LIVE" : "NO_DATA"),
+    stopArrivals,
     serverTime: textOrNull(snapshot?.serverTime),
     latestPosition,
     recentPositions,
@@ -118,6 +164,14 @@ function mergeRouteTrackingProgress(snapshot, event) {
   }
 
   const isLatestEvent = getPositionTimestamp(normalizedEvent) >= getPositionTimestamp(previousProgress.latestEvent);
+  const stopArrivals = [...normalizedSnapshot.stopArrivals];
+  if (
+    normalizedEvent.eventType === "STOP_ARRIVED"
+    && !stopArrivals.some((arrival) => arrival.eventId === normalizedEvent.eventId)
+  ) {
+    const provisionalArrival = buildProvisionalStopArrival(normalizedSnapshot, normalizedEvent);
+    if (provisionalArrival) stopArrivals.push(provisionalArrival);
+  }
   return {
     ...normalizedSnapshot,
     routePlanId: normalizedSnapshot.routePlanId ?? normalizedEvent.routePlanId,
@@ -130,7 +184,36 @@ function mergeRouteTrackingProgress(snapshot, event) {
       failedStopIds: [...failedStopIds],
       latestEvent: isLatestEvent ? normalizedEvent : previousProgress.latestEvent,
     },
+    stopArrivals,
   };
+}
+
+function buildProvisionalStopArrival(snapshot, event) {
+  if (!event.deliveryStopId || !event.driverId || !event.eventId || !event.occurredAt || !event.routePlanId) return null;
+  const eventTimestamp = getPositionTimestamp(event);
+  const nearestPoint = getRouteTrackingPathPoints(snapshot).reduce((nearest, point) => {
+    if (point.driverId !== event.driverId) return nearest;
+    const pointTimestamp = getPositionTimestamp(point);
+    if (!pointTimestamp) return nearest;
+    const ageMs = Math.abs(eventTimestamp - pointTimestamp);
+    return nearest === null || ageMs < nearest.ageMs ? { ageMs, point } : nearest;
+  }, null);
+  const thresholdMs = numberOrNull(snapshot.policy?.delayedThresholdMs) ?? 180_000;
+  const canUseNearestPoint = nearestPoint !== null && nearestPoint.ageMs <= thresholdMs;
+  return normalizeTrackingStopArrival({
+    deliveryStopId: event.deliveryStopId,
+    driverId: event.driverId,
+    eventId: event.eventId,
+    latitude: canUseNearestPoint ? nearestPoint.point.coordinates[1] : null,
+    longitude: canUseNearestPoint ? nearestPoint.point.coordinates[0] : null,
+    occurredAt: event.occurredAt,
+    positionAgeMs: nearestPoint?.ageMs ?? null,
+    positionSource: canUseNearestPoint ? "nearest_location" : "unavailable",
+    receivedAt: event.receivedAt,
+    routePlanId: event.routePlanId,
+    schemaVersion: "route_tracking_arrival.v1",
+    stopSequence: null,
+  });
 }
 
 function mergeRouteTrackingPosition(snapshot, position) {
@@ -192,6 +275,7 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
     schemaVersion: incomingSnapshot.schemaVersion,
     serverTime: incomingSnapshot.serverTime ?? current.serverTime,
     status: incomingSnapshot.status,
+    stopArrivals: mergeTrackingStopArrivals(current.stopArrivals, incomingSnapshot.stopArrivals),
   });
   const baseLatestTimestamp = getRouteTrackingLatestTimestamp(mergedBase);
   const positionsByKey = new Map();
@@ -215,6 +299,16 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
     return mergeRouteTrackingProgress(mergedSnapshot, currentProgressEvent);
   }
   return mergedSnapshot;
+}
+
+function mergeTrackingStopArrivals(currentArrivals, incomingArrivals) {
+  const arrivalsByEventId = new Map();
+  for (const arrival of currentArrivals) arrivalsByEventId.set(arrival.eventId, arrival);
+  for (const arrival of incomingArrivals) arrivalsByEventId.set(arrival.eventId, arrival);
+  return [...arrivalsByEventId.values()].sort((left, right) => (
+    getPositionTimestamp(left) - getPositionTimestamp(right)
+    || left.eventId.localeCompare(right.eventId)
+  ));
 }
 
 function getRouteTrackingHistorySize(snapshot) {
@@ -463,10 +557,11 @@ function getRouteTrackingLineFeatures(snapshot) {
       properties: { trackingType: "trackingTrail" },
     });
   }
-  if (roadMatchedPath.uncertainGeometry) {
+  const plausibleUncertainGeometry = getPlausibleUncertainGeometry(roadMatchedPath.uncertainGeometry);
+  if (plausibleUncertainGeometry) {
     features.push({
       type: "Feature",
-      geometry: roadMatchedPath.uncertainGeometry,
+      geometry: plausibleUncertainGeometry,
       properties: { trackingType: "trackingConnector" },
     });
   }
@@ -492,9 +587,17 @@ function getRouteTrackingLineFeatures(snapshot) {
   let currentSegment = seed ? [seed] : [];
   for (const point of tailPoints) {
     const previousPoint = currentSegment.at(-1);
-    if (previousPoint && point.timestamp - previousPoint.timestamp > gapThresholdMs) {
+    const elapsedMs = previousPoint ? point.timestamp - previousPoint.timestamp : null;
+    const distanceMeters = previousPoint
+      ? distanceBetweenCoordinatesMeters(previousPoint.coordinates, point.coordinates)
+      : 0;
+    const isImplausibleJump = elapsedMs != null
+      && elapsedMs > 0
+      && distanceMeters / (elapsedMs / 1000) > RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND;
+    if (previousPoint && (elapsedMs > gapThresholdMs || isImplausibleJump)) {
       if (currentSegment.length >= 2) tailSegments.push(currentSegment);
-      currentSegment = [];
+      currentSegment = [point];
+      continue;
     }
     if (!currentSegment.at(-1) || !areCoordinatesEqual(currentSegment.at(-1).coordinates, point.coordinates)) {
       currentSegment.push(point);
@@ -512,6 +615,41 @@ function getRouteTrackingLineFeatures(snapshot) {
     });
   }
   return features;
+}
+
+function getRouteTrackingFitCoordinates(snapshot) {
+  const normalized = normalizeRouteTrackingSnapshot(snapshot);
+  const lineCoordinates = getRouteTrackingLineFeatures(normalized).flatMap((feature) => (
+    feature.geometry.type === "MultiLineString"
+      ? feature.geometry.coordinates.flat()
+      : feature.geometry.coordinates
+  ));
+  const arrivalCoordinates = normalized.stopArrivals.flatMap((arrival) => (
+    arrival.positionSource !== "unavailable" && arrival.latitude != null && arrival.longitude != null
+      ? [[arrival.longitude, arrival.latitude]]
+      : []
+  ));
+  const visibleCoordinates = [...lineCoordinates, ...arrivalCoordinates];
+  if (visibleCoordinates.length > 0) return visibleCoordinates;
+
+  const pathPoints = getRouteTrackingPathPoints(normalized);
+  return pathPoints.length <= 1 && normalized.latestPosition
+    ? [[normalized.latestPosition.longitude, normalized.latestPosition.latitude]]
+    : [];
+}
+
+function getPlausibleUncertainGeometry(geometry) {
+  if (!geometry) return null;
+  const coordinates = geometry.coordinates.filter((line) => {
+    const pathLengthMeters = line.slice(1).reduce((total, coordinate, index) => (
+      total + distanceBetweenCoordinatesMeters(line[index], coordinate)
+    ), 0);
+    const directDistanceMeters = distanceBetweenCoordinatesMeters(line[0], line.at(-1));
+    const detourRatio = pathLengthMeters / Math.max(1, directDistanceMeters);
+    return pathLengthMeters < UNCERTAIN_LOOP_MIN_LENGTH_METERS
+      || detourRatio <= UNCERTAIN_LOOP_MAX_DETOUR_RATIO;
+  });
+  return coordinates.length === 0 ? null : { coordinates, type: "MultiLineString" };
 }
 
 function getRawTrackingConnectorFeatures(snapshot) {
@@ -758,6 +896,7 @@ export {
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
+  getRouteTrackingFitCoordinates,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
   getRouteTrackingStreamInactivityMs,

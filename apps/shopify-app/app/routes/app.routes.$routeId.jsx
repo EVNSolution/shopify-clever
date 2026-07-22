@@ -584,6 +584,20 @@ const routeTrackingMapReferenceKeyStyle = {
   width: "22px",
 };
 
+const routeTrackingMapArrivalKeyStyle = {
+  alignItems: "center",
+  background: "#0b84d8",
+  border: "2px solid #ffffff",
+  borderRadius: "50%",
+  color: "#ffffff",
+  display: "inline-flex",
+  fontSize: "9px",
+  fontWeight: 700,
+  height: "18px",
+  justifyContent: "center",
+  width: "18px",
+};
+
 const routeMetaActionsStyle = {
   borderBottom: "1px solid #ececec",
   display: "grid",
@@ -4091,7 +4105,7 @@ export default function RouteDetailPage() {
 
     const map = routeMapRef.current;
     const syncTracking = () => {
-      syncRouteDetailLiveTracking(routeMapRef.current, routeTrackingSnapshot);
+      syncRouteDetailLiveTracking(routeMapRef.current, routeTrackingSnapshot, routeMapStops);
     };
     syncTracking();
     map.on("styledata", syncTracking);
@@ -4099,7 +4113,7 @@ export default function RouteDetailPage() {
     return () => {
       map.off("styledata", syncTracking);
     };
-  }, [isMapReady, isTrackingMapView, routeMapRef, routeTrackingSnapshot]);
+  }, [isMapReady, isTrackingMapView, routeMapRef, routeMapStops, routeTrackingSnapshot]);
 
 
   useEffect(() => {
@@ -4701,6 +4715,10 @@ export default function RouteDetailPage() {
                 <span style={routeTrackingMapLegendItemStyle}>
                   <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
                   <span>Actual GPS tracking</span>
+                </span>
+                <span style={routeTrackingMapLegendItemStyle}>
+                  <span aria-hidden="true" style={routeTrackingMapArrivalKeyStyle}>1</span>
+                  <span>Arrived stop</span>
                 </span>
               </div>
             ) : null}

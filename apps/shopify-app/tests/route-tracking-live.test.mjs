@@ -17,10 +17,8 @@ test("Tracking map fits the latest GPS position when no recorded path exists yet
   const routeMapSource = readIfPresent(routeMapPath);
   const routeDetailSource = readIfPresent(routeDetailPath);
 
-  assert.match(routeMapSource, /const pathLocations = getRouteTrackingPathPoints\(trackingSnapshot\)\.map/);
-  assert.match(routeMapSource, /if \(pathLocations\.length > 0\) return pathLocations/);
-  assert.match(routeMapSource, /trackingSnapshot\?\.latestPosition\?\.latitude/);
-  assert.match(routeMapSource, /return latestCoordinates \? \[\{ coordinates: latestCoordinates, hasCoordinates: true \}\] : \[\]/);
+  assert.match(routeMapSource, /getRouteTrackingFitCoordinates\(trackingSnapshot\)\.map/);
+  assert.doesNotMatch(routeMapSource, /getRouteTrackingPathPoints\(trackingSnapshot\)\.map/);
   assert.match(routeDetailSource, /const hasTrackingGpsFitRef = useRef\(false\)/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| routeTrackingMapLocations\.length === 0\) return/);
   assert.match(routeDetailSource, /fitRouteDetailMap\(mapRef\.current, mapLibraryRef\.current, routeTrackingMapLocations\)/);
@@ -107,6 +105,9 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   const routeMapSource = readIfPresent(routeMapPath);
 
   assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking"/);
+  assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID = "route-detail-tracking-arrivals"/);
+  assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID/);
+  assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID/);
   assert.match(routeMapSource, /function syncRouteDetailLiveTracking\(map, trackingSnapshot/);
   assert.match(routeMapSource, /existingSource\?\.setData/);
   assert.match(routeMapSource, /trackingTrail/);
@@ -119,10 +120,12 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /isTrackingReference/);
   assert.doesNotMatch(routeMapSource, /trackingPosition|trackingHistoryPoint/);
   assert.doesNotMatch(routeMapSource, /ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID|ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID/);
+  assert.match(routeMapSource, /featureType: "stopArrival"/);
+  assert.match(routeMapSource, /"text-field": \["to-string", \["get", "stopNumber"\]\]/);
   assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
-  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, routeTrackingSnapshot/);
+  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, routeTrackingSnapshot, routeMapStops\)/);
   assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
 });
