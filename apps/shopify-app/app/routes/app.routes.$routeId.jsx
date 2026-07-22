@@ -50,6 +50,7 @@ import {
   syncRouteDetailMapViewEmphasis,
   syncRouteDetailLiveTracking,
   syncRouteDetailRouteLine,
+  syncRouteDetailTrackingVisibility,
   syncRouteEditPolygon,
 } from "../features/delivery/route-detail-map";
 import {
@@ -2781,7 +2782,6 @@ export default function RouteDetailPage() {
   const routeMapFitLocations = isTrackingMapView && routeTrackingMapLocations.length > 0
     ? routeTrackingMapLocations
     : routeMapLocations;
-  const routeMapViewKey = `${isTrackingMapView ? "tracking" : "stops"}-${mapRenderKey}`;
   const routeGeometryRows = useMemo(
     () => buildRouteGeometryRows(timelineRouteRows, routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints),
     [routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints, timelineRouteRows],
@@ -3098,10 +3098,6 @@ export default function RouteDetailPage() {
       resetRoutePolygonDraft();
       setIsRoutePolygonEditMode(false);
     }
-    clearMapRecoveryTimer();
-    mapLoadedRef.current = false;
-    setIsMapReady(false);
-    setMapStatus("loading");
     setChildDetailTab(nextTab);
   };
 
@@ -3963,7 +3959,7 @@ export default function RouteDetailPage() {
       mapLibraryRef.current = null;
       mapLoadedRef.current = false;
     };
-  }, [isTrackingMapView, mapRenderKey, scheduleMapRecovery]);
+  }, [mapRenderKey, scheduleMapRecovery]);
 
 
   useEffect(() => {
@@ -4044,7 +4040,8 @@ export default function RouteDetailPage() {
         (metric) => emitMarkerDiagnostics({ ...metric, trigger: "initial-sync" }),
       );
       syncRouteDetailMapViewEmphasis(map, isTrackingMapView);
-      bindStopLayerHandlers();
+      syncRouteDetailTrackingVisibility(map, isTrackingMapView);
+      if (!isTrackingMapView) bindStopLayerHandlers();
       const markerCreateMs = roundPerfDuration(performance.now() - markerStartedAt);
       logRouteDetailPerformance("routes.detail.map.sync", {
         totalMs: roundPerfDuration(performance.now() - syncStartedAt),
@@ -4065,7 +4062,8 @@ export default function RouteDetailPage() {
       }
       if (syncRouteDetailMapMarkerLayers(map, departureLocation, routeMapStops, savedRouteStopPoints, routeLineColor, routeStopColorById, (metric) => emitMarkerDiagnostics({ ...metric, trigger: "styledata" }))) {
         syncRouteDetailMapViewEmphasis(map, isTrackingMapView);
-        bindStopLayerHandlers();
+        syncRouteDetailTrackingVisibility(map, isTrackingMapView);
+        if (!isTrackingMapView) bindStopLayerHandlers();
       }
     };
 
@@ -4618,11 +4616,10 @@ export default function RouteDetailPage() {
 
           <MapPanel
             ariaLabel={isTrackingMapView ? "Recorded GPS tracking map" : "Route stop location map"}
-            canvasKey={routeMapViewKey}
+            canvasKey={mapRenderKey}
             canvasRef={mapContainerRef}
             canvasStyle={isTrackingMapView ? routeTrackingMapCanvasStyle : routeDetailMapCanvasStyle}
             frameStyle={isTrackingMapView ? routeTrackingMapFrameStyle : routeDetailMapFrameStyle}
-            key={routeMapViewKey}
             wheelHintEnabled={isTrackingMapView || !isRoutePolygonEditMode}
             toolbar={
               <>
