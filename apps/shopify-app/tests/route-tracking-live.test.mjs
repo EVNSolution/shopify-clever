@@ -123,7 +123,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.doesNotMatch(routeMapSource, /trackingPosition|trackingHistoryPoint/);
   assert.doesNotMatch(routeMapSource, /ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID|ROUTE_DETAIL_TRACKING_HISTORY_LAYER_ID/);
   assert.match(routeMapSource, /featureType: "stopArrival"/);
-  assert.match(routeMapSource, /"text-field": \["to-string", \["get", "stopLabel"\]\]/);
+  assert.match(routeMapSource, /"text-field": \["to-string", \["get", "stopNumber"\]\]/);
   assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
