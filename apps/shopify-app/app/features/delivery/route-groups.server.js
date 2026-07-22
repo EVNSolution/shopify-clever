@@ -97,6 +97,27 @@ export async function saveDeliveryRouteGroupDraft(request, routeGroupId, payload
   return mutateRouteGroup(request, routeGroupId, "/draft", payload, options, "저장할 route group ID가 없습니다.");
 }
 
+export async function fetchNextDeliveryRouteGroupRouteIdx(request, routeGroupId, options = {}) {
+  const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
+  if (!safeRouteGroupId) return { nextRouteIdx: null, errors: missingRouteGroupResult("조회할 route group ID가 없습니다.").errors };
+
+  const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}/next-route-idx`, {
+    cacheKey: `next-route-idx:${Date.now()}:${Math.random()}`,
+    fetch: options.fetch,
+    method: "GET",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    nextRouteIdx: numberOrNull(
+      result.data?.nextRouteIdx
+        ?? result.data?.nextRouteIndex
+        ?? result.data?.routeIdx,
+    ),
+    errors: result.errors,
+  };
+}
+
 export async function deleteDeliveryRouteGroup(request, routeGroupId, options = {}) {
   const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
   if (!safeRouteGroupId) return missingRouteGroupResult("삭제할 route group ID가 없습니다.");
@@ -337,6 +358,11 @@ function readOrderIdsFromObjects(values) {
 
 function uniqueTexts(values) {
   return Array.from(new Set(values.map(textOrUndefined).filter(Boolean)));
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 export async function generateDeliveryRouteGroupChildRoutes(request, routeGroupId, payload = {}, options = {}) {
