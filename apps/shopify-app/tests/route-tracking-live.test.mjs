@@ -68,6 +68,8 @@ test("ready and in-progress child routes observe lifecycle events with a fresh S
   assert.match(routeDetailSource, /document\.visibilityState/);
   assert.match(routeDetailSource, /AbortController/);
   assert.match(routeDetailSource, /trackingReconnectDelayMs/);
+  assert.match(routeDetailSource, /isRouteTrackingPayloadForRoute/);
+  assert.match(routeDetailSource, /if \(isDisposed \|\| controller\.signal\.aborted\) break;/);
   assert.match(routeDetailSource, /const isCurrentController = streamController === controller/);
   assert.doesNotMatch(routeDetailSource, /\}, \[shopify, trackingStreamRoutePlanId\]\)/);
 });
@@ -125,7 +127,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
   assert.match(routeDetailSource, /completedTrackingStopIds/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
-  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, routeTrackingSnapshot, routeMapStops\)/);
+  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot, routeMapStops\)/);
   assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
   assert.match(routeMapSource, /function syncRouteDetailTrackingVisibility\(map, isTrackingView = false\)/);
@@ -141,12 +143,12 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.match(routeDetailSource, /routeTrackingPresentation\.mode === "live"/);
   assert.match(routeDetailSource, /routeTrackingPresentation\.trackingLabel/);
   assert.match(routeDetailSource, /routeTrackingConnectionLabel/);
-  assert.match(routeDetailSource, /routeTrackingSnapshot\?\.policy/);
+  assert.match(routeDetailSource, /displayedRouteTrackingSnapshot\?\.policy/);
   assert.match(routeDetailSource, /Latest position/);
   assert.match(routeDetailSource, /Last received/);
   assert.match(routeDetailSource, /trackingConnectionState/);
   assert.match(routeDetailSource, /Driver stage/);
-  assert.match(routeDetailSource, /routeTrackingSnapshot\?\.progress/);
+  assert.match(routeDetailSource, /displayedRouteTrackingSnapshot\?\.progress/);
   assert.match(routeDetailSource, /GPS records/);
   assert.match(routeDetailSource, /Fit recorded GPS path/);
   assert.doesNotMatch(routeDetailSource, /GPS record #/);

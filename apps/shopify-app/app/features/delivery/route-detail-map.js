@@ -1,6 +1,6 @@
-import { addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers";
-import { numberOrUndefined, textOrUndefined } from "./route-helpers";
-import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures } from "./route-tracking";
+import { addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers.js";
+import { numberOrUndefined, textOrUndefined } from "./route-helpers.js";
+import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures } from "./route-tracking.js";
 
 const DEFAULT_CENTER = [-79.3832, 43.6532];
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
@@ -218,32 +218,33 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
   const routeLineWidth = 2.5;
   if (existingSource?.setData) {
     existingSource.setData(routeLineData);
-    if (map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) {
-      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", ["coalesce", ["get", "routeColor"], routeColor]);
-      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-opacity", routeLineOpacity);
-      map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-width", routeLineWidth);
-    }
-    return true;
+  } else {
+    map.addSource(ROUTE_DETAIL_ROUTE_SOURCE_ID, {
+      type: "geojson",
+      data: routeLineData,
+    });
   }
 
-  map.addSource(ROUTE_DETAIL_ROUTE_SOURCE_ID, {
-    type: "geojson",
-    data: routeLineData,
-  });
-  map.addLayer({
-    id: ROUTE_DETAIL_ROUTE_LAYER_ID,
-    type: "line",
-    source: ROUTE_DETAIL_ROUTE_SOURCE_ID,
-    layout: {
-      "line-cap": "round",
-      "line-join": "round",
-    },
-    paint: {
-      "line-color": ["coalesce", ["get", "routeColor"], routeColor],
-      "line-opacity": routeLineOpacity,
-      "line-width": routeLineWidth,
-    },
-  });
+  if (!map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) {
+    map.addLayer({
+      id: ROUTE_DETAIL_ROUTE_LAYER_ID,
+      type: "line",
+      source: ROUTE_DETAIL_ROUTE_SOURCE_ID,
+      layout: {
+        "line-cap": "round",
+        "line-join": "round",
+      },
+      paint: {
+        "line-color": ["coalesce", ["get", "routeColor"], routeColor],
+        "line-opacity": routeLineOpacity,
+        "line-width": routeLineWidth,
+      },
+    });
+  } else {
+    map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", ["coalesce", ["get", "routeColor"], routeColor]);
+    map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-opacity", routeLineOpacity);
+    map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-width", routeLineWidth);
+  }
   return true;
 }
 

@@ -333,8 +333,13 @@ test("child detail tabs reuse one map while swapping Stops and Tracking layers",
   assert.doesNotMatch(routeDetailSource, /Road-matched GPS path|Unconfirmed GPS movement|Current GPS position/);
   assert.match(routeDetailSource, /\[mapRenderKey, scheduleMapRecovery\]/);
   assert.doesNotMatch(routeDetailSource, /\[isTrackingMapView, mapRenderKey, scheduleMapRecovery\]/);
+  assert.match(
+    routeDetailSource,
+    /hasInitialRouteMapFitRef\.current = false;\s*hasTrackingGpsFitRef\.current = false;\s*\}, \[effectiveRoutePlan\?\.id, isTrackingMapView, mapRenderKey\]\);/,
+  );
   assert.ok(tabHandlerStart >= 0 && tabHandlerEnd > tabHandlerStart);
   assert.doesNotMatch(tabHandlerSource, /clearMapRecoveryTimer|mapLoadedRef|setIsMapReady|setMapStatus/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView\) bindStopLayerHandlers\(\)/);
+  assert.match(routeDetailSource, /if \(mapCanvas\?\.style\.cursor === "pointer"\) mapCanvas\.style\.cursor = "";/);
   assert.match(routeDetailSource, /aria-label="Child route tracking"/);
 });
