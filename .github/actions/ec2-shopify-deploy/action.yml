@@ -89,6 +89,8 @@ runs:
           --exclude '.react-router/' \
           --exclude '.shopify/' \
           --exclude '.omx/' \
+          --exclude 'backups/' \
+          --exclude 'apps/delivery-api/' \
           --exclude 'infra/env/*.env' \
           --exclude 'infra/compose/.env*' \
           --exclude 'infra/compose/*.env' \
