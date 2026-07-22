@@ -37,7 +37,10 @@ import { readRouteDraftPayload } from "./route-draft";
 import {
   collectRouteRefreshOrderGids,
   getRoutePlanIdsForOrderRefresh,
+  partitionRefreshableRouteDetails,
 } from "./route-order-refresh";
+
+const ROUTE_REFRESH_CONCURRENCY = 5;
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -547,6 +550,7 @@ export const routeDetailAction = async ({ params, request }) => {
 };
 
 export async function refreshRouteOrders({
+  allowInProgress = true,
   admin,
   request,
   routeGroupId,
@@ -581,15 +585,32 @@ export async function refreshRouteOrders({
     };
   }
 
-  const routeDetails = await Promise.all(routePlanIds.map((routePlanId) =>
+  const routeDetails = await mapWithConcurrency(routePlanIds, ROUTE_REFRESH_CONCURRENCY, (routePlanId) =>
     fetchDeliveryRoutePlanDetail(request, routePlanId, {
       cacheKey: shopifyShopCacheKey,
       sessionToken,
-    })));
+    }));
   errors.push(...routeDetails.flatMap((detail) => detail.errors ?? []));
-  if (errors.length > 0) return { errors, routePlanIds, sync: null, updatedOrders: 0 };
+  if (errors.length > 0) return { errors, routePlanIds, skippedRoutes: [], sync: null, updatedOrders: 0 };
 
-  const routeOrderGids = collectRouteRefreshOrderGids(routeDetails);
+  const partitioned = partitionRefreshableRouteDetails(routeDetails, { allowInProgress });
+  const skippedRoutes = partitioned.skipped;
+  const refreshableRouteDetails = partitioned.refreshable;
+  routePlanIds = refreshableRouteDetails
+    .map((detail) => textOrUndefined(detail?.routePlan?.id ?? detail?.routePlanId))
+    .filter(Boolean);
+  if (routePlanIds.length === 0) {
+    return {
+      errors: [{ message: "READY 또는 진행 중인 child route만 주문 정보를 업데이트할 수 있습니다." }],
+      refreshedRoutes: 0,
+      routePlanIds: [],
+      skippedRoutes,
+      sync: null,
+      updatedOrders: 0,
+    };
+  }
+
+  const routeOrderGids = collectRouteRefreshOrderGids(refreshableRouteDetails);
   let sync = null;
   let updatedOrders = 0;
   if (routeOrderGids.length > 0) {
@@ -598,7 +619,7 @@ export async function refreshRouteOrders({
       deliveryCycle: preferencesData.appPreferences.deliveryCycle,
     });
     errors.push(...(preferencesData.errors ?? []), ...(shopifyOrderData.errors ?? []));
-    if (errors.length > 0) return { errors, routePlanIds, sync: null, updatedOrders: 0 };
+    if (errors.length > 0) return { errors, routePlanIds, skippedRoutes, sync: null, updatedOrders: 0 };
 
     const snapshots = getOrderSyncSnapshots(shopifyOrderData.orders);
     const syncedOrderData = await syncDeliveryOrders(
@@ -611,19 +632,28 @@ export async function refreshRouteOrders({
     updatedOrders = syncedOrderData.orders.length;
   }
 
-  if (errors.length > 0) return { errors, routePlanIds, sync, updatedOrders };
+  if (errors.length > 0) return { errors, routePlanIds, skippedRoutes, sync, updatedOrders };
 
-  const refreshedRoutes = await Promise.all(routePlanIds.map((routePlanId) =>
-    refreshDeliveryRoutePlanOrderData(request, routePlanId, { sessionToken })));
+  const refreshedRoutes = await mapWithConcurrency(routePlanIds, ROUTE_REFRESH_CONCURRENCY, (routePlanId) =>
+    refreshDeliveryRoutePlanOrderData(request, routePlanId, { sessionToken }));
   errors.push(...refreshedRoutes.flatMap((detail) => detail.errors ?? []));
 
   return {
     errors,
     refreshedRoutes: refreshedRoutes.filter((detail) => detail.routePlan).length,
     routePlanIds,
+    skippedRoutes,
     sync,
     updatedOrders,
   };
+}
+
+async function mapWithConcurrency(values, concurrency, operation) {
+  const results = [];
+  for (let index = 0; index < values.length; index += concurrency) {
+    results.push(...await Promise.all(values.slice(index, index + concurrency).map(operation)));
+  }
+  return results;
 }
 
 

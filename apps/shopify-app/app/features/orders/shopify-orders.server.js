@@ -12,6 +12,7 @@ import {
 const SHOPIFY_ORDERS_PAGE_SIZE = 50;
 const SHOPIFY_ORDERS_MAX_PAGES = 20;
 const SHOPIFY_ORDER_NODES_BATCH_SIZE = 100;
+const SHOPIFY_ORDER_LINE_ITEMS_PAGE_SIZE = 100;
 
 export const SHOPIFY_ORDERS_QUERY = `#graphql
   query CleverRouteOrders($first: Int!, $after: String) {
@@ -50,6 +51,10 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
               variantTitle
               quantity
               sku
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
             }
           }
           shippingAddress {
@@ -117,6 +122,10 @@ export const SHOPIFY_ORDERS_BY_IDS_QUERY = `#graphql
             quantity
             sku
           }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
         }
         shippingAddress {
           name
@@ -136,6 +145,29 @@ export const SHOPIFY_ORDERS_BY_IDS_QUERY = `#graphql
   }
 `;
 
+export const SHOPIFY_ORDER_LINE_ITEMS_QUERY = `#graphql
+  query CleverRouteOrderLineItems($id: ID!, $first: Int!, $after: String) {
+    node(id: $id) {
+      ... on Order {
+        id
+        lineItems(first: $first, after: $after) {
+          nodes {
+            title
+            name
+            variantTitle
+            quantity
+            sku
+          }
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+        }
+      }
+    }
+  }
+`;
+
 export const SHOPIFY_ORDERS_BY_IDS_QUERY_WITHOUT_CUSTOMER_NOTE =
   SHOPIFY_ORDERS_BY_IDS_QUERY.replace(
     /\n[ ]{8}customer \{\n[ ]{10}note\n[ ]{8}\}/,
@@ -144,6 +176,8 @@ export const SHOPIFY_ORDERS_BY_IDS_QUERY_WITHOUT_CUSTOMER_NOTE =
 
 export const ORDER_SCOPE_ACCESS_ERROR_CODE = "ORDER_SCOPE_ACCESS";
 export const PROTECTED_ORDER_ACCESS_ERROR_CODE = SERVICE_ERROR_CODES.PROTECTED_ORDER_ACCESS;
+export const SHOPIFY_ORDER_NODE_MISSING_ERROR_CODE = "SHOPIFY_ORDER_NODE_MISSING";
+export const SHOPIFY_ORDER_LINE_ITEMS_INCOMPLETE_ERROR_CODE = "SHOPIFY_ORDER_LINE_ITEMS_INCOMPLETE";
 
 const ORDER_SCOPE_ACCESS_MESSAGE =
   "Shopify Orders 권한이 아직 승인되지 않았습니다. shopify.app.toml의 access_scopes에 read_orders를 포함한 뒤 Shopify 앱을 다시 설치/권한 갱신해 주세요.";
@@ -234,8 +268,27 @@ export async function fetchShopifyOrdersByIds(admin, orderIds, options = {}) {
       }
 
       const payload = await response.json();
-      orders.push(...mapShopifyOrderNodesResponse(payload, options));
       errors.push(...normalizeGraphqlErrors(payload.errors));
+
+      const nodes = getShopifyOrderNodes(payload?.data?.nodes);
+      const returnedIds = new Set(nodes.map((node) => textOrUndefined(node?.id)).filter(Boolean));
+      const missingIds = batchIds.filter((id) => !returnedIds.has(id));
+      if (missingIds.length > 0) {
+        return {
+          orders: [],
+          errors: [
+            ...errors,
+            {
+              code: SHOPIFY_ORDER_NODE_MISSING_ERROR_CODE,
+              message: `Shopify에서 요청한 주문을 찾지 못했습니다: ${missingIds.join(", ")}`,
+            },
+          ],
+        };
+      }
+
+      const hydrated = await hydrateShopifyOrderLineItems(admin, nodes);
+      errors.push(...hydrated.errors);
+      orders.push(...hydrated.nodes.map((node) => mapOrderNode(node, options)).filter(Boolean));
     }
 
     return { orders, errors };
@@ -270,8 +323,13 @@ async function loadShopifyOrders(admin, options = {}) {
         response = await admin.graphql(ordersQuery, { variables });
       }
       const payload = await response.json();
-      orders.push(...mapShopifyOrdersResponse(payload, options));
       errors.push(...normalizeGraphqlErrors(payload.errors));
+      const pageNodes = getShopifyOrderNodes(
+        payload?.data?.orders?.edges?.map((edge) => edge?.node),
+      );
+      const hydrated = await hydrateShopifyOrderLineItems(admin, pageNodes);
+      errors.push(...hydrated.errors);
+      orders.push(...hydrated.nodes.map((node) => mapOrderNode(node, options)).filter(Boolean));
 
       const pageInfo = payload?.data?.orders?.pageInfo;
       if (pageInfo?.hasNextPage !== true) break;
@@ -312,6 +370,77 @@ async function loadShopifyOrders(admin, options = {}) {
 
     throw error;
   }
+}
+
+async function hydrateShopifyOrderLineItems(admin, orderNodes) {
+  const nodes = [];
+  const errors = [];
+
+  for (const order of orderNodes) {
+    const orderId = textOrUndefined(order?.id);
+    const initialLineItems = Array.isArray(order?.lineItems?.nodes)
+      ? order.lineItems.nodes
+      : [];
+    let pageInfo = order?.lineItems?.pageInfo;
+    let after = textOrUndefined(pageInfo?.endCursor);
+    const seenCursors = new Set();
+    const lineItems = [...initialLineItems];
+
+    while (pageInfo?.hasNextPage === true) {
+      if (!orderId || !after || seenCursors.has(after)) {
+        errors.push(incompleteLineItemsError(orderId));
+        break;
+      }
+      seenCursors.add(after);
+
+      assertReadOnlyShopifyOrdersOperation(SHOPIFY_ORDER_LINE_ITEMS_QUERY);
+      const response = await admin.graphql(SHOPIFY_ORDER_LINE_ITEMS_QUERY, {
+        variables: {
+          after,
+          first: SHOPIFY_ORDER_LINE_ITEMS_PAGE_SIZE,
+          id: orderId,
+        },
+      });
+      const payload = await response.json();
+      const pageErrors = normalizeGraphqlErrors(payload.errors);
+      if (pageErrors.length > 0) {
+        errors.push(...pageErrors);
+        break;
+      }
+
+      const node = payload?.data?.node;
+      if (textOrUndefined(node?.id) !== orderId) {
+        errors.push(incompleteLineItemsError(orderId));
+        break;
+      }
+
+      lineItems.push(...(Array.isArray(node?.lineItems?.nodes) ? node.lineItems.nodes : []));
+      pageInfo = node?.lineItems?.pageInfo;
+      after = textOrUndefined(pageInfo?.endCursor);
+    }
+
+    nodes.push({
+      ...order,
+      lineItems: {
+        ...(order?.lineItems ?? {}),
+        nodes: lineItems,
+        pageInfo: pageInfo ?? { endCursor: null, hasNextPage: false },
+      },
+    });
+  }
+
+  return { errors, nodes };
+}
+
+function getShopifyOrderNodes(value) {
+  return Array.isArray(value) ? value.filter((node) => node?.id) : [];
+}
+
+function incompleteLineItemsError(orderId) {
+  return {
+    code: SHOPIFY_ORDER_LINE_ITEMS_INCOMPLETE_ERROR_CODE,
+    message: `Shopify 주문 상품을 끝까지 조회하지 못했습니다: ${orderId ?? "unknown order"}`,
+  };
 }
 
 function readShopifyOrdersCache(cacheKey, now) {

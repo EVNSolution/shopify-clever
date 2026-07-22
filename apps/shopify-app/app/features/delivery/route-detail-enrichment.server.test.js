@@ -9,7 +9,9 @@ import {
 } from "./route-detail-enrichment.server.js";
 import {
   collectRouteRefreshOrderGids,
+  getBulkRefreshRoutePlanIds,
   getRoutePlanIdsForOrderRefresh,
+  partitionRefreshableRouteDetails,
 } from "./route-order-refresh.js";
 import { getTimeZoneAbbreviationForInstant } from "../shopify/shop-timezone.server.js";
 
@@ -133,4 +135,33 @@ test("collects unique materialized child routes and Shopify orders for route ref
     ]),
     ["gid://shopify/Order/1", "gid://shopify/Order/2"],
   );
+});
+
+test("bulk order refresh targets only ready-compatible routes", () => {
+  assert.deepEqual(
+    getBulkRefreshRoutePlanIds([
+      { id: "ready", status: "READY" },
+      { id: "draft", status: "DRAFT" },
+      { id: "legacy", status: "ASSIGNED" },
+      { id: "active", status: "IN_PROGRESS" },
+      { id: "done", status: "COMPLETED" },
+      { id: "cancelled", status: "CANCELLED" },
+    ]),
+    ["ready", "draft", "legacy"],
+  );
+});
+
+test("explicit refresh permits active routes but skips terminal routes", () => {
+  const partitioned = partitionRefreshableRouteDetails([
+    { routePlan: { id: "ready", status: "READY" } },
+    { routePlan: { id: "active", status: "IN_PROGRESS" } },
+    { routePlan: { id: "done", status: "COMPLETED" } },
+    { routePlan: { id: "unknown", status: "SOMETHING_NEW" } },
+  ]);
+
+  assert.deepEqual(partitioned.refreshable.map((detail) => detail.routePlan.id), ["ready", "active"]);
+  assert.deepEqual(partitioned.skipped, [
+    { routePlanId: "done", status: "COMPLETED" },
+    { routePlanId: "unknown", status: "SOMETHING_NEW" },
+  ]);
 });
