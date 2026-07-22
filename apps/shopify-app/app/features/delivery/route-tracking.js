@@ -119,12 +119,24 @@ function getPositionTimestamp(position) {
   return Number.isFinite(timestamp) ? timestamp : 0;
 }
 
+function isRouteTrackingPayloadForRoute(payload, routePlanId) {
+  const expectedRoutePlanId = textOrNull(routePlanId);
+  const payloadRoutePlanId = textOrNull(payload?.routePlanId);
+  return !expectedRoutePlanId || !payloadRoutePlanId || expectedRoutePlanId === payloadRoutePlanId;
+}
+
 function normalizeRouteTrackingSnapshot(snapshot) {
   const recentPositions = (Array.isArray(snapshot?.recentPositions) ? snapshot.recentPositions : [])
     .map(normalizeTrackingPosition)
     .filter(Boolean)
     .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
-  const latestPosition = normalizeTrackingPosition(snapshot?.latestPosition) ?? recentPositions.at(-1) ?? null;
+  const explicitLatestPosition = normalizeTrackingPosition(snapshot?.latestPosition);
+  const latestRecentPosition = recentPositions.at(-1) ?? null;
+  const latestPosition = explicitLatestPosition && latestRecentPosition
+    ? getPositionTimestamp(latestRecentPosition) > getPositionTimestamp(explicitLatestPosition)
+      ? latestRecentPosition
+      : explicitLatestPosition
+    : explicitLatestPosition ?? latestRecentPosition;
   const recordedPath = normalizeRecordedPath(snapshot?.recordedPath, latestPosition);
   const stopArrivals = (Array.isArray(snapshot?.stopArrivals) ? snapshot.stopArrivals : [])
     .map(normalizeTrackingStopArrival)
@@ -149,7 +161,9 @@ function normalizeRouteTrackingSnapshot(snapshot) {
 function mergeRouteTrackingProgress(snapshot, event) {
   const normalizedSnapshot = normalizeRouteTrackingSnapshot(snapshot);
   const normalizedEvent = normalizeTrackingProgressEvent(event);
-  if (!normalizedEvent) return normalizedSnapshot;
+  if (!normalizedEvent || !isRouteTrackingPayloadForRoute(normalizedEvent, normalizedSnapshot.routePlanId)) {
+    return normalizedSnapshot;
+  }
 
   const previousProgress = normalizedSnapshot.progress;
   const completedStopIds = new Set(previousProgress.completedStopIds);
@@ -219,7 +233,9 @@ function buildProvisionalStopArrival(snapshot, event) {
 function mergeRouteTrackingPosition(snapshot, position) {
   const normalizedSnapshot = normalizeRouteTrackingSnapshot(snapshot);
   const normalizedPosition = normalizeTrackingPosition(position);
-  if (!normalizedPosition) return normalizedSnapshot;
+  if (!normalizedPosition || !isRouteTrackingPayloadForRoute(normalizedPosition, normalizedSnapshot.routePlanId)) {
+    return normalizedSnapshot;
+  }
 
   const recordedPath = normalizedSnapshot.recordedPath ?? normalizedSnapshot.recentPositions.reduce(
     (path, recentPosition) => mergeRecordedPathPosition(path, recentPosition, normalizedSnapshot.policy),
@@ -900,6 +916,7 @@ export {
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
   getRouteTrackingStreamInactivityMs,
+  isRouteTrackingPayloadForRoute,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
   mergeRouteTrackingSnapshot,

@@ -61,6 +61,7 @@ import {
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
   getRouteTrackingStreamInactivityMs,
+  isRouteTrackingPayloadForRoute,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
   mergeRouteTrackingSnapshot,
@@ -2605,6 +2606,9 @@ export default function RouteDetailPage() {
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
   const [routeExecutionStatus, setRouteExecutionStatus] = useState(loaderRouteExecutionStatus);
   routeTrackingSnapshotRef.current = routeTrackingSnapshot;
+  const displayedRouteTrackingSnapshot = isRouteTrackingPayloadForRoute(routeTrackingSnapshot, trackingRoutePlanId)
+    ? routeTrackingSnapshot
+    : null;
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
   }, [loaderRouteExecutionStatus]);
@@ -2666,8 +2670,8 @@ export default function RouteDetailPage() {
     ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { ianaTimezone, timezoneAbbreviation })
     : [];
   const routeTrackingPresentation = useMemo(
-    () => getRouteTrackingPresentation(routeExecutionStatus, routeTrackingSnapshot, routeTrackingClock),
-    [routeExecutionStatus, routeTrackingClock, routeTrackingSnapshot],
+    () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
+    [displayedRouteTrackingSnapshot, routeExecutionStatus, routeTrackingClock],
   );
   const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS" ? trackingRoutePlanId : null;
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
@@ -2678,12 +2682,12 @@ export default function RouteDetailPage() {
     : ["loading", "unavailable"].includes(trackingConnectionState)
       ? trackingConnectionState
       : routeTrackingPresentation.connectionLabel;
-  const routeTrackingPolicy = routeTrackingSnapshot?.policy;
-  const routeTrackingProgress = routeTrackingSnapshot?.progress;
-  const latestTrackingPosition = routeTrackingSnapshot?.latestPosition ?? null;
+  const routeTrackingPolicy = displayedRouteTrackingSnapshot?.policy;
+  const routeTrackingProgress = displayedRouteTrackingSnapshot?.progress;
+  const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
   const routeTrackingPathSummary = useMemo(
-    () => getRouteTrackingPathSummary(routeTrackingSnapshot),
-    [routeTrackingSnapshot],
+    () => getRouteTrackingPathSummary(displayedRouteTrackingSnapshot),
+    [displayedRouteTrackingSnapshot],
   );
   const activeChildOrderDisclosureRow = activeChildOrderDisclosure
     ? childRouteOrderRows.find((row) => row.id === activeChildOrderDisclosure.rowId) ?? null
@@ -2776,8 +2780,8 @@ export default function RouteDetailPage() {
     [departureLocation, routeMapLocationsSource],
   );
   const routeTrackingMapLocations = useMemo(
-    () => getRouteTrackingFitLocations(routeTrackingSnapshot),
-    [routeTrackingSnapshot],
+    () => getRouteTrackingFitLocations(displayedRouteTrackingSnapshot),
+    [displayedRouteTrackingSnapshot],
   );
   const routeMapFitLocations = isTrackingMapView && routeTrackingMapLocations.length > 0
     ? routeTrackingMapLocations
@@ -2886,6 +2890,7 @@ export default function RouteDetailPage() {
     const applyTrackingEvent = (trackingEvent) => {
       if (trackingEvent.event === "tracking_snapshot") {
         const snapshot = normalizeRouteTrackingSnapshot(trackingEvent.data?.snapshot ?? trackingEvent.data);
+        if (!isRouteTrackingPayloadForRoute(snapshot, trackingStreamRoutePlanId)) return;
         setRouteTrackingSnapshot((currentSnapshot) => {
           const nextSnapshot = mergeRouteTrackingSnapshot(currentSnapshot, snapshot);
           routeTrackingSnapshotRef.current = nextSnapshot;
@@ -2894,10 +2899,12 @@ export default function RouteDetailPage() {
         return;
       }
       if (trackingEvent.event === "tracking_position") {
+        const position = trackingEvent.data?.position ?? trackingEvent.data;
+        if (!isRouteTrackingPayloadForRoute(position, trackingStreamRoutePlanId)) return;
         setRouteTrackingSnapshot((currentSnapshot) => {
           const nextSnapshot = mergeRouteTrackingPosition(
             currentSnapshot,
-            trackingEvent.data?.position ?? trackingEvent.data,
+            position,
           );
           routeTrackingSnapshotRef.current = nextSnapshot;
           return nextSnapshot;
@@ -2906,6 +2913,7 @@ export default function RouteDetailPage() {
       }
       if (trackingEvent.event === "tracking_progress") {
         const progressEvent = trackingEvent.data?.progress ?? trackingEvent.data;
+        if (!isRouteTrackingPayloadForRoute(progressEvent, trackingStreamRoutePlanId)) return;
         setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingEvent(currentStatus, progressEvent));
         if (doesTrackingEventRefreshEta(progressEvent)) {
           revalidatorRef.current.revalidate();
@@ -2956,6 +2964,7 @@ export default function RouteDetailPage() {
         while (!isDisposed && !controller.signal.aborted) {
           const { done, value } = await reader.read();
           if (done) break;
+          if (isDisposed || controller.signal.aborted) break;
           armStreamInactivityTimer(controller);
           const parsed = consumeRouteTrackingSseChunk(buffer, decoder.decode(value, { stream: true }));
           buffer = parsed.remainder;
@@ -3097,6 +3106,10 @@ export default function RouteDetailPage() {
     if (isRoutePolygonEditMode) {
       resetRoutePolygonDraft();
       setIsRoutePolygonEditMode(false);
+    }
+    if (nextTab === "tracking") {
+      const mapCanvas = mapRef.current?.getCanvas?.();
+      if (mapCanvas?.style.cursor === "pointer") mapCanvas.style.cursor = "";
     }
     setChildDetailTab(nextTab);
   };
@@ -3875,7 +3888,7 @@ export default function RouteDetailPage() {
   useEffect(() => {
     hasInitialRouteMapFitRef.current = false;
     hasTrackingGpsFitRef.current = false;
-  }, [isTrackingMapView, mapRenderKey]);
+  }, [effectiveRoutePlan?.id, isTrackingMapView, mapRenderKey]);
 
   useEffect(() => () => clearMapRecoveryTimer(), [clearMapRecoveryTimer]);
 
@@ -4103,7 +4116,7 @@ export default function RouteDetailPage() {
 
     const map = routeMapRef.current;
     const syncTracking = () => {
-      syncRouteDetailLiveTracking(routeMapRef.current, routeTrackingSnapshot, routeMapStops);
+      syncRouteDetailLiveTracking(routeMapRef.current, displayedRouteTrackingSnapshot, routeMapStops);
     };
     syncTracking();
     map.on("styledata", syncTracking);
@@ -4111,7 +4124,7 @@ export default function RouteDetailPage() {
     return () => {
       map.off("styledata", syncTracking);
     };
-  }, [isMapReady, isTrackingMapView, routeMapRef, routeMapStops, routeTrackingSnapshot]);
+  }, [displayedRouteTrackingSnapshot, isMapReady, isTrackingMapView, routeMapRef, routeMapStops]);
 
 
   useEffect(() => {

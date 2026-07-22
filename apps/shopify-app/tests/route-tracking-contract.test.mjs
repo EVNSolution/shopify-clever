@@ -12,6 +12,7 @@ import {
   getRouteTrackingFitCoordinates,
   getRouteTrackingPresentation,
   getRouteTrackingStreamInactivityMs,
+  isRouteTrackingPayloadForRoute,
   mergeRouteTrackingProgress,
   mergeRouteTrackingPosition,
   mergeRouteTrackingSnapshot,
@@ -64,6 +65,67 @@ test("tracking positions are deduplicated and an older event cannot replace late
   assert.equal(merged.latestPosition.eventId, "new");
   assert.deepEqual(getRouteTrackingPathPoints(merged).map((point) => point.eventId), ["old", "new"]);
   assert.equal(duplicate.recentPositions.length, 2);
+});
+
+test("tracking snapshot chooses the newest position across latest and recent payloads", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    routePlanId: "route-1",
+    latestPosition: {
+      eventId: "stale-latest",
+      latitude: 37.5,
+      longitude: 127,
+      occurredAt: "2026-07-20T04:00:00.000Z",
+    },
+    recentPositions: [{
+      eventId: "newest-recent",
+      latitude: 37.6,
+      longitude: 127.1,
+      occurredAt: "2026-07-20T04:05:00.000Z",
+    }],
+  });
+
+  assert.equal(snapshot.latestPosition.eventId, "newest-recent");
+});
+
+test("tracking merges reject position and progress payloads from another route", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    routePlanId: "route-b",
+    latestPosition: {
+      eventId: "route-b-position",
+      latitude: 37.5,
+      longitude: 127,
+      occurredAt: "2026-07-20T04:00:00.000Z",
+      routePlanId: "route-b",
+    },
+    progress: {
+      completedStopIds: ["route-b-stop"],
+      latestEvent: {
+        eventId: "route-b-progress",
+        eventType: "STOP_DELIVERED",
+        occurredAt: "2026-07-20T04:00:00.000Z",
+        routePlanId: "route-b",
+      },
+    },
+  });
+  const mismatchedPosition = {
+    eventId: "route-a-position",
+    latitude: 38,
+    longitude: 128,
+    occurredAt: "2026-07-20T04:01:00.000Z",
+    routePlanId: "route-a",
+  };
+  const mismatchedProgress = {
+    deliveryStopId: "route-a-stop",
+    eventId: "route-a-progress",
+    eventType: "STOP_DELIVERED",
+    occurredAt: "2026-07-20T04:01:00.000Z",
+    routePlanId: "route-a",
+  };
+
+  assert.equal(isRouteTrackingPayloadForRoute(mismatchedPosition, "route-b"), false);
+  assert.equal(isRouteTrackingPayloadForRoute({ eventId: "legacy" }, "route-b"), true);
+  assert.deepEqual(mergeRouteTrackingPosition(snapshot, mismatchedPosition), snapshot);
+  assert.deepEqual(mergeRouteTrackingProgress(snapshot, mismatchedProgress), snapshot);
 });
 
 test("recorded route geometry preserves more than 1000 compressed GPS points without truncation", () => {
