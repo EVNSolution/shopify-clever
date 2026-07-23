@@ -93,6 +93,25 @@ const CHILD_ORDER_DISCLOSURE_EDGE_INSET = 12;
 const CHILD_ORDER_DISCLOSURE_GAP = 2;
 const CHILD_ORDER_DISCLOSURE_HEIGHT = 260;
 const CHILD_ORDER_DISCLOSURE_WIDTH = 300;
+const CHILD_STOP_ACTIONS_EDGE_INSET = 12;
+const CHILD_STOP_ACTIONS_GAP = 4;
+const CHILD_STOP_ACTIONS_WIDTH = 248;
+const CHILD_STOP_EDIT_FIELDS = [
+  ["recipientName", "Recipient"],
+  ["phone", "Phone"],
+  ["address1", "Address 1"],
+  ["address2", "Address 2"],
+  ["city", "City"],
+  ["province", "Province"],
+  ["postalCode", "Postal code"],
+  ["countryCode", "Country code"],
+  ["latitude", "Latitude"],
+  ["longitude", "Longitude"],
+  ["timeWindowStart", "Time window start"],
+  ["timeWindowEnd", "Time window end"],
+  ["serviceMinutes", "Stop time minutes"],
+  ["instructions", "Instructions"],
+];
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -696,7 +715,7 @@ const routePlanRowsColumnWidths = [
 const childRouteOrderTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1424px",
+  minWidth: "1500px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -715,6 +734,7 @@ const childRouteOrderColumnWidths = [
   "132px",
   "104px",
   "94px",
+  "76px",
 ];
 
 const childRouteOrderRowStyle = {
@@ -859,6 +879,83 @@ const childRouteDisclosureEmptyStyle = {
   color: "#6d7175",
 };
 
+const childRouteActionsHeaderCellStyle = {
+  ...childRouteOrderHeaderCellStyle,
+  background: "#f7f7f7",
+  boxShadow: "-8px 0 12px rgba(255, 255, 255, 0.92)",
+  position: "sticky",
+  right: 0,
+  zIndex: 3,
+};
+
+const childRouteActionsCellStyle = {
+  ...childRouteOrderCellStyle,
+  background: "#ffffff",
+  boxShadow: "-8px 0 12px rgba(255, 255, 255, 0.92)",
+  overflow: "visible",
+  position: "sticky",
+  right: 0,
+  zIndex: 2,
+};
+
+const childStopActionsButtonStyle = {
+  ...routeActionButtonStyle,
+  minHeight: "28px",
+  padding: "2px 8px",
+};
+
+const childStopActionsMenuStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxShadow: "0 12px 32px rgba(0, 0, 0, 0.16)",
+  color: "#303030",
+  display: "grid",
+  gap: "3px",
+  left: 0,
+  padding: "7px",
+  position: "fixed",
+  top: 0,
+  width: `${CHILD_STOP_ACTIONS_WIDTH}px`,
+  zIndex: 100030,
+};
+
+const childStopActionsHeadingStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 700,
+  padding: "5px 8px 3px",
+};
+
+const childStopActionsMenuItemStyle = {
+  ...siblingRouteMenuItemStyle,
+  minHeight: "32px",
+  padding: "6px 8px",
+};
+
+const childStopActionsExternalLinkStyle = {
+  ...childStopActionsMenuItemStyle,
+  boxSizing: "border-box",
+  textDecoration: "none",
+};
+
+const childStopActionsDividerStyle = {
+  borderTop: "1px solid #eeeeee",
+  margin: "4px 0",
+};
+
+const childStopEditReadonlyStyle = {
+  background: "#f7f7f7",
+  border: "1px solid #e3e3e3",
+  borderRadius: "8px",
+  color: "#616161",
+  display: "grid",
+  fontSize: "12px",
+  gap: "4px",
+  lineHeight: 1.35,
+  padding: "8px",
+};
+
 const childRouteTimelineRowsStyle = {
   display: "grid",
   gap: "6px",
@@ -903,6 +1000,29 @@ function getChildOrderDisclosurePopoverPosition(rect, popoverSize = {}) {
     CHILD_ORDER_DISCLOSURE_EDGE_INSET,
     rect.top - height - CHILD_ORDER_DISCLOSURE_GAP,
   );
+
+  return { left, top, width };
+}
+
+function getChildStopActionsMenuPosition(rect, popoverSize = {}) {
+  const viewportWidth = window.innerWidth;
+  const viewportHeight = window.innerHeight;
+  const width = Math.min(
+    popoverSize.width ?? CHILD_STOP_ACTIONS_WIDTH,
+    viewportWidth - CHILD_STOP_ACTIONS_EDGE_INSET * 2,
+  );
+  const height = Math.min(
+    popoverSize.height ?? 360,
+    viewportHeight - CHILD_STOP_ACTIONS_EDGE_INSET * 2,
+  );
+  const left = Math.min(
+    Math.max(CHILD_STOP_ACTIONS_EDGE_INSET, rect.right - width),
+    viewportWidth - width - CHILD_STOP_ACTIONS_EDGE_INSET,
+  );
+  const belowTop = rect.bottom + CHILD_STOP_ACTIONS_GAP;
+  const top = belowTop + height <= viewportHeight - CHILD_STOP_ACTIONS_EDGE_INSET
+    ? belowTop
+    : Math.max(CHILD_STOP_ACTIONS_EDGE_INSET, rect.top - height - CHILD_STOP_ACTIONS_GAP);
 
   return { left, top, width };
 }
@@ -1708,6 +1828,12 @@ function getLiveTrackingStopStatus(row, progress) {
   return row.status;
 }
 
+function isRouteExecutionLockedForStopMembership(status) {
+  return ["IN_PROGRESS", "EN_ROUTE", "ARRIVED", "COMPLETED", "DELIVERED", "FAILED", "SKIPPED", "CANCELLED"].includes(
+    String(status ?? "").trim().replace(/-/g, "_").toUpperCase(),
+  );
+}
+
 function countRouteStopsByStatus(routeStops, statuses) {
   const statusSet = new Set(statuses);
 
@@ -1835,6 +1961,43 @@ function normalizeRouteStopCoordinates(stop) {
   );
 }
 
+function getRouteStopAddressValue(stop, field) {
+  return textOrUndefined(
+    stop?.[field] ??
+    stop?.address?.[field] ??
+    stop?.shippingAddress?.[field] ??
+    stop?.order?.shippingAddress?.[field] ??
+    stop?.shopifyOrderSnapshot?.shippingAddress?.[field] ??
+    stop?.rawPayload?.shippingAddress?.[field],
+  );
+}
+
+function getRouteStopPhone(stop) {
+  return textOrUndefined(
+    stop?.phone ??
+    stop?.recipientPhone ??
+    stop?.customerPhone ??
+    stop?.address?.phone ??
+    stop?.shippingAddress?.phone ??
+    stop?.order?.phone ??
+    stop?.order?.customer?.phone ??
+    stop?.shopifyOrderSnapshot?.phone ??
+    stop?.shopifyOrderSnapshot?.shippingAddress?.phone,
+  );
+}
+
+function getRouteStopInstructions(stop) {
+  return textOrUndefined(
+    stop?.instructions ??
+    stop?.deliveryInstructions ??
+    stop?.driverInstructions ??
+    stop?.note ??
+    stop?.order?.note ??
+    stop?.shopifyOrderSnapshot?.note ??
+    stop?.rawPayload?.note,
+  );
+}
+
 function formatRouteStopItemOptions(options) {
   if (!Array.isArray(options)) return textOrUndefined(options);
   return options
@@ -1921,6 +2084,7 @@ function buildRouteStops(stops) {
       orderId: textOrUndefined(stop.orderId) ?? null,
       routePlanId: textOrUndefined(stop.routePlanId ?? stop.routePlan?.id ?? stop.routeGroupingChild?.routePlanId) ?? null,
       shopifyOrderGid: textOrUndefined(stop.shopifyOrderGid),
+      shopifyOrderLegacyId: textOrUndefined(stop.shopifyOrderLegacyId ?? stop.legacyResourceId ?? stop.shopifyOrderSnapshot?.legacyResourceId),
       originalIndex: index,
       sequence: numberOrUndefined(stop.sequence),
       sourceSequence: numberOrUndefined(stop.sourceSequence),
@@ -1929,6 +2093,16 @@ function buildRouteStops(stops) {
       order: stop.orderName ?? stop.sourceOrderId ?? stop.shopifyOrderGid,
       recipient: stop.recipientName ?? stop.recipient ?? stop.customerName ?? "Unknown recipient",
       address: textOrUndefined(stop.addressLabel) ?? formatStopAddress(stop.address),
+      recipientName: textOrUndefined(stop.recipientName ?? stop.recipient ?? stop.customerName),
+      phone: getRouteStopPhone(stop),
+      address1: getRouteStopAddressValue(stop, "address1"),
+      address2: getRouteStopAddressValue(stop, "address2"),
+      city: getRouteStopAddressValue(stop, "city"),
+      province: getRouteStopAddressValue(stop, "province"),
+      postalCode: getRouteStopAddressValue(stop, "postalCode"),
+      countryCode: getRouteStopAddressValue(stop, "countryCode"),
+      latitude: coordinates?.[1] ?? null,
+      longitude: coordinates?.[0] ?? null,
       status: stop.fulfillmentStatus ?? stop.status ?? stop.assignmentStatus ?? "PENDING",
       deliveryStatus: textOrUndefined(stop.deliveryStatus),
       deliveryStopStatus: textOrUndefined(stop.deliveryStopStatus),
@@ -1943,6 +2117,9 @@ function buildRouteStops(stops) {
       distanceFromPreviousMeters: numberOrUndefined(stop.distanceFromPreviousMeters),
       serviceMinutes: numberOrUndefined(stop.serviceMinutes),
       serviceType: textOrUndefined(stop.serviceType ?? stop.method),
+      timeWindowEnd: textOrUndefined(stop.timeWindowEnd),
+      timeWindowStart: textOrUndefined(stop.timeWindowStart),
+      instructions: getRouteStopInstructions(stop),
       itemCount,
       items,
       canonicalLineItems: stop.canonicalLineItems,
@@ -2454,6 +2631,19 @@ function renderChildRouteInfoIcon() {
   );
 }
 
+function getShopifyOrderResourceId(row) {
+  const legacyResourceId = textOrUndefined(row?.shopifyOrderLegacyId);
+  if (legacyResourceId) return legacyResourceId;
+
+  const gidResourceId = textOrUndefined(row?.shopifyOrderGid)?.match(/\/Order\/([^/?#]+)/)?.[1];
+  return gidResourceId ? decodeURIComponent(gidResourceId) : null;
+}
+
+function getShopifyOrderAdminHref(row) {
+  const resourceId = getShopifyOrderResourceId(row);
+  return resourceId ? `shopify://admin/orders/${encodeURIComponent(resourceId)}` : null;
+}
+
 export default function RouteDetailPage() {
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -2562,6 +2752,9 @@ export default function RouteDetailPage() {
   const childOrderDisclosureCloseButtonRef = useRef(null);
   const childOrderDisclosurePopoverRef = useRef(null);
   const childOrderDisclosureTriggerRef = useRef(null);
+  const childStopActionsButtonRefs = useRef(new Map());
+  const childStopActionsMenuRef = useRef(null);
+  const childStopActionsTriggerRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
   const routeTimelineDragSnapshotRef = useRef(null);
   const routeTimelineDropCommittedRef = useRef(false);
@@ -2604,6 +2797,10 @@ export default function RouteDetailPage() {
   const [routeTimelineDrag, setRouteTimelineDrag] = useState(null);
   const [activeRouteTimelineStopPopover, setActiveRouteTimelineStopPopover] = useState(null);
   const [activeChildOrderDisclosure, setActiveChildOrderDisclosure] = useState(null);
+  const [activeChildStopActions, setActiveChildStopActions] = useState(null);
+  const [activeChildStopEditRow, setActiveChildStopEditRow] = useState(null);
+  const [childStopEditDraft, setChildStopEditDraft] = useState({});
+  const [focusedTrackingStopId, setFocusedTrackingStopId] = useState(null);
   const [activeRouteSelector, setActiveRouteSelector] = useState(null);
   const [routeSelectorQuery, setRouteSelectorQuery] = useState("");
   const [routeStartTimeDraft, setRouteStartTimeDraft] = useState(() => buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
@@ -2683,6 +2880,7 @@ export default function RouteDetailPage() {
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
     [displayedRouteTrackingSnapshot, routeExecutionStatus, routeTrackingClock],
   );
+  const canDraftEditChildStopMembership = !isRouteExecutionLockedForStopMembership(routeExecutionStatus);
   const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS" ? trackingRoutePlanId : null;
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
     ? trackingRoutePlanId
@@ -2702,6 +2900,16 @@ export default function RouteDetailPage() {
   const activeChildOrderDisclosureRow = activeChildOrderDisclosure
     ? childRouteOrderRows.find((row) => row.id === activeChildOrderDisclosure.rowId) ?? null
     : null;
+  const activeChildStopActionsRow = activeChildStopActions
+    ? childRouteOrderRows.find((row) => row.id === activeChildStopActions.rowId) ?? null
+    : null;
+  const activeChildStopShopifyHref = getShopifyOrderAdminHref(activeChildStopActionsRow);
+  const activeChildStopSourceRouteId = activeChildStopActionsRow
+    ? timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === activeChildStopActionsRow.id))?.id
+    : null;
+  const childStopSendTargetRows = activeChildStopActionsRow
+    ? timelineRouteRows.filter((routeRow) => !routeRow.isPreviewOnly && routeRow.id !== activeChildStopSourceRouteId)
+    : [];
   const activeRouteTimelineStop = activeRouteTimelineStopPopover
     ? timelineRouteRows.flatMap((routeRow) => routeRow.stops).find((stop) => stop.id === activeRouteTimelineStopPopover.stopId)
     : null;
@@ -3433,6 +3641,142 @@ export default function RouteDetailPage() {
     popoverNode.style.transform = `translate3d(${Math.round(nextPosition.left)}px, ${Math.round(nextPosition.top)}px, 0)`;
   }, []);
 
+  const setChildStopActionsButtonRef = useCallback((rowId, node) => {
+    if (node) {
+      childStopActionsButtonRefs.current.set(rowId, node);
+      return;
+    }
+
+    childStopActionsButtonRefs.current.delete(rowId);
+  }, []);
+
+  const getChildStopActionsState = (event, rowId, sendTargetsOpen = false) => {
+    childStopActionsTriggerRef.current = event.currentTarget;
+    return {
+      ...getChildStopActionsMenuPosition(event.currentTarget.getBoundingClientRect()),
+      actionKey: globalThis.crypto?.randomUUID?.() ?? String(Date.now()),
+      rowId,
+      sendTargetsOpen,
+    };
+  };
+
+  const handleToggleChildStopActions = (event, rowId) => {
+    event.stopPropagation();
+    const next = getChildStopActionsState(event, rowId);
+    setActiveChildStopActions((current) => (
+      current?.rowId === rowId ? null : next
+    ));
+  };
+
+  const positionChildStopActionsMenu = useCallback(() => {
+    const triggerNode = childStopActionsTriggerRef.current;
+    const menuNode = childStopActionsMenuRef.current;
+    if (!triggerNode || !menuNode) return;
+
+    const nextPosition = getChildStopActionsMenuPosition(triggerNode.getBoundingClientRect(), {
+      height: menuNode.offsetHeight,
+      width: menuNode.offsetWidth,
+    });
+    menuNode.style.transform = `translate3d(${Math.round(nextPosition.left)}px, ${Math.round(nextPosition.top)}px, 0)`;
+  }, []);
+
+  const closeChildStopActions = () => {
+    const trigger = childStopActionsTriggerRef.current;
+    setActiveChildStopActions(null);
+    window.requestAnimationFrame(() => trigger?.focus());
+  };
+
+  const handleMarkChildStopStatus = (row, status) => {
+    if (!row?.deliveryStopId || routeGroupActionBusy) return;
+    submitRouteAction("transitionRouteStop", {
+      deliveryStopId: row.deliveryStopId,
+      idempotencyKey: `${effectiveRoutePlan?.id ?? "route"}:${row.deliveryStopId}:${status}:${activeChildStopActions?.actionKey ?? Date.now()}`,
+      status,
+    });
+    setActiveChildStopActions(null);
+  };
+
+  const handleOpenChildStopEditor = (row) => {
+    if (!row?.deliveryStopId) return;
+    setChildStopEditDraft(row.editFields ?? {});
+    setActiveChildStopEditRow(row);
+    setActiveChildStopActions(null);
+  };
+
+  const handleSaveChildStopEdit = () => {
+    if (!activeChildStopEditRow?.deliveryStopId || routeGroupActionBusy) return;
+    submitRouteAction("updateRouteStop", {
+      deliveryStopId: activeChildStopEditRow.deliveryStopId,
+      recipientName: childStopEditDraft.recipientName ?? "",
+      phone: childStopEditDraft.phone ?? "",
+      address1: childStopEditDraft.address1 ?? "",
+      address2: childStopEditDraft.address2 ?? "",
+      city: childStopEditDraft.city ?? "",
+      province: childStopEditDraft.province ?? "",
+      postalCode: childStopEditDraft.postalCode ?? "",
+      countryCode: childStopEditDraft.countryCode ?? "",
+      latitude: childStopEditDraft.latitude ?? "",
+      longitude: childStopEditDraft.longitude ?? "",
+      timeWindowStart: childStopEditDraft.timeWindowStart ?? "",
+      timeWindowEnd: childStopEditDraft.timeWindowEnd ?? "",
+      serviceMinutes: childStopEditDraft.serviceMinutes ?? "",
+      instructions: childStopEditDraft.instructions ?? "",
+    });
+    setActiveChildStopEditRow(null);
+  };
+
+  const handleRemoveChildStopFromGroup = (row) => {
+    if (!canDraftEditChildStopMembership || !row?.id) return;
+    setRoutePreviewByKey({});
+    if (row.orderId) setRemovedOrderIds((orderIds) => [...new Set([...orderIds, row.orderId])]);
+    animateRouteTimelineChange(() => {
+      setRouteTimelineOrderByRouteId((currentOrderByRouteId) => removeTimelineStop(
+        routeRows,
+        currentOrderByRouteId,
+        { stopId: row.id },
+      ));
+    });
+    setActiveChildStopActions(null);
+  };
+
+  const handleSendChildStopToRoute = (row, targetRouteRow) => {
+    if (!canDraftEditChildStopMembership || !row?.id || !targetRouteRow || targetRouteRow.isPreviewOnly) return;
+    setRoutePreviewByKey({});
+    animateRouteTimelineChange(() => {
+      setRouteTimelineOrderByRouteId((currentOrderByRouteId) => moveTimelineStop(
+        routeRows,
+        currentOrderByRouteId,
+        { stopId: row.id },
+        targetRouteRow.id,
+      ));
+    });
+    setActiveChildStopActions(null);
+  };
+
+  const handleOpenChildStopSendTargets = () => {
+    setActiveChildStopActions((current) => current ? { ...current, sendTargetsOpen: !current.sendTargetsOpen } : current);
+  };
+
+  const handleOpenChildStopTracking = (row) => {
+    if (!row) return;
+    setFocusedTrackingStopId(row.id);
+    setChildDetailTab("tracking");
+    setActiveChildStopActions(null);
+    const stop = routeMapStops.find((candidate) => (
+      candidate.id === row.id ||
+      candidate.deliveryStopId === row.deliveryStopId ||
+      candidate.shopifyOrderGid === row.shopifyOrderGid
+    ));
+    if (stop && isMapReady && mapRef.current && mapLibraryRef.current) {
+      fitRouteStopAndSnappedPoint(
+        mapRef.current,
+        mapLibraryRef.current,
+        stop,
+        findRouteStopPoint(stop, savedRouteStopPoints),
+      );
+    }
+  };
+
   const activeRouteTimelineStopPopoverId = activeRouteTimelineStopPopover?.stopId;
 
   useEffect(() => {
@@ -3502,6 +3846,41 @@ export default function RouteDetailPage() {
       window.removeEventListener("scroll", syncChildOrderDisclosurePopover, true);
     };
   }, [activeChildOrderDisclosure, positionChildOrderDisclosurePopover]);
+
+  useEffect(() => {
+    if (!activeChildStopActions) return undefined;
+
+    const syncChildStopActionsMenu = () => positionChildStopActionsMenu();
+    positionChildStopActionsMenu();
+    window.addEventListener("resize", syncChildStopActionsMenu);
+    window.addEventListener("scroll", syncChildStopActionsMenu, true);
+    return () => {
+      window.removeEventListener("resize", syncChildStopActionsMenu);
+      window.removeEventListener("scroll", syncChildStopActionsMenu, true);
+    };
+  }, [activeChildStopActions, positionChildStopActionsMenu]);
+
+  useEffect(() => {
+    if (!activeChildStopActions) return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      if (event.target?.closest?.('[data-child-stop-actions-trigger="true"]')) return;
+      if (event.target?.closest?.('[data-child-stop-actions-menu="true"]')) return;
+      setActiveChildStopActions(null);
+    };
+    const handleDocumentKeyDown = (event) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      closeChildStopActions();
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    document.addEventListener("keydown", handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", handleDocumentPointerDown);
+      document.removeEventListener("keydown", handleDocumentKeyDown);
+    };
+  }, [activeChildStopActions]);
 
   useEffect(() => () => {
     if (childOrderDisclosureCloseTimerRef.current != null) {
@@ -3861,6 +4240,17 @@ export default function RouteDetailPage() {
     const skippedRoutes = routeActionFetcher.data?.skippedRoutes?.length ?? 0;
     const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} terminal routes skipped` : "";
     shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes${skippedMessage}`);
+  }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (!["transitionRouteStop", "updateRouteStop"].includes(lastRouteActionIntentRef.current)) return;
+    const intent = lastRouteActionIntentRef.current;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+
+    revalidator.revalidate();
+    shopify.toast.show(intent === "transitionRouteStop" ? "Stop status updated" : "Stop fields updated");
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
@@ -5027,7 +5417,12 @@ export default function RouteDetailPage() {
                 <thead>
                   <tr>
                     {CHILD_ROUTE_ORDER_COLUMNS.map((column) => (
-                      <th key={column.key} style={childRouteOrderHeaderCellStyle}>{column.label}</th>
+                      <th
+                        key={column.key}
+                        style={column.key === "actions" ? childRouteActionsHeaderCellStyle : childRouteOrderHeaderCellStyle}
+                      >
+                        {column.label}
+                      </th>
                     ))}
                   </tr>
                 </thead>
@@ -5079,6 +5474,24 @@ export default function RouteDetailPage() {
                         >
                           <span>{row.attributesSummary}</span>
                           {renderChildRouteInfoIcon()}
+                        </button>
+                      </td>
+                      <td style={childRouteActionsCellStyle}>
+                        <button
+                          aria-expanded={activeChildStopActions?.rowId === row.id}
+                          aria-haspopup="menu"
+                          aria-label={`Open actions for ${row.order}`}
+                          data-child-stop-actions-trigger="true"
+                          disabled={routeGroupActionBusy}
+                          onClick={(event) => handleToggleChildStopActions(event, row.id)}
+                          ref={(node) => setChildStopActionsButtonRef(row.id, node)}
+                          style={{
+                            ...childStopActionsButtonStyle,
+                            ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                          }}
+                          type="button"
+                        >
+                          ⋯
                         </button>
                       </td>
                     </tr>
@@ -5175,7 +5588,13 @@ export default function RouteDetailPage() {
                   </thead>
                   <tbody>
                     {childRouteOrderRows.map((row) => (
-                      <tr key={row.id} style={childRouteOrderRowStyle}>
+                      <tr
+                        key={row.id}
+                        style={{
+                          ...childRouteOrderRowStyle,
+                          ...(focusedTrackingStopId === row.id ? { outline: "2px solid #0b84d8", outlineOffset: "-2px" } : null),
+                        }}
+                      >
                         <td style={childRouteStopCellStyle}><span style={{
                           ...childRouteTableStopMarkerStyle,
                           ...(completedTrackingStopIds.has(row.id) ? { background: ROUTE_DETAIL_COMPLETED_STOP_COLOR } : null),
@@ -5457,6 +5876,128 @@ export default function RouteDetailPage() {
             </div>,
             document.body,
           ) : null}
+          {activeChildStopActions && activeChildStopActionsRow && typeof document !== "undefined" ? createPortal(
+            <div
+              aria-label={`Actions for ${activeChildStopActionsRow.order}`}
+              data-child-stop-actions-menu="true"
+              ref={childStopActionsMenuRef}
+              role="menu"
+              style={{
+                ...childStopActionsMenuStyle,
+                transform: `translate3d(${Math.round(activeChildStopActions.left)}px, ${Math.round(activeChildStopActions.top)}px, 0)`,
+                width: `${Math.round(activeChildStopActions.width)}px`,
+              }}
+            >
+              <div style={childStopActionsHeadingStyle}>Mark as…</div>
+              <button
+                disabled={!activeChildStopActionsRow.deliveryStopId || routeGroupActionBusy || activeChildStopActionsRow.status === "Ready"}
+                onClick={() => handleMarkChildStopStatus(activeChildStopActionsRow, "READY")}
+                role="menuitem"
+                style={childStopActionsMenuItemStyle}
+                type="button"
+              >
+                Ready
+              </button>
+              <button
+                disabled={!activeChildStopActionsRow.deliveryStopId || routeGroupActionBusy || activeChildStopActionsRow.status === "In progress"}
+                onClick={() => handleMarkChildStopStatus(activeChildStopActionsRow, "IN_PROGRESS")}
+                role="menuitem"
+                style={childStopActionsMenuItemStyle}
+                type="button"
+              >
+                In progress
+              </button>
+              <button
+                disabled={!activeChildStopActionsRow.deliveryStopId || routeGroupActionBusy || activeChildStopActionsRow.status === "Completed"}
+                onClick={() => handleMarkChildStopStatus(activeChildStopActionsRow, "COMPLETED")}
+                role="menuitem"
+                style={childStopActionsMenuItemStyle}
+                type="button"
+              >
+                Completed
+              </button>
+              <div style={childStopActionsDividerStyle} />
+              <button
+                disabled={!activeChildStopActionsRow.deliveryStopId}
+                onClick={() => handleOpenChildStopEditor(activeChildStopActionsRow)}
+                role="menuitem"
+                style={childStopActionsMenuItemStyle}
+                type="button"
+              >
+                Edit stop
+              </button>
+              <button
+                disabled={!canDraftEditChildStopMembership}
+                onClick={() => handleRemoveChildStopFromGroup(activeChildStopActionsRow)}
+                role="menuitem"
+                style={{
+                  ...childStopActionsMenuItemStyle,
+                  ...(!canDraftEditChildStopMembership ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                }}
+                type="button"
+              >
+                Remove from group
+              </button>
+              <button
+                disabled={!canDraftEditChildStopMembership || childStopSendTargetRows.length === 0}
+                onClick={() => {
+                  if (childStopSendTargetRows.length === 1) {
+                    handleSendChildStopToRoute(activeChildStopActionsRow, childStopSendTargetRows[0]);
+                    return;
+                  }
+                  handleOpenChildStopSendTargets();
+                }}
+                role="menuitem"
+                style={{
+                  ...childStopActionsMenuItemStyle,
+                  ...(!canDraftEditChildStopMembership || childStopSendTargetRows.length === 0 ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                }}
+                type="button"
+              >
+                Send to route
+              </button>
+              {activeChildStopActions.sendTargetsOpen ? (
+                <div aria-label="Route targets" role="group" style={{ display: "grid", gap: "3px" }}>
+                  {childStopSendTargetRows.map((routeRow) => (
+                    <button
+                      key={routeRow.id}
+                      onClick={() => handleSendChildStopToRoute(activeChildStopActionsRow, routeRow)}
+                      role="menuitem"
+                      style={childStopActionsMenuItemStyle}
+                      type="button"
+                    >
+                      {routeRow.title}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+              {activeChildStopShopifyHref ? (
+                <a
+                  href={activeChildStopShopifyHref}
+                  onClick={() => setActiveChildStopActions(null)}
+                  rel="noreferrer"
+                  role="menuitem"
+                  style={childStopActionsExternalLinkStyle}
+                  target="_blank"
+                >
+                  View in Shopify
+                </a>
+              ) : (
+                <button disabled role="menuitem" style={{ ...childStopActionsMenuItemStyle, cursor: "not-allowed", opacity: 0.55 }} type="button">
+                  View in Shopify
+                </button>
+              )}
+              <button
+                onClick={() => handleOpenChildStopTracking(activeChildStopActionsRow)}
+                role="menuitem"
+                style={childStopActionsMenuItemStyle}
+                type="button"
+              >
+                Open tracking
+              </button>
+            </div>,
+            document.body,
+          ) : null}
         </section>
 
         {isRouteDraftExitDialogOpen ? (
@@ -5503,6 +6044,54 @@ export default function RouteDetailPage() {
                   type="button"
                 >
                   Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {activeChildStopEditRow ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Close stop editor"
+              onClick={() => setActiveChildStopEditRow(null)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div
+              aria-label="Edit stop"
+              role="dialog"
+              style={routeLineEditorDialogStyle}
+            >
+              <h2 style={routeLineEditorTitleStyle}>Edit stop</h2>
+              <div style={childStopEditReadonlyStyle}>
+                <strong>{activeChildStopEditRow.order}</strong>
+                <span>Shopify order details are read-only. Edit only CLEVER delivery fields here.</span>
+              </div>
+              {CHILD_STOP_EDIT_FIELDS.map(([field, label]) => (
+                <div key={field} style={routeLineEditorFieldStyle}>
+                  <label htmlFor={`child-stop-${field}`} style={routeLineEditorLabelStyle}>{label}</label>
+                  <input
+                    id={`child-stop-${field}`}
+                    onChange={(event) => setChildStopEditDraft((draft) => ({ ...draft, [field]: event.target.value }))}
+                    style={routeLineEditorInputStyle}
+                    type={["latitude", "longitude", "serviceMinutes"].includes(field) ? "number" : "text"}
+                    value={childStopEditDraft[field] ?? ""}
+                  />
+                </div>
+              ))}
+              <div style={routeLineEditorActionsStyle}>
+                <button onClick={() => setActiveChildStopEditRow(null)} style={routeActionButtonStyle} type="button">Cancel</button>
+                <button
+                  disabled={routeGroupActionBusy || !activeChildStopEditRow.deliveryStopId}
+                  onClick={handleSaveChildStopEdit}
+                  style={{
+                    ...routeLineEditorPrimaryButtonStyle,
+                    ...(routeGroupActionBusy || !activeChildStopEditRow.deliveryStopId ? { opacity: 0.55 } : null),
+                  }}
+                  type="button"
+                >
+                  Save
                 </button>
               </div>
             </div>

@@ -14,6 +14,8 @@ import {
   deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
   refreshDeliveryRoutePlanOrderData,
+  transitionDeliveryRoutePlanStop,
+  updateDeliveryRoutePlanStop,
 } from "./route-plans.server";
 import {
   firstArray,
@@ -44,6 +46,7 @@ import {
 } from "./route-order-refresh";
 
 const ROUTE_REFRESH_CONCURRENCY = 5;
+const ROUTE_STOP_TRANSITION_STATUSES = new Set(["READY", "IN_PROGRESS", "COMPLETED"]);
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -293,6 +296,30 @@ function getRedirectSearch(request, deletedKeys = []) {
   return `${search ? `?${search}` : ""}${url.hash}`;
 }
 
+function readRouteStopTransitionStatus(value) {
+  const status = textOrUndefined(value)?.toUpperCase();
+  return status && ROUTE_STOP_TRANSITION_STATUSES.has(status) ? status : null;
+}
+
+function readRouteStopOverridePayload(formData) {
+  return {
+    recipientName: textOrUndefined(formData.get("recipientName")) ?? null,
+    phone: textOrUndefined(formData.get("phone")) ?? null,
+    address1: textOrUndefined(formData.get("address1")) ?? null,
+    address2: textOrUndefined(formData.get("address2")) ?? null,
+    city: textOrUndefined(formData.get("city")) ?? null,
+    province: textOrUndefined(formData.get("province")) ?? null,
+    postalCode: textOrUndefined(formData.get("postalCode")) ?? null,
+    countryCode: textOrUndefined(formData.get("countryCode")) ?? null,
+    latitude: numberOrUndefined(formData.get("latitude")) ?? null,
+    longitude: numberOrUndefined(formData.get("longitude")) ?? null,
+    timeWindowStart: textOrUndefined(formData.get("timeWindowStart")) ?? null,
+    timeWindowEnd: textOrUndefined(formData.get("timeWindowEnd")) ?? null,
+    serviceMinutes: numberOrUndefined(formData.get("serviceMinutes")) ?? null,
+    instructions: textOrUndefined(formData.get("instructions")) ?? null,
+  };
+}
+
 export const routeDetailLoader = async ({ params, request }) => {
   const routeId = cleanRoutePathParam(params.routeId);
   const routeGroupIdHint = getRouteGroupIdHint(request);
@@ -508,6 +535,39 @@ export const routeDetailAction = async ({ params, request }) => {
       sessionToken: shopifySessionToken,
       shopifyShopCacheKey: session?.shop,
     });
+  }
+
+  if (intent === "transitionRouteStop") {
+    const deliveryStopId = textOrUndefined(formData.get("deliveryStopId"));
+    const status = readRouteStopTransitionStatus(formData.get("status"));
+    if (!status) {
+      return {
+        routePlan: null,
+        stop: null,
+        errors: [{ message: "지원하지 않는 stop 상태입니다." }],
+      };
+    }
+    return transitionDeliveryRoutePlanStop(
+      request,
+      routeId,
+      deliveryStopId,
+      {
+        status,
+        idempotencyKey: textOrUndefined(formData.get("idempotencyKey")),
+      },
+      { sessionToken: shopifySessionToken },
+    );
+  }
+
+  if (intent === "updateRouteStop") {
+    const deliveryStopId = textOrUndefined(formData.get("deliveryStopId"));
+    return updateDeliveryRoutePlanStop(
+      request,
+      routeId,
+      deliveryStopId,
+      readRouteStopOverridePayload(formData),
+      { sessionToken: shopifySessionToken },
+    );
   }
 
   if (intent === "previewRouteOptimization") {

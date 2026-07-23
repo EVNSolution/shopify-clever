@@ -34,8 +34,15 @@ test("materialized child route guard only accepts route-plan-backed group childr
 });
 
 test("child row status mapper is per-order and does not reuse route lifecycle semantics", () => {
-  assert.equal(formatChildOrderStatus("preparing"), "Preparing");
-  assert.equal(formatChildOrderStatus("ready"), "Preparing");
+  assert.equal(formatChildOrderStatus("PENDING"), "Ready");
+  assert.equal(formatChildOrderStatus("ASSIGNED"), "Ready");
+  assert.equal(formatChildOrderStatus("ready"), "Ready");
+  assert.equal(formatChildOrderStatus("EN_ROUTE"), "In progress");
+  assert.equal(formatChildOrderStatus("ARRIVED"), "In progress");
+  assert.equal(formatChildOrderStatus("DELIVERED"), "Completed");
+  assert.equal(formatChildOrderStatus("FAILED"), "Failed");
+  assert.equal(formatChildOrderStatus("SKIPPED"), "Skipped");
+  assert.equal(formatChildOrderStatus("CANCELLED"), "Cancelled");
   assert.equal(formatChildOrderStatus("in_progress"), "In progress");
   assert.equal(formatChildOrderStatus("completed"), "Completed");
   assert.equal(formatChildOrderStatus("DRAFT"), "Preparing");
@@ -120,7 +127,7 @@ test("child order rows follow actual child sequence and use delivery serviceType
 
   assert.deepEqual(rows.map((row) => row.order), ["#1001", "#1002"]);
   assert.deepEqual(rows.map((row) => row.stop), [1, 2]);
-  assert.deepEqual(rows.map((row) => row.status), ["Preparing", "Completed"]);
+  assert.deepEqual(rows.map((row) => row.status), ["Ready", "Completed"]);
   assert.equal(rows[1].orderDate, "06.30 14:20");
   assert.equal(rows[1].eta, "12:00 EDT");
   assert.equal(rows[1].driveTime, "16m · 7.4km");
@@ -151,7 +158,11 @@ test("child order rows preserve flattened address strings from route stop normal
   assert.equal(row.address, "1219 Flat Address Rd, Seoul");
 });
 
-test("child order table columns are exact and excluded columns stay out of the child branch", () => {
+test("child order table columns include a sticky Actions column with the confirmed menu contract", () => {
+  const actionsMenuStart = routeDetailSource.indexOf('aria-label={`Actions for ${activeChildStopActionsRow.order}`}');
+  const actionsMenuEnd = routeDetailSource.indexOf("</div>,", actionsMenuStart);
+  const actionsMenuSource = routeDetailSource.slice(actionsMenuStart, actionsMenuEnd);
+
   assert.deepEqual(CHILD_ROUTE_ORDER_COLUMNS.map((column) => column.label), [
     "Stop",
     "Order",
@@ -166,14 +177,99 @@ test("child order table columns are exact and excluded columns stay out of the c
     "Method",
     "Payment",
     "Attributes",
+    "Actions",
   ]);
 
   assert.match(routeDetailSource, /aria-label="Child route order stops"/);
   assert.match(routeDetailSource, /CHILD_ROUTE_ORDER_COLUMNS\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /childRouteOrderRows\.map\(\(row\) =>/);
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
-  assert.doesNotMatch(routeDetailSource, /aria-label="Open Shopify order"/);
-  assert.doesNotMatch(routeDetailSource, /aria-label="Remove order from route"/);
+  assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
+  assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{/);
+  assert.match(routeDetailSource, /minWidth: "1500px"/);
+  assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{[\s\S]*background: "#f7f7f7"/);
+  assert.match(routeDetailSource, /position: "sticky"/);
+  assert.match(routeDetailSource, /right: 0/);
+  assert.match(routeDetailSource, /boxShadow: "-8px 0 12px rgba\(255, 255, 255, 0\.92\)"/);
+  assert.match(routeDetailSource, /aria-label=\{`Open actions for \$\{row\.order\}`\}/);
+  assert.match(routeDetailSource, /aria-haspopup="menu"/);
+  assert.match(routeDetailSource, /data-child-stop-actions-trigger="true"/);
+  assert.match(routeDetailSource, /data-child-stop-actions-menu="true"/);
+  assert.match(routeDetailSource, /role="menu"/);
+  assert.match(routeDetailSource, />Mark as…<\/div>/);
+  assert.match(routeDetailSource, /handleMarkChildStopStatus\(activeChildStopActionsRow, "READY"\)/);
+  assert.match(routeDetailSource, /handleMarkChildStopStatus\(activeChildStopActionsRow, "IN_PROGRESS"\)/);
+  assert.match(routeDetailSource, /handleMarkChildStopStatus\(activeChildStopActionsRow, "COMPLETED"\)/);
+  assert.ok(actionsMenuStart >= 0 && actionsMenuEnd > actionsMenuStart);
+  assert.doesNotMatch(actionsMenuSource, /Attempted/);
+  assert.match(routeDetailSource, />\s*Edit stop\s*<\/button>/);
+  assert.match(routeDetailSource, />\s*Remove from group\s*<\/button>/);
+  assert.match(routeDetailSource, />\s*Send to route\s*<\/button>/);
+  assert.match(routeDetailSource, />\s*View in Shopify\s*<\/a>/);
+  assert.match(routeDetailSource, />\s*Open tracking\s*<\/button>/);
+});
+
+test("child order rows preserve canonical identifiers and flat operational edit fields for actions", () => {
+  const [row] = buildChildRouteOrderRows([
+    {
+      address: {
+        address1: "10 Test St",
+        address2: "Unit 2",
+        city: "Toronto",
+        countryCode: "CA",
+        postalCode: "M1M 1M1",
+        province: "ON",
+      },
+      coordinates: [-79.4, 43.7],
+      id: "local-stop-id",
+      instructions: "Use side door",
+      deliveryStopId: "delivery-stop-1",
+      orderId: "canonical-order-1",
+      orderName: "#1001",
+      phone: "+14165550123",
+      recipientName: "Kim Minji",
+      serviceMinutes: 7,
+      shopifyOrderGid: "gid://shopify/Order/1001",
+      shopifyOrderLegacyId: "1001",
+      timeWindowEnd: "21:00",
+      timeWindowStart: "17:00",
+    },
+  ]);
+
+  assert.equal(row.orderId, "canonical-order-1");
+  assert.equal(row.deliveryStopId, "delivery-stop-1");
+  assert.equal(row.shopifyOrderGid, "gid://shopify/Order/1001");
+  assert.equal(row.shopifyOrderLegacyId, "1001");
+  assert.deepEqual(row.editFields, {
+    address1: "10 Test St",
+    address2: "Unit 2",
+    city: "Toronto",
+    countryCode: "CA",
+    instructions: "Use side door",
+    latitude: 43.7,
+    longitude: -79.4,
+    phone: "+14165550123",
+    postalCode: "M1M 1M1",
+    province: "ON",
+    recipientName: "Kim Minji",
+    serviceMinutes: 7,
+    timeWindowEnd: "21:00",
+    timeWindowStart: "17:00",
+  });
+});
+
+test("child stop actions call server intents only for status and CLEVER field edits", () => {
+  assert.match(routeDetailSource, /submitRouteAction\("transitionRouteStop"/);
+  assert.match(routeDetailSource, /submitRouteAction\("updateRouteStop"/);
+  assert.doesNotMatch(routeDetailSource, /\["deliveryArea", "Delivery area"\]/);
+  assert.doesNotMatch(routeDetailSource, /\["deliveryNote", "Delivery note"\]/);
+  assert.doesNotMatch(routeDetailSource, /\["serviceType", "Service type"\]/);
+  assert.match(routeDetailSource, /const canDraftEditChildStopMembership = !isRouteExecutionLockedForStopMembership\(routeExecutionStatus\)/);
+  assert.match(routeDetailSource, /disabled=\{!canDraftEditChildStopMembership\}/);
+  assert.match(routeDetailServerSource, /intent === "transitionRouteStop"/);
+  assert.match(routeDetailServerSource, /transitionDeliveryRoutePlanStop\(\s*request,\s*routeId,\s*deliveryStopId/);
+  assert.match(routeDetailServerSource, /intent === "updateRouteStop"/);
+  assert.match(routeDetailServerSource, /updateDeliveryRoutePlanStop\(\s*request,\s*routeId,\s*deliveryStopId/);
 });
 
 test("child timeline precedes the table and enforces explicit responsive minimum spacing", () => {
@@ -204,7 +300,7 @@ test("child timeline renders distinct circular Start and End markers", () => {
   assert.match(routeDetailSource, />End<\/span>/);
   assert.match(routeDetailSource, /childRouteTimelineOrderLabelStyle/);
   assert.match(routeDetailSource, /<span style=\{childRouteTimelineOrderLabelStyle\}>\{stop\.order\}<\/span>/);
-  assert.doesNotMatch(routeDetailSource, /position: "sticky"/);
+  assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{[\s\S]*position: "sticky"/);
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraft\}/);
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
@@ -233,7 +329,7 @@ test("child timeline and order table share explicit centered alignment axes", ()
   assert.match(routeDetailSource, /const childRouteOrderHeaderCellStyle = \{[\s\S]*textAlign: "center"[\s\S]*verticalAlign: "middle"/);
   assert.match(routeDetailSource, /const childRouteOrderCellStyle = \{[\s\S]*textAlign: "center"/);
   assert.match(routeDetailSource, /const childRouteStopCellStyle = \{[\s\S]*padding: "8px 0"[\s\S]*textAlign: "center"/);
-  assert.match(routeDetailSource, /<th key=\{column\.key\} style=\{childRouteOrderHeaderCellStyle\}>\{column\.label\}<\/th>/);
+  assert.match(routeDetailSource, /style=\{column\.key === "actions" \? childRouteActionsHeaderCellStyle : childRouteOrderHeaderCellStyle\}/);
 });
 
 test("child timeline keeps breathing room and stop digits share a browser-neutral optical correction", () => {
