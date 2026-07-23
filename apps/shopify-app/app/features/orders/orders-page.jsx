@@ -1273,17 +1273,28 @@ const noteCardStyle = {
   padding: "8px 10px",
 };
 
-const noteListStyle = {
-  margin: 0,
-  paddingLeft: "18px",
+const noteStackStyle = {
+  display: "grid",
+  gap: "8px",
 };
 
-const noteListItemStyle = {
+const noteLabelStyle = {
+  color: "#657080",
+  fontSize: "10px",
+  fontWeight: 700,
+  letterSpacing: "0.06em",
+  marginBottom: "4px",
+  textAlign: "left",
+  textTransform: "uppercase",
+};
+
+const noteTextStyle = {
   color: "#303030",
   fontSize: "12px",
   lineHeight: 1.4,
   overflowWrap: "anywhere",
   textAlign: "left",
+  whiteSpace: "pre-wrap",
 };
 
 const itemPopoverTitleStyle = {
@@ -5168,12 +5179,20 @@ function OrdersPageContent({ loaderData }) {
                                   width: `${Math.round(notePopoverPosition.width)}px`,
                                 }}
                               >
-                                <div style={itemPopoverTitleStyle}>Order Note</div>
-                                <div style={noteCardStyle}>
-                                  <ul style={noteListStyle}>
-                                    {orderNote ? <li style={noteListItemStyle}>{orderNote}</li> : null}
-                                    {customerNote ? <li style={noteListItemStyle}>{customerNote}</li> : null}
-                                  </ul>
+                                <div style={itemPopoverTitleStyle}>Notes</div>
+                                <div style={noteStackStyle}>
+                                  {orderNote ? (
+                                    <div style={noteCardStyle}>
+                                      <div style={noteLabelStyle}>Order Note</div>
+                                      <div style={noteTextStyle}>{orderNote}</div>
+                                    </div>
+                                  ) : null}
+                                  {customerNote ? (
+                                    <div style={noteCardStyle}>
+                                      <div style={noteLabelStyle}>Customer Note</div>
+                                      <div style={noteTextStyle}>{customerNote}</div>
+                                    </div>
+                                  ) : null}
                                 </div>
                               </div>
                             , document.body) : null}
