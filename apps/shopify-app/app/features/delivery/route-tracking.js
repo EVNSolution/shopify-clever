@@ -285,7 +285,7 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
   const mergedBase = normalizeRouteTrackingSnapshot({
     ...historyBase,
     policy: incomingSnapshot.policy ?? current.policy,
-    progress: incomingSnapshot.progress,
+    progress: mergeTrackingProgressSnapshot(current.progress, incomingSnapshot.progress),
     roadMatchedPath: getNewestRoadMatchedPath(current.roadMatchedPath, incomingSnapshot.roadMatchedPath),
     routePlanId: incomingSnapshot.routePlanId ?? current.routePlanId,
     schemaVersion: incomingSnapshot.schemaVersion,
@@ -315,6 +315,48 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
     return mergeRouteTrackingProgress(mergedSnapshot, currentProgressEvent);
   }
   return mergedSnapshot;
+}
+
+function mergeTrackingProgressSnapshot(currentProgress, incomingProgress) {
+  const currentLatestEvent = currentProgress?.latestEvent ?? null;
+  const incomingLatestEvent = incomingProgress?.latestEvent ?? null;
+  const currentLatestTimestamp = getPositionTimestamp(currentLatestEvent);
+  const incomingLatestTimestamp = getPositionTimestamp(incomingLatestEvent);
+  const latestEvent = incomingLatestEvent && incomingLatestTimestamp >= currentLatestTimestamp
+    ? incomingLatestEvent
+    : currentLatestEvent;
+  const completedStopIds = new Set(currentProgress?.completedStopIds ?? []);
+  const failedStopIds = new Set(currentProgress?.failedStopIds ?? []);
+
+  for (const deliveryStopId of incomingProgress?.completedStopIds ?? []) {
+    completedStopIds.add(deliveryStopId);
+    failedStopIds.delete(deliveryStopId);
+  }
+  for (const deliveryStopId of incomingProgress?.failedStopIds ?? []) {
+    failedStopIds.add(deliveryStopId);
+    completedStopIds.delete(deliveryStopId);
+  }
+
+  if (latestEvent?.deliveryStopId && latestEvent.eventType === "STOP_DELIVERED") {
+    completedStopIds.add(latestEvent.deliveryStopId);
+    failedStopIds.delete(latestEvent.deliveryStopId);
+  }
+  if (latestEvent?.deliveryStopId && latestEvent.eventType === "STOP_FAILED") {
+    failedStopIds.add(latestEvent.deliveryStopId);
+    completedStopIds.delete(latestEvent.deliveryStopId);
+  }
+
+  return {
+    completedStopIds: [...completedStopIds],
+    currentStage: latestEvent
+      ? getProgressStage(latestEvent.eventType)
+      : incomingProgress?.currentStage ?? currentProgress?.currentStage ?? "READY",
+    currentStopId: latestEvent
+      ? latestEvent.eventType === "STOP_ARRIVED" ? latestEvent.deliveryStopId : null
+      : incomingProgress?.currentStopId ?? currentProgress?.currentStopId ?? null,
+    failedStopIds: [...failedStopIds],
+    latestEvent,
+  };
 }
 
 function mergeTrackingStopArrivals(currentArrivals, incomingArrivals) {
