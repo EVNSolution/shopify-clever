@@ -424,12 +424,17 @@ test("Orders ID stays centered while Note uses a separate headerless column", ()
   assert.match(ordersPageSource, /createPortal\([\s\S]*?ref=\{notePopoverRef\}[\s\S]*?notePopoverPosition\.left/);
   assert.match(ordersPageSource, /data-order-notes-popover-root="true"/);
   assert.match(ordersPageSource, /<s-icon type="note"/);
+  assert.match(ordersPageSource, />Notes</);
   assert.match(ordersPageSource, />Order Note</);
+  assert.match(ordersPageSource, />Customer Note</);
   assert.match(ordersPageSource, /const noteCardStyle = \{/);
-  assert.match(ordersPageSource, /const noteListStyle = \{/);
-  assert.match(ordersPageSource, /<ul style=\{noteListStyle\}>/);
-  assert.match(ordersPageSource, /<li style=\{noteListItemStyle\}>\{orderNote\}<\/li>/);
-  assert.match(ordersPageSource, /<li style=\{noteListItemStyle\}>\{customerNote\}<\/li>/);
+  assert.match(ordersPageSource, /const noteStackStyle = \{/);
+  assert.match(ordersPageSource, /const noteLabelStyle = \{/);
+  assert.match(ordersPageSource, /const noteTextStyle = \{/);
+  assert.match(ordersPageSource, /\{orderNote \? \([\s\S]*?<div style=\{noteLabelStyle\}>Order Note<\/div>[\s\S]*?<div style=\{noteTextStyle\}>\{orderNote\}<\/div>/);
+  assert.match(ordersPageSource, /\{customerNote \? \([\s\S]*?<div style=\{noteLabelStyle\}>Customer Note<\/div>[\s\S]*?<div style=\{noteTextStyle\}>\{customerNote\}<\/div>/);
+  assert.doesNotMatch(ordersPageSource, /const noteListStyle = \{/);
+  assert.doesNotMatch(ordersPageSource, /<ul style=\{noteListStyle\}>/);
 });
 
 test("Ordered pill exposes order timing and delivery-cycle sequence on hover", () => {
