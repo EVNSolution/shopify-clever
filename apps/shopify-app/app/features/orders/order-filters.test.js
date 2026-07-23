@@ -4,6 +4,7 @@ import {
   filterOrders,
   formatServiceTypeLabel,
   getBulkOrderSelectionState,
+  getOrderDeliveryDateFilterOptions,
   getOrderDeliveryExceptionState,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
@@ -16,6 +17,7 @@ import {
   isOrderRouteCreated,
   isOrderRoutePlanningLocked,
   isOrderSelectableForCurrentWorkset,
+  ORDER_DELIVERY_DATE_PENDING,
   updateOrderFilterSearchParams,
 } from "./order-filters.js";
 
@@ -155,6 +157,46 @@ test("filters delivery dates with date-only normalization", () => {
       { deliveryDate: "2026-05-18", scope: "history" },
     ).map((order) => order.id),
     ["date-only", "date-time"],
+  );
+});
+
+test("filters orders with no delivery date through the pending sentinel", () => {
+  assert.deepEqual(
+    filterOrders(
+      [
+        { id: "dated", deliveryDate: "2026-05-18" },
+        { id: "missing" },
+        { id: "blank", deliveryDate: "  " },
+      ],
+      { deliveryDate: ORDER_DELIVERY_DATE_PENDING, scope: "history" },
+    ).map((order) => order.id),
+    ["missing", "blank"],
+  );
+
+  const pendingFilters = getOrderFiltersFromSearchParams(
+    new URLSearchParams(`deliveryDate=${ORDER_DELIVERY_DATE_PENDING}`),
+  );
+  assert.equal(pendingFilters.deliveryDate, ORDER_DELIVERY_DATE_PENDING);
+  assert.equal(
+    updateOrderFilterSearchParams(new URLSearchParams(), pendingFilters).get("deliveryDate"),
+    ORDER_DELIVERY_DATE_PENDING,
+  );
+});
+
+test("builds counted delivery-date options with pending first", () => {
+  assert.deepEqual(
+    getOrderDeliveryDateFilterOptions([
+      { deliveryDate: "2026-05-15" },
+      { deliveryDate: "2026-05-14T13:00:00.000Z" },
+      { deliveryDate: "2026-05-15" },
+      {},
+      { deliveryDate: "" },
+    ]),
+    [
+      { count: 2, value: ORDER_DELIVERY_DATE_PENDING },
+      { count: 1, value: "2026-05-14" },
+      { count: 2, value: "2026-05-15" },
+    ],
   );
 });
 

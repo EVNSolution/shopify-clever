@@ -38,6 +38,7 @@ import {
 } from "./orders-table-columns";
 import {
   filterOrders,
+  getOrderDeliveryDateFilterOptions,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
   getOrderDeliveryDateValue,
@@ -46,6 +47,7 @@ import {
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
   isOrderRouteCreated,
+  ORDER_DELIVERY_DATE_PENDING,
   ORDER_DELIVERY_STATE_OPTIONS,
   ORDER_HISTORY_SCOPE,
   ORDER_PLANNING_SCOPE,
@@ -1584,6 +1586,20 @@ function formatOrderDateValue(value) {
   return value ? value.replaceAll("-", ".") : "";
 }
 
+function formatDeliveryDateFilterLabel(value, count) {
+  if (value === ORDER_DELIVERY_DATE_PENDING) return `Date pending (${count})`;
+
+  const date = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return `${value} (${count})`;
+
+  const weekday = new Intl.DateTimeFormat("en-US", {
+    timeZone: "UTC",
+    weekday: "short",
+  }).format(date);
+
+  return `${weekday} ${value.slice(5, 7)}/${value.slice(8, 10)} (${count})`;
+}
+
 function formatOrderDateRangeLabel(startDate, endDate) {
   if (!startDate && !endDate) return "";
   if (!endDate || startDate === endDate) return formatOrderDateValue(startDate);
@@ -2429,6 +2445,7 @@ function OrdersPageContent({ loaderData }) {
             ...effectiveOrderFilters,
             tab: "all",
             deliveryArea: "",
+            deliveryDate: "",
             deliveryState: "",
             deliveryWeekday: "",
             orderedDateFrom: "",
@@ -2447,6 +2464,12 @@ function OrdersPageContent({ loaderData }) {
         deliveryArea: "",
         referenceDate: orderFilterReferenceDate,
       })).deliveryAreas,
+      deliveryDates: getOrderDeliveryDateFilterOptions(filterOrders(orderFilterOptionOrders, {
+        ...effectiveOrderFilters,
+        tab: "all",
+        deliveryDate: "",
+        referenceDate: orderFilterReferenceDate,
+      })),
       deliveryWeekdays: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
         ...effectiveOrderFilters,
         tab: "all",
@@ -4707,6 +4730,18 @@ function OrdersPageContent({ loaderData }) {
                   )
                 : null}
             </div>
+            <OrderFilterMenu
+              aria-label="Filter orders by delivery date"
+              clearLabel="Clear delivery date filter"
+              label="Delivery date"
+              options={orderFilterOptions.deliveryDates.map(({ count, value }) => ({
+                label: formatDeliveryDateFilterLabel(value, count),
+                value,
+              }))}
+              value={orderFilters.deliveryDate}
+              onChange={(filterValue) => handleOrderFilterChange("deliveryDate", filterValue)}
+              onClear={() => handleClearOrderFilter("deliveryDate")}
+            />
             <OrderFilterMenu
               aria-label="Filter orders by delivery day"
               clearLabel="Clear delivery day filter"

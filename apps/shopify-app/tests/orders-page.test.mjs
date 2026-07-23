@@ -1585,7 +1585,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.doesNotMatch(ordersPageSource, /safeOrders\.map\(\(order\) =>\s*\(\s*<tr/);
 });
 
-test("Orders page filters table rows by order date, delivery day, type, and area", () => {
+test("Orders page filters table rows by order date, delivery date, delivery day, type, and area", () => {
   assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useRevalidator, useSearchParams \} from "react-router"/);
   assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_HISTORY_SCOPE[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_WEEKDAY_OPTIONS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "(?:\.\.\/features\/orders|\.)\/order-filters"/);
   assert.match(ordersPageSource, /const \[searchParams, setSearchParams\] = useSearchParams\(\)/);
@@ -1598,6 +1598,7 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /deliveryAreas: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryArea: ""/);
+  assert.match(ordersPageSource, /deliveryDates: getOrderDeliveryDateFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryDate: ""/);
   assert.match(ordersPageSource, /deliveryWeekdays: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryWeekday: ""/);
   assert.match(ordersPageSource, /serviceTypes: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?serviceType: ""/);
   assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
@@ -1653,6 +1654,13 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.match(ordersPageSource, /options=\{ORDER_WEEKDAY_OPTIONS\}/);
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryWeekday", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear delivery day filter"/);
+  assert.match(ordersPageSource, /aria-label="Filter orders by delivery date"/);
+  assert.match(ordersPageSource, /label="Delivery date"/);
+  assert.match(ordersPageSource, /orderFilterOptions\.deliveryDates\.map\(\(\{ count, value \}\) => \(\{/);
+  assert.match(ordersPageSource, /formatDeliveryDateFilterLabel\(value, count\)/);
+  assert.match(ordersPageSource, /value=\{orderFilters\.deliveryDate\}/);
+  assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryDate", filterValue\)/);
+  assert.match(ordersPageSource, /clearLabel="Clear delivery date filter"/);
   assert.match(ordersPageSource, /aria-label="Filter orders by service type"/);
   assert.match(ordersPageSource, /label="Type"/);
   assert.match(ordersPageSource, /\{ label: "Delivery", value: "DELIVERY" \}/);
@@ -1688,7 +1696,6 @@ test("Orders page filters table rows by order date, delivery day, type, and area
   assert.doesNotMatch(ordersPageSource, /aria-label="Choose order scope"/);
   assert.doesNotMatch(ordersPageSource, />Planning Scope<\/option>/);
   assert.doesNotMatch(ordersPageSource, />History \/ All Orders<\/option>/);
-  assert.doesNotMatch(ordersPageSource, /aria-label="Filter orders by delivery date"/);
   assert.doesNotMatch(ordersPageSource, /aria-label="Search orders"/);
   assert.doesNotMatch(ordersPageSource, /placeholder="Search orders"/);
   assert.doesNotMatch(ordersPageSource, /type="search"/);
