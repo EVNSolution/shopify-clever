@@ -14,6 +14,7 @@ export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "method", label: "Method" },
   { key: "payment", label: "Payment" },
   { key: "attributes", label: "Attributes" },
+  { key: "actions", label: "Actions" },
 ];
 
 function textOrUndefined(value) {
@@ -64,9 +65,14 @@ export function isMaterializedChildRouteDetail({ routePlan, routeGroup } = {}) {
 }
 
 export function formatChildOrderStatus(value) {
-  const status = String(value ?? "").trim().toLowerCase();
-  if (status === "completed") return "Completed";
-  if (status === "in_progress" || status === "in-progress") return "In progress";
+  const status = String(value ?? "").trim().replace(/-/g, "_").toUpperCase();
+  if (status === "READY" || status === "PENDING" || status === "ASSIGNED") return "Ready";
+  if (status === "EN_ROUTE" || status === "ARRIVED") return "In progress";
+  if (status === "DELIVERED" || status === "COMPLETED") return "Completed";
+  if (status === "FAILED") return "Failed";
+  if (status === "SKIPPED") return "Skipped";
+  if (status === "CANCELLED") return "Cancelled";
+  if (status === "IN_PROGRESS") return "In progress";
   return "Preparing";
 }
 
@@ -306,6 +312,63 @@ function getCustomerName(stop) {
   ) ?? EMPTY_LABEL;
 }
 
+function getStopPhone(stop) {
+  return firstText(
+    stop?.phone,
+    stop?.recipientPhone,
+    stop?.customerPhone,
+    stop?.shippingAddress?.phone,
+    stop?.address?.phone,
+    stop?.order?.phone,
+    stop?.order?.customer?.phone,
+    stop?.shopifyOrderSnapshot?.phone,
+    stop?.shopifyOrderSnapshot?.shippingAddress?.phone,
+  );
+}
+
+function getStopAddressField(stop, field) {
+  return firstText(
+    stop?.[field],
+    stop?.address?.[field],
+    stop?.shippingAddress?.[field],
+    stop?.order?.shippingAddress?.[field],
+    stop?.shopifyOrderSnapshot?.shippingAddress?.[field],
+    stop?.rawPayload?.shippingAddress?.[field],
+  );
+}
+
+function getStopLatitude(stop) {
+  return numberOrUndefined(
+    stop?.latitude ??
+    stop?.coordinates?.latitude ??
+    stop?.address?.latitude ??
+    stop?.shippingAddress?.latitude ??
+    (Array.isArray(stop?.coordinates) ? stop.coordinates[1] : undefined)
+  );
+}
+
+function getStopLongitude(stop) {
+  return numberOrUndefined(
+    stop?.longitude ??
+    stop?.coordinates?.longitude ??
+    stop?.address?.longitude ??
+    stop?.shippingAddress?.longitude ??
+    (Array.isArray(stop?.coordinates) ? stop.coordinates[0] : undefined)
+  );
+}
+
+function getStopInstructions(stop) {
+  return firstText(
+    stop?.instructions,
+    stop?.deliveryInstructions,
+    stop?.driverInstructions,
+    stop?.note,
+    stop?.order?.note,
+    stop?.shopifyOrderSnapshot?.note,
+    stop?.rawPayload?.note,
+  );
+}
+
 function normalizeAttributes(attributes) {
   if (typeof attributes === "string") {
     const value = attributes.trim();
@@ -373,6 +436,10 @@ export function buildChildRouteOrderRows(stops, { ianaTimezone, timezoneAbbrevia
 
     return {
       id: firstText(stop?.id, stop?.deliveryStopId, stop?.shopifyOrderGid, stop?.orderId) ?? `child-order-${index + 1}`,
+      orderId: firstText(stop?.orderId, stop?.sourceOrderId),
+      deliveryStopId: firstText(stop?.deliveryStopId),
+      shopifyOrderGid: firstText(stop?.shopifyOrderGid),
+      shopifyOrderLegacyId: firstText(stop?.shopifyOrderLegacyId, stop?.legacyResourceId, stop?.shopifyOrderSnapshot?.legacyResourceId),
       stop: index + 1,
       order: firstText(stop?.order, stop?.orderName, stop?.sourceOrderId, stop?.shopifyOrderGid) ?? EMPTY_LABEL,
       status: formatChildOrderStatus(getOrderStatusSource(stop)),
@@ -390,6 +457,22 @@ export function buildChildRouteOrderRows(stops, { ianaTimezone, timezoneAbbrevia
       attributes,
       attributesSummary: formatAttributesSummary(attributes),
       attributesDetail: attributes.length > 0 ? attributes.map((attribute) => attribute.label).join("\n") : EMPTY_LABEL,
+      editFields: {
+        recipientName: firstText(stop?.recipientName, stop?.recipient, stop?.customerName),
+        phone: getStopPhone(stop),
+        address1: getStopAddressField(stop, "address1"),
+        address2: getStopAddressField(stop, "address2"),
+        city: getStopAddressField(stop, "city"),
+        province: getStopAddressField(stop, "province"),
+        postalCode: getStopAddressField(stop, "postalCode"),
+        countryCode: getStopAddressField(stop, "countryCode"),
+        latitude: getStopLatitude(stop),
+        longitude: getStopLongitude(stop),
+        timeWindowStart: firstText(stop?.timeWindowStart),
+        timeWindowEnd: firstText(stop?.timeWindowEnd),
+        serviceMinutes: numberOrUndefined(stop?.serviceMinutes),
+        instructions: getStopInstructions(stop),
+      },
     };
   });
 }

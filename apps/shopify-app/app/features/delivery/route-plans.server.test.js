@@ -14,6 +14,8 @@ import {
   fetchDeliveryRoutePlans,
   getDeliveryApiBaseUrl,
   getShopifySessionBearer,
+  transitionDeliveryRoutePlanStop,
+  updateDeliveryRoutePlanStop,
   updateDeliveryRoutePlanStops,
   updateDeliveryRoutePlanDepartureTime,
   updateDeliveryRoutePlanScheduledStart,
@@ -583,6 +585,106 @@ test("updates route plan stops through the delivery Admin API", async () => {
   assert.equal(result.routePlan.id, "route 1");
   assert.equal(result.stops[0].sequence, 1);
   assert.equal(result.routeStopPoints[0].snapDistanceMeters, 54.16);
+  assert.deepEqual(result.errors, []);
+});
+
+test("transitions a route plan stop through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+  const result = await transitionDeliveryRoutePlanStop(
+    new Request("https://app.example/app/routes/route-1"),
+    "route 1",
+    "stop 1",
+    { idempotencyKey: "route-stop-transition-1", status: "READY" },
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({
+          data: {
+            routePlan: { id: "route 1" },
+            stop: { deliveryStopId: "stop 1", status: "READY" },
+          },
+          error: null,
+        });
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route%201/stops/stop%201/transition");
+  assert.equal(calls[0].options.method, "POST");
+  assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    idempotencyKey: "route-stop-transition-1",
+    status: "READY",
+  });
+  assert.equal(result.stop.status, "READY");
+  assert.deepEqual(result.errors, []);
+});
+
+test("updates flat operational route plan stop override fields through the delivery Admin API", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+  const result = await updateDeliveryRoutePlanStop(
+    new Request("https://app.example/app/routes/route-1"),
+    "route 1",
+    "stop 1",
+    {
+      address1: "10 Test St",
+      address2: "Unit 2",
+      city: "Toronto",
+      countryCode: "CA",
+      instructions: "Use side door",
+      latitude: 43.7,
+      longitude: -79.4,
+      phone: "+14165550123",
+      postalCode: "M1M 1M1",
+      province: "ON",
+      recipientName: "Kim Minji",
+      serviceMinutes: 7,
+      timeWindowEnd: "21:00",
+      timeWindowStart: "17:00",
+    },
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({
+          data: {
+            routePlan: { id: "route 1" },
+            stop: { deliveryStopId: "stop 1", recipientName: "Kim Minji" },
+          },
+          error: null,
+        });
+      },
+      sessionToken: "client-session-token",
+    },
+  );
+
+  process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route%201/stops/stop%201/override");
+  assert.equal(calls[0].options.method, "PATCH");
+  assert.deepEqual(JSON.parse(calls[0].options.body), {
+    address1: "10 Test St",
+    address2: "Unit 2",
+    city: "Toronto",
+    countryCode: "CA",
+    instructions: "Use side door",
+    latitude: 43.7,
+    longitude: -79.4,
+    phone: "+14165550123",
+    postalCode: "M1M 1M1",
+    province: "ON",
+    recipientName: "Kim Minji",
+    serviceMinutes: 7,
+    timeWindowEnd: "21:00",
+    timeWindowStart: "17:00",
+  });
+  assert.equal(result.stop.recipientName, "Kim Minji");
   assert.deepEqual(result.errors, []);
 });
 

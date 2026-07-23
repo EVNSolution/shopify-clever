@@ -12,6 +12,7 @@ export const DELIVERY_API_ENDPOINT_NOT_FOUND_ERROR_CODE =
 export const DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND_ERROR_CODE =
   "DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND";
 export const DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_PLAN_ID_MISSING";
+export const DELIVERY_ROUTE_STOP_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_STOP_ID_MISSING";
 export { buildRouteScopeFromOrders } from "./route-scope.js";
 
 const deliveryApiGetCache = new Map();
@@ -242,6 +243,107 @@ export async function updateDeliveryRoutePlanStops(request, routePlanId, payload
     routeMetrics: result.data?.routeMetrics ?? null,
     routeStopPoints: result.data?.routeStopPoints ?? [],
     stops: result.data?.stops ?? [],
+    errors: result.errors,
+  };
+}
+
+export async function transitionDeliveryRoutePlanStop(request, routePlanId, deliveryStopId, payload, options = {}) {
+  const normalizedRoutePlanId = textOrNull(routePlanId);
+  const normalizedDeliveryStopId = textOrNull(deliveryStopId);
+
+  if (!normalizedRoutePlanId) {
+    return {
+      routePlan: null,
+      stop: null,
+      errors: [
+        {
+          code: DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE,
+          message: "수정할 route plan ID가 없어 route stop 상태를 저장하지 못했습니다.",
+        },
+      ],
+    };
+  }
+  if (!normalizedDeliveryStopId) {
+    return {
+      routePlan: null,
+      stop: null,
+      errors: [
+        {
+          code: DELIVERY_ROUTE_STOP_ID_MISSING_ERROR_CODE,
+          message: "수정할 delivery stop ID가 없어 route stop 상태를 저장하지 못했습니다.",
+        },
+      ],
+    };
+  }
+
+  const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
+  const safeDeliveryStopId = encodeURIComponent(normalizedDeliveryStopId);
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/stops/${safeDeliveryStopId}/transition`,
+    {
+      body: JSON.stringify({
+        status: textOrNull(payload?.status),
+        idempotencyKey: textOrNull(payload?.idempotencyKey),
+      }),
+      fetch: options.fetch,
+      method: "POST",
+      sessionToken: options.sessionToken,
+    },
+  );
+
+  return {
+    routePlan: result.data?.routePlan ?? null,
+    stop: result.data?.stop ?? result.data?.deliveryStop ?? null,
+    errors: result.errors,
+  };
+}
+
+export async function updateDeliveryRoutePlanStop(request, routePlanId, deliveryStopId, payload, options = {}) {
+  const normalizedRoutePlanId = textOrNull(routePlanId);
+  const normalizedDeliveryStopId = textOrNull(deliveryStopId);
+
+  if (!normalizedRoutePlanId) {
+    return {
+      routePlan: null,
+      stop: null,
+      errors: [
+        {
+          code: DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE,
+          message: "수정할 route plan ID가 없어 route stop을 저장하지 못했습니다.",
+        },
+      ],
+    };
+  }
+  if (!normalizedDeliveryStopId) {
+    return {
+      routePlan: null,
+      stop: null,
+      errors: [
+        {
+          code: DELIVERY_ROUTE_STOP_ID_MISSING_ERROR_CODE,
+          message: "수정할 delivery stop ID가 없어 route stop을 저장하지 못했습니다.",
+        },
+      ],
+    };
+  }
+
+  const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
+  const safeDeliveryStopId = encodeURIComponent(normalizedDeliveryStopId);
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/stops/${safeDeliveryStopId}/override`,
+    {
+      body: JSON.stringify(payload ?? {}),
+      fetch: options.fetch,
+      method: "PATCH",
+      sessionToken: options.sessionToken,
+    },
+  );
+
+  return {
+    routePlan: result.data?.routePlan ?? null,
+    stop: result.data?.stop ?? result.data?.deliveryStop ?? null,
     errors: result.errors,
   };
 }
