@@ -88,6 +88,36 @@ test("honors a configured delivery cycle cutoff time", () => {
   );
 });
 
+test("keeps orders placed through 16:59 in the current K-food delivery cycle", () => {
+  assert.equal(
+    inferDeliveryDateFromOrderCycle({
+      deliveryCycle: {
+        cutoffTime: "17:00",
+        cutoffWeekday: "TUESDAY",
+        timeZone: "America/Toronto",
+      },
+      deliveryDay: "Friday",
+      orderCreatedAt: "2026-05-05T20:59:00.000Z",
+    }),
+    "2026-05-08",
+  );
+});
+
+test("starts the next K-food delivery cycle at exactly 17:00", () => {
+  assert.equal(
+    inferDeliveryDateFromOrderCycle({
+      deliveryCycle: {
+        cutoffTime: "17:00",
+        cutoffWeekday: "TUESDAY",
+        timeZone: "America/Toronto",
+      },
+      deliveryDay: "Friday",
+      orderCreatedAt: "2026-05-05T21:00:00.000Z",
+    }),
+    "2026-05-15",
+  );
+});
+
 test("normalizes invalid delivery cycle settings to the current default", () => {
   assert.deepEqual(
     normalizeDeliveryCycle({ cutoffTime: "99:99", cutoffWeekday: "NOPE" }),
@@ -108,15 +138,16 @@ test("uses the order cycle when Shopify line items do not include a date range",
   );
 });
 
-test("uses an explicit delivery date before weekday/range inference", () => {
+test("uses the product date range before an explicit delivery date", () => {
   assert.equal(
     inferDeliveryDateForOrder({
       deliveryDate: "2026-05-18",
+      deliveryDay: "Friday",
       lineItems: {
-        nodes: [{ title: "CLEVER 2026.05.18-05.31" }],
+        nodes: [{ title: "CLEVER 2026.05.21-05.23" }],
       },
-      orderCreatedAt: null,
+      orderCreatedAt: "2026-05-01T15:30:00.000Z",
     }),
-    "2026-05-18",
+    "2026-05-22",
   );
 });

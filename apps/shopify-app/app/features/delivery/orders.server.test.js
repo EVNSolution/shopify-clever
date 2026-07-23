@@ -18,7 +18,15 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
 
   const result = await syncDeliveryOrders(
     new Request("https://app.example/app/orders"),
-    { reason: "manual_refresh", orders },
+    {
+      deliveryCycle: {
+        cutoffTime: "17:00",
+        cutoffWeekday: "TUESDAY",
+        timeZone: "America/Toronto",
+      },
+      reason: "manual_refresh",
+      orders,
+    },
     {
       fetch: async (url, options) => {
         calls.push({ url, options });
@@ -48,6 +56,11 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
   assert.equal(calls[0].options.headers["x-clever-app-id"], "clever-route-dev");
   assert.equal(calls[0].options.headers["content-type"], "application/json");
   assert.deepEqual(JSON.parse(calls[0].options.body), {
+    deliveryCycle: {
+      cutoffTime: "17:00",
+      cutoffWeekday: "TUESDAY",
+      timeZone: "America/Toronto",
+    },
     source: "clever-app-orders",
     reason: "manual_refresh",
     orders,
