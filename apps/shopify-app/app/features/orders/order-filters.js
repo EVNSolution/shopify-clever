@@ -17,6 +17,7 @@ const LEGACY_ORDER_FILTER_QUERY_KEYS = ["q"];
 export const ORDER_PLANNING_SCOPE = "planning";
 export const ORDER_HISTORY_SCOPE = "history";
 export const ORDER_DEFAULT_TAB = "unplanned";
+export const ORDER_DELIVERY_DATE_PENDING = "pending";
 export const ORDER_STATUS_TABS = [
   { label: "All", value: "all" },
   { label: "Unplanned", value: "unplanned" },
@@ -111,10 +112,15 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
     return false;
   }
 
-  const deliveryDateFilter = normalizeDateOnlyValue(normalizedFilters.deliveryDate);
+  const deliveryDateFilter = normalizedFilters.deliveryDate;
+  const orderDeliveryDate = getOrderDeliveryDateValue(order);
+  if (deliveryDateFilter === ORDER_DELIVERY_DATE_PENDING && orderDeliveryDate) {
+    return false;
+  }
   if (
     deliveryDateFilter &&
-    getOrderDeliveryDateValue(order) !== deliveryDateFilter
+    deliveryDateFilter !== ORDER_DELIVERY_DATE_PENDING &&
+    orderDeliveryDate !== deliveryDateFilter
   ) {
     return false;
   }
@@ -175,6 +181,28 @@ export function getOrderFilterOptions(orders) {
   };
 }
 
+export function getOrderDeliveryDateFilterOptions(orders) {
+  const counts = new Map();
+
+  for (const order of Array.isArray(orders) ? orders : []) {
+    const value = getOrderDeliveryDateValue(order) || ORDER_DELIVERY_DATE_PENDING;
+    counts.set(value, (counts.get(value) ?? 0) + 1);
+  }
+
+  return [
+    ...(counts.has(ORDER_DELIVERY_DATE_PENDING)
+      ? [{
+          count: counts.get(ORDER_DELIVERY_DATE_PENDING),
+          value: ORDER_DELIVERY_DATE_PENDING,
+        }]
+      : []),
+    ...Array.from(counts.entries())
+      .filter(([value]) => value !== ORDER_DELIVERY_DATE_PENDING)
+      .sort(([leftValue], [rightValue]) => leftValue.localeCompare(rightValue))
+      .map(([value, count]) => ({ count, value })),
+  ];
+}
+
 export function getOrderFiltersFromSearchParams(searchParams) {
   const params = toSearchParams(searchParams);
   const plannedQueryKey = ORDER_FILTER_QUERY_KEYS.planned;
@@ -224,7 +252,7 @@ export function normalizeOrderFilters(filters = {}) {
 
   return {
     deliveryArea: textOrEmpty(filters.deliveryArea),
-    deliveryDate: textOrEmpty(filters.deliveryDate),
+    deliveryDate: normalizeDeliveryDateFilter(filters.deliveryDate),
     deliveryState: normalizeDeliveryState(filters.deliveryState),
     deliveryWeekday: normalizeDeliveryWeekday(filters.deliveryWeekday),
     orderedDate: "",
@@ -565,6 +593,15 @@ function normalizeDeliveryWeekday(value) {
   return ORDER_WEEKDAY_OPTIONS.some((option) => option.value === normalizedValue)
     ? normalizedValue
     : "";
+}
+
+function normalizeDeliveryDateFilter(value) {
+  const normalizedValue = textOrEmpty(value).toLowerCase();
+  if (normalizedValue === ORDER_DELIVERY_DATE_PENDING) {
+    return ORDER_DELIVERY_DATE_PENDING;
+  }
+
+  return normalizeDateOnlyValue(value);
 }
 
 function normalizeDeliveryState(value) {
