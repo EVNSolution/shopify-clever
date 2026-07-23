@@ -879,25 +879,6 @@ const childRouteDisclosureEmptyStyle = {
   color: "#6d7175",
 };
 
-const childRouteActionsHeaderCellStyle = {
-  ...childRouteOrderHeaderCellStyle,
-  background: "#f7f7f7",
-  boxShadow: "-8px 0 12px rgba(255, 255, 255, 0.92)",
-  position: "sticky",
-  right: 0,
-  zIndex: 3,
-};
-
-const childRouteActionsCellStyle = {
-  ...childRouteOrderCellStyle,
-  background: "#ffffff",
-  boxShadow: "-8px 0 12px rgba(255, 255, 255, 0.92)",
-  overflow: "visible",
-  position: "sticky",
-  right: 0,
-  zIndex: 2,
-};
-
 const childStopActionsButtonStyle = {
   ...routeActionButtonStyle,
   minHeight: "28px",
@@ -1698,6 +1679,25 @@ const childRouteOrderCellStyle = {
   ...routesDetailCellStyle,
   padding: "8px 4px",
   textAlign: "center",
+};
+
+const childRouteActionsHeaderCellStyle = {
+  ...childRouteOrderHeaderCellStyle,
+  background: "#f7f7f7",
+  boxShadow: "-8px 0 12px rgba(255, 255, 255, 0.92)",
+  position: "sticky",
+  right: 0,
+  zIndex: 3,
+};
+
+const childRouteActionsCellStyle = {
+  ...childRouteOrderCellStyle,
+  background: "#ffffff",
+  boxShadow: "-8px 0 12px rgba(255, 255, 255, 0.92)",
+  overflow: "visible",
+  position: "sticky",
+  right: 0,
+  zIndex: 2,
 };
 
 const childRouteStopCellStyle = {

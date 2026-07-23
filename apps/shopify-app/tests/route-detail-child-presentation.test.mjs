@@ -332,6 +332,18 @@ test("child timeline and order table share explicit centered alignment axes", ()
   assert.match(routeDetailSource, /style=\{column\.key === "actions" \? childRouteActionsHeaderCellStyle : childRouteOrderHeaderCellStyle\}/);
 });
 
+test("child action cell styles initialize after the shared styles they extend", () => {
+  const orderHeaderIndex = routeDetailSource.indexOf("const childRouteOrderHeaderCellStyle");
+  const orderCellIndex = routeDetailSource.indexOf("const childRouteOrderCellStyle");
+  const actionsHeaderIndex = routeDetailSource.indexOf("const childRouteActionsHeaderCellStyle");
+  const actionsCellIndex = routeDetailSource.indexOf("const childRouteActionsCellStyle");
+
+  assert.ok(orderHeaderIndex >= 0);
+  assert.ok(orderCellIndex >= 0);
+  assert.ok(actionsHeaderIndex > orderHeaderIndex);
+  assert.ok(actionsCellIndex > orderCellIndex);
+});
+
 test("child timeline keeps breathing room and stop digits share a browser-neutral optical correction", () => {
   assert.match(routeDetailSource, /const childRouteTimelineStyle = \{[\s\S]*padding: "8px 8px 16px"/);
   assert.match(routeDetailSource, /aria-label="Child route stop timeline"[\s\S]*style=\{childRouteTimelineStyle\}/);
