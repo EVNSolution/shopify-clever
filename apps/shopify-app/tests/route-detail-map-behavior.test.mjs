@@ -98,6 +98,24 @@ test("Tracking completion preserves the route-colored marker and exposes badge s
   assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-3");
 });
 
+test("persisted delivery status does not create a Tracking completion badge", () => {
+  const markerData = buildRouteDetailMarkerFeatureCollection(null, [{
+    coordinates: [126.927, 37.512],
+    deliveryStopId: "stop-4",
+    hasCoordinates: true,
+    id: "order-4",
+    isTrackingCompleted: false,
+    preserveRouteColor: true,
+    routeColor: "#006fbb",
+    status: "DELIVERED",
+    stop: 4,
+  }], [], "#e11900", new Map());
+
+  assert.equal(markerData.features.length, 1);
+  assert.equal(markerData.features[0].properties.isCompleted, false);
+  assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-4");
+});
+
 test("Tracking planned route remains a solid, visible reference under dashed GPS", () => {
   const fake = createFakeMap();
   const routeGeometry = {

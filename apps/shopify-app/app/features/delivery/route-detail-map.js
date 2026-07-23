@@ -874,7 +874,7 @@ function buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, 
       },
       properties: {
         featureType: "routeStop",
-        isCompleted: Boolean(stop.isTrackingCompleted || isRouteStopCompleted(stop)),
+        isCompleted: Boolean(stop.isTrackingCompleted),
         orderId: stop.orderId ?? "",
         pinImage: getRouteDetailStopPinImageId(stop, stopColor),
         sortKey: stop.isPolygonSelected ? 3000 : 1000 - stop.stop,

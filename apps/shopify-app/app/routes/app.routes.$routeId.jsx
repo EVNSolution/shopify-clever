@@ -2948,19 +2948,10 @@ export default function RouteDetailPage() {
     () => new Set(isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds),
     [isPolygonTargetPickerOpen, polygonCandidateOrderIds, polygonSelectedOrderIds],
   );
-  const completedTrackingStopIds = useMemo(() => {
-    const completedStopIds = new Set(routeTrackingProgress?.completedStopIds ?? []);
-    for (const routeRow of timelineRouteRows) {
-      for (const stop of routeRow.stops) {
-        if ([stop.status, stop.deliveryStatus, stop.deliveryStopStatus]
-          .some((status) => ["COMPLETED", "DELIVERED", "FULFILLED"].includes(String(status ?? "").toUpperCase()))) {
-          if (stop.id) completedStopIds.add(stop.id);
-          if (stop.deliveryStopId) completedStopIds.add(stop.deliveryStopId);
-        }
-      }
-    }
-    return completedStopIds;
-  }, [routeTrackingProgress?.completedStopIds, timelineRouteRows]);
+  const completedTrackingStopIds = useMemo(
+    () => new Set(routeTrackingProgress?.completedStopIds ?? []),
+    [routeTrackingProgress?.completedStopIds],
+  );
   const routeStopColorById = useMemo(() => new Map(timelineRouteRows.flatMap((routeRow) => (
     routeRow.stops.flatMap((stop) => {
       return [
@@ -5597,7 +5588,9 @@ export default function RouteDetailPage() {
                       >
                         <td style={childRouteStopCellStyle}><span style={{
                           ...childRouteTableStopMarkerStyle,
-                          ...(completedTrackingStopIds.has(row.id) ? { background: ROUTE_DETAIL_COMPLETED_STOP_COLOR } : null),
+                          background: completedTrackingStopIds.has(row.id)
+                            ? ROUTE_DETAIL_COMPLETED_STOP_COLOR
+                            : routeStopColorById.get(row.id) ?? routeLineColor,
                         }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
                         <td style={childRouteOrderCellStyle}>{row.order}</td>
                         <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
