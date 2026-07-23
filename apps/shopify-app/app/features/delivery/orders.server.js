@@ -10,6 +10,7 @@ const DELIVERY_ORDERS_SYNC_REASON = "orders_page_open";
 export async function syncDeliveryOrders(request, payload = {}, options = {}) {
   const result = await deliveryApiRequest(request, "/admin/orders/sync", {
     body: JSON.stringify({
+      ...(payload.deliveryCycle ? { deliveryCycle: payload.deliveryCycle } : {}),
       source: DELIVERY_ORDERS_SYNC_SOURCE,
       reason: payload.reason ?? DELIVERY_ORDERS_SYNC_REASON,
       orders: Array.isArray(payload.orders) ? payload.orders : [],

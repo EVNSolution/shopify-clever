@@ -50,12 +50,12 @@ export function inferDeliveryDateForOrder({
   orderCreatedAt,
 } = {}) {
   return (
-    normalizeExplicitDeliveryDate(deliveryDate, orderCreatedAt) ??
     inferDeliveryDateFromLineItems({
       deliveryDay,
       lineItems,
       orderCreatedAt,
     }) ??
+    normalizeExplicitDeliveryDate(deliveryDate, orderCreatedAt) ??
     inferDeliveryDateFromOrderCycle({
       deliveryCycle,
       deliveryDay,
@@ -122,7 +122,7 @@ export function inferDeliveryDateFromOrderCycle({
   );
   const cutoffWeekdayIndex = WEEKDAY_INDEX_BY_CODE[cycle.cutoffWeekday];
   let daysUntilCutoff = (cutoffWeekdayIndex - orderDate.getUTCDay() + 7) % 7;
-  if (daysUntilCutoff === 0 && getLocalMinutes(orderLocalDate) > parseCutoffMinutes(cycle.cutoffTime)) {
+  if (daysUntilCutoff === 0 && getLocalMinutes(orderLocalDate) >= parseCutoffMinutes(cycle.cutoffTime)) {
     daysUntilCutoff = 7;
   }
 

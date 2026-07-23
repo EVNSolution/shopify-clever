@@ -191,9 +191,18 @@ async function handleOrdersAction(request) {
       return { syncedOrders: [], sync: null, errors: [] };
     }
 
+    const preferencesData = await fetchShopifyAppPreferences(admin);
+    if ((preferencesData.errors ?? []).length > 0) {
+      return { syncedOrders: [], sync: null, errors: preferencesData.errors };
+    }
+
     const syncedOrderData = await syncDeliveryOrders(
       request,
-      { reason: "orders_page_open", orders: orderSnapshots },
+      {
+        deliveryCycle: preferencesData.appPreferences.deliveryCycle,
+        reason: "orders_page_open",
+        orders: orderSnapshots,
+      },
       {
         cacheKey: shopifyShopCacheKey,
         primeOrdersCache: true,
@@ -471,6 +480,7 @@ async function resolvePlannedOrdersForAction({
       ? await syncDeliveryOrders(
           request,
           {
+            deliveryCycle: preferencesData.appPreferences.deliveryCycle,
             reason,
             orders: plannedShopifyOrderSnapshots,
           },

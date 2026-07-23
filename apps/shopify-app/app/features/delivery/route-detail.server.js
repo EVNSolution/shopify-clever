@@ -663,7 +663,11 @@ export async function refreshRouteOrders({
     const snapshots = getOrderSyncSnapshots(shopifyOrderData.orders);
     const syncedOrderData = await syncDeliveryOrders(
       request,
-      { reason: "manual_refresh", orders: snapshots },
+      {
+        deliveryCycle: preferencesData.appPreferences.deliveryCycle,
+        reason: "manual_refresh",
+        orders: snapshots,
+      },
       { cacheKey: shopifyShopCacheKey, sessionToken },
     );
     errors.push(...(syncedOrderData.errors ?? []));
