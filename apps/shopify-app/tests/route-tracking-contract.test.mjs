@@ -665,6 +665,56 @@ test("tracking progress keeps the current driver stage and completed stop ids", 
   assert.deepEqual(delivered.progress.completedStopIds, ["stop-1", "stop-2"]);
 });
 
+test("reconnect snapshots without latest events cannot regress newer live progress", () => {
+  const liveSnapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    progress: {
+      completedStopIds: ["stop-live-earlier", "stop-durable-failed"],
+      currentStage: "DRIVING",
+      currentStopId: null,
+      failedStopIds: ["stop-live-failed", "stop-durable-completed"],
+      latestEvent: {
+        deliveryStopId: "stop-live-delivered",
+        driverId: "driver-1",
+        eventId: "progress-live-delivered",
+        eventType: "STOP_DELIVERED",
+        occurredAt: "2026-07-20T04:05:00.000Z",
+        receivedAt: "2026-07-20T04:05:01.000Z",
+        routePlanId: "route-1",
+      },
+    },
+    recentPositions: [],
+    routePlanId: "route-1",
+  });
+  const reconnectSnapshot = {
+    policy,
+    progress: {
+      completedStopIds: ["stop-durable-completed"],
+      currentStage: "READY",
+      currentStopId: null,
+      failedStopIds: ["stop-durable-failed"],
+      latestEvent: null,
+    },
+    recentPositions: [],
+    routePlanId: "route-1",
+    status: "NO_DATA",
+  };
+
+  const merged = mergeRouteTrackingSnapshot(liveSnapshot, reconnectSnapshot);
+
+  assert.equal(merged.progress.currentStage, "DRIVING");
+  assert.equal(merged.progress.latestEvent.eventId, "progress-live-delivered");
+  assert.deepEqual(new Set(merged.progress.completedStopIds), new Set([
+    "stop-durable-completed",
+    "stop-live-delivered",
+    "stop-live-earlier",
+  ]));
+  assert.deepEqual(new Set(merged.progress.failedStopIds), new Set([
+    "stop-durable-failed",
+    "stop-live-failed",
+  ]));
+});
+
 test("tracking proxy forwards authentication and streams the upstream body without buffering", async () => {
   const abortController = new AbortController();
   const request = new Request("https://app.test/app/route-tracking/route-1", {
