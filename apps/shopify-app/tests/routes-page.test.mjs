@@ -661,7 +661,8 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /const restoreRouteTimelineDragPreview = useCallback\(\(\) => \{[\s\S]*setRouteTimelineOrderByRouteId\(snapshot\.orderByRouteId\)[\s\S]*setRoutePreviewByKey\(snapshot\.previewByKey\)/);
   assert.match(routeDetailSource, /const handleRouteTimelineDragLeave = useCallback\(\(event\) => \{[\s\S]*getBoundingClientRect\(\)[\s\S]*restoreRouteTimelineDragPreview\(\)/);
   assert.match(routeDetailSource, /onDragLeave=\{handleRouteTimelineDragLeave\}/);
-  assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*moveDraggedTimelineStop\(routeRow\.id\);[\s\S]*handleRouteTimelineDragEnd\(\);/);
+  assert.match(routeDetailSource, /const handleRouteTimelineRouteDrop = \(event, routeRow\) => \{[\s\S]*routeTimelineDropCommittedRef\.current = true;/);
+  assert.doesNotMatch(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;\s*moveDraggedTimelineStop\(routeRow\.id\);/);
   assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*removeTimelineStop\(/);
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);

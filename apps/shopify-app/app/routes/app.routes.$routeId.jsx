@@ -5,6 +5,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
+  buildChildActualArrivalByStopId,
   buildChildRouteOrderRows,
   formatStoreLocalDateTimeInput,
   formatStoreLocalOrderDate,
@@ -88,6 +89,8 @@ const ROUTE_TIMELINE_STOP_POPOVER_GAP = 4;
 const ROUTE_TIMELINE_STOP_POPOVER_HEIGHT = 260;
 const ROUTE_TIMELINE_STOP_POPOVER_WIDTH = 320;
 const ROUTE_TIMELINE_STOP_POPOVER_EDGE_INSET = 12;
+const ROUTE_TIMELINE_REORDER_ACTIVATION_BIAS_PX = 6;
+const ROUTE_TIMELINE_REORDER_ANIMATION_MS = 200;
 const CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH = 73;
 const CHILD_ORDER_DISCLOSURE_EDGE_INSET = 12;
 const CHILD_ORDER_DISCLOSURE_GAP = 2;
@@ -1320,14 +1323,14 @@ const routeTimelineStopStyle = {
   height: "18px",
   justifyContent: "center",
   padding: 0,
-  transition: "opacity 140ms ease, transform 180ms ease",
+  transition: "box-shadow 120ms ease, opacity 120ms ease",
   width: "18px",
 };
 
 const routeTimelineStopDraggingStyle = {
+  boxShadow: "0 0 0 3px rgba(11, 132, 216, 0.16)",
   cursor: "grabbing",
-  opacity: 0.55,
-  transform: "scale(1.12)",
+  opacity: 0.35,
 };
 
 const routeTimelineStopPopoverStyle = {
@@ -1679,6 +1682,17 @@ const childRouteOrderCellStyle = {
   ...routesDetailCellStyle,
   padding: "8px 4px",
   textAlign: "center",
+};
+
+const childRouteExpectedArrivalCellStyle = {
+  ...childRouteOrderCellStyle,
+  color: "#6d7175",
+};
+
+const childRouteActualArrivalCellStyle = {
+  ...childRouteOrderCellStyle,
+  color: "#303030",
+  fontWeight: 650,
 };
 
 const childRouteActionsHeaderCellStyle = {
@@ -2417,10 +2431,19 @@ function getNextChildRouteDraft(routeRows) {
 }
 
 function getTimelineRouteStopIds(routeRows, orderByRouteId, routeId) {
-  const savedOrder = orderByRouteId[routeId];
+  const savedOrder = orderByRouteId?.[routeId];
   if (Array.isArray(savedOrder)) return savedOrder;
 
   return routeRows.find((routeRow) => routeRow.id === routeId)?.stops.map((stop) => stop.id) ?? [];
+}
+
+function areTimelineOrdersEqual(routeRows, firstOrderByRouteId, secondOrderByRouteId) {
+  return routeRows.every((routeRow) => {
+    const firstStopIds = getTimelineRouteStopIds(routeRows, firstOrderByRouteId, routeRow.id);
+    const secondStopIds = getTimelineRouteStopIds(routeRows, secondOrderByRouteId, routeRow.id);
+    return firstStopIds.length === secondStopIds.length
+      && firstStopIds.every((stopId, index) => stopId === secondStopIds[index]);
+  });
 }
 
 function moveTimelineStop(routeRows, orderByRouteId, drag, targetRouteId, afterStopId = null) {
@@ -2747,6 +2770,8 @@ export default function RouteDetailPage() {
   const routeMapCenterRef = useRef(DEFAULT_CENTER);
   const markersRef = useRef([]);
   const routeTimelineStopRefs = useRef(new Map());
+  const routeTimelineStopMotionRefs = useRef(new Map());
+  const routeTimelineAnimationsRef = useRef(new Map());
   const routeTimelineStopPopoverRef = useRef(null);
   const childOrderDisclosureCloseTimerRef = useRef(null);
   const childOrderDisclosureCloseButtonRef = useRef(null);
@@ -2756,8 +2781,11 @@ export default function RouteDetailPage() {
   const childStopActionsMenuRef = useRef(null);
   const childStopActionsTriggerRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
+  const routeTimelineDragPointerXRef = useRef(null);
   const routeTimelineDragSnapshotRef = useRef(null);
   const routeTimelineDropCommittedRef = useRef(false);
+  const routeTimelineSuppressClickRef = useRef(false);
+  const routeTimelineSuppressClickTimerRef = useRef(null);
   const lastRouteActionIntentRef = useRef(null);
   const navigateAfterRouteDraftSaveRef = useRef(null);
   const routePolygonCornerDragIndexRef = useRef(null);
@@ -2795,6 +2823,8 @@ export default function RouteDetailPage() {
   const [clientRouteRows, setClientRouteRows] = useState([]);
   const [routePreviewByKey, setRoutePreviewByKey] = useState({});
   const [routeTimelineDrag, setRouteTimelineDrag] = useState(null);
+  const routeTimelineOrderByRouteIdRef = useRef(routeTimelineOrderByRouteId);
+  routeTimelineOrderByRouteIdRef.current = routeTimelineOrderByRouteId;
   const [activeRouteTimelineStopPopover, setActiveRouteTimelineStopPopover] = useState(null);
   const [activeChildOrderDisclosure, setActiveChildOrderDisclosure] = useState(null);
   const [activeChildStopActions, setActiveChildStopActions] = useState(null);
@@ -2873,8 +2903,12 @@ export default function RouteDetailPage() {
   const timelineRouteRows = buildTimelineRows(routeRows, routeTimelineOrderByRouteId);
   const contextTimelineRouteRows = buildTimelineRows(contextRouteRows, routeTimelineOrderByRouteId);
   const currentTimelineRouteRow = timelineRouteRows.find((routeRow) => routeRow.routePlanId === effectiveRoutePlan?.id) ?? timelineRouteRows[0] ?? null;
+  const actualArrivalByStopId = useMemo(
+    () => buildChildActualArrivalByStopId(displayedRouteTrackingSnapshot?.stopArrivals),
+    [displayedRouteTrackingSnapshot?.stopArrivals],
+  );
   const childRouteOrderRows = isMaterializedChildRouteDetail
-    ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { ianaTimezone, timezoneAbbreviation })
+    ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { actualArrivalByStopId, ianaTimezone })
     : [];
   const routeTrackingPresentation = useMemo(
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
@@ -3470,6 +3504,17 @@ export default function RouteDetailPage() {
     routeTimelineStopRefs.current.delete(stopId);
   }, []);
 
+  const setRouteTimelineStopMotionRef = useCallback((stopId, node) => {
+    if (node) {
+      routeTimelineStopMotionRefs.current.set(stopId, node);
+      return;
+    }
+
+    routeTimelineStopMotionRefs.current.delete(stopId);
+    routeTimelineAnimationsRef.current.get(stopId)?.cancel();
+    routeTimelineAnimationsRef.current.delete(stopId);
+  }, []);
+
   const getRouteTimelineStopPopoverState = useCallback((stopId, mode = "pinned") => {
     const node = routeTimelineStopRefs.current.get(stopId);
     if (!node) return null;
@@ -3493,7 +3538,7 @@ export default function RouteDetailPage() {
   }, [activeRouteTimelineStopPopover?.stopId]);
 
   const readRouteTimelineStopRects = useCallback(() => {
-    return new Map([...routeTimelineStopRefs.current.entries()].map(([stopId, node]) => [
+    return new Map([...routeTimelineStopMotionRefs.current.entries()].map(([stopId, node]) => [
       stopId,
       node.getBoundingClientRect(),
     ]));
@@ -3504,20 +3549,34 @@ export default function RouteDetailPage() {
 
     flushSync(applyChange);
     window.requestAnimationFrame(() => {
-      for (const [stopId, node] of routeTimelineStopRefs.current.entries()) {
+      for (const [stopId, node] of routeTimelineStopMotionRefs.current.entries()) {
+        if (routeTimelineDragRef.current?.stopId === stopId) continue;
         const previousRect = previousRects.get(stopId);
         if (!previousRect) continue;
 
         const nextRect = node.getBoundingClientRect();
         const deltaX = previousRect.left - nextRect.left;
         const deltaY = previousRect.top - nextRect.top;
-        if (Math.abs(deltaX) < 1 || Math.abs(deltaY) > 4) continue;
+        if (Math.abs(deltaX) < 1 && Math.abs(deltaY) < 1) continue;
 
-        node.style.transition = "none";
-        node.style.transform = `translateX(${deltaX}px)`;
-        node.getBoundingClientRect();
-        node.style.transition = "transform 180ms ease";
-        node.style.transform = "";
+        routeTimelineAnimationsRef.current.get(stopId)?.cancel();
+        if (typeof node.animate !== "function") continue;
+        const animation = node.animate(
+          [
+            { transform: `translate3d(${deltaX}px, ${deltaY}px, 0)` },
+            { transform: "translate3d(0, 0, 0)" },
+          ],
+          {
+            duration: ROUTE_TIMELINE_REORDER_ANIMATION_MS,
+            easing: "cubic-bezier(0.22, 1, 0.36, 1)",
+          },
+        );
+        routeTimelineAnimationsRef.current.set(stopId, animation);
+        animation.onfinish = () => {
+          if (routeTimelineAnimationsRef.current.get(stopId) === animation) {
+            routeTimelineAnimationsRef.current.delete(stopId);
+          }
+        };
       }
     });
   }, [readRouteTimelineStopRects]);
@@ -3526,15 +3585,33 @@ export default function RouteDetailPage() {
     const drag = routeTimelineDragRef.current;
     if (!drag) return;
 
-    setRoutePreviewByKey({});
+    const currentOrderByRouteId = routeTimelineOrderByRouteIdRef.current;
+    const snapshot = routeTimelineDragSnapshotRef.current;
+    const nextOrderByRouteId = moveTimelineStop(
+      routeRows,
+      currentOrderByRouteId,
+      drag,
+      targetRouteId,
+      afterStopId,
+    );
+    const returnedToSnapshot = snapshot && areTimelineOrdersEqual(
+      routeRows,
+      nextOrderByRouteId,
+      snapshot.orderByRouteId,
+    );
+    const restoredOrderByRouteId = returnedToSnapshot
+      ? snapshot.orderByRouteId
+      : nextOrderByRouteId;
+    if (areTimelineOrdersEqual(routeRows, currentOrderByRouteId, restoredOrderByRouteId)) return;
+
+    routeTimelineOrderByRouteIdRef.current = restoredOrderByRouteId;
     animateRouteTimelineChange(() => {
-      setRouteTimelineOrderByRouteId((currentOrderByRouteId) => moveTimelineStop(
-        routeRows,
-        currentOrderByRouteId,
-        drag,
-        targetRouteId,
-        afterStopId,
-      ));
+      setRouteTimelineOrderByRouteId(restoredOrderByRouteId);
+      setRoutePreviewByKey(
+        restoredOrderByRouteId === snapshot?.orderByRouteId
+          ? snapshot.previewByKey
+          : {},
+      );
     });
   }, [animateRouteTimelineChange, routeRows]);
 
@@ -3542,11 +3619,17 @@ export default function RouteDetailPage() {
     if (routeRow.isPreviewOnly) return;
     const drag = { routeId: routeRow.id, stopId: stop.id };
     routeTimelineDragRef.current = drag;
+    routeTimelineDragPointerXRef.current = event.clientX;
     routeTimelineDragSnapshotRef.current = {
       orderByRouteId: routeTimelineOrderByRouteId,
       previewByKey: routePreviewByKey,
     };
     routeTimelineDropCommittedRef.current = false;
+    if (routeTimelineSuppressClickTimerRef.current != null) {
+      window.clearTimeout(routeTimelineSuppressClickTimerRef.current);
+      routeTimelineSuppressClickTimerRef.current = null;
+    }
+    routeTimelineSuppressClickRef.current = true;
     setActiveRouteTimelineStopPopover(null);
     setRouteTimelineDrag(drag);
     event.dataTransfer.effectAllowed = "move";
@@ -3556,6 +3639,10 @@ export default function RouteDetailPage() {
 
   const handleRouteTimelineStopClick = (event, stop) => {
     event.stopPropagation();
+    if (routeTimelineDragRef.current || routeTimelineSuppressClickRef.current) {
+      event.preventDefault();
+      return;
+    }
     if (isMapReady && mapRef.current && mapLibraryRef.current) {
       fitRouteStopAndSnappedPoint(
         mapRef.current,
@@ -3570,6 +3657,7 @@ export default function RouteDetailPage() {
   };
 
   const handleRouteTimelineStopMouseEnter = (stop) => {
+    if (routeTimelineDragRef.current) return;
     setActiveRouteTimelineStopPopover((current) => current?.mode === "pinned"
       ? current
       : getRouteTimelineStopPopoverState(stop.id, "hover"));
@@ -3883,6 +3971,7 @@ export default function RouteDetailPage() {
     const snapshot = routeTimelineDragSnapshotRef.current;
     if (!routeTimelineDragRef.current || !snapshot) return;
 
+    routeTimelineOrderByRouteIdRef.current = snapshot.orderByRouteId;
     flushSync(() => {
       setRouteTimelineOrderByRouteId(snapshot.orderByRouteId);
       setRoutePreviewByKey(snapshot.previewByKey);
@@ -3894,9 +3983,14 @@ export default function RouteDetailPage() {
     if (shouldRestorePreview) restoreRouteTimelineDragPreview();
 
     routeTimelineDragRef.current = null;
+    routeTimelineDragPointerXRef.current = null;
     routeTimelineDragSnapshotRef.current = null;
     routeTimelineDropCommittedRef.current = false;
     flushSync(() => setRouteTimelineDrag(null));
+    routeTimelineSuppressClickTimerRef.current = window.setTimeout(() => {
+      routeTimelineSuppressClickRef.current = false;
+      routeTimelineSuppressClickTimerRef.current = null;
+    }, 0);
   }, [restoreRouteTimelineDragPreview]);
 
   const handleRouteTimelineDragLeave = useCallback((event) => {
@@ -3916,11 +4010,38 @@ export default function RouteDetailPage() {
     event.dataTransfer.dropEffect = "move";
   };
 
-  const handleRouteTimelineStopDragEnter = (event, routeRow, stop) => {
+  const handleRouteTimelineStopDragEnter = (event) => {
     event.preventDefault();
     event.stopPropagation();
-    if (routeTimelineDragRef.current?.stopId === stop.id) return;
-    moveDraggedTimelineStop(routeRow.id, stop.id);
+  };
+
+  const handleRouteTimelineStopDragOver = (event, routeRow, stop) => {
+    handleRouteTimelineDragOver(event);
+    event.stopPropagation();
+    const drag = routeTimelineDragRef.current;
+    if (!drag || drag.stopId === stop.id) return;
+
+    const targetRect = routeTimelineStopMotionRefs.current.get(stop.id)?.getBoundingClientRect();
+    if (!targetRect) return;
+    const targetStopIds = getTimelineRouteStopIds(
+      routeRows,
+      routeTimelineOrderByRouteIdRef.current,
+      routeRow.id,
+    ).filter((stopId) => stopId !== drag.stopId);
+    const targetIndex = targetStopIds.indexOf(stop.id);
+    if (targetIndex < 0) return;
+
+    const previousPointerX = routeTimelineDragPointerXRef.current;
+    const pointerDirection = previousPointerX == null
+      ? 0
+      : Math.sign(event.clientX - previousPointerX);
+    routeTimelineDragPointerXRef.current = event.clientX;
+    const activationPoint = targetRect.left + targetRect.width / 2
+      - pointerDirection * ROUTE_TIMELINE_REORDER_ACTIVATION_BIAS_PX;
+    const afterStopId = event.clientX < activationPoint
+      ? targetStopIds[targetIndex - 1] ?? "__start__"
+      : stop.id;
+    moveDraggedTimelineStop(routeRow.id, afterStopId);
   };
 
   const handleRouteTimelineEmptyRouteDragEnter = (event, routeRow) => {
@@ -3946,9 +4067,9 @@ export default function RouteDetailPage() {
   const handleRouteTimelineRouteDrop = (event, routeRow) => {
     if (routeRow.isPreviewOnly) return;
     event.preventDefault();
+    event.stopPropagation();
+    if (!routeTimelineDragRef.current) return;
     routeTimelineDropCommittedRef.current = true;
-    moveDraggedTimelineStop(routeRow.id);
-    handleRouteTimelineDragEnd();
   };
 
   const handleRouteTimelineRemoveDrop = (event) => {
@@ -5353,6 +5474,9 @@ export default function RouteDetailPage() {
                     {routeRow.stops.map((stop) => (
                       <span
                         key={stop.id}
+                        ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)}
+                        onDragEnter={handleRouteTimelineStopDragEnter}
+                        onDragOver={(event) => handleRouteTimelineStopDragOver(event, routeRow, stop)}
                         style={childRouteTimelineStopUnitStyle}
                         title={stop.order}
                       >
@@ -5363,13 +5487,11 @@ export default function RouteDetailPage() {
                           ref={(node) => setRouteTimelineStopRef(stop.id, node)}
                           draggable
                           onDragEnd={handleRouteTimelineDragEnd}
-                          onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
-                          onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
                           onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
                           onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                           onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                           onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
-                          aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
+                          aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
                           aria-label={`Show ${stop.order} stop details`}
                           style={{
                             ...routeTimelineStopStyle,
@@ -5425,7 +5547,7 @@ export default function RouteDetailPage() {
                       <td style={childRouteOrderCellStyle}>{row.status}</td>
                       <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
                       <td style={childRouteOrderCellStyle}>{row.address}</td>
-                      <td style={childRouteOrderCellStyle}>{row.eta}</td>
+                      <td style={childRouteExpectedArrivalCellStyle}>{row.expectedArrival}</td>
                       <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.customer}</td>
@@ -5569,7 +5691,8 @@ export default function RouteDetailPage() {
                         ["Stop", "64px"],
                         ["Order", "96px"],
                         ["Status", "120px"],
-                        ["ETA (est.)", "120px"],
+                        ["Expected arrival", "120px"],
+                        ["Actual arrival", "120px"],
                         ["Customer", "160px"],
                         ["Address", "360px"],
                       ].map(([label, width]) => (
@@ -5594,7 +5717,8 @@ export default function RouteDetailPage() {
                         }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
                         <td style={childRouteOrderCellStyle}>{row.order}</td>
                         <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
-                        <td style={childRouteOrderCellStyle}>{row.eta}</td>
+                        <td style={childRouteExpectedArrivalCellStyle}>{row.expectedArrival}</td>
+                        <td style={childRouteActualArrivalCellStyle}>{row.actualArrival}</td>
                         <td style={childRouteOrderCellStyle}>{row.customer}</td>
                         <td style={childRouteOrderCellStyle}>{row.address}</td>
                       </tr>
@@ -5726,6 +5850,9 @@ export default function RouteDetailPage() {
                       {routeRow.stops.map((stop) => (
                         <span
                           key={stop.id}
+                          ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)}
+                          onDragEnter={handleRouteTimelineStopDragEnter}
+                          onDragOver={(event) => handleRouteTimelineStopDragOver(event, routeRow, stop)}
                           style={routeTimelineSegmentStyle}
                           title={stop.order}
                         >
@@ -5735,13 +5862,11 @@ export default function RouteDetailPage() {
                             ref={(node) => setRouteTimelineStopRef(stop.id, node)}
                             draggable={!routeRow.isPreviewOnly}
                             onDragEnd={handleRouteTimelineDragEnd}
-                            onDragEnter={(event) => handleRouteTimelineStopDragEnter(event, routeRow, stop)}
-                            onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
                             onDragStart={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
                             onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                             onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                             onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
-                            aria-expanded={activeRouteTimelineStopPopover?.stopId === stop.id}
+                            aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
                             aria-label={`Show ${stop.order} stop details`}
                             style={{
                               ...routeTimelineStopStyle,
@@ -5764,7 +5889,7 @@ export default function RouteDetailPage() {
               </>
             </section>
           ) : null}
-            {activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
+            {!routeTimelineDrag && activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
               <>
                 <div
                   data-route-timeline-stop-popover-root="true"

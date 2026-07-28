@@ -6,7 +6,7 @@ export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "status", label: "Status" },
   { key: "orderDate", label: "Order date" },
   { key: "address", label: "Address" },
-  { key: "eta", label: "ETA (est.)" },
+  { key: "expectedArrival", label: "Expected arrival" },
   { key: "driveTime", label: "Drive time" },
   { key: "stopTime", label: "Stop time" },
   { key: "customer", label: "Customer" },
@@ -172,57 +172,37 @@ export function storeLocalDateTimeToIso(value, ianaTimezone) {
   return null;
 }
 
-function getTimeZoneAbbreviationForInstant(ianaTimezone, instant, fallbackAbbreviation) {
-  const timeZone = textOrUndefined(ianaTimezone);
-  if (!timeZone) return textOrUndefined(fallbackAbbreviation);
-
-  const date = instant instanceof Date ? instant : new Date(instant);
-  if (Number.isNaN(date.getTime())) return textOrUndefined(fallbackAbbreviation);
-
-  try {
-    const parts = new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      timeZoneName: "short",
-    }).formatToParts(date);
-    return textOrUndefined(parts.find((part) => part.type === "timeZoneName")?.value) ?? textOrUndefined(fallbackAbbreviation);
-  } catch {
-    return textOrUndefined(fallbackAbbreviation);
-  }
-}
-
-export function formatChildEtaLabel(value, ianaTimezone, fallbackAbbreviation) {
+export function formatChildEtaLabel(value, ianaTimezone) {
   const parts = formatDateParts(value, ianaTimezone, {
     hour: "2-digit",
     hourCycle: "h23",
     minute: "2-digit",
   });
   if (!parts?.hour || !parts?.minute) return EMPTY_LABEL;
-
-  const abbreviation = getTimeZoneAbbreviationForInstant(ianaTimezone, value, fallbackAbbreviation);
-  return abbreviation ? `${parts.hour}:${parts.minute} ${abbreviation}` : `${parts.hour}:${parts.minute}`;
+  return `${parts.hour}:${parts.minute}`;
 }
 
 export function formatChildDriveTimeLabel(durationSeconds, distanceMeters) {
   const seconds = numberOrUndefined(durationSeconds);
   const meters = numberOrUndefined(distanceMeters);
-  const duration = seconds === undefined ? null : `${Math.round(seconds / 60)}m`;
+  const duration = seconds === undefined ? null : `${Math.round(seconds / 60)} min`;
   let distance = null;
 
   if (meters !== undefined) {
     if (meters < 1000) {
-      distance = `${Math.round(meters)}m`;
+      distance = `${Math.round(meters)} m`;
     } else {
       const kilometers = meters / 1000;
-      distance = `${kilometers >= 10 ? Math.round(kilometers) : kilometers.toFixed(1)}km`;
+      distance = `${kilometers >= 10 ? Math.round(kilometers) : kilometers.toFixed(1)} km`;
     }
   }
 
-  return [duration, distance].filter(Boolean).join(" · ") || EMPTY_LABEL;
+  return [duration, distance].filter(Boolean).join(" ") || EMPTY_LABEL;
 }
 
 export function formatChildStopTimeLabel(serviceMinutes) {
   const minutes = numberOrUndefined(serviceMinutes);
-  return minutes === undefined ? EMPTY_LABEL : `${Math.round(minutes)}m`;
+  return minutes === undefined ? EMPTY_LABEL : `${Math.round(minutes)} min`;
 }
 
 function getStopCanonicalSequence(stop) {
@@ -428,16 +408,35 @@ function formatPaymentStatus(stop) {
   return status;
 }
 
-export function buildChildRouteOrderRows(stops, { ianaTimezone, timezoneAbbreviation } = {}) {
+export function buildChildActualArrivalByStopId(stopArrivals) {
+  const actualArrivalByStopId = {};
+
+  for (const arrival of Array.isArray(stopArrivals) ? stopArrivals : []) {
+    const deliveryStopId = firstText(arrival?.deliveryStopId);
+    const occurredAt = firstText(arrival?.occurredAt);
+    const occurredAtTimestamp = Date.parse(occurredAt ?? "");
+    if (!deliveryStopId || !Number.isFinite(occurredAtTimestamp)) continue;
+
+    const currentTimestamp = Date.parse(actualArrivalByStopId[deliveryStopId] ?? "");
+    if (!Number.isFinite(currentTimestamp) || occurredAtTimestamp < currentTimestamp) {
+      actualArrivalByStopId[deliveryStopId] = occurredAt;
+    }
+  }
+
+  return actualArrivalByStopId;
+}
+
+export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ianaTimezone } = {}) {
   return sortChildStopsByActualSequence(Array.isArray(stops) ? stops : []).map((stop, index) => {
     const items = normalizeItems(stop);
     const attributes = normalizeAttributes(stop?.attributes);
     const serviceType = firstText(stop?.serviceType, stop?.method);
+    const deliveryStopId = firstText(stop?.deliveryStopId);
 
     return {
       id: firstText(stop?.id, stop?.deliveryStopId, stop?.shopifyOrderGid, stop?.orderId) ?? `child-order-${index + 1}`,
       orderId: firstText(stop?.orderId, stop?.sourceOrderId),
-      deliveryStopId: firstText(stop?.deliveryStopId),
+      deliveryStopId,
       shopifyOrderGid: firstText(stop?.shopifyOrderGid),
       shopifyOrderLegacyId: firstText(stop?.shopifyOrderLegacyId, stop?.legacyResourceId, stop?.shopifyOrderSnapshot?.legacyResourceId),
       stop: index + 1,
@@ -445,7 +444,8 @@ export function buildChildRouteOrderRows(stops, { ianaTimezone, timezoneAbbrevia
       status: formatChildOrderStatus(getOrderStatusSource(stop)),
       orderDate: formatStoreLocalOrderDate(getOrderDateSource(stop), ianaTimezone),
       address: getStopAddress(stop),
-      eta: formatChildEtaLabel(firstText(stop?.estimatedArrivalAt, stop?.eta, stop?.arrivalAt), ianaTimezone, timezoneAbbreviation),
+      expectedArrival: formatChildEtaLabel(firstText(stop?.estimatedArrivalAt, stop?.eta, stop?.arrivalAt), ianaTimezone),
+      actualArrival: formatChildEtaLabel(actualArrivalByStopId[deliveryStopId], ianaTimezone),
       driveTime: formatChildDriveTimeLabel(stop?.durationFromPreviousSeconds, stop?.distanceFromPreviousMeters),
       stopTime: formatChildStopTimeLabel(stop?.serviceMinutes),
       customer: getCustomerName(stop),
