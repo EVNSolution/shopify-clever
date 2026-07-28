@@ -133,11 +133,10 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /arrivalStopCount/);
   assert.match(routeMapSource, /arrivalDetailsJson/);
   assert.doesNotMatch(routeMapSource, /badgeOffset|labelOffset|ARRIVAL_BADGE_IMAGE_ID/);
-  assert.match(routeMapSource, /ROUTE_DETAIL_COMPLETED_STOP_COLOR/);
   assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID/);
   assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID/);
-  assert.match(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted\)/);
-  assert.doesNotMatch(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted \|\| isRouteStopCompleted\(stop\)\)/);
+  assert.match(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted \|\| isRouteStopCompleted\(stop\)\)/);
+  assert.match(routeMapSource, /"circle-color": "#008060"/);
   assert.match(routeMapSource, /"circle-translate": \[-10, -28\]/);
   assert.match(routeMapSource, /"text-translate": \[-10, -28\]/);
   assert.match(routeMapSource, /"text-field": "✓"/);
@@ -145,7 +144,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeDetailSource, /const completedTrackingStopIds = useMemo\(\s*\(\) => new Set\(routeTrackingProgress\?\.completedStopIds \?\? \[\]\)/);
   assert.doesNotMatch(routeDetailSource, /completedStopIds\.add\(stop\.(?:id|deliveryStopId)\)/);
   assert.match(routeDetailSource, /isTrackingCompleted: completedTrackingStopIds\.has\(stop\.id\)/);
-  assert.match(routeDetailSource, /preserveRouteColor: isTrackingMapView/);
+  assert.doesNotMatch(routeDetailSource, /preserveRouteColor/);
   assert.match(routeDetailSource, /background: completedTrackingStopIds\.has\(row\.id\)[\s\S]*ROUTE_DETAIL_COMPLETED_STOP_COLOR[\s\S]*routeStopColorById\.get\(row\.id\) \?\? routeLineColor/);
   assert.match(routeDetailSource, /if \(!isTrackingMapView \|\| !isMapReady \|\| !routeMapRef\.current\) return undefined/);
   assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot, routeMapStops\)/);
@@ -162,8 +161,8 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(globalCssSource, /\.route-tracking-arrival-popup__stop\s*\{[\s\S]*min-width:\s*56px/);
   assert.match(globalCssSource, /\.route-tracking-arrival-popup__close\s*\{[\s\S]*font-size:\s*16px/);
   assert.match(globalCssSource, /\.route-tracking-arrival-popup__list\s*\{[\s\S]*overflow-y:\s*auto/);
-  assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map, isTrackingView = false\)/);
-  assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map, isTrackingMapView\)/);
+  assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map\)/);
+  assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map\)/);
   assert.match(routeMapSource, /function syncRouteDetailTrackingVisibility\(map, isTrackingView = false\)/);
   assert.match(routeMapSource, /setLayoutProperty\?\.\(layerId, "visibility", visibility\)/);
   assert.match(routeDetailSource, /syncRouteDetailTrackingVisibility\(map, isTrackingMapView\)/);
