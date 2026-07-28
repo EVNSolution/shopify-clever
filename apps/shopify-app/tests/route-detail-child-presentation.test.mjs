@@ -6,6 +6,7 @@ import test from "node:test";
 
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
+  buildChildActualArrivalByStopId,
   buildChildRouteOrderRows,
   formatChildDriveTimeLabel,
   formatChildEtaLabel,
@@ -49,18 +50,18 @@ test("child row status mapper is per-order and does not reuse route lifecycle se
   assert.equal(formatChildOrderStatus("PUBLISHED"), "Preparing");
 });
 
-test("child row date and ETA formatting uses store-local time and dynamic timezone abbreviation", () => {
+test("child row date and arrival formatting uses store-local time without timezone abbreviations", () => {
   assert.equal(
     formatStoreLocalOrderDate("2026-06-30T18:20:00.000Z", "America/New_York"),
     "06.30 14:20",
   );
   assert.equal(
-    formatChildEtaLabel("2026-01-15T16:00:00.000Z", "America/New_York", "ET"),
-    "11:00 EST",
+    formatChildEtaLabel("2026-01-15T16:00:00.000Z", "America/New_York"),
+    "11:00",
   );
   assert.equal(
-    formatChildEtaLabel("2026-07-15T16:00:00.000Z", "America/New_York", "ET"),
-    "12:00 EDT",
+    formatChildEtaLabel("2026-07-15T16:00:00.000Z", "America/New_York"),
+    "12:00",
   );
 });
 
@@ -83,15 +84,41 @@ test("route start date-time input round-trips through the store timezone without
 });
 
 test("child route compact metrics use read-only drive and stop labels", () => {
-  assert.equal(formatChildDriveTimeLabel(960, 7400), "16m · 7.4km");
-  assert.equal(formatChildDriveTimeLabel(60, 80), "1m · 80m");
-  assert.equal(formatChildStopTimeLabel(5), "5m");
+  assert.equal(formatChildDriveTimeLabel(960, 7400), "16 min 7.4 km");
+  assert.equal(formatChildDriveTimeLabel(60, 80), "1 min 80 m");
+  assert.equal(formatChildStopTimeLabel(5), "5 min");
+});
+
+test("child tracking keeps the earliest actual stop arrival by delivery stop", () => {
+  assert.deepEqual(buildChildActualArrivalByStopId([
+    {
+      deliveryStopId: "stop-1",
+      occurredAt: "2026-07-15T16:03:00.000Z",
+    },
+    {
+      deliveryStopId: "stop-1",
+      occurredAt: "2026-07-15T16:05:00.000Z",
+    },
+    {
+      deliveryStopId: "stop-2",
+      occurredAt: "invalid",
+    },
+  ]), {
+    "stop-1": "2026-07-15T16:03:00.000Z",
+  });
 });
 
 test("child order rows follow actual child sequence and use delivery serviceType only", () => {
+  const actualArrivalByStopId = buildChildActualArrivalByStopId([
+    {
+      deliveryStopId: "stop-1002",
+      occurredAt: "2026-07-15T15:58:00.000Z",
+    },
+  ]);
   const rows = buildChildRouteOrderRows(
     [
       {
+        deliveryStopId: "stop-1002",
         sequence: 2,
         sourceSequence: 1,
         orderName: "#1002",
@@ -122,16 +149,17 @@ test("child order rows follow actual child sequence and use delivery serviceType
         paymentMethodTitle: "Cash",
       },
     ],
-    { ianaTimezone: "America/New_York", timezoneAbbreviation: "ET" },
+    { actualArrivalByStopId, ianaTimezone: "America/New_York" },
   );
 
   assert.deepEqual(rows.map((row) => row.order), ["#1001", "#1002"]);
   assert.deepEqual(rows.map((row) => row.stop), [1, 2]);
   assert.deepEqual(rows.map((row) => row.status), ["Ready", "Completed"]);
   assert.equal(rows[1].orderDate, "06.30 14:20");
-  assert.equal(rows[1].eta, "12:00 EDT");
-  assert.equal(rows[1].driveTime, "16m · 7.4km");
-  assert.equal(rows[1].stopTime, "5m");
+  assert.equal(rows[1].expectedArrival, "12:00");
+  assert.equal(rows[1].actualArrival, "11:58");
+  assert.equal(rows[1].driveTime, "16 min 7.4 km");
+  assert.equal(rows[1].stopTime, "5 min");
   assert.equal(rows[1].customer, "Second Customer");
   assert.equal(rows[1].itemsSummary, "2 items");
   assert.equal(rows[1].method, "EVENING_DELIVERY");
@@ -169,7 +197,7 @@ test("child order table columns include a sticky Actions column with the confirm
     "Status",
     "Order date",
     "Address",
-    "ETA (est.)",
+    "Expected arrival",
     "Drive time",
     "Stop time",
     "Customer",
@@ -183,6 +211,7 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, /aria-label="Child route order stops"/);
   assert.match(routeDetailSource, /CHILD_ROUTE_ORDER_COLUMNS\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /childRouteOrderRows\.map\(\(row\) =>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{row\.expectedArrival\}<\/td>/);
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{/);
@@ -304,6 +333,71 @@ test("child timeline renders distinct circular Start and End markers", () => {
   assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraft\}/);
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
+});
+
+test("child timeline drag suppresses stop details until the gesture fully ends", () => {
+  assert.match(
+    routeDetailSource,
+    /const handleRouteTimelineStopMouseEnter = \(stop\) => \{\s*if \(routeTimelineDragRef\.current\) return;/,
+  );
+  assert.match(
+    routeDetailSource,
+    /const handleRouteTimelineStopClick = \(event, stop\) => \{[\s\S]*routeTimelineSuppressClickRef\.current/,
+  );
+  assert.match(
+    routeDetailSource,
+    /\{!routeTimelineDrag && activeRouteTimelineStop && activeRouteTimelineStopPopover \? \(/,
+  );
+});
+
+test("child timeline drag previews midpoint placement and preserves the returned start snapshot", () => {
+  assert.match(
+    routeDetailSource,
+    /function areTimelineOrdersEqual\(routeRows, firstOrderByRouteId, secondOrderByRouteId\)/,
+  );
+  assert.match(
+    routeDetailSource,
+    /const targetStopIds = getTimelineRouteStopIds\(\s*routeRows,\s*routeTimelineOrderByRouteIdRef\.current,\s*routeRow\.id,\s*\)\.filter\(\(stopId\) => stopId !== drag\.stopId\)/,
+  );
+  assert.match(
+    routeDetailSource,
+    /event\.clientX < activationPoint/,
+  );
+  assert.match(
+    routeDetailSource,
+    /areTimelineOrdersEqual\(\s*routeRows,\s*nextOrderByRouteId,\s*snapshot\.orderByRouteId,\s*\)/,
+  );
+  assert.doesNotMatch(
+    routeDetailSource,
+    /routeTimelineDropCommittedRef\.current = true;\s*moveDraggedTimelineStop\(routeRow\.id\);\s*handleRouteTimelineDragEnd\(\);/,
+  );
+});
+
+test("child timeline reorders whole stop units with a cancellable FLIP animation", () => {
+  assert.match(routeDetailSource, /const routeTimelineStopMotionRefs = useRef\(new Map\(\)\)/);
+  assert.match(routeDetailSource, /const setRouteTimelineStopMotionRef = useCallback/);
+  assert.match(routeDetailSource, /routeTimelineStopMotionRefs\.current\.entries\(\)/);
+  assert.match(routeDetailSource, /node\.animate\(\s*\[/);
+  assert.match(routeDetailSource, /translate3d\(\$\{deltaX\}px, \$\{deltaY\}px, 0\)/);
+  assert.match(routeDetailSource, /const ROUTE_TIMELINE_REORDER_ANIMATION_MS = 200;/);
+  assert.match(routeDetailSource, /duration: ROUTE_TIMELINE_REORDER_ANIMATION_MS/);
+  assert.match(routeDetailSource, /easing: "cubic-bezier\(0\.22, 1, 0\.36, 1\)"/);
+  assert.match(
+    routeDetailSource,
+    /ref=\{\(node\) => setRouteTimelineStopMotionRef\(stop\.id, node\)\}/,
+  );
+});
+
+test("child timeline slightly widens the directional reorder activation area", () => {
+  assert.match(routeDetailSource, /const ROUTE_TIMELINE_REORDER_ACTIVATION_BIAS_PX = 6;/);
+  assert.match(routeDetailSource, /const routeTimelineDragPointerXRef = useRef\(null\);/);
+  assert.match(routeDetailSource, /const previousPointerX = routeTimelineDragPointerXRef\.current;/);
+  assert.match(routeDetailSource, /const pointerDirection = previousPointerX == null\s*\? 0\s*: Math\.sign\(event\.clientX - previousPointerX\);/);
+  assert.match(
+    routeDetailSource,
+    /const activationPoint = targetRect\.left \+ targetRect\.width \/ 2\s*- pointerDirection \* ROUTE_TIMELINE_REORDER_ACTIVATION_BIAS_PX;/,
+  );
+  assert.match(routeDetailSource, /event\.clientX < activationPoint/);
 });
 
 test("child timeline connectors run only between component centers", () => {
