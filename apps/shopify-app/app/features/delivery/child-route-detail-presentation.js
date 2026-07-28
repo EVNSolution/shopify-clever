@@ -197,7 +197,7 @@ export function formatChildDriveTimeLabel(durationSeconds, distanceMeters) {
     }
   }
 
-  return [duration, distance].filter(Boolean).join(" ") || EMPTY_LABEL;
+  return [duration, distance].filter(Boolean).join(" / ") || EMPTY_LABEL;
 }
 
 export function formatChildStopTimeLabel(serviceMinutes) {

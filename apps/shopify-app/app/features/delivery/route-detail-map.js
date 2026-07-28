@@ -511,7 +511,7 @@ function syncRouteDetailTrackingVisibility(map, isTrackingView = false) {
   return true;
 }
 
-function syncRouteDetailMapViewEmphasis(map, isTrackingView = false) {
+function syncRouteDetailMapViewEmphasis(map) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
   if (map.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID)) {
@@ -524,13 +524,12 @@ function syncRouteDetailMapViewEmphasis(map, isTrackingView = false) {
     map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-opacity", 1);
     map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-stroke-opacity", 1);
   }
-  const completionVisibility = isTrackingView ? "visible" : "none";
   for (const layerId of [
     ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID,
     ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID,
   ]) {
     if (map.getLayer?.(layerId)) {
-      map.setLayoutProperty?.(layerId, "visibility", completionVisibility);
+      map.setLayoutProperty?.(layerId, "visibility", "visible");
     }
   }
   return true;
@@ -783,7 +782,6 @@ function fitRouteStopAndSnappedPoint(map, maplibregl, stop, routeStopPoint) {
 }
 
 function getRouteStopDisplayColor(stop, routeColor, routeStopColorById) {
-  if (isRouteStopCompleted(stop) && !stop.preserveRouteColor) return ROUTE_DETAIL_COMPLETED_STOP_COLOR;
   return (
     routeStopColorById?.get(stop.id) ??
     routeStopColorById?.get(stop.deliveryStopId) ??
@@ -874,7 +872,7 @@ function buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, 
       },
       properties: {
         featureType: "routeStop",
-        isCompleted: Boolean(stop.isTrackingCompleted),
+        isCompleted: Boolean(stop.isTrackingCompleted || isRouteStopCompleted(stop)),
         orderId: stop.orderId ?? "",
         pinImage: getRouteDetailStopPinImageId(stop, stopColor),
         sortKey: stop.isPolygonSelected ? 3000 : 1000 - stop.stop,
@@ -985,9 +983,6 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
         type: "circle",
         source: ROUTE_DETAIL_MARKER_SOURCE_ID,
         filter: completedStopFilter,
-        layout: {
-          visibility: "none",
-        },
         paint: {
           "circle-color": "#008060",
           "circle-radius": 7,
@@ -1009,7 +1004,6 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
           "text-field": "✓",
           "text-ignore-placement": true,
           "text-size": 10,
-          visibility: "none",
         },
         paint: {
           "text-color": "#ffffff",

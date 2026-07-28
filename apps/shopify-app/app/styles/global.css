@@ -423,6 +423,114 @@ s-badge {
   z-index: 5000;
 }
 
+.route-stop-map-popup .maplibregl-popup-content {
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  max-width: min(320px, calc(100vw - 32px));
+  min-width: 260px;
+  padding: 12px;
+}
+
+.route-stop-map-popup__content {
+  color: #303030;
+  display: grid;
+  font-size: 12px;
+  gap: 8px;
+  line-height: 1.4;
+}
+
+.route-stop-map-popup__header {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+}
+
+.route-stop-map-popup__title {
+  font-size: 15px;
+  line-height: 20px;
+}
+
+.route-stop-map-popup__close {
+  background: transparent;
+  border: 0;
+  color: #6d7175;
+  cursor: pointer;
+  font-size: 16px;
+  line-height: 1;
+  padding: 0;
+}
+
+.route-stop-map-popup__status {
+  align-items: center;
+  background: #eeeeee;
+  border-radius: 999px;
+  color: #4a4a4a;
+  display: inline-flex;
+  font-weight: 650;
+  gap: 6px;
+  justify-self: start;
+  padding: 3px 8px;
+}
+
+.route-stop-map-popup__status::before {
+  background: currentColor;
+  border-radius: 999px;
+  content: "";
+  height: 8px;
+  width: 8px;
+}
+
+.route-stop-map-popup__status--completed {
+  background: #d1fadf;
+  color: #007a5a;
+}
+
+.route-stop-map-popup__status--in-progress {
+  background: #e8f4fb;
+  color: #0869a6;
+}
+
+.route-stop-map-popup__date,
+.route-stop-map-popup__address,
+.route-stop-map-popup__meta {
+  color: #616161;
+}
+
+.route-stop-map-popup__customer {
+  margin-top: 4px;
+}
+
+.route-stop-map-popup__address {
+  line-height: 1.5;
+  white-space: normal;
+}
+
+.route-stop-map-popup__meta {
+  display: grid;
+  gap: 3px;
+}
+
+.route-stop-map-popup__actions {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  color: #303030;
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 650;
+  justify-content: center;
+  min-height: 32px;
+  padding: 5px 10px;
+}
+
+.route-stop-map-popup__actions:hover {
+  background: #f6f6f7;
+}
+
 .route-tracking-arrival-popup .maplibregl-popup-content {
   border-radius: 10px;
   box-shadow: 0 4px 18px rgba(0, 0, 0, 0.18);

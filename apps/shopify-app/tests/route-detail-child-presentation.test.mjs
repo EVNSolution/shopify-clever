@@ -84,8 +84,8 @@ test("route start date-time input round-trips through the store timezone without
 });
 
 test("child route compact metrics use read-only drive and stop labels", () => {
-  assert.equal(formatChildDriveTimeLabel(960, 7400), "16 min 7.4 km");
-  assert.equal(formatChildDriveTimeLabel(60, 80), "1 min 80 m");
+  assert.equal(formatChildDriveTimeLabel(960, 7400), "16 min / 7.4 km");
+  assert.equal(formatChildDriveTimeLabel(60, 80), "1 min / 80 m");
   assert.equal(formatChildStopTimeLabel(5), "5 min");
 });
 
@@ -158,7 +158,7 @@ test("child order rows follow actual child sequence and use delivery serviceType
   assert.equal(rows[1].orderDate, "06.30 14:20");
   assert.equal(rows[1].expectedArrival, "12:00");
   assert.equal(rows[1].actualArrival, "11:58");
-  assert.equal(rows[1].driveTime, "16 min 7.4 km");
+  assert.equal(rows[1].driveTime, "16 min / 7.4 km");
   assert.equal(rows[1].stopTime, "5 min");
   assert.equal(rows[1].customer, "Second Customer");
   assert.equal(rows[1].itemsSummary, "2 items");
@@ -318,6 +318,17 @@ test("child timeline precedes the table and enforces explicit responsive minimum
   assert.match(routeDetailSource, /minWidth: 0/);
   assert.match(routeDetailSource, /overflowX: "auto"/);
   assert.match(routeDetailSource, /getChildRouteTimelineTrackStyle\(routeRow\.stops\.length\)/);
+});
+
+test("Stops and Tracking route markers share one order popup with the existing stop Actions menu", () => {
+  assert.match(routeDetailSource, /const handleRouteStopLayerClick = \(event\) => \{/);
+  assert.match(routeDetailSource, /map\.on\("click", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerClick\)/);
+  assert.match(routeDetailSource, /map\.off\("click", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerClick\)/);
+  assert.doesNotMatch(routeDetailSource, /if \(!isTrackingMapView\) bindStopLayerHandlers\(\)/);
+  assert.match(routeDetailSource, /content\.className = "route-stop-map-popup__content"/);
+  assert.match(routeDetailSource, /actions\.dataset\.childStopActionsTrigger = "true"/);
+  assert.match(routeDetailSource, /handleToggleChildStopActions\(event, row\.id\)/);
+  assert.match(routeDetailSource, /activeRouteTimelineStopPopover\.mode === "pinned"[\s\S]*handleToggleChildStopActions\(event, activeRouteTimelineStop\.id\)/);
 });
 
 test("child timeline renders distinct circular Start and End markers", () => {
@@ -541,7 +552,7 @@ test("child detail tabs reuse one map while swapping Stops and Tracking layers",
   );
   assert.ok(tabHandlerStart >= 0 && tabHandlerEnd > tabHandlerStart);
   assert.doesNotMatch(tabHandlerSource, /clearMapRecoveryTimer|mapLoadedRef|setIsMapReady|setMapStatus/);
-  assert.match(routeDetailSource, /if \(!isTrackingMapView\) bindStopLayerHandlers\(\)/);
+  assert.match(routeDetailSource, /syncRouteDetailTrackingVisibility\(map, isTrackingMapView\);\s*bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /if \(mapCanvas\?\.style\.cursor === "pointer"\) mapCanvas\.style\.cursor = "";/);
   assert.match(routeDetailSource, /aria-label="Child route tracking"/);
 });

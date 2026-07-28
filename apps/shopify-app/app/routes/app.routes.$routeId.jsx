@@ -1379,6 +1379,22 @@ const routeTimelineStopPopoverMetaStyle = {
   lineHeight: 1.35,
 };
 
+const routeTimelineStopPopoverActionStyle = {
+  alignItems: "center",
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "8px",
+  color: "#303030",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontSize: "12px",
+  fontWeight: 650,
+  justifyContent: "center",
+  minHeight: "30px",
+  padding: "5px 10px",
+  width: "100%",
+};
+
 const routeTimelineStopItemListStyle = {
   display: "grid",
   gap: "5px",
@@ -3003,7 +3019,6 @@ export default function RouteDetailPage() {
           ...stop,
           isTrackingCompleted: completedTrackingStopIds.has(stop.id) || completedTrackingStopIds.has(stop.deliveryStopId),
           isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
-          preserveRouteColor: isTrackingMapView,
           routeColor: routeStopColorById.get(stop.id) ?? routeRow.color,
         })),
       );
@@ -3014,11 +3029,10 @@ export default function RouteDetailPage() {
         ...stop,
         isTrackingCompleted: completedTrackingStopIds.has(stop.id) || completedTrackingStopIds.has(stop.deliveryStopId),
         isPolygonSelected: polygonHighlightedOrderIds.has(stop.orderId),
-        preserveRouteColor: isTrackingMapView,
         routeColor: routeLineColor,
       }))
       : [];
-  }, [completedTrackingStopIds, isRouteGroupDetail, isTrackingMapView, polygonHighlightedOrderIds, routeGroupStopsSource, routeLineColor, routeStopColorById, timelineRouteRows]);
+  }, [completedTrackingStopIds, isRouteGroupDetail, polygonHighlightedOrderIds, routeGroupStopsSource, routeLineColor, routeStopColorById, timelineRouteRows]);
   const routeMapLocationsSource = routeMapStops.length > 0 ? routeMapStops : orderedRouteStops;
   const routeMapCenter = useMemo(
     () => getRouteMapCenter(departureLocation, routeMapLocationsSource),
@@ -4535,8 +4549,38 @@ export default function RouteDetailPage() {
     const map = mapRef.current;
     const maplibregl = mapLibraryRef.current;
     let routeLineRetryTimer = null;
+    let stopPopup = null;
+    let stopPopupFrame = null;
     let didBindStopLayerHandlers = false;
 
+    const cancelStopPopupFrame = () => {
+      if (stopPopupFrame == null) return;
+      window.cancelAnimationFrame(stopPopupFrame);
+      stopPopupFrame = null;
+    };
+    const closeStopPopup = () => {
+      cancelStopPopupFrame();
+      stopPopup?.remove();
+      stopPopup = null;
+    };
+    const keepStopPopupInView = (popup) => {
+      cancelStopPopupFrame();
+      stopPopupFrame = window.requestAnimationFrame(() => {
+        stopPopupFrame = null;
+        if (stopPopup !== popup || !popup?.isOpen?.()) return;
+
+        const mapElement = map.getContainer?.();
+        const popupElement = popup.getElement?.();
+        if (!mapElement || !popupElement) return;
+
+        const panOffset = getRouteDetailPopupPanOffset(
+          mapElement.getBoundingClientRect(),
+          popupElement.getBoundingClientRect(),
+        );
+        if (panOffset[0] === 0 && panOffset[1] === 0) return;
+        map.panBy(panOffset, { duration: 180 });
+      });
+    };
     const scheduleRouteLineRetry = () => {
       if (routeLineRetryTimer != null) return;
       routeLineRetryTimer = window.setTimeout(() => {
@@ -4561,6 +4605,95 @@ export default function RouteDetailPage() {
         findRouteStopPoint(stop, savedRouteStopPoints),
       );
     };
+    const handleRouteStopLayerClick = (event) => {
+      const feature = event.features?.[0];
+      const coordinates = feature?.geometry?.coordinates;
+      const stop = getRouteStopFromMapFeature(feature, routeMapStops);
+      if (
+        !stop
+        || !Array.isArray(coordinates)
+        || coordinates.length < 2
+        || !Number.isFinite(Number(coordinates[0]))
+        || !Number.isFinite(Number(coordinates[1]))
+      ) return;
+
+      const row = childRouteOrderRows.find((candidate) => (
+        candidate.id === stop.id
+        || candidate.deliveryStopId === stop.deliveryStopId
+        || candidate.shopifyOrderGid === stop.shopifyOrderGid
+      ));
+      const content = document.createElement("div");
+      content.className = "route-stop-map-popup__content";
+
+      const header = document.createElement("div");
+      header.className = "route-stop-map-popup__header";
+
+      const title = document.createElement("strong");
+      title.className = "route-stop-map-popup__title";
+      title.textContent = row?.order ?? stop.order ?? `Stop ${stop.stop}`;
+
+      const close = document.createElement("button");
+      close.className = "route-stop-map-popup__close";
+      close.type = "button";
+      close.setAttribute("aria-label", "Close stop details");
+      close.textContent = "×";
+      close.onclick = closeStopPopup;
+      header.append(title, close);
+      content.append(header);
+
+      const status = document.createElement("span");
+      status.className = `route-stop-map-popup__status route-stop-map-popup__status--${String(row?.status ?? stop.status ?? "ready").toLowerCase().replace(/\s+/g, "-")}`;
+      status.textContent = row?.status ?? stop.status ?? "Ready";
+      content.append(status);
+
+      if (row?.orderDate && row.orderDate !== ROUTE_EMPTY_LABEL) {
+        const orderDate = document.createElement("span");
+        orderDate.className = "route-stop-map-popup__date";
+        orderDate.textContent = row.orderDate;
+        content.append(orderDate);
+      }
+
+      const customer = document.createElement("strong");
+      customer.className = "route-stop-map-popup__customer";
+      customer.textContent = row?.customer ?? stop.recipient;
+      content.append(customer);
+
+      const address = document.createElement("span");
+      address.className = "route-stop-map-popup__address";
+      address.textContent = row?.address ?? stop.address;
+      content.append(address);
+
+      const meta = document.createElement("div");
+      meta.className = "route-stop-map-popup__meta";
+      const method = document.createElement("span");
+      method.textContent = `Delivery method: ${row?.method ?? stop.serviceType ?? ROUTE_EMPTY_LABEL}`;
+      const items = document.createElement("span");
+      items.textContent = `Items: ${row?.itemsSummary ?? stop.itemCount ?? 0}`;
+      meta.append(method, items);
+      content.append(meta);
+
+      if (row) {
+        const actions = document.createElement("button");
+        actions.className = "route-stop-map-popup__actions";
+        actions.dataset.childStopActionsTrigger = "true";
+        actions.type = "button";
+        actions.textContent = "Actions";
+        actions.onclick = (event) => handleToggleChildStopActions(event, row.id);
+        content.append(actions);
+      }
+
+      closeStopPopup();
+      stopPopup = new maplibregl.Popup({
+        className: "route-stop-map-popup",
+        closeButton: false,
+        offset: 20,
+        padding: { bottom: 12, left: 12, right: 12, top: 12 },
+      })
+        .setLngLat([Number(coordinates[0]), Number(coordinates[1])])
+        .setDOMContent(content)
+        .addTo(map);
+      keepStopPopupInView(stopPopup);
+    };
     const handleRouteStopLayerMouseEnter = () => {
       map.getCanvas().style.cursor = "pointer";
     };
@@ -4569,6 +4702,7 @@ export default function RouteDetailPage() {
     };
     const bindStopLayerHandlers = () => {
       if (didBindStopLayerHandlers || !map.getLayer?.(ROUTE_DETAIL_STOP_LAYER_ID)) return;
+      map.on("click", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerClick);
       map.on("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick);
       map.on("mouseenter", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerMouseEnter);
       map.on("mouseleave", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerMouseLeave);
@@ -4606,9 +4740,9 @@ export default function RouteDetailPage() {
         routeStopColorById,
         (metric) => emitMarkerDiagnostics({ ...metric, trigger: "initial-sync" }),
       );
-      syncRouteDetailMapViewEmphasis(map, isTrackingMapView);
+      syncRouteDetailMapViewEmphasis(map);
       syncRouteDetailTrackingVisibility(map, isTrackingMapView);
-      if (!isTrackingMapView) bindStopLayerHandlers();
+      bindStopLayerHandlers();
       const markerCreateMs = roundPerfDuration(performance.now() - markerStartedAt);
       logRouteDetailPerformance("routes.detail.map.sync", {
         totalMs: roundPerfDuration(performance.now() - syncStartedAt),
@@ -4628,9 +4762,9 @@ export default function RouteDetailPage() {
         scheduleRouteLineRetry();
       }
       if (syncRouteDetailMapMarkerLayers(map, departureLocation, routeMapStops, savedRouteStopPoints, routeLineColor, routeStopColorById, (metric) => emitMarkerDiagnostics({ ...metric, trigger: "styledata" }))) {
-        syncRouteDetailMapViewEmphasis(map, isTrackingMapView);
+        syncRouteDetailMapViewEmphasis(map);
         syncRouteDetailTrackingVisibility(map, isTrackingMapView);
-        if (!isTrackingMapView) bindStopLayerHandlers();
+        bindStopLayerHandlers();
       }
     };
 
@@ -4641,8 +4775,10 @@ export default function RouteDetailPage() {
       if (routeLineRetryTimer != null) {
         window.clearTimeout(routeLineRetryTimer);
       }
+      closeStopPopup();
       map.off("styledata", handleRouteDetailStyleData);
       if (didBindStopLayerHandlers) {
+        map.off("click", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerClick);
         map.off("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick);
         map.off("mouseenter", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerMouseEnter);
         map.off("mouseleave", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerMouseLeave);
@@ -5894,7 +6030,7 @@ export default function RouteDetailPage() {
                 <div
                   data-route-timeline-stop-popover-root="true"
                   ref={routeTimelineStopPopoverRef}
-                  role="tooltip"
+                  role={activeRouteTimelineStopPopover.mode === "pinned" ? "dialog" : "tooltip"}
                   style={{
                     ...routeTimelineStopPopoverStyle,
                     transform: `translate3d(${Math.round(activeRouteTimelineStopPopover.left)}px, ${Math.round(activeRouteTimelineStopPopover.top)}px, 0)`,
@@ -5932,6 +6068,16 @@ export default function RouteDetailPage() {
                       {activeRouteTimelineStop.itemCount > 0 ? `${activeRouteTimelineStop.itemCount} items` : "No item detail"}
                     </span>
                   )}
+                  {activeRouteTimelineStopPopover.mode === "pinned" ? (
+                    <button
+                      data-child-stop-actions-trigger="true"
+                      onClick={(event) => handleToggleChildStopActions(event, activeRouteTimelineStop.id)}
+                      style={routeTimelineStopPopoverActionStyle}
+                      type="button"
+                    >
+                      Actions
+                    </button>
+                  ) : null}
                 </div>
               </>
             ) : null}

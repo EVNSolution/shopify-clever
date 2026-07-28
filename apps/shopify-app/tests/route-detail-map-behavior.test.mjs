@@ -60,7 +60,7 @@ function createFakeMap() {
   return { calls, layers, map, sources };
 }
 
-test("Tracking keeps planned stops opaque and shows completion checks only in Tracking", () => {
+test("Stops and Tracking show the same completion check badges", () => {
   const fake = createFakeMap();
   fake.map.addLayer({ id: "route-detail-stop-markers", type: "symbol", paint: {} });
   fake.map.addLayer({ id: "route-detail-departure-marker", type: "symbol", paint: {} });
@@ -76,18 +76,17 @@ test("Tracking keeps planned stops opaque and shows completion checks only in Tr
   assert.equal(fake.layers.get("route-detail-stop-completion-checks").layout.visibility, "visible");
 
   assert.equal(syncRouteDetailMapViewEmphasis(fake.map, false), true);
-  assert.equal(fake.layers.get("route-detail-stop-completion-badges").layout.visibility, "none");
-  assert.equal(fake.layers.get("route-detail-stop-completion-checks").layout.visibility, "none");
+  assert.equal(fake.layers.get("route-detail-stop-completion-badges").layout.visibility, "visible");
+  assert.equal(fake.layers.get("route-detail-stop-completion-checks").layout.visibility, "visible");
 });
 
-test("Tracking completion preserves the route-colored marker and exposes badge state", () => {
+test("tracking completion preserves the route marker and exposes the common check badge", () => {
   const markerData = buildRouteDetailMarkerFeatureCollection(null, [{
     coordinates: [126.927, 37.512],
     deliveryStopId: "stop-3",
     hasCoordinates: true,
     id: "order-3",
     isTrackingCompleted: true,
-    preserveRouteColor: true,
     routeColor: "#006fbb",
     status: "DELIVERED",
     stop: 3,
@@ -98,21 +97,20 @@ test("Tracking completion preserves the route-colored marker and exposes badge s
   assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-3");
 });
 
-test("persisted delivery status does not create a Tracking completion badge", () => {
+test("persisted delivery status exposes the same check badge in Stops", () => {
   const markerData = buildRouteDetailMarkerFeatureCollection(null, [{
     coordinates: [126.927, 37.512],
     deliveryStopId: "stop-4",
     hasCoordinates: true,
     id: "order-4",
     isTrackingCompleted: false,
-    preserveRouteColor: true,
     routeColor: "#006fbb",
     status: "DELIVERED",
     stop: 4,
   }], [], "#e11900", new Map());
 
   assert.equal(markerData.features.length, 1);
-  assert.equal(markerData.features[0].properties.isCompleted, false);
+  assert.equal(markerData.features[0].properties.isCompleted, true);
   assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-4");
 });
 

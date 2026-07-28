@@ -696,7 +696,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /onClick=\{\(event\) => handleRouteTimelineStopClick\(event, stop\)\}/);
   assert.match(routeDetailSource, /onMouseEnter=\{\(\) => handleRouteTimelineStopMouseEnter\(stop\)\}/);
   assert.match(routeDetailSource, /onMouseLeave=\{\(\) => handleRouteTimelineStopMouseLeave\(stop\)\}/);
-  assert.match(routeDetailSource, /role="tooltip"/);
+  assert.match(routeDetailSource, /role=\{activeRouteTimelineStopPopover\.mode === "pinned" \? "dialog" : "tooltip"\}/);
   assert.match(routeDetailSource, /data-route-timeline-stop-button="true"/);
   assert.match(routeDetailSource, /data-route-timeline-stop-popover-root="true"/);
   assert.doesNotMatch(routeDetailSource, /routeTimelineStopPopoverBackdropStyle/);
@@ -885,11 +885,21 @@ test("Route detail renders every stop as a route-colored source-layer teardrop",
   assert.doesNotMatch(routeDetailSource, /ROUTE_DETAIL_ORDER_MARKER_MIN_ZOOM/);
   assert.doesNotMatch(routeDetailSource, /minzoom/);
   assert.match(routeDetailMapSource, /function getRouteStopDisplayColor\(stop, routeColor, routeStopColorById\) \{/);
+  assert.doesNotMatch(routeDetailMapSource, /if \(isRouteStopCompleted\(stop\)/);
   assert.match(routeDetailMapSource, /getRouteDetailStopPinImageId\(stop, stopColor\)/);
   assert.match(routeDetailMapSource, /label: stop\.stop/);
   assert.match(mapMarkersSource, /"icon-anchor": "bottom"/);
+  assert.match(routeDetailSource, /map\.on\("click", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerClick\)/);
   assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_STOP_LAYER_ID, handleRouteStopLayerDoubleClick\)/);
   assert.doesNotMatch(routeDetailSource, /expandedRouteStopIds|setExpandedRouteStopIds|toggleExpandedRouteStop|addEventListener\("click"|createRouteStopPopupElement|route-stop-precision-point|Show stop|Show \${group\.stops\.length} overlapping route stops|getRouteStopOverlapGroupKey|expandedRouteStopOverlapGroupKey|toggleExpandedRouteStopGroup|getRouteStopOverlapMarkerOffset|markerOffset|ROUTE_STOP_EXPANDED_MARKER_GAP|offset: markerOffset|cluster|Cluster|supercluster|buildRouteStopMarkerGroups|ROUTE_STOP_OVERLAP_PIXEL_RADIUS|createRouteStopMarkerElement/);
+});
+
+test("Route stop map popup is readable and exposes the existing child stop action trigger", () => {
+  assert.match(globalCssSource, /\.route-stop-map-popup \.maplibregl-popup-content/);
+  assert.match(globalCssSource, /\.route-stop-map-popup__status/);
+  assert.match(globalCssSource, /\.route-stop-map-popup__actions/);
+  assert.match(routeDetailSource, /actions\.textContent = "Actions"/);
+  assert.match(routeDetailSource, /actions\.dataset\.childStopActionsTrigger = "true"/);
 });
 test("Route detail renders OSRM snapped stop points as route-colored circle layers", () => {
   assert.match(routeDetailMapSource, /const ROUTE_STOP_POINT_MIN_DISTANCE_METERS = 1/);
