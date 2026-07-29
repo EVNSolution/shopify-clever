@@ -1027,6 +1027,13 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /Past due/);
   assert.doesNotMatch(ordersPageSource, /Past due · unassigned/);
   assert.match(ordersPageSource, /Assigned · undelivered/);
+  assert.match(ordersPageSource, /formatOrderShopifyFulfillmentState\(order\)/);
+  assert.match(ordersPageSource, /getOrderShopifyFulfillmentPillTone\(order\)/);
+  assert.match(ordersPageSource, /Fulfilled/);
+  assert.match(ordersPageSource, /Unfulfilled/);
+  assert.match(ordersPageSource, /const statePillStackStyle = \{/);
+  assert.doesNotMatch(ordersPageSource, /\{ label: "Fulfilled", value: "FULFILLED" \}/);
+  assert.doesNotMatch(ordersPageSource, /\{ label: "Unfulfilled", value: "UNFULFILLED" \}/);
   assert.match(ordersPageSource, /En route/);
   assert.match(ordersPageSource, /Arrived/);
   assert.match(ordersPageSource, /Failed/);

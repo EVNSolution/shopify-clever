@@ -6,6 +6,7 @@ import {
   getBulkOrderSelectionState,
   getOrderDeliveryDateFilterOptions,
   getOrderDeliveryExceptionState,
+  getOrderShopifyFulfillmentState,
   getOrderFilterOptions,
   getOrderFiltersFromSearchParams,
   getOrderTabState,
@@ -143,6 +144,51 @@ test("filters orders by delivery state", () => {
       scope: "history",
     }).map((order) => order.id),
     ["order-1", "order-3"],
+  );
+});
+
+test("filters Shopify fulfillment states without replacing CLEVER delivery state", () => {
+  const fulfillmentOrders = [
+    {
+      id: "fulfilled",
+      planningStatus: "PLANNED",
+      rawPayload: { displayFulfillmentStatus: "FULFILLED" },
+    },
+    {
+      id: "unfulfilled",
+      planningStatus: "UNPLANNED",
+      shopifyOrderSnapshot: { displayFulfillmentStatus: "UNFULFILLED" },
+    },
+    {
+      id: "partial",
+      planningStatus: "PLANNED",
+      fulfillmentStatus: "PARTIALLY_FULFILLED",
+    },
+  ];
+
+  assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[0]), "fulfilled");
+  assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[1]), "unfulfilled");
+  assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[2]), null);
+  assert.deepEqual(
+    filterOrders(fulfillmentOrders, {
+      deliveryState: "fulfilled",
+      scope: "history",
+    }).map((order) => order.id),
+    ["fulfilled"],
+  );
+  assert.deepEqual(
+    filterOrders(fulfillmentOrders, {
+      deliveryState: "unfulfilled",
+      scope: "history",
+    }).map((order) => order.id),
+    ["unfulfilled"],
+  );
+  assert.deepEqual(
+    filterOrders(fulfillmentOrders, {
+      deliveryState: "planned",
+      scope: "history",
+    }).map((order) => order.id),
+    ["fulfilled", "partial"],
   );
 });
 

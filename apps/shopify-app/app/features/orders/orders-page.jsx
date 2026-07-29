@@ -44,6 +44,7 @@ import {
   getOrderDeliveryDateValue,
   getOrderDeliveryExceptionState,
   getOrderDeliveryStateFilterValue,
+  getOrderShopifyFulfillmentState,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
   isOrderRouteCreated,
@@ -1171,6 +1172,14 @@ const deliveryInfoCellStyle = {
   overflow: "visible",
 };
 
+const statePillStackStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  flexWrap: "wrap",
+  gap: "4px",
+  justifyContent: "center",
+};
+
 const orderNumberButtonStyle = {
   alignItems: "center",
   border: 0,
@@ -2066,6 +2075,21 @@ function formatOrderDeliveryState(order, referenceDate) {
   if (stateValue === "planned") return "Planned";
 
   return "Unplanned";
+}
+
+function formatOrderShopifyFulfillmentState(order) {
+  const state = getOrderShopifyFulfillmentState(order);
+
+  if (state === "fulfilled") return "Fulfilled";
+  if (state === "unfulfilled") return "Unfulfilled";
+
+  return null;
+}
+
+function getOrderShopifyFulfillmentPillTone(order) {
+  return getOrderShopifyFulfillmentState(order) === "fulfilled"
+    ? "success"
+    : "neutral";
 }
 
 function getFirstTextValue(values) {
@@ -5337,13 +5361,23 @@ function OrdersPageContent({ loaderData }) {
                         ) : deliveryPill}
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        {renderDetailPill({
-                          children: formatOrderDeliveryState(order, orderFilterReferenceDate),
-                          details: statePillDetails,
-                          detailKey: `${order.id}:state`,
-                          label: "State details",
-                          tone: getOrderDeliveryStatePillTone(order, orderFilterReferenceDate),
-                        })}
+                        <span style={statePillStackStyle}>
+                          {renderDetailPill({
+                            children: formatOrderDeliveryState(order, orderFilterReferenceDate),
+                            details: statePillDetails,
+                            detailKey: `${order.id}:state`,
+                            label: "State details",
+                            tone: getOrderDeliveryStatePillTone(order, orderFilterReferenceDate),
+                          })}
+                          {formatOrderShopifyFulfillmentState(order) ? (
+                            <InfoPill
+                              title="Shopify fulfillment"
+                              tone={getOrderShopifyFulfillmentPillTone(order)}
+                            >
+                              {formatOrderShopifyFulfillmentState(order)}
+                            </InfoPill>
+                          ) : null}
+                        </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         {renderDetailPill({
