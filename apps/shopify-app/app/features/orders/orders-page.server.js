@@ -4,6 +4,7 @@ import {
   buildCreateRoutePlanPayload,
   DELIVERY_API_ERROR_CODE,
   DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
+  fetchDeliveryRoutePlans,
 } from "../delivery/route-plans.server";
 import {
   createDeliveryRouteGroup,
@@ -12,6 +13,8 @@ import {
   updateDeliveryRouteGroupOrders,
 } from "../delivery/route-groups.server";
 import { getRouteGroupChildRoutePlanId, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
+import { refreshRouteOrders } from "../delivery/route-detail.server";
+import { getBulkRefreshRoutePlanIds } from "../delivery/route-order-refresh";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
 import { fetchShopifyAppPreferences } from "../settings/app-preferences.server";
 import {
@@ -138,7 +141,7 @@ function buildFirstRouteDraftPayload(routeGroup, addedOrderIds = []) {
     ...groupOrderIds.filter((orderId) => !draftedOrderIds.has(orderId)),
   ];
 
-  return { routes };
+  return { mode: "MANUAL_ORDER", routes };
 }
 
 export const action = async ({ request }) => {
@@ -214,6 +217,96 @@ async function handleOrdersAction(request) {
       syncedOrders: syncedOrderData.orders,
       sync: syncedOrderData.sync,
       errors: syncedOrderData.errors,
+    };
+  }
+
+  if (intent === "refreshAllRoutes") {
+    const preferencesData = await fetchShopifyAppPreferences(admin);
+    if ((preferencesData.errors ?? []).length > 0) {
+      return {
+        errors: preferencesData.errors,
+        refreshedRoutes: 0,
+        routePlanIds: [],
+        skippedRoutes: [],
+        syncedOrders: [],
+        sync: null,
+        updatedOrders: 0,
+      };
+    }
+
+    const orderData = shouldFetchShopifyOrders()
+      ? await fetchShopifyOrders(admin, {
+          cacheKey: shopifyShopCacheKey,
+          deliveryCycle: preferencesData.appPreferences.deliveryCycle,
+        })
+      : { orders: [], errors: [] };
+    const orderSnapshots = getOrderSyncSnapshots(orderData.orders);
+    const syncedOrderData = orderSnapshots.length > 0
+      ? await syncDeliveryOrders(
+          request,
+          {
+            deliveryCycle: preferencesData.appPreferences.deliveryCycle,
+            reason: "orders_page_open",
+            orders: orderSnapshots,
+          },
+          {
+            cacheKey: shopifyShopCacheKey,
+            primeOrdersCache: true,
+            sessionToken: shopifySessionToken,
+          },
+        )
+      : { orders: [], errors: [], sync: null };
+    const routePlanData = await fetchDeliveryRoutePlans(request, {
+      cacheKey: shopifyShopCacheKey,
+      sessionToken: shopifySessionToken,
+    });
+    const errors = [
+      ...(orderData.errors ?? []),
+      ...(syncedOrderData.errors ?? []),
+      ...(routePlanData.errors ?? []),
+    ];
+    if (errors.length > 0) {
+      return {
+        errors,
+        refreshedRoutes: 0,
+        routePlanIds: [],
+        skippedRoutes: [],
+        syncedOrders: syncedOrderData.orders ?? [],
+        sync: syncedOrderData.sync ?? null,
+        updatedOrders: syncedOrderData.orders?.length ?? 0,
+      };
+    }
+
+    const routePlans = routePlanData.routePlans ?? [];
+    const routePlanIds = getBulkRefreshRoutePlanIds(routePlans);
+    const initiallySkippedRoutes = routePlans
+      .filter((routePlan) => !routePlanIds.includes(routePlan.id))
+      .map((routePlan) => ({ routePlanId: routePlan.id, status: routePlan.status ?? "UNKNOWN" }));
+    if (routePlanIds.length === 0) {
+      return {
+        errors: [],
+        refreshedRoutes: 0,
+        routePlanIds: [],
+        skippedRoutes: initiallySkippedRoutes,
+        syncedOrders: syncedOrderData.orders ?? [],
+        sync: syncedOrderData.sync ?? null,
+        updatedOrders: syncedOrderData.orders?.length ?? 0,
+      };
+    }
+
+    const result = await refreshRouteOrders({
+      allowInProgress: false,
+      admin,
+      request,
+      routePlanIds,
+      sessionToken: shopifySessionToken,
+      shopifyShopCacheKey,
+      syncedOrderData,
+    });
+    return {
+      ...result,
+      skippedRoutes: [...initiallySkippedRoutes, ...(result.skippedRoutes ?? [])],
+      syncedOrders: syncedOrderData.orders ?? [],
     };
   }
 

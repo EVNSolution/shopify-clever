@@ -68,7 +68,16 @@ const DELIVERY_COMPLETE_STATUSES = new Set([
   "complete",
   "completed",
   "delivered",
-  "fulfilled",
+]);
+const ROUTE_AWAITING_DELIVERY_STATUSES = new Set([
+  "assigned",
+  "draft",
+  "planned",
+  "published",
+  "ready",
+  "route_created",
+  "route_planned",
+  "routed",
 ]);
 const CANCELLED_STATUSES = new Set(["cancelled", "canceled", "voided"]);
 const ROUTE_ASSIGNED_STATUSES = new Set(["assigned", "arrived", "en_route", "published"]);
@@ -318,10 +327,15 @@ export function isOrderRouteAssigned(order) {
 }
 
 export function isOrderDeliveryComplete(order) {
+  const hasAwaitingDeliveryRoute = Array.isArray(order?.routeMemberships)
+    && order.routeMemberships.some((membership) =>
+      ROUTE_AWAITING_DELIVERY_STATUSES.has(
+        normalizeComparableText(membership?.status ?? membership?.routeStatus),
+      ),
+    );
+  if (hasAwaitingDeliveryRoute) return false;
+
   const statusValues = [
-    order?.status,
-    order?.fulfillmentStatus,
-    order?.displayFulfillmentStatus,
     order?.deliveryStopStatus,
     order?.deliveryStatus,
   ].map(normalizeComparableText);

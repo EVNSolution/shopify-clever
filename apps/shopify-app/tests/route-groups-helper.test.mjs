@@ -256,6 +256,7 @@ test("route group helper deletes a child route plan before saving the merged dra
   assert.equal(fakeFetch.calls[1].init.method, "DELETE");
   assert.equal(fakeFetch.calls[2].url, "https://delivery.test/admin/route-groups/group%2F1/draft");
   assert.equal(fakeFetch.calls[2].init.method, "PATCH");
+  assert.equal(JSON.parse(fakeFetch.calls[2].init.body).mode, "MANUAL_ORDER");
   assert.deepEqual(JSON.parse(fakeFetch.calls[2].init.body).routes.map((route) => route.orderIds), [["order-1", "order-3"], ["order-2"]]);
 });
 

@@ -293,7 +293,7 @@ export function buildRouteGroupChildrenDeleteDraft(routeGroup, routePlanIds) {
     }];
   });
 
-  return { draft: { mode: "OPTIMIZE_ORDER", routes }, errors: [] };
+  return { draft: { mode: "MANUAL_ORDER", routes }, errors: [] };
 }
 
 function summarizeChildDeleteForLog(routeGroup, routePlanIds, draftResult) {

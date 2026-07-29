@@ -2569,13 +2569,14 @@ function buildRouteDraftPayload(routeRows, {
   expectedUpdatedAt,
   includeEmptyTempRoutes = true,
   includeExistingOptimized = true,
+  mode,
   removedOrderIds = [],
 } = {}) {
   const deletedRoutePlanIdSet = new Set(deletedRoutePlanIds);
   return {
     deletedRoutePlanIds,
     expectedUpdatedAt,
-    mode: "OPTIMIZE_ORDER",
+    mode,
     removedOrderIds,
     routes: routeRows
       .filter((routeRow) => !deletedRoutePlanIdSet.has(routeRow.routePlanId))
@@ -4206,6 +4207,7 @@ export default function RouteDetailPage() {
         deletedRoutePlanIds,
         expectedUpdatedAt: routeGroup?.updatedAt,
         includeExistingOptimized: true,
+        mode: "OPTIMIZE_ORDER",
         removedOrderIds,
       })),
     });
@@ -4218,6 +4220,7 @@ export default function RouteDetailPage() {
         deletedRoutePlanIds,
         expectedUpdatedAt: routeGroup?.updatedAt,
         includeExistingOptimized: false,
+        mode: "MANUAL_ORDER",
         removedOrderIds,
       })),
     });
