@@ -80,13 +80,13 @@ test("bulk-updates delivery orders through the delivery Admin API", async () => 
 
   const result = await bulkUpdateDeliveryOrders(
     new Request("https://app.example/app/orders"),
-    { field: "payment", orderIds: ["order-id"], value: "CASH" },
+    { field: "payment", orderIds: ["order-id"], value: "PENDING" },
     {
       fetch: async (url, options) => {
         calls.push({ url, options });
         return Response.json({
           data: {
-            orders: [{ id: "order-id", financialStatus: "CASH" }],
+            orders: [{ id: "order-id", financialStatus: "PENDING" }],
             updated: 1,
           },
           error: null,
@@ -104,11 +104,11 @@ test("bulk-updates delivery orders through the delivery Admin API", async () => 
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     field: "payment",
     orderIds: ["order-id"],
-    value: "CASH",
+    value: "PENDING",
   });
   assert.deepEqual(result, {
     errors: [],
-    orders: [{ id: "order-id", financialStatus: "CASH" }],
+    orders: [{ id: "order-id", financialStatus: "PENDING" }],
     updated: 1,
   });
 });
