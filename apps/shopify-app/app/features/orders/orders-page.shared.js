@@ -328,6 +328,13 @@ export function shouldRevalidateOrdersRoute({
     return defaultShouldRevalidate;
   }
 
+  if (
+    currentUrl.searchParams.get("view") === "inventory" &&
+    nextUrl.searchParams.get("view") !== "inventory"
+  ) {
+    return true;
+  }
+
   const changedQueryKeys = getChangedQueryKeys(
     currentUrl.searchParams,
     nextUrl.searchParams,

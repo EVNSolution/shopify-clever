@@ -93,7 +93,7 @@ test("SSR keeps the stream open long enough to flush the Orders timeout boundary
   assert.match(entryServerSource, /setTimeout\(abort, streamTimeout \+ 1000\)/);
 });
 
-test("Orders UI-only query changes keep loaded Orders and Inventory data", () => {
+test("Inventory to Orders reloads data while other UI-only query changes keep loaded data", () => {
   const routeArgs = (currentPath, nextPath, overrides = {}) => ({
     currentUrl: new URL(`https://admin.example${currentPath}`),
     nextUrl: new URL(`https://admin.example${nextPath}`),
@@ -108,7 +108,8 @@ test("Orders UI-only query changes keep loaded Orders and Inventory data", () =>
   );
   assert.equal(
     shouldRevalidateOrdersRoute(routeArgs("/app/orders?view=inventory", "/app/orders")),
-    false,
+    true,
+    "returning to Orders must reload the list and map instead of reusing Inventory-only loader data",
   );
   assert.equal(
     shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders?deliveryArea=North")),
@@ -175,6 +176,10 @@ test("direct Inventory entry loads Orders once only when the Orders tab is selec
   assert.match(ordersPageSource, /ordersLoaded: shouldLoadOrders/);
   assert.match(ordersPageSource, /const \{[\s\S]*ordersLoaded[\s\S]*\} = loaderData/);
   assert.match(ordersPageSource, /const ordersLoadRequestedRef = useRef\(false\)/);
+  assert.match(
+    ordersPageSource,
+    /if \(activeOrdersView === "inventory"\) \{[\s\S]*ordersLoadRequestedRef\.current = false;[\s\S]*return;/,
+  );
   assert.match(ordersPageSource, /const shouldRequestOrders = shouldRequestOrdersData\(\{/);
   assert.match(ordersPageSource, /ordersLoadRequestedRef\.current = true;[\s\S]*revalidator\.revalidate\(\)/);
   assert.match(ordersPageSource, /aria-label="Shopify orders are loading"/);
