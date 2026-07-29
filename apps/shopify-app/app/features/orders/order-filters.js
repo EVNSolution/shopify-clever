@@ -44,6 +44,8 @@ export const ORDER_DELIVERY_STATE_OPTIONS = [
   { label: "Assigned", value: "assigned_undelivered" },
   { label: "Past due", value: "past_due" },
   { label: "Delivered", value: "delivered" },
+  { label: "Fulfilled", value: "fulfilled" },
+  { label: "Unfulfilled", value: "unfulfilled" },
 ];
 export const ORDER_UNAVAILABLE_REASON_LABELS = {
   already_planned: "Already planned",
@@ -143,7 +145,7 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
 
   if (
     normalizedFilters.deliveryState &&
-    getOrderDeliveryStateFilterValue(order, referenceDate) !== normalizedFilters.deliveryState
+    !orderMatchesDeliveryState(order, normalizedFilters.deliveryState, referenceDate)
   ) {
     return false;
   }
@@ -383,6 +385,20 @@ export function getOrderDeliveryStateFilterValue(order, referenceDate = new Date
   return "unplanned";
 }
 
+export function getOrderShopifyFulfillmentState(order) {
+  const fulfillmentStatus = normalizeComparableText(
+    order?.rawPayload?.displayFulfillmentStatus ??
+      order?.shopifyOrderSnapshot?.displayFulfillmentStatus ??
+      order?.displayFulfillmentStatus ??
+      order?.fulfillmentStatus,
+  );
+
+  if (fulfillmentStatus === "fulfilled") return "fulfilled";
+  if (fulfillmentStatus === "unfulfilled") return "unfulfilled";
+
+  return null;
+}
+
 export function isOrderDeliveryDatePast(order, referenceDate = new Date()) {
   const deliveryDateValue = getOrderDeliveryDateValue(order);
   const referenceDateValue = normalizeReferenceDateValue(referenceDate);
@@ -505,12 +521,25 @@ function getSortedUniqueValues(orders, key) {
 
 function getSortedDeliveryStates(orders) {
   const values = new Set(
-    orders.map((order) => getOrderDeliveryStateFilterValue(order)).filter(Boolean),
+    orders
+      .flatMap((order) => [
+        getOrderDeliveryStateFilterValue(order),
+        getOrderShopifyFulfillmentState(order),
+      ])
+      .filter(Boolean),
   );
 
   return ORDER_DELIVERY_STATE_OPTIONS.map((option) => option.value).filter((value) =>
     values.has(value),
   );
+}
+
+function orderMatchesDeliveryState(order, deliveryState, referenceDate) {
+  if (deliveryState === "fulfilled" || deliveryState === "unfulfilled") {
+    return getOrderShopifyFulfillmentState(order) === deliveryState;
+  }
+
+  return getOrderDeliveryStateFilterValue(order, referenceDate) === deliveryState;
 }
 
 function getSortedDeliveryWeekdays(orders) {
