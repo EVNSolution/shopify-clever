@@ -8,6 +8,7 @@ import { mapCanonicalOrdersToOrderRows } from "../app/features/orders/canonical-
 import {
   buildOrderTimelineDetails,
   formatLatestShopifyOrderUpdatedAt,
+  getOrdersRefreshCompletion,
   getLatestShopifyOrderUpdatedAt,
 } from "../app/features/orders/orders-page.shared.js";
 
@@ -123,6 +124,77 @@ test("Orders update action shows the latest individual Shopify order update", ()
     "2026-07-29, 14:00:00",
   );
   assert.equal(formatLatestShopifyOrderUpdatedAt([], "Asia/Seoul"), "—");
+});
+
+test("Orders Shopify refresh completion is handled once per background request", () => {
+  const completedRefresh = {
+    errors: [],
+    refreshRequestId: "refresh-1",
+    refreshedRoutes: 3,
+    updatedOrders: 12,
+  };
+
+  assert.equal(
+    getOrdersRefreshCompletion({
+      activeRequestId: "refresh-1",
+      data: completedRefresh,
+      fetcherState: "loading",
+      handledRequestId: null,
+    }),
+    null,
+  );
+  assert.deepEqual(
+    getOrdersRefreshCompletion({
+      activeRequestId: "refresh-1",
+      data: completedRefresh,
+      fetcherState: "idle",
+      handledRequestId: null,
+    }),
+    {
+      data: completedRefresh,
+      hasErrors: false,
+      requestId: "refresh-1",
+    },
+  );
+  assert.equal(
+    getOrdersRefreshCompletion({
+      activeRequestId: "refresh-1",
+      data: completedRefresh,
+      fetcherState: "idle",
+      handledRequestId: "refresh-1",
+    }),
+    null,
+  );
+  assert.equal(
+    getOrdersRefreshCompletion({
+      activeRequestId: "refresh-2",
+      data: completedRefresh,
+      fetcherState: "idle",
+      handledRequestId: null,
+    }),
+    null,
+  );
+  assert.equal(
+    getOrdersRefreshCompletion({
+      activeRequestId: "refresh-1",
+      data: {
+        ...completedRefresh,
+        errors: [{ message: "sync failed" }],
+      },
+      fetcherState: "idle",
+      handledRequestId: null,
+    })?.hasErrors,
+    true,
+  );
+  assert.equal(
+    getOrdersRefreshCompletion({
+      activeRequestId: "refresh-1",
+      data: { errors: [{ message: "action failed before correlation" }] },
+      fetcherState: "idle",
+      handledRequestId: null,
+    })?.requestId,
+    "refresh-1",
+  );
 });
 
 test("Orders loader can isolate CLEVER delivery orders for synthetic dev data", () => {
@@ -890,8 +962,10 @@ test("Orders owns global Shopify order update and safe route refresh", () => {
   assert.match(ordersPageSource, /allowInProgress: false/);
   assert.match(ordersPageSource, /const routePlanIds = getBulkRefreshRoutePlanIds\(routePlans\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "refreshAllRoutes"\)/);
+  assert.match(ordersPageSource, /formData\.set\("refreshRequestId", refreshRequestId\)/);
   assert.match(ordersPageSource, /ordersRefreshFetcher\.submit\(formData, \{ method: "post" \}\)/);
-  assert.match(ordersPageSource, /ordersRefreshFetcher\.data\.updatedOrders/);
+  assert.match(ordersPageSource, /refreshResult\.updatedOrders/);
+  assert.match(ordersPageSource, /Update completed\. Refreshing the Orders view/);
   assert.match(ordersPageSource, /shopify\.toast\.show\(`\$\{updatedOrders\} orders synced; \$\{refreshedRoutes\} READY routes refreshed\$\{skippedMessage\}`\)/);
   assert.doesNotMatch(ordersPageSource, /orderUpdate|customerUpdate|mutation\s+\w*Order|mutation\s+\w*Customer/);
 });

@@ -287,13 +287,38 @@ export function shouldRequestOrdersData({
     revalidationState === "idle";
 }
 
+export function getOrdersRefreshCompletion({
+  activeRequestId,
+  data,
+  fetcherState,
+  handledRequestId,
+}) {
+  if (fetcherState !== "idle" || !data) return null;
+
+  const responseRequestId = textOrUndefined(data.refreshRequestId);
+  if (responseRequestId && responseRequestId !== activeRequestId) return null;
+
+  const requestId = responseRequestId ?? textOrUndefined(activeRequestId);
+  if (!requestId || requestId === handledRequestId) {
+    return null;
+  }
+
+  return {
+    data,
+    hasErrors: (data.errors ?? []).length > 0,
+    requestId,
+  };
+}
+
 export function shouldRevalidateOrdersRoute({
   currentUrl,
   defaultShouldRevalidate,
+  formData,
   formMethod,
   nextUrl,
 }) {
   if (formMethod && formMethod.toLowerCase() !== "get") {
+    if (formData?.get("_intent") === "refreshAllRoutes") return false;
     return defaultShouldRevalidate;
   }
   if (!currentUrl || !nextUrl || currentUrl.pathname !== nextUrl.pathname) {
