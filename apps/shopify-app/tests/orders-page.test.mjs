@@ -403,10 +403,14 @@ test("Orders order-number button shows a subtle rounded hover state", () => {
 test("Orders ID stays centered while Note uses a separate headerless column", () => {
   assert.match(ordersPageSource, /\{ key: "name", label: "ID" \}/);
   assert.match(ordersPageSource, /const noteCellStyle = \{[\s\S]*?textAlign:\s*"center"/);
+  assert.match(ordersPageSource, /const orderSignalSlotsStyle = \{[\s\S]*?gridTemplateColumns:\s*"18px 18px"[\s\S]*?width:\s*"100%"/);
+  assert.match(ordersPageSource, /const orderSignalSlotStyle = \{[\s\S]*?height:\s*"18px"[\s\S]*?width:\s*"18px"/);
+  assert.match(ordersPageSource, /const subscriptionSignalIconStyle = \{[\s\S]*?color:\s*"#4a9fe5"/);
   assert.match(ordersPageSource, /column\.key !== "name" && columnIndex < SORTABLE_ORDER_COLUMNS\.length - 1/);
   assert.match(ordersPageSource, /const addressCellStyle = \{[\s\S]*?textAlign:\s*"left"/);
   assert.match(ordersPageSource, /<th key="notes" scope="col" aria-label="Notes" style=\{checkboxHeaderCellStyle\} \/>/);
-  assert.match(ordersPageSource, /<td style=\{tableCellStyle\}>[\s\S]*?className="order-number-button"[\s\S]*?<\/td>\s*<td style=\{noteCellStyle\}>[\s\S]*?data-order-notes-popover-root="true"/);
+  assert.match(ordersPageSource, /<td style=\{tableCellStyle\}>[\s\S]*?className="order-number-button"[\s\S]*?<\/td>\s*<td style=\{noteCellStyle\}>[\s\S]*?<span style=\{orderSignalSlotsStyle\}>[\s\S]*?<span style=\{orderSignalSlotStyle\}>[\s\S]*?data-order-notes-popover-root="true"/);
+  assert.match(ordersPageSource, /<\/span>\s*<span style=\{orderSignalSlotStyle\}>[\s\S]*?\{subscriptionSignalLabel \? \(/);
   assert.doesNotMatch(ordersPageSource, /const orderIdentityStyle = \{/);
   assert.match(ordersPageSource, /<td style=\{addressCellStyle\}>\{order\.address\}<\/td>/);
   assert.match(ordersPageSource, /overflowX:\s*"auto"/);
@@ -425,7 +429,7 @@ test("Orders ID stays centered while Note uses a separate headerless column", ()
   assert.match(ordersPageSource, /data-order-notes-popover-root="true"/);
   assert.match(ordersPageSource, /<s-icon type="note"/);
   assert.match(ordersPageSource, /getAppstleSubscriptionOrderKind\(order\)/);
-  assert.match(ordersPageSource, /<s-icon type="refresh"/);
+  assert.match(ordersPageSource, /<s-icon type="refresh" size="base" style=\{subscriptionSignalIconStyle\}/);
   assert.match(ordersPageSource, /Recurring subscription order/);
   assert.match(ordersPageSource, />Notes</);
   assert.match(ordersPageSource, />Order Note</);
