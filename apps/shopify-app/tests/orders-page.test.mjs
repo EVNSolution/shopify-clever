@@ -648,6 +648,7 @@ test("Orders page adds planned orders to an existing route group first child", (
   assert.match(ordersPageSource, /function buildFirstRouteDraftPayload\(routeGroup, addedOrderIds = \[\]\)/);
   assert.match(ordersPageSource, /const children = getVisibleRouteGroupChildren\(routeGroup\)/);
   assert.match(ordersPageSource, /routes\[0\]\.orderIds = \[/);
+  assert.match(ordersPageSource, /return \{ mode: "MANUAL_ORDER", routes \}/);
   assert.match(ordersPageSource, /if \(intent === "addOrdersToRouteGroup"\) \{/);
   assert.match(ordersPageSource, /addOrderIds,/);
   assert.match(ordersPageSource, /expectedUpdatedAt/);
@@ -708,7 +709,7 @@ test("Orders page bulk-changes selected server order state or payment", () => {
   assert.match(ordersPageSource, /if \(intent === "bulkUpdateOrders"\)/);
   assert.match(ordersPageSource, /bulkUpdateDeliveryOrders\(\s*request,\s*\{ field, orderIds, value \},\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
   assert.match(ordersPageSource, /const bulkUpdatedOrders = useMemo\(/);
-  assert.match(ordersPageSource, /mergeShopifyOrderRowsWithCanonicalRows\(syncMergedOrders, bulkUpdatedOrders\)/);
+  assert.match(ordersPageSource, /mergeShopifyOrderRowsWithCanonicalRows\(refreshMergedOrders, bulkUpdatedOrders\)/);
   assert.match(ordersPageSource, /const checkedServerOrderIds = useMemo\(/);
   assert.match(ordersPageSource, /checkedOrders\.map\(\(order\) => order\.orderId\)\.filter\(Boolean\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "bulkUpdateOrders"\)/);
@@ -830,6 +831,23 @@ test("Orders page syncs loaded Shopify snapshots without adding sync cards", () 
   assert.doesNotMatch(ordersPageSource, /Orders sync KPI/);
   assert.doesNotMatch(ordersPageSource, /orders sync card/i);
   assert.doesNotMatch(ordersPageSource, /sync status panel/i);
+});
+
+test("Orders owns global Shopify order update and safe route refresh", () => {
+  assert.match(ordersPageSource, /import \{ refreshRouteOrders \} from "\.\.\/delivery\/route-detail\.server"/);
+  assert.match(ordersPageSource, /import \{ getBulkRefreshRoutePlanIds \} from "\.\.\/delivery\/route-order-refresh"/);
+  assert.match(ordersPageSource, /const ordersRefreshFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /intent === "refreshAllRoutes"/);
+  assert.match(ordersPageSource, /fetchShopifyOrders\(admin,\s*\{[\s\S]*deliveryCycle: preferencesData\.appPreferences\.deliveryCycle,[\s\S]*\}\)/);
+  assert.match(ordersPageSource, /reason: "orders_page_open"/);
+  assert.match(ordersPageSource, /syncedOrderData,/);
+  assert.match(ordersPageSource, /allowInProgress: false/);
+  assert.match(ordersPageSource, /const routePlanIds = getBulkRefreshRoutePlanIds\(routePlans\)/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "refreshAllRoutes"\)/);
+  assert.match(ordersPageSource, /ordersRefreshFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(ordersPageSource, /ordersRefreshFetcher\.data\.updatedOrders/);
+  assert.match(ordersPageSource, /shopify\.toast\.show\(`\$\{updatedOrders\} orders synced; \$\{refreshedRoutes\} READY routes refreshed\$\{skippedMessage\}`\)/);
+  assert.doesNotMatch(ordersPageSource, /orderUpdate|customerUpdate|mutation\s+\w*Order|mutation\s+\w*Customer/);
 });
 
 test("Orders route creation submits the planned draft without client ready-state filtering", () => {
@@ -1985,4 +2003,19 @@ test("Orders inventory detail logs API payload counts on the server", () => {
   assert.match(inventoryDetailSource, /orderItemQuantity/);
   assert.match(inventoryDetailSource, /summaryItemQuantity/);
   assert.match(inventoryDetailSource, /firstOrderItemKeys/);
+});
+
+test("Orders inventory detail stores pending payment method in CLEVER DB only", () => {
+  assert.match(inventoryDetailSource, /import \{ bulkUpdateDeliveryOrders \} from "\.\.\/features\/delivery\/orders\.server"/);
+  assert.match(inventoryDetailSource, /export const action = async \(\{ request \}\) =>/);
+  assert.match(inventoryDetailSource, /formData\.get\("_intent"\) === "updateInventoryOrderPayment"/);
+  assert.match(inventoryDetailSource, /fetchDeliveryInventoryOrderView\(\s*request,\s*inventoryId,\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
+  assert.match(inventoryDetailSource, /if \(!currentOrder \|\| !isPendingInventoryPayment\(currentOrder\)\)/);
+  assert.match(inventoryDetailSource, /bulkUpdateDeliveryOrders\(\s*request,\s*\{ field: "payment", orderIds: \[orderId\], value \},\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
+  assert.match(inventoryDetailSource, /const INVENTORY_PAYMENT_METHOD_OPTIONS = \[[\s\S]*\{ label: "Cash", value: "CASH" \}[\s\S]*\{ label: "eTransfer", value: "ETRANSFER" \}[\s\S]*\]/);
+  assert.match(inventoryDetailSource, /canSetPaymentMethod: isPendingInventoryPayment\(order\)/);
+  assert.match(inventoryDetailSource, /order\.canSetPaymentMethod \?/);
+  assert.match(inventoryDetailSource, /formData\.set\("field", "payment"\)/);
+  assert.match(inventoryDetailSource, /formData\.set\("value", value\)/);
+  assert.doesNotMatch(inventoryDetailSource, /orderUpdate|customerUpdate|mutation\s+\w+/);
 });

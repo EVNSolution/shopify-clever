@@ -2384,6 +2384,7 @@ function OrdersPageContent({ loaderData }) {
   const inventoryDeleteFetcher = useFetcher();
   const orderBulkUpdateFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
+  const ordersRefreshFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
   const revalidator = useRevalidator();
@@ -2412,6 +2413,10 @@ function OrdersPageContent({ loaderData }) {
     () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders),
     [ordersSyncFetcher.data?.syncedOrders],
   );
+  const refreshedOrders = useMemo(
+    () => mapCanonicalOrdersToOrderRows(ordersRefreshFetcher.data?.syncedOrders),
+    [ordersRefreshFetcher.data?.syncedOrders],
+  );
   const bulkUpdatedOrders = useMemo(
     () => mapCanonicalOrdersToOrderRows(orderBulkUpdateFetcher.data?.updatedOrders),
     [orderBulkUpdateFetcher.data?.updatedOrders],
@@ -2422,12 +2427,16 @@ function OrdersPageContent({ loaderData }) {
         syncedOrders.length > 0
           ? mergeShopifyOrderRowsWithCanonicalRows(safeOrders, syncedOrders)
           : safeOrders;
+      const refreshMergedOrders =
+        refreshedOrders.length > 0
+          ? mergeShopifyOrderRowsWithCanonicalRows(syncMergedOrders, refreshedOrders)
+          : syncMergedOrders;
 
       return bulkUpdatedOrders.length > 0
-        ? mergeShopifyOrderRowsWithCanonicalRows(syncMergedOrders, bulkUpdatedOrders)
-        : syncMergedOrders;
+        ? mergeShopifyOrderRowsWithCanonicalRows(refreshMergedOrders, bulkUpdatedOrders)
+        : refreshMergedOrders;
     },
-    [bulkUpdatedOrders, safeOrders, syncedOrders],
+    [bulkUpdatedOrders, refreshedOrders, safeOrders, syncedOrders],
   );
   const urlOrderFilters = useMemo(
     () => getOrderFiltersFromSearchParams(searchParams),
@@ -2547,6 +2556,8 @@ function OrdersPageContent({ loaderData }) {
         ? [{ message: bulkUpdateClientError }]
         : orderBulkUpdateFetcher.data?.errors?.length
           ? orderBulkUpdateFetcher.data
+        : ordersRefreshFetcher.data?.errors?.length
+          ? ordersRefreshFetcher.data
           : routePlanFetcher.data?.errors?.length
         ? routePlanFetcher.data
         : inventoryDeleteFetcher.data?.errors?.length
@@ -2560,6 +2571,7 @@ function OrdersPageContent({ loaderData }) {
   const isCreatingInventory = inventoryFetcher.state !== "idle";
   const isDeletingInventory = inventoryDeleteFetcher.state !== "idle";
   const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
+  const isRefreshingAllRoutes = ordersRefreshFetcher.state !== "idle";
   const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
@@ -2927,6 +2939,21 @@ function OrdersPageContent({ loaderData }) {
     inventoryDeleteFetcher.submit(formData, { method: "post" });
   }, [checkedInventoryIds, inventoryDeleteDisabled, inventoryDeleteFetcher, shopify]);
 
+  const handleRefreshAllRoutes = useCallback(async () => {
+    if (isRefreshingAllRoutes) return;
+
+    const formData = new FormData();
+    formData.set("_intent", "refreshAllRoutes");
+
+    try {
+      formData.set("shopifySessionToken", await shopify.idToken());
+    } catch {
+      // The server action returns the actionable authentication error.
+    }
+
+    ordersRefreshFetcher.submit(formData, { method: "post" });
+  }, [isRefreshingAllRoutes, ordersRefreshFetcher, shopify]);
+
   const ordersViewTabs = (
     <div style={ordersViewTabsRowStyle}>
       <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
@@ -2948,7 +2975,14 @@ function OrdersPageContent({ loaderData }) {
           disabled={inventoryDeleteDisabled}
           onClick={handleDeleteSelectedInventories}
         >Delete</button>
-      ) : null}
+      ) : (
+        <button
+          type="button"
+          style={isRefreshingAllRoutes ? disabledPlanButtonStyle : addToPlanButtonStyle}
+          disabled={isRefreshingAllRoutes}
+          onClick={handleRefreshAllRoutes}
+        >{isRefreshingAllRoutes ? "Updating…" : "Update routes"}</button>
+      )}
     </div>
   );
 
@@ -4009,6 +4043,18 @@ function OrdersPageContent({ loaderData }) {
       cancelled = true;
     };
   }, [ordersSyncFetcher, safeOrders, shopify]);
+
+  useEffect(() => {
+    if (ordersRefreshFetcher.state !== "idle" || !ordersRefreshFetcher.data) return;
+    revalidator.revalidate();
+    if ((ordersRefreshFetcher.data.errors ?? []).length > 0) return;
+
+    const updatedOrders = Number(ordersRefreshFetcher.data.updatedOrders ?? 0);
+    const refreshedRoutes = Number(ordersRefreshFetcher.data.refreshedRoutes ?? 0);
+    const skippedRoutes = ordersRefreshFetcher.data.skippedRoutes?.length ?? 0;
+    const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} active or terminal routes skipped` : "";
+    shopify.toast.show(`${updatedOrders} orders synced; ${refreshedRoutes} READY routes refreshed${skippedMessage}`);
+  }, [ordersRefreshFetcher.data, ordersRefreshFetcher.state, revalidator, shopify]);
 
   useEffect(() => {
     const createdRouteGroup = routePlanFetcher.data?.routeGroup;

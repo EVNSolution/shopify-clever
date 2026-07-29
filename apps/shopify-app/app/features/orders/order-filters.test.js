@@ -405,13 +405,22 @@ test("classifies combined delivery-date and route-assignment states", () => {
     deliveryDate: "2026-05-20",
     deliveryStopStatus: "DELIVERED",
   };
+  const deliveredOnAnotherRouteOrder = {
+    deliveryDate: "2026-05-20",
+    deliveryStopStatus: "DELIVERED",
+    routeMemberships: [
+      { routePlanId: "route-completed", status: "COMPLETED" },
+      { routePlanId: "route-ready", status: "READY" },
+    ],
+  };
 
   assert.equal(isOrderDeliveryDatePast(pastUnassignedOrder, "2026-05-18"), true);
   assert.equal(isOrderRouteAssigned(pastAssignedOrder), true);
   assert.equal(isOrderRouteAssigned(manuallyAssignedOrder), true);
   assert.equal(isOrderRoutePlanningLocked(pastUnassignedOrder, "2026-05-18"), true);
-  assert.equal(isOrderDeliveryComplete(completedPastOrder), true);
+  assert.equal(isOrderDeliveryComplete(completedPastOrder), false);
   assert.equal(isOrderDeliveryComplete(manuallyDeliveredOrder), true);
+  assert.equal(isOrderDeliveryComplete(deliveredOnAnotherRouteOrder), false);
   assert.equal(
     getOrderDeliveryExceptionState(pastUnassignedOrder, "2026-05-18"),
     "overdue_unassigned",
@@ -422,7 +431,7 @@ test("classifies combined delivery-date and route-assignment states", () => {
   );
   assert.equal(
     getOrderDeliveryExceptionState(completedPastOrder, "2026-05-18"),
-    "none",
+    "overdue_unassigned",
   );
   assert.equal(
     getOrderDeliveryExceptionState(futureUnassignedOrder, "2026-05-18"),

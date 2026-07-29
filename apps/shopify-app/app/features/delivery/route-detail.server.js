@@ -642,6 +642,7 @@ export async function refreshRouteOrders({
   routePlanIds: requestedRoutePlanIds = [],
   sessionToken,
   shopifyShopCacheKey,
+  syncedOrderData,
 }) {
   clearDeliveryApiResponseCache();
 
@@ -712,7 +713,15 @@ export async function refreshRouteOrders({
   }
   let sync = null;
   let updatedOrders = 0;
-  if (routeOrderGids.length > 0) {
+  if (syncedOrderData) {
+    errors.push(...(syncedOrderData.errors ?? []));
+    errors.push(...(syncedOrderData.warnings ?? []).map((warning) => ({
+      ...warning,
+      code: warning.code ?? "ORDER_SYNC_SNAPSHOT_SKIPPED",
+    })));
+    sync = syncedOrderData.sync ?? null;
+    updatedOrders = syncedOrderData.orders?.length ?? 0;
+  } else if (routeOrderGids.length > 0) {
     const preferencesData = await fetchShopifyAppPreferences(admin);
     const shopifyOrderData = await fetchShopifyOrdersByIds(admin, routeOrderGids, {
       deliveryCycle: preferencesData.appPreferences.deliveryCycle,

@@ -1,6 +1,7 @@
 /* eslint-env node */
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   attachDeliveryOrderFieldsToStops,
@@ -16,6 +17,8 @@ import {
   partitionRefreshableRouteDetails,
 } from "./route-order-refresh.js";
 import { getTimeZoneAbbreviationForInstant } from "../shopify/shop-timezone.server.js";
+
+const routeDetailServerSource = readFileSync(new URL("./route-detail.server.js", import.meta.url), "utf8");
 
 test("merges authoritative direct route-plan stops into only the current child", () => {
   const childDetails = [
@@ -198,4 +201,14 @@ test("route refresh expands to every ready sibling route membership", () => {
     ]),
     ["route-1", "route-2", "route-3"],
   );
+});
+
+test("pre-synced route refresh keeps the already partitioned READY route ids", () => {
+  const preSyncedBranch = routeDetailServerSource.match(
+    /if \(syncedOrderData\) \{([\s\S]*?)\} else if \(routeOrderGids\.length > 0\)/,
+  )?.[1] ?? "";
+
+  assert.match(preSyncedBranch, /updatedOrders = syncedOrderData\.orders\?\.length \?\? 0/);
+  assert.doesNotMatch(preSyncedBranch, /collectRouteRefreshRoutePlanIdsFromOrders/);
+  assert.doesNotMatch(preSyncedBranch, /routePlanIds = \[\.\.\.new Set/);
 });

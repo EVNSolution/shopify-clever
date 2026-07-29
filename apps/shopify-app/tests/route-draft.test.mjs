@@ -78,3 +78,16 @@ test("route draft adapter keeps explicit clear values and rejects malformed JSON
     }],
   });
 });
+
+test("route draft adapter preserves manual-order save intent", () => {
+  const draft = readRouteDraftPayload(JSON.stringify({
+    mode: "MANUAL_ORDER",
+    routes: [{
+      orderIds: ["order-2", "order-1"],
+      routePlanId: "route-1",
+    }],
+  }));
+
+  assert.equal(draft.mode, "MANUAL_ORDER");
+  assert.deepEqual(draft.routes[0]?.orderIds, ["order-2", "order-1"]);
+});

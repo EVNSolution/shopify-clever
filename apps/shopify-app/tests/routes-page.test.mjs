@@ -33,7 +33,7 @@ const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8"
 const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
 
 test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
-  assert.match(routesPageSource, /import \{ clearDeliveryApiResponseCache, deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
   assert.match(routesPageSource, /import \{ deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
   assert.match(routesPageSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
   assert.match(routesPageSource, /import \{ Outlet, redirect,/);
@@ -114,7 +114,7 @@ test("Routes page adds top summary cards and explicit route actions", () => {
   assert.match(routesPageSource, /function handleCreateRoutesClick\(\) \{/);
   assert.match(routesPageSource, /navigate\("\/app\/orders"\)/);
   assert.match(routesPageSource, /<button type="button" style=\{createRoutesButtonStyle\} onClick=\{handleCreateRoutesClick\}>Create routes<\/button>/);
-  assert.match(routesPageSource, /routeRefreshBusy \? "Updating…" : "Update all routes"/);
+  assert.doesNotMatch(routesPageSource, /Update all routes/);
   assert.match(routesPageSource, /<section aria-label="Routes summary" style=\{routesSummaryCardsStyle\}>/);
   assert.match(routesPageSource, /routesSummary\.map\(\(summaryItem\) =>/);
   assert.doesNotMatch(routesPageSource, /Filter routes|Recent|Add filter|Clear all/);
@@ -290,7 +290,7 @@ test("Routes table selection column uses checkboxes and a single delete action",
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRevalidator, useRouteError, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
   assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
@@ -540,16 +540,13 @@ test("Route detail explicitly updates assigned orders without changing route mem
   assert.match(routeDetailServerSource, /refreshDeliveryRoutePlanOrderData\(request, routePlanId/);
 });
 
-test("Routes list explicitly updates only ready-compatible persisted routes", () => {
-  assert.match(routesPageSource, /import \{ refreshRouteOrders \} from "\.\.\/features\/delivery\/route-detail\.server"/);
-  assert.match(routesPageSource, /import \{ getBulkRefreshRoutePlanIds \} from "\.\.\/features\/delivery\/route-order-refresh"/);
-  assert.match(routesPageSource, /intent === "refreshAllRoutes"/);
-  assert.match(routesPageSource, /clearDeliveryApiResponseCache\(\)/);
-  assert.match(routesPageSource, /const routePlanIds = getBulkRefreshRoutePlanIds\(routePlans\)/);
-  assert.match(routesPageSource, /allowInProgress: false/);
-  assert.match(routesPageSource, /revalidator\.revalidate\(\)/);
-  assert.match(routesPageSource, /formData\.set\("_intent", "refreshAllRoutes"\)/);
-  assert.match(routesPageSource, /routeRefreshFetcher\.submit\(formData, \{ method: "post" \}\)/);
+test("Routes list leaves global order refresh ownership on Orders", () => {
+  assert.doesNotMatch(routesPageSource, /import \{ refreshRouteOrders \} from "\.\.\/features\/delivery\/route-detail\.server"/);
+  assert.doesNotMatch(routesPageSource, /import \{ getBulkRefreshRoutePlanIds \} from "\.\.\/features\/delivery\/route-order-refresh"/);
+  assert.doesNotMatch(routesPageSource, /intent === "refreshAllRoutes"/);
+  assert.doesNotMatch(routesPageSource, /clearDeliveryApiResponseCache\(\)/);
+  assert.doesNotMatch(routesPageSource, /routeRefreshFetcher/);
+  assert.doesNotMatch(routesPageSource, /handleRefreshAllRoutes/);
 });
 
 test("Route detail summarizes delivery with the actual date label", () => {
@@ -1074,7 +1071,10 @@ test("Route detail draft payload is child-only and treats routeIdx as server ass
   assert.match(payloadBuilder, /label: getRouteDraftLabel\(routeRow\)/);
   assert.match(routeDetailSource, /function getRouteDraftLabel\(routeRow\) \{[\s\S]*return routeRow\.isGeneratedTitle \? null : routeRow\.title/);
   assert.match(payloadBuilder, /deletedRoutePlanIds/);
+  assert.match(payloadBuilder, /mode,/);
   assert.match(payloadBuilder, /removedOrderIds/);
+  assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{[\s\S]*mode: "OPTIMIZE_ORDER"/);
+  assert.match(routeDetailSource, /buildRouteDraftPayload\(contextTimelineRouteRows, \{[\s\S]*includeExistingOptimized: false,[\s\S]*mode: "MANUAL_ORDER"/);
   assert.doesNotMatch(routeDetailSource, /routeKey: "root"/);
   assert.doesNotMatch(routeDetailSource, /if \(routeRow\.isCurrent\) return "root"/);
 });

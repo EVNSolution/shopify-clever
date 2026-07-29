@@ -1,12 +1,14 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Link, useLoaderData, useRouteError, useSearchParams } from "react-router";
+import { Link, useFetcher, useLoaderData, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { bulkUpdateDeliveryOrders } from "../features/delivery/orders.server";
 import { fetchDeliveryInventoryOrderView } from "../features/delivery/inventories.server";
 import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
 import { getInventoryPrintTextLineCount } from "../features/delivery/inventory-print";
-import { getServiceErrorNotice } from "../features/service-errors";
+import { getServiceErrorNotice, normalizeCaughtServiceError } from "../features/service-errors";
+import { authenticate } from "../shopify.server";
 
 export const meta = ({ data }) => [{ title: data?.inventory?.name ?? "Inventory" }];
 
@@ -283,6 +285,29 @@ const orderViewPaymentPillBaseStyle = {
   lineHeight: "14px",
   padding: "1px 7px",
   width: "fit-content",
+};
+
+const orderViewPaymentControlStyle = {
+  alignItems: "start",
+  display: "grid",
+  gap: "4px",
+};
+
+const orderViewPaymentButtonsStyle = {
+  display: "inline-flex",
+  gap: "4px",
+};
+
+const orderViewPaymentButtonStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "6px",
+  color: "#202223",
+  cursor: "pointer",
+  fontSize: "10px",
+  fontWeight: 700,
+  lineHeight: "14px",
+  padding: "2px 6px",
 };
 
 const orderViewPhoneLineStyle = {
@@ -567,6 +592,10 @@ const PRINT_ORDER_NOTE_LINE_HEIGHT_PX = 17;
 const PRINT_ORDER_BREAK_SAFETY_PX = 12;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
 const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
+const INVENTORY_PAYMENT_METHOD_OPTIONS = [
+  { label: "Cash", value: "CASH" },
+  { label: "eTransfer", value: "ETRANSFER" },
+];
 
 const noticeStyle = {
   background: "#fff4f4",
@@ -707,6 +736,82 @@ export const loader = async ({ request }) => {
   };
 };
 
+export const action = async ({ request }) => {
+  try {
+    await authenticate.admin(request);
+
+    const formData = await request.formData();
+    if (formData.get("_intent") === "updateInventoryOrderPayment") {
+      const field = textOrUndefined(formData.get("field"));
+      const orderId = textOrUndefined(formData.get("orderId"));
+      const value = textOrUndefined(formData.get("value"));
+      const shopifySessionToken = textOrUndefined(formData.get("shopifySessionToken"));
+
+      if (field !== "payment" || !orderId || !isInventoryPaymentMethodValue(value)) {
+        return {
+          inventoryPayment: null,
+          errors: [{ message: "변경할 Pending 주문과 결제 수단을 선택해주세요." }],
+        };
+      }
+
+      const inventoryId = new URL(request.url).searchParams.get("id");
+      const currentInventoryData = await fetchDeliveryInventoryOrderView(
+        request,
+        inventoryId,
+        { sessionToken: shopifySessionToken },
+      );
+      if ((currentInventoryData.errors ?? []).length > 0) {
+        return {
+          inventoryPayment: null,
+          errors: currentInventoryData.errors,
+        };
+      }
+      const currentOrder = currentInventoryData.inventory?.orders?.find(
+        (order) => getInventoryDeliveryOrderId(order) === orderId,
+      );
+      if (!currentOrder || !isPendingInventoryPayment(currentOrder)) {
+        return {
+          inventoryPayment: null,
+          errors: [{ message: "Pending 주문의 결제 수단만 기록할 수 있습니다." }],
+        };
+      }
+
+      const bulkUpdateData = await bulkUpdateDeliveryOrders(
+        request,
+        { field: "payment", orderIds: [orderId], value },
+        { sessionToken: shopifySessionToken },
+      );
+
+      return {
+        inventoryPayment: {
+          orderId,
+          value,
+          updated: bulkUpdateData.updated,
+        },
+        updatedOrders: bulkUpdateData.orders,
+        errors: bulkUpdateData.errors,
+      };
+    }
+
+    return {
+      inventoryPayment: null,
+      errors: [{ message: "지원하지 않는 Inventory 작업입니다." }],
+    };
+  } catch (error) {
+    if (error instanceof Response) throw error;
+
+    console.error("orders_inventory_action_failed", {
+      message: error?.message,
+      stack: error?.stack,
+    });
+
+    return {
+      inventoryPayment: null,
+      errors: normalizeCaughtServiceError(error, "Inventory payment update failed."),
+    };
+  }
+};
+
 function hasSessionTokenRefreshError(errors) {
   return errors.some((error) =>
     error?.code === "DELIVERY_SESSION_TOKEN_MISSING" ||
@@ -798,11 +903,13 @@ function buildInventoryOrderViewRows(orders) {
   return (Array.isArray(orders) ? orders : []).map((order, index) => {
     return {
       addressLines: getInventoryOrderAddressLines(order),
+      canSetPaymentMethod: isPendingInventoryPayment(order),
       customer: getInventoryOrderCustomer(order),
       customerNote: getInventoryOrderCustomerNote(order),
       driveTime: formatInventoryRouteTime(order?.driveTime ?? order?.driveTimeMinutes ?? order?.routeStop?.driveTime),
       eta: textOrDisplay(order?.eta ?? order?.routeStop?.eta),
       items: getInventoryOrderLineItems(order).map(formatInventoryOrderLineItem),
+      orderDbId: getInventoryDeliveryOrderId(order),
       orderId: getInventoryOrderName(order, index),
       payment: formatInventoryOrderPayment(order),
       phone: getInventoryOrderPhone(order),
@@ -810,6 +917,12 @@ function buildInventoryOrderViewRows(orders) {
       stopTime: formatInventoryRouteTime(order?.stopTime ?? order?.stopTimeMinutes ?? order?.routeStop?.stopTime),
     };
   });
+}
+
+function getInventoryDeliveryOrderId(order) {
+  return textOrUndefined(order?.id)
+    ?? textOrUndefined(order?.deliveryOrderId)
+    ?? textOrUndefined(order?.orderId);
 }
 
 function getInventoryOrderLineItems(order) {
@@ -959,6 +1072,14 @@ function formatInventoryOrderPayment(order) {
   return status;
 }
 
+function isPendingInventoryPayment(order) {
+  return formatInventoryOrderPayment(order) === "Pending";
+}
+
+function isInventoryPaymentMethodValue(value) {
+  return INVENTORY_PAYMENT_METHOD_OPTIONS.some((option) => option.value === value);
+}
+
 function formatInventoryRouteTime(value) {
   const text = textOrUndefined(value);
   if (!text) return "-";
@@ -991,10 +1112,16 @@ function DateCellLabel({ label }) {
 export default function InventoryDetailPage() {
   const { errors, generatedAt, inventory, needsSessionTokenRefresh } = useLoaderData();
   const shopify = useAppBridge();
+  const inventoryPaymentFetcher = useFetcher();
   const [searchParams, setSearchParams] = useSearchParams();
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const [inventoryDetailView, setInventoryDetailView] = useState("products");
+  const [inventoryPaymentClientError, setInventoryPaymentClientError] = useState(null);
   const notice = getServiceErrorNotice([{ errors }], { context: "inventory_detail" });
+  const paymentUpdateNotice = getServiceErrorNotice(
+    [{ errors: inventoryPaymentClientError ? [{ message: inventoryPaymentClientError }] : inventoryPaymentFetcher.data?.errors }],
+    { context: "inventory_payment_update" },
+  );
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
   const matrix = buildInventoryProductMatrix(orders);
   const hasMatrix = matrix.rows.length > 0 && matrix.products.length > 0;
@@ -1002,6 +1129,33 @@ export default function InventoryDetailPage() {
   const historyItems = buildInventoryHistoryItems(inventory);
   const orderRouteMeta = buildInventoryOrderRouteMeta(inventory, matrix, orders);
   const orderViewRows = buildInventoryOrderViewRows(orders);
+  const isUpdatingInventoryPayment = inventoryPaymentFetcher.state !== "idle";
+
+  const handleInventoryPaymentChange = async (orderId, value) => {
+    if (isUpdatingInventoryPayment) return;
+    if (!orderId || !isInventoryPaymentMethodValue(value)) {
+      setInventoryPaymentClientError("변경할 Pending 주문과 결제 수단을 선택해주세요.");
+      return;
+    }
+
+    setInventoryPaymentClientError(null);
+
+    let sessionToken = "";
+    try {
+      sessionToken = await shopify.idToken();
+    } catch {
+      setInventoryPaymentClientError("Shopify session token을 가져오지 못했습니다.");
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("_intent", "updateInventoryOrderPayment");
+    formData.set("field", "payment");
+    formData.set("orderId", orderId);
+    formData.set("value", value);
+    formData.set("shopifySessionToken", sessionToken);
+    inventoryPaymentFetcher.submit(formData, { method: "post" });
+  };
 
   useEffect(() => {
     if (!needsSessionTokenRefresh || searchParams.get(SESSION_TOKEN_REFRESH_PARAM)) return;
@@ -1059,6 +1213,7 @@ export default function InventoryDetailPage() {
       <div className="inventory-detail-sheet" style={sheetStyle}>
         <section className="inventory-detail-panel" style={panelStyle}>
           {notice ? <div role="alert" style={noticeStyle}>{notice}</div> : null}
+          {paymentUpdateNotice ? <div className="inventory-detail-no-print" role="alert" style={noticeStyle}>{paymentUpdateNotice}</div> : null}
           <div style={sectionStyle}>
             <div style={headerTopBarStyle}>
               <Link className="inventory-detail-no-print" style={backLinkStyle} to="/app/orders?view=inventory">
@@ -1160,7 +1315,30 @@ export default function InventoryDetailPage() {
                         </div>
                         {order.payment !== "-" || order.customerNote ? (
                           <div className="inventory-detail-order-details" style={orderViewDetailsStyle}>
-                            {order.payment !== "-" ? <span className="inventory-detail-order-payment" style={getOrderViewPaymentPillStyle(order.payment)}>{order.payment}</span> : null}
+                            {order.payment !== "-" ? (
+                              <div style={orderViewPaymentControlStyle}>
+                                <span className="inventory-detail-order-payment" style={getOrderViewPaymentPillStyle(order.payment)}>{order.payment}</span>
+                                {order.canSetPaymentMethod ? (
+                                  <div className="inventory-detail-no-print" style={orderViewPaymentButtonsStyle}>
+                                    {INVENTORY_PAYMENT_METHOD_OPTIONS.map((option) => (
+                                      <button
+                                        disabled={isUpdatingInventoryPayment || !order.orderDbId}
+                                        key={option.value}
+                                        onClick={() => handleInventoryPaymentChange(order.orderDbId, option.value)}
+                                        style={{
+                                          ...orderViewPaymentButtonStyle,
+                                          cursor: isUpdatingInventoryPayment || !order.orderDbId ? "default" : "pointer",
+                                          opacity: isUpdatingInventoryPayment || !order.orderDbId ? 0.6 : 1,
+                                        }}
+                                        type="button"
+                                      >
+                                        {option.label}
+                                      </button>
+                                    ))}
+                                  </div>
+                                ) : null}
+                              </div>
+                            ) : null}
                             {order.customerNote ? (
                               <div
                                 className="inventory-detail-order-note"
