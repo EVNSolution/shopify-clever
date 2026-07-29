@@ -131,6 +131,14 @@ test("Orders UI-only query changes keep loaded Orders and Inventory data", () =>
     shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders?view=inventory", { formMethod: "POST" })),
     true,
   );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders", {
+      formData: new URLSearchParams({ _intent: "refreshAllRoutes" }),
+      formMethod: "POST",
+    })),
+    false,
+    "the background update owns one explicit loader refresh after its action completes",
+  );
 
   assert.match(ordersPageSource, /export function shouldRevalidate\(args\) \{/);
   assert.match(ordersPageSource, /return shouldRevalidateOrdersRoute\(args\)/);

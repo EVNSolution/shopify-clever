@@ -221,9 +221,14 @@ async function handleOrdersAction(request) {
   }
 
   if (intent === "refreshAllRoutes") {
+    const refreshRequestId = textOrUndefined(formData.get("refreshRequestId"));
+    const completeRefresh = (result) => ({
+      ...result,
+      refreshRequestId,
+    });
     const preferencesData = await fetchShopifyAppPreferences(admin);
     if ((preferencesData.errors ?? []).length > 0) {
-      return {
+      return completeRefresh({
         errors: preferencesData.errors,
         refreshedRoutes: 0,
         routePlanIds: [],
@@ -231,7 +236,7 @@ async function handleOrdersAction(request) {
         syncedOrders: [],
         sync: null,
         updatedOrders: 0,
-      };
+      });
     }
 
     clearShopifyOrdersCache(shopifyShopCacheKey);
@@ -267,7 +272,7 @@ async function handleOrdersAction(request) {
       ...(routePlanData.errors ?? []),
     ];
     if (errors.length > 0) {
-      return {
+      return completeRefresh({
         errors,
         refreshedRoutes: 0,
         routePlanIds: [],
@@ -275,7 +280,7 @@ async function handleOrdersAction(request) {
         syncedOrders: syncedOrderData.orders ?? [],
         sync: syncedOrderData.sync ?? null,
         updatedOrders: syncedOrderData.orders?.length ?? 0,
-      };
+      });
     }
 
     const routePlans = routePlanData.routePlans ?? [];
@@ -284,7 +289,7 @@ async function handleOrdersAction(request) {
       .filter((routePlan) => !routePlanIds.includes(routePlan.id))
       .map((routePlan) => ({ routePlanId: routePlan.id, status: routePlan.status ?? "UNKNOWN" }));
     if (routePlanIds.length === 0) {
-      return {
+      return completeRefresh({
         errors: [],
         refreshedRoutes: 0,
         routePlanIds: [],
@@ -292,7 +297,7 @@ async function handleOrdersAction(request) {
         syncedOrders: syncedOrderData.orders ?? [],
         sync: syncedOrderData.sync ?? null,
         updatedOrders: syncedOrderData.orders?.length ?? 0,
-      };
+      });
     }
 
     const result = await refreshRouteOrders({
@@ -304,11 +309,11 @@ async function handleOrdersAction(request) {
       shopifyShopCacheKey,
       syncedOrderData,
     });
-    return {
+    return completeRefresh({
       ...result,
       skippedRoutes: [...initiallySkippedRoutes, ...(result.skippedRoutes ?? [])],
       syncedOrders: syncedOrderData.orders ?? [],
-    };
+    });
   }
 
 

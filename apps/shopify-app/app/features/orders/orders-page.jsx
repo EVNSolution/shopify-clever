@@ -64,6 +64,7 @@ import {
   buildOrdersViewNavigationMetric,
   DEFAULT_ROUTE_PLAN_TITLE,
   formatLatestShopifyOrderUpdatedAt,
+  getOrdersRefreshCompletion,
   getSafePerformanceNow,
   roundPerfDuration,
   shouldRequestOrdersData,
@@ -228,7 +229,19 @@ const ordersUpdateActionStyle = {
   gap: "10px",
 };
 
+const ordersUpdateMetaStyle = {
+  display: "grid",
+  justifyItems: "end",
+};
+
 const ordersLatestUpdateStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  lineHeight: "18px",
+  whiteSpace: "nowrap",
+};
+
+const ordersRefreshStatusStyle = {
   color: "#616161",
   fontSize: "12px",
   lineHeight: "18px",
@@ -2632,7 +2645,11 @@ function OrdersPageContent({ loaderData }) {
   const isCreatingInventory = inventoryFetcher.state !== "idle";
   const isDeletingInventory = inventoryDeleteFetcher.state !== "idle";
   const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
-  const isRefreshingAllRoutes = ordersRefreshFetcher.state !== "idle";
+  const [ordersRefreshPhase, setOrdersRefreshPhase] = useState("idle");
+  const isRefreshingAllRoutes =
+    ordersRefreshFetcher.state !== "idle" ||
+    ordersRefreshPhase === "syncing" ||
+    ordersRefreshPhase === "reloading";
   const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
@@ -2681,6 +2698,10 @@ function OrdersPageContent({ loaderData }) {
   const submittedRouteSessionTokenRef = useRef(null);
   const submittedInventorySessionTokenRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
+  const activeOrdersRefreshRequestIdRef = useRef(null);
+  const handledOrdersRefreshRequestIdRef = useRef(null);
+  const pendingOrdersRefreshResultRef = useRef(null);
+  const ordersRefreshRevalidationObservedRef = useRef(false);
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
   const orderedDateFieldRef = useRef(null);
@@ -3003,8 +3024,16 @@ function OrdersPageContent({ loaderData }) {
   const handleRefreshAllRoutes = useCallback(async () => {
     if (isRefreshingAllRoutes) return;
 
+    const refreshRequestId =
+      globalThis.crypto?.randomUUID?.() ??
+      `${Date.now()}-${Math.random().toString(36).slice(2)}`;
     const formData = new FormData();
     formData.set("_intent", "refreshAllRoutes");
+    formData.set("refreshRequestId", refreshRequestId);
+    activeOrdersRefreshRequestIdRef.current = refreshRequestId;
+    pendingOrdersRefreshResultRef.current = null;
+    ordersRefreshRevalidationObservedRef.current = false;
+    setOrdersRefreshPhase("syncing");
 
     try {
       formData.set("shopifySessionToken", await shopify.idToken());
@@ -3014,6 +3043,19 @@ function OrdersPageContent({ loaderData }) {
 
     ordersRefreshFetcher.submit(formData, { method: "post" });
   }, [isRefreshingAllRoutes, ordersRefreshFetcher, shopify]);
+
+  const ordersRefreshButtonLabel =
+    ordersRefreshPhase === "reloading"
+      ? "Refreshing Orders…"
+      : isRefreshingAllRoutes
+        ? "Updating Shopify orders…"
+        : "Update Shopify orders";
+  const ordersRefreshStatusMessage =
+    ordersRefreshPhase === "reloading"
+      ? "Update completed. Refreshing the Orders view…"
+      : ordersRefreshPhase === "syncing"
+        ? "Updating in the background…"
+        : null;
 
   const ordersViewTabs = (
     <div style={ordersViewTabsRowStyle}>
@@ -3038,15 +3080,22 @@ function OrdersPageContent({ loaderData }) {
         >Delete</button>
       ) : (
         <div style={ordersUpdateActionStyle}>
-          <span style={ordersLatestUpdateStyle}>
-            Latest update: {latestShopifyOrderUpdatedAt}
-          </span>
+          <div style={ordersUpdateMetaStyle}>
+            <span style={ordersLatestUpdateStyle}>
+              Latest update: {latestShopifyOrderUpdatedAt}
+            </span>
+            {ordersRefreshStatusMessage ? (
+              <span aria-live="polite" role="status" style={ordersRefreshStatusStyle}>
+                {ordersRefreshStatusMessage}
+              </span>
+            ) : null}
+          </div>
           <button
             type="button"
             style={isRefreshingAllRoutes ? disabledPlanButtonStyle : addToPlanButtonStyle}
             disabled={isRefreshingAllRoutes}
             onClick={handleRefreshAllRoutes}
-          >{isRefreshingAllRoutes ? "Updating…" : "Update Shopify orders"}</button>
+          >{ordersRefreshButtonLabel}</button>
         </div>
       )}
     </div>
@@ -4115,16 +4164,46 @@ function OrdersPageContent({ loaderData }) {
   }, [ordersSyncFetcher, safeOrders, shopify]);
 
   useEffect(() => {
-    if (ordersRefreshFetcher.state !== "idle" || !ordersRefreshFetcher.data) return;
-    revalidator.revalidate();
-    if ((ordersRefreshFetcher.data.errors ?? []).length > 0) return;
+    const completion = getOrdersRefreshCompletion({
+      activeRequestId: activeOrdersRefreshRequestIdRef.current,
+      data: ordersRefreshFetcher.data,
+      fetcherState: ordersRefreshFetcher.state,
+      handledRequestId: handledOrdersRefreshRequestIdRef.current,
+    });
+    if (!completion) return;
 
-    const updatedOrders = Number(ordersRefreshFetcher.data.updatedOrders ?? 0);
-    const refreshedRoutes = Number(ordersRefreshFetcher.data.refreshedRoutes ?? 0);
-    const skippedRoutes = ordersRefreshFetcher.data.skippedRoutes?.length ?? 0;
+    handledOrdersRefreshRequestIdRef.current = completion.requestId;
+    if (completion.hasErrors) {
+      activeOrdersRefreshRequestIdRef.current = null;
+      setOrdersRefreshPhase("error");
+      return;
+    }
+
+    pendingOrdersRefreshResultRef.current = completion.data;
+    ordersRefreshRevalidationObservedRef.current = false;
+    setOrdersRefreshPhase("reloading");
+    revalidator.revalidate();
+  }, [ordersRefreshFetcher.data, ordersRefreshFetcher.state, revalidator]);
+
+  useEffect(() => {
+    if (ordersRefreshPhase !== "reloading") return;
+    if (revalidator.state !== "idle") {
+      ordersRefreshRevalidationObservedRef.current = true;
+      return;
+    }
+    if (!ordersRefreshRevalidationObservedRef.current) return;
+
+    const refreshResult = pendingOrdersRefreshResultRef.current ?? {};
+    const updatedOrders = Number(refreshResult.updatedOrders ?? 0);
+    const refreshedRoutes = Number(refreshResult.refreshedRoutes ?? 0);
+    const skippedRoutes = refreshResult.skippedRoutes?.length ?? 0;
     const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} active or terminal routes skipped` : "";
+    activeOrdersRefreshRequestIdRef.current = null;
+    pendingOrdersRefreshResultRef.current = null;
+    ordersRefreshRevalidationObservedRef.current = false;
+    setOrdersRefreshPhase("idle");
     shopify.toast.show(`${updatedOrders} orders synced; ${refreshedRoutes} READY routes refreshed${skippedMessage}`);
-  }, [ordersRefreshFetcher.data, ordersRefreshFetcher.state, revalidator, shopify]);
+  }, [ordersRefreshPhase, revalidator.state, shopify]);
 
   useEffect(() => {
     const createdRouteGroup = routePlanFetcher.data?.routeGroup;
