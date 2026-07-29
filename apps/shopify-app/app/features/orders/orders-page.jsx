@@ -2946,6 +2946,10 @@ function OrdersPageContent({ loaderData }) {
   }, [activeOrdersView]);
 
   useEffect(() => {
+    if (activeOrdersView === "inventory") {
+      ordersLoadRequestedRef.current = false;
+      return;
+    }
     if (ordersLoaded) {
       ordersLoadRequestedRef.current = false;
       return;
