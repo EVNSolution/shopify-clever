@@ -3,10 +3,25 @@ import assert from "node:assert/strict";
 import {
   inferDeliveryDateForOrder,
   formatDeliveryScopeLabel,
+  getAppstleSubscriptionOrderKind,
   inferDeliveryDateFromLineItems,
   inferDeliveryDateFromOrderCycle,
   normalizeDeliveryCycle,
 } from "./delivery-labels.js";
+
+test("recognizes exact Appstle subscription tags from Shopify snapshots", () => {
+  assert.equal(
+    getAppstleSubscriptionOrderKind({
+      rawPayload: { tags: ["appstle_subscription_recurring_order"] },
+    }),
+    "recurring",
+  );
+  assert.equal(
+    getAppstleSubscriptionOrderKind(["appstle_subscription_first_order"]),
+    "first",
+  );
+  assert.equal(getAppstleSubscriptionOrderKind(["subscription"]), null);
+});
 
 test("formats delivery labels with the actual date and weekday", () => {
   assert.equal(
@@ -149,5 +164,24 @@ test("uses the product date range before an explicit delivery date", () => {
       orderCreatedAt: "2026-05-01T15:30:00.000Z",
     }),
     "2026-05-22",
+  );
+});
+
+test("uses the configured order cycle for recurring subscriptions with stale product dates", () => {
+  assert.equal(
+    inferDeliveryDateForOrder({
+      deliveryCycle: {
+        cutoffTime: "17:00",
+        cutoffWeekday: "TUESDAY",
+        timeZone: "America/Toronto",
+      },
+      deliveryDay: "Saturday",
+      ignoreLineItemDateRange: true,
+      lineItems: {
+        nodes: [{ title: "PREMIUM MEAL KIT SET 7/16-7/18" }],
+      },
+      orderCreatedAt: "2026-07-23T14:00:00.000Z",
+    }),
+    "2026-08-01",
   );
 });

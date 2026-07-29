@@ -360,7 +360,7 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
   assert.match(ordersPageSource, /select: "2\.5%"/);
   assert.match(ordersPageSource, /name: "64px"/);
-  assert.match(ordersPageSource, /notes: "24px"/);
+  assert.match(ordersPageSource, /notes: "44px"/);
   assert.match(ordersPageSource, /address: "calc\(37% - 88px\)"/);
   assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.flatMap/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
@@ -424,6 +424,9 @@ test("Orders ID stays centered while Note uses a separate headerless column", ()
   assert.match(ordersPageSource, /createPortal\([\s\S]*?ref=\{notePopoverRef\}[\s\S]*?notePopoverPosition\.left/);
   assert.match(ordersPageSource, /data-order-notes-popover-root="true"/);
   assert.match(ordersPageSource, /<s-icon type="note"/);
+  assert.match(ordersPageSource, /getAppstleSubscriptionOrderKind\(order\)/);
+  assert.match(ordersPageSource, /<s-icon type="refresh"/);
+  assert.match(ordersPageSource, /Recurring subscription order/);
   assert.match(ordersPageSource, />Notes</);
   assert.match(ordersPageSource, />Order Note</);
   assert.match(ordersPageSource, />Customer Note</);
@@ -1027,11 +1030,10 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /Past due/);
   assert.doesNotMatch(ordersPageSource, /Past due · unassigned/);
   assert.match(ordersPageSource, /Assigned · undelivered/);
-  assert.match(ordersPageSource, /formatOrderShopifyFulfillmentState\(order\)/);
-  assert.match(ordersPageSource, /getOrderShopifyFulfillmentPillTone\(order\)/);
-  assert.match(ordersPageSource, /Fulfilled/);
-  assert.match(ordersPageSource, /Unfulfilled/);
-  assert.match(ordersPageSource, /const statePillStackStyle = \{/);
+  assert.doesNotMatch(ordersPageSource, /formatOrderShopifyFulfillmentState\(order\)/);
+  assert.doesNotMatch(ordersPageSource, /getOrderShopifyFulfillmentPillTone\(order\)/);
+  assert.doesNotMatch(ordersPageSource, /title="Shopify fulfillment"/);
+  assert.doesNotMatch(ordersPageSource, /const statePillStackStyle = \{/);
   assert.doesNotMatch(ordersPageSource, /\{ label: "Fulfilled", value: "FULFILLED" \}/);
   assert.doesNotMatch(ordersPageSource, /\{ label: "Unfulfilled", value: "UNFULFILLED" \}/);
   assert.match(ordersPageSource, /En route/);
@@ -1763,6 +1765,7 @@ test("Orders map renders planned pins and the focused table-click pin", () => {
 
 test("Shopify order mapping reads only the Customer note and keeps coordinate metadata", () => {
   assert.match(shopifyOrdersSource, /export const SHOPIFY_ORDERS_QUERY/);
+  assert.match(shopifyOrdersSource, /\btags\b/);
   assert.match(shopifyOrdersSource, /customer\s*\{\s*note\s*\}/);
   assert.match(shopifyOrdersSource, /shippingAddress\s*\{/);
   assert.match(shopifyOrdersSource, /coordinates: \[longitude, latitude\]/);

@@ -169,6 +169,7 @@ function sanitizeShopifyOrderSyncSnapshot(snapshot) {
   copyStringField(output, snapshot, "note");
   copyStringField(output, snapshot, "phone");
   copyStringArrayField(output, snapshot, "paymentGatewayNames");
+  copyStringArrayField(output, snapshot, "tags");
 
   if (Object.hasOwn(snapshot, "currentTotalPriceSet")) {
     output.currentTotalPriceSet = sanitizeMoneySet(snapshot.currentTotalPriceSet);

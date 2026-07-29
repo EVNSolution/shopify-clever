@@ -1,5 +1,6 @@
 import {
   formatDeliveryScopeLabel,
+  getAppstleSubscriptionOrderKind,
   inferDeliveryDateForOrder,
 } from "../delivery/delivery-labels.js";
 import {
@@ -26,6 +27,7 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
           createdAt
           updatedAt
           cancelledAt
+          tags
           note
           customer {
             note
@@ -96,6 +98,7 @@ export const SHOPIFY_ORDERS_BY_IDS_QUERY = `#graphql
         createdAt
         updatedAt
         cancelledAt
+        tags
         note
         customer {
           note
@@ -513,10 +516,12 @@ function mapOrderNode(order, options = {}) {
   const attributes = getAttributeMap(order.customAttributes);
   const deliveryDay = textOrUndefined(attributes["Delivery Day"]);
   const deliveryDateRaw = getDeliveryDateAttribute(attributes);
+  const subscriptionOrderKind = getAppstleSubscriptionOrderKind(order);
   const deliveryDate = inferDeliveryDateForOrder({
     deliveryCycle: options.deliveryCycle,
     deliveryDate: deliveryDateRaw,
     deliveryDay,
+    ignoreLineItemDateRange: subscriptionOrderKind === "recurring",
     lineItems: order.lineItems,
     orderCreatedAt: order.createdAt ?? order.processedAt,
   });

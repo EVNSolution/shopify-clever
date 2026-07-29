@@ -25,6 +25,7 @@ test("orders query reads order and customer notes", () => {
   assert.match(SHOPIFY_ORDERS_QUERY, /createdAt/);
   assert.match(SHOPIFY_ORDERS_QUERY, /updatedAt/);
   assert.match(SHOPIFY_ORDERS_QUERY, /cancelledAt/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /\btags\b/);
   assert.match(SHOPIFY_ORDERS_QUERY, /\bnote\b/);
   assert.match(SHOPIFY_ORDERS_QUERY, /customer\s*\{\s*note\s*\}/);
   assert.match(SHOPIFY_ORDERS_QUERY, /processedAt/);
@@ -217,6 +218,67 @@ test("maps Shopify customer notes without changing the recipient name", () => {
 
   assert.equal(order.customer, "Kim Minji");
   assert.equal(order.customerNote, "Call before delivery");
+});
+
+test("moves recurring Appstle orders to the configured cycle instead of a stale product date", () => {
+  const [order] = mapShopifyOrdersResponse({
+    data: {
+      orders: {
+        edges: [{
+          node: {
+            id: "gid://shopify/Order/1387",
+            name: "#1387",
+            createdAt: "2026-07-23T14:00:00.000Z",
+            tags: ["appstle_subscription_recurring_order"],
+            customAttributes: [{ key: "Delivery Day", value: "Saturday" }],
+            lineItems: {
+              nodes: [{ title: "PREMIUM MEAL KIT SET 7/16-7/18" }],
+            },
+            shippingAddress: { name: "Subscription customer" },
+          },
+        }],
+      },
+    },
+  }, {
+    deliveryCycle: {
+      cutoffTime: "17:00",
+      cutoffWeekday: "TUESDAY",
+      timeZone: "America/Toronto",
+    },
+  });
+
+  assert.equal(order.deliveryDate, "2026-08-01");
+  assert.deepEqual(order.rawPayload.tags, ["appstle_subscription_recurring_order"]);
+});
+
+test("keeps product dates for the first Appstle subscription order", () => {
+  const [order] = mapShopifyOrdersResponse({
+    data: {
+      orders: {
+        edges: [{
+          node: {
+            id: "gid://shopify/Order/1217",
+            name: "#1217",
+            createdAt: "2026-07-09T14:00:00.000Z",
+            tags: ["appstle_subscription_first_order"],
+            customAttributes: [{ key: "Delivery Day", value: "Saturday" }],
+            lineItems: {
+              nodes: [{ title: "PREMIUM MEAL KIT SET 7/16-7/18" }],
+            },
+            shippingAddress: { name: "Subscription customer" },
+          },
+        }],
+      },
+    },
+  }, {
+    deliveryCycle: {
+      cutoffTime: "17:00",
+      cutoffWeekday: "TUESDAY",
+      timeZone: "America/Toronto",
+    },
+  });
+
+  assert.equal(order.deliveryDate, "2026-07-18");
 });
 
 
