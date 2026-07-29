@@ -1264,11 +1264,6 @@ const subscriptionSignalStyle = {
   width: "18px",
 };
 
-const subscriptionSignalIconStyle = {
-  color: "#4a9fe5",
-  display: "block",
-};
-
 const itemPopoverStyle = {
   background: "#ffffff",
   border: "1px solid #d6dce5",
@@ -2108,6 +2103,11 @@ function getOrderSubscriptionSignalLabel(order) {
   if (kind === "recurring") return "Recurring subscription order";
   if (kind === "first") return "First subscription order";
   return null;
+}
+
+function getOrderSubscriptionTooltipId(order) {
+  const orderId = textOrUndefined(order?.id) ?? textOrUndefined(order?.name) ?? "unknown";
+  return `order-subscription-${orderId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
 function getFirstTextValue(values) {
@@ -5212,6 +5212,9 @@ function OrdersPageContent({ loaderData }) {
                   const orderNote = getOrderNote(order);
                   const customerNote = getCustomerNote(order);
                   const subscriptionSignalLabel = getOrderSubscriptionSignalLabel(order);
+                  const subscriptionTooltipId = subscriptionSignalLabel
+                    ? getOrderSubscriptionTooltipId(order)
+                    : null;
 
                   return (
                     <tr key={order.id}>
@@ -5296,9 +5299,16 @@ function OrdersPageContent({ loaderData }) {
                                 aria-label={subscriptionSignalLabel}
                                 role="img"
                                 style={subscriptionSignalStyle}
-                                title={subscriptionSignalLabel}
                               >
-                                <s-icon type="refresh" size="base" style={subscriptionSignalIconStyle}></s-icon>
+                                <s-icon
+                                  type="order-repeat"
+                                  size="base"
+                                  tone="info"
+                                  interestFor={subscriptionTooltipId}
+                                ></s-icon>
+                                <s-tooltip id={subscriptionTooltipId}>
+                                  {subscriptionSignalLabel}
+                                </s-tooltip>
                               </span>
                             ) : null}
                           </span>
