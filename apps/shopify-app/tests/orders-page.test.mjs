@@ -5,7 +5,11 @@ import { join } from "node:path";
 import test from "node:test";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 import { mapCanonicalOrdersToOrderRows } from "../app/features/orders/canonical-orders.js";
-import { buildOrderTimelineDetails } from "../app/features/orders/orders-page.shared.js";
+import {
+  buildOrderTimelineDetails,
+  formatLatestShopifyOrderUpdatedAt,
+  getLatestShopifyOrderUpdatedAt,
+} from "../app/features/orders/orders-page.shared.js";
 
 const root = process.cwd();
 
@@ -88,6 +92,36 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.match(appConfigSource, /scopes = "[^"]*read_customers/);
   assert.equal(packageJson.dependencies["maplibre-gl"]?.length > 0, true);
   assert.equal(packageJson.dependencies.pmtiles?.length > 0, true);
+});
+
+test("Orders update action shows the latest individual Shopify order update", () => {
+  assert.match(ordersPageSource, /Latest update: \{latestShopifyOrderUpdatedAt\}/);
+  assert.match(ordersPageSource, /Update Shopify orders/);
+  assert.doesNotMatch(ordersPageSource, />Update routes</);
+
+  const orders = [
+    { updatedAt: "2026-07-29T01:00:00.000Z" },
+    {
+      updatedAtShopify: "2026-07-29T02:00:00.000Z",
+      updatedAt: "2026-07-29T05:00:00.000Z",
+    },
+    {
+      shopifyOrderSnapshot: { updatedAt: "2026-07-29T04:30:15.000Z" },
+    },
+    {
+      rawPayload: { updatedAt: "not-a-date" },
+    },
+  ];
+
+  assert.equal(
+    getLatestShopifyOrderUpdatedAt(orders),
+    "2026-07-29T05:00:00.000Z",
+  );
+  assert.equal(
+    formatLatestShopifyOrderUpdatedAt(orders, "Asia/Seoul"),
+    "2026-07-29, 14:00:00",
+  );
+  assert.equal(formatLatestShopifyOrderUpdatedAt([], "Asia/Seoul"), "—");
 });
 
 test("Orders loader can isolate CLEVER delivery orders for synthetic dev data", () => {

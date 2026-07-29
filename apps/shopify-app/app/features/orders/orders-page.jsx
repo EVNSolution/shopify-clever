@@ -62,6 +62,7 @@ import {
   buildOrderTimelineDetails,
   buildOrdersViewNavigationMetric,
   DEFAULT_ROUTE_PLAN_TITLE,
+  formatLatestShopifyOrderUpdatedAt,
   getSafePerformanceNow,
   roundPerfDuration,
   shouldRequestOrdersData,
@@ -218,6 +219,19 @@ const ordersViewTabBarStyle = {
   alignItems: "center",
   display: "flex",
   gap: "6px",
+};
+
+const ordersUpdateActionStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "10px",
+};
+
+const ordersLatestUpdateStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  lineHeight: "18px",
+  whiteSpace: "nowrap",
 };
 
 const ordersViewTabButtonStyle = {
@@ -2480,6 +2494,10 @@ function OrdersPageContent({ loaderData }) {
     },
     [bulkUpdatedOrders, refreshedOrders, safeOrders, syncedOrders],
   );
+  const latestShopifyOrderUpdatedAt = useMemo(
+    () => formatLatestShopifyOrderUpdatedAt(displayOrders, shopTimeZone),
+    [displayOrders, shopTimeZone],
+  );
   const urlOrderFilters = useMemo(
     () => getOrderFiltersFromSearchParams(searchParams),
     [searchParams],
@@ -3018,12 +3036,17 @@ function OrdersPageContent({ loaderData }) {
           onClick={handleDeleteSelectedInventories}
         >Delete</button>
       ) : (
-        <button
-          type="button"
-          style={isRefreshingAllRoutes ? disabledPlanButtonStyle : addToPlanButtonStyle}
-          disabled={isRefreshingAllRoutes}
-          onClick={handleRefreshAllRoutes}
-        >{isRefreshingAllRoutes ? "Updating…" : "Update routes"}</button>
+        <div style={ordersUpdateActionStyle}>
+          <span style={ordersLatestUpdateStyle}>
+            Latest update: {latestShopifyOrderUpdatedAt}
+          </span>
+          <button
+            type="button"
+            style={isRefreshingAllRoutes ? disabledPlanButtonStyle : addToPlanButtonStyle}
+            disabled={isRefreshingAllRoutes}
+            onClick={handleRefreshAllRoutes}
+          >{isRefreshingAllRoutes ? "Updating…" : "Update Shopify orders"}</button>
+        </div>
       )}
     </div>
   );

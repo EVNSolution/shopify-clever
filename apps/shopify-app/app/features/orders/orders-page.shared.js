@@ -49,6 +49,52 @@ export function buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone }
   ]);
 }
 
+export function getLatestShopifyOrderUpdatedAt(orders) {
+  let latestTimestamp;
+
+  for (const order of Array.isArray(orders) ? orders : []) {
+    const candidates = [
+      order?.updatedAtShopify,
+      order?.sourceUpdatedAt,
+      order?.shopifyOrderSnapshot?.updatedAt,
+      order?.rawPayload?.updatedAt,
+      order?.updatedAt,
+    ];
+
+    for (const candidate of candidates) {
+      const text = textOrUndefined(candidate);
+      if (!text) continue;
+
+      const timestamp = new Date(text).getTime();
+      if (Number.isNaN(timestamp)) continue;
+
+      latestTimestamp = latestTimestamp == null
+        ? timestamp
+        : Math.max(latestTimestamp, timestamp);
+    }
+  }
+
+  return latestTimestamp == null
+    ? undefined
+    : new Date(latestTimestamp).toISOString();
+}
+
+export function formatLatestShopifyOrderUpdatedAt(orders, shopTimeZone) {
+  const latestUpdatedAt = getLatestShopifyOrderUpdatedAt(orders);
+  if (!latestUpdatedAt) return "—";
+
+  return new Intl.DateTimeFormat("en-CA", {
+    day: "2-digit",
+    hour: "2-digit",
+    hour12: false,
+    minute: "2-digit",
+    month: "2-digit",
+    second: "2-digit",
+    ...(shopTimeZone ? { timeZone: shopTimeZone } : {}),
+    year: "numeric",
+  }).format(new Date(latestUpdatedAt));
+}
+
 const DATE_FORMAT_OPTIONS = {
   day: "2-digit",
   month: "2-digit",
