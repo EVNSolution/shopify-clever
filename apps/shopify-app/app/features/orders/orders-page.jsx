@@ -6,6 +6,7 @@ import { Await, useFetcher, useLoaderData, useNavigate, useRevalidator, useSearc
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { appendIdToken, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
+import { getAppstleSubscriptionOrderKind } from "../delivery/delivery-labels";
 import { createDepartureMarkerElement } from "../maps/map-markers";
 import { createMapLibreMap } from "../maps/maplibre-map";
 import { installMissingMapImageFallback } from "../maps/maplibre-missing-images";
@@ -44,7 +45,6 @@ import {
   getOrderDeliveryDateValue,
   getOrderDeliveryExceptionState,
   getOrderDeliveryStateFilterValue,
-  getOrderShopifyFulfillmentState,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
   isOrderRouteCreated,
@@ -1172,14 +1172,6 @@ const deliveryInfoCellStyle = {
   overflow: "visible",
 };
 
-const statePillStackStyle = {
-  alignItems: "center",
-  display: "inline-flex",
-  flexWrap: "wrap",
-  gap: "4px",
-  justifyContent: "center",
-};
-
 const orderNumberButtonStyle = {
   alignItems: "center",
   border: 0,
@@ -1241,6 +1233,15 @@ const itemInfoButtonStyle = {
 const noteButtonStyle = {
   ...itemInfoButtonStyle,
   marginLeft: 0,
+};
+
+const subscriptionSignalStyle = {
+  alignItems: "center",
+  color: "#5c6ac4",
+  display: "inline-flex",
+  height: "18px",
+  justifyContent: "center",
+  width: "18px",
 };
 
 const itemPopoverStyle = {
@@ -2077,19 +2078,11 @@ function formatOrderDeliveryState(order, referenceDate) {
   return "Unplanned";
 }
 
-function formatOrderShopifyFulfillmentState(order) {
-  const state = getOrderShopifyFulfillmentState(order);
-
-  if (state === "fulfilled") return "Fulfilled";
-  if (state === "unfulfilled") return "Unfulfilled";
-
+function getOrderSubscriptionSignalLabel(order) {
+  const kind = getAppstleSubscriptionOrderKind(order);
+  if (kind === "recurring") return "Recurring subscription order";
+  if (kind === "first") return "First subscription order";
   return null;
-}
-
-function getOrderShopifyFulfillmentPillTone(order) {
-  return getOrderShopifyFulfillmentState(order) === "fulfilled"
-    ? "success"
-    : "neutral";
 }
 
 function getFirstTextValue(values) {
@@ -5193,6 +5186,7 @@ function OrdersPageContent({ loaderData }) {
                   const paymentPillDetails = getOrderPaymentPillDetails(order);
                   const orderNote = getOrderNote(order);
                   const customerNote = getCustomerNote(order);
+                  const subscriptionSignalLabel = getOrderSubscriptionSignalLabel(order);
 
                   return (
                     <tr key={order.id}>
@@ -5266,6 +5260,19 @@ function OrdersPageContent({ loaderData }) {
                                 </div>
                               </div>
                             , document.body) : null}
+                          </span>
+                        ) : null}
+                        {subscriptionSignalLabel ? (
+                          <span
+                            aria-label={subscriptionSignalLabel}
+                            role="img"
+                            style={{
+                              ...subscriptionSignalStyle,
+                              marginLeft: orderNote || customerNote ? "4px" : 0,
+                            }}
+                            title={subscriptionSignalLabel}
+                          >
+                            <s-icon type="refresh" size="base"></s-icon>
                           </span>
                         ) : null}
                       </td>
@@ -5361,23 +5368,13 @@ function OrdersPageContent({ loaderData }) {
                         ) : deliveryPill}
                       </td>
                       <td style={deliveryInfoCellStyle}>
-                        <span style={statePillStackStyle}>
-                          {renderDetailPill({
-                            children: formatOrderDeliveryState(order, orderFilterReferenceDate),
-                            details: statePillDetails,
-                            detailKey: `${order.id}:state`,
-                            label: "State details",
-                            tone: getOrderDeliveryStatePillTone(order, orderFilterReferenceDate),
-                          })}
-                          {formatOrderShopifyFulfillmentState(order) ? (
-                            <InfoPill
-                              title="Shopify fulfillment"
-                              tone={getOrderShopifyFulfillmentPillTone(order)}
-                            >
-                              {formatOrderShopifyFulfillmentState(order)}
-                            </InfoPill>
-                          ) : null}
-                        </span>
+                        {renderDetailPill({
+                          children: formatOrderDeliveryState(order, orderFilterReferenceDate),
+                          details: statePillDetails,
+                          detailKey: `${order.id}:state`,
+                          label: "State details",
+                          tone: getOrderDeliveryStatePillTone(order, orderFilterReferenceDate),
+                        })}
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         {renderDetailPill({

@@ -1,7 +1,7 @@
 export const ORDER_TABLE_COLUMN_WIDTHS = {
   select: "2.5%",
   name: "64px",
-  notes: "24px",
+  notes: "44px",
   orderedDate: "8%",
   customer: "9%",
   address: "calc(37% - 88px)",

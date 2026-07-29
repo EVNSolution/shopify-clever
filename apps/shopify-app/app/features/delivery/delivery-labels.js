@@ -30,6 +30,29 @@ export const DEFAULT_DELIVERY_CYCLE = {
   timeZone: "America/Toronto",
 };
 
+const APPSTLE_SUBSCRIPTION_FIRST_ORDER_TAG = "appstle_subscription_first_order";
+const APPSTLE_SUBSCRIPTION_RECURRING_ORDER_TAG = "appstle_subscription_recurring_order";
+
+export function getAppstleSubscriptionOrderKind(orderOrTags) {
+  const tagCandidates = Array.isArray(orderOrTags)
+    ? orderOrTags
+    : [
+        orderOrTags?.tags,
+        orderOrTags?.rawPayload?.tags,
+        orderOrTags?.shopifyOrderSnapshot?.tags,
+      ].flatMap((value) => (Array.isArray(value) ? value : []));
+  const tags = new Set(
+    tagCandidates
+      .filter((value) => typeof value === "string")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  if (tags.has(APPSTLE_SUBSCRIPTION_RECURRING_ORDER_TAG)) return "recurring";
+  if (tags.has(APPSTLE_SUBSCRIPTION_FIRST_ORDER_TAG)) return "first";
+  return null;
+}
+
 export function formatDeliveryScopeLabel({
   deliveryDate,
   timeWindowEnd,
@@ -46,15 +69,18 @@ export function inferDeliveryDateForOrder({
   deliveryCycle,
   deliveryDate,
   deliveryDay,
+  ignoreLineItemDateRange = false,
   lineItems,
   orderCreatedAt,
 } = {}) {
   return (
-    inferDeliveryDateFromLineItems({
-      deliveryDay,
-      lineItems,
-      orderCreatedAt,
-    }) ??
+    (ignoreLineItemDateRange
+      ? undefined
+      : inferDeliveryDateFromLineItems({
+          deliveryDay,
+          lineItems,
+          orderCreatedAt,
+        })) ??
     normalizeExplicitDeliveryDate(deliveryDate, orderCreatedAt) ??
     inferDeliveryDateFromOrderCycle({
       deliveryCycle,
