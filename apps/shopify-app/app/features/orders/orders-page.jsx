@@ -92,9 +92,7 @@ const ORDER_STATE_CHANGE_OPTIONS = [
 ];
 const ORDER_PAYMENT_CHANGE_OPTIONS = [
   { label: "Paid", value: "PAID" },
-  { label: "Cash", value: "CASH" },
-  { label: "eTransfer", value: "ETRANSFER" },
-  { label: "Pending", value: "PENDING" },
+  { label: "Awaiting payment", value: "PENDING" },
   { label: "Unknown", value: "UNKNOWN" },
 ];
 const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
@@ -2138,22 +2136,28 @@ function getOrderSubscriptionTooltipId(order) {
   return `order-subscription-${orderId.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
 }
 
-function getFirstTextValue(values) {
-  for (const value of values) {
-    const text = textOrUndefined(value);
-    if (text) return text;
-  }
-
-  return undefined;
-}
-
 function getOrderPaymentStatus(order) {
-  return getFirstTextValue([
-    order?.paymentStatus,
+  const candidates = [
     order?.rawPayload?.displayFinancialStatus,
     order?.shopifyOrderSnapshot?.displayFinancialStatus,
+    order?.paymentStatus,
     order?.financialStatus,
+  ];
+  const validStatuses = new Set([
+    "AUTHORIZED",
+    "EXPIRED",
+    "PAID",
+    "PARTIALLY_PAID",
+    "PARTIALLY_REFUNDED",
+    "PENDING",
+    "REFUNDED",
+    "VOIDED",
+    "UNKNOWN",
   ]);
+
+  return candidates
+    .map(textOrUndefined)
+    .find((candidate) => validStatuses.has(normalizePaymentStatus(candidate)));
 }
 
 function getOrderPaymentGatewayNames(order) {
@@ -2168,34 +2172,17 @@ function normalizePaymentStatus(value) {
   return textOrUndefined(value)?.replace(/\s+/g, "_").toUpperCase() ?? "";
 }
 
-function getPaymentGatewaySearchValue(value) {
-  return String(value ?? "").toLowerCase();
-}
-
-function hasCashPaymentGateway(gatewayNames) {
-  return gatewayNames.some((gatewayName) => {
-    const searchValue = getPaymentGatewaySearchValue(gatewayName);
-    return searchValue.includes("cash") || searchValue.includes("cod") || searchValue.includes("현금");
-  });
-}
-
-function hasETransferPaymentGateway(gatewayNames) {
-  return gatewayNames.some((gatewayName) => {
-    const searchValue = getPaymentGatewaySearchValue(gatewayName).replace(/[\s_-]+/g, "");
-    return searchValue.includes("etransfer") || searchValue.includes("emailtransfer");
-  });
-}
-
 function formatOrderPaymentState(order) {
   const status = normalizePaymentStatus(getOrderPaymentStatus(order));
-  const gatewayNames = getOrderPaymentGatewayNames(order);
 
   if (status === "PAID") return "Paid";
-  if (status === "CASH") return "Cash";
-  if (status === "ETRANSFER") return "eTransfer";
-  if (hasCashPaymentGateway(gatewayNames)) return "Cash";
-  if (hasETransferPaymentGateway(gatewayNames)) return "eTransfer";
-  if (status === "PENDING") return "Pending";
+  if (status === "PENDING") return "Awaiting payment";
+  if (status === "PARTIALLY_PAID") return "Partially paid";
+  if (status === "AUTHORIZED") return "Authorized";
+  if (status === "PARTIALLY_REFUNDED") return "Partially refunded";
+  if (status === "REFUNDED") return "Refunded";
+  if (status === "VOIDED") return "Voided";
+  if (status === "EXPIRED") return "Expired";
 
   return "Unknown";
 }
@@ -2203,7 +2190,7 @@ function formatOrderPaymentState(order) {
 function getOrderPaymentPillTone(order) {
   const paymentState = formatOrderPaymentState(order);
   if (paymentState === "Paid") return "success";
-  if (paymentState === "Cash" || paymentState === "eTransfer") return "warning";
+  if (paymentState === "Awaiting payment") return "warning";
   return "critical";
 }
 
@@ -2212,11 +2199,9 @@ function getOrderPaymentPillDetails(order) {
   if (paymentState === "Paid") return [];
 
   const gatewayNames = getOrderPaymentGatewayNames(order);
-  const reason = paymentState === "Cash" || paymentState === "eTransfer"
-    ? `${paymentState} payment needs collection`
-    : paymentState === "Pending"
-      ? "Payment is pending"
-      : "Payment status or gateway is unknown";
+  const reason = paymentState === "Awaiting payment"
+    ? "Payment is awaiting collection"
+    : "Payment status or gateway is unknown";
 
   return getUniqueInfoDetails([
     reason,

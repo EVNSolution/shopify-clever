@@ -818,8 +818,9 @@ test("Orders page bulk-changes selected server order state or payment", () => {
   assert.match(ordersPageSource, /const ORDER_STATE_CHANGE_OPTIONS = \[/);
   assert.match(ordersPageSource, /\{ label: "Delivered", value: "DELIVERED" \}/);
   assert.match(ordersPageSource, /const ORDER_PAYMENT_CHANGE_OPTIONS = \[/);
-  assert.match(ordersPageSource, /\{ label: "Cash", value: "CASH" \}/);
-  assert.match(ordersPageSource, /\{ label: "eTransfer", value: "ETRANSFER" \}/);
+  assert.match(ordersPageSource, /\{ label: "Awaiting payment", value: "PENDING" \}/);
+  assert.doesNotMatch(ordersPageSource, /\{ label: "Cash", value: "CASH" \}/);
+  assert.doesNotMatch(ordersPageSource, /\{ label: "eTransfer", value: "ETRANSFER" \}/);
   assert.match(ordersPageSource, /const orderBulkUpdateFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /if \(intent === "bulkUpdateOrders"\)/);
   assert.match(ordersPageSource, /bulkUpdateDeliveryOrders\(\s*request,\s*\{ field, orderIds, value \},\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
@@ -1212,8 +1213,7 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /tone: getOrderDeliveryStatePillTone\(order, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /function getOrderPaymentPillDetails\(order\)/);
   assert.match(ordersPageSource, /tone: getOrderPaymentPillTone\(order\)/);
-  assert.match(ordersPageSource, /payment needs collection/);
-  assert.match(ordersPageSource, /Payment is pending/);
+  assert.match(ordersPageSource, /Payment is awaiting collection/);
   assert.match(ordersPageSource, /Payment status or gateway is unknown/);
   assert.match(ordersPageSource, /Raw payment status/);
   assert.match(ordersPageSource, /Raw payment gateway/);
@@ -1226,15 +1226,13 @@ test("Orders table keeps delivery state operational and payment state separate",
   assert.match(ordersPageSource, /order\?\.rawPayload\?\.paymentGatewayNames/);
   assert.match(ordersPageSource, /order\?\.shopifyOrderSnapshot\?\.paymentGatewayNames/);
   assert.match(ordersPageSource, /if \(status === "PAID"\) return "Paid"/);
-  assert.match(ordersPageSource, /if \(status === "CASH"\) return "Cash"/);
-  assert.match(ordersPageSource, /if \(status === "ETRANSFER"\) return "eTransfer"/);
-  assert.match(ordersPageSource, /return "Cash"/);
-  assert.match(ordersPageSource, /return "eTransfer"/);
-  assert.match(ordersPageSource, /if \(status === "PENDING"\) return "Pending"/);
+  assert.doesNotMatch(ordersPageSource, /if \(status === "CASH"\) return "Cash"/);
+  assert.doesNotMatch(ordersPageSource, /if \(status === "ETRANSFER"\) return "eTransfer"/);
+  assert.match(ordersPageSource, /if \(status === "PENDING"\) return "Awaiting payment"/);
   assert.match(ordersPageSource, /return "Unknown"/);
   assert.match(ordersPageSource, /function getOrderPaymentPillTone\(order\) \{/);
   assert.match(ordersPageSource, /if \(paymentState === "Paid"\) return "success"/);
-  assert.match(ordersPageSource, /if \(paymentState === "Cash" \|\| paymentState === "eTransfer"\) return "warning"/);
+  assert.match(ordersPageSource, /if \(paymentState === "Awaiting payment"\) return "warning"/);
   assert.match(ordersPageSource, /return "critical"/);
   assert.doesNotMatch(ordersPageSource, /formatPaymentStatusLabel/);
   assert.doesNotMatch(ordersPageSource, /formatPaymentGatewayName/);
@@ -2029,7 +2027,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /break-inside: avoid/);
   assert.match(inventoryDetailSource, /page-break-inside: avoid/);
   assert.match(inventoryDetailSource, /break-inside: avoid-page/);
-  assert.match(inventoryDetailSource, /getOrderViewPaymentPillStyle\(order\.payment\)/);
+  assert.match(inventoryDetailSource, /getOrderViewPaymentPillStyle\(order\.paymentStatus\)/);
   assert.doesNotMatch(inventoryDetailSource, /orderViewItemStyle/);
   assert.doesNotMatch(inventoryDetailSource, /orderViewPaymentStyle/);
   assert.match(inventoryDetailSource, /const PRODUCT_COLUMNS_PER_TABLE = 6/);
@@ -2049,7 +2047,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /noteLines \* PRINT_ORDER_NOTE_LINE_HEIGHT_PX/);
   assert.match(inventoryDetailSource, /function applyInventoryOrderPrintBreaks/);
   assert.match(inventoryDetailSource, /function textOrDisplay\(value, fallback = "-"\)/);
-  assert.match(inventoryDetailSource, /order\.payment !== "-"/);
+  assert.match(inventoryDetailSource, /order\.paymentStatus !== "-"/);
   assert.doesNotMatch(inventoryDetailSource, /return "—"/);
   assert.match(inventoryDetailSource, /const height = getPrintOrderHeightPx\(card\)/);
   assert.match(inventoryDetailSource, /style\.breakBefore = "page"/);
@@ -2135,17 +2133,14 @@ test("Orders inventory detail logs API payload counts on the server", () => {
   assert.match(inventoryDetailSource, /firstOrderItemKeys/);
 });
 
-test("Orders inventory detail stores pending payment method in CLEVER DB only", () => {
-  assert.match(inventoryDetailSource, /import \{ bulkUpdateDeliveryOrders \} from "\.\.\/features\/delivery\/orders\.server"/);
-  assert.match(inventoryDetailSource, /export const action = async \(\{ request \}\) =>/);
-  assert.match(inventoryDetailSource, /formData\.get\("_intent"\) === "updateInventoryOrderPayment"/);
-  assert.match(inventoryDetailSource, /fetchDeliveryInventoryOrderView\(\s*request,\s*inventoryId,\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
-  assert.match(inventoryDetailSource, /if \(!currentOrder \|\| !isPendingInventoryPayment\(currentOrder\)\)/);
-  assert.match(inventoryDetailSource, /bulkUpdateDeliveryOrders\(\s*request,\s*\{ field: "payment", orderIds: \[orderId\], value \},\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
-  assert.match(inventoryDetailSource, /const INVENTORY_PAYMENT_METHOD_OPTIONS = \[[\s\S]*\{ label: "Cash", value: "CASH" \}[\s\S]*\{ label: "eTransfer", value: "ETRANSFER" \}[\s\S]*\]/);
-  assert.match(inventoryDetailSource, /canSetPaymentMethod: isPendingInventoryPayment\(order\)/);
-  assert.match(inventoryDetailSource, /order\.canSetPaymentMethod \?/);
-  assert.match(inventoryDetailSource, /formData\.set\("field", "payment"\)/);
-  assert.match(inventoryDetailSource, /formData\.set\("value", value\)/);
+test("Orders inventory detail renders payment method and status independently", () => {
+  assert.match(inventoryDetailSource, /formatInventoryPaymentMethod\(order\)/);
+  assert.match(inventoryDetailSource, /formatInventoryPaymentStatus\(order\)/);
+  assert.match(inventoryDetailSource, />Method</);
+  assert.match(inventoryDetailSource, />Status</);
+  assert.doesNotMatch(inventoryDetailSource, /updateInventoryOrderPayment/);
+  assert.doesNotMatch(inventoryDetailSource, /bulkUpdateDeliveryOrders/);
+  assert.doesNotMatch(inventoryDetailSource, /INVENTORY_PAYMENT_METHOD_OPTIONS/);
+  assert.doesNotMatch(inventoryDetailSource, />Pending</);
   assert.doesNotMatch(inventoryDetailSource, /orderUpdate|customerUpdate|mutation\s+\w+/);
 });
