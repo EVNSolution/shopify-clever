@@ -209,9 +209,24 @@ export function getOrderDeliveryDateFilterOptions(orders) {
       : []),
     ...Array.from(counts.entries())
       .filter(([value]) => value !== ORDER_DELIVERY_DATE_PENDING)
-      .sort(([leftValue], [rightValue]) => leftValue.localeCompare(rightValue))
+      .sort(([leftValue], [rightValue]) => rightValue.localeCompare(leftValue))
       .map(([value, count]) => ({ count, value })),
   ];
+}
+
+export function sortOrdersByDeliveryDatePriority(orders, direction = "descending") {
+  return [...(Array.isArray(orders) ? orders : [])].sort((leftOrder, rightOrder) => {
+    const leftDate = getOrderDeliveryDateValue(leftOrder);
+    const rightDate = getOrderDeliveryDateValue(rightOrder);
+
+    if (!leftDate && !rightDate) return 0;
+    if (!leftDate) return -1;
+    if (!rightDate) return 1;
+
+    return direction === "ascending"
+      ? leftDate.localeCompare(rightDate)
+      : rightDate.localeCompare(leftDate);
+  });
 }
 
 export function getOrderFiltersFromSearchParams(searchParams) {

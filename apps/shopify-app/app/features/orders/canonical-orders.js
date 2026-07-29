@@ -93,7 +93,11 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
   });
 }
 
-export function mergeShopifyOrderRowsWithCanonicalRows(shopifyRows, canonicalRows) {
+export function mergeShopifyOrderRowsWithCanonicalRows(
+  shopifyRows,
+  canonicalRows,
+  options = {},
+) {
   const safeShopifyRows = Array.isArray(shopifyRows) ? shopifyRows : [];
   if (!Array.isArray(canonicalRows) || canonicalRows.length === 0) {
     return safeShopifyRows;
@@ -122,7 +126,9 @@ export function mergeShopifyOrderRowsWithCanonicalRows(shopifyRows, canonicalRow
     };
   });
 
-  return [...mergedRows, ...canonicalRowById.values()];
+  return options.includeCanonicalOnly === false
+    ? mergedRows
+    : [...mergedRows, ...canonicalRowById.values()];
 }
 
 export function isOrderReadyToPlan(order) {

@@ -53,6 +53,7 @@ import {
   ORDER_HISTORY_SCOPE,
   ORDER_PLANNING_SCOPE,
   ORDER_WEEKDAY_OPTIONS,
+  sortOrdersByDeliveryDatePriority,
   updateOrderFilterSearchParams,
 } from "./order-filters";
 import { InfoPill } from "../../ui/info-pill";
@@ -3132,7 +3133,11 @@ function OrdersPageContent({ loaderData }) {
 
 
   const sortedOrders = useMemo(() => {
-    if (!sortConfig) return filteredOrders;
+    if (!sortConfig) return sortOrdersByDeliveryDatePriority(filteredOrders);
+
+    if (sortConfig.key === "deliveryLabel") {
+      return sortOrdersByDeliveryDatePriority(filteredOrders, sortConfig.direction);
+    }
 
     return [...filteredOrders].sort((leftOrder, rightOrder) => {
       const comparison = compareOrderSortValues(
@@ -4907,6 +4912,10 @@ function OrdersPageContent({ loaderData }) {
               onClear={() => handleClearOrderFilter("deliveryState")}
             />
             <div style={orderControlsTrailingStyle}>
+              <span aria-label="Visible order count" style={orderSelectionCountStyle}>
+                Orders: {filteredOrders.length}
+                {filteredOrders.length === displayOrders.length ? "" : ` / ${displayOrders.length}`}
+              </span>
               <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
               <button
                 type="button"

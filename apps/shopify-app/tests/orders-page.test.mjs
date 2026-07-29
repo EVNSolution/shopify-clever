@@ -98,6 +98,7 @@ test("Orders update action shows the latest individual Shopify order update", ()
   assert.match(ordersPageSource, /Latest update: \{latestShopifyOrderUpdatedAt\}/);
   assert.match(ordersPageSource, /Update Shopify orders/);
   assert.doesNotMatch(ordersPageSource, />Update routes</);
+  assert.match(ordersPageSource, /clearShopifyOrdersCache\(shopifyShopCacheKey\)/);
 
   const orders = [
     { updatedAt: "2026-07-29T01:00:00.000Z" },
@@ -805,7 +806,10 @@ test("Orders loader merges delivery server planning state before background sync
   assert.match(ordersPageSource, /const serverOrderDataPromise = shouldLoadOrders\s*\?\s*fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\.then/);
   assert.match(ordersPageSource, /Promise\.resolve\(\{ data: \{ orders: \[\], errors: \[\] \}, durationMs: 0 \}\)/);
   assert.match(ordersPageSource, /const serverOrderRows = mapCanonicalOrdersToOrderRows\(serverOrderData\.orders\)/);
-  assert.match(ordersPageSource, /const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\)/);
+  assert.match(
+    ordersPageSource,
+    /const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\{\s*includeCanonicalOnly:\s*!shouldLoadShopifyOrders \|\| orderData\.complete !== true,\s*\},\s*\)/,
+  );
   assert.match(ordersPageSource, /orders: mergedOrders/);
   assert.match(ordersPageSource, /activeOrdersView,/);
   assert.match(ordersPageSource, /serverOrdersMs: serverOrderDataResult\.durationMs/);
@@ -1608,6 +1612,8 @@ test("Orders table headers sort rows by ascending and descending values", () => 
   assert.match(ordersPageSource, /const \[tableColumnWidths, setTableColumnWidths\] = useState\(DEFAULT_TABLE_COLUMN_WIDTHS\)/);
   assert.match(ordersPageSource, /const tableRef = useRef\(null\)/);
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) =>/);
+  assert.match(ordersPageSource, /if \(!sortConfig\) return sortOrdersByDeliveryDatePriority\(filteredOrders\)/);
+  assert.match(ordersPageSource, /sortConfig\.key === "deliveryLabel"/);
   assert.match(ordersPageSource, /if \(columnKey === "deliveryLabel"\) \{/);
   assert.match(ordersPageSource, /return getOrderDeliveryDateValue\(order\) \|\| order\.deliveryLabel \|\| ""/);
   assert.match(ordersPageSource, /if \(columnKey === "payment"\) \{/);
@@ -1674,7 +1680,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /serviceTypes: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?serviceType: ""/);
   assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /getOrderSortValue\(leftOrder, sortConfig\.key, orderFilterReferenceDate\)/);
-  assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return filteredOrders/);
+  assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return sortOrdersByDeliveryDatePriority\(filteredOrders\)/);
   assert.match(ordersPageSource, /aria-label="Filter orders by ordered date"/);
   assert.match(ordersPageSource, /const orderedDateFieldRef = useRef\(null\)/);
   assert.match(ordersPageSource, /const rect = orderedDateFieldRef\.current\?\.getBoundingClientRect\(\)/);
@@ -1732,6 +1738,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /value=\{orderFilters\.deliveryDate\}/);
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryDate", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear delivery date filter"/);
+  assert.match(ordersPageSource, /aria-label="Visible order count"/);
   assert.match(ordersPageSource, /aria-label="Filter orders by service type"/);
   assert.match(ordersPageSource, /label="Type"/);
   assert.match(ordersPageSource, /\{ label: "Delivery", value: "DELIVERY" \}/);

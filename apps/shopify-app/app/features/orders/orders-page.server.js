@@ -23,7 +23,7 @@ import {
   mergeShopifyOrderRowsWithCanonicalRows,
 } from "./canonical-orders";
 import { collectServiceErrors, normalizeCaughtServiceError } from "../service-errors";
-import { fetchShopifyOrders } from "./shopify-orders.server";
+import { clearShopifyOrdersCache, fetchShopifyOrders } from "./shopify-orders.server";
 import { authenticate } from "../../shopify.server";
 import {
   DEFAULT_ROUTE_PLAN_TITLE,
@@ -234,6 +234,7 @@ async function handleOrdersAction(request) {
       };
     }
 
+    clearShopifyOrdersCache(shopifyShopCacheKey);
     const orderData = shouldFetchShopifyOrders()
       ? await fetchShopifyOrders(admin, {
           cacheKey: shopifyShopCacheKey,
@@ -809,6 +810,10 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
   const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows(
     orderData.orders,
     serverOrderRows,
+    {
+      includeCanonicalOnly:
+        !shouldLoadShopifyOrders || orderData.complete !== true,
+    },
   );
 
   return {

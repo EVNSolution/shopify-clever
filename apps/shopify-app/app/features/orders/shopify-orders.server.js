@@ -11,7 +11,6 @@ import {
 } from "../service-errors.js";
 
 const SHOPIFY_ORDERS_PAGE_SIZE = 50;
-const SHOPIFY_ORDERS_MAX_PAGES = 20;
 const SHOPIFY_ORDER_NODES_BATCH_SIZE = 100;
 const SHOPIFY_ORDER_LINE_ITEMS_PAGE_SIZE = 100;
 
@@ -181,6 +180,7 @@ export const ORDER_SCOPE_ACCESS_ERROR_CODE = "ORDER_SCOPE_ACCESS";
 export const PROTECTED_ORDER_ACCESS_ERROR_CODE = SERVICE_ERROR_CODES.PROTECTED_ORDER_ACCESS;
 export const SHOPIFY_ORDER_NODE_MISSING_ERROR_CODE = "SHOPIFY_ORDER_NODE_MISSING";
 export const SHOPIFY_ORDER_LINE_ITEMS_INCOMPLETE_ERROR_CODE = "SHOPIFY_ORDER_LINE_ITEMS_INCOMPLETE";
+export const SHOPIFY_ORDERS_INCOMPLETE_ERROR_CODE = "SHOPIFY_ORDERS_INCOMPLETE";
 
 const ORDER_SCOPE_ACCESS_MESSAGE =
   "Shopify Orders 권한이 아직 승인되지 않았습니다. shopify.app.toml의 access_scopes에 read_orders를 포함한 뒤 Shopify 앱을 다시 설치/권한 갱신해 주세요.";
@@ -200,8 +200,18 @@ const DELIVERY_DATE_ATTRIBUTE_KEYS = [
   "tomatono_delivery_date",
 ];
 
-export function clearShopifyOrdersCache() {
-  shopifyOrdersCache.clear();
+export function clearShopifyOrdersCache(cacheKey) {
+  const normalizedCacheKey = normalizeShopifyOrdersCacheKey(cacheKey);
+  if (!normalizedCacheKey) {
+    shopifyOrdersCache.clear();
+    return;
+  }
+
+  for (const key of shopifyOrdersCache.keys()) {
+    if (key === normalizedCacheKey || key.startsWith(`${normalizedCacheKey}|`)) {
+      shopifyOrdersCache.delete(key);
+    }
+  }
 }
 
 export function assertReadOnlyShopifyOrdersOperation(operation) {
@@ -312,8 +322,9 @@ async function loadShopifyOrders(admin, options = {}) {
     const errors = [];
     let after = null;
     let ordersQuery = SHOPIFY_ORDERS_QUERY;
+    let complete = true;
 
-    for (let page = 0; page < SHOPIFY_ORDERS_MAX_PAGES; page += 1) {
+    for (;;) {
       const variables = { after, first: SHOPIFY_ORDERS_PAGE_SIZE };
       let response;
       try {
@@ -338,18 +349,27 @@ async function loadShopifyOrders(admin, options = {}) {
       if (pageInfo?.hasNextPage !== true) break;
 
       const nextCursor = textOrUndefined(pageInfo.endCursor);
-      if (!nextCursor || nextCursor === after) break;
+      if (!nextCursor || nextCursor === after) {
+        complete = false;
+        errors.push({
+          code: SHOPIFY_ORDERS_INCOMPLETE_ERROR_CODE,
+          message: "Shopify 주문 페이지를 끝까지 읽지 못했습니다. 누락된 주문을 숨기지 않도록 다시 시도해 주세요.",
+        });
+        break;
+      }
       after = nextCursor;
     }
 
     return {
       orders,
       errors,
+      complete,
     };
   } catch (error) {
     if (isOrderScopeAccessError(error)) {
       return {
         orders: [],
+        complete: false,
         errors: [
           {
             code: ORDER_SCOPE_ACCESS_ERROR_CODE,
@@ -362,6 +382,7 @@ async function loadShopifyOrders(admin, options = {}) {
     if (isProtectedOrderAccessError(error)) {
       return {
         orders: [],
+        complete: false,
         errors: [
           {
             code: PROTECTED_ORDER_ACCESS_ERROR_CODE,

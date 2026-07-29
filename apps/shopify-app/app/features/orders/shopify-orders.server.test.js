@@ -9,6 +9,7 @@ import {
   PROTECTED_ORDER_ACCESS_ERROR_CODE,
   SHOPIFY_ORDERS_BY_IDS_QUERY,
   SHOPIFY_ORDER_LINE_ITEMS_QUERY,
+  SHOPIFY_ORDERS_INCOMPLETE_ERROR_CODE,
   SHOPIFY_ORDERS_QUERY,
   SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE,
   assertReadOnlyShopifyOrdersOperation,
@@ -322,6 +323,75 @@ test("fetchShopifyOrders paginates beyond Shopify's first 50 orders", async () =
     { after: "cursor-50", first: 50 },
   ]);
   assert.equal(result.orders.at(-1).name, "#0079");
+  assert.equal(result.complete, true);
+});
+
+test("fetchShopifyOrders continues beyond the previous twenty-page ceiling", async () => {
+  const calls = [];
+  const admin = {
+    graphql: async (_query, options) => {
+      calls.push(options?.variables ?? {});
+      const page = calls.length;
+
+      return {
+        json: async () => ({
+          data: {
+            orders: {
+              edges: [{
+                node: {
+                  id: `gid://shopify/Order/${page}`,
+                  name: `#${page}`,
+                  shippingAddress: { name: `Customer ${page}` },
+                },
+              }],
+              pageInfo: {
+                endCursor: `cursor-${page}`,
+                hasNextPage: page < 21,
+              },
+            },
+          },
+        }),
+      };
+    },
+  };
+
+  const result = await fetchShopifyOrders(admin);
+
+  assert.equal(result.orders.length, 21);
+  assert.equal(calls.length, 21);
+  assert.equal(result.complete, true);
+});
+
+test("fetchShopifyOrders reports an incomplete source instead of silently stopping on a repeated cursor", async () => {
+  const admin = {
+    graphql: async () => ({
+      json: async () => ({
+        data: {
+          orders: {
+            edges: [{
+              node: {
+                id: "gid://shopify/Order/1",
+                name: "#1",
+                shippingAddress: { name: "Customer 1" },
+              },
+            }],
+            pageInfo: {
+              endCursor: "same-cursor",
+              hasNextPage: true,
+            },
+          },
+        },
+      }),
+    }),
+  };
+
+  const result = await fetchShopifyOrders(admin);
+
+  assert.equal(result.complete, false);
+  assert.equal(
+    result.errors.some((error) => error.code === SHOPIFY_ORDERS_INCOMPLETE_ERROR_CODE),
+    true,
+  );
 });
 
 test("maps Shopify orders into map-ready rows", () => {
