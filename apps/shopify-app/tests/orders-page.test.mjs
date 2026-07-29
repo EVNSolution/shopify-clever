@@ -405,7 +405,7 @@ test("Orders ID stays centered while Note uses a separate headerless column", ()
   assert.match(ordersPageSource, /const noteCellStyle = \{[\s\S]*?textAlign:\s*"center"/);
   assert.match(ordersPageSource, /const orderSignalSlotsStyle = \{[\s\S]*?gridTemplateColumns:\s*"18px 18px"[\s\S]*?width:\s*"100%"/);
   assert.match(ordersPageSource, /const orderSignalSlotStyle = \{[\s\S]*?height:\s*"18px"[\s\S]*?width:\s*"18px"/);
-  assert.match(ordersPageSource, /const subscriptionSignalIconStyle = \{[\s\S]*?color:\s*"#4a9fe5"/);
+  assert.doesNotMatch(ordersPageSource, /const subscriptionSignalIconStyle = \{/);
   assert.match(ordersPageSource, /column\.key !== "name" && columnIndex < SORTABLE_ORDER_COLUMNS\.length - 1/);
   assert.match(ordersPageSource, /const addressCellStyle = \{[\s\S]*?textAlign:\s*"left"/);
   assert.match(ordersPageSource, /<th key="notes" scope="col" aria-label="Notes" style=\{checkboxHeaderCellStyle\} \/>/);
@@ -429,7 +429,8 @@ test("Orders ID stays centered while Note uses a separate headerless column", ()
   assert.match(ordersPageSource, /data-order-notes-popover-root="true"/);
   assert.match(ordersPageSource, /<s-icon type="note"/);
   assert.match(ordersPageSource, /getAppstleSubscriptionOrderKind\(order\)/);
-  assert.match(ordersPageSource, /<s-icon type="refresh" size="base" style=\{subscriptionSignalIconStyle\}/);
+  assert.match(ordersPageSource, /<s-icon[\s\S]*?type="order-repeat"[\s\S]*?tone="info"[\s\S]*?interestFor=\{subscriptionTooltipId\}/);
+  assert.match(ordersPageSource, /<s-tooltip id=\{subscriptionTooltipId\}>[\s\S]*?\{subscriptionSignalLabel\}[\s\S]*?<\/s-tooltip>/);
   assert.match(ordersPageSource, /Recurring subscription order/);
   assert.match(ordersPageSource, />Notes</);
   assert.match(ordersPageSource, />Order Note</);
