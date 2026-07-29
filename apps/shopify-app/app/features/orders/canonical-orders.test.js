@@ -354,6 +354,26 @@ test("keeps canonical-only order rows for history and all-orders coverage", () =
   );
 });
 
+test("excludes canonical-only rows after a complete Shopify source load", () => {
+  const currentShopifyRow = {
+    id: "gid://shopify/Order/1001",
+    name: "#1001",
+  };
+  const staleCanonicalRow = {
+    id: "gid://shopify/Order/0999",
+    name: "#0999",
+    planningStatus: "DELIVERED",
+  };
+
+  const mergedRows = mergeShopifyOrderRowsWithCanonicalRows(
+    [currentShopifyRow],
+    [staleCanonicalRow],
+    { includeCanonicalOnly: false },
+  );
+
+  assert.deepEqual(mergedRows, [currentShopifyRow]);
+});
+
 test("preserves canonical-only rows without sync snapshots when background sync refreshes loaded rows", () => {
   const loadedShopifyRow = {
     id: "gid://shopify/Order/1001",

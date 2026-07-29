@@ -5,6 +5,7 @@ import {
   formatServiceTypeLabel,
   getBulkOrderSelectionState,
   getOrderDeliveryDateFilterOptions,
+  sortOrdersByDeliveryDatePriority,
   getOrderDeliveryExceptionState,
   getOrderShopifyFulfillmentState,
   getOrderFilterOptions,
@@ -240,9 +241,37 @@ test("builds counted delivery-date options with pending first", () => {
     ]),
     [
       { count: 2, value: ORDER_DELIVERY_DATE_PENDING },
-      { count: 1, value: "2026-05-14" },
       { count: 2, value: "2026-05-15" },
+      { count: 1, value: "2026-05-14" },
     ],
+  );
+});
+
+test("sorts date-pending orders first and dated orders newest first", () => {
+  const sorted = sortOrdersByDeliveryDatePriority([
+    { id: "old", deliveryDate: "2026-05-14" },
+    { id: "pending-1" },
+    { id: "new", deliveryDate: "2026-05-16" },
+    { id: "pending-2", deliveryDate: "" },
+    { id: "middle", deliveryDate: "2026-05-15" },
+  ]);
+
+  assert.deepEqual(
+    sorted.map((order) => order.id),
+    ["pending-1", "pending-2", "new", "middle", "old"],
+  );
+});
+
+test("keeps date-pending orders first when delivery-date sorting is ascending", () => {
+  const sorted = sortOrdersByDeliveryDatePriority([
+    { id: "new", deliveryDate: "2026-05-16" },
+    { id: "pending" },
+    { id: "old", deliveryDate: "2026-05-14" },
+  ], "ascending");
+
+  assert.deepEqual(
+    sorted.map((order) => order.id),
+    ["pending", "old", "new"],
   );
 });
 
