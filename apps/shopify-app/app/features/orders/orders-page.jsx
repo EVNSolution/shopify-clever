@@ -1213,6 +1213,24 @@ const noteCellStyle = {
   textAlign: "center",
 };
 
+const orderSignalSlotsStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "4px",
+  gridTemplateColumns: "18px 18px",
+  justifyContent: "center",
+  width: "100%",
+};
+
+const orderSignalSlotStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  height: "18px",
+  justifyContent: "center",
+  lineHeight: 0,
+  width: "18px",
+};
+
 const itemInfoButtonStyle = {
   alignItems: "center",
   background: "transparent",
@@ -1232,16 +1250,23 @@ const itemInfoButtonStyle = {
 
 const noteButtonStyle = {
   ...itemInfoButtonStyle,
+  lineHeight: 0,
   marginLeft: 0,
+  top: 0,
 };
 
 const subscriptionSignalStyle = {
   alignItems: "center",
-  color: "#5c6ac4",
   display: "inline-flex",
   height: "18px",
   justifyContent: "center",
+  lineHeight: 0,
   width: "18px",
+};
+
+const subscriptionSignalIconStyle = {
+  color: "#4a9fe5",
+  display: "block",
 };
 
 const itemPopoverStyle = {
@@ -5216,65 +5241,68 @@ function OrdersPageContent({ loaderData }) {
                         </button>
                       </td>
                       <td style={noteCellStyle}>
-                        {orderNote || customerNote ? (
-                          <span data-order-notes-popover-root="true">
-                            <button
-                              type="button"
-                              aria-expanded={visibleNoteOrderId === order.id}
-                              aria-label={`${visibleNoteOrderId === order.id ? "Hide" : "Show"} notes for ${order.name}`}
-                              style={noteButtonStyle}
-                              onMouseEnter={(event) => openNotePopover(event, order.id)}
-                              onMouseLeave={() => closeHoveredNotePopover(order.id)}
-                              onClick={(event) => togglePinnedNotePopover(event, order.id)}
-                            >
-                              <s-icon type="note" size="base" color="subdued"></s-icon>
-                            </button>
-                            {visibleNoteOrderId === order.id && notePopoverPosition && typeof document !== "undefined" ? createPortal(
-                              <div
-                                ref={notePopoverRef}
-                                data-order-notes-popover-root="true"
-                                role="dialog"
-                                aria-label={`Notes for ${order.name}`}
-                                style={{
-                                  ...notePopoverStyle,
-                                  left: `${Math.round(notePopoverPosition.left)}px`,
-                                  top: `${Math.round(notePopoverPosition.top)}px`,
-                                  transform: "none",
-                                  width: `${Math.round(notePopoverPosition.width)}px`,
-                                }}
+                        <span style={orderSignalSlotsStyle}>
+                          <span style={orderSignalSlotStyle}>
+                            {orderNote || customerNote ? (
+                              <span data-order-notes-popover-root="true">
+                                <button
+                                  type="button"
+                                  aria-expanded={visibleNoteOrderId === order.id}
+                                  aria-label={`${visibleNoteOrderId === order.id ? "Hide" : "Show"} notes for ${order.name}`}
+                                  style={noteButtonStyle}
+                                  onMouseEnter={(event) => openNotePopover(event, order.id)}
+                                  onMouseLeave={() => closeHoveredNotePopover(order.id)}
+                                  onClick={(event) => togglePinnedNotePopover(event, order.id)}
+                                >
+                                  <s-icon type="note" size="base" color="subdued"></s-icon>
+                                </button>
+                                {visibleNoteOrderId === order.id && notePopoverPosition && typeof document !== "undefined" ? createPortal(
+                                  <div
+                                    ref={notePopoverRef}
+                                    data-order-notes-popover-root="true"
+                                    role="dialog"
+                                    aria-label={`Notes for ${order.name}`}
+                                    style={{
+                                      ...notePopoverStyle,
+                                      left: `${Math.round(notePopoverPosition.left)}px`,
+                                      top: `${Math.round(notePopoverPosition.top)}px`,
+                                      transform: "none",
+                                      width: `${Math.round(notePopoverPosition.width)}px`,
+                                    }}
+                                  >
+                                    <div style={itemPopoverTitleStyle}>Notes</div>
+                                    <div style={noteStackStyle}>
+                                      {orderNote ? (
+                                        <div style={noteCardStyle}>
+                                          <div style={noteLabelStyle}>Order Note</div>
+                                          <div style={noteTextStyle}>{orderNote}</div>
+                                        </div>
+                                      ) : null}
+                                      {customerNote ? (
+                                        <div style={noteCardStyle}>
+                                          <div style={noteLabelStyle}>Customer Note</div>
+                                          <div style={noteTextStyle}>{customerNote}</div>
+                                        </div>
+                                      ) : null}
+                                    </div>
+                                  </div>
+                                , document.body) : null}
+                              </span>
+                            ) : null}
+                          </span>
+                          <span style={orderSignalSlotStyle}>
+                            {subscriptionSignalLabel ? (
+                              <span
+                                aria-label={subscriptionSignalLabel}
+                                role="img"
+                                style={subscriptionSignalStyle}
+                                title={subscriptionSignalLabel}
                               >
-                                <div style={itemPopoverTitleStyle}>Notes</div>
-                                <div style={noteStackStyle}>
-                                  {orderNote ? (
-                                    <div style={noteCardStyle}>
-                                      <div style={noteLabelStyle}>Order Note</div>
-                                      <div style={noteTextStyle}>{orderNote}</div>
-                                    </div>
-                                  ) : null}
-                                  {customerNote ? (
-                                    <div style={noteCardStyle}>
-                                      <div style={noteLabelStyle}>Customer Note</div>
-                                      <div style={noteTextStyle}>{customerNote}</div>
-                                    </div>
-                                  ) : null}
-                                </div>
-                              </div>
-                            , document.body) : null}
+                                <s-icon type="refresh" size="base" style={subscriptionSignalIconStyle}></s-icon>
+                              </span>
+                            ) : null}
                           </span>
-                        ) : null}
-                        {subscriptionSignalLabel ? (
-                          <span
-                            aria-label={subscriptionSignalLabel}
-                            role="img"
-                            style={{
-                              ...subscriptionSignalStyle,
-                              marginLeft: orderNote || customerNote ? "4px" : 0,
-                            }}
-                            title={subscriptionSignalLabel}
-                          >
-                            <s-icon type="refresh" size="base"></s-icon>
-                          </span>
-                        ) : null}
+                        </span>
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         {renderDetailPill({
