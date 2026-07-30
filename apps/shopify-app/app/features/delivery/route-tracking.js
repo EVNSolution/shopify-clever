@@ -3,8 +3,6 @@ const FALLBACK_STREAM_INACTIVITY_MS = 45_000;
 const EARTH_RADIUS_METERS = 6_371_000;
 const RAW_FALLBACK_MIN_MOVEMENT_METERS = 12;
 const RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND = 55;
-const UNCERTAIN_LOOP_MIN_LENGTH_METERS = 250;
-const UNCERTAIN_LOOP_MAX_DETOUR_RATIO = 3;
 
 function numberOrNull(value) {
   const number = Number(value);
@@ -615,11 +613,10 @@ function getRouteTrackingLineFeatures(snapshot) {
       properties: { trackingType: "trackingTrail" },
     });
   }
-  const plausibleUncertainGeometry = getPlausibleUncertainGeometry(roadMatchedPath.uncertainGeometry);
-  if (plausibleUncertainGeometry) {
+  if (roadMatchedPath.uncertainGeometry) {
     features.push({
       type: "Feature",
-      geometry: plausibleUncertainGeometry,
+      geometry: roadMatchedPath.uncertainGeometry,
       properties: { trackingType: "trackingConnector" },
     });
   }
@@ -672,7 +669,7 @@ function getRouteTrackingLineFeatures(snapshot) {
       properties: { trackingType: "trackingConnector" },
     });
   }
-  return features;
+  return features.length > 0 ? features : getRawTrackingConnectorFeatures(normalized);
 }
 
 function getRouteTrackingFitCoordinates(snapshot) {
@@ -694,20 +691,6 @@ function getRouteTrackingFitCoordinates(snapshot) {
   return pathPoints.length <= 1 && normalized.latestPosition
     ? [[normalized.latestPosition.longitude, normalized.latestPosition.latitude]]
     : [];
-}
-
-function getPlausibleUncertainGeometry(geometry) {
-  if (!geometry) return null;
-  const coordinates = geometry.coordinates.filter((line) => {
-    const pathLengthMeters = line.slice(1).reduce((total, coordinate, index) => (
-      total + distanceBetweenCoordinatesMeters(line[index], coordinate)
-    ), 0);
-    const directDistanceMeters = distanceBetweenCoordinatesMeters(line[0], line.at(-1));
-    const detourRatio = pathLengthMeters / Math.max(1, directDistanceMeters);
-    return pathLengthMeters < UNCERTAIN_LOOP_MIN_LENGTH_METERS
-      || detourRatio <= UNCERTAIN_LOOP_MAX_DETOUR_RATIO;
-  });
-  return coordinates.length === 0 ? null : { coordinates, type: "MultiLineString" };
 }
 
 function getRawTrackingConnectorFeatures(snapshot) {

@@ -221,7 +221,7 @@ test("road-matched tracking renders only open GPS line segments", () => {
   );
 });
 
-test("road-matched tracking removes loop-shaped uncertain geometry and impossible live tail jumps", () => {
+test("road-matched tracking preserves uncertain geometry while rejecting an impossible live tail jump", () => {
   const snapshot = normalizeRouteTrackingSnapshot({
     policy,
     recordedPath: {
@@ -262,8 +262,62 @@ test("road-matched tracking removes loop-shaped uncertain geometry and impossibl
 
   const features = getRouteTrackingLineFeatures(snapshot);
 
-  assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingTrail"]);
-  assert.deepEqual(getRouteTrackingFitCoordinates(snapshot), [[127, 37.5], [127.0002, 37.5002]]);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingTrail",
+    "trackingConnector",
+  ]);
+  assert.deepEqual(features[1].geometry.coordinates, snapshot.roadMatchedPath.uncertainGeometry.coordinates);
+  assert.deepEqual(getRouteTrackingFitCoordinates(snapshot), [
+    [127, 37.5],
+    [127.0002, 37.5002],
+    [127, 37.5],
+    [127.004, 37.5],
+    [127.004, 37.504],
+    [127, 37.504],
+    [127.00001, 37.50001],
+  ]);
+});
+
+test("road-match metadata without usable geometry falls back to the recorded GPS path", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: {
+      geometry: {
+        coordinates: [[127, 37.5], [127.001, 37.501], [127.002, 37.502]],
+        type: "LineString",
+      },
+      samples: [0, 1, 2].map((index) => ({
+        driverId: "driver-1",
+        eventId: `raw-${index}`,
+        occurredAt: `2026-07-21T00:0${index}:00.000Z`,
+        receivedAt: `2026-07-21T00:0${index}:01.000Z`,
+      })),
+      sourcePointCount: 3,
+    },
+    roadMatchedPath: {
+      coverage: "korea",
+      inputPointCount: 3,
+      lastInputOccurredAt: "2026-07-21T00:02:00.000Z",
+      lastMatchedPosition: {
+        latitude: 37.502,
+        longitude: 127.002,
+        occurredAt: "2026-07-21T00:02:00.000Z",
+      },
+      matchedGeometry: null,
+      matchedPointCount: 0,
+      schemaVersion: "route_tracking_road_match.v1",
+      uncertainGeometry: null,
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingConnector"]);
+  assert.deepEqual(features[0].geometry.coordinates, [[
+    [127, 37.5],
+    [127.001, 37.501],
+    [127.002, 37.502],
+  ]]);
 });
 
 test("raw GPS remains visible only as a filtered dashed path while road matching is unavailable", () => {
