@@ -206,6 +206,7 @@ test("road-matched tracking renders only open GPS line segments", () => {
 
   const features = getRouteTrackingLineFeatures(snapshot);
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingConnector",
     "trackingTrail",
     "trackingConnector",
     "trackingConnector",
@@ -263,19 +264,17 @@ test("road-matched tracking preserves uncertain geometry while rejecting an impo
   const features = getRouteTrackingLineFeatures(snapshot);
 
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingConnector",
     "trackingTrail",
     "trackingConnector",
   ]);
-  assert.deepEqual(features[1].geometry.coordinates, snapshot.roadMatchedPath.uncertainGeometry.coordinates);
-  assert.deepEqual(getRouteTrackingFitCoordinates(snapshot), [
-    [127, 37.5],
-    [127.0002, 37.5002],
-    [127, 37.5],
-    [127.004, 37.5],
-    [127.004, 37.504],
-    [127, 37.504],
-    [127.00001, 37.50001],
-  ]);
+  assert.deepEqual(features[2].geometry.coordinates, snapshot.roadMatchedPath.uncertainGeometry.coordinates);
+  assert.equal(
+    getRouteTrackingFitCoordinates(snapshot).some((coordinate) => (
+      coordinate[0] === 128 && coordinate[1] === 38
+    )),
+    false,
+  );
 });
 
 test("road-match metadata without usable geometry falls back to the recorded GPS path", () => {
@@ -313,11 +312,67 @@ test("road-match metadata without usable geometry falls back to the recorded GPS
   const features = getRouteTrackingLineFeatures(snapshot);
 
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingConnector"]);
-  assert.deepEqual(features[0].geometry.coordinates, [[
+  assert.deepEqual(features[0].geometry.coordinates, [
     [127, 37.5],
     [127.001, 37.501],
     [127.002, 37.502],
-  ]]);
+  ]);
+});
+
+test("recorded GPS keeps road-match fragments connected across collection gaps", () => {
+  const coordinates = [
+    [127, 37.5],
+    [127.001, 37.501],
+    [127.01, 37.51],
+    [127.011, 37.511],
+  ];
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: {
+      geometry: { coordinates, type: "LineString" },
+      samples: [
+        ["raw-1", "2026-07-21T00:00:00.000Z"],
+        ["raw-2", "2026-07-21T00:01:00.000Z"],
+        ["raw-3", "2026-07-21T00:10:00.000Z"],
+        ["raw-4", "2026-07-21T00:11:00.000Z"],
+      ].map(([eventId, occurredAt]) => ({
+        driverId: "driver-1",
+        eventId,
+        occurredAt,
+        receivedAt: occurredAt,
+      })),
+      sourcePointCount: 604,
+    },
+    roadMatchedPath: {
+      coverage: "canada",
+      inputPointCount: 4,
+      lastInputOccurredAt: "2026-07-21T00:11:00.000Z",
+      lastMatchedPosition: {
+        latitude: 37.511,
+        longitude: 127.011,
+        occurredAt: "2026-07-21T00:11:00.000Z",
+      },
+      matchedGeometry: {
+        coordinates: [
+          coordinates.slice(0, 2),
+          coordinates.slice(2),
+        ],
+        type: "MultiLineString",
+      },
+      matchedPointCount: 4,
+      schemaVersion: "route_tracking_road_match.v1",
+      uncertainGeometry: null,
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+  const connector = features.find((feature) => (
+    feature.properties.trackingType === "trackingConnector"
+    && feature.geometry.type === "LineString"
+  ));
+
+  assert.deepEqual(connector?.geometry.coordinates, coordinates);
+  assert.equal(getRouteTrackingPathSummary(snapshot).gapCount, 1);
 });
 
 test("raw GPS remains visible only as a filtered dashed path while road matching is unavailable", () => {
@@ -341,11 +396,11 @@ test("raw GPS remains visible only as a filtered dashed path while road matching
 
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingConnector"]);
   assert.equal(features.some((feature) => feature.geometry.type === "Point"), false);
-  assert.deepEqual(features[0].geometry.coordinates, [[
+  assert.deepEqual(features[0].geometry.coordinates, [
     [127, 37.5],
     [127.001, 37.501],
     [127.002, 37.502],
-  ]]);
+  ]);
 });
 
 test("live GPS extends the server recorded path without dropping past positions", () => {

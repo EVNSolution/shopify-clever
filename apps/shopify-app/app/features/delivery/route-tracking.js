@@ -603,9 +603,10 @@ function getRouteTrackingPathPoints(snapshot) {
 function getRouteTrackingLineFeatures(snapshot) {
   const normalized = normalizeRouteTrackingSnapshot(snapshot);
   const roadMatchedPath = normalized.roadMatchedPath;
-  if (!roadMatchedPath) return getRawTrackingConnectorFeatures(normalized);
+  const recordedCoverage = getRecordedTrackingCoverageFeature(normalized);
+  if (!roadMatchedPath) return recordedCoverage ? [recordedCoverage] : [];
 
-  const features = [];
+  const features = recordedCoverage ? [recordedCoverage] : [];
   if (roadMatchedPath.matchedGeometry) {
     features.push({
       type: "Feature",
@@ -669,7 +670,7 @@ function getRouteTrackingLineFeatures(snapshot) {
       properties: { trackingType: "trackingConnector" },
     });
   }
-  return features.length > 0 ? features : getRawTrackingConnectorFeatures(normalized);
+  return features;
 }
 
 function getRouteTrackingFitCoordinates(snapshot) {
@@ -693,8 +694,7 @@ function getRouteTrackingFitCoordinates(snapshot) {
     : [];
 }
 
-function getRawTrackingConnectorFeatures(snapshot) {
-  const gapThresholdMs = numberOrNull(snapshot.policy?.delayedThresholdMs) ?? 180_000;
+function getRecordedTrackingCoverageFeature(snapshot) {
   const points = getRouteTrackingPathPoints(snapshot)
     .map((point) => ({ ...point, timestamp: getPositionTimestamp(point) }));
   const segments = [];
@@ -708,10 +708,9 @@ function getRawTrackingConnectorFeatures(snapshot) {
 
     const elapsedMs = point.timestamp - previousPoint.timestamp;
     const distanceMeters = distanceBetweenCoordinatesMeters(previousPoint.coordinates, point.coordinates);
-    const hasGap = Number.isFinite(elapsedMs) && elapsedMs > gapThresholdMs;
     const isImplausibleJump = elapsedMs > 0
       && distanceMeters / (elapsedMs / 1000) > RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND;
-    if (hasGap || isImplausibleJump) {
+    if (isImplausibleJump) {
       if (currentSegment.length >= 2) segments.push(currentSegment);
       currentSegment = [point];
       continue;
@@ -724,13 +723,15 @@ function getRawTrackingConnectorFeatures(snapshot) {
   const coordinates = segments
     .map((segment) => segment.map((point) => point.coordinates))
     .filter((line) => line.length >= 2 && !areCoordinatesEqual(line[0], line.at(-1)));
-  return coordinates.length === 0
-    ? []
-    : [{
-        type: "Feature",
-        geometry: { coordinates, type: "MultiLineString" },
-        properties: { trackingType: "trackingConnector" },
-      }];
+  if (coordinates.length === 0) return null;
+
+  return {
+    type: "Feature",
+    geometry: coordinates.length === 1
+      ? { coordinates: coordinates[0], type: "LineString" }
+      : { coordinates, type: "MultiLineString" },
+    properties: { trackingType: "trackingConnector" },
+  };
 }
 
 function areCoordinatesEqual(left, right) {
