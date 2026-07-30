@@ -723,12 +723,35 @@ function fitRouteDetailMap(map, maplibregl, locations, options = {}) {
 }
 
 function findRouteStopPoint(stop, routeStopPoints) {
+  if (routeStopPoints instanceof Map) {
+    return (
+      routeStopPoints.get(textOrUndefined(stop?.deliveryStopId)) ??
+      routeStopPoints.get(textOrUndefined(stop?.shopifyOrderGid)) ??
+      null
+    );
+  }
   if (!Array.isArray(routeStopPoints)) return null;
 
   return routeStopPoints.find((point) => (
     (point.deliveryStopId && stop.deliveryStopId && point.deliveryStopId === stop.deliveryStopId) ||
     point.shopifyOrderGid === stop.shopifyOrderGid
   )) ?? null;
+}
+
+function buildRouteStopPointLookup(routeStopPoints) {
+  if (routeStopPoints instanceof Map) return routeStopPoints;
+
+  const lookup = new Map();
+  if (!Array.isArray(routeStopPoints)) return lookup;
+
+  for (const point of routeStopPoints) {
+    const deliveryStopId = textOrUndefined(point?.deliveryStopId);
+    const shopifyOrderGid = textOrUndefined(point?.shopifyOrderGid);
+    if (deliveryStopId) lookup.set(deliveryStopId, point);
+    if (shopifyOrderGid) lookup.set(shopifyOrderGid, point);
+  }
+
+  return lookup;
 }
 
 function getRouteStopPointerCoordinates(stop, routeStopPoint) {
@@ -813,12 +836,15 @@ function getRouteDetailStopPinImageId(stop, routeColor) {
 }
 
 function ensureRouteDetailMarkerImages(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById) {
-  if (departureLocation?.hasCoordinates && !addMapPinImage(
-    map,
-    ROUTE_DETAIL_DEPARTURE_IMAGE_ID,
-    createDepartureMarkerImageData(),
-  )) {
-    return false;
+  if (departureLocation?.hasCoordinates) {
+    if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") return false;
+    if (!map.hasImage(ROUTE_DETAIL_DEPARTURE_IMAGE_ID) && !addMapPinImage(
+      map,
+      ROUTE_DETAIL_DEPARTURE_IMAGE_ID,
+      createDepartureMarkerImageData(),
+    )) {
+      return false;
+    }
   }
 
   for (const stop of routeStops) {
@@ -827,12 +853,16 @@ function ensureRouteDetailMarkerImages(map, departureLocation, routeStops, route
     if (!markerCoordinates) continue;
 
     const stopColor = getRouteStopDisplayColor(stop, routeColor, routeStopColorById);
+    const imageId = getRouteDetailStopPinImageId(stop, stopColor);
+    if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") return false;
+    if (map.hasImage(imageId)) continue;
+
     const imageData = createMapPinImageData(stopColor, {
       label: stop.stop,
       shadowBlur: stop.isPolygonSelected ? 8 : undefined,
       shadowColor: stop.isPolygonSelected ? "rgba(79, 124, 255, 0.95)" : undefined,
     });
-    if (!addMapPinImage(map, getRouteDetailStopPinImageId(stop, stopColor), imageData)) {
+    if (!addMapPinImage(map, imageId, imageData)) {
       return false;
     }
   }
@@ -914,8 +944,9 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
   let stopPointData = null;
 
   try {
-    markerData = buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById);
-    stopPointData = buildRouteDetailStopPointFeatureCollection(routeStops, routeStopPoints, routeColor, routeStopColorById);
+    const routeStopPointLookup = buildRouteStopPointLookup(routeStopPoints);
+    markerData = buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, routeStopPointLookup, routeColor, routeStopColorById);
+    stopPointData = buildRouteDetailStopPointFeatureCollection(routeStops, routeStopPointLookup, routeColor, routeStopColorById);
 
     if (!isRouteDetailMapStyleReady(map)) {
       emitRouteDetailMarkerDiagnostics(onDiagnostics, {
@@ -929,7 +960,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
       return false;
     }
 
-    if (!ensureRouteDetailMarkerImages(map, departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById)) {
+    if (!ensureRouteDetailMarkerImages(map, departureLocation, routeStops, routeStopPointLookup, routeColor, routeStopColorById)) {
       emitRouteDetailMarkerDiagnostics(onDiagnostics, {
         ...getRouteDetailMarkerLayerState(map),
         markerFeatureCount: markerData.features.length,
@@ -1073,6 +1104,7 @@ function getRouteStopFromMapFeature(feature, routeStops) {
 export {
   buildRouteDetailMarkerFeatureCollection,
   buildRouteDetailLiveTrackingData,
+  buildRouteStopPointLookup,
   DEFAULT_CENTER,
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,

@@ -416,7 +416,7 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /if \(routeGroupActionBusy\) return/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("queryNextRouteIdx", \{ tempId \}\)/);
   assert.doesNotMatch(routeDetailSource, /submitRouteGroupAction\("addEmptyRoute"/);
-  assert.match(routeDetailSource, /const polygonCandidateOrderIds = polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
+  assert.match(routeDetailSource, /const polygonCandidateOrderIds = useMemo\([\s\S]*polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
   assert.doesNotMatch(routeDetailSource, /routeTimelineStopSelectedStyle/);
   assert.match(routeDetailSource, /setRouteTimelineOrderByRouteId\(\(currentOrderByRouteId\) =>/);
   assert.match(routeDetailSource, /moveTimelineStop\(routeRows, nextOrderByRouteId, \{ stopId \}, targetRouteRow\.id\)/);
@@ -499,8 +499,8 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(legacyRouteGroupDetailSource, /redirect\(/);
   assert.match(legacyRouteGroupDetailSource, /routeGroupPath\(cleanRoutePathParam\(params\.routeGroupId\)\)/);
   assert.match(routeDetailSource, /const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null/);
-  assert.match(routeDetailSource, /const displayRouteRowsSource = isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
-  assert.match(routeDetailSource, /const contextRouteRowsSource = isRouteGroupDetail/);
+  assert.match(routeDetailSource, /const displayRouteRowsSource = useMemo\([\s\S]*isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
+  assert.match(routeDetailSource, /const contextRouteRowsSource = useMemo\([\s\S]*isRouteGroupDetail/);
 });
 
 test("Route detail loader reads the selected persisted route plan", () => {
@@ -1033,8 +1033,8 @@ test("Route group detail Add Empty Route queries server numbering without saving
   assert.doesNotMatch(addEmptyHandler, /buildRouteDraftPayload/);
   assert.doesNotMatch(addEmptyHandler, /saveRouteDraft/);
   assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx"/);
-  assert.match(routeDetailSource, /const hasMaterializedClientRoute = clientRouteRows\.some\(\(routeRow\) => routeRow\.isMaterializedDraft\)/);
-  assert.match(routeDetailSource, /hasMaterializedClientRoute \? \[\] : routeGroupChildRows/);
+  assert.match(routeDetailSource, /const hasMaterializedClientRoute = useMemo\([\s\S]*clientRouteRows\.some\(\(routeRow\) => routeRow\.isMaterializedDraft\)/);
+  assert.match(routeDetailSource, /const groupRouteRowsSource = useMemo\([\s\S]*hasMaterializedClientRoute \? \[\] : routeGroupChildRows/);
   assert.match(routeDetailSource, /const canSaveRoutePolygon = hasEditableRouteRows && polygonCandidateOrderIds\.length > 0/);
   assert.match(routeDetailSource, /if \(targetRouteRow\.isPreviewOnly \|\| polygonSelectedOrderIds\.length === 0\) return/);
   assert.match(routeDetailSource, /timelineRouteRows\.filter\(\(routeRow\) => !routeRow\.isPreviewOnly\)\.map/);
@@ -1104,12 +1104,12 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /routeIdx: draft\.routeIdx/);
   assert.match(routeDetailSource, /routeIndex: draft\.routeIndex/);
   assert.match(routeHelpersSource, /getDefaultRouteGroupChildName\(index, child\)/);
-  assert.match(routeDetailSource, /const routePolygonSourceStops = timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail \? routeGroupStopsSource : \[\]/);
+  assert.match(routeDetailSource, /const routePolygonSourceStops = useMemo\([\s\S]*timelineRouteRows\.length > 0[\s\S]*: isRouteGroupDetail \? routeGroupStopsSource : \[\]/);
   assert.match(routeDetailSource, /const routeMapStops = useMemo\(\(\) => \{[\s\S]*timelineRouteRows\.length > 0[\s\S]*return isRouteGroupDetail[\s\S]*routeGroupStopsSource\.map/);
-  assert.match(routeDetailSource, /const displayRouteRowsSource = isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
-  assert.match(routeDetailSource, /const contextRouteRowsSource = isRouteGroupDetail/);
-  assert.match(routeDetailSource, /const routeRows = ensureUniqueRouteRowColors\(applyRouteRowDraftState\(\[\.\.\.displayRouteRowsSource, \.\.\.clientRouteRows\]/);
-  assert.match(routeDetailSource, /const contextRouteRows = ensureUniqueRouteRowColors\(applyRouteRowDraftState\(\[\.\.\.contextRouteRowsSource, \.\.\.clientRouteRows\]/);
+  assert.match(routeDetailSource, /const displayRouteRowsSource = useMemo\([\s\S]*isRouteGroupDetail \? groupRouteRowsSource : currentRouteRowsSource/);
+  assert.match(routeDetailSource, /const contextRouteRowsSource = useMemo\([\s\S]*isRouteGroupDetail/);
+  assert.match(routeDetailSource, /const routeRows = useMemo\([\s\S]*ensureUniqueRouteRowColors\(applyRouteRowDraftState\(\[\.\.\.displayRouteRowsSource, \.\.\.clientRouteRows\]/);
+  assert.match(routeDetailSource, /const contextRouteRows = useMemo\([\s\S]*ensureUniqueRouteRowColors\(applyRouteRowDraftState\(\[\.\.\.contextRouteRowsSource, \.\.\.clientRouteRows\]/);
   assert.match(routeDetailSource, /function getRouteDraftOptimized\(routeRow, includeExistingOptimized\) \{/);
   assert.match(routeDetailSource, /if \(routeRow\.routePlanId && !includeExistingOptimized\) return undefined/);
   assert.match(routeDetailSource, /function shouldIncludeRouteDraftRow\(routeRow, includeEmptyTempRoutes\) \{/);
