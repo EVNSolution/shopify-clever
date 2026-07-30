@@ -288,6 +288,14 @@ export function shouldRequestOrdersData({
     revalidationState === "idle";
 }
 
+export function getPendingOrdersView(pendingLocation) {
+  if (pendingLocation?.pathname !== "/app/orders") return undefined;
+
+  return new URLSearchParams(pendingLocation.search ?? "").get("view") === "inventory"
+    ? "inventory"
+    : "orders";
+}
+
 export function createOrdersViewSnapshot(loaderData, capturedAt = Date.now()) {
   const ordersCacheKey = textOrUndefined(loaderData?.ordersCacheKey);
   if (!loaderData?.ordersLoaded || !ordersCacheKey) return null;
