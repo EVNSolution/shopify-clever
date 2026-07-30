@@ -823,6 +823,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
 
   return {
     orders: mergedOrders,
+    ordersCacheKey: shopifyShopCacheKey ?? null,
     ordersLoaded: shouldLoadOrders,
     inventories: inventoryData.inventories,
     routeGroups: routeGroupData.routeGroups,

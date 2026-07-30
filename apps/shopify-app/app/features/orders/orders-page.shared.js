@@ -1,6 +1,7 @@
 import { ORDER_FILTER_QUERY_KEYS } from "./order-filters.js";
 
 export const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft";
+export const ORDERS_VIEW_SNAPSHOT_TTL_MS = 30 * 60_000;
 
 const ORDERS_UI_ONLY_QUERY_KEYS = new Set([
   ...Object.values(ORDER_FILTER_QUERY_KEYS),
@@ -285,6 +286,65 @@ export function shouldRequestOrdersData({
     !ordersLoaded &&
     !requestPending &&
     revalidationState === "idle";
+}
+
+export function createOrdersViewSnapshot(loaderData, capturedAt = Date.now()) {
+  const ordersCacheKey = textOrUndefined(loaderData?.ordersCacheKey);
+  if (!loaderData?.ordersLoaded || !ordersCacheKey) return null;
+
+  return {
+    capturedAt,
+    departureLocation: loaderData.departureLocation ?? null,
+    deliveryCycle: loaderData.deliveryCycle ?? null,
+    orders: Array.isArray(loaderData.orders) ? loaderData.orders : [],
+    ordersCacheKey,
+    routeGroups: Array.isArray(loaderData.routeGroups) ? loaderData.routeGroups : [],
+    shopLocalDate: loaderData.shopLocalDate ?? null,
+    shopTimeZone: loaderData.shopTimeZone ?? null,
+  };
+}
+
+export function restoreOrdersViewSnapshot(
+  loaderData,
+  snapshot,
+  {
+    now = Date.now(),
+    ttlMs = ORDERS_VIEW_SNAPSHOT_TTL_MS,
+  } = {},
+) {
+  const loaderCacheKey = textOrUndefined(loaderData?.ordersCacheKey);
+  const snapshotCacheKey = textOrUndefined(snapshot?.ordersCacheKey);
+  const capturedAt = Number(snapshot?.capturedAt);
+  const maxAgeMs = Number(ttlMs);
+  const snapshotAgeMs = Number(now) - capturedAt;
+  const canRestore =
+    loaderData?.ordersLoaded !== true &&
+    loaderCacheKey &&
+    loaderCacheKey === snapshotCacheKey &&
+    Number.isFinite(capturedAt) &&
+    Number.isFinite(snapshotAgeMs) &&
+    snapshotAgeMs >= 0 &&
+    Number.isFinite(maxAgeMs) &&
+    maxAgeMs >= 0 &&
+    snapshotAgeMs <= maxAgeMs;
+
+  if (!canRestore) {
+    return { loaderData, restored: false };
+  }
+
+  return {
+    loaderData: {
+      ...loaderData,
+      departureLocation: snapshot.departureLocation ?? null,
+      deliveryCycle: snapshot.deliveryCycle ?? null,
+      orders: Array.isArray(snapshot.orders) ? snapshot.orders : [],
+      ordersLoaded: true,
+      routeGroups: Array.isArray(snapshot.routeGroups) ? snapshot.routeGroups : [],
+      shopLocalDate: snapshot.shopLocalDate ?? null,
+      shopTimeZone: snapshot.shopTimeZone ?? null,
+    },
+    restored: true,
+  };
 }
 
 export function getOrdersRefreshCompletion({

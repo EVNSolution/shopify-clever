@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Link, useLoaderData, useRouteError, useSearchParams } from "react-router";
+import { Link, PrefetchPageLinks, useLoaderData, useRouteError, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryOrderView } from "../features/delivery/inventories.server";
 import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
@@ -1059,6 +1059,7 @@ export default function InventoryDetailPage() {
 
   return (
     <main className={`inventory-detail-page inventory-detail-view-${inventoryDetailView}`} style={pageStyle}>
+      <PrefetchPageLinks page="/app/orders" />
       <style>{printCss}</style>
       <div className="inventory-detail-sheet" style={sheetStyle}>
         <section className="inventory-detail-panel" style={panelStyle}>
