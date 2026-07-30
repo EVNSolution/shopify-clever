@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   buildOrdersViewNavigationMetric,
   createOrdersViewSnapshot,
+  getPendingOrdersView,
   restoreOrdersViewSnapshot,
   shouldRequestOrdersData,
   shouldRevalidateOrdersRoute,
@@ -187,6 +188,38 @@ test("direct Inventory entry loads Orders once only when the Orders tab is selec
   assert.match(ordersPageSource, /const shouldRequestOrders = shouldRequestOrdersData\(\{/);
   assert.match(ordersPageSource, /ordersLoadRequestedRef\.current = true;[\s\S]*revalidator\.revalidate\(\)/);
   assert.match(ordersPageSource, /aria-label="Shopify orders are loading"/);
+});
+
+test("Orders tab selection follows the pending destination before its loader completes", () => {
+  assert.equal(
+    getPendingOrdersView({
+      pathname: "/app/orders",
+      search: "",
+    }),
+    "orders",
+  );
+  assert.equal(
+    getPendingOrdersView({
+      pathname: "/app/orders",
+      search: "?view=inventory",
+    }),
+    "inventory",
+  );
+  assert.equal(
+    getPendingOrdersView({
+      pathname: "/app/orders/inventory",
+      search: "",
+    }),
+    undefined,
+  );
+  assert.match(
+    ordersPageSource,
+    /const activeOrdersView = getPendingOrdersView\(navigation\.location\) \?\? currentOrdersView/,
+  );
+  assert.match(
+    ordersPageSource,
+    /navigation\.state === "idle" \? revalidator\.state : navigation\.state/,
+  );
 });
 
 test("Orders restores the last complete view while inventory-only data refreshes", () => {

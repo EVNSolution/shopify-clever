@@ -2,7 +2,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Await, useFetcher, useLoaderData, useNavigate, useRevalidator, useSearchParams } from "react-router";
+import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { appendIdToken, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
@@ -66,6 +66,7 @@ import {
   DEFAULT_ROUTE_PLAN_TITLE,
   formatLatestShopifyOrderUpdatedAt,
   getOrdersRefreshCompletion,
+  getPendingOrdersView,
   getSafePerformanceNow,
   restoreOrdersViewSnapshot,
   roundPerfDuration,
@@ -2445,13 +2446,15 @@ function OrdersPageContent({ loaderData }) {
   const ordersRefreshFetcher = useFetcher();
   const shopify = useAppBridge();
   const navigate = useNavigate();
+  const navigation = useNavigation();
   const revalidator = useRevalidator();
 
   useEffect(() => {
     ordersLoadAutoRetryAttempted = false;
   }, []);
   const [searchParams, setSearchParams] = useSearchParams();
-  const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
+  const currentOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
+  const activeOrdersView = getPendingOrdersView(navigation.location) ?? currentOrdersView;
   const sourceOrdersLoaded = loaderData.ordersLoaded === true;
   const restoredOrdersView = useMemo(
     () => restoreOrdersViewSnapshot(
@@ -2975,13 +2978,14 @@ function OrdersPageContent({ loaderData }) {
       activeOrdersView,
       ordersLoaded: sourceOrdersLoaded,
       requestPending: ordersLoadRequestedRef.current,
-      revalidationState: revalidator.state,
+      revalidationState:
+        navigation.state === "idle" ? revalidator.state : navigation.state,
     });
     if (!shouldRequestOrders) return;
 
     ordersLoadRequestedRef.current = true;
     revalidator.revalidate();
-  }, [activeOrdersView, revalidator, sourceOrdersLoaded]);
+  }, [activeOrdersView, navigation.state, revalidator, sourceOrdersLoaded]);
   const openInventoryDetail = useCallback((inventoryId) => {
     if (!inventoryId) return;
     navigate(`/app/orders/inventory?id=${encodeURIComponent(inventoryId)}`);

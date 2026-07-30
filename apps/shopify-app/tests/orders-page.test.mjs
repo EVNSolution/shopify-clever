@@ -710,7 +710,7 @@ test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop tim
 
 test("Orders page creates a childless route group from scoped planned orders", () => {
   assert.match(ordersPageSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useRevalidator, useSearchParams \} from "react-router"/);
+  assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams \} from "react-router"/);
   assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-plans\.server"/);
   assert.match(ordersPageSource, /import \{[\s\S]*createDeliveryRouteGroup[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-groups\.server"/);
   assert.doesNotMatch(ordersPageSource, /generateDeliveryRouteGroupChildRoutes/);
@@ -1735,7 +1735,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
 });
 
 test("Orders page filters table rows by order date, delivery date, delivery day, type, and area", () => {
-  assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useRevalidator, useSearchParams \} from "react-router"/);
+  assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams \} from "react-router"/);
   assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_HISTORY_SCOPE[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_WEEKDAY_OPTIONS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "(?:\.\.\/features\/orders|\.)\/order-filters"/);
   assert.match(ordersPageSource, /const \[searchParams, setSearchParams\] = useSearchParams\(\)/);
   assert.match(ordersPageSource, /const \[optimisticOrderFilters, setOptimisticOrderFilters\] = useState\(null\)/);
