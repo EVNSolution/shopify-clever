@@ -1825,13 +1825,23 @@ function getRouteCreatedLabel(routePlan) {
   return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL;
 }
 
-function formatTrackingTimestamp(value) {
+function formatTrackingTimestamp(value, ianaTimezone) {
   const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return ROUTE_EMPTY_LABEL;
-  return new Intl.DateTimeFormat(undefined, {
-    dateStyle: "short",
-    timeStyle: "medium",
-  }).format(date);
+  if (!date || Number.isNaN(date.getTime()) || !textOrUndefined(ianaTimezone)) return ROUTE_EMPTY_LABEL;
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      month: "numeric",
+      second: "2-digit",
+      timeZone: ianaTimezone,
+      timeZoneName: "short",
+      year: "numeric",
+    }).format(date);
+  } catch {
+    return ROUTE_EMPTY_LABEL;
+  }
 }
 
 function formatTrackingPosition(position) {
@@ -2133,9 +2143,10 @@ function buildRouteStops(stops) {
       countryCode: getRouteStopAddressValue(stop, "countryCode"),
       latitude: coordinates?.[1] ?? null,
       longitude: coordinates?.[0] ?? null,
-      status: stop.fulfillmentStatus ?? stop.status ?? stop.assignmentStatus ?? "PENDING",
+      status: stop.status ?? stop.assignmentStatus ?? "PENDING",
       deliveryStatus: textOrUndefined(stop.deliveryStatus),
       deliveryStopStatus: textOrUndefined(stop.deliveryStopStatus),
+      fulfillmentStatus: textOrUndefined(stop.fulfillmentStatus),
       readiness: textOrUndefined(stop.readiness),
       planningStatus: textOrUndefined(stop.planningStatus),
       payment: stop.paymentStatus ?? stop.financialStatus ?? "—",
@@ -4883,11 +4894,12 @@ export default function RouteDetailPage() {
 
 
   useEffect(() => {
-    if (!isTrackingMapView || !isMapReady || !routeMapRef.current) return undefined;
+    if (!isMapReady || !routeMapRef.current) return undefined;
 
     const map = routeMapRef.current;
     const syncTracking = () => {
       syncRouteDetailLiveTracking(routeMapRef.current, displayedRouteTrackingSnapshot, routeMapStops);
+      syncRouteDetailTrackingVisibility(map, isTrackingMapView);
     };
     syncTracking();
     map.on("styledata", syncTracking);
@@ -5890,7 +5902,7 @@ export default function RouteDetailPage() {
                 <div style={routeChildTrackingMetricStyle}>
                   <span style={routeChildTrackingMetricLabelStyle}>Last received</span>
                   <strong style={routeChildTrackingMetricValueStyle}>
-                    {formatTrackingTimestamp(latestTrackingPosition?.receivedAt ?? latestTrackingPosition?.occurredAt)}
+                    {formatTrackingTimestamp(latestTrackingPosition?.receivedAt ?? latestTrackingPosition?.occurredAt, ianaTimezone)}
                   </strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
@@ -5915,7 +5927,7 @@ export default function RouteDetailPage() {
                   <span style={routeChildTrackingMetricLabelStyle}>Recorded range</span>
                   <strong style={routeChildTrackingMetricValueStyle}>{
                     routeTrackingPathSummary.firstOccurredAt
-                      ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt)}`
+                      ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt, ianaTimezone)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt, ianaTimezone)}`
                       : ROUTE_EMPTY_LABEL
                   }</strong>
                 </div>

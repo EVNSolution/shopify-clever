@@ -15,6 +15,7 @@ const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking";
 const ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID = "route-detail-live-tracking-trail";
 const ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID = "route-detail-live-tracking-connector";
+const ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID = "route-detail-live-driver-position";
 const ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID = "route-detail-tracking-arrivals";
 const ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID = "route-detail-tracking-arrival-circles";
 const ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID = "route-detail-tracking-arrival-labels";
@@ -23,6 +24,7 @@ const ROUTE_DETAIL_TRACKING_LAYER_IDS = [
   ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
   ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID,
   ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
 ];
 const ROUTE_DETAIL_COMPLETED_STOP_COLOR = "#8c9196";
 const ROUTE_DETAIL_DEPARTURE_IMAGE_ID = "route-detail-departure-pin";
@@ -300,9 +302,27 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
 }
 
 function buildRouteDetailLiveTrackingData(trackingSnapshot) {
+  const features = getRouteTrackingLineFeatures(trackingSnapshot);
+  const currentPositionCoordinates = normalizeLngLat(
+    trackingSnapshot?.latestPosition?.latitude,
+    trackingSnapshot?.latestPosition?.longitude,
+  );
+  if (currentPositionCoordinates) {
+    features.push({
+      type: "Feature",
+      geometry: { type: "Point", coordinates: currentPositionCoordinates },
+      properties: {
+        driverId: textOrUndefined(trackingSnapshot?.latestPosition?.driverId) ?? "",
+        occurredAt: textOrUndefined(trackingSnapshot?.latestPosition?.occurredAt) ?? "",
+        receivedAt: textOrUndefined(trackingSnapshot?.latestPosition?.receivedAt) ?? "",
+        trackingType: "currentPosition",
+      },
+    });
+  }
+
   return {
     type: "FeatureCollection",
-    features: getRouteTrackingLineFeatures(trackingSnapshot),
+    features,
   };
 }
 
@@ -492,6 +512,21 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot, routeStops) {
         "text-size": 11,
       },
       paint: { "text-color": "#ffffff" },
+    });
+  }
+  if (!map.getLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID)) {
+    map.addLayer({
+      id: ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
+      type: "circle",
+      source: ROUTE_DETAIL_TRACKING_SOURCE_ID,
+      filter: ["==", ["get", "trackingType"], "currentPosition"],
+      layout: { visibility: "visible" },
+      paint: {
+        "circle-color": "#d82c0d",
+        "circle-radius": 8,
+        "circle-stroke-color": "#ffffff",
+        "circle-stroke-width": 3,
+      },
     });
   }
 
@@ -814,11 +849,6 @@ function getRouteStopDisplayColor(stop, routeColor, routeStopColorById) {
   );
 }
 
-function isRouteStopCompleted(stop) {
-  return [stop?.status, stop?.deliveryStatus, stop?.deliveryStopStatus, stop?.fulfillmentStatus]
-    .some((status) => ["COMPLETED", "DELIVERED", "FULFILLED"].includes(String(status ?? "").toUpperCase()));
-}
-
 function getRouteStopMarkerKey(stop) {
   return [
     textOrUndefined(stop.routePlanId),
@@ -902,7 +932,7 @@ function buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, 
       },
       properties: {
         featureType: "routeStop",
-        isCompleted: Boolean(stop.isTrackingCompleted || isRouteStopCompleted(stop)),
+        isCompleted: Boolean(stop.isTrackingCompleted),
         orderId: stop.orderId ?? "",
         pinImage: getRouteDetailStopPinImageId(stop, stopColor),
         sortKey: stop.isPolygonSelected ? 3000 : 1000 - stop.stop,

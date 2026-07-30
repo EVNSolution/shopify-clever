@@ -76,7 +76,7 @@ test("main map handlers read current child rows and actions without rebinding", 
     "  useEffect(() => {\n    if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return undefined;",
   );
   const mainMapEffectEnd = routeDetailSource.indexOf(
-    "\n\n  useEffect(() => {\n    if (!isTrackingMapView || !isMapReady || !routeMapRef.current) return undefined;",
+    "\n\n  useEffect(() => {\n    if (!isMapReady || !routeMapRef.current) return undefined;",
     mainMapEffectStart,
   );
   assert.notEqual(mainMapEffectStart, -1);
