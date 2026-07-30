@@ -4,6 +4,8 @@ import { join } from "node:path";
 import test from "node:test";
 import {
   buildOrdersViewNavigationMetric,
+  createOrdersViewSnapshot,
+  restoreOrdersViewSnapshot,
   shouldRequestOrdersData,
   shouldRevalidateOrdersRoute,
   withPromiseTimeout,
@@ -174,7 +176,9 @@ test("direct Inventory entry loads Orders once only when the Orders tab is selec
   );
 
   assert.match(ordersPageSource, /ordersLoaded: shouldLoadOrders/);
-  assert.match(ordersPageSource, /const \{[\s\S]*ordersLoaded[\s\S]*\} = loaderData/);
+  assert.match(ordersPageSource, /const sourceOrdersLoaded = loaderData\.ordersLoaded === true/);
+  assert.match(ordersPageSource, /restoreOrdersViewSnapshot\(/);
+  assert.match(ordersPageSource, /const \{[\s\S]*ordersLoaded[\s\S]*\} = displayLoaderData/);
   assert.match(ordersPageSource, /const ordersLoadRequestedRef = useRef\(false\)/);
   assert.match(
     ordersPageSource,
@@ -183,6 +187,77 @@ test("direct Inventory entry loads Orders once only when the Orders tab is selec
   assert.match(ordersPageSource, /const shouldRequestOrders = shouldRequestOrdersData\(\{/);
   assert.match(ordersPageSource, /ordersLoadRequestedRef\.current = true;[\s\S]*revalidator\.revalidate\(\)/);
   assert.match(ordersPageSource, /aria-label="Shopify orders are loading"/);
+});
+
+test("Orders restores the last complete view while inventory-only data refreshes", () => {
+  const snapshot = createOrdersViewSnapshot(
+    {
+      departureLocation: { id: "depot-1" },
+      deliveryCycle: { cutoffTime: "17:00" },
+      orders: [{ id: "order-1" }],
+      ordersCacheKey: "shop-a",
+      ordersLoaded: true,
+      routeGroups: [{ id: "group-1" }],
+      shopLocalDate: "2026-07-30",
+      shopTimeZone: "America/Toronto",
+    },
+    1_000,
+  );
+  const inventoryOnlyData = {
+    inventories: [{ id: "inventory-2" }],
+    orders: [],
+    ordersCacheKey: "shop-a",
+    ordersLoaded: false,
+    routeGroups: [],
+  };
+
+  const restored = restoreOrdersViewSnapshot(
+    inventoryOnlyData,
+    snapshot,
+    { now: 2_000 },
+  );
+
+  assert.equal(restored.restored, true);
+  assert.deepEqual(restored.loaderData.orders, [{ id: "order-1" }]);
+  assert.deepEqual(restored.loaderData.routeGroups, [{ id: "group-1" }]);
+  assert.deepEqual(restored.loaderData.inventories, [{ id: "inventory-2" }]);
+  assert.equal(restored.loaderData.ordersLoaded, true);
+});
+
+test("Orders never restores an expired or cross-shop view snapshot", () => {
+  const snapshot = createOrdersViewSnapshot(
+    {
+      orders: [{ id: "order-1" }],
+      ordersCacheKey: "shop-a",
+      ordersLoaded: true,
+    },
+    1_000,
+  );
+
+  assert.equal(
+    restoreOrdersViewSnapshot(
+      {
+        orders: [],
+        ordersCacheKey: "shop-b",
+        ordersLoaded: false,
+      },
+      snapshot,
+      { now: 2_000 },
+    ).restored,
+    false,
+  );
+  assert.equal(
+    restoreOrdersViewSnapshot(
+      {
+        orders: [],
+        ordersCacheKey: "shop-a",
+        ordersLoaded: false,
+      },
+      snapshot,
+      { now: 2_000, ttlMs: 500 },
+    ).restored,
+    false,
+  );
 });
 
 test("Orders view transitions emit query-safe performance metrics", () => {

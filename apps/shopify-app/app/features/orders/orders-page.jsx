@@ -62,10 +62,12 @@ import { TabLayout } from "../../ui/tab-layout";
 import {
   buildOrderTimelineDetails,
   buildOrdersViewNavigationMetric,
+  createOrdersViewSnapshot,
   DEFAULT_ROUTE_PLAN_TITLE,
   formatLatestShopifyOrderUpdatedAt,
   getOrdersRefreshCompletion,
   getSafePerformanceNow,
+  restoreOrdersViewSnapshot,
   roundPerfDuration,
   shouldRequestOrdersData,
   textOrUndefined,
@@ -73,6 +75,7 @@ import {
 
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
+let lastOrdersViewSnapshot = null;
 const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
 const ORDER_DATA_FIX_ACTION = "fixData";
 const ORDER_BULK_ACTION_OPTIONS = [
@@ -2449,8 +2452,22 @@ function OrdersPageContent({ loaderData }) {
   }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const activeOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
-  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = loaderData;
-  const { deliveryCycle, shopTimeZone } = loaderData;
+  const sourceOrdersLoaded = loaderData.ordersLoaded === true;
+  const restoredOrdersView = useMemo(
+    () => restoreOrdersViewSnapshot(
+      loaderData,
+      typeof window === "undefined" ? null : lastOrdersViewSnapshot,
+    ),
+    [loaderData],
+  );
+  const displayLoaderData = restoredOrdersView.loaderData;
+  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = displayLoaderData;
+  const { deliveryCycle, shopTimeZone } = displayLoaderData;
+
+  useEffect(() => {
+    if (!sourceOrdersLoaded || typeof window === "undefined") return;
+    lastOrdersViewSnapshot = createOrdersViewSnapshot(loaderData);
+  }, [loaderData, sourceOrdersLoaded]);
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
     () => (Array.isArray(orders) ? orders : []),
@@ -2950,13 +2967,13 @@ function OrdersPageContent({ loaderData }) {
       ordersLoadRequestedRef.current = false;
       return;
     }
-    if (ordersLoaded) {
+    if (sourceOrdersLoaded) {
       ordersLoadRequestedRef.current = false;
       return;
     }
     const shouldRequestOrders = shouldRequestOrdersData({
       activeOrdersView,
-      ordersLoaded,
+      ordersLoaded: sourceOrdersLoaded,
       requestPending: ordersLoadRequestedRef.current,
       revalidationState: revalidator.state,
     });
@@ -2964,7 +2981,7 @@ function OrdersPageContent({ loaderData }) {
 
     ordersLoadRequestedRef.current = true;
     revalidator.revalidate();
-  }, [activeOrdersView, ordersLoaded, revalidator]);
+  }, [activeOrdersView, revalidator, sourceOrdersLoaded]);
   const openInventoryDetail = useCallback((inventoryId) => {
     if (!inventoryId) return;
     navigate(`/app/orders/inventory?id=${encodeURIComponent(inventoryId)}`);
@@ -4124,6 +4141,7 @@ function OrdersPageContent({ loaderData }) {
   }, [needsSessionTokenRefresh, searchParams, setSearchParams, shopify]);
 
   useEffect(() => {
+    if (!sourceOrdersLoaded) return;
     if (orderSyncSubmittedRef.current) return;
 
     const orderSnapshots = getOrderSyncSnapshots(safeOrders);
@@ -4150,7 +4168,7 @@ function OrdersPageContent({ loaderData }) {
     return () => {
       cancelled = true;
     };
-  }, [ordersSyncFetcher, safeOrders, shopify]);
+  }, [ordersSyncFetcher, safeOrders, shopify, sourceOrdersLoaded]);
 
   useEffect(() => {
     const completion = getOrdersRefreshCompletion({
