@@ -36,6 +36,7 @@ import {
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
   ROUTE_DETAIL_POLYGON_CORNER_LAYER_ID,
   ROUTE_DETAIL_STOP_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
   findRouteStopPoint,
   fitRouteDetailMap,
   fitRouteStopAndSnappedPoint,
@@ -606,6 +607,37 @@ const routeTrackingMapReferenceKeyStyle = {
   height: "3px",
   opacity: 0.42,
   width: "22px",
+};
+
+const routeTrackingMapFreshnessStyle = {
+  alignItems: "center",
+  background: "rgba(255, 255, 255, 0.94)",
+  border: "1px solid rgba(138, 138, 138, 0.55)",
+  borderRadius: "999px",
+  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.12)",
+  color: "#303030",
+  display: "flex",
+  fontSize: "12px",
+  fontWeight: 700,
+  gap: "7px",
+  left: "50%",
+  lineHeight: 1,
+  padding: "9px 12px",
+  pointerEvents: "none",
+  position: "absolute",
+  top: "12px",
+  transform: "translateX(-50%)",
+  whiteSpace: "nowrap",
+  zIndex: 2,
+};
+
+const routeTrackingMapFreshnessDotStyle = {
+  background: "#d82c0d",
+  border: "2px solid #ffffff",
+  borderRadius: "50%",
+  boxShadow: "0 0 0 1px rgba(216, 44, 13, 0.22)",
+  height: "9px",
+  width: "9px",
 };
 
 const routeMetaActionsStyle = {
@@ -1827,6 +1859,48 @@ function formatTrackingTimestamp(value, ianaTimezone) {
   }
 }
 
+function formatTrackingElapsedSeconds(value, now = Date.now()) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return ROUTE_EMPTY_LABEL;
+  return `${Math.max(0, Math.floor((now - date.getTime()) / 1000))}s ago`;
+}
+
+function formatTrackingRange(firstValue, lastValue, ianaTimezone) {
+  const firstDate = firstValue ? new Date(firstValue) : null;
+  const lastDate = lastValue ? new Date(lastValue) : null;
+  if (
+    !firstDate
+    || !lastDate
+    || Number.isNaN(firstDate.getTime())
+    || Number.isNaN(lastDate.getTime())
+    || !textOrUndefined(ianaTimezone)
+  ) return ROUTE_EMPTY_LABEL;
+
+  try {
+    const dateFormatter = new Intl.DateTimeFormat("en-CA", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: ianaTimezone,
+    });
+    const timeFormatter = new Intl.DateTimeFormat("en-CA", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      timeZone: ianaTimezone,
+    });
+    const firstDateLabel = dateFormatter.format(firstDate);
+    const lastDateLabel = dateFormatter.format(lastDate);
+    const firstTimeLabel = timeFormatter.format(firstDate);
+    const lastTimeLabel = timeFormatter.format(lastDate);
+
+    return firstDateLabel === lastDateLabel
+      ? `${firstTimeLabel}–${lastTimeLabel}`
+      : `${firstDateLabel} ${firstTimeLabel}–${lastDateLabel} ${lastTimeLabel}`;
+  } catch {
+    return ROUTE_EMPTY_LABEL;
+  }
+}
+
 function formatTrackingPosition(position) {
   const latitude = numberOrUndefined(position?.latitude);
   const longitude = numberOrUndefined(position?.longitude);
@@ -2983,7 +3057,6 @@ export default function RouteDetailPage() {
     [displayedRouteTrackingSnapshot, routeExecutionStatus, routeTrackingClock],
   );
   const canDraftEditChildStopMembership = !isRouteExecutionLockedForStopMembership(routeExecutionStatus);
-  const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS" ? trackingRoutePlanId : null;
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
     ? trackingRoutePlanId
     : null;
@@ -2995,6 +3068,7 @@ export default function RouteDetailPage() {
   const routeTrackingPolicy = displayedRouteTrackingSnapshot?.policy;
   const routeTrackingProgress = displayedRouteTrackingSnapshot?.progress;
   const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
+  const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? latestTrackingPosition?.occurredAt;
   const routeTrackingPathSummary = useMemo(
     () => getRouteTrackingPathSummary(displayedRouteTrackingSnapshot),
     [displayedRouteTrackingSnapshot],
@@ -3339,10 +3413,11 @@ export default function RouteDetailPage() {
   }, [trackingStreamRoutePlanId]);
 
   useEffect(() => {
-    if (!liveTrackingRoutePlanId) return undefined;
-    const clock = window.setInterval(() => setRouteTrackingClock(Date.now()), 10_000);
+    if (!isTrackingMapView || !latestTrackingReceivedAt) return undefined;
+    setRouteTrackingClock(Date.now());
+    const clock = window.setInterval(() => setRouteTrackingClock(Date.now()), 1_000);
     return () => window.clearInterval(clock);
-  }, [liveTrackingRoutePlanId]);
+  }, [isTrackingMapView, latestTrackingReceivedAt]);
 
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
@@ -4880,15 +4955,57 @@ export default function RouteDetailPage() {
     if (!isMapReady || !routeMapRef.current) return undefined;
 
     const map = routeMapRef.current;
+    let didBindTrackingPositionHandlers = false;
+    const handleTrackingPositionDoubleClick = (event) => {
+      event.preventDefault?.();
+      event.originalEvent?.preventDefault?.();
+      event.originalEvent?.stopPropagation?.();
+      const coordinates = event.features?.[0]?.geometry?.coordinates;
+      if (
+        !Array.isArray(coordinates)
+        || coordinates.length < 2
+        || !Number.isFinite(Number(coordinates[0]))
+        || !Number.isFinite(Number(coordinates[1]))
+      ) return;
+
+      map.easeTo({
+        center: [Number(coordinates[0]), Number(coordinates[1])],
+        duration: 450,
+        zoom: Math.max(map.getZoom?.() ?? 0, 15),
+      });
+    };
+    const handleTrackingPositionMouseEnter = () => {
+      map.getCanvas().style.cursor = "pointer";
+    };
+    const handleTrackingPositionMouseLeave = () => {
+      map.getCanvas().style.cursor = "";
+    };
+    const bindTrackingPositionHandlers = () => {
+      if (
+        didBindTrackingPositionHandlers
+        || !isTrackingMapView
+        || !map.getLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID)
+      ) return;
+      map.on("dblclick", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionDoubleClick);
+      map.on("mouseenter", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionMouseEnter);
+      map.on("mouseleave", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionMouseLeave);
+      didBindTrackingPositionHandlers = true;
+    };
     const syncTracking = () => {
       syncRouteDetailLiveTracking(routeMapRef.current, displayedRouteTrackingSnapshot);
       syncRouteDetailTrackingVisibility(map, isTrackingMapView);
+      bindTrackingPositionHandlers();
     };
     syncTracking();
     map.on("styledata", syncTracking);
 
     return () => {
       map.off("styledata", syncTracking);
+      if (didBindTrackingPositionHandlers) {
+        map.off("dblclick", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionDoubleClick);
+        map.off("mouseenter", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionMouseEnter);
+        map.off("mouseleave", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionMouseLeave);
+      }
     };
   }, [displayedRouteTrackingSnapshot, isMapReady, isTrackingMapView, routeMapRef]);
 
@@ -5503,19 +5620,31 @@ export default function RouteDetailPage() {
             }
           >
             {isTrackingMapView ? (
-              <div aria-label="Tracking map legend" style={routeTrackingMapLegendStyle}>
-                <span style={routeTrackingMapLegendItemStyle}>
-                  <span
-                    aria-hidden="true"
-                    style={{ ...routeTrackingMapReferenceKeyStyle, background: routePathColor }}
-                  />
-                  <span>Planned route</span>
-                </span>
-                <span style={routeTrackingMapLegendItemStyle}>
-                  <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
-                  <span>Actual GPS tracking</span>
-                </span>
-              </div>
+              <>
+                <div aria-label="Tracking map legend" style={routeTrackingMapLegendStyle}>
+                  <span style={routeTrackingMapLegendItemStyle}>
+                    <span
+                      aria-hidden="true"
+                      style={{ ...routeTrackingMapReferenceKeyStyle, background: routePathColor }}
+                    />
+                    <span>Planned route</span>
+                  </span>
+                  <span style={routeTrackingMapLegendItemStyle}>
+                    <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
+                    <span>Actual GPS tracking</span>
+                  </span>
+                </div>
+                {latestTrackingReceivedAt ? (
+                  <div
+                    aria-label="Current position freshness"
+                    style={routeTrackingMapFreshnessStyle}
+                    title={`Last received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}. Double-click the red marker to focus.`}
+                  >
+                    <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
+                    <span>Current position {formatTrackingElapsedSeconds(latestTrackingReceivedAt, routeTrackingClock)}</span>
+                  </div>
+                ) : null}
+              </>
             ) : null}
           </MapPanel>
 
@@ -5742,12 +5871,6 @@ export default function RouteDetailPage() {
                   </strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Last received</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>
-                    {formatTrackingTimestamp(latestTrackingPosition?.receivedAt ?? latestTrackingPosition?.occurredAt, ianaTimezone)}
-                  </strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
                   <span style={routeChildTrackingMetricLabelStyle}>Driver</span>
                   <strong style={routeChildTrackingMetricValueStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</strong>
                 </div>
@@ -5766,10 +5889,19 @@ export default function RouteDetailPage() {
                   <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Recorded range</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>{
-                    routeTrackingPathSummary.firstOccurredAt
+                  <span style={routeChildTrackingMetricLabelStyle}>Range</span>
+                  <strong
+                    style={{ ...routeChildTrackingMetricValueStyle, whiteSpace: "nowrap" }}
+                    title={routeTrackingPathSummary.firstOccurredAt
                       ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt, ianaTimezone)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt, ianaTimezone)}`
+                      : undefined}
+                  >{
+                    routeTrackingPathSummary.firstOccurredAt
+                      ? formatTrackingRange(
+                        routeTrackingPathSummary.firstOccurredAt,
+                        routeTrackingPathSummary.lastOccurredAt,
+                        ianaTimezone,
+                      )
                       : ROUTE_EMPTY_LABEL
                   }</strong>
                 </div>

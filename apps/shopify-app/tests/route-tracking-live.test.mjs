@@ -62,7 +62,6 @@ test("ready and in-progress child routes observe lifecycle events with a fresh S
   assert.match(routeDetailSource, /tracking_snapshot/);
   assert.match(routeDetailSource, /tracking_position/);
   assert.match(routeDetailSource, /tracking_progress/);
-  assert.match(routeDetailSource, /const liveTrackingRoutePlanId = routeExecutionStatus === "IN_PROGRESS"/);
   assert.match(routeDetailSource, /const trackingStreamRoutePlanId = \["READY", "IN_PROGRESS"\]\.includes\(routeExecutionStatus\)/);
   assert.match(routeDetailSource, /\?mode=snapshot/);
   assert.match(routeDetailSource, /getRouteExecutionStatusFromTrackingEvent/);
@@ -180,4 +179,19 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.match(routeDetailSource, /GPS records/);
   assert.match(routeDetailSource, /Fit recorded GPS path/);
   assert.doesNotMatch(routeDetailSource, /GPS record #/);
+});
+
+test("Tracking map focuses the live driver position and keeps freshness visible without verbose range cards", () => {
+  const routeDetailSource = readIfPresent(routeDetailPath);
+  const routeMapSource = readIfPresent(routeMapPath);
+
+  assert.match(routeMapSource, /export \{[\s\S]*ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID/);
+  assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionDoubleClick\)/);
+  assert.match(routeDetailSource, /map\.easeTo\(\{[\s\S]*center: \[Number\(coordinates\[0\]\), Number\(coordinates\[1\]\)\][\s\S]*zoom: Math\.max\(map\.getZoom\?\.\(\) \?\? 0, 15\)/);
+  assert.match(routeDetailSource, /window\.setInterval\(\(\) => setRouteTrackingClock\(Date\.now\(\)\), 1_000\)/);
+  assert.match(routeDetailSource, /Current position/);
+  assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(/);
+  assert.match(routeDetailSource, /<span style=\{routeChildTrackingMetricLabelStyle\}>Range<\/span>/);
+  assert.match(routeDetailSource, /formatTrackingRange\(/);
+  assert.doesNotMatch(routeDetailSource, />Recorded range</);
 });
