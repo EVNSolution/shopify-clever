@@ -5,8 +5,6 @@ import {
   buildRouteDetailMarkerFeatureCollection,
   buildRouteStopPointLookup,
   getRouteDetailPopupPanOffset,
-  getRouteDetailTrackingArrivalItems,
-  getRouteTrackingArrivalListMaxHeight,
   syncRouteDetailLiveTracking,
   syncRouteDetailMapMarkerLayers,
   syncRouteDetailMapViewEmphasis,
@@ -17,8 +15,6 @@ import {
 const TRACKING_LAYER_IDS = [
   "route-detail-live-tracking-trail",
   "route-detail-live-tracking-connector",
-  "route-detail-tracking-arrival-circles",
-  "route-detail-tracking-arrival-labels",
   "route-detail-live-driver-position",
 ];
 const DRIVER_POSITION_LAYER_ID = "route-detail-live-driver-position";
@@ -280,13 +276,7 @@ test("Tracking planned route remains a solid, visible reference under dashed GPS
   assert.equal(routeLayer.paint["line-dasharray"], undefined);
 });
 
-test("arrival popup sizing stays inside the visible tracking map viewport", () => {
-  assert.equal(getRouteTrackingArrivalListMaxHeight(520), 260);
-  assert.equal(getRouteTrackingArrivalListMaxHeight(240), 138);
-  assert.equal(getRouteTrackingArrivalListMaxHeight(180), 78);
-});
-
-test("arrival popup pan correction uses only the overflow outside the visible frame", () => {
+test("map popup pan correction uses only the overflow outside the visible frame", () => {
   const frameRect = { bottom: 520, left: 0, right: 800, top: 0 };
 
   assert.deepEqual(
@@ -315,13 +305,19 @@ test("tracking layers reuse their sources while current driver position stays ex
       receivedAt: "2026-07-30T14:50:42.000Z",
       routePlanId: "route-1",
     },
+    stopArrivals: [{
+      deliveryStopId: "stop-1",
+      eventId: "arrival-1",
+      latitude: 37.511,
+      longitude: 126.926,
+      occurredAt: "2026-07-30T14:49:00.000Z",
+      positionSource: "event",
+      stopSequence: 1,
+    }],
   };
 
   assert.equal(syncRouteDetailLiveTracking(fake.map, snapshot, []), true);
-  assert.deepEqual(fake.calls.addSource, [
-    "route-detail-live-tracking",
-    "route-detail-tracking-arrivals",
-  ]);
+  assert.deepEqual(fake.calls.addSource, ["route-detail-live-tracking"]);
   assert.deepEqual(fake.calls.addLayer, TRACKING_LAYER_IDS);
   assert.deepEqual(
     fake.sources.get("route-detail-live-tracking").data.features.find(
@@ -340,210 +336,24 @@ test("tracking layers reuse their sources while current driver position stays ex
   );
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["visible", "visible", "visible", "visible", "visible"],
+    ["visible", "visible", "visible"],
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.paint?.["circle-color"], "#d82c0d");
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "visible");
+  assert.equal(fake.sources.has("route-detail-tracking-arrivals"), false);
+  assert.equal(fake.layers.has("route-detail-tracking-arrival-circles"), false);
+  assert.equal(fake.layers.has("route-detail-tracking-arrival-labels"), false);
 
   assert.equal(syncRouteDetailTrackingVisibility(fake.map, false), true);
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["none", "none", "none", "none", "none"],
+    ["none", "none", "none"],
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "none");
 
   assert.equal(syncRouteDetailLiveTracking(fake.map, snapshot, []), true);
-  assert.deepEqual(fake.calls.addSource, [
-    "route-detail-live-tracking",
-    "route-detail-tracking-arrivals",
-  ]);
+  assert.deepEqual(fake.calls.addSource, ["route-detail-live-tracking"]);
   assert.deepEqual(fake.calls.addLayer, TRACKING_LAYER_IDS);
-});
-
-test("arrival markers keep one marker for repeated Arrived events at the same stop", () => {
-  const fake = createFakeMap();
-  const routeStops = [{
-    address: "서울특별시 영등포구 노들로",
-    coordinates: [126.929, 37.515],
-    deliveryStopId: "stop-8",
-    hasCoordinates: true,
-    stop: 8,
-  }];
-
-  syncRouteDetailLiveTracking(fake.map, {
-    stopArrivals: [
-      {
-        deliveryStopId: "stop-8",
-        eventId: "arrival-first",
-        latitude: 37.515,
-        longitude: 126.929,
-        occurredAt: "2026-07-22T01:00:00.000Z",
-        positionSource: "event",
-      },
-      {
-        deliveryStopId: "stop-8",
-        eventId: "arrival-repeated",
-        latitude: 37.51501,
-        longitude: 126.92901,
-        occurredAt: "2026-07-22T01:01:00.000Z",
-        positionSource: "event",
-      },
-    ],
-  }, routeStops);
-
-  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
-  assert.equal(arrivalFeatures.length, 1);
-  assert.deepEqual(arrivalFeatures[0].geometry.coordinates, [126.929, 37.515]);
-  assert.equal(arrivalFeatures[0].properties.displayLabel, "8");
-  assert.equal(arrivalFeatures[0].properties.arrivalStopCount, 1);
-  assert.equal(arrivalFeatures[0].properties.arrivalEventCount, 2);
-  assert.deepEqual(getRouteDetailTrackingArrivalItems(arrivalFeatures[0]), [{
-    occurredAt: "2026-07-22T01:00:00.000Z",
-    stopNumber: 8,
-  }]);
-});
-
-test("arrival markers collapse colocated stops into one natural cluster with popup details", () => {
-  const fake = createFakeMap();
-  const routeStops = [
-    {
-      address: "서울특별시 영등포구 노들로",
-      coordinates: [126.929, 37.515],
-      deliveryStopId: "stop-3",
-      hasCoordinates: true,
-      stop: 3,
-    },
-    {
-      address: "서울특별시 영등포구 노들로",
-      coordinates: [126.929, 37.515],
-      deliveryStopId: "stop-8",
-      hasCoordinates: true,
-      stop: 8,
-    },
-  ];
-
-  syncRouteDetailLiveTracking(fake.map, {
-    stopArrivals: [
-      {
-        deliveryStopId: "stop-8",
-        eventId: "arrival-8",
-        latitude: 37.51502,
-        longitude: 126.92902,
-        occurredAt: "2026-07-22T01:08:00.000Z",
-        positionSource: "event",
-      },
-      {
-        deliveryStopId: "stop-3",
-        eventId: "arrival-3",
-        latitude: 37.515,
-        longitude: 126.929,
-        occurredAt: "2026-07-22T01:03:00.000Z",
-        positionSource: "event",
-      },
-    ],
-  }, routeStops);
-
-  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
-  assert.equal(arrivalFeatures.length, 1);
-  assert.deepEqual(arrivalFeatures[0].geometry.coordinates, [126.929, 37.515]);
-  assert.equal(arrivalFeatures[0].properties.displayLabel, "2");
-  assert.equal(arrivalFeatures[0].properties.arrivalStopCount, 2);
-  assert.equal(arrivalFeatures[0].properties.arrivalStopNumbers, "3, 8");
-  assert.deepEqual(getRouteDetailTrackingArrivalItems(arrivalFeatures[0]), [
-    { occurredAt: "2026-07-22T01:03:00.000Z", stopNumber: 3 },
-    { occurredAt: "2026-07-22T01:08:00.000Z", stopNumber: 8 },
-  ]);
-
-  const labelLayout = fake.layers.get("route-detail-tracking-arrival-labels").layout;
-  assert.deepEqual(labelLayout["text-field"], ["get", "displayLabel"]);
-  assert.equal(labelLayout["icon-image"], undefined);
-  assert.equal(labelLayout["icon-offset"], undefined);
-  assert.equal(labelLayout["text-offset"], undefined);
-});
-
-test("arrival markers keep distinct GPS locations separate", () => {
-  const fake = createFakeMap();
-
-  syncRouteDetailLiveTracking(fake.map, {
-    stopArrivals: [
-      {
-        deliveryStopId: "stop-3",
-        eventId: "arrival-3",
-        latitude: 37.515,
-        longitude: 126.929,
-        occurredAt: "2026-07-22T01:03:00.000Z",
-        positionSource: "event",
-        stopSequence: 3,
-      },
-      {
-        deliveryStopId: "stop-8",
-        eventId: "arrival-8",
-        latitude: 37.516,
-        longitude: 126.93,
-        occurredAt: "2026-07-22T01:08:00.000Z",
-        positionSource: "event",
-        stopSequence: 8,
-      },
-    ],
-  }, []);
-
-  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
-  assert.equal(arrivalFeatures.length, 2);
-  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.displayLabel), ["3", "8"]);
-  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.arrivalStopCount), [1, 1]);
-});
-
-test("arrival marker groups do not chain locations beyond the collision distance", () => {
-  const fake = createFakeMap();
-
-  syncRouteDetailLiveTracking(fake.map, {
-    stopArrivals: [
-      {
-        deliveryStopId: "stop-1",
-        eventId: "arrival-1",
-        latitude: 37.515,
-        longitude: 126.929,
-        occurredAt: "2026-07-22T01:01:00.000Z",
-        positionSource: "event",
-        stopSequence: 1,
-      },
-      {
-        deliveryStopId: "stop-2",
-        eventId: "arrival-2",
-        latitude: 37.51509,
-        longitude: 126.929,
-        occurredAt: "2026-07-22T01:02:00.000Z",
-        positionSource: "event",
-        stopSequence: 2,
-      },
-      {
-        deliveryStopId: "stop-3",
-        eventId: "arrival-3",
-        latitude: 37.51518,
-        longitude: 126.929,
-        occurredAt: "2026-07-22T01:03:00.000Z",
-        positionSource: "event",
-        stopSequence: 3,
-      },
-    ],
-  }, []);
-
-  const arrivalFeatures = fake.sources.get("route-detail-tracking-arrivals").data.features;
-  assert.equal(arrivalFeatures.length, 2);
-  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.displayLabel), ["2", "3"]);
-  assert.deepEqual(arrivalFeatures.map((feature) => feature.properties.arrivalStopNumbers), ["1, 2", "3"]);
-});
-
-test("arrival popup details reject malformed feature properties", () => {
-  assert.deepEqual(getRouteDetailTrackingArrivalItems({ properties: { arrivalDetailsJson: "{" } }), []);
-  assert.deepEqual(getRouteDetailTrackingArrivalItems({
-    properties: {
-      arrivalDetailsJson: JSON.stringify([
-        { occurredAt: "2026-07-22T01:00:00.000Z", stopNumber: 1 },
-        { occurredAt: null, stopNumber: 0 },
-      ]),
-    },
-  }), [{ occurredAt: "2026-07-22T01:00:00.000Z", stopNumber: 1 }]);
 });
 
 test("planned route sync recreates a missing layer when its source still exists", () => {
