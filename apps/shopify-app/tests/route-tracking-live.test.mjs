@@ -113,9 +113,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   const globalCssSource = readIfPresent(globalCssPath);
 
   assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking"/);
-  assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_ARRIVAL_SOURCE_ID = "route-detail-tracking-arrivals"/);
-  assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID/);
-  assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_ARRIVAL_LABEL_LAYER_ID/);
+  assert.doesNotMatch(routeMapSource, /ROUTE_DETAIL_TRACKING_ARRIVAL/);
   assert.match(routeMapSource, /function syncRouteDetailLiveTracking\(map, trackingSnapshot/);
   assert.match(routeMapSource, /existingSource\?\.setData/);
   assert.match(routeMapSource, /trackingTrail/);
@@ -129,11 +127,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /trackingType: "currentPosition"/);
   assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID/);
   assert.match(routeMapSource, /"circle-color": "#d82c0d"/);
-  assert.match(routeMapSource, /featureType: "stopArrival"/);
-  assert.match(routeMapSource, /"text-field": \["get", "displayLabel"\]/);
-  assert.match(routeMapSource, /arrivalStopCount/);
-  assert.match(routeMapSource, /arrivalDetailsJson/);
-  assert.doesNotMatch(routeMapSource, /badgeOffset|labelOffset|ARRIVAL_BADGE_IMAGE_ID/);
+  assert.doesNotMatch(routeMapSource, /featureType: "stopArrival"|arrivalStopCount|arrivalDetailsJson/);
   assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID/);
   assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID/);
   assert.match(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted\)/);
@@ -149,8 +143,8 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.doesNotMatch(routeDetailSource, /preserveRouteColor/);
   assert.match(routeDetailSource, /background: completedTrackingStopIds\.has\(row\.id\)[\s\S]*ROUTE_DETAIL_COMPLETED_STOP_COLOR[\s\S]*routeStopColorById\.get\(row\.id\) \?\? routeLineColor/);
   assert.match(routeDetailSource, /if \(!isMapReady \|\| !routeMapRef\.current\) return undefined/);
-  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot, routeMapStops\)/);
-  assert.match(routeDetailSource, /map\.on\("click", ROUTE_DETAIL_TRACKING_ARRIVAL_CIRCLE_LAYER_ID, handleArrivalMarkerClick\)/);
+  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot\)/);
+  assert.doesNotMatch(routeDetailSource, /handleArrivalMarkerClick|route-tracking-arrival-popup|Arrived stop/);
   assert.match(routeDetailSource, /new maplibregl\.Popup\(/);
   assert.match(routeDetailSource, /\.setDOMContent\(content\)/);
   assert.match(routeDetailSource, /closeButton: false/);
@@ -159,10 +153,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeDetailSource, /map\.panBy\(panOffset/);
   assert.match(routeDetailSource, /const routeTrackingMapCanvasStyle = \{[\s\S]*height: "100%"[\s\S]*minHeight: 0/);
   assert.doesNotMatch(routeDetailSource, /minHeight: "570px"/);
-  assert.match(routeDetailSource, /close\.className = "route-tracking-arrival-popup__close"/);
-  assert.match(globalCssSource, /\.route-tracking-arrival-popup__stop\s*\{[\s\S]*min-width:\s*56px/);
-  assert.match(globalCssSource, /\.route-tracking-arrival-popup__close\s*\{[\s\S]*font-size:\s*16px/);
-  assert.match(globalCssSource, /\.route-tracking-arrival-popup__list\s*\{[\s\S]*overflow-y:\s*auto/);
+  assert.doesNotMatch(globalCssSource, /route-tracking-arrival-popup/);
   assert.match(routeMapSource, /function syncRouteDetailMapViewEmphasis\(map\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapViewEmphasis\(map\)/);
   assert.match(routeMapSource, /function syncRouteDetailTrackingVisibility\(map, isTrackingView = false\)/);
