@@ -803,6 +803,17 @@ test("Route detail keeps marker coordinates validated and ordered for MapLibre",
   assert.match(routeDetailSource, /hasCoordinates: coordinates != null/);
 });
 
+test("Route detail keeps Shopify fulfillment separate from delivery stop status", () => {
+  assert.match(routeDetailSource, /status: stop\.status \?\? stop\.assignmentStatus \?\? "PENDING"/);
+  assert.match(routeDetailSource, /fulfillmentStatus: textOrUndefined\(stop\.fulfillmentStatus\)/);
+  assert.doesNotMatch(routeDetailSource, /status: stop\.fulfillmentStatus \?\?/);
+  assert.doesNotMatch(
+    routeDetailMapSource,
+    /\[stop\?\.status, stop\?\.deliveryStatus, stop\?\.deliveryStopStatus, stop\?\.fulfillmentStatus\]/,
+  );
+  assert.doesNotMatch(routeDetailSource, /suppressCompletionCheck/);
+});
+
 test("Route detail places stop and departure markers through MapLibre source layers", () => {
   assert.match(routeDetailSource, /import \{ MAP_MARKER_PALETTE \} from "\.\.\/features\/maps\/map-markers"/);
   assert.match(routeDetailMapSource, /import \{ addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer \}/);

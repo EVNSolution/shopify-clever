@@ -19,7 +19,9 @@ const TRACKING_LAYER_IDS = [
   "route-detail-live-tracking-connector",
   "route-detail-tracking-arrival-circles",
   "route-detail-tracking-arrival-labels",
+  "route-detail-live-driver-position",
 ];
+const DRIVER_POSITION_LAYER_ID = "route-detail-live-driver-position";
 
 function createFakeMap(options = {}) {
   const sources = new Map();
@@ -228,7 +230,7 @@ test("tracking completion preserves the route marker and exposes the common chec
   assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-3");
 });
 
-test("persisted delivery status exposes the same check badge in Stops", () => {
+test("persisted order delivery status does not impersonate a route-specific driver completion", () => {
   const markerData = buildRouteDetailMarkerFeatureCollection(null, [{
     coordinates: [126.927, 37.512],
     deliveryStopId: "stop-4",
@@ -241,8 +243,27 @@ test("persisted delivery status exposes the same check badge in Stops", () => {
   }], [], "#e11900", new Map());
 
   assert.equal(markerData.features.length, 1);
-  assert.equal(markerData.features[0].properties.isCompleted, true);
+  assert.equal(markerData.features[0].properties.isCompleted, false);
   assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-4");
+});
+
+test("Shopify fulfillment does not mark a Ready delivery stop as completed", () => {
+  const markerData = buildRouteDetailMarkerFeatureCollection(null, [{
+    coordinates: [126.927, 37.512],
+    deliveryStatus: "READY",
+    deliveryStopId: "stop-5",
+    fulfillmentStatus: "FULFILLED",
+    hasCoordinates: true,
+    id: "order-5",
+    isTrackingCompleted: false,
+    routeColor: "#006fbb",
+    status: "READY",
+    stop: 5,
+  }], [], "#e11900", new Map());
+
+  assert.equal(markerData.features.length, 1);
+  assert.equal(markerData.features[0].properties.isCompleted, false);
+  assert.equal(markerData.features[0].properties.pinImage, "route-detail-stop-pin-006fbb-5");
 });
 
 test("Tracking planned route remains a solid, visible reference under dashed GPS", () => {
@@ -282,27 +303,56 @@ test("arrival popup pan correction uses only the overflow outside the visible fr
   );
 });
 
-test("tracking layers reuse their sources and toggle together between tabs", () => {
+test("tracking layers reuse their sources while current driver position stays exclusive to Tracking", () => {
   const fake = createFakeMap();
+  const snapshot = {
+    latestPosition: {
+      driverId: "driver-1",
+      eventId: "location-1",
+      latitude: 37.512,
+      longitude: 126.927,
+      occurredAt: "2026-07-30T14:50:41.719Z",
+      receivedAt: "2026-07-30T14:50:42.000Z",
+      routePlanId: "route-1",
+    },
+  };
 
-  assert.equal(syncRouteDetailLiveTracking(fake.map, null, []), true);
+  assert.equal(syncRouteDetailLiveTracking(fake.map, snapshot, []), true);
   assert.deepEqual(fake.calls.addSource, [
     "route-detail-live-tracking",
     "route-detail-tracking-arrivals",
   ]);
   assert.deepEqual(fake.calls.addLayer, TRACKING_LAYER_IDS);
   assert.deepEqual(
-    TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["visible", "visible", "visible", "visible"],
+    fake.sources.get("route-detail-live-tracking").data.features.find(
+      (feature) => feature.properties.trackingType === "currentPosition",
+    ),
+    {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [126.927, 37.512] },
+      properties: {
+        driverId: "driver-1",
+        occurredAt: "2026-07-30T14:50:41.719Z",
+        receivedAt: "2026-07-30T14:50:42.000Z",
+        trackingType: "currentPosition",
+      },
+    },
   );
+  assert.deepEqual(
+    TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
+    ["visible", "visible", "visible", "visible", "visible"],
+  );
+  assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.paint?.["circle-color"], "#d82c0d");
+  assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "visible");
 
   assert.equal(syncRouteDetailTrackingVisibility(fake.map, false), true);
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["none", "none", "none", "none"],
+    ["none", "none", "none", "none", "none"],
   );
+  assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "none");
 
-  assert.equal(syncRouteDetailLiveTracking(fake.map, null, []), true);
+  assert.equal(syncRouteDetailLiveTracking(fake.map, snapshot, []), true);
   assert.deepEqual(fake.calls.addSource, [
     "route-detail-live-tracking",
     "route-detail-tracking-arrivals",
