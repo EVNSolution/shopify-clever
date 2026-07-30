@@ -47,6 +47,30 @@ test("polygon map click handlers do not rebind for every polygon point update", 
   assert.doesNotMatch(polygonClickEffectSource.split("\n").at(-2), /routePolygonPoints|isRoutePolygonClosed/);
 });
 
+test("polygon point clicks update MapLibre directly without rerendering the route detail tree", () => {
+  const clickStart = routeDetailSource.indexOf("const handleMapClick = (event) => {");
+  const clickEnd = routeDetailSource.indexOf("const handleMapDoubleClick = (event) => {", clickStart);
+  assert.notEqual(clickStart, -1);
+  assert.notEqual(clickEnd, -1);
+
+  const clickHandlerSource = routeDetailSource.slice(clickStart, clickEnd);
+  assert.match(clickHandlerSource, /previewRoutePolygonDraftPoints\(nextPoints\)/);
+  assert.match(clickHandlerSource, /syncRouteEditPolygon\(map, nextPoints, false\)/);
+  assert.doesNotMatch(clickHandlerSource, /setRoutePolygonDraftPoints\(nextPoints\)/);
+  assert.doesNotMatch(clickHandlerSource, /setRoutePolygonClosed\(/);
+});
+
+test("polygon corner dragging coalesces MapLibre updates to animation frames", () => {
+  const dragStart = routeDetailSource.indexOf("const handlePolygonCornerDragMove = (event) => {");
+  const dragEnd = routeDetailSource.indexOf("const handlePolygonCornerDragEnd = (event) => {", dragStart);
+  assert.notEqual(dragStart, -1);
+  assert.notEqual(dragEnd, -1);
+
+  const dragHandlerSource = routeDetailSource.slice(dragStart, dragEnd);
+  assert.match(dragHandlerSource, /window\.requestAnimationFrame\(flushPendingPolygonDrag\)/);
+  assert.doesNotMatch(dragHandlerSource, /syncDraggedPolygonPoint\(event\)/);
+});
+
 test("main map handlers read current child rows and actions without rebinding", () => {
   const mainMapEffectStart = routeDetailSource.indexOf(
     "  useEffect(() => {\n    if (!isMapReady || !mapRef.current || !mapLibraryRef.current) return undefined;",

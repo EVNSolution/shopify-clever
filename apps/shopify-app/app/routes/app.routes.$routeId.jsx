@@ -3422,6 +3422,14 @@ export default function RouteDetailPage() {
     setRoutePolygonPoints(nextPoints);
   };
 
+  const previewRoutePolygonDraftPoints = (nextPoints) => {
+    const hadPoints = routePolygonPointsRef.current.length > 0;
+    routePolygonPointsRef.current = nextPoints;
+    if (!hadPoints && nextPoints.length > 0) {
+      setRoutePolygonPoints([nextPoints[0]]);
+    }
+  };
+
   const setRoutePolygonClosed = (nextIsClosed) => {
     routePolygonClosedRef.current = nextIsClosed;
     setIsRoutePolygonClosed(nextIsClosed);
@@ -5067,8 +5075,8 @@ export default function RouteDetailPage() {
       if ((event.originalEvent?.detail ?? 1) > 1) return;
       const lngLat = [event.lngLat.lng, event.lngLat.lat];
       const nextPoints = [...routePolygonPointsRef.current, lngLat];
-      setRoutePolygonDraftPoints(nextPoints);
-      setRoutePolygonClosed(false);
+      previewRoutePolygonDraftPoints(nextPoints);
+      routePolygonClosedRef.current = false;
       setIsPolygonTargetPickerOpen(false);
       syncRouteEditPolygon(map, nextPoints, false);
     };
@@ -5108,6 +5116,8 @@ export default function RouteDetailPage() {
 
     const canvas = map.getCanvas?.();
     let wasDragPanEnabled = null;
+    let polygonDragAnimationFrame = null;
+    let pendingPolygonDragLngLat = null;
 
     const getFeaturePointIndex = (feature) => {
       const pointIndex = numberOrUndefined(feature?.properties?.pointIndex);
@@ -5120,17 +5130,32 @@ export default function RouteDetailPage() {
       event.originalEvent?.stopPropagation?.();
     };
 
-    const syncDraggedPolygonPoint = (event) => {
+    const syncDraggedPolygonPoint = (lngLat) => {
       const pointIndex = routePolygonCornerDragIndexRef.current;
-      if (!Number.isInteger(pointIndex) || !event.lngLat) return null;
+      if (!Number.isInteger(pointIndex) || !lngLat) return null;
 
-      const draggedPoint = [event.lngLat.lng, event.lngLat.lat];
+      const draggedPoint = [lngLat.lng, lngLat.lat];
       const nextPoints = routePolygonPointsRef.current.map((point, currentIndex) =>
         currentIndex === pointIndex ? draggedPoint : point,
       );
       routePolygonPointsRef.current = nextPoints;
       syncRouteEditPolygon(map, nextPoints, routePolygonClosedRef.current);
       return nextPoints;
+    };
+
+    const flushPendingPolygonDrag = () => {
+      polygonDragAnimationFrame = null;
+      const lngLat = pendingPolygonDragLngLat;
+      pendingPolygonDragLngLat = null;
+      if (lngLat) syncDraggedPolygonPoint(lngLat);
+    };
+
+    const cancelPendingPolygonDrag = () => {
+      if (polygonDragAnimationFrame !== null) {
+        window.cancelAnimationFrame(polygonDragAnimationFrame);
+        polygonDragAnimationFrame = null;
+      }
+      pendingPolygonDragLngLat = null;
     };
 
     const restoreDragPan = () => {
@@ -5168,14 +5193,20 @@ export default function RouteDetailPage() {
       if (routePolygonCornerDragIndexRef.current == null) return;
 
       preventMapGesture(event);
-      syncDraggedPolygonPoint(event);
+      pendingPolygonDragLngLat = event.lngLat
+        ? { lat: event.lngLat.lat, lng: event.lngLat.lng }
+        : null;
+      if (pendingPolygonDragLngLat && polygonDragAnimationFrame === null) {
+        polygonDragAnimationFrame = window.requestAnimationFrame(flushPendingPolygonDrag);
+      }
     };
 
     const handlePolygonCornerDragEnd = (event) => {
       if (routePolygonCornerDragIndexRef.current == null) return;
 
       preventMapGesture(event);
-      const nextPoints = syncDraggedPolygonPoint(event) ?? routePolygonPointsRef.current;
+      cancelPendingPolygonDrag();
+      const nextPoints = syncDraggedPolygonPoint(event.lngLat) ?? routePolygonPointsRef.current;
       routePolygonCornerDragIndexRef.current = null;
       restoreDragPan();
       if (canvas) canvas.style.cursor = "crosshair";
@@ -5202,6 +5233,7 @@ export default function RouteDetailPage() {
       map.off("touchmove", handlePolygonCornerDragMove);
       map.off("mouseup", handlePolygonCornerDragEnd);
       map.off("touchend", handlePolygonCornerDragEnd);
+      cancelPendingPolygonDrag();
       routePolygonCornerDragIndexRef.current = null;
       restoreDragPan();
       if (canvas) canvas.style.cursor = "crosshair";
