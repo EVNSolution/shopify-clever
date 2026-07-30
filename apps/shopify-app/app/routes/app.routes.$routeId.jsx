@@ -2794,9 +2794,11 @@ export default function RouteDetailPage() {
   const childOrderDisclosureCloseButtonRef = useRef(null);
   const childOrderDisclosurePopoverRef = useRef(null);
   const childOrderDisclosureTriggerRef = useRef(null);
+  const childRouteOrderRowsRef = useRef([]);
   const childStopActionsButtonRefs = useRef(new Map());
   const childStopActionsMenuRef = useRef(null);
   const childStopActionsTriggerRef = useRef(null);
+  const handleToggleChildStopActionsRef = useRef(null);
   const routeTimelineDragRef = useRef(null);
   const routeTimelineDragPointerXRef = useRef(null);
   const routeTimelineDragSnapshotRef = useRef(null);
@@ -2875,7 +2877,7 @@ export default function RouteDetailPage() {
     setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
   }, [effectiveRoutePlan?.id, routeStartDateTimeValue, routeStartTimeZone]);
   const currentRouteLineId = effectiveRoutePlan?.id ?? null;
-  const currentRouteRowsSource = isRouteGroupDetail || !currentRouteLineId
+  const currentRouteRowsSource = useMemo(() => (isRouteGroupDetail || !currentRouteLineId
     ? []
     : [
       {
@@ -2908,25 +2910,80 @@ export default function RouteDetailPage() {
         totalItems: routeTotalItems,
         totalWeightLabel: routeTotalWeight,
       },
-    ];
-  const hasMaterializedClientRoute = clientRouteRows.some((routeRow) => routeRow.isMaterializedDraft);
-  const groupRouteRowsSource = hasMaterializedClientRoute ? [] : routeGroupChildRows;
-  const displayRouteRowsSource = isRouteGroupDetail ? groupRouteRowsSource : currentRouteRowsSource;
-  const contextRouteRowsSource = isRouteGroupDetail
-    ? groupRouteRowsSource
-    : mergeCurrentRouteRow(groupRouteRowsSource, currentRouteRowsSource[0]);
-  const routeRows = ensureUniqueRouteRowColors(applyRouteRowDraftState([...displayRouteRowsSource, ...clientRouteRows], routeLineEdits, routePreviewByKey));
-  const contextRouteRows = ensureUniqueRouteRowColors(applyRouteRowDraftState([...contextRouteRowsSource, ...clientRouteRows], routeLineEdits, routePreviewByKey));
-  const timelineRouteRows = buildTimelineRows(routeRows, routeTimelineOrderByRouteId);
-  const contextTimelineRouteRows = buildTimelineRows(contextRouteRows, routeTimelineOrderByRouteId);
+    ]), [
+    currentRouteGroupChild?.routeIdx,
+    currentRouteGroupChild?.updatedAt,
+    currentRouteLineId,
+    effectiveRoutePlan?.id,
+    effectiveRoutePlan?.scheduledStartAt,
+    effectiveRoutePlan?.scheduledStartTimeZone,
+    effectiveRoutePlan?.updatedAt,
+    isRouteGroupDetail,
+    orderedRouteStops,
+    routeAttemptedCount,
+    routeCandidateTitle,
+    routeCreatedLabel,
+    routeDeliveredCount,
+    routeDriverId,
+    routeDriverSummary,
+    routeGeometry,
+    routeLineColor,
+    routeMetrics,
+    routeStartDateTimeValue,
+    routeStartTimeLabel,
+    routeStopPoints,
+    routeTotalDistance,
+    routeTotalDriveTime,
+    routeTotalItems,
+    routeTotalWeight,
+    routeExecutionStatus,
+  ]);
+  const hasMaterializedClientRoute = useMemo(
+    () => clientRouteRows.some((routeRow) => routeRow.isMaterializedDraft),
+    [clientRouteRows],
+  );
+  const groupRouteRowsSource = useMemo(
+    () => (hasMaterializedClientRoute ? [] : routeGroupChildRows),
+    [hasMaterializedClientRoute, routeGroupChildRows],
+  );
+  const displayRouteRowsSource = useMemo(
+    () => (isRouteGroupDetail ? groupRouteRowsSource : currentRouteRowsSource),
+    [currentRouteRowsSource, groupRouteRowsSource, isRouteGroupDetail],
+  );
+  const contextRouteRowsSource = useMemo(
+    () => (isRouteGroupDetail
+      ? groupRouteRowsSource
+      : mergeCurrentRouteRow(groupRouteRowsSource, currentRouteRowsSource[0])),
+    [currentRouteRowsSource, groupRouteRowsSource, isRouteGroupDetail],
+  );
+  const routeRows = useMemo(
+    () => ensureUniqueRouteRowColors(applyRouteRowDraftState([...displayRouteRowsSource, ...clientRouteRows], routeLineEdits, routePreviewByKey)),
+    [clientRouteRows, displayRouteRowsSource, routeLineEdits, routePreviewByKey],
+  );
+  const contextRouteRows = useMemo(
+    () => ensureUniqueRouteRowColors(applyRouteRowDraftState([...contextRouteRowsSource, ...clientRouteRows], routeLineEdits, routePreviewByKey)),
+    [clientRouteRows, contextRouteRowsSource, routeLineEdits, routePreviewByKey],
+  );
+  const timelineRouteRows = useMemo(
+    () => buildTimelineRows(routeRows, routeTimelineOrderByRouteId),
+    [routeRows, routeTimelineOrderByRouteId],
+  );
+  const contextTimelineRouteRows = useMemo(
+    () => buildTimelineRows(contextRouteRows, routeTimelineOrderByRouteId),
+    [contextRouteRows, routeTimelineOrderByRouteId],
+  );
   const currentTimelineRouteRow = timelineRouteRows.find((routeRow) => routeRow.routePlanId === effectiveRoutePlan?.id) ?? timelineRouteRows[0] ?? null;
   const actualArrivalByStopId = useMemo(
     () => buildChildActualArrivalByStopId(displayedRouteTrackingSnapshot?.stopArrivals),
     [displayedRouteTrackingSnapshot?.stopArrivals],
   );
-  const childRouteOrderRows = isMaterializedChildRouteDetail
-    ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { actualArrivalByStopId, ianaTimezone })
-    : [];
+  const childRouteOrderRows = useMemo(
+    () => (isMaterializedChildRouteDetail
+      ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { actualArrivalByStopId, ianaTimezone })
+      : []),
+    [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
+  );
+  childRouteOrderRowsRef.current = childRouteOrderRows;
   const routeTrackingPresentation = useMemo(
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
     [displayedRouteTrackingSnapshot, routeExecutionStatus, routeTrackingClock],
@@ -2987,13 +3044,22 @@ export default function RouteDetailPage() {
     && !routeGroupActionBusy
     && !isRoutePolygonEditMode
     && !isRouteLineEditorOpen;
-  const routePolygonSourceStops = timelineRouteRows.length > 0
-    ? timelineRouteRows.flatMap((routeRow) => routeRow.stops)
-    : isRouteGroupDetail ? routeGroupStopsSource : [];
-  const polygonCandidateStops = isRoutePolygonClosed && routePolygonPoints.length >= 3
-    ? routePolygonSourceStops.filter((stop) => stop.orderId && stop.hasCoordinates && isLngLatInPolygon(stop.coordinates, routePolygonPoints))
-    : [];
-  const polygonCandidateOrderIds = polygonCandidateStops.map((stop) => stop.orderId);
+  const routePolygonSourceStops = useMemo(
+    () => (timelineRouteRows.length > 0
+      ? timelineRouteRows.flatMap((routeRow) => routeRow.stops)
+      : isRouteGroupDetail ? routeGroupStopsSource : []),
+    [isRouteGroupDetail, routeGroupStopsSource, timelineRouteRows],
+  );
+  const polygonCandidateStops = useMemo(
+    () => (isRoutePolygonClosed && routePolygonPoints.length >= 3
+      ? routePolygonSourceStops.filter((stop) => stop.orderId && stop.hasCoordinates && isLngLatInPolygon(stop.coordinates, routePolygonPoints))
+      : []),
+    [isRoutePolygonClosed, routePolygonPoints, routePolygonSourceStops],
+  );
+  const polygonCandidateOrderIds = useMemo(
+    () => polygonCandidateStops.map((stop) => stop.orderId),
+    [polygonCandidateStops],
+  );
   const canSaveRoutePolygon = hasEditableRouteRows && polygonCandidateOrderIds.length > 0;
   const polygonHighlightedOrderIds = useMemo(
     () => new Set(isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds),
@@ -3054,7 +3120,10 @@ export default function RouteDetailPage() {
     () => buildRouteGeometryRows(timelineRouteRows, routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints),
     [routeChildDetailsByRoutePlanId, routeGeometry, routeStopPoints, timelineRouteRows],
   );
-  const routeGeometryStopPoints = routeGeometryRows.flatMap((routeRow) => routeRow.routeStopPoints);
+  const routeGeometryStopPoints = useMemo(
+    () => routeGeometryRows.flatMap((routeRow) => routeRow.routeStopPoints),
+    [routeGeometryRows],
+  );
   const visibleErrors = [
     ...(routeGroupClientError ? [{ message: routeGroupClientError }] : []),
     ...(routeActionFetcher.data?.errors ?? []),
@@ -3761,6 +3830,7 @@ export default function RouteDetailPage() {
       current?.rowId === rowId ? null : next
     ));
   };
+  handleToggleChildStopActionsRef.current = handleToggleChildStopActions;
 
   const positionChildStopActionsMenu = useCallback(() => {
     const triggerNode = childStopActionsTriggerRef.current;
@@ -4620,7 +4690,7 @@ export default function RouteDetailPage() {
         || !Number.isFinite(Number(coordinates[1]))
       ) return;
 
-      const row = childRouteOrderRows.find((candidate) => (
+      const row = childRouteOrderRowsRef.current.find((candidate) => (
         candidate.id === stop.id
         || candidate.deliveryStopId === stop.deliveryStopId
         || candidate.shopifyOrderGid === stop.shopifyOrderGid
@@ -4681,7 +4751,7 @@ export default function RouteDetailPage() {
         actions.dataset.childStopActionsTrigger = "true";
         actions.type = "button";
         actions.textContent = "Actions";
-        actions.onclick = (event) => handleToggleChildStopActions(event, row.id);
+        actions.onclick = (event) => handleToggleChildStopActionsRef.current?.(event, row.id);
         content.append(actions);
       }
 
@@ -4965,7 +5035,7 @@ export default function RouteDetailPage() {
         removeRouteEditPolygon(map);
         return;
       }
-      syncRouteEditPolygon(map, routePolygonPoints, isRoutePolygonClosed);
+      syncRouteEditPolygon(map, routePolygonPointsRef.current, routePolygonClosedRef.current);
     };
 
     syncPolygon();
@@ -4974,7 +5044,7 @@ export default function RouteDetailPage() {
     return () => {
       map.off("styledata", syncPolygon);
     };
-  }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints]);
+  }, [isMapReady, isRoutePolygonEditMode]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return undefined;
@@ -5027,7 +5097,7 @@ export default function RouteDetailPage() {
       map.doubleClickZoom?.enable?.();
       if (canvas) canvas.style.cursor = previousCursor;
     };
-  }, [isMapReady, isRoutePolygonClosed, isRoutePolygonEditMode, routePolygonPoints]);
+  }, [isMapReady, isRoutePolygonEditMode]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return undefined;

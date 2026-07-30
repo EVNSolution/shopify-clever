@@ -3,10 +3,12 @@ import test from "node:test";
 
 import {
   buildRouteDetailMarkerFeatureCollection,
+  buildRouteStopPointLookup,
   getRouteDetailPopupPanOffset,
   getRouteDetailTrackingArrivalItems,
   getRouteTrackingArrivalListMaxHeight,
   syncRouteDetailLiveTracking,
+  syncRouteDetailMapMarkerLayers,
   syncRouteDetailMapViewEmphasis,
   syncRouteDetailRouteLine,
   syncRouteDetailTrackingVisibility,
@@ -19,11 +21,16 @@ const TRACKING_LAYER_IDS = [
   "route-detail-tracking-arrival-labels",
 ];
 
-function createFakeMap() {
+function createFakeMap(options = {}) {
   const sources = new Map();
   const layers = new Map();
-  const calls = { addLayer: [], addSource: [], setLayoutProperty: [], setPaintProperty: [] };
+  const images = new Set(options.images ?? []);
+  const calls = { addImage: [], addLayer: [], addSource: [], setLayoutProperty: [], setPaintProperty: [] };
   const map = {
+    addImage(id) {
+      calls.addImage.push(id);
+      images.add(id);
+    },
     addLayer(layer) {
       calls.addLayer.push(layer.id);
       layers.set(layer.id, structuredClone(layer));
@@ -39,6 +46,9 @@ function createFakeMap() {
     },
     getLayer(id) {
       return layers.get(id);
+    },
+    hasImage(id) {
+      return images.has(id);
     },
     getSource(id) {
       return sources.get(id);
@@ -59,6 +69,127 @@ function createFakeMap() {
   };
   return { calls, layers, map, sources };
 }
+
+test("route marker sync skips canvas rasterization for pre-registered marker images", () => {
+  const previousDocument = globalThis.document;
+  globalThis.document = {
+    createElement() {
+      throw new Error("canvas should not be created for existing map images");
+    },
+  };
+
+  try {
+    const fake = createFakeMap({
+      images: [
+        "route-detail-departure-pin",
+        "route-detail-stop-pin-006fbb-1",
+        "route-detail-stop-pin-006fbb-2",
+      ],
+    });
+    const didSync = syncRouteDetailMapMarkerLayers(
+      fake.map,
+      { coordinates: [126.92, 37.51], hasCoordinates: true },
+      [
+        {
+          coordinates: [126.921, 37.511],
+          deliveryStopId: "stop-1",
+          hasCoordinates: true,
+          id: "order-1",
+          routeColor: "#006fbb",
+          stop: 1,
+        },
+        {
+          coordinates: [126.922, 37.512],
+          deliveryStopId: "stop-2",
+          hasCoordinates: true,
+          id: "order-2",
+          routeColor: "#006fbb",
+          stop: 2,
+        },
+      ],
+      [],
+      "#006fbb",
+      new Map(),
+    );
+
+    assert.equal(didSync, true);
+    assert.deepEqual(fake.calls.addImage, []);
+    assert.ok(fake.sources.has("route-detail-markers"));
+  } finally {
+    globalThis.document = previousDocument;
+  }
+});
+
+test("route marker sync indexes snapped stop points once instead of linearly searching per stop", () => {
+  const fake = createFakeMap({
+    images: [
+      "route-detail-stop-pin-006fbb-1",
+      "route-detail-stop-pin-006fbb-2",
+      "route-detail-stop-pin-006fbb-3",
+    ],
+  });
+  let findCallCount = 0;
+  const routeStopPoints = [
+    { deliveryStopId: "stop-1", inputCoordinates: [126.921, 37.511] },
+    { deliveryStopId: "stop-2", inputCoordinates: [126.922, 37.512] },
+    { deliveryStopId: "stop-3", inputCoordinates: [126.923, 37.513] },
+  ];
+  routeStopPoints.find = () => {
+    findCallCount += 1;
+    throw new Error("route stop point lookup should not use Array.find during sync");
+  };
+
+  const didSync = syncRouteDetailMapMarkerLayers(
+    fake.map,
+    null,
+    [
+      { deliveryStopId: "stop-1", hasCoordinates: false, id: "order-1", routeColor: "#006fbb", stop: 1 },
+      { deliveryStopId: "stop-2", hasCoordinates: false, id: "order-2", routeColor: "#006fbb", stop: 2 },
+      { deliveryStopId: "stop-3", hasCoordinates: false, id: "order-3", routeColor: "#006fbb", stop: 3 },
+    ],
+    routeStopPoints,
+    "#006fbb",
+    new Map(),
+  );
+
+  assert.equal(didSync, true);
+  assert.equal(findCallCount, 0);
+  assert.equal(fake.sources.get("route-detail-markers").data.features.length, 3);
+});
+
+test("route marker sync preserves an existing stop point lookup through the marker source", () => {
+  const fake = createFakeMap({
+    images: ["route-detail-stop-pin-006fbb-1"],
+  });
+  const routeStopPoint = {
+    deliveryStopId: "stop-1",
+    inputCoordinates: [126.921, 37.511],
+  };
+  const routeStopPointLookup = new Map([["stop-1", routeStopPoint]]);
+
+  assert.equal(buildRouteStopPointLookup(routeStopPointLookup), routeStopPointLookup);
+
+  const didSync = syncRouteDetailMapMarkerLayers(
+    fake.map,
+    null,
+    [{
+      deliveryStopId: "stop-1",
+      hasCoordinates: false,
+      id: "order-1",
+      routeColor: "#006fbb",
+      stop: 1,
+    }],
+    routeStopPointLookup,
+    "#006fbb",
+    new Map(),
+  );
+
+  assert.equal(didSync, true);
+  assert.deepEqual(
+    fake.sources.get("route-detail-markers").data.features[0].geometry.coordinates,
+    routeStopPoint.inputCoordinates,
+  );
+});
 
 test("Stops and Tracking show the same completion check badges", () => {
   const fake = createFakeMap();
