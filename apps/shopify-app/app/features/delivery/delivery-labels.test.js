@@ -65,6 +65,18 @@ test("infers the concrete delivery date from a Shopify line item range and deliv
   );
 });
 
+test("infers an exact product date without a delivery-day attribute", () => {
+  assert.equal(
+    inferDeliveryDateFromLineItems({
+      lineItems: {
+        nodes: [{ title: "Catering 08/05/2026" }],
+      },
+      orderCreatedAt: "2026-08-01T20:58:48.000Z",
+    }),
+    "2026-08-05",
+  );
+});
+
 
 test("infers delivery dates from the CLEVER Tuesday-to-Monday order cycle", () => {
   assert.equal(
