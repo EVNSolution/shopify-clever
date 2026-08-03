@@ -2679,7 +2679,10 @@ function OrdersPageContent({ loaderData }) {
   const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
   const [selectedRouteGroupId, setSelectedRouteGroupId] = useState("");
   const [activeOrderPopupId, setActiveOrderPopupId] = useState(null);
-  const [sortConfig, setSortConfig] = useState(null);
+  const [sortConfig, setSortConfig] = useState({
+    key: "name",
+    direction: "descending",
+  });
   const [tableColumnWidths, setTableColumnWidths] = useState(DEFAULT_TABLE_COLUMN_WIDTHS);
   const [lockedTableWidth, setLockedTableWidth] = useState(null);
   const tableRef = useRef(null);

@@ -1685,7 +1685,10 @@ test("Orders map keeps planned pins two display steps larger and centers the pla
 
 test("Orders table headers sort rows by ascending and descending values", () => {
   assert.match(ordersPageSource, /const SORTABLE_ORDER_COLUMNS = \[/);
-  assert.match(ordersPageSource, /const \[sortConfig, setSortConfig\] = useState\(null\)/);
+  assert.match(
+    ordersPageSource,
+    /const \[sortConfig, setSortConfig\] = useState\(\{\s*key: "name",\s*direction: "descending",\s*\}\)/,
+  );
   assert.match(ordersPageSource, /const \[tableColumnWidths, setTableColumnWidths\] = useState\(DEFAULT_TABLE_COLUMN_WIDTHS\)/);
   assert.match(ordersPageSource, /const tableRef = useRef\(null\)/);
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) =>/);
