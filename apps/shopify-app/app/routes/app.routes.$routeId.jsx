@@ -2757,6 +2757,7 @@ export default function RouteDetailPage() {
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
   const routeActionFetcher = useFetcher();
+  const customerEmailFetcher = useFetcher();
   const {
     childRouteDetails = [],
     currentDepartureLocation = null,
@@ -2904,6 +2905,11 @@ export default function RouteDetailPage() {
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
+  const [isCustomerEmailDialogOpen, setIsCustomerEmailDialogOpen] = useState(false);
+  const [customerEmailSignal, setCustomerEmailSignal] = useState("DELIVERY_SCHEDULED");
+  const [customerEmailConfirmed, setCustomerEmailConfirmed] = useState(false);
+  const [customerEmailPreviewSignal, setCustomerEmailPreviewSignal] = useState(null);
+  const [customerEmailCommandId, setCustomerEmailCommandId] = useState(null);
   const [routeGroupClientError, setRouteGroupClientError] = useState(null);
   const [isRoutePolygonEditMode, setIsRoutePolygonEditMode] = useState(false);
   const [routeTimelineOrderByRouteId, setRouteTimelineOrderByRouteId] = useState({});
@@ -4272,6 +4278,39 @@ export default function RouteDetailPage() {
     }
   };
 
+  const submitCustomerEmailAction = async (intent) => {
+    try {
+      const formData = new FormData();
+      formData.set("_intent", intent);
+      formData.set("shopifySessionToken", await shopify.idToken());
+      formData.set("signal", customerEmailSignal);
+      if (intent === "previewCustomerEmail") {
+        setCustomerEmailConfirmed(false);
+        setCustomerEmailPreviewSignal(customerEmailSignal);
+        setCustomerEmailCommandId(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${effectiveRoutePlan?.id}`);
+      }
+      if (intent === "sendCustomerEmail") {
+        formData.set("commandId", customerEmailCommandId ?? `${Date.now()}-${effectiveRoutePlan?.id}`);
+        formData.set("confirmed", String(customerEmailConfirmed));
+      }
+      customerEmailFetcher.submit(formData, { method: "post" });
+    } catch {
+      setRouteGroupClientError("Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.");
+    }
+  };
+
+  const openCustomerEmailDialog = () => {
+    setCustomerEmailConfirmed(false);
+    setCustomerEmailPreviewSignal(null);
+    setCustomerEmailCommandId(null);
+    setIsCustomerEmailDialogOpen(true);
+  };
+
+  useEffect(() => {
+    if (!customerEmailFetcher.data?.dispatch) return;
+    setCustomerEmailConfirmed(false);
+  }, [customerEmailFetcher.data?.dispatch]);
+
   const submitRouteGroupAction = async (intent, fields = {}) => {
     if (!routeGroupId) {
       setRouteGroupClientError("Route group id가 없어 작업을 실행할 수 없습니다.");
@@ -5380,6 +5419,17 @@ export default function RouteDetailPage() {
                 >
                   {refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
                 </button>
+                {isMaterializedChildRouteDetail ? (
+                  <button
+                    disabled={!effectiveRoutePlan?.id}
+                    onClick={openCustomerEmailDialog}
+                    style={effectiveRoutePlan?.id ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title="Preview and manually send a customer email"
+                    type="button"
+                  >
+                    Send email
+                  </button>
+                ) : null}
                 <button
                   disabled={!inventoryDetailHref}
                   onClick={handleViewInventory}
@@ -6354,6 +6404,90 @@ export default function RouteDetailPage() {
             document.body,
           ) : null}
         </section>
+
+        {isCustomerEmailDialogOpen ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Close customer email dialog"
+              onClick={() => setIsCustomerEmailDialogOpen(false)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div aria-label="Send customer email" role="dialog" style={routeLineEditorDialogStyle}>
+              <h2 style={routeLineEditorTitleStyle}>Send customer email</h2>
+              <p style={routeLineEditorLabelStyle}>No message is sent until you preview, confirm, and press Send.</p>
+              <div style={routeLineEditorFieldStyle}>
+                <label htmlFor="customer-email-signal" style={routeLineEditorLabelStyle}>Message</label>
+                <select
+                  id="customer-email-signal"
+                  onChange={(event) => {
+                    setCustomerEmailSignal(event.target.value);
+                    setCustomerEmailConfirmed(false);
+                    setCustomerEmailPreviewSignal(null);
+                  }}
+                  style={routeLineEditorInputStyle}
+                  value={customerEmailSignal}
+                >
+                  <option value="DELIVERY_SCHEDULED">Delivery scheduled</option>
+                  <option value="OUT_FOR_DELIVERY">Out for delivery</option>
+                  <option value="DRIVER_NEARBY">Driver is nearby</option>
+                  <option value="DELIVERED">Delivered</option>
+                  <option value="MISSED_DELIVERY">Missed delivery</option>
+                </select>
+              </div>
+              <button
+                disabled={customerEmailFetcher.state !== "idle"}
+                onClick={() => submitCustomerEmailAction("previewCustomerEmail")}
+                style={routeActionButtonStyle}
+                type="button"
+              >
+                {customerEmailFetcher.state !== "idle" && customerEmailFetcher.formData?.get("_intent") === "previewCustomerEmail" ? "Previewing…" : "Preview recipients"}
+              </button>
+              {customerEmailFetcher.data?.preview && customerEmailPreviewSignal === customerEmailSignal ? (
+                <div style={childStopEditReadonlyStyle}>
+                  <strong>{customerEmailFetcher.data.preview.counts?.rendered ?? customerEmailFetcher.data.preview.recipients?.length ?? 0} eligible recipient(s)</strong>
+                  <span>{customerEmailFetcher.data.preview.counts?.skipped ?? customerEmailFetcher.data.preview.skipped?.length ?? 0} skipped by server eligibility rules</span>
+                  {(customerEmailFetcher.data.preview.recipients ?? []).length > 0 ? (
+                    <span style={{ whiteSpace: "pre-line" }}>{customerEmailFetcher.data.preview.recipients.map((recipient) => `${recipient.orderNumber} ${recipient.email}`).join("\n")}</span>
+                  ) : null}
+                  {customerEmailFetcher.data.preview.recipients?.[0]?.rendered?.subject ? <span><strong>Subject:</strong> {customerEmailFetcher.data.preview.recipients[0].rendered.subject}</span> : null}
+                  {customerEmailFetcher.data.preview.recipients?.[0]?.rendered?.body ? <span style={{ whiteSpace: "pre-wrap" }}>{customerEmailFetcher.data.preview.recipients[0].rendered.body}</span> : null}
+                </div>
+              ) : null}
+              {(customerEmailFetcher.data?.errors ?? []).length > 0 ? (
+                <p role="alert" style={{ color: "#8e1f0b", margin: 0 }}>{customerEmailFetcher.data.errors[0]?.message ?? "Unable to prepare customer email."}</p>
+              ) : null}
+              {customerEmailFetcher.data?.dispatch ? (
+                <p role="status" style={{ color: "#008060", margin: 0 }}>
+                  {customerEmailFetcher.data.dispatch.counts?.sent ?? 0} message(s) sent
+                </p>
+              ) : null}
+              <label style={{ alignItems: "center", display: "flex", gap: "8px" }}>
+                <input
+                  checked={customerEmailConfirmed}
+                  disabled={!customerEmailFetcher.data?.preview || customerEmailPreviewSignal !== customerEmailSignal}
+                  onChange={(event) => setCustomerEmailConfirmed(event.target.checked)}
+                  type="checkbox"
+                />
+                Confirm this manual send to the eligible recipients shown above
+              </label>
+              <div style={routeLineEditorActionsStyle}>
+                <button onClick={() => setIsCustomerEmailDialogOpen(false)} style={routeActionButtonStyle} type="button">Close</button>
+                <button
+                  disabled={customerEmailFetcher.state !== "idle" || !customerEmailConfirmed || customerEmailPreviewSignal !== customerEmailSignal}
+                  onClick={() => submitCustomerEmailAction("sendCustomerEmail")}
+                  style={{
+                    ...routeLineEditorPrimaryButtonStyle,
+                    ...(customerEmailFetcher.state !== "idle" || !customerEmailConfirmed || customerEmailPreviewSignal !== customerEmailSignal ? { opacity: 0.55 } : null),
+                  }}
+                  type="button"
+                >
+                  {customerEmailFetcher.state !== "idle" && customerEmailFetcher.formData?.get("_intent") === "sendCustomerEmail" ? "Sending…" : "Send"}
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {isRouteDraftExitDialogOpen ? (
           <div style={routeLineEditorOverlayStyle}>

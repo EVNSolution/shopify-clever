@@ -1,6 +1,10 @@
 import { redirect } from "react-router";
 
 import { fetchDeliveryDrivers } from "./drivers.server";
+import {
+  previewRouteCustomerEmail,
+  sendRouteCustomerEmail,
+} from "./customer-email.server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
 import {
   deleteDeliveryRouteGroup,
@@ -535,6 +539,20 @@ export const routeDetailAction = async ({ params, request }) => {
       sessionToken: shopifySessionToken,
       shopifyShopCacheKey: session?.shop,
     });
+  }
+
+  if (intent === "previewCustomerEmail") {
+    return previewRouteCustomerEmail(request, routeId, {
+      signal: textOrUndefined(formData.get("signal")),
+    }, { sessionToken: shopifySessionToken });
+  }
+
+  if (intent === "sendCustomerEmail") {
+    return sendRouteCustomerEmail(request, routeId, {
+      commandId: textOrUndefined(formData.get("commandId")),
+      confirmed: formData.get("confirmed") === "true",
+      signal: textOrUndefined(formData.get("signal")),
+    }, { sessionToken: shopifySessionToken });
   }
 
   if (intent === "transitionRouteStop") {
