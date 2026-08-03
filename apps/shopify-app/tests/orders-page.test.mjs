@@ -966,8 +966,13 @@ test("Orders owns global Shopify order update and safe route refresh", () => {
   assert.match(ordersPageSource, /formData\.set\("refreshRequestId", refreshRequestId\)/);
   assert.match(ordersPageSource, /ordersRefreshFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /refreshResult\.updatedOrders/);
-  assert.match(ordersPageSource, /Update completed\. Refreshing the Orders view/);
   assert.match(ordersPageSource, /shopify\.toast\.show\(`\$\{updatedOrders\} orders synced; \$\{refreshedRoutes\} READY routes refreshed\$\{skippedMessage\}`\)/);
+  assert.match(
+    ordersPageSource,
+    /setOrdersRefreshPhase\("idle"\);[\s\S]*shopify\.toast\.show\([\s\S]*revalidator\.revalidate\(\)/,
+  );
+  assert.doesNotMatch(ordersPageSource, /ordersRefreshRevalidationObservedRef/);
+  assert.doesNotMatch(ordersPageSource, /pendingOrdersRefreshResultRef/);
   assert.doesNotMatch(ordersPageSource, /orderUpdate|customerUpdate|mutation\s+\w*Order|mutation\s+\w*Customer/);
 });
 

@@ -99,6 +99,17 @@ export function normalizeExplicitDeliveryDate(value, orderCreatedAt) {
     return formatYmdDateParts(isoMatch[1], isoMatch[2], isoMatch[3]);
   }
 
+  const monthFirstMatch = text.match(
+    /\b(\d{1,2})[./-](\d{1,2})[./-](20\d{2})\b/,
+  );
+  if (monthFirstMatch) {
+    return formatYmdDateParts(
+      monthFirstMatch[3],
+      monthFirstMatch[1],
+      monthFirstMatch[2],
+    );
+  }
+
   const shortMatch = text.match(/\b(\d{1,2})[./-](\d{1,2})\b/);
   if (!shortMatch) return undefined;
 
@@ -111,6 +122,9 @@ export function inferDeliveryDateFromLineItems({
   lineItems,
   orderCreatedAt,
 } = {}) {
+  const exactDate = findExactDateInLineItems(lineItems, orderCreatedAt);
+  if (exactDate) return exactDate;
+
   const weekdayIndex = getWeekdayIndex(deliveryDay);
   if (weekdayIndex == null) return undefined;
 
@@ -126,6 +140,19 @@ export function inferDeliveryDateFromLineItems({
     if (cursorDate.getUTCDay() === weekdayIndex) {
       return cursorDate.toISOString().slice(0, 10);
     }
+  }
+
+  return undefined;
+}
+
+function findExactDateInLineItems(lineItems, orderCreatedAt) {
+  const lineItemTexts = getLineItemTexts(lineItems);
+  const defaultYear = getDefaultYear(orderCreatedAt);
+
+  for (const lineItemText of lineItemTexts) {
+    if (parseDateRange(lineItemText, defaultYear)) continue;
+    const date = normalizeExplicitDeliveryDate(lineItemText, orderCreatedAt);
+    if (date) return date;
   }
 
   return undefined;
