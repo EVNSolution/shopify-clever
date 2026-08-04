@@ -1,12 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useActionData, useFetcher, useLoaderData, useRouteError, useRevalidator, useSubmit } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useAppBridge } from "@shopify/app-bridge-react";
-import {
-  fetchCustomerEmailSettings,
-  saveCustomerEmailSettings,
-  sendCustomerEmailTest,
-} from "../features/delivery/customer-email.server";
 import { geocodeAddress } from "../features/locations/address-geocoding.server";
 import {
   fetchShopifyDepartureLocation,
@@ -16,72 +10,31 @@ import {
   fetchShopifyAppPreferences,
   saveShopifyAppPreferences,
 } from "../features/settings/app-preferences.server";
+import {
+  SettingsLayout,
+  settingsActionRowStyle,
+  settingsButtonGroupStyle,
+  settingsButtonStyle,
+  settingsCoordinateGridStyle,
+  settingsDisabledButtonStyle,
+  settingsErrorStyle,
+  settingsFieldsetStyle,
+  settingsFormStyle,
+  settingsInputStyle,
+  settingsLabelStyle,
+  settingsLegendStyle,
+  settingsMapControlRowStyle,
+  settingsMessageStyle,
+  settingsReadonlyInputStyle,
+  settingsResetButtonStyle,
+  settingsSaveStatusStyle,
+  settingsSelectStyle,
+} from "../features/settings/settings-layout";
 import { SettingsDepartureMap } from "../features/settings/settings-departure-map";
 import { clearShopifyOrdersCache } from "../features/orders/shopify-orders.server";
 import { SUPPORTED_LANGUAGES, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
 import { PageShell } from "../ui/page-shell";
-
-const settingsPageStyle = {
-  display: "grid",
-  gap: "12px",
-  maxWidth: "760px",
-  width: "100%",
-};
-
-const settingsFormStyle = {
-  display: "grid",
-  gap: "12px",
-};
-
-const settingsFieldsetStyle = {
-  border: 0,
-  display: "grid",
-  gap: "10px",
-  margin: 0,
-  padding: 0,
-};
-
-const settingsLegendStyle = {
-  color: "#202223",
-  fontSize: "15px",
-  fontWeight: 700,
-  lineHeight: "20px",
-  marginBottom: "2px",
-  padding: 0,
-};
-
-const settingsLabelStyle = {
-  color: "#303030",
-  display: "grid",
-  fontSize: "13px",
-  fontWeight: 650,
-  gap: "4px",
-};
-
-const settingsCoordinateGridStyle = {
-  display: "grid",
-  gap: "8px",
-  gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-};
-
-const settingsInputStyle = {
-  background: "#ffffff",
-  border: "1px solid #c9c9c9",
-  borderRadius: "8px",
-  boxSizing: "border-box",
-  color: "#303030",
-  font: "inherit",
-  minHeight: "36px",
-  padding: "7px 10px",
-  width: "100%",
-};
-
-const settingsSelectStyle = {
-  ...settingsInputStyle,
-  height: "36px",
-  lineHeight: "20px",
-};
 
 const DELIVERY_CYCLE_WEEKDAY_OPTIONS = [
   { label: "Sunday", value: "SUNDAY" },
@@ -93,119 +46,20 @@ const DELIVERY_CYCLE_WEEKDAY_OPTIONS = [
   { label: "Saturday", value: "SATURDAY" },
 ];
 
-const settingsReadonlyInputStyle = {
-  ...settingsInputStyle,
-  background: "#f7f7f7",
-  color: "#616161",
-};
-
-const settingsMapControlRowStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  justifyContent: "flex-end",
-};
-
-const settingsActionRowStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  justifyContent: "space-between",
-  minHeight: "34px",
-};
-
-const settingsButtonGroupStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  justifyContent: "flex-end",
-};
-
-const settingsSaveStatusStyle = {
-  alignItems: "center",
-  color: "#008060",
-  display: "inline-flex",
-  fontSize: "14px",
-  fontWeight: 700,
-  lineHeight: "20px",
-  margin: 0,
-  minHeight: "34px",
-};
-
-const settingsButtonStyle = {
-  background: "#303030",
-  border: "1px solid #303030",
-  borderRadius: "8px",
-  color: "#ffffff",
-  cursor: "pointer",
-  fontSize: "13px",
-  fontWeight: 650,
-  minHeight: "34px",
-  padding: "6px 12px",
-};
-
-const settingsResetButtonStyle = {
-  ...settingsButtonStyle,
-  background: "#ffffff",
-  borderColor: "#c9c9c9",
-  color: "#303030",
-};
-
-const settingsDisabledButtonStyle = {
-  ...settingsResetButtonStyle,
-  cursor: "not-allowed",
-  opacity: 0.58,
-};
-
-const settingsMessageStyle = {
-  color: "#616161",
-  fontSize: "13px",
-  lineHeight: "18px",
-  margin: 0,
-};
-
-const settingsErrorStyle = {
-  ...settingsMessageStyle,
-  color: "#8e1f0b",
-};
-
-const settingsSectionCardStyle = {
-  border: "1px solid #e3e3e3",
-  borderRadius: "10px",
-  display: "grid",
-  gap: "12px",
-  padding: "14px",
-};
-
-const settingsTemplateTabsStyle = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "6px",
-};
-
-const settingsTextareaStyle = {
-  ...settingsInputStyle,
-  minHeight: "140px",
-  resize: "vertical",
-};
-
 export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
-  const [departureResult, preferencesResult, customerEmailResult] = await Promise.all([
+  const [departureResult, preferencesResult] = await Promise.all([
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
     fetchShopifyAppPreferences(admin),
-    fetchCustomerEmailSettings(request, { cacheKey: shopifyShopCacheKey }),
   ]);
 
   return {
     departureLocation: departureResult.departureLocation,
     appPreferences: preferencesResult.appPreferences,
-    customerEmailSettings: customerEmailResult.customerEmailSettings,
     errors: [
       ...(departureResult.errors ?? []),
       ...(preferencesResult.errors ?? []),
-      ...(customerEmailResult.errors ?? []),
     ],
   };
 };
@@ -221,36 +75,6 @@ export const action = async ({ request }) => {
     },
     language: formText(formData.get("language")),
   };
-
-  if (formData.get("_intent") === "saveCustomerEmailSettings") {
-    return saveCustomerEmailSettings(request, readCustomerEmailSettings(formData), {
-      sessionToken: formText(formData.get("shopifySessionToken")),
-    });
-  }
-
-  if (formData.get("_intent") === "testCustomerEmail") {
-    const attemptId = formText(formData.get("attemptId")) || crypto.randomUUID();
-    const recipientEmail = formText(formData.get("recipientEmail"));
-    const signal = formText(formData.get("signal"));
-    console.info("customer_email.test.action.received", {
-      attemptId,
-      recipientDomain: emailDomain(recipientEmail),
-      signal,
-    });
-    const result = await sendCustomerEmailTest(request, {
-      attemptId,
-      confirmed: formData.get("confirmed") === "true",
-      recipientEmail,
-      signal,
-    }, { sessionToken: formText(formData.get("shopifySessionToken")) });
-    console.info("customer_email.test.action.completed", {
-      attemptId,
-      errorCount: result.errors.length,
-      messageId: result.test?.messageId ?? null,
-      provider: result.test?.provider ?? null,
-    });
-    return result;
-  }
 
   if (formData.get("_intent") === "geocodeDeparture") {
     const geocodedDepartureLocation = await geocodeAddress(departureAddress);
@@ -303,29 +127,6 @@ export const action = async ({ request }) => {
     ],
   };
 };
-
-const CUSTOMER_EMAIL_SIGNALS = [
-  ["DELIVERY_SCHEDULED", "Delivery scheduled"],
-  ["OUT_FOR_DELIVERY", "Out for delivery"],
-  ["DRIVER_NEARBY", "Driver is nearby"],
-  ["DELIVERED", "Delivered"],
-  ["MISSED_DELIVERY", "Missed delivery"],
-];
-
-function readCustomerEmailSettings(formData) {
-  return {
-    nearbyStopsThreshold: numberFromFormValue(formData.get("nearbyStopsThreshold")) ?? 3,
-    replyTo: formText(formData.get("replyTo")),
-    senderEmail: formText(formData.get("senderEmail")),
-    senderName: formText(formData.get("senderName")),
-    templates: Object.fromEntries(CUSTOMER_EMAIL_SIGNALS.map(([signal]) => [signal, {
-      body: formText(formData.get(`template.${signal}.body`)),
-      enabled: true,
-      subject: formText(formData.get(`template.${signal}.subject`)),
-    }])),
-    version: 1,
-  };
-}
 
 function getSubmittedDepartureCoordinate(formData) {
   const latitude = numberFromFormValue(formData.get("departureLatitude"));
@@ -405,7 +206,7 @@ function isValidLongitude(longitude) {
 }
 
 export default function SettingsPage() {
-  const { departureLocation, appPreferences, customerEmailSettings, errors } = useLoaderData();
+  const { departureLocation, appPreferences, errors } = useLoaderData();
   const actionData = useActionData();
   const geocodeFetcher = useFetcher();
   const submitSettings = useSubmit();
@@ -527,7 +328,7 @@ export default function SettingsPage() {
 
   return (
     <PageShell title={copy("settings.title")}>
-      <div style={settingsPageStyle}>
+      <SettingsLayout>
         {activeErrors.length > 0 ? (
           <p role="alert" style={settingsErrorStyle}>{activeErrors[0]?.message ?? copy("settings.errors.unableToSave")}</p>
         ) : null}
@@ -685,8 +486,6 @@ export default function SettingsPage() {
             onCoordinateChange={handleMapCoordinateChange}
           />
 
-          <CustomerEmailSettings initialSettings={customerEmailSettings} />
-
           <div style={settingsActionRowStyle}>
             {shouldShowSaveStatus ? (
               <p role="status" style={settingsSaveStatusStyle}>{savedDepartureMessage}</p>
@@ -697,128 +496,9 @@ export default function SettingsPage() {
             </div>
           </div>
         </form>
-      </div>
+      </SettingsLayout>
     </PageShell>
   );
-}
-
-function normalizeCustomerEmailSettings(settings) {
-  const templates = settings?.templates ?? {};
-  return {
-    nearbyStopsThreshold: settings?.nearbyStopsThreshold ?? 3,
-    replyTo: settings?.replyTo ?? "",
-    senderEmail: settings?.senderEmail ?? settings?.sender?.email ?? "",
-    senderName: settings?.senderName ?? settings?.sender?.name ?? "",
-    templates: Object.fromEntries(CUSTOMER_EMAIL_SIGNALS.map(([signal]) => [signal, {
-      body: templates?.[signal]?.body ?? "",
-      enabled: templates?.[signal]?.enabled ?? true,
-      subject: templates?.[signal]?.subject ?? "",
-    }])),
-  };
-}
-
-function CustomerEmailSettings({ initialSettings }) {
-  const shopify = useAppBridge();
-  const fetcher = useFetcher();
-  const [settings, setSettings] = useState(() => normalizeCustomerEmailSettings(initialSettings));
-  const [activeSignal, setActiveSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
-  const [testRecipient, setTestRecipient] = useState("");
-  const [testConfirmed, setTestConfirmed] = useState(false);
-  const intent = fetcher.formData?.get("_intent");
-  const busy = fetcher.state !== "idle";
-  const activeTemplate = settings.templates[activeSignal] ?? { body: "", subject: "" };
-  const errors = fetcher.data?.errors ?? [];
-
-  useEffect(() => {
-    if (!fetcher.data?.customerEmailSettings || errors.length > 0) return;
-    setSettings(normalizeCustomerEmailSettings(fetcher.data.customerEmailSettings));
-  }, [errors.length, fetcher.data?.customerEmailSettings]);
-
-  const submit = async (nextIntent) => {
-    const formData = new FormData();
-    formData.set("_intent", nextIntent);
-    formData.set("shopifySessionToken", await shopify.idToken());
-    if (nextIntent === "testCustomerEmail") {
-      const attemptId = crypto.randomUUID();
-      console.info("customer_email.test.button.clicked", {
-        attemptId,
-        recipientDomain: emailDomain(testRecipient),
-        signal: activeSignal,
-      });
-      formData.set("attemptId", attemptId);
-      formData.set("confirmed", String(testConfirmed));
-      formData.set("recipientEmail", testRecipient);
-      formData.set("signal", activeSignal);
-    } else {
-      formData.set("senderName", settings.senderName);
-      formData.set("senderEmail", settings.senderEmail);
-      formData.set("replyTo", settings.replyTo);
-      formData.set("nearbyStopsThreshold", String(settings.nearbyStopsThreshold));
-      for (const [signal, template] of Object.entries(settings.templates)) {
-        formData.set(`template.${signal}.subject`, template.subject);
-        formData.set(`template.${signal}.body`, template.body);
-      }
-    }
-    fetcher.submit(formData, { method: "post" });
-  };
-
-  const updateTemplate = (field, value) => {
-    setSettings((current) => ({
-      ...current,
-      templates: {
-        ...current.templates,
-        [activeSignal]: { ...current.templates[activeSignal], [field]: value },
-      },
-    }));
-  };
-
-  return (
-    <fieldset style={settingsFieldsetStyle}>
-      <legend style={settingsLegendStyle}>Customer email</legend>
-      <p style={settingsMessageStyle}>Messages are sent manually from a child route. Saving a template never queues or sends email.</p>
-      <div style={settingsSectionCardStyle}>
-        <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>Sender name<input onChange={(event) => setSettings({ ...settings, senderName: event.target.value })} style={settingsInputStyle} value={settings.senderName} /></label>
-          <label style={settingsLabelStyle}>Sender email<input onChange={(event) => setSettings({ ...settings, senderEmail: event.target.value })} style={settingsInputStyle} type="email" value={settings.senderEmail} /></label>
-        </div>
-        <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>Reply-to email<input onChange={(event) => setSettings({ ...settings, replyTo: event.target.value })} style={settingsInputStyle} type="email" value={settings.replyTo} /></label>
-          <label style={settingsLabelStyle}>Nearby trigger stops<input max="25" min="1" onChange={(event) => setSettings({ ...settings, nearbyStopsThreshold: event.target.value })} style={settingsInputStyle} type="number" value={settings.nearbyStopsThreshold} /></label>
-        </div>
-        <div aria-label="Email templates" role="tablist" style={settingsTemplateTabsStyle}>
-          {CUSTOMER_EMAIL_SIGNALS.map(([signal, label]) => (
-            <button aria-selected={activeSignal === signal} key={signal} onClick={() => setActiveSignal(signal)} role="tab" style={activeSignal === signal ? settingsButtonStyle : settingsResetButtonStyle} type="button">{label}</button>
-          ))}
-        </div>
-        <label style={settingsLabelStyle}>Subject<input onChange={(event) => updateTemplate("subject", event.target.value)} style={settingsInputStyle} value={activeTemplate.subject} /></label>
-        <label style={settingsLabelStyle}>Body<textarea onChange={(event) => updateTemplate("body", event.target.value)} style={settingsTextareaStyle} value={activeTemplate.body} /></label>
-        <p style={settingsMessageStyle}>Variables are rendered by the delivery server. Unknown variables are rejected before sending.</p>
-        <div style={settingsActionRowStyle}>
-          <span>{intent === "saveCustomerEmailSettings" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Email settings saved</span> : null}</span>
-          <button disabled={busy} onClick={() => submit("saveCustomerEmailSettings")} style={busy ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{busy && intent === "saveCustomerEmailSettings" ? "Saving…" : "Save email settings"}</button>
-        </div>
-      </div>
-      <div style={settingsSectionCardStyle}>
-        <strong>Send a test</strong>
-        <p style={settingsMessageStyle}>A test goes only to the address entered below. It does not use customer data.</p>
-        <input aria-label="Test recipient email" onChange={(event) => setTestRecipient(event.target.value)} placeholder="name@example.com" style={settingsInputStyle} type="email" value={testRecipient} />
-        <label style={{ ...settingsLabelStyle, alignItems: "center", display: "flex", gridTemplateColumns: "auto 1fr" }}>
-          <input checked={testConfirmed} onChange={(event) => setTestConfirmed(event.target.checked)} type="checkbox" />
-          Confirm one test email to this address
-        </label>
-        <div style={settingsActionRowStyle}>
-          <span>{intent === "testCustomerEmail" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Test email accepted{fetcher.data.attemptId ? ` · Ref ${fetcher.data.attemptId.slice(0, 8)}` : ""}</span> : null}</span>
-          <button disabled={busy || !testConfirmed || !testRecipient} onClick={() => submit("testCustomerEmail")} style={busy || !testConfirmed || !testRecipient ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{busy && intent === "testCustomerEmail" ? "Sending…" : "Send test"}</button>
-        </div>
-      </div>
-      {errors.length > 0 ? <p role="alert" style={settingsErrorStyle}>{errors[0]?.message ?? "Unable to save email settings."}</p> : null}
-    </fieldset>
-  );
-}
-
-function emailDomain(value) {
-  const separator = value.lastIndexOf("@");
-  return separator >= 0 ? value.slice(separator + 1).trim().toLowerCase() || null : null;
 }
 
 export function ErrorBoundary() {
