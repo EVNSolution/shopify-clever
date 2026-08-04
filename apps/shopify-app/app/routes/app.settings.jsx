@@ -229,11 +229,27 @@ export const action = async ({ request }) => {
   }
 
   if (formData.get("_intent") === "testCustomerEmail") {
-    return sendCustomerEmailTest(request, {
+    const attemptId = formText(formData.get("attemptId")) || crypto.randomUUID();
+    const recipientEmail = formText(formData.get("recipientEmail"));
+    const signal = formText(formData.get("signal"));
+    console.info("customer_email.test.action.received", {
+      attemptId,
+      recipientDomain: emailDomain(recipientEmail),
+      signal,
+    });
+    const result = await sendCustomerEmailTest(request, {
+      attemptId,
       confirmed: formData.get("confirmed") === "true",
-      recipientEmail: formText(formData.get("recipientEmail")),
-      signal: formText(formData.get("signal")),
+      recipientEmail,
+      signal,
     }, { sessionToken: formText(formData.get("shopifySessionToken")) });
+    console.info("customer_email.test.action.completed", {
+      attemptId,
+      errorCount: result.errors.length,
+      messageId: result.test?.messageId ?? null,
+      provider: result.test?.provider ?? null,
+    });
+    return result;
   }
 
   if (formData.get("_intent") === "geocodeDeparture") {
@@ -723,6 +739,13 @@ function CustomerEmailSettings({ initialSettings }) {
     formData.set("_intent", nextIntent);
     formData.set("shopifySessionToken", await shopify.idToken());
     if (nextIntent === "testCustomerEmail") {
+      const attemptId = crypto.randomUUID();
+      console.info("customer_email.test.button.clicked", {
+        attemptId,
+        recipientDomain: emailDomain(testRecipient),
+        signal: activeSignal,
+      });
+      formData.set("attemptId", attemptId);
       formData.set("confirmed", String(testConfirmed));
       formData.set("recipientEmail", testRecipient);
       formData.set("signal", activeSignal);
@@ -784,13 +807,18 @@ function CustomerEmailSettings({ initialSettings }) {
           Confirm one test email to this address
         </label>
         <div style={settingsActionRowStyle}>
-          <span>{intent === "testCustomerEmail" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Test email accepted</span> : null}</span>
+          <span>{intent === "testCustomerEmail" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Test email accepted{fetcher.data.attemptId ? ` · Ref ${fetcher.data.attemptId.slice(0, 8)}` : ""}</span> : null}</span>
           <button disabled={busy || !testConfirmed || !testRecipient} onClick={() => submit("testCustomerEmail")} style={busy || !testConfirmed || !testRecipient ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{busy && intent === "testCustomerEmail" ? "Sending…" : "Send test"}</button>
         </div>
       </div>
       {errors.length > 0 ? <p role="alert" style={settingsErrorStyle}>{errors[0]?.message ?? "Unable to save email settings."}</p> : null}
     </fieldset>
   );
+}
+
+function emailDomain(value) {
+  const separator = value.lastIndexOf("@");
+  return separator >= 0 ? value.slice(separator + 1).trim().toLowerCase() || null : null;
 }
 
 export function ErrorBoundary() {

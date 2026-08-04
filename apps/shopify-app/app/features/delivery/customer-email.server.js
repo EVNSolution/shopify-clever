@@ -25,9 +25,16 @@ export async function sendCustomerEmailTest(request, input, options = {}) {
   const result = await deliveryApiRequest(request, "/admin/customer-email/test", {
     ...options,
     body: JSON.stringify(input),
+    headers: {
+      ...(options.headers ?? {}),
+      "x-correlation-id": input.attemptId,
+    },
     method: "POST",
   });
-  return normalizeResult(result, "test");
+  return {
+    ...normalizeResult(result, "test"),
+    attemptId: input.attemptId,
+  };
 }
 
 export async function previewRouteCustomerEmail(request, routePlanId, input, options = {}) {
