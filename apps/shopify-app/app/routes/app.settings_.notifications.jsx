@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -38,6 +39,17 @@ const CUSTOMER_EMAIL_SIGNALS = [
   ["DRIVER_NEARBY", "Driver is nearby"],
   ["DELIVERED", "Delivered"],
   ["MISSED_DELIVERY", "Missed delivery"],
+];
+
+const CUSTOMER_EMAIL_TEMPLATE_VARIABLES = [
+  ["customerName", "Customer name"],
+  ["orderNumber", "Order number"],
+  ["deliveryDate", "Delivery date"],
+  ["deliveryAddress", "Delivery address"],
+  ["eta", "ETA"],
+  ["routeName", "Route name"],
+  ["sequence", "Stop sequence"],
+  ["shopName", "Shop name"],
 ];
 
 const CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
@@ -205,16 +217,6 @@ function emailDomain(value) {
   return separator >= 0 ? value.slice(separator + 1).trim().toLowerCase() || null : null;
 }
 
-function updateNestedSettings(current, section, field, value) {
-  return {
-    ...current,
-    [section]: {
-      ...current[section],
-      [field]: value,
-    },
-  };
-}
-
 export default function CustomerNotificationsSettingsPage() {
   const { customerEmailSettings, errors: loaderErrors } = useLoaderData();
 
@@ -241,9 +243,15 @@ function CustomerEmailSettings({ initialSettings }) {
   const [lastSyncedTestSignal, setLastSyncedTestSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
   const [testConfirmed, setTestConfirmed] = useState(false);
   const [logoUploadStatus, setLogoUploadStatus] = useState({ kind: "idle", message: "", progress: 0 });
+  const [brandingEditorOpen, setBrandingEditorOpen] = useState(false);
+  const [brandingDraft, setBrandingDraft] = useState(() => ({ ...settings.branding }));
+  const [templateEditorSignal, setTemplateEditorSignal] = useState(null);
+  const [templateDraft, setTemplateDraft] = useState({ body: "", subject: "" });
+  const templateBodyRef = useRef(null);
   const intent = fetcher.formData?.get("_intent");
   const busy = fetcher.state !== "idle";
   const activeTemplate = settings.templates[activeSignal] ?? { body: "", subject: "" };
+  const templateEditorLabel = CUSTOMER_EMAIL_SIGNALS.find(([signal]) => signal === templateEditorSignal)?.[1] ?? "Template";
   const branding = settings.branding;
   const errors = fetcher.data?.errors ?? [];
   const saveBusy = busy && intent === "saveCustomerEmailSettings";
@@ -298,18 +306,48 @@ function CustomerEmailSettings({ initialSettings }) {
     fetcher.submit(formData, { method: "post" });
   };
 
-  const updateTemplate = (field, value) => {
+  const openBrandingEditor = () => {
+    setBrandingDraft({ ...branding });
+    setLogoUploadStatus({ kind: "idle", message: "", progress: 0 });
+    setBrandingEditorOpen(true);
+  };
+
+  const applyBrandingDraft = () => {
+    setSettings((current) => ({ ...current, branding: { ...brandingDraft } }));
+    setBrandingEditorOpen(false);
+  };
+
+  const openTemplateEditor = (signal) => {
+    const template = settings.templates[signal] ?? { body: "", subject: "" };
+    setActiveSignal(signal);
+    setTemplateDraft({ body: template.body, subject: template.subject });
+    setTemplateEditorSignal(signal);
+  };
+
+  const applyTemplateDraft = () => {
+    if (!templateEditorSignal) return;
     setSettings((current) => ({
       ...current,
       templates: {
         ...current.templates,
-        [activeSignal]: { ...current.templates[activeSignal], [field]: value },
+        [templateEditorSignal]: { ...current.templates[templateEditorSignal], ...templateDraft },
       },
     }));
+    setTemplateEditorSignal(null);
   };
 
-  const updateBranding = (field, value) => {
-    setSettings((current) => updateNestedSettings(current, "branding", field, value));
+  const insertTemplateVariable = (variable) => {
+    const token = `{{${variable}}}`;
+    const textarea = templateBodyRef.current;
+    const start = textarea?.selectionStart ?? templateDraft.body.length;
+    const end = textarea?.selectionEnd ?? start;
+    const body = `${templateDraft.body.slice(0, start)}${token}${templateDraft.body.slice(end)}`;
+    setTemplateDraft((current) => ({ ...current, body }));
+    window.requestAnimationFrame(() => {
+      const cursor = start + token.length;
+      templateBodyRef.current?.focus();
+      templateBodyRef.current?.setSelectionRange(cursor, cursor);
+    });
   };
 
   const handleLogoUpload = async (event) => {
@@ -344,15 +382,8 @@ function CustomerEmailSettings({ initialSettings }) {
         throw new Error(uploadError?.message ?? "Logo upload did not return a URL.");
       }
 
-      setSettings((current) => ({
-        ...current,
-        branding: {
-          ...current.branding,
-          logoMode: "image",
-          logoUrl,
-        },
-      }));
-      setLogoUploadStatus({ kind: "success", message: "Logo uploaded. Save notification settings to keep this logo.", progress: 100 });
+      setBrandingDraft((current) => ({ ...current, logoMode: "image", logoUrl }));
+      setLogoUploadStatus({ kind: "success", message: "Logo uploaded. Apply changes, then save notification settings.", progress: 100 });
     } catch (error) {
       setLogoUploadStatus({ kind: "error", message: error?.message ?? "Unable to upload logo.", progress: 0 });
     } finally {
@@ -380,44 +411,39 @@ function CustomerEmailSettings({ initialSettings }) {
       </section>
 
       <section aria-label="Notification branding" style={settingsSectionCardStyle}>
-        <strong>Branding</strong>
-        <div aria-label="Logo settings" style={logoSettingsBlockStyle}>
-          <label style={settingsLabelStyle}>
-            Logo upload
-            <input accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} style={settingsInputStyle} type="file" />
-          </label>
-          {logoUploadStatus.kind !== "idle" ? (
-            <div aria-live="polite" style={logoUploadStatus.kind === "error" ? settingsErrorStyle : settingsMessageStyle}>
-              <span>{logoUploadStatus.message}</span>
-              {logoUploadStatus.kind === "uploading" ? (
-                <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
-              ) : null}
-            </div>
-          ) : null}
-          <label style={settingsLabelStyle}>Logo URL<input onChange={(event) => updateBranding("logoUrl", event.target.value)} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={branding.logoUrl} /></label>
-          <div style={settingsCoordinateGridStyle}>
-            <label style={settingsLabelStyle}>Logo link<input onChange={(event) => updateBranding("logoLinkUrl", event.target.value)} placeholder="https://store.cleversystem.ai" style={settingsInputStyle} type="url" value={branding.logoLinkUrl} /></label>
-            <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => updateBranding("logoMode", event.target.value)} style={settingsSelectStyle} value={branding.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
-            <label style={settingsLabelStyle}>Logo width<input max="320" min="48" onChange={(event) => updateBranding("logoWidth", Number(event.target.value))} style={settingsInputStyle} type="number" value={branding.logoWidth} /></label>
+        <div style={notificationCardHeaderStyle}>
+          <div>
+            <strong>Branding</strong>
+            <p style={settingsMessageStyle}>Preview the customer email, then edit its logo and footer in one place.</p>
           </div>
+          <button onClick={openBrandingEditor} style={settingsResetButtonStyle} type="button">Edit branding</button>
         </div>
-        <label style={settingsLabelStyle}>Footer text<input onChange={(event) => updateBranding("footerText", event.target.value)} style={settingsInputStyle} value={branding.footerText} /></label>
         <NotificationPreview activeTemplate={activeTemplate} branding={branding} senderName={settings.senderName} />
       </section>
 
       <section aria-label="Email templates" style={settingsSectionCardStyle}>
-        <strong>Templates</strong>
-        <div aria-label="Email templates" role="tablist" style={settingsTemplateTabsStyle}>
-          {CUSTOMER_EMAIL_SIGNALS.map(([signal, label]) => (
-            <button aria-selected={activeSignal === signal} key={signal} onClick={() => setActiveSignal(signal)} role="tab" style={activeSignal === signal ? settingsButtonStyle : settingsResetButtonStyle} type="button">{label}</button>
-          ))}
+        <div style={notificationCardHeaderStyle}>
+          <div>
+            <strong>Templates</strong>
+            <p style={settingsMessageStyle}>Open a template to edit its wording and insert supported variables.</p>
+          </div>
         </div>
-        <label style={settingsLabelStyle}>Subject<input onChange={(event) => updateTemplate("subject", event.target.value)} style={settingsInputStyle} value={activeTemplate.subject} /></label>
-        <label style={settingsLabelStyle}>Body<textarea onChange={(event) => updateTemplate("body", event.target.value)} style={settingsTextareaStyle} value={activeTemplate.body} /></label>
-        <p style={settingsMessageStyle}>Variables are rendered by the delivery server. Unknown variables are rejected before sending.</p>
-        <div style={settingsActionRowStyle}>
-          <span>{intent === "saveCustomerEmailSettings" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Email settings saved</span> : null}</span>
-          <button disabled={busy} onClick={() => submit("saveCustomerEmailSettings")} style={busy ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{saveBusy ? "Saving..." : "Save notification settings"}</button>
+        <div aria-label="Email templates" style={notificationTemplateListStyle}>
+          {CUSTOMER_EMAIL_SIGNALS.map(([signal, label]) => (
+            <button
+              aria-label={`Edit ${label} template`}
+              key={signal}
+              onClick={() => openTemplateEditor(signal)}
+              style={notificationTemplateRowStyle}
+              type="button"
+            >
+              <span style={notificationTemplateCopyStyle}>
+                <strong>{label}</strong>
+                <span style={settingsMessageStyle}>{settings.templates[signal]?.subject || "No subject"}</span>
+              </span>
+              <span style={notificationTemplateEditLabelStyle}>Edit</span>
+            </button>
+          ))}
         </div>
       </section>
 
@@ -437,8 +463,96 @@ function CustomerEmailSettings({ initialSettings }) {
         </div>
       </section>
 
+      <div style={settingsActionRowStyle}>
+        <span>{intent === "saveCustomerEmailSettings" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Email settings saved</span> : null}</span>
+        <button disabled={busy} onClick={() => submit("saveCustomerEmailSettings")} style={busy ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{saveBusy ? "Saving..." : "Save notification settings"}</button>
+      </div>
+
       {errors.length > 0 ? <p role="alert" style={settingsErrorStyle}>{errors[0]?.message ?? "Unable to save email settings."}</p> : null}
+
+      {brandingEditorOpen ? (
+        <SettingsEditorModal ariaLabel="Edit notification branding" onClose={() => setBrandingEditorOpen(false)} title="Branding">
+          <div className="notification-branding-editor">
+            <div aria-label="Logo settings" style={logoSettingsBlockStyle}>
+              <label style={settingsLabelStyle}>
+                Logo upload
+                <input accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} style={settingsInputStyle} type="file" />
+              </label>
+              {logoUploadStatus.kind !== "idle" ? (
+                <div aria-live="polite" style={logoUploadStatus.kind === "error" ? settingsErrorStyle : settingsMessageStyle}>
+                  <span>{logoUploadStatus.message}</span>
+                  {logoUploadStatus.kind === "uploading" ? (
+                    <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
+                  ) : null}
+                </div>
+              ) : null}
+              <label style={settingsLabelStyle}>Logo URL<input onChange={(event) => setBrandingDraft((current) => ({ ...current, logoUrl: event.target.value }))} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={brandingDraft.logoUrl} /></label>
+              <label style={settingsLabelStyle}>Logo link<input onChange={(event) => setBrandingDraft((current) => ({ ...current, logoLinkUrl: event.target.value }))} placeholder="https://store.cleversystem.ai" style={settingsInputStyle} type="url" value={brandingDraft.logoLinkUrl} /></label>
+              <div style={settingsCoordinateGridStyle}>
+                <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => setBrandingDraft((current) => ({ ...current, logoMode: event.target.value }))} style={settingsSelectStyle} value={brandingDraft.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
+                <label style={settingsLabelStyle}>Logo width<input max="320" min="48" onChange={(event) => setBrandingDraft((current) => ({ ...current, logoWidth: Number(event.target.value) }))} style={settingsInputStyle} type="number" value={brandingDraft.logoWidth} /></label>
+              </div>
+              <label style={settingsLabelStyle}>Footer text<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, footerText: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "92px" }} value={brandingDraft.footerText} /></label>
+            </div>
+            <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} senderName={settings.senderName} />
+          </div>
+          <div style={settingsActionRowStyle}>
+            <button onClick={() => setBrandingEditorOpen(false)} style={settingsResetButtonStyle} type="button">Cancel</button>
+            <button onClick={applyBrandingDraft} style={settingsButtonStyle} type="button">Apply changes</button>
+          </div>
+        </SettingsEditorModal>
+      ) : null}
+
+      {templateEditorSignal ? (
+        <SettingsEditorModal ariaLabel={`Edit ${templateEditorLabel} template`} onClose={() => setTemplateEditorSignal(null)} title={templateEditorLabel}>
+          <label style={settingsLabelStyle}>Subject<input maxLength={200} onChange={(event) => setTemplateDraft((current) => ({ ...current, subject: event.target.value }))} style={settingsInputStyle} value={templateDraft.subject} /></label>
+          <label style={settingsLabelStyle}>Body<textarea maxLength={10000} onChange={(event) => setTemplateDraft((current) => ({ ...current, body: event.target.value }))} ref={templateBodyRef} style={settingsTextareaStyle} value={templateDraft.body} /></label>
+          <div>
+            <strong style={notificationVariablesTitleStyle}>Insert variable</strong>
+            <div aria-label="Template variables" style={settingsTemplateTabsStyle}>
+              {CUSTOMER_EMAIL_TEMPLATE_VARIABLES.map(([variable, label]) => (
+                <button key={variable} onClick={() => insertTemplateVariable(variable)} style={notificationVariableButtonStyle} type="button">{label}</button>
+              ))}
+            </div>
+          </div>
+          <p style={settingsMessageStyle}>Variables are rendered by the delivery server. Unknown variables are rejected before sending.</p>
+          <div style={settingsActionRowStyle}>
+            <button onClick={() => setTemplateEditorSignal(null)} style={settingsResetButtonStyle} type="button">Cancel</button>
+            <button onClick={applyTemplateDraft} style={settingsButtonStyle} type="button">Apply template</button>
+          </div>
+        </SettingsEditorModal>
+      ) : null}
     </div>
+  );
+}
+
+function SettingsEditorModal({ ariaLabel, children, onClose, title }) {
+  useEffect(() => {
+    const handleKeyDown = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [onClose]);
+
+  return createPortal(
+    <div
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+      role="presentation"
+      style={notificationModalOverlayStyle}
+    >
+      <section aria-label={ariaLabel} aria-modal="true" role="dialog" style={notificationModalStyle}>
+        <style>{NOTIFICATION_EDITOR_RESPONSIVE_CSS}</style>
+        <header style={notificationModalHeaderStyle}>
+          <strong>{title}</strong>
+          <button aria-label="Close editor" onClick={onClose} style={notificationModalCloseStyle} type="button">×</button>
+        </header>
+        <div style={notificationModalBodyStyle}>{children}</div>
+      </section>
+    </div>,
+    document.body,
   );
 }
 
@@ -527,6 +641,134 @@ const logoSettingsBlockStyle = {
   gap: "10px",
   padding: "12px",
 };
+
+const notificationCardHeaderStyle = {
+  alignItems: "start",
+  display: "flex",
+  gap: "16px",
+  justifyContent: "space-between",
+};
+
+const notificationTemplateListStyle = {
+  border: "1px solid #e3e3e3",
+  borderRadius: "8px",
+  display: "grid",
+  overflow: "hidden",
+};
+
+const notificationTemplateRowStyle = {
+  alignItems: "center",
+  appearance: "none",
+  background: "#ffffff",
+  border: 0,
+  borderBottom: "1px solid #e3e3e3",
+  color: "#303030",
+  cursor: "pointer",
+  display: "flex",
+  font: "inherit",
+  gap: "16px",
+  justifyContent: "space-between",
+  minHeight: "56px",
+  padding: "10px 12px",
+  textAlign: "left",
+  width: "100%",
+};
+
+const notificationTemplateCopyStyle = {
+  display: "grid",
+  gap: "3px",
+  minWidth: 0,
+};
+
+const notificationTemplateEditLabelStyle = {
+  color: "#005bd3",
+  flex: "0 0 auto",
+  fontSize: "13px",
+  fontWeight: 650,
+};
+
+const notificationModalOverlayStyle = {
+  alignItems: "center",
+  background: "rgba(0, 0, 0, 0.38)",
+  display: "flex",
+  inset: 0,
+  justifyContent: "center",
+  padding: "16px",
+  position: "fixed",
+  zIndex: 2147483000,
+};
+
+const notificationModalStyle = {
+  background: "#ffffff",
+  borderRadius: "12px",
+  boxShadow: "0 20px 48px rgba(0, 0, 0, 0.24)",
+  boxSizing: "border-box",
+  maxHeight: "calc(100vh - 32px)",
+  maxWidth: "960px",
+  overflow: "hidden",
+  width: "100%",
+};
+
+const notificationModalHeaderStyle = {
+  alignItems: "center",
+  borderBottom: "1px solid #e3e3e3",
+  display: "flex",
+  fontSize: "16px",
+  justifyContent: "space-between",
+  minHeight: "48px",
+  padding: "0 16px",
+};
+
+const notificationModalCloseStyle = {
+  alignItems: "center",
+  appearance: "none",
+  background: "transparent",
+  border: 0,
+  borderRadius: "6px",
+  color: "#616161",
+  cursor: "pointer",
+  display: "inline-flex",
+  fontSize: "22px",
+  height: "32px",
+  justifyContent: "center",
+  width: "32px",
+};
+
+const notificationModalBodyStyle = {
+  display: "grid",
+  gap: "14px",
+  maxHeight: "calc(100vh - 82px)",
+  overflowY: "auto",
+  padding: "16px",
+};
+
+const notificationVariablesTitleStyle = {
+  display: "block",
+  fontSize: "13px",
+  marginBottom: "8px",
+};
+
+const notificationVariableButtonStyle = {
+  ...settingsResetButtonStyle,
+  fontWeight: 550,
+  minHeight: "30px",
+  padding: "4px 8px",
+};
+
+const NOTIFICATION_EDITOR_RESPONSIVE_CSS = `
+.notification-branding-editor {
+  align-items: start;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(260px, 0.8fr) minmax(320px, 1.2fr);
+}
+
+@media (max-width: 760px) {
+  .notification-branding-editor {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+`;
 
 const NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS = `
 @media (prefers-color-scheme: dark) {
