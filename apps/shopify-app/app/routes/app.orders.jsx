@@ -16,5 +16,8 @@ export function ErrorBoundary() {
 }
 
 export const headers = (headersArgs) => {
-  return boundary.headers(headersArgs);
+  const headers = boundary.headers(headersArgs);
+  const serverTiming = headersArgs.loaderHeaders?.get("Server-Timing");
+  if (serverTiming) headers.set("Server-Timing", serverTiming);
+  return headers;
 };

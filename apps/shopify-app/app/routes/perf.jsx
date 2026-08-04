@@ -1,6 +1,7 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import process from "node:process";
+import { allowlistTelemetryMetric, sanitizeRequestPath } from "../features/telemetry/structured-telemetry.server";
 
 const PERF_LOG_DIR = join(process.cwd(), ".omx/perf");
 const MAX_PERF_PAYLOAD_BYTES = 32_000;
@@ -35,11 +36,11 @@ function sanitizeMetricUrl(value) {
 }
 
 function sanitizeMetricPayload(metric) {
-  return {
+  return allowlistTelemetryMetric({
     ...metric,
-    url: sanitizeMetricUrl(metric.url),
-    referrer: sanitizeMetricUrl(metric.referrer),
-  };
+    path: sanitizeRequestPath(sanitizeMetricUrl(metric?.url)),
+    referrerPath: sanitizeRequestPath(sanitizeMetricUrl(metric?.referrer)),
+  });
 }
 
 function getPerfLogPath(metric) {

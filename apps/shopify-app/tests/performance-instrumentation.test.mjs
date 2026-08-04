@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import {
   buildOrdersViewNavigationMetric,
@@ -11,6 +12,12 @@ import {
   shouldRevalidateOrdersRoute,
   withPromiseTimeout,
 } from "../app/features/orders/orders-page.shared.js";
+import {
+  allowlistTelemetryMetric,
+  hashShopIdentifier,
+  sanitizeRequestPath,
+  sanitizeTelemetryValue,
+} from "../app/features/telemetry/structured-telemetry.server.js";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
 const root = process.cwd();
@@ -31,6 +38,7 @@ const rootSource = readFileSync(join(root, "app/root.jsx"), "utf8");
 const entryServerSource = readFileSync(join(root, "app/entry.server.jsx"), "utf8");
 const perfRoutePath = join(root, "app/routes/perf.jsx");
 const perfScriptPath = join(root, "scripts/perf-orders.mjs");
+const perfCohortScriptPath = join(root, "scripts/orders-browser-performance-cohorts.mjs");
 
 test("performance evaluator captures real browser Orders navigation timings", () => {
   assert.equal(packageJson.scripts["perf:orders"], "node scripts/perf-orders.mjs");
@@ -57,11 +65,51 @@ test("performance evaluator captures real browser Orders navigation timings", ()
   assert.match(perfScriptSource, /ordersSourceRetry/);
 });
 
+test("Orders performance cohorts use real embedded-browser samples and merge server evidence", () => {
+  assert.equal(packageJson.scripts["perf:orders:cohorts"], "node scripts/orders-browser-performance-cohorts.mjs");
+  assert.equal(existsSync(perfCohortScriptPath), true);
+  const source = readFileSync(perfCohortScriptPath, "utf8");
+  assert.match(source, /orders\.loader\.first_usable/);
+  assert.match(source, /orders\.page\.fetch/);
+  assert.match(source, /PERF_SAMPLE_COUNT/);
+  assert.match(source, /CLEVER_ROUTE_SERVER_ROOT/);
+  assert.match(source, /Shopify embedded app; set PERF_TARGET_URL/);
+  assert.match(source, /orders-server-performance-cohorts\.json/);
+  assert.match(source, /assertPrivacyCanary/);
+  assert.match(source, /distanceMs <= 1_000/);
+});
+
+test("Orders resource transitions reuse a short-lived in-memory App Bridge session token", () => {
+  assert.match(ordersPageSource, /createOrdersResourceSessionTokenGetter\(\(\) => shopify\.idToken\(\)\)/);
+  assert.match(ordersPageSource, /const idToken = await getOrdersResourceSessionToken\(\)/);
+  assert.doesNotMatch(ordersPageSource, /const idToken = await shopify\.idToken\(\);[\s\S]{0,200}loadOrdersPageResource/);
+});
+
+test("Orders prefetches one bounded adjacent page and restores the previous page from memory", () => {
+  assert.match(ordersPageSource, /const ordersPagePrefetchFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /after: ordersPageInfo\.endCursor/);
+  assert.match(ordersPageSource, /ordersPageCacheRef\.current\.get\(cacheKey\)/);
+  assert.match(ordersPageSource, /getReverseOrdersPageCacheEntry\(\{/);
+  assert.doesNotMatch(ordersPageSource, /localStorage[\s\S]{0,500}ordersPageCache/);
+});
+
+test("performance capture preserves allowlisted metric names while redacting sensitive fields", () => {
+  const metric = allowlistTelemetryMetric({
+    name: "orders.loader.first_usable",
+    customerName: "Private Customer",
+  });
+
+  assert.equal(metric.name, "orders.loader.first_usable");
+  assert.equal("customerName" in metric, false);
+  const perfRouteSource = readFileSync(perfRoutePath, "utf8");
+  assert.doesNotMatch(perfRouteSource, /\.\.\.sanitizeTelemetryValue\(metric\)/);
+});
+
 test("Orders route renders its shell while slow loader data is still pending", () => {
   assert.match(ordersPageSource, /async function loadOrdersPageData\(/);
   assert.match(
     ordersPageSource,
-    /export const loader = async \(\{ request \}\) => \{[\s\S]*authenticate\.admin\(request\)[\s\S]*ordersPageData: withPromiseTimeout\([\s\S]*loadOrdersPageData\(/,
+    /export const loader = async \(\{ request \}\) => \{[\s\S]*authenticate\.admin\(request\)[\s\S]*const ordersPageData = withPromiseTimeout\([\s\S]*loadOrdersPageData\(/,
   );
   assert.doesNotMatch(ordersPageSource, /ordersPageData:\s*await loadOrdersPageData\(/);
   assert.match(ordersPageSource, /<Suspense fallback=\{<OrdersPageLoading \/>\}>/);
@@ -77,7 +125,7 @@ test("Orders loading leaves the skeleton for a retryable error when data stalls"
   );
 
   assert.match(ordersPageSource, /const ORDERS_PAGE_LOAD_TIMEOUT_MS = 15_000/);
-  assert.match(ordersPageSource, /ordersPageData: withPromiseTimeout\(/);
+  assert.match(ordersPageSource, /const ordersPageData = withPromiseTimeout\(/);
   assert.match(ordersPageSource, /<Await resolve=\{ordersPageData\} errorElement=\{<OrdersPageLoadError \/>\}>/);
   assert.match(ordersPageSource, /function OrdersPageLoadError\(\)/);
   assert.match(ordersPageSource, /const revalidator = useRevalidator\(\)/);
@@ -142,6 +190,14 @@ test("Inventory to Orders reloads data while other UI-only query changes keep lo
     })),
     false,
     "the background update owns one explicit loader refresh after its action completes",
+  );
+  assert.equal(
+    shouldRevalidateOrdersRoute(routeArgs("/app/orders", "/app/orders", {
+      formData: new URLSearchParams({ _intent: "pollOrdersReconciliation" }),
+      formMethod: "POST",
+    })),
+    false,
+    "reconciliation status polling must not reload Orders before terminal success",
   );
 
   assert.match(ordersPageSource, /export function shouldRevalidate\(args\) \{/);
@@ -325,6 +381,56 @@ test("Orders view transitions emit query-safe performance metrics", () => {
   assert.match(ordersPageSource, /const pendingOrdersViewNavigationRef = useRef\(null\)/);
   assert.match(ordersPageSource, /emitPerformanceMetric\(navigationMetric\)/);
   assert.match(ordersPageSource, /pendingOrdersViewNavigationRef\.current = null/);
+});
+
+test("structured telemetry redacts sensitive nested values and raw identifiers", () => {
+  const sanitized = sanitizeTelemetryValue({
+    headers: {
+      authorization: "Bearer secret-token",
+      cookie: "session=secret",
+      "x-shopify-hmac-sha256": "hmac-secret",
+    },
+    nested: {
+      url: "https://admin.example/app/orders?id_token=secret#hash",
+      customerEmail: "customer@example.com",
+      phone: "+1 555 222 3333",
+      rawPayload: { id: "gid://shopify/Order/1" },
+      variables: { id: "gid://shopify/Order/1" },
+    },
+  });
+
+  const serialized = JSON.stringify(sanitized);
+  assert.equal(serialized.includes("secret-token"), false);
+  assert.equal(serialized.includes("session=secret"), false);
+  assert.equal(serialized.includes("hmac-secret"), false);
+  assert.equal(serialized.includes("id_token"), false);
+  assert.equal(serialized.includes("customer@example.com"), false);
+  assert.equal(serialized.includes("+1 555 222 3333"), false);
+  assert.equal(serialized.includes("gid://shopify/Order/1"), false);
+  assert.equal(sanitizeRequestPath("https://admin.example/app/orders?id_token=secret"), "/app/orders");
+  assert.match(hashShopIdentifier("KFood-Test.myshopify.com"), /^[a-f0-9]{16}$/);
+});
+
+test("structured telemetry keeps only allowlisted scalar metric fields", () => {
+  assert.deepEqual(
+    allowlistTelemetryMetric({
+      authorization: "Bearer secret",
+      durationMs: 12.34,
+      name: "orders.loader",
+      orderCount: 3,
+      path: "/app/orders?id_token=secret",
+      rawPayload: { order: 1 },
+      requestId: "request-1",
+      shop: "raw-shop.myshopify.com",
+    }),
+    {
+      durationMs: 12.34,
+      name: "orders.loader",
+      orderCount: 3,
+      path: "/app/orders",
+      requestId: "request-1",
+    },
+  );
 });
 
 test("performance capture endpoint stores browser metrics outside app data", () => {

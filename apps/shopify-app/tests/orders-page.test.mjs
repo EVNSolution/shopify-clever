@@ -1,15 +1,20 @@
 import assert from "node:assert/strict";
-import { fileURLToPath } from "node:url";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 import { mapCanonicalOrdersToOrderRows } from "../app/features/orders/canonical-orders.js";
 import {
   buildOrderTimelineDetails,
   formatLatestShopifyOrderUpdatedAt,
+  getOrdersReconciliationPollingCompletion,
+  getOrdersReconciliationStatusMessage,
   getOrdersRefreshCompletion,
   getLatestShopifyOrderUpdatedAt,
+  isOrdersReconciliationTerminalFailure,
+  isOrdersReconciliationTerminalSuccess,
+  shouldPollOrdersReconciliationJob,
 } from "../app/features/orders/orders-page.shared.js";
 
 const root = process.cwd();
@@ -197,6 +202,74 @@ test("Orders Shopify refresh completion is handled once per background request",
   );
 });
 
+test("Orders reconciliation polling ignores stale jobs and classifies terminal statuses", () => {
+  const runningData = {
+    errors: [],
+    refreshRequestId: "refresh-1",
+    reconciliationJob: {
+      counts: { scanned: 20, updated: 8 },
+      jobId: "job-1",
+      status: "running",
+    },
+  };
+
+  assert.equal(shouldPollOrdersReconciliationJob(runningData.reconciliationJob), true);
+  assert.equal(isOrdersReconciliationTerminalSuccess(runningData.reconciliationJob), false);
+  assert.equal(isOrdersReconciliationTerminalFailure(runningData.reconciliationJob), false);
+  assert.equal(
+    getOrdersReconciliationStatusMessage(runningData.reconciliationJob),
+    "Reconciliation running: 20 scanned, 8 updated",
+  );
+
+  assert.deepEqual(
+    getOrdersReconciliationPollingCompletion({
+      activeJobId: "job-1",
+      activeRequestId: "refresh-1",
+      data: runningData,
+      fetcherState: "idle",
+    }),
+    {
+      data: runningData,
+      hasErrors: false,
+      job: runningData.reconciliationJob,
+      jobId: "job-1",
+      requestId: "refresh-1",
+    },
+  );
+  assert.equal(
+    getOrdersReconciliationPollingCompletion({
+      activeJobId: "job-2",
+      activeRequestId: "refresh-1",
+      data: runningData,
+      fetcherState: "idle",
+    }),
+    null,
+  );
+  assert.equal(
+    getOrdersReconciliationPollingCompletion({
+      activeJobId: "job-1",
+      activeRequestId: "refresh-2",
+      data: runningData,
+      fetcherState: "idle",
+    }),
+    null,
+  );
+
+  const succeededJob = { ...runningData.reconciliationJob, status: "SUCCEEDED" };
+  assert.equal(shouldPollOrdersReconciliationJob(succeededJob), false);
+  assert.equal(isOrdersReconciliationTerminalSuccess(succeededJob), true);
+  assert.equal(getOrdersReconciliationStatusMessage(succeededJob), "Reconciliation complete: 8 updated");
+
+  const failedJob = {
+    jobId: "job-1",
+    lastError: { message: "safe delivery API error" },
+    status: "DEAD_LETTER",
+  };
+  assert.equal(shouldPollOrdersReconciliationJob(failedJob), false);
+  assert.equal(isOrdersReconciliationTerminalFailure(failedJob), true);
+  assert.equal(getOrdersReconciliationStatusMessage(failedJob), "Reconciliation failed: safe delivery API error");
+});
+
 test("Orders loader can isolate CLEVER delivery orders for synthetic dev data", () => {
   assert.match(
     ordersPageSource,
@@ -204,11 +277,55 @@ test("Orders loader can isolate CLEVER delivery orders for synthetic dev data", 
   );
   assert.match(
     ordersPageSource,
-    /const shouldLoadShopifyOrders = shouldLoadOrders && shouldFetchShopifyOrders\(\)/,
+    /function shouldUseCanonicalFirstOrders\(\) \{[\s\S]*CLEVER_ORDERS_CANONICAL_FIRST/,
   );
   assert.match(
     ordersPageSource,
-    /shouldFetchShopifyOrders\(\)\s*\?\s*fetchShopifyOrders/,
+    /const shouldLoadShopifyMetadata =\s*shouldLoadOrders && shouldFetchShopifyOrders\(\)/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const shouldLoadShopifyOrders =\s*shouldLoadShopifyMetadata && !canonicalFirst/,
+  );
+  assert.match(ordersPageSource, /canonicalFirst\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows/);
+});
+
+test("Orders canonical-first first load skips Shopify full order fetch and disables mount sync by default", () => {
+  assert.match(ordersPageSource, /CLEVER_ORDERS_CANONICAL_FIRST/);
+  assert.match(ordersPageSource, /CLEVER_ORDERS_AUTO_SYNC_ON_LOAD/);
+  assert.match(ordersPageSource, /featureFlags: \{[\s\S]*autoSyncOrdersOnLoad,[\s\S]*canonicalFirst/);
+  assert.match(ordersPageSource, /if \(!autoSyncOrdersOnLoad\) return;[\s\S]*formData\.set\("_intent", "syncOrders"\)/);
+  assert.doesNotMatch(ordersPageSource, /CLEVER_ORDERS_CANONICAL_FIRST[\s\S]{0,240}fetchShopifyOrders\(admin/);
+});
+
+test("Orders canonical-first preserves lightweight Shopify metadata reads when Shopify reads are enabled", () => {
+  assert.match(
+    ordersPageSource,
+    /const shouldLoadShopifyMetadata =\s*shouldLoadOrders && shouldFetchShopifyOrders\(\)/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const shouldLoadShopifyOrders =\s*shouldLoadShopifyMetadata && !canonicalFirst/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const orderDataPromise = shouldLoadShopifyOrders[\s\S]*fetchShopifyOrders\(admin,\s*\{/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const departureLocationDataPromise = shouldLoadOrders\s*\?\s*\(shouldLoadShopifyMetadata[\s\S]*fetchShopifyDepartureLocation\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const shopTimeZoneDataPromise = shouldLoadOrders\s*\?\s*\(shouldLoadShopifyMetadata[\s\S]*fetchShopifyShopTimeZone\(admin,\s*\{\s*cacheKey: shopifyShopCacheKey\s*\}\)/,
+  );
+  assert.doesNotMatch(
+    ordersPageSource,
+    /shouldLoadShopifyOrders[\s\S]{0,120}fetchShopifyDepartureLocation\(admin/,
+  );
+  assert.doesNotMatch(
+    ordersPageSource,
+    /shouldLoadShopifyOrders[\s\S]{0,120}fetchShopifyShopTimeZone\(admin/,
   );
 });
 
@@ -472,13 +589,14 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.flatMap/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
-  assert.match(ordersPageSource, /const checkboxChecked = orderIsPlanned \|\| checkedOrderIdSet\.has\(order\.id\)/);
+  assert.match(ordersPageSource, /const checkboxChecked = snapshotSelectionActive/);
+  assert.match(ordersPageSource, /!selectionExcludedOrderIdSet\.has\(order\.orderId\)/);
   assert.match(ordersPageSource, /`Select \${order\.name} for plan`/);
   assert.match(ordersPageSource, /checked=\{checkboxChecked\}/);
-  assert.match(ordersPageSource, /disabled=\{orderIsPlanned\}/);
+  assert.match(ordersPageSource, /snapshotSelectionUpdating/);
   assert.match(
     ordersPageSource,
-    /onChange=\{\(event\) => toggleOrderCheck\(order\.id, event\.currentTarget\.checked\)\}/,
+    /onChange=\{\(event\) => toggleOrderCheck\(order, event\.currentTarget\.checked\)\}/,
   );
   assert.doesNotMatch(ordersPageSource, /Shift range|orderSelectionAnchorRef|handleOrderRowShiftSelect/);
   assert.doesNotMatch(ordersPageSource, /routePlanningUnavailable/);
@@ -823,7 +941,7 @@ test("Orders page bulk-changes selected server order state or payment", () => {
   assert.doesNotMatch(ordersPageSource, /\{ label: "eTransfer", value: "ETRANSFER" \}/);
   assert.match(ordersPageSource, /const orderBulkUpdateFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /if \(intent === "bulkUpdateOrders"\)/);
-  assert.match(ordersPageSource, /bulkUpdateDeliveryOrders\(\s*request,\s*\{ field, orderIds, value \},\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
+  assert.match(ordersPageSource, /bulkUpdateDeliveryOrders\(\s*request,\s*\{ field, orderIds, selectionToken, value \},\s*\{ sessionToken: shopifySessionToken \},?\s*\)/);
   assert.match(ordersPageSource, /const bulkUpdatedOrders = useMemo\(/);
   assert.match(ordersPageSource, /mergeShopifyOrderRowsWithCanonicalRows\(refreshMergedOrders, bulkUpdatedOrders\)/);
   assert.match(ordersPageSource, /const checkedServerOrderIds = useMemo\(/);
@@ -876,12 +994,13 @@ test("Orders loader merges delivery server planning state before background sync
   assert.match(ordersPageSource, /const activeOrdersView = new URL\(request\.url\)\.searchParams\.get\("view"\) === "inventory"/);
   assert.match(ordersPageSource, /const shouldLoadOrders = activeOrdersView !== "inventory"/);
   assert.match(ordersPageSource, /const serverOrdersStartedAt = getSafePerformanceNow\(\)/);
-  assert.match(ordersPageSource, /const serverOrderDataPromise = shouldLoadOrders\s*\?\s*fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\.then/);
+  assert.match(ordersPageSource, /const serverOrdersRequestPromise = shouldLoadOrders\s*\?\s*\(resourceFlags\.pagination[\s\S]*fetchDeliveryOrdersPage\([\s\S]*:\s*fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\)\s*:\s*null/);
+  assert.match(ordersPageSource, /const serverOrderDataPromise = shouldLoadOrders\s*\?\s*serverOrdersRequestPromise\.then/);
   assert.match(ordersPageSource, /Promise\.resolve\(\{ data: \{ orders: \[\], errors: \[\] \}, durationMs: 0 \}\)/);
   assert.match(ordersPageSource, /const serverOrderRows = mapCanonicalOrdersToOrderRows\(serverOrderData\.orders\)/);
   assert.match(
     ordersPageSource,
-    /const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\{\s*includeCanonicalOnly:\s*!shouldLoadShopifyOrders \|\| orderData\.complete !== true,\s*\},\s*\)/,
+    /const mergedOrders = canonicalFirst\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\{\s*includeCanonicalOnly:\s*!shouldLoadShopifyOrders \|\| orderData\.complete !== true,\s*\},\s*\)/,
   );
   assert.match(ordersPageSource, /orders: mergedOrders/);
   assert.match(ordersPageSource, /activeOrdersView,/);
@@ -890,6 +1009,47 @@ test("Orders loader merges delivery server planning state before background sync
   assert.match(ordersPageSource, /DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE/);
   assert.match(ordersPageSource, /INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token"/);
   assert.match(ordersPageSource, /error\?\.code === "UNAUTHORIZED"[\s\S]*error\?\.message === INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE/);
+});
+
+test("Orders resources bind planning queries to the shop-local date", () => {
+  assert.match(
+    ordersPageSource,
+    /resourceFilters\.set\("routeOpsToday", shopLocalDate\)/,
+  );
+  assert.match(
+    ordersPageSource,
+    /routeOpsToday:\s*getShopLocalDate\(shopTimeZoneData\)/,
+    "the initial paged request must carry the same explicit shop-local planning date as follow-up resources",
+  );
+  assert.match(
+    ordersPageSource,
+    /fetchDeliveryOrdersPage\([\s\S]*\.\.\.payload\.filters/,
+  );
+});
+
+test("Orders ignores stale all-filtered selection responses", () => {
+  assert.match(ordersPageSource, /latestSelectionRequestKeyRef/);
+  assert.match(
+    ordersPageSource,
+    /shouldApplyOrdersResourceResponse\(ordersSelectionFetcher\.data, latestSelectionRequestKeyRef\.current\)/,
+  );
+  assert.match(ordersPageSource, /_requestKey:\s*payload\._requestKey \?\? null/);
+});
+
+test("Orders frozen all-filtered selection persists across pages and patches canonical exclusions", () => {
+  assert.match(ordersPageSource, /const \[selectionExcludedOrderIds, setSelectionExcludedOrderIds\] = useState\(\[\]\)/);
+  assert.match(ordersPageSource, /pendingSelectionExclusionsRef/);
+  assert.match(ordersPageSource, /formData\.set\("selectionToken", selectionSnapshot\.selectionToken\)/);
+  assert.match(ordersPageSource, /formData\.set\("excludeOrderIds", JSON\.stringify\(excludeOrderIds\)\)/);
+  assert.match(ordersPageSource, /method: "patch"/);
+  assert.match(ordersPageSource, /updateOrdersSelectionExclusions\([\s\S]*order\.orderId,[\s\S]*checked/);
+  assert.match(ordersPageSource, /snapshotSelectableTableOrders\.map\(\(order\) => order\.orderId\)/);
+  assert.match(ordersPageSource, /selectedOrderCount = snapshotSelectionActive/);
+  assert.match(ordersPageSource, /setSelectionSnapshot\(null\);[\s\S]*setSelectionExcludedOrderIds\(\[\]\)/);
+  assert.match(ordersPageSource, /availableOrderBulkActionOptions = snapshotSelectionActive/);
+  assert.match(ordersPageSource, /option\.value !== ORDER_DATA_FIX_ACTION/);
+  assert.match(ordersPageSource, /snapshotSelectionActive && orderActionField === ORDER_DATA_FIX_ACTION/);
+  assert.match(ordersPageSource, /전체 선택에서는 상태 또는 결제만 일괄 변경할 수 있습니다/);
 });
 
 test("Orders preserve every server-owned route membership while keeping a primary route", () => {
@@ -942,6 +1102,8 @@ test("Orders page uses the Shopify shop timezone as today's delivery cutoff", ()
 test("Orders page syncs loaded Shopify snapshots without adding sync cards", () => {
   assert.match(ordersPageSource, /const ordersSyncFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /const orderSyncSubmittedRef = useRef\(false\)/);
+  assert.match(ordersPageSource, /const autoSyncOrdersOnLoad = featureFlags\?\.autoSyncOrdersOnLoad === true/);
+  assert.match(ordersPageSource, /if \(!autoSyncOrdersOnLoad\) return/);
   assert.match(ordersPageSource, /getOrderSyncSnapshots\(safeOrders\)/);
   assert.match(ordersPageSource, /ordersSyncFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /mapCanonicalOrdersToOrderRows\(ordersSyncFetcher\.data\?\.syncedOrders\)/);
@@ -956,7 +1118,13 @@ test("Orders owns global Shopify order update and safe route refresh", () => {
   assert.match(ordersPageSource, /import \{ refreshRouteOrders \} from "\.\.\/delivery\/route-detail\.server"/);
   assert.match(ordersPageSource, /import \{ getBulkRefreshRoutePlanIds \} from "\.\.\/delivery\/route-order-refresh"/);
   assert.match(ordersPageSource, /const ordersRefreshFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /const ordersReconciliationStatusFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /intent === "refreshAllRoutes"/);
+  assert.match(ordersPageSource, /intent === "pollOrdersReconciliation"/);
+  assert.match(ordersPageSource, /startDeliveryOrdersReconciliation\(/);
+  assert.match(ordersPageSource, /\{ correlationId: refreshRequestId, mode: "FULL" \}/);
+  assert.match(ordersPageSource, /fetchDeliveryOrdersReconciliationStatus\(/);
+  assert.match(ordersPageSource, /reconciliationMode: "background"/);
   assert.match(ordersPageSource, /fetchShopifyOrders\(admin,\s*\{[\s\S]*deliveryCycle: preferencesData\.appPreferences\.deliveryCycle,[\s\S]*\}\)/);
   assert.match(ordersPageSource, /reason: "orders_page_open"/);
   assert.match(ordersPageSource, /syncedOrderData,/);
@@ -965,14 +1133,19 @@ test("Orders owns global Shopify order update and safe route refresh", () => {
   assert.match(ordersPageSource, /formData\.set\("_intent", "refreshAllRoutes"\)/);
   assert.match(ordersPageSource, /formData\.set\("refreshRequestId", refreshRequestId\)/);
   assert.match(ordersPageSource, /ordersRefreshFetcher\.submit\(formData, \{ method: "post" \}\)/);
-  assert.match(ordersPageSource, /refreshResult\.updatedOrders/);
-  assert.match(ordersPageSource, /shopify\.toast\.show\(`\$\{updatedOrders\} orders synced; \$\{refreshedRoutes\} READY routes refreshed\$\{skippedMessage\}`\)/);
+  assert.match(ordersPageSource, /formData\.set\("_intent", "pollOrdersReconciliation"\)/);
+  assert.match(ordersPageSource, /formData\.set\("jobId", active\.jobId\)/);
+  assert.match(ordersPageSource, /ordersReconciliationStatusFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(ordersPageSource, /refreshResult\.updatedOrders \?\? reconciliationJob\?\.appliedCount/);
+  assert.match(ordersPageSource, /Order reconciliation queued/);
+  assert.match(ordersPageSource, /\$\{updatedOrders\} orders synced; \$\{refreshedRoutes\} READY routes refreshed\$\{skippedMessage\}/);
   assert.match(
     ordersPageSource,
-    /setOrdersRefreshPhase\("idle"\);[\s\S]*shopify\.toast\.show\([\s\S]*revalidator\.revalidate\(\)/,
+    /isOrdersReconciliationTerminalSuccess\(job\)[\s\S]*ordersReconciliationRevalidatedJobIdRef\.current !== completion\.jobId[\s\S]*revalidator\.revalidate\(\)/,
   );
-  assert.doesNotMatch(ordersPageSource, /ordersRefreshRevalidationObservedRef/);
-  assert.doesNotMatch(ordersPageSource, /pendingOrdersRefreshResultRef/);
+  assert.match(ordersPageSource, /isOrdersReconciliationTerminalFailure\(job\)/);
+  assert.match(ordersPageSource, /window\.clearTimeout\(timeout\)/);
+  assert.match(ordersPageSource, /current\?\.jobId !== active\.jobId \|\| current\?\.requestId !== active\.requestId/);
   assert.doesNotMatch(ordersPageSource, /orderUpdate|customerUpdate|mutation\s+\w*Order|mutation\s+\w*Customer/);
 });
 
@@ -987,12 +1160,14 @@ test("Orders route creation submits the planned draft without client ready-state
 
 test("Orders route creation syncs only selected planned orders during preflight", () => {
   assert.match(ordersPageSource, /const plannedOrderIdSet = new Set\(plannedOrderIds\)/);
-  assert.match(ordersPageSource, /const plannedShopifyOrders = orderData\.orders\.filter\(\s*\(order\) =>\s*plannedOrderIdSet\.has\(order\.id\),?\s*\)/);
+  assert.match(ordersPageSource, /const missingPlannedOrderIds = plannedOrderIds\.filter\(\(orderId\) => !canonicalOrderById\.has\(orderId\)\)/);
+  assert.match(ordersPageSource, /fetchShopifyOrdersByIds\(admin, missingPlannedOrderIds/);
+  assert.match(ordersPageSource, /const plannedShopifyOrders = canonicalFirst\s*\?\s*orderData\.orders\s*:\s*orderData\.orders\.filter\(\(order\) =>\s*plannedOrderIdSet\.has\(order\.id\)\)/);
   assert.match(ordersPageSource, /const plannedShopifyOrderSnapshots = getOrderSyncSnapshots\(plannedShopifyOrders\)/);
   assert.match(ordersPageSource, /plannedShopifyOrderSnapshots\.length > 0\s*\?\s*await syncDeliveryOrders/);
   assert.match(ordersPageSource, /orders: plannedShopifyOrderSnapshots/);
-  assert.match(ordersPageSource, /const canonicalOrderData = await fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,\s*sessionToken: shopifySessionToken,?\s*\},?\s*\)/);
-  assert.match(ordersPageSource, /const canonicalOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*mapCanonicalOrdersToOrderRows\(canonicalOrderData\.orders\),\s*mapCanonicalOrdersToOrderRows\(syncedOrderData\.orders\),\s*\)/);
+  assert.match(ordersPageSource, /fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,\s*sessionToken: shopifySessionToken,?\s*\},?\s*\)/);
+  assert.match(ordersPageSource, /const canonicalOrders = mergeShopifyOrderRowsWithCanonicalRows\(\s*canonicalRows,\s*mapCanonicalOrdersToOrderRows\(syncedOrderData\.orders\),\s*\)/);
   assert.match(ordersPageSource, /if \(plannedOrders\.length !== plannedOrderIds\.length\)/);
   assert.doesNotMatch(ordersPageSource, /orders: getOrderSyncSnapshots\(orderData\.orders\)/);
 });
@@ -1110,9 +1285,9 @@ test("Orders page keeps Add to map in the table controls", () => {
   assert.match(ordersPageSource, /const nextOrderIds = Array\.from\(new Set\(\[\.\.\.plannedOrderIds, \.\.\.selectedOrderIds\]\)\)/);
   assert.match(ordersPageSource, /setRoutePlanTitle\(buildRoutePlanTitleFromOrders\(nextOrders\)\)/);
   assert.match(ordersPageSource, />Add to map<\/button>/);
-  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0\}/);
+  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0 \|\| snapshotSelectionActive\}/);
   assert.match(ordersPageSource, /const orderControlsTrailingStyle = \{[\s\S]*?marginLeft:\s*"auto"/);
-  assert.doesNotMatch(ordersPageSource, />Clear selection<\/button>/);
+  assert.match(ordersPageSource, />Clear selection<\/button>/);
   assert.doesNotMatch(ordersPageSource, /shown ·/);
   assert.doesNotMatch(ordersPageSource, /added to plan\./);
   assert.doesNotMatch(ordersPageSource, />Add to map<\/button>[\s\S]{0,400}>Assign<\/button>/);
@@ -1583,7 +1758,7 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
     /const handleAddOrderToPlan = useCallback\(\(orderId\) => \{[\s\S]*?\}, \[plannedOrderIdSet\]\);/,
   )?.[0] ?? "";
   const tableAddBlock = ordersPageSource.match(
-    /const handleAddToPlan = \(\) => \{[\s\S]*?\n  \};/,
+    /const handleAddToPlan = \(\) => \{[\s\S]*?\n {2}\};/,
   )?.[0] ?? "";
 
   assert.match(ordersPageSource, /const \[planFitRequest, setPlanFitRequest\] = useState\(0\)/);
@@ -1750,7 +1925,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate \} = displayLoaderData/);
+  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, needsSessionTokenRefresh, perf, shopLocalDate \} = displayLoaderData/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
@@ -1838,9 +2013,9 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /clearLabel="Clear state filter"/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(nextFilters\);\s*setSearchParams\(/);
   assert.match(ordersPageSource, />Clear filters<\/button>/);
-  assert.doesNotMatch(ordersPageSource, />Clear selection<\/button>/);
+  assert.match(ordersPageSource, />Clear selection<\/button>/);
   assert.match(ordersPageSource, />Clear<\/button>/);
-  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0\}/);
+  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0 \|\| snapshotSelectionActive\}/);
   assert.match(ordersPageSource, /deliveryWeekday: ""/);
   assert.match(ordersPageSource, /orderedDateFrom: ""/);
   assert.match(ordersPageSource, /orderedDateTo: ""/);
@@ -1870,7 +2045,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
 });
 
 test("Orders map renders planned pins and the focused table-click pin", () => {
-  assert.match(ordersPageSource, /const locatedOrders = useMemo\(\s*\(\) => filteredOrders\.filter\(\(order\) => order\.hasCoordinates\),\s*\[filteredOrders\],\s*\)/);
+  assert.match(ordersPageSource, /const locatedOrders = useMemo\(\s*\(\) => compactMapEnabled\s*\?\s*mapCompactOrderPointsToRows\(ordersMapPoints\)\s*:\s*filteredOrders\.filter\(\(order\) => order\.hasCoordinates\),\s*\[compactMapEnabled, filteredOrders, ordersMapPoints\],\s*\)/);
   assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds, activeOrderPopupId\)/);
   assert.match(ordersPageSource, /if \(!ordersLayerSynced\) \{\s*mapSourceSyncPendingRef\.current = true;\s*scheduleMapSourceSyncRetry\(\);\s*return undefined;\s*\}/);
   assert.match(ordersPageSource, /mapSourceSyncPendingRef\.current = false/);

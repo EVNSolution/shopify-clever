@@ -378,6 +378,86 @@ export function getOrdersRefreshCompletion({
   };
 }
 
+export function getOrdersReconciliationPollingCompletion({
+  activeJobId,
+  activeRequestId,
+  data,
+  fetcherState,
+}) {
+  if (fetcherState !== "idle" || !data) return null;
+
+  const responseRequestId = textOrUndefined(data.refreshRequestId);
+  const job = data.reconciliationJob ?? null;
+  const responseJobId = textOrUndefined(job?.jobId);
+
+  if (!responseRequestId || responseRequestId !== activeRequestId) return null;
+  if (!responseJobId || responseJobId !== activeJobId) return null;
+
+  return {
+    data,
+    hasErrors: (data.errors ?? []).length > 0,
+    job,
+    jobId: responseJobId,
+    requestId: responseRequestId,
+  };
+}
+
+export function isOrdersReconciliationTerminalSuccess(job) {
+  return normalizeOrdersReconciliationStatus(job?.status) === "succeeded";
+}
+
+export function isOrdersReconciliationTerminalFailure(job) {
+  return new Set(["failed", "dead_letter", "cancelled"]).has(
+    normalizeOrdersReconciliationStatus(job?.status),
+  );
+}
+
+export function shouldPollOrdersReconciliationJob(job) {
+  if (!textOrUndefined(job?.jobId)) return false;
+  if (isOrdersReconciliationTerminalSuccess(job)) return false;
+  if (isOrdersReconciliationTerminalFailure(job)) return false;
+  return true;
+}
+
+export function getOrdersReconciliationStatusMessage(job, fallback = null) {
+  if (!job) return fallback;
+  const status = normalizeOrdersReconciliationStatus(job.status);
+  const counts = job.counts ?? {};
+  const scanned = numberOrNull(job.scannedCount ?? counts.scanned);
+  const updated = numberOrNull(job.appliedCount ?? counts.updated);
+  const failed = numberOrNull(job.failedCount ?? counts.failed);
+
+  if (status === "succeeded") {
+    return `Reconciliation complete: ${updated ?? 0} updated`;
+  }
+  if (status === "failed" || status === "dead_letter" || status === "cancelled") {
+    return getOrdersReconciliationFailureMessage(job);
+  }
+  if (status === "retry_wait") {
+    return `Reconciliation retrying: ${scanned ?? 0} scanned`;
+  }
+  if (status === "running") {
+    return `Reconciliation running: ${scanned ?? 0} scanned, ${updated ?? 0} updated`;
+  }
+  if (status === "queued") {
+    return "Reconciliation queued";
+  }
+  if (failed != null && failed > 0) {
+    return `Reconciliation ${status}: ${failed} failed`;
+  }
+
+  return fallback ?? `Reconciliation ${status}`;
+}
+
+export function getOrdersReconciliationFailureMessage(job) {
+  const message = textOrUndefined(job?.lastError?.message);
+  return message ? `Reconciliation failed: ${message}` : "Reconciliation failed";
+}
+
+function normalizeOrdersReconciliationStatus(value) {
+  return textOrUndefined(value)?.replaceAll("-", "_").toLowerCase() ?? "unknown";
+}
+
 export function shouldRevalidateOrdersRoute({
   currentUrl,
   defaultShouldRevalidate,
@@ -387,6 +467,7 @@ export function shouldRevalidateOrdersRoute({
 }) {
   if (formMethod && formMethod.toLowerCase() !== "get") {
     if (formData?.get("_intent") === "refreshAllRoutes") return false;
+    if (formData?.get("_intent") === "pollOrdersReconciliation") return false;
     return defaultShouldRevalidate;
   }
   if (!currentUrl || !nextUrl || currentUrl.pathname !== nextUrl.pathname) {
@@ -415,6 +496,12 @@ export function shouldRevalidateOrdersRoute({
   return changedQueryKeys.every((queryKey) => ORDERS_UI_ONLY_QUERY_KEYS.has(queryKey))
     ? false
     : defaultShouldRevalidate;
+}
+
+function numberOrNull(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 export function withPromiseTimeout(promise, timeoutMs, message) {

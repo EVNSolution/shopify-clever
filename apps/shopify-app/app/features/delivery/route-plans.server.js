@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
 
 import { buildRouteScopeFromOrders } from "./route-scope.js";
+import {
+  logStructuredMetric,
+  sanitizeRequestPath,
+  sanitizeTelemetryValue,
+} from "../telemetry/structured-telemetry.server.js";
 
 const DEFAULT_CLEVER_APP_ID = "clever";
 const DEFAULT_DELIVERY_API_GET_CACHE_TTL_MS = 15_000;
@@ -626,6 +631,7 @@ async function executeDeliveryApiRequest({
   url,
   suppressErrorStatuses,
 }) {
+  const startedAt = Date.now();
   let response;
 
   try {
@@ -641,6 +647,14 @@ async function executeDeliveryApiRequest({
   } catch (error) {
     const normalizedError = normalizeDeliveryApiNetworkError(error, path);
     logDeliveryApiFailure({ appId, error: normalizedError, method, path, status: 0 });
+    logDeliveryApiTiming({
+      appId,
+      durationMs: Date.now() - startedAt,
+      errorCount: 1,
+      method,
+      path,
+      status: 0,
+    });
 
     return {
       data: null,
@@ -661,12 +675,29 @@ async function executeDeliveryApiRequest({
         status: response.status,
       });
     }
+    logDeliveryApiTiming({
+      appId,
+      durationMs: Date.now() - startedAt,
+      errorCount: 1,
+      method,
+      path,
+      status: response.status,
+    });
 
     return {
       data: payload?.data ?? null,
       errors: [normalizedError],
     };
   }
+
+  logDeliveryApiTiming({
+    appId,
+    durationMs: Date.now() - startedAt,
+    errorCount: 0,
+    method,
+    path,
+    status: response.status,
+  });
 
   return {
     data: payload?.data ?? null,
@@ -693,10 +724,23 @@ function logDeliveryApiFailure({ appId, error, method, path, status }) {
   console.warn("delivery_api_request_failed", {
     appId,
     code: error?.code ?? DELIVERY_API_ERROR_CODE,
-    message: error?.message,
+    message: sanitizeTelemetryValue(error?.message),
     method,
-    path,
+    path: sanitizeRequestPath(path),
     status,
+  });
+}
+
+function logDeliveryApiTiming({ appId, durationMs, errorCount, method, path, status }) {
+  logStructuredMetric("delivery_api_request", {
+    category: "delivery-api",
+    count: 1,
+    durationMs,
+    errorCount,
+    httpStatus: status,
+    path: sanitizeRequestPath(path),
+    status: method,
+    topic: appId,
   });
 }
 
