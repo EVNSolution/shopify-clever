@@ -7,6 +7,10 @@ function normalizeResult(result, key) {
   };
 }
 
+function isFormDataPayload(input) {
+  return typeof FormData !== "undefined" && input instanceof FormData;
+}
+
 export async function fetchCustomerEmailSettings(request, options = {}) {
   const result = await deliveryApiRequest(request, "/admin/customer-email/settings", options);
   return normalizeResult(result, "customerEmailSettings");
@@ -35,6 +39,25 @@ export async function sendCustomerEmailTest(request, input, options = {}) {
     ...normalizeResult(result, "test"),
     attemptId: input.attemptId,
   };
+}
+
+export async function uploadCustomerEmailLogo(request, formData, options = {}) {
+  if (!isFormDataPayload(formData)) {
+    return {
+      logoAsset: null,
+      errors: [{
+        code: "CUSTOMER_EMAIL_LOGO_FORM_DATA_REQUIRED",
+        message: "Logo upload requires multipart form data.",
+      }],
+    };
+  }
+
+  const result = await deliveryApiRequest(request, "/admin/customer-email/logo", {
+    ...options,
+    body: formData,
+    method: "POST",
+  });
+  return normalizeResult(result, "logoAsset");
 }
 
 export async function previewRouteCustomerEmail(request, routePlanId, input, options = {}) {

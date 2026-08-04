@@ -193,7 +193,15 @@ test("Customer Notifications keeps sender, templates, tests, and modern branding
   assert.match(notificationsPageSource, /settings\?\.senderName \?\? sender\.name/);
   assert.match(notificationsPageSource, /BRANDING_COLOR_FIELDS/);
   assert.match(notificationsPageSource, /type="color"/);
-  assert.match(notificationsPageSource, /HTTPS logo URL/);
+  assert.match(notificationsPageSource, /Logo image/);
+  assert.match(notificationsPageSource, /accept="image\/png,image\/jpeg,image\/webp"/);
+  assert.match(notificationsPageSource, /CUSTOMER_EMAIL_LOGO_MAX_BYTES = 1024 \* 1024/);
+  assert.match(notificationsPageSource, /uploadCustomerEmailLogo/);
+  assert.match(notificationsPageSource, /_intent", "uploadCustomerEmailLogo"/);
+  assert.match(notificationsPageSource, /xhr\.upload\.onprogress/);
+  assert.match(notificationsPageSource, /setLogoUploadStatus\(\{ kind: "success"/);
+  assert.match(notificationsPageSource, /logoMode: "image"/);
+  assert.match(notificationsPageSource, /Advanced logo URL/);
   assert.match(notificationsPageSource, /formHttpsUrl\(formData\.get\("branding\.logoUrl"\)\)/);
   assert.match(notificationsPageSource, /logoMode/);
   assert.match(notificationsPageSource, /logoWidth/);
@@ -206,7 +214,18 @@ test("Customer Notifications keeps sender, templates, tests, and modern branding
   assert.match(notificationsPageSource, /Live notification preview/);
   assert.match(notificationsPageSource, /Email templates/);
   assert.match(notificationsPageSource, /Send test/);
-  assert.doesNotMatch(notificationsPageSource, /type="file"|upload/i);
+  assert.doesNotMatch(notificationsPageSource, /HTTPS logo URL/);
+  assert.doesNotMatch(notificationsPageSource, /placeholder="https:\/\/cdn\.example\.com\/logo\.png"/);
+});
+
+test("Customer Notifications preview renders the logo from the footer upper-left", () => {
+  assert.match(notificationsPageSource, /const footerLogo = logo \? \(/);
+  assert.match(notificationsPageSource, /justifySelf: "start"/);
+  assert.match(notificationsPageSource, /objectFit: "contain"/);
+  assert.match(notificationsPageSource, /maxHeight: "64px"/);
+  assert.match(notificationsPageSource, /maxWidth: "160px"/);
+  assert.match(notificationsPageSource, /<div style=\{notificationPreviewFooterStyle\(branding\)\}>[\s\S]*\{footerLogo\}/);
+  assert.doesNotMatch(notificationsPageSource, /<strong[\s\S]*\{subject\}<\/strong>[\s\S]*<p[\s\S]*\{body\}<\/p>[\s\S]*<div[\s\S]*<img/);
 });
 
 test("Settings tab is a plain editable form without explainer cards", () => {

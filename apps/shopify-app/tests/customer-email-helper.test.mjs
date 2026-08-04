@@ -8,6 +8,7 @@ import {
   saveCustomerEmailSettings,
   sendCustomerEmailTest,
   sendRouteCustomerEmail,
+  uploadCustomerEmailLogo,
 } from "../app/features/delivery/customer-email.server.js";
 
 process.env.CLEVER_DELIVERY_API_URL = "https://delivery.test";
@@ -53,6 +54,31 @@ test("customer email test forwards its correlation id", async () => {
   assert.equal(fetch.calls[0].init.headers["x-correlation-id"], "attempt-1");
   assert.equal(result.attemptId, "attempt-1");
   assert.equal(result.test.messageId, "message-1");
+});
+
+test("customer email logo upload forwards multipart form data without forcing json content type", async () => {
+  const fetch = fakeFetch({ data: { logoAsset: { url: "https://cdn.test/logo.webp" } }, error: null });
+  const formData = new FormData();
+  formData.set("logo", new Blob(["logo"], { type: "image/webp" }), "logo.webp");
+
+  const result = await uploadCustomerEmailLogo(request(), formData, { fetch, sessionToken: "token" });
+
+  assert.equal(fetch.calls[0].url, "https://delivery.test/admin/customer-email/logo");
+  assert.equal(fetch.calls[0].init.method, "POST");
+  assert.equal(fetch.calls[0].init.body, formData);
+  assert.equal(fetch.calls[0].init.headers.authorization, "Bearer token");
+  assert.equal(fetch.calls[0].init.headers["content-type"], undefined);
+  assert.equal(result.logoAsset.url, "https://cdn.test/logo.webp");
+});
+
+test("customer email logo upload requires a multipart form data payload", async () => {
+  const fetch = fakeFetch({ data: { logoAsset: { url: "https://cdn.test/logo.webp" } }, error: null });
+
+  const result = await uploadCustomerEmailLogo(request(), null, { fetch, sessionToken: "token" });
+
+  assert.equal(fetch.calls.length, 0);
+  assert.equal(result.logoAsset, null);
+  assert.equal(result.errors[0].code, "CUSTOMER_EMAIL_LOGO_FORM_DATA_REQUIRED");
 });
 
 test("route email requires separate preview and send endpoints", async () => {
