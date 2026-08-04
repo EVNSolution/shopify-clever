@@ -243,7 +243,8 @@ function CustomerEmailSettings({ initialSettings }) {
   const [lastSyncedTestSignal, setLastSyncedTestSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
   const [testConfirmed, setTestConfirmed] = useState(false);
   const [logoUploadStatus, setLogoUploadStatus] = useState({ kind: "idle", message: "", progress: 0 });
-  const [brandingEditorOpen, setBrandingEditorOpen] = useState(false);
+  const [templateExampleOpen, setTemplateExampleOpen] = useState(false);
+  const [templateExampleMode, setTemplateExampleMode] = useState("preview");
   const [brandingDraft, setBrandingDraft] = useState(() => ({ ...settings.branding }));
   const [templateEditorSignal, setTemplateEditorSignal] = useState(null);
   const [templateDraft, setTemplateDraft] = useState({ body: "", subject: "" });
@@ -306,15 +307,16 @@ function CustomerEmailSettings({ initialSettings }) {
     fetcher.submit(formData, { method: "post" });
   };
 
-  const openBrandingEditor = () => {
+  const openTemplateExample = () => {
     setBrandingDraft({ ...branding });
     setLogoUploadStatus({ kind: "idle", message: "", progress: 0 });
-    setBrandingEditorOpen(true);
+    setTemplateExampleMode("preview");
+    setTemplateExampleOpen(true);
   };
 
   const applyBrandingDraft = () => {
     setSettings((current) => ({ ...current, branding: { ...brandingDraft } }));
-    setBrandingEditorOpen(false);
+    setTemplateExampleMode("preview");
   };
 
   const openTemplateEditor = (signal) => {
@@ -414,11 +416,10 @@ function CustomerEmailSettings({ initialSettings }) {
         <div style={notificationCardHeaderStyle}>
           <div>
             <strong>Branding</strong>
-            <p style={settingsMessageStyle}>Preview the customer email, then edit its logo and footer in one place.</p>
+            <p style={settingsMessageStyle}>Open an example to preview the email or edit its logo and footer branding.</p>
           </div>
-          <button onClick={openBrandingEditor} style={settingsResetButtonStyle} type="button">Edit branding</button>
+          <button onClick={openTemplateExample} style={settingsResetButtonStyle} type="button">Template example</button>
         </div>
-        <NotificationPreview activeTemplate={activeTemplate} branding={branding} senderName={settings.senderName} />
       </section>
 
       <section aria-label="Email templates" style={settingsSectionCardStyle}>
@@ -470,35 +471,43 @@ function CustomerEmailSettings({ initialSettings }) {
 
       {errors.length > 0 ? <p role="alert" style={settingsErrorStyle}>{errors[0]?.message ?? "Unable to save email settings."}</p> : null}
 
-      {brandingEditorOpen ? (
-        <SettingsEditorModal ariaLabel="Edit notification branding" onClose={() => setBrandingEditorOpen(false)} title="Branding">
-          <div className="notification-branding-editor">
-            <div aria-label="Logo settings" style={logoSettingsBlockStyle}>
-              <label style={settingsLabelStyle}>
-                Logo upload
-                <input accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} style={settingsInputStyle} type="file" />
-              </label>
-              {logoUploadStatus.kind !== "idle" ? (
-                <div aria-live="polite" style={logoUploadStatus.kind === "error" ? settingsErrorStyle : settingsMessageStyle}>
-                  <span>{logoUploadStatus.message}</span>
-                  {logoUploadStatus.kind === "uploading" ? (
-                    <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
-                  ) : null}
-                </div>
-              ) : null}
-              <label style={settingsLabelStyle}>Logo URL<input onChange={(event) => setBrandingDraft((current) => ({ ...current, logoUrl: event.target.value }))} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={brandingDraft.logoUrl} /></label>
-              <label style={settingsLabelStyle}>Logo link<input onChange={(event) => setBrandingDraft((current) => ({ ...current, logoLinkUrl: event.target.value }))} placeholder="https://store.cleversystem.ai" style={settingsInputStyle} type="url" value={brandingDraft.logoLinkUrl} /></label>
-              <div style={settingsCoordinateGridStyle}>
-                <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => setBrandingDraft((current) => ({ ...current, logoMode: event.target.value }))} style={settingsSelectStyle} value={brandingDraft.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
-                <label style={settingsLabelStyle}>Logo width<input max="320" min="48" onChange={(event) => setBrandingDraft((current) => ({ ...current, logoWidth: Number(event.target.value) }))} style={settingsInputStyle} type="number" value={brandingDraft.logoWidth} /></label>
-              </div>
-              <label style={settingsLabelStyle}>Footer text<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, footerText: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "92px" }} value={brandingDraft.footerText} /></label>
-            </div>
-            <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} senderName={settings.senderName} />
+      {templateExampleOpen ? (
+        <SettingsEditorModal ariaLabel="Template example" onClose={() => setTemplateExampleOpen(false)} title="Template example">
+          <div aria-label="Template example mode" role="tablist" style={settingsTemplateTabsStyle}>
+            <button aria-selected={templateExampleMode === "preview"} onClick={() => setTemplateExampleMode("preview")} role="tab" style={templateExampleMode === "preview" ? settingsButtonStyle : settingsResetButtonStyle} type="button">Preview</button>
+            <button aria-selected={templateExampleMode === "edit"} onClick={() => setTemplateExampleMode("edit")} role="tab" style={templateExampleMode === "edit" ? settingsButtonStyle : settingsResetButtonStyle} type="button">Edit</button>
           </div>
+          {templateExampleMode === "preview" ? (
+            <NotificationPreview activeTemplate={activeTemplate} branding={branding} senderName={settings.senderName} />
+          ) : null}
+          {templateExampleMode === "edit" ? (
+            <div aria-label="Branding controls">
+              <div aria-label="Logo settings" style={logoSettingsBlockStyle}>
+                <label style={settingsLabelStyle}>
+                  Logo upload
+                  <input accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} style={settingsInputStyle} type="file" />
+                </label>
+                {logoUploadStatus.kind !== "idle" ? (
+                  <div aria-live="polite" style={logoUploadStatus.kind === "error" ? settingsErrorStyle : settingsMessageStyle}>
+                    <span>{logoUploadStatus.message}</span>
+                    {logoUploadStatus.kind === "uploading" ? (
+                      <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
+                    ) : null}
+                  </div>
+                ) : null}
+                <label style={settingsLabelStyle}>Logo URL<input onChange={(event) => setBrandingDraft((current) => ({ ...current, logoUrl: event.target.value }))} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={brandingDraft.logoUrl} /></label>
+                <label style={settingsLabelStyle}>Logo link<input onChange={(event) => setBrandingDraft((current) => ({ ...current, logoLinkUrl: event.target.value }))} placeholder="https://store.cleversystem.ai" style={settingsInputStyle} type="url" value={brandingDraft.logoLinkUrl} /></label>
+                <div style={settingsCoordinateGridStyle}>
+                  <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => setBrandingDraft((current) => ({ ...current, logoMode: event.target.value }))} style={settingsSelectStyle} value={brandingDraft.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
+                  <label style={settingsLabelStyle}>Logo width<input max="320" min="48" onChange={(event) => setBrandingDraft((current) => ({ ...current, logoWidth: Number(event.target.value) }))} style={settingsInputStyle} type="number" value={brandingDraft.logoWidth} /></label>
+                </div>
+                <label style={settingsLabelStyle}>Footer text<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, footerText: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "92px" }} value={brandingDraft.footerText} /></label>
+              </div>
+            </div>
+          ) : null}
           <div style={settingsActionRowStyle}>
-            <button onClick={() => setBrandingEditorOpen(false)} style={settingsResetButtonStyle} type="button">Cancel</button>
-            <button onClick={applyBrandingDraft} style={settingsButtonStyle} type="button">Apply changes</button>
+            <button onClick={() => setTemplateExampleOpen(false)} style={settingsResetButtonStyle} type="button">Close</button>
+            {templateExampleMode === "edit" ? <button onClick={applyBrandingDraft} style={settingsButtonStyle} type="button">Apply changes</button> : null}
           </div>
         </SettingsEditorModal>
       ) : null}
@@ -544,7 +553,6 @@ function SettingsEditorModal({ ariaLabel, children, onClose, title }) {
       style={notificationModalOverlayStyle}
     >
       <section aria-label={ariaLabel} aria-modal="true" role="dialog" style={notificationModalStyle}>
-        <style>{NOTIFICATION_EDITOR_RESPONSIVE_CSS}</style>
         <header style={notificationModalHeaderStyle}>
           <strong>{title}</strong>
           <button aria-label="Close editor" onClick={onClose} style={notificationModalCloseStyle} type="button">×</button>
@@ -754,21 +762,6 @@ const notificationVariableButtonStyle = {
   minHeight: "30px",
   padding: "4px 8px",
 };
-
-const NOTIFICATION_EDITOR_RESPONSIVE_CSS = `
-.notification-branding-editor {
-  align-items: start;
-  display: grid;
-  gap: 16px;
-  grid-template-columns: minmax(260px, 0.8fr) minmax(320px, 1.2fr);
-}
-
-@media (max-width: 760px) {
-  .notification-branding-editor {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-`;
 
 const NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS = `
 @media (prefers-color-scheme: dark) {
