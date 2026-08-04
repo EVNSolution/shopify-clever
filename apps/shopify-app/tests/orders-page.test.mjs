@@ -1531,8 +1531,8 @@ test("Orders route plan side panel does not carry per-order reorder UI", () => {
 
 test("Orders route plan side panel keeps compact copy in a fixed scroll container", () => {
   assert.match(ordersPageSource, /const routePlanScrollAreaStyle = \{/);
-  assert.match(ordersPageSource, /height:\s*"420px"/);
-  assert.match(ordersPageSource, /maxHeight:\s*"420px"/);
+  assert.match(ordersPageSource, /height: `\$\{ordersMapHeight\}px`/);
+  assert.match(ordersPageSource, /maxHeight: `\$\{ordersMapHeight\}px`/);
   assert.match(ordersPageSource, /flexDirection:\s*"column"/);
   assert.match(ordersPageSource, /overflowY:\s*"auto"/);
   assert.match(ordersPageSource, /minHeight:\s*0/);
@@ -1657,7 +1657,7 @@ test("Orders map has a compact refresh control for recovering failed tile loads"
   assert.match(ordersPageSource, /\}, \[activeOrdersView, clearMapSourceSyncRetryTimer, mapRenderKey, requestMapSourceSync, scheduleMapRecovery\]\)/);
   assert.match(ordersPageSource, /canvasKey=\{mapRenderKey\}/);
   assert.match(ordersPageSource, /ariaLabel: "Refresh map"/);
-  assert.match(ordersPageSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/map-panel"/);
+  assert.match(ordersPageSource, /import \{ MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "(?:\.\.\/ui|\.\.\/\.\.\/ui)\/map-panel"/);
   assert.match(ordersPageSource, /<MapPanel/);
   assert.match(ordersPageSource, /<MapToolbar/);
   assert.match(mapPanelSource, /flexDirection: "column"/);
@@ -2064,13 +2064,26 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /formData\.set\("filters", JSON\.stringify\(Object\.fromEntries\(resourceFilterSearchParams\)\)\)/);
   assert.match(ordersPageSource, /const ordersCurrentPage = getPositiveInteger\(ordersPageInfo\?\.currentPage\)/);
   assert.match(ordersPageSource, /const ordersTotalPages = getPositiveInteger\(ordersPageInfo\?\.totalPages\)/);
-  assert.match(ordersPageSource, /function getOrdersPageNumbers\(currentPage, totalPages\)/);
+  assert.match(ordersPageSource, /import \{ getOrdersPageNumbers \} from "\.\/orders-pagination"/);
   assert.match(ordersPageSource, /ordersPageNumbers\.map\(\(pageNumber\) =>/);
   assert.match(ordersPageSource, /typeof pageNumber !== "number"/);
   assert.match(ordersPageSource, /aria-current=\{active \? "page" : undefined\}/);
   assert.match(ordersPageSource, /onClick=\{\(\) => handleOrdersPageChange\(pageNumber\)\}/);
   assert.match(ordersPageSource, /readWatermark: ordersPageInfo\?\.readWatermark/);
   assert.doesNotMatch(ordersPageSource, />Previous<\/button>|>Next<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /Frozen selected set/);
+});
+
+test("Orders map and route plan share an accessible resizable height", () => {
+  assert.match(mapPanelSource, /export function MapResizeHandle/);
+  assert.match(mapPanelSource, /role="slider"/);
+  assert.match(mapPanelSource, /setPointerCapture/);
+  assert.match(mapPanelSource, /aria-valuenow/);
+  assert.match(ordersPageSource, /const \[ordersMapHeight, setOrdersMapHeight\] = useState\(ORDERS_MAP_DEFAULT_HEIGHT\)/);
+  assert.match(ordersPageSource, /frameStyle=\{\{ height: `\$\{ordersMapHeight\}px` \}\}/);
+  assert.match(ordersPageSource, /height: `\$\{ordersMapHeight\}px`/);
+  assert.match(ordersPageSource, /<MapResizeHandle[\s\S]*onChange=\{setOrdersMapHeight\}/);
+  assert.match(ordersPageSource, /\[isMapReady, isMapWide, ordersMapHeight\]/);
 });
 
 test("Orders map renders planned pins and the focused table-click pin", () => {
