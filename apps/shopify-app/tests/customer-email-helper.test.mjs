@@ -49,9 +49,19 @@ test("customer email test forwards its correlation id", async () => {
     confirmed: true,
     recipientEmail: "customer@example.com",
     signal: "DELIVERY_SCHEDULED",
+    subject: "Edited test subject",
+    body: "Edited test body",
   }, { fetch, sessionToken: "token" });
 
   assert.equal(fetch.calls[0].init.headers["x-correlation-id"], "attempt-1");
+  assert.deepEqual(JSON.parse(fetch.calls[0].init.body), {
+    attemptId: "attempt-1",
+    confirmed: true,
+    recipientEmail: "customer@example.com",
+    signal: "DELIVERY_SCHEDULED",
+    subject: "Edited test subject",
+    body: "Edited test body",
+  });
   assert.equal(result.attemptId, "attempt-1");
   assert.equal(result.test.messageId, "message-1");
 });
