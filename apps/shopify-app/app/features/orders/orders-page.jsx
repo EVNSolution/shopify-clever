@@ -6019,11 +6019,14 @@ function OrdersPageContent({ loaderData }) {
             : null}
           {paginationEnabled ? (
             <nav aria-label="Orders pagination" style={ordersPaginationBlockStyle}>
-              <span aria-label="Orders page status" style={orderSelectionCountStyle}>
-                Page {ordersCurrentPage} of {ordersTotalPages}
+              <span
+                aria-label="Orders page status"
+                style={{ ...orderSelectionCountStyle, display: "flex", gap: "12px" }}
+              >
                 {ordersPageResult?.countPrecision === "exact" && ordersPageResult.count != null
-                  ? `, ${ordersPageResult.count} orders`
-                  : ""}
+                  ? <span>{ordersPageResult.count} total orders</span>
+                  : null}
+                <span>Page {ordersCurrentPage} of {ordersTotalPages}</span>
               </span>
               <div style={ordersPaginationButtonsStyle}>
                 {ordersPageNumbers.map((pageNumber) => {
