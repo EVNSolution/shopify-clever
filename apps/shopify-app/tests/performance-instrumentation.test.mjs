@@ -85,11 +85,12 @@ test("Orders resource transitions reuse a short-lived in-memory App Bridge sessi
   assert.doesNotMatch(ordersPageSource, /const idToken = await shopify\.idToken\(\);[\s\S]{0,200}loadOrdersPageResource/);
 });
 
-test("Orders prefetches one bounded adjacent page and restores the previous page from memory", () => {
+test("Orders prefetches one bounded numeric page and restores pages from memory", () => {
   assert.match(ordersPageSource, /const ordersPagePrefetchFetcher = useFetcher\(\)/);
-  assert.match(ordersPageSource, /after: ordersPageInfo\.endCursor/);
+  assert.match(ordersPageSource, /const nextPage = getPositiveInteger\(ordersPageInfo\.currentPage\) \+ 1/);
+  assert.match(ordersPageSource, /page: nextPage/);
   assert.match(ordersPageSource, /ordersPageCacheRef\.current\.get\(cacheKey\)/);
-  assert.match(ordersPageSource, /getReverseOrdersPageCacheEntry\(\{/);
+  assert.match(ordersPageSource, /getOrdersPageCacheKey\(resourceFilterKey, "page", currentPageNumber\)/);
   assert.doesNotMatch(ordersPageSource, /localStorage[\s\S]{0,500}ordersPageCache/);
 });
 

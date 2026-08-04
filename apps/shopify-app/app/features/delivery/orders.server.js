@@ -279,18 +279,26 @@ function normalizePageFilters(filters) {
   const normalizedFilters = normalizeObject(filters);
   const rawAfter = normalizedFilters.after;
   const rawBefore = normalizedFilters.before;
+  const rawPage = normalizedFilters.page;
+  const rawReadWatermark = normalizedFilters.readWatermark;
   const rest = { ...normalizedFilters };
   delete rest.after;
   delete rest.before;
+  delete rest.page;
+  delete rest.readWatermark;
   delete rest.pageSize;
   delete rest.sort;
   const after = textOrUndefined(rawAfter);
   const before = after ? undefined : textOrUndefined(rawBefore);
+  const page = after || before ? undefined : integerOrUndefined(rawPage);
+  const readWatermark = textOrUndefined(rawReadWatermark);
 
   return {
     ...rest,
     pageSize: 50,
     sort: "id_desc",
+    ...(page ? { page } : {}),
+    ...(page && readWatermark ? { readWatermark } : {}),
     ...(after ? { after } : {}),
     ...(before ? { before } : {}),
   };
@@ -299,12 +307,15 @@ function normalizePageFilters(filters) {
 function normalizeOrdersPageInfo(value) {
   const pageInfo = normalizeObject(value);
   return {
+    currentPage: integerOrUndefined(pageInfo.currentPage) ?? 1,
     endCursor: textOrNull(pageInfo.endCursor),
     hasNextPage: pageInfo.hasNextPage === true,
     hasPreviousPage: pageInfo.hasPreviousPage === true,
     pageSize: integerOrUndefined(pageInfo.pageSize) ?? 50,
+    readWatermark: textOrNull(pageInfo.readWatermark),
     sort: textOrUndefined(pageInfo.sort) ?? "id_desc",
     startCursor: textOrNull(pageInfo.startCursor),
+    totalPages: integerOrUndefined(pageInfo.totalPages) ?? 1,
   };
 }
 
