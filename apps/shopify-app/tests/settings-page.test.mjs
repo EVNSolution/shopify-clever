@@ -8,6 +8,14 @@ const settingsPageSource = readFileSync(
   join(root, "app/routes/app.settings.jsx"),
   "utf8",
 );
+const notificationsPageSource = readFileSync(
+  join(root, "app/routes/app.settings_.notifications.jsx"),
+  "utf8",
+);
+const settingsLayoutSource = readFileSync(
+  join(root, "app/features/settings/settings-layout.jsx"),
+  "utf8",
+);
 const settingsDepartureMapSource = readFileSync(
   join(root, "app/features/settings/settings-departure-map.jsx"),
   "utf8",
@@ -27,6 +35,7 @@ test("Settings tab reads the Shopify departure location", () => {
   assert.match(settingsPageSource, /Promise\.all\(\[/);
   assert.match(settingsPageSource, /fetchShopifyDepartureLocation\(admin, \{ cacheKey: shopifyShopCacheKey \}\)/);
   assert.match(settingsPageSource, /fetchShopifyAppPreferences\(admin\)/);
+  assert.doesNotMatch(settingsPageSource, /fetchCustomerEmailSettings/);
   assert.doesNotMatch(settingsPageSource, /useSearchParams|searchParams\.get\("section"\)/);
 });
 
@@ -73,7 +82,8 @@ test("Settings renders language as a General fieldset without card sections", ()
   assert.match(settingsPageSource, /const \[language, setLanguage\] = useState\(activeLanguage\)/);
   assert.match(settingsPageSource, /const copy = useCallback\(\(key, params\) => translate\(language, key, params\)/);
   assert.match(settingsPageSource, /<fieldset style=\{settingsFieldsetStyle\}>[\s\S]*<legend style=\{settingsLegendStyle\}>\{copy\("settings\.general\.title"\)\}<\/legend>/);
-  assert.match(settingsPageSource, /const settingsSelectStyle = \{[\s\S]*\.\.\.settingsInputStyle,[\s\S]*height: "36px"/);
+  assert.match(settingsPageSource, /settingsSelectStyle/);
+  assert.match(settingsLayoutSource, /export const settingsSelectStyle = \{[\s\S]*\.\.\.settingsInputStyle,[\s\S]*height: "36px"/);
   assert.match(settingsPageSource, /<select[\s\S]*name="language"[\s\S]*style=\{settingsSelectStyle\}[\s\S]*value=\{language\}/);
   assert.match(settingsPageSource, /SUPPORTED_LANGUAGES\.map\(\(option\) =>/);
   assert.match(settingsPageSource, /<option key=\{option\.code\} value=\{option\.code\}>/);
@@ -140,10 +150,10 @@ test("Settings refreshes after a successful save and shows readonly marker coord
 });
 
 test("Settings shows the save success alert at the bottom in green text", () => {
-  assert.match(settingsPageSource, /const settingsSaveStatusStyle = \{/);
-  assert.match(settingsPageSource, /color: "#008060"/);
-  assert.match(settingsPageSource, /fontSize: "14px"/);
-  assert.match(settingsPageSource, /minHeight: "34px"/);
+  assert.match(settingsLayoutSource, /export const settingsSaveStatusStyle = \{/);
+  assert.match(settingsLayoutSource, /color: "#008060"/);
+  assert.match(settingsLayoutSource, /fontSize: "14px"/);
+  assert.match(settingsLayoutSource, /minHeight: "34px"/);
   assert.match(settingsPageSource, /const shouldShowSaveStatus = Boolean/);
   assert.match(settingsPageSource, /function formatSavedDepartureMessage\(name, copy\)/);
   assert.doesNotMatch(settingsPageSource, /Departure location "\$\{trimmedName\}" has been saved\./);
@@ -152,16 +162,57 @@ test("Settings shows the save success alert at the bottom in green text", () => 
   assert.match(settingsPageSource, /copy\("settings\.departureLocation\.saved"\)/);
   assert.match(settingsPageSource, /shouldShowSaveStatus \? \(/);
   assert.match(settingsPageSource, /<p role="status" style=\{settingsSaveStatusStyle\}>\{savedDepartureMessage\}<\/p>/);
-  assert.match(settingsPageSource, /const settingsButtonGroupStyle = \{/);
+  assert.match(settingsLayoutSource, /export const settingsButtonGroupStyle = \{/);
   assert.match(settingsPageSource, /style=\{settingsButtonGroupStyle\}/);
   assert.doesNotMatch(settingsPageSource, />Saved\.<\/p>/);
   assert.doesNotMatch(settingsPageSource, /style=\{settingsMessageStyle\}>Saved\.<\/p>/);
 });
 
+test("Settings splits General and Customer Notifications into internal routes", () => {
+  assert.match(settingsPageSource, /<SettingsLayout>/);
+  assert.match(notificationsPageSource, /<SettingsLayout>/);
+  assert.match(settingsLayoutSource, /href: "\/app\/settings"/);
+  assert.match(settingsLayoutSource, /href: "\/app\/settings\/notifications"/);
+  assert.match(settingsLayoutSource, /Customer Notifications/);
+  assert.match(settingsLayoutSource, /aria-label="Settings sections"/);
+  assert.match(settingsLayoutSource, /grid-template-columns: 160px minmax\(0, 760px\)/);
+  assert.match(settingsLayoutSource, /@media \(max-width: 760px\)/);
+  assert.match(settingsLayoutSource, /overflow-x: auto/);
+  assert.doesNotMatch(settingsPageSource, /CustomerEmailSettings|saveCustomerEmailSettings|testCustomerEmail/);
+});
+
+test("Customer Notifications keeps sender, templates, tests, and modern branding preview", () => {
+  assert.match(notificationsPageSource, /fetchCustomerEmailSettings/);
+  assert.match(notificationsPageSource, /saveCustomerEmailSettings/);
+  assert.match(notificationsPageSource, /sendCustomerEmailTest/);
+  assert.match(notificationsPageSource, /version: 2/);
+  assert.match(notificationsPageSource, /branding: \{/);
+  assert.match(notificationsPageSource, /senderEmail/);
+  assert.match(notificationsPageSource, /senderName/);
+  assert.match(notificationsPageSource, /settings\?\.senderEmail \?\? sender\.email/);
+  assert.match(notificationsPageSource, /settings\?\.senderName \?\? sender\.name/);
+  assert.match(notificationsPageSource, /BRANDING_COLOR_FIELDS/);
+  assert.match(notificationsPageSource, /type="color"/);
+  assert.match(notificationsPageSource, /HTTPS logo URL/);
+  assert.match(notificationsPageSource, /formHttpsUrl\(formData\.get\("branding\.logoUrl"\)\)/);
+  assert.match(notificationsPageSource, /logoMode/);
+  assert.match(notificationsPageSource, /logoWidth/);
+  assert.match(notificationsPageSource, /logoLinkUrl/);
+  assert.match(notificationsPageSource, /logoAltText/);
+  assert.match(notificationsPageSource, /previewText/);
+  assert.match(notificationsPageSource, /footerText/);
+  assert.match(notificationsPageSource, /showPoweredByClever/);
+  assert.doesNotMatch(notificationsPageSource, /primaryColor|poweredByEnabled|logoHref|logoAlt:/);
+  assert.match(notificationsPageSource, /Live notification preview/);
+  assert.match(notificationsPageSource, /Email templates/);
+  assert.match(notificationsPageSource, /Send test/);
+  assert.doesNotMatch(notificationsPageSource, /type="file"|upload/i);
+});
+
 test("Settings tab is a plain editable form without explainer cards", () => {
   assert.match(settingsPageSource, /import \{ PageShell \} from "\.\.\/ui\/page-shell"/);
   assert.doesNotMatch(settingsPageSource, /PageSection|PageGrid|ValueList|StatusPill|PageNote/);
-  assert.doesNotMatch(settingsPageSource, /aria-label="Settings sections"|ariaLabel="User variables"|ariaLabel="Runtime\/system values"/);
+  assert.doesNotMatch(settingsPageSource, /ariaLabel="User variables"|ariaLabel="Runtime\/system values"/);
   assert.doesNotMatch(settingsPageSource, /Settings sections|User variables|Runtime\/system values/);
   assert.doesNotMatch(settingsPageSource, /currentUserVariableItems|runtimeSystemValueItems|storeConnectionItems|apiConnectionItems/);
   assert.doesNotMatch(settingsPageSource, /planningDefaultItems|deliveryRuleItems|geocodingItems|syncWebhookItems|capacityItems|advancedItems/);

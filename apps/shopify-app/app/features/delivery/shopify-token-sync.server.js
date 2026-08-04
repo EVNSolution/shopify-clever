@@ -2,6 +2,7 @@ import { getDeliveryApiBaseUrl } from "./route-plans.server.js";
 
 const TOKEN_SYNC_TTL_MS = 5 * 60 * 1000;
 const lastSyncedAtByShop = new Map();
+const inFlightSyncByShop = new Map();
 
 export async function syncShopifyOfflineTokenToDeliveryApi(
   request,
@@ -18,6 +19,27 @@ export async function syncShopifyOfflineTokenToDeliveryApi(
     return { skipped: true };
   }
 
+  const inFlightSync = inFlightSyncByShop.get(shopDomain);
+  if (inFlightSync) return inFlightSync;
+
+  const syncPromise = syncShopifyOfflineToken(shopDomain, authorization, {
+    fetch: fetchImpl,
+    now,
+  });
+  inFlightSyncByShop.set(shopDomain, syncPromise);
+
+  try {
+    return await syncPromise;
+  } finally {
+    inFlightSyncByShop.delete(shopDomain);
+  }
+}
+
+async function syncShopifyOfflineToken(
+  shopDomain,
+  authorization,
+  { fetch: fetchImpl, now },
+) {
   const response = await fetchImpl(`${getDeliveryApiBaseUrl()}/shopify/auth/token-exchange`, {
     body: JSON.stringify({ shopDomain }),
     headers: {
