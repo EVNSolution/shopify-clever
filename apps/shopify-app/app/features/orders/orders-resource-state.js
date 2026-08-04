@@ -12,6 +12,7 @@ export function buildOrdersResourceRequest(resource, filterSearchParams, options
   const searchParams = new URLSearchParams(filterSearchParams ?? "");
   searchParams.delete("after");
   searchParams.delete("before");
+  searchParams.delete("page");
   searchParams.delete("id_token");
   searchParams.delete("_requestKey");
 
@@ -19,8 +20,8 @@ export function buildOrdersResourceRequest(resource, filterSearchParams, options
     action: path,
     payload: {
       filters: Object.fromEntries(searchParams),
-      ...(options.after ? { after: options.after } : {}),
-      ...(options.before ? { before: options.before } : {}),
+      ...(options.page ? { page: String(options.page) } : {}),
+      ...(options.readWatermark ? { readWatermark: options.readWatermark } : {}),
       ...(resource === "map" && options.limit ? { limit: String(options.limit) } : {}),
       ...(options.requestKey ? { _requestKey: options.requestKey } : {}),
       ...(options.idToken ? { shopifySessionToken: options.idToken } : {}),
@@ -33,7 +34,7 @@ export function shouldApplyOrdersResourceResponse(data, requestKey) {
 }
 
 export function getOrdersPageCacheKey(filterKey, direction, cursor) {
-  if (!cursor || !["next", "previous"].includes(direction)) return null;
+  if (!cursor || !["next", "previous", "page"].includes(direction)) return null;
   return `${String(filterKey ?? "")}\n${direction}\n${cursor}`;
 }
 

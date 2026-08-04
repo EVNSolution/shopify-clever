@@ -14,14 +14,20 @@ import {
 test("Orders resource requests keep filters and session tokens out of URLs", () => {
   const request = buildOrdersResourceRequest(
     "page",
-    new URLSearchParams({ deliveryArea: "North, East", search: "kim lee", before: "stale" }),
-    { after: "next", idToken: "token", requestKey: "page-2" },
+    new URLSearchParams({ deliveryArea: "North, East", search: "kim lee", before: "stale", page: "9" }),
+    {
+      idToken: "token",
+      page: 2,
+      readWatermark: "2026-08-04T00:00:00.000Z",
+      requestKey: "page-2",
+    },
   );
   assert.equal(request.action, "/app/orders/page");
   assert.equal(request.action.includes("?"), false);
   assert.deepEqual(request.payload, {
     _requestKey: "page-2",
-    after: "next",
+    page: "2",
+    readWatermark: "2026-08-04T00:00:00.000Z",
     filters: { deliveryArea: "North, East", search: "kim lee" },
     shopifySessionToken: "token",
   });

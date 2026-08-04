@@ -16,7 +16,6 @@ import { getOrderAreaSuggestion } from "./order-area-suggestion";
 import {
   buildOrdersResourceRequest,
   getOrdersPageCacheKey,
-  getReverseOrdersPageCacheEntry,
   mapCompactOrderPointsToRows,
   shouldApplyOrdersResourceResponse,
   updateOrdersSelectionExclusions,
@@ -95,6 +94,43 @@ function submitOrdersResourceRequest(submit, resource, filterSearchParams, optio
     action: request.action,
     encType: "application/json",
     method: "post",
+  });
+}
+
+function getOrdersResourceFilters(filters = {}) {
+  return {
+    ...filters,
+    scope: ORDER_HISTORY_SCOPE,
+    tab: "all",
+  };
+}
+
+function getPositiveInteger(value, fallback = 1) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : fallback;
+}
+
+function getOrdersPageNumbers(currentPage, totalPages) {
+  if (totalPages <= 11) {
+    return Array.from({ length: totalPages }, (_value, index) => index + 1);
+  }
+
+  const visiblePages = new Set([
+    1,
+    2,
+    currentPage - 2,
+    currentPage - 1,
+    currentPage,
+    currentPage + 1,
+    currentPage + 2,
+    totalPages - 1,
+    totalPages,
+  ].filter((page) => page >= 1 && page <= totalPages));
+  const sortedPages = [...visiblePages].sort((left, right) => left - right);
+
+  return sortedPages.flatMap((page, index) => {
+    const previousPage = sortedPages[index - 1];
+    return previousPage && page - previousPage > 1 ? [`ellipsis-${page}`, page] : [page];
   });
 }
 
@@ -539,6 +575,43 @@ const tableWrapStyle = {
   paddingBottom: "10px",
   paddingRight: "10px",
   scrollbarGutter: "stable",
+};
+
+const ordersPaginationBlockStyle = {
+  alignItems: "center",
+  borderBottom: "1px solid #ebebeb",
+  borderTop: "1px solid #ebebeb",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "8px",
+  justifyContent: "space-between",
+  margin: "12px 10px 14px",
+  padding: "10px 0",
+};
+
+const ordersPaginationButtonsStyle = {
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "6px",
+};
+
+const activeOrdersPageButtonStyle = {
+  ...createRouteButtonStyle,
+  minWidth: "32px",
+  padding: "4px 10px",
+};
+
+const ordersPageButtonStyle = {
+  ...orderFilterButtonStyle,
+  minWidth: "32px",
+  padding: "4px 10px",
+};
+
+const disabledOrdersPageButtonStyle = {
+  ...disabledOrderFilterButtonStyle,
+  minWidth: "32px",
+  padding: "4px 10px",
 };
 
 const orderFilterControlStyle = {
@@ -2602,7 +2675,10 @@ function OrdersPageContent({ loaderData }) {
     [searchParams],
   );
   const resourceFilterSearchParams = useMemo(() => {
-    const resourceFilters = updateOrderFilterSearchParams(new URLSearchParams(), urlOrderFilters);
+    const resourceFilters = updateOrderFilterSearchParams(
+      new URLSearchParams(),
+      getOrdersResourceFilters(urlOrderFilters),
+    );
     if (shopLocalDate) resourceFilters.set("routeOpsToday", shopLocalDate);
     return resourceFilters;
   }, [shopLocalDate, urlOrderFilters]);
@@ -2708,13 +2784,9 @@ function OrdersPageContent({ loaderData }) {
 
     const pendingNavigation = pendingPageNavigationRef.current;
     if (pendingNavigation?.requestKey === ordersPageFetcher.data._requestKey) {
-      const reverseEntry = getReverseOrdersPageCacheEntry({
-        currentPage: pendingNavigation.currentPage,
-        direction: pendingNavigation.direction,
-        filterKey: resourceFilterKey,
-        targetPage: ordersPageFetcher.data,
-      });
-      if (reverseEntry) ordersPageCacheRef.current.set(reverseEntry.key, reverseEntry.value);
+      const currentPageNumber = pendingNavigation.currentPage?.pageInfo?.currentPage;
+      const cacheKey = getOrdersPageCacheKey(resourceFilterKey, "page", currentPageNumber);
+      if (cacheKey) ordersPageCacheRef.current.set(cacheKey, pendingNavigation.currentPage);
       pendingPageNavigationRef.current = null;
     }
 
@@ -2750,13 +2822,14 @@ function OrdersPageContent({ loaderData }) {
       ordersPageFetcher.state !== "idle" ||
       ordersPagePrefetchFetcher.state !== "idle" ||
       !ordersPageInfo?.hasNextPage ||
-      !ordersPageInfo?.endCursor
+      !ordersPageInfo?.currentPage
     ) return;
 
+    const nextPage = getPositiveInteger(ordersPageInfo.currentPage) + 1;
     const cacheKey = getOrdersPageCacheKey(
       resourceFilterKey,
-      "next",
-      ordersPageInfo.endCursor,
+      "page",
+      nextPage,
     );
     if (!cacheKey || ordersPageCacheRef.current.has(cacheKey)) return;
 
@@ -2772,8 +2845,9 @@ function OrdersPageContent({ loaderData }) {
         "page",
         resourceFilterSearchParams,
         {
-          after: ordersPageInfo.endCursor,
           idToken,
+          page: nextPage,
+          readWatermark: ordersPageInfo.readWatermark,
           requestKey,
         },
       );
@@ -2786,8 +2860,9 @@ function OrdersPageContent({ loaderData }) {
     getOrdersResourceSessionToken,
     submitOrdersPagePrefetchResource,
     ordersPageFetcher.state,
-    ordersPageInfo?.endCursor,
+    ordersPageInfo?.currentPage,
     ordersPageInfo?.hasNextPage,
+    ordersPageInfo?.readWatermark,
     ordersPagePrefetchFetcher.state,
     paginationEnabled,
     resourceFilterKey,
@@ -3611,6 +3686,12 @@ function OrdersPageContent({ loaderData }) {
   );
 
   const tableOrders = sortedOrders;
+  const ordersCurrentPage = getPositiveInteger(ordersPageInfo?.currentPage);
+  const ordersTotalPages = getPositiveInteger(ordersPageInfo?.totalPages);
+  const ordersPageNumbers = useMemo(
+    () => getOrdersPageNumbers(ordersCurrentPage, ordersTotalPages),
+    [ordersCurrentPage, ordersTotalPages],
+  );
   const tableWidth = lockedTableWidth ? `max(100%, ${lockedTableWidth}px)` : "100%";
   const checkedOrders = useMemo(
     () => checkedOrderIds.map((orderId) => displayOrderById.get(orderId)).filter(Boolean),
@@ -4114,12 +4195,12 @@ function OrdersPageContent({ loaderData }) {
     );
   };
 
-  const handleOrdersPageChange = async (direction) => {
+  const handleOrdersPageChange = async (targetPage) => {
     if (!paginationEnabled || ordersPageFetcher.state !== "idle") return;
-    const cursor = direction === "next"
-      ? ordersPageInfo?.endCursor
-      : ordersPageInfo?.startCursor;
-    if (!cursor) return;
+    const currentPageNumber = getPositiveInteger(ordersPageInfo?.currentPage);
+    const totalPages = getPositiveInteger(ordersPageInfo?.totalPages);
+    const nextPage = getPositiveInteger(targetPage);
+    if (nextPage === currentPageNumber || nextPage > totalPages) return;
 
     const requestKey = `page-${resourceSequenceRef.current + 1}`;
     resourceSequenceRef.current += 1;
@@ -4130,18 +4211,13 @@ function OrdersPageContent({ loaderData }) {
       result: ordersPageResult,
       rows: tableRows,
     };
-    const cacheKey = getOrdersPageCacheKey(resourceFilterKey, direction, cursor);
+    const cacheKey = getOrdersPageCacheKey(resourceFilterKey, "page", nextPage);
     const cachedPage = cacheKey ? ordersPageCacheRef.current.get(cacheKey) : null;
 
     if (cachedPage) {
       ordersPageCacheRef.current.delete(cacheKey);
-      const reverseEntry = getReverseOrdersPageCacheEntry({
-        currentPage,
-        direction,
-        filterKey: resourceFilterKey,
-        targetPage: cachedPage,
-      });
-      if (reverseEntry) ordersPageCacheRef.current.set(reverseEntry.key, reverseEntry.value);
+      const currentCacheKey = getOrdersPageCacheKey(resourceFilterKey, "page", currentPageNumber);
+      if (currentCacheKey) ordersPageCacheRef.current.set(currentCacheKey, currentPage);
 
       setTableRows(Array.isArray(cachedPage.rows) ? cachedPage.rows : []);
       setOrdersPageInfo(cachedPage.pageInfo ?? null);
@@ -4155,13 +4231,14 @@ function OrdersPageContent({ loaderData }) {
       return;
     }
 
-    pendingPageNavigationRef.current = { currentPage, direction, requestKey };
+    pendingPageNavigationRef.current = { currentPage, requestKey };
     const idToken = await getOrdersResourceSessionToken();
     if (!idToken) return;
 
     submitOrdersResourceRequest(submitOrdersPageResource, "page", resourceFilterSearchParams, {
-      ...(direction === "next" ? { after: cursor } : { before: cursor }),
       idToken,
+      page: nextPage,
+      readWatermark: ordersPageInfo?.readWatermark,
       requestKey,
     });
   };
@@ -5947,6 +6024,40 @@ function OrdersPageContent({ loaderData }) {
                 document.body,
               )
             : null}
+          {paginationEnabled ? (
+            <nav aria-label="Orders pagination" style={ordersPaginationBlockStyle}>
+              <span aria-label="Orders page status" style={orderSelectionCountStyle}>
+                Page {ordersCurrentPage} of {ordersTotalPages}
+                {ordersPageResult?.countPrecision === "exact" && ordersPageResult.count != null
+                  ? `, ${ordersPageResult.count} orders`
+                  : ""}
+              </span>
+              <div style={ordersPaginationButtonsStyle}>
+                {ordersPageNumbers.map((pageNumber) => {
+                  if (typeof pageNumber !== "number") {
+                    return <span key={pageNumber} aria-hidden="true">…</span>;
+                  }
+                  const active = pageNumber === ordersCurrentPage;
+                  const disabled = active || ordersPageFetcher.state !== "idle";
+                  return (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      aria-current={active ? "page" : undefined}
+                      aria-label={`Go to orders page ${pageNumber}`}
+                      style={
+                        active
+                          ? activeOrdersPageButtonStyle
+                          : disabled ? disabledOrdersPageButtonStyle : ordersPageButtonStyle
+                      }
+                      disabled={disabled}
+                      onClick={() => handleOrdersPageChange(pageNumber)}
+                    >{pageNumber}</button>
+                  );
+                })}
+              </div>
+            </nav>
+          ) : null}
           <div style={tableWrapStyle}>
             <table
               ref={tableRef}
@@ -6261,22 +6372,6 @@ function OrdersPageContent({ loaderData }) {
                 })}
               </tbody>
             </table>
-            {paginationEnabled ? (
-              <div aria-label="Orders pagination" style={orderControlsTrailingStyle}>
-                <button
-                  type="button"
-                  style={ordersPageInfo?.hasPreviousPage && ordersPageFetcher.state === "idle" ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
-                  disabled={!ordersPageInfo?.hasPreviousPage || ordersPageFetcher.state !== "idle"}
-                  onClick={() => handleOrdersPageChange("previous")}
-                >Previous</button>
-                <button
-                  type="button"
-                  style={ordersPageInfo?.hasNextPage && ordersPageFetcher.state === "idle" ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
-                  disabled={!ordersPageInfo?.hasNextPage || ordersPageFetcher.state !== "idle"}
-                  onClick={() => handleOrdersPageChange("next")}
-                >Next</button>
-              </div>
-            ) : null}
           </div>
         </div>
       }

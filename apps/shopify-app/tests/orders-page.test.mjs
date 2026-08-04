@@ -20,6 +20,10 @@ import {
 const root = process.cwd();
 
 const ordersPageSource = readOrdersPageSource();
+const ordersPageServerSource = readFileSync(
+  join(root, "app/features/orders/orders-page.server.js"),
+  "utf8",
+);
 const rootDocumentSource = readFileSync(join(root, "app/root.jsx"), "utf8");
 const shopifyOrdersSource = readFileSync(
   join(root, "app/features/orders/shopify-orders.server.js"),
@@ -2042,6 +2046,31 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.doesNotMatch(ordersPageSource, /Include past and planned orders/);
   assert.doesNotMatch(ordersPageSource, />\s*Un-routed\s*<\/button>/);
   assert.doesNotMatch(ordersPageSource, /Show routed orders/);
+});
+
+test("Orders paginated resource defaults to all history orders and renders numeric page buttons", () => {
+  assert.match(
+    ordersPageSource,
+    /function getOrdersResourceFilters\(filters = \{\}\) \{[\s\S]*scope: ORDER_HISTORY_SCOPE,[\s\S]*tab: "all"/,
+  );
+  assert.match(
+    ordersPageSource,
+    /updateOrderFilterSearchParams\([\s\S]*new URLSearchParams\(\),[\s\S]*getOrdersResourceFilters\(urlOrderFilters\),[\s\S]*\)/,
+  );
+  assert.match(
+    ordersPageServerSource,
+    /getOrdersResourceFilters\(getOrderFiltersFromSearchParams\([\s\S]*page: 1,[\s\S]*routeOpsToday/,
+  );
+  assert.match(ordersPageSource, /formData\.set\("filters", JSON\.stringify\(Object\.fromEntries\(resourceFilterSearchParams\)\)\)/);
+  assert.match(ordersPageSource, /const ordersCurrentPage = getPositiveInteger\(ordersPageInfo\?\.currentPage\)/);
+  assert.match(ordersPageSource, /const ordersTotalPages = getPositiveInteger\(ordersPageInfo\?\.totalPages\)/);
+  assert.match(ordersPageSource, /function getOrdersPageNumbers\(currentPage, totalPages\)/);
+  assert.match(ordersPageSource, /ordersPageNumbers\.map\(\(pageNumber\) =>/);
+  assert.match(ordersPageSource, /typeof pageNumber !== "number"/);
+  assert.match(ordersPageSource, /aria-current=\{active \? "page" : undefined\}/);
+  assert.match(ordersPageSource, /onClick=\{\(\) => handleOrdersPageChange\(pageNumber\)\}/);
+  assert.match(ordersPageSource, /readWatermark: ordersPageInfo\?\.readWatermark/);
+  assert.doesNotMatch(ordersPageSource, />Previous<\/button>|>Next<\/button>/);
 });
 
 test("Orders map renders planned pins and the focused table-click pin", () => {

@@ -52,7 +52,7 @@ import {
   textOrUndefined,
   withPromiseTimeout,
 } from "./orders-page.shared";
-import { getOrderFiltersFromSearchParams } from "./order-filters";
+import { getOrderFiltersFromSearchParams, ORDER_HISTORY_SCOPE } from "./order-filters";
 import { resolveOrdersResourceFeatureFlags } from "./orders-resource-flags";
 import {
   fetchShopifyShopTimeZone,
@@ -853,7 +853,8 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
       ? shopTimeZoneDataPromise.then(({ data: shopTimeZoneData }) => fetchDeliveryOrdersPage(
           request,
           {
-            ...getOrderFiltersFromSearchParams(new URL(request.url).searchParams),
+            ...getOrdersResourceFilters(getOrderFiltersFromSearchParams(new URL(request.url).searchParams)),
+            page: 1,
             routeOpsToday: getShopLocalDate(shopTimeZoneData),
           },
           { cacheKey: shopifyShopCacheKey },
@@ -1029,8 +1030,8 @@ export async function loadOrdersPageResource(request) {
       request,
       {
         ...payload.filters,
-        after: payload.after,
-        before: payload.before,
+        page: payload.page ?? 1,
+        readWatermark: payload.readWatermark,
       },
       { sessionToken: payload.shopifySessionToken },
     );
@@ -1191,6 +1192,8 @@ async function readResourcePayload(request) {
     excludeOrderIds: parseJsonArray(formData.get("excludeOrderIds")),
     filters: parseJsonObject(formData.get("filters")),
     limit: textOrUndefined(formData.get("limit")),
+    page: textOrUndefined(formData.get("page")),
+    readWatermark: textOrUndefined(formData.get("readWatermark")),
     _requestKey: textOrUndefined(formData.get("_requestKey")),
     selectionToken: textOrUndefined(formData.get("selectionToken")),
     shopifySessionToken: textOrUndefined(formData.get("shopifySessionToken")),
@@ -1214,8 +1217,24 @@ async function readOrdersQueryResourcePayload(request) {
       ? payload.filters
       : {},
     limit: textOrUndefined(payload.limit),
+    page: integerOrUndefined(payload.page),
+    readWatermark: textOrUndefined(payload.readWatermark),
     shopifySessionToken: sessionToken,
   };
+}
+
+function getOrdersResourceFilters(filters = {}) {
+  return {
+    ...filters,
+    scope: ORDER_HISTORY_SCOPE,
+    tab: "all",
+  };
+}
+
+function integerOrUndefined(value) {
+  if (value == null || value === "") return undefined;
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : undefined;
 }
 
 function authenticatedResourceRequest(request, sessionToken) {

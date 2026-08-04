@@ -64,16 +64,20 @@ test("Orders selection snapshots use an authenticated action and never put the t
   assert.match(ordersPageServerSource, /_requestKey: payload\._requestKey \?\? null/);
 });
 
-test("Orders resource navigation binds one cursor and rejects stale responses", () => {
+test("Orders resource numeric navigation posts a page number and rejects stale responses", () => {
   assert.match(ordersResourceStateSource, /searchParams\.delete\("after"\)/);
   assert.match(ordersResourceStateSource, /searchParams\.delete\("before"\)/);
+  assert.match(ordersResourceStateSource, /searchParams\.delete\("page"\)/);
   assert.match(
     ordersResourceStateSource,
-    /\.\.\.\(options\.after \? \{ after: options\.after \} : \{\}\),[\s\S]*\.\.\.\(options\.before \? \{ before: options\.before \} : \{\}\)/,
+    /\.\.\.\(options\.page \? \{ page: String\(options\.page\) \} : \{\}\)/,
   );
+  assert.match(ordersResourceStateSource, /options\.readWatermark \? \{ readWatermark: options\.readWatermark \}/);
   assert.doesNotMatch(ordersResourceStateSource, /searchParams\.set\("id_token"/);
   assert.match(
     ordersResourceStateSource,
     /data\?\._requestKey === requestKey/,
   );
+  assert.match(ordersPageServerSource, /page: payload\.page \?\? 1/);
+  assert.match(ordersPageServerSource, /readWatermark: payload\.readWatermark/);
 });

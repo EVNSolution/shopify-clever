@@ -161,7 +161,7 @@ test("resolves a frozen order selection by opaque token without sending member i
   }
 });
 
-test("fetches a bounded order page with one cursor and normalizes its envelope", async () => {
+test("fetches a bounded numeric order page and normalizes its envelope", async () => {
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
   process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
   const calls = [];
@@ -169,7 +169,11 @@ test("fetches a bounded order page with one cursor and normalizes its envelope",
   try {
     const result = await fetchDeliveryOrdersPage(
       new Request("https://app.example/app/orders"),
-      { after: "next-cursor", before: "ignored-cursor", search: "kim" },
+      {
+        page: 2,
+        readWatermark: "2026-08-04T00:00:00.000Z",
+        search: "kim",
+      },
       {
         fetch: async (url, options) => {
           calls.push({ url, options });
@@ -177,16 +181,19 @@ test("fetches a bounded order page with one cursor and normalizes its envelope",
             data: {
               rows: [{ id: "order-1" }],
               pageInfo: {
+                currentPage: 2,
                 endCursor: "end",
                 hasNextPage: true,
                 hasPreviousPage: false,
                 pageSize: 50,
+                readWatermark: "2026-08-04T00:00:00.000Z",
                 sort: "id_desc",
                 startCursor: "start",
+                totalPages: 7,
               },
               result: {
-                count: null,
-                countPrecision: "unknown",
+                count: 321,
+                countPrecision: "exact",
                 filterHash: "hmac-sha256:abc",
                 readWatermark: "2026-08-04T00:00:00.000Z",
               },
@@ -203,17 +210,24 @@ test("fetches a bounded order page with one cursor and normalizes its envelope",
     assert.equal(url.pathname, "/admin/orders/page");
     assert.equal(url.searchParams.get("pageSize"), "50");
     assert.equal(url.searchParams.get("sort"), "id_desc");
-    assert.equal(url.searchParams.get("after"), "next-cursor");
+    assert.equal(url.searchParams.get("page"), "2");
+    assert.equal(url.searchParams.get("readWatermark"), "2026-08-04T00:00:00.000Z");
+    assert.equal(url.searchParams.has("after"), false);
     assert.equal(url.searchParams.has("before"), false);
     assert.equal(url.searchParams.get("search"), "kim");
     assert.deepEqual(result.pageInfo, {
+      currentPage: 2,
       endCursor: "end",
       hasNextPage: true,
       hasPreviousPage: false,
       pageSize: 50,
+      readWatermark: "2026-08-04T00:00:00.000Z",
       sort: "id_desc",
       startCursor: "start",
+      totalPages: 7,
     });
+    assert.equal(result.result.count, 321);
+    assert.equal(result.result.countPrecision, "exact");
     assert.equal(result.result.filterHash, "hmac-sha256:abc");
     assert.equal(result.freshness.canonicalOrderCount, 123);
   } finally {
