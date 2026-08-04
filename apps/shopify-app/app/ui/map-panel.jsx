@@ -96,6 +96,144 @@ const mapStatusStyle = {
   fontWeight: 700,
 };
 
+const mapResizeHandleStyle = {
+  alignItems: "center",
+  background: "rgba(255, 255, 255, 0.94)",
+  border: `1px solid ${MAP_TOOLBAR_BORDER_COLOR}`,
+  borderRadius: "7px",
+  bottom: "10px",
+  boxShadow: "0 1px 4px rgba(0, 0, 0, 0.16)",
+  cursor: "ns-resize",
+  display: "flex",
+  height: "28px",
+  justifyContent: "center",
+  left: "10px",
+  padding: 0,
+  position: "absolute",
+  touchAction: "none",
+  width: "28px",
+  zIndex: 4,
+};
+
+const mapResizeGripStyle = {
+  borderBottom: "1px solid currentColor",
+  borderTop: "1px solid currentColor",
+  color: "#616161",
+  height: "7px",
+  position: "relative",
+  width: "13px",
+};
+
+const mapResizeGripMiddleStyle = {
+  borderTop: "1px solid currentColor",
+  left: 0,
+  position: "absolute",
+  right: 0,
+  top: "3px",
+};
+
+function clampMapHeight(value, min, max) {
+  return Math.min(max, Math.max(min, Math.round(value)));
+}
+
+export function MapResizeHandle({
+  ariaLabel,
+  controls,
+  defaultValue,
+  max,
+  min,
+  onChange,
+  value,
+}) {
+  const dragRef = useRef(null);
+  const suppressClickRef = useRef(false);
+
+  const updateValue = (nextValue) => onChange(clampMapHeight(nextValue, min, max));
+
+  const handlePointerDown = (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    dragRef.current = {
+      moved: false,
+      pointerId: event.pointerId,
+      startValue: value,
+      startY: event.clientY,
+    };
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  };
+
+  const handlePointerMove = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const deltaY = event.clientY - drag.startY;
+    if (Math.abs(deltaY) >= 2) drag.moved = true;
+    updateValue(drag.startValue + deltaY);
+  };
+
+  const finishPointerDrag = (event) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    suppressClickRef.current = drag.moved;
+    dragRef.current = null;
+    if (event.currentTarget.hasPointerCapture?.(event.pointerId)) {
+      event.currentTarget.releasePointerCapture?.(event.pointerId);
+    }
+  };
+
+  const handleClick = () => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    const presets = [min, defaultValue, max];
+    const nextPreset = presets.find((preset) => preset > value) ?? min;
+    updateValue(nextPreset);
+  };
+
+  const handleKeyDown = (event) => {
+    const step = event.shiftKey ? 40 : 16;
+    const nextValue = {
+      ArrowDown: value + step,
+      ArrowUp: value - step,
+      End: max,
+      Home: min,
+    }[event.key];
+    if (nextValue == null && event.key !== "Enter") return;
+    event.preventDefault();
+    updateValue(event.key === "Enter" ? defaultValue : nextValue);
+  };
+
+  return (
+    <div
+      aria-controls={controls}
+      aria-label={ariaLabel}
+      aria-orientation="vertical"
+      aria-valuemax={max}
+      aria-valuemin={min}
+      aria-valuenow={value}
+      aria-valuetext={`${value} pixels`}
+      onClick={handleClick}
+      onKeyDown={handleKeyDown}
+      onLostPointerCapture={finishPointerDrag}
+      onPointerDown={handlePointerDown}
+      onPointerCancel={finishPointerDrag}
+      onPointerMove={handlePointerMove}
+      onPointerUp={finishPointerDrag}
+      role="slider"
+      style={mapResizeHandleStyle}
+      tabIndex={0}
+      title="Drag to resize. Click to cycle sizes."
+    >
+      <span aria-hidden="true" style={mapResizeGripStyle}>
+        <span style={mapResizeGripMiddleStyle} />
+      </span>
+    </div>
+  );
+}
+
 export function MapPanel({
   ariaLabel,
   canvasKey,

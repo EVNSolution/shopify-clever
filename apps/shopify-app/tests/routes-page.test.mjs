@@ -702,8 +702,8 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /onDrop=\{handleRouteTimelineRemoveDrop\}/);
   assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
   assert.doesNotMatch(routeDetailSource, /activeRouteDriverStops/);
-  assert.match(routeDetailSource, /height: "440px"/);
-  assert.match(routeDetailSource, /minHeight: "490px"/);
+  assert.match(routeDetailSource, /ROUTE_STOPS_MAP_DEFAULT_HEIGHT = 440/);
+  assert.match(routeDetailSource, /const routeDetailMapCanvasStyle = \{[\s\S]*minHeight: 0/);
   assert.doesNotMatch(routeDetailSource, /routeDetailHeaderInfoCardStyle/);
   assert.doesNotMatch(routeDetailSource, /routeDetailPageNavStyle/);
   assert.doesNotMatch(routeDetailSource, /routeDetailTitleMetricsStyle/);
@@ -744,8 +744,8 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /style: OPENFREEMAP_STYLE_URL/);
   assert.match(routeDetailSource, /createMapLibreMap\(maplibregl, \{/);
   assert.doesNotMatch(routeDetailSource, /new maplibregl\.NavigationControl/);
-  assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
-  assert.match(routeDetailSource, /const routeDetailMapFrameStyle = \{/);
+  assert.match(routeDetailSource, /import \{ MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
+  assert.match(routeDetailSource, /frameStyle=\{\{ height: `\$\{activeRouteMapHeight\}px` \}\}/);
   assert.match(routeDetailSource, /const routeDetailMapCanvasStyle = \{/);
   assert.match(routeDetailSource, /canvasRef=\{mapContainerRef\}/);
   assert.doesNotMatch(routeDetailSource, /routeMapWheelHintVisible|handleRouteDetailMapWheel|routeDetailMapWheelHintStyle/);
@@ -762,6 +762,15 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
   assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Start free trial/);
+});
+
+test("Route detail maps expose the shared accessible height control", () => {
+  assert.match(routeDetailSource, /import \{ MapPanel, MapResizeHandle, MapToolbar/);
+  assert.match(routeDetailSource, /const \[routeStopsMapHeight, setRouteStopsMapHeight\] = useState\(ROUTE_STOPS_MAP_DEFAULT_HEIGHT\)/);
+  assert.match(routeDetailSource, /const \[routeTrackingMapHeight, setRouteTrackingMapHeight\] = useState\(ROUTE_TRACKING_MAP_DEFAULT_HEIGHT\)/);
+  assert.match(routeDetailSource, /frameStyle=\{\{ height: `\$\{activeRouteMapHeight\}px` \}\}/);
+  assert.match(routeDetailSource, /<MapResizeHandle[\s\S]*onChange=\{handleRouteMapHeightChange\}/);
+  assert.match(routeDetailSource, /\[activeRouteMapHeight, isMapReady\]/);
 });
 
 test("Route detail does not let route-line style readiness block marker rendering", () => {
@@ -960,7 +969,7 @@ test("Route detail emits browser marker diagnostics through the perf endpoint", 
 test("Route detail map has compact refresh and automatic recovery controls", () => {
   assert.match(routeDetailSource, /const MAP_RECOVERY_DELAY_MS = 2500/);
   assert.match(routeDetailSource, /const MAX_MAP_RECOVERY_ATTEMPTS = 3/);
-  assert.match(routeDetailSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
+  assert.match(routeDetailSource, /import \{ MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/ui\/map-panel"/);
   assert.match(routeDetailSource, /<MapPanel/);
   assert.match(routeDetailSource, /<MapToolbar/);
   assert.match(routeDetailSource, /renderMapRefreshIcon\(\)/);

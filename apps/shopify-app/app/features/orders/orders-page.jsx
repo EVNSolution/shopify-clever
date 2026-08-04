@@ -21,6 +21,7 @@ import {
   updateOrdersSelectionExclusions,
   updateVisibleOrdersSelectionExclusions,
 } from "./orders-resource-state";
+import { getOrdersPageNumbers } from "./orders-pagination";
 import { createOrdersResourceSessionTokenGetter } from "./orders-session-token-cache";
 import {
   DEFAULT_CENTER,
@@ -66,7 +67,7 @@ import {
   updateOrderFilterSearchParams,
 } from "./order-filters";
 import { InfoPill } from "../../ui/info-pill";
-import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
+import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
 import { TabLayout } from "../../ui/tab-layout";
 import {
   buildOrderTimelineDetails,
@@ -110,30 +111,6 @@ function getPositiveInteger(value, fallback = 1) {
   return Number.isInteger(number) && number > 0 ? number : fallback;
 }
 
-function getOrdersPageNumbers(currentPage, totalPages) {
-  if (totalPages <= 11) {
-    return Array.from({ length: totalPages }, (_value, index) => index + 1);
-  }
-
-  const visiblePages = new Set([
-    1,
-    2,
-    currentPage - 2,
-    currentPage - 1,
-    currentPage,
-    currentPage + 1,
-    currentPage + 2,
-    totalPages - 1,
-    totalPages,
-  ].filter((page) => page >= 1 && page <= totalPages));
-  const sortedPages = [...visiblePages].sort((left, right) => left - right);
-
-  return sortedPages.flatMap((page, index) => {
-    const previousPage = sortedPages[index - 1];
-    return previousPage && page - previousPage > 1 ? [`ellipsis-${page}`, page] : [page];
-  });
-}
-
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 let lastOrdersViewSnapshot = null;
@@ -161,8 +138,13 @@ const ORDER_PAYMENT_CHANGE_OPTIONS = [
 ];
 const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
+const ORDERS_MAP_DEFAULT_HEIGHT = 420;
+const ORDERS_MAP_MIN_HEIGHT = 320;
+const ORDERS_MAP_MAX_HEIGHT = 720;
+
 const ordersMapCanvasStyle = {
-  minHeight: "420px",
+  height: "100%",
+  minHeight: 0,
 };
 
 const ordersLoadingPanelStyle = {
@@ -253,8 +235,6 @@ const routePlanPanelStyle = {
   display: "flex",
   flexDirection: "column",
   gap: "8px",
-  height: "420px",
-  maxHeight: "420px",
   overflowX: "hidden",
   overflowY: "auto",
   padding: "10px",
@@ -3161,6 +3141,7 @@ function OrdersPageContent({ loaderData }) {
   const [mapSourceSyncRequest, setMapSourceSyncRequest] = useState(0);
   const [mapStatus, setMapStatus] = useState("idle");
   const [isMapWide, setIsMapWide] = useState(false);
+  const [ordersMapHeight, setOrdersMapHeight] = useState(ORDERS_MAP_DEFAULT_HEIGHT);
   const [planFitRequest, setPlanFitRequest] = useState(0);
   const [selectedOrderFocusRequest, setSelectedOrderFocusRequest] = useState(0);
   const [orderedDateCalendarOpen, setOrderedDateCalendarOpen] = useState(false);
@@ -5349,7 +5330,7 @@ function OrdersPageContent({ loaderData }) {
       window.cancelAnimationFrame(firstResizeFrame);
       window.cancelAnimationFrame(secondResizeFrame);
     };
-  }, [isMapReady, isMapWide]);
+  }, [isMapReady, isMapWide, ordersMapHeight]);
 
   if (activeOrdersView === "orders" && !ordersLoaded) {
     return (
@@ -5381,6 +5362,7 @@ function OrdersPageContent({ loaderData }) {
             canvasKey={mapRenderKey}
             canvasRef={mapContainerRef}
             canvasStyle={ordersMapCanvasStyle}
+            frameStyle={{ height: `${ordersMapHeight}px` }}
             id="orders-map"
             toolbar={
               <MapToolbar
@@ -5483,10 +5465,26 @@ function OrdersPageContent({ loaderData }) {
                 </div>
               </div>
             ) : null}
+            <MapResizeHandle
+              ariaLabel="Resize orders map height"
+              controls="orders-map"
+              defaultValue={ORDERS_MAP_DEFAULT_HEIGHT}
+              max={ORDERS_MAP_MAX_HEIGHT}
+              min={ORDERS_MAP_MIN_HEIGHT}
+              onChange={setOrdersMapHeight}
+              value={ordersMapHeight}
+            />
           </MapPanel>
       }
       secondary={
-        <div className="order-route-plan" style={routePlanPanelStyle}>
+        <div
+          className="order-route-plan"
+          style={{
+            ...routePlanPanelStyle,
+            height: `${ordersMapHeight}px`,
+            maxHeight: `${ordersMapHeight}px`,
+          }}
+        >
           <label style={routePlanTitleGroupStyle}>
             <span style={routePlanTitleLabelStyle}>Title</span>
             <input
@@ -5761,11 +5759,6 @@ function OrdersPageContent({ loaderData }) {
                   : filteredOrders.length === displayOrders.length ? "" : ` / ${displayOrders.length}`}
               </span>
               <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {selectedOrderCount}</span>
-              {selectionSnapshot ? (
-                <span aria-label="Frozen selected orders" style={orderSelectionCountStyle}>
-                  Frozen selected set
-                </span>
-              ) : null}
               {selectionSnapshotsEnabled ? (
                 <button
                   type="button"

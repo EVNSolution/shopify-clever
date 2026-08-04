@@ -75,7 +75,7 @@ import { MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
-import { MapPanel, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
+import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
 
 const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-clever-lite.json";
 const MAP_RECOVERY_DELAY_MS = 2500;
@@ -555,16 +555,14 @@ const routeChildTrackingMetricValueStyle = {
   fontWeight: 750,
 };
 
-const routeDetailMapFrameStyle = {
-  height: "440px",
-};
+const ROUTE_STOPS_MAP_DEFAULT_HEIGHT = 440;
+const ROUTE_TRACKING_MAP_DEFAULT_HEIGHT = 520;
+const ROUTE_MAP_MIN_HEIGHT = 320;
+const ROUTE_MAP_MAX_HEIGHT = 760;
 
 const routeDetailMapCanvasStyle = {
-  minHeight: "490px",
-};
-
-const routeTrackingMapFrameStyle = {
-  height: "520px",
+  height: "100%",
+  minHeight: 0,
 };
 
 const routeTrackingMapCanvasStyle = {
@@ -2902,6 +2900,16 @@ export default function RouteDetailPage() {
   const [pendingRouteDraftHref, setPendingRouteDraftHref] = useState(null);
   const [childDetailTab, setChildDetailTab] = useState("stops");
   const isTrackingMapView = isMaterializedChildRouteDetail && childDetailTab === "tracking";
+  const [routeStopsMapHeight, setRouteStopsMapHeight] = useState(ROUTE_STOPS_MAP_DEFAULT_HEIGHT);
+  const [routeTrackingMapHeight, setRouteTrackingMapHeight] = useState(ROUTE_TRACKING_MAP_DEFAULT_HEIGHT);
+  const activeRouteMapHeight = isTrackingMapView ? routeTrackingMapHeight : routeStopsMapHeight;
+  const handleRouteMapHeightChange = useCallback((nextHeight) => {
+    if (isTrackingMapView) {
+      setRouteTrackingMapHeight(nextHeight);
+      return;
+    }
+    setRouteStopsMapHeight(nextHeight);
+  }, [isTrackingMapView]);
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
@@ -5276,6 +5284,22 @@ export default function RouteDetailPage() {
     fitRouteDetailMap(mapRef.current, mapLibraryRef.current, routeTrackingMapLocations);
   }, [isMapReady, isTrackingMapView, routeTrackingMapLocations]);
 
+  useEffect(() => {
+    if (!isMapReady || !mapRef.current) return undefined;
+
+    let secondResizeFrame;
+    const firstResizeFrame = window.requestAnimationFrame(() => {
+      secondResizeFrame = window.requestAnimationFrame(() => {
+        mapRef.current?.resize();
+      });
+    });
+
+    return () => {
+      window.cancelAnimationFrame(firstResizeFrame);
+      window.cancelAnimationFrame(secondResizeFrame);
+    };
+  }, [activeRouteMapHeight, isMapReady]);
+
   return (
     <main style={routesDetailPageStyle}>
       {hasRouteAllocationDraft ? (
@@ -5588,7 +5612,8 @@ export default function RouteDetailPage() {
             canvasKey={mapRenderKey}
             canvasRef={mapContainerRef}
             canvasStyle={isTrackingMapView ? routeTrackingMapCanvasStyle : routeDetailMapCanvasStyle}
-            frameStyle={isTrackingMapView ? routeTrackingMapFrameStyle : routeDetailMapFrameStyle}
+            frameStyle={{ height: `${activeRouteMapHeight}px` }}
+            id="route-detail-map"
             wheelHintEnabled={isTrackingMapView || !isRoutePolygonEditMode}
             toolbar={
               <>
@@ -5696,6 +5721,15 @@ export default function RouteDetailPage() {
                 ) : null}
               </>
             ) : null}
+            <MapResizeHandle
+              ariaLabel="Resize route map height"
+              controls="route-detail-map"
+              defaultValue={isTrackingMapView ? ROUTE_TRACKING_MAP_DEFAULT_HEIGHT : ROUTE_STOPS_MAP_DEFAULT_HEIGHT}
+              max={ROUTE_MAP_MAX_HEIGHT}
+              min={ROUTE_MAP_MIN_HEIGHT}
+              onChange={handleRouteMapHeightChange}
+              value={activeRouteMapHeight}
+            />
           </MapPanel>
 
           {!isTrackingMapView ? (
