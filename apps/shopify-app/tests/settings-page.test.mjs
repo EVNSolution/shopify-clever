@@ -12,6 +12,10 @@ const notificationsPageSource = readFileSync(
   join(root, "app/routes/app.settings_.notifications.jsx"),
   "utf8",
 );
+const notificationPreviewSource = notificationsPageSource.slice(
+  notificationsPageSource.indexOf("function NotificationPreview"),
+  notificationsPageSource.indexOf("export function ErrorBoundary"),
+);
 const settingsLayoutSource = readFileSync(
   join(root, "app/features/settings/settings-layout.jsx"),
   "utf8",
@@ -181,7 +185,7 @@ test("Settings splits General and Customer Notifications into internal routes", 
   assert.doesNotMatch(settingsPageSource, /CustomerEmailSettings|saveCustomerEmailSettings|testCustomerEmail/);
 });
 
-test("Customer Notifications keeps sender, templates, tests, and modern branding preview", () => {
+test("Customer Notifications keeps sender, templates, explicit tests, and compact logo preview", () => {
   assert.match(notificationsPageSource, /fetchCustomerEmailSettings/);
   assert.match(notificationsPageSource, /saveCustomerEmailSettings/);
   assert.match(notificationsPageSource, /sendCustomerEmailTest/);
@@ -191,9 +195,7 @@ test("Customer Notifications keeps sender, templates, tests, and modern branding
   assert.match(notificationsPageSource, /senderName/);
   assert.match(notificationsPageSource, /settings\?\.senderEmail \?\? sender\.email/);
   assert.match(notificationsPageSource, /settings\?\.senderName \?\? sender\.name/);
-  assert.match(notificationsPageSource, /BRANDING_COLOR_FIELDS/);
-  assert.match(notificationsPageSource, /type="color"/);
-  assert.match(notificationsPageSource, /Logo image/);
+  assert.match(notificationsPageSource, /Logo upload/);
   assert.match(notificationsPageSource, /accept="image\/png,image\/jpeg,image\/webp"/);
   assert.match(notificationsPageSource, /CUSTOMER_EMAIL_LOGO_MAX_BYTES = 1024 \* 1024/);
   assert.match(notificationsPageSource, /uploadCustomerEmailLogo/);
@@ -201,7 +203,8 @@ test("Customer Notifications keeps sender, templates, tests, and modern branding
   assert.match(notificationsPageSource, /xhr\.upload\.onprogress/);
   assert.match(notificationsPageSource, /setLogoUploadStatus\(\{ kind: "success"/);
   assert.match(notificationsPageSource, /logoMode: "image"/);
-  assert.match(notificationsPageSource, /Advanced logo URL/);
+  assert.match(notificationsPageSource, /Logo settings/);
+  assert.match(notificationsPageSource, /Logo upload/);
   assert.match(notificationsPageSource, /formHttpsUrl\(formData\.get\("branding\.logoUrl"\)\)/);
   assert.match(notificationsPageSource, /logoMode/);
   assert.match(notificationsPageSource, /logoWidth/);
@@ -210,6 +213,20 @@ test("Customer Notifications keeps sender, templates, tests, and modern branding
   assert.match(notificationsPageSource, /previewText/);
   assert.match(notificationsPageSource, /footerText/);
   assert.match(notificationsPageSource, /showPoweredByClever/);
+  assert.match(notificationsPageSource, /formData\.set\("subject", testSubject\)/);
+  assert.match(notificationsPageSource, /formData\.set\("body", testBody\)/);
+  assert.match(notificationsPageSource, /subject: formText\(formData\.get\("subject"\)\)/);
+  assert.match(notificationsPageSource, /body: formText\(formData\.get\("body"\)\)/);
+  assert.match(notificationsPageSource, /aria-label="Test subject"/);
+  assert.match(notificationsPageSource, /aria-label="Test body"/);
+  assert.match(notificationsPageSource, /aria-label="Test subject" maxLength=\{200\}/);
+  assert.match(notificationsPageSource, /aria-label="Test body" maxLength=\{10000\}/);
+  assert.match(notificationsPageSource, /lastSyncedTestSignal/);
+  assert.doesNotMatch(notificationsPageSource, /BRANDING_COLOR_FIELDS/);
+  assert.doesNotMatch(notificationsPageSource, /type="color"/);
+  assert.doesNotMatch(notificationsPageSource, />Logo alt text</);
+  assert.doesNotMatch(notificationsPageSource, />Preview text</);
+  assert.doesNotMatch(notificationsPageSource, />Show powered by CLEVER</);
   assert.doesNotMatch(notificationsPageSource, /primaryColor|poweredByEnabled|logoHref|logoAlt:/);
   assert.match(notificationsPageSource, /Live notification preview/);
   assert.match(notificationsPageSource, /Email templates/);
@@ -224,7 +241,14 @@ test("Customer Notifications preview renders the logo from the footer upper-left
   assert.match(notificationsPageSource, /objectFit: "contain"/);
   assert.match(notificationsPageSource, /maxHeight: "64px"/);
   assert.match(notificationsPageSource, /maxWidth: "160px"/);
-  assert.match(notificationsPageSource, /<div style=\{notificationPreviewFooterStyle\(branding\)\}>[\s\S]*\{footerLogo\}/);
+  assert.match(notificationsPageSource, /fontSize: "24px"/);
+  assert.match(notificationsPageSource, /<hr aria-hidden="true" style=\{notificationPreviewDividerStyle\} \/>/);
+  assert.match(notificationsPageSource, /<div className="customer-email-preview__footer" style=\{notificationPreviewFooterBoxStyle\}>[\s\S]*\{footerLogo\}/);
+  assert.match(notificationsPageSource, /background: "#f3f4f6"/);
+  assert.match(notificationsPageSource, /@media \(prefers-color-scheme: dark\)/);
+  assert.doesNotMatch(notificationPreviewSource, /branding\.previewText/);
+  assert.doesNotMatch(notificationPreviewSource, /branding\.accentColor/);
+  assert.doesNotMatch(notificationPreviewSource, /branding\.logoAltText/);
   assert.doesNotMatch(notificationsPageSource, /<strong[\s\S]*\{subject\}<\/strong>[\s\S]*<p[\s\S]*\{body\}<\/p>[\s\S]*<div[\s\S]*<img/);
 });
 

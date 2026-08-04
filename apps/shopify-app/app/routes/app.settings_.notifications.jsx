@@ -40,12 +40,6 @@ const CUSTOMER_EMAIL_SIGNALS = [
   ["MISSED_DELIVERY", "Missed delivery"],
 ];
 
-const BRANDING_COLOR_FIELDS = [
-  ["accentColor", "Accent"],
-  ["backgroundColor", "Background"],
-  ["surfaceColor", "Surface"],
-  ["textColor", "Text"],
-];
 const CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const CUSTOMER_EMAIL_LOGO_MAX_BYTES = 1024 * 1024;
 
@@ -109,9 +103,11 @@ export const action = async ({ request }) => {
     });
     const result = await sendCustomerEmailTest(request, {
       attemptId,
+      body: formText(formData.get("body")),
       confirmed: formData.get("confirmed") === "true",
       recipientEmail,
       signal,
+      subject: formText(formData.get("subject")),
     }, { sessionToken: formText(formData.get("shopifySessionToken")) });
     console.info("customer_email.test.action.completed", {
       attemptId,
@@ -240,6 +236,9 @@ function CustomerEmailSettings({ initialSettings }) {
   const [settings, setSettings] = useState(() => normalizeCustomerEmailSettings(initialSettings));
   const [activeSignal, setActiveSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
   const [testRecipient, setTestRecipient] = useState("");
+  const [testSubject, setTestSubject] = useState(() => settings.templates[CUSTOMER_EMAIL_SIGNALS[0][0]]?.subject ?? "");
+  const [testBody, setTestBody] = useState(() => settings.templates[CUSTOMER_EMAIL_SIGNALS[0][0]]?.body ?? "");
+  const [lastSyncedTestSignal, setLastSyncedTestSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
   const [testConfirmed, setTestConfirmed] = useState(false);
   const [logoUploadStatus, setLogoUploadStatus] = useState({ kind: "idle", message: "", progress: 0 });
   const intent = fetcher.formData?.get("_intent");
@@ -255,6 +254,13 @@ function CustomerEmailSettings({ initialSettings }) {
     setSettings(normalizeCustomerEmailSettings(fetcher.data.customerEmailSettings));
   }, [errors.length, fetcher.data?.customerEmailSettings]);
 
+  useEffect(() => {
+    if (lastSyncedTestSignal === activeSignal) return;
+    setTestSubject(activeTemplate.subject);
+    setTestBody(activeTemplate.body);
+    setLastSyncedTestSignal(activeSignal);
+  }, [activeSignal, activeTemplate.body, activeTemplate.subject, lastSyncedTestSignal]);
+
   const submit = async (nextIntent) => {
     const formData = new FormData();
     formData.set("_intent", nextIntent);
@@ -267,15 +273,17 @@ function CustomerEmailSettings({ initialSettings }) {
         signal: activeSignal,
       });
       formData.set("attemptId", attemptId);
+      formData.set("body", testBody);
       formData.set("confirmed", String(testConfirmed));
       formData.set("recipientEmail", testRecipient);
       formData.set("signal", activeSignal);
+      formData.set("subject", testSubject);
     } else {
       formData.set("senderName", settings.senderName);
       formData.set("senderEmail", settings.senderEmail);
       formData.set("replyTo", settings.replyTo);
       formData.set("nearbyStopsThreshold", String(settings.nearbyStopsThreshold));
-      for (const [field] of BRANDING_COLOR_FIELDS) {
+      for (const field of ["accentColor", "backgroundColor", "surfaceColor", "textColor"]) {
         formData.set(`branding.${field}`, branding[field]);
       }
       for (const field of ["logoUrl", "logoMode", "logoWidth", "logoLinkUrl", "logoAltText", "previewText", "footerText"]) {
@@ -373,41 +381,27 @@ function CustomerEmailSettings({ initialSettings }) {
 
       <section aria-label="Notification branding" style={settingsSectionCardStyle}>
         <strong>Branding</strong>
-        <div style={settingsCoordinateGridStyle}>
-          {BRANDING_COLOR_FIELDS.map(([field, label]) => (
-            <label key={field} style={settingsLabelStyle}>
-              {label} color
-              <input onChange={(event) => updateBranding(field, event.target.value)} style={settingsInputStyle} type="color" value={branding[field]} />
-            </label>
-          ))}
-        </div>
-        <label style={settingsLabelStyle}>
-          Logo image
-          <input accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} style={settingsInputStyle} type="file" />
-        </label>
-        {logoUploadStatus.kind !== "idle" ? (
-          <div aria-live="polite" style={logoUploadStatus.kind === "error" ? settingsErrorStyle : settingsMessageStyle}>
-            <span>{logoUploadStatus.message}</span>
-            {logoUploadStatus.kind === "uploading" ? (
-              <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
-            ) : null}
+        <div aria-label="Logo settings" style={logoSettingsBlockStyle}>
+          <label style={settingsLabelStyle}>
+            Logo upload
+            <input accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} style={settingsInputStyle} type="file" />
+          </label>
+          {logoUploadStatus.kind !== "idle" ? (
+            <div aria-live="polite" style={logoUploadStatus.kind === "error" ? settingsErrorStyle : settingsMessageStyle}>
+              <span>{logoUploadStatus.message}</span>
+              {logoUploadStatus.kind === "uploading" ? (
+                <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
+              ) : null}
+            </div>
+          ) : null}
+          <label style={settingsLabelStyle}>Logo URL<input onChange={(event) => updateBranding("logoUrl", event.target.value)} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={branding.logoUrl} /></label>
+          <div style={settingsCoordinateGridStyle}>
+            <label style={settingsLabelStyle}>Logo link<input onChange={(event) => updateBranding("logoLinkUrl", event.target.value)} placeholder="https://store.cleversystem.ai" style={settingsInputStyle} type="url" value={branding.logoLinkUrl} /></label>
+            <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => updateBranding("logoMode", event.target.value)} style={settingsSelectStyle} value={branding.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
+            <label style={settingsLabelStyle}>Logo width<input max="320" min="48" onChange={(event) => updateBranding("logoWidth", Number(event.target.value))} style={settingsInputStyle} type="number" value={branding.logoWidth} /></label>
           </div>
-        ) : null}
-        <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>Advanced logo URL<input onChange={(event) => updateBranding("logoUrl", event.target.value)} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={branding.logoUrl} /></label>
-          <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => updateBranding("logoMode", event.target.value)} style={settingsSelectStyle} value={branding.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
         </div>
-        <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>Logo width<input max="320" min="48" onChange={(event) => updateBranding("logoWidth", Number(event.target.value))} style={settingsInputStyle} type="number" value={branding.logoWidth} /></label>
-          <label style={settingsLabelStyle}>Logo link<input onChange={(event) => updateBranding("logoLinkUrl", event.target.value)} placeholder="https://store.example.com" style={settingsInputStyle} type="url" value={branding.logoLinkUrl} /></label>
-        </div>
-        <label style={settingsLabelStyle}>Logo alt text<input onChange={(event) => updateBranding("logoAltText", event.target.value)} style={settingsInputStyle} value={branding.logoAltText} /></label>
-        <label style={settingsLabelStyle}>Preview text<input onChange={(event) => updateBranding("previewText", event.target.value)} style={settingsInputStyle} value={branding.previewText} /></label>
         <label style={settingsLabelStyle}>Footer text<input onChange={(event) => updateBranding("footerText", event.target.value)} style={settingsInputStyle} value={branding.footerText} /></label>
-        <label style={{ ...settingsLabelStyle, alignItems: "center", display: "flex", gridTemplateColumns: "auto 1fr" }}>
-          <input checked={branding.showPoweredByClever} onChange={(event) => updateBranding("showPoweredByClever", event.target.checked)} type="checkbox" />
-          Show powered by CLEVER
-        </label>
         <NotificationPreview activeTemplate={activeTemplate} branding={branding} senderName={settings.senderName} />
       </section>
 
@@ -431,6 +425,8 @@ function CustomerEmailSettings({ initialSettings }) {
         <strong>Send a test</strong>
         <p style={settingsMessageStyle}>A test goes only to the address entered below. It does not use customer data.</p>
         <input aria-label="Test recipient email" onChange={(event) => setTestRecipient(event.target.value)} placeholder="name@example.com" style={settingsInputStyle} type="email" value={testRecipient} />
+        <label style={settingsLabelStyle}>Subject<input aria-label="Test subject" maxLength={200} onChange={(event) => setTestSubject(event.target.value)} style={settingsInputStyle} value={testSubject} /></label>
+        <label style={settingsLabelStyle}>Body<textarea aria-label="Test body" maxLength={10000} onChange={(event) => setTestBody(event.target.value)} style={settingsTextareaStyle} value={testBody} /></label>
         <label style={{ ...settingsLabelStyle, alignItems: "center", display: "flex", gridTemplateColumns: "auto 1fr" }}>
           <input checked={testConfirmed} onChange={(event) => setTestConfirmed(event.target.checked)} type="checkbox" />
           Confirm one test email to this address
@@ -484,25 +480,25 @@ function NotificationPreview({ activeTemplate, branding, senderName }) {
   const footerLogo = logo ? (
     branding.logoLinkUrl.startsWith("https://") ? (
       <a href={branding.logoLinkUrl} rel="noreferrer" style={{ justifySelf: "start" }} target="_blank">
-        <img alt={branding.logoAltText || senderName || "Store logo"} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
+        <img alt={deriveLogoAltText(senderName)} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
       </a>
     ) : (
-      <img alt={branding.logoAltText || senderName || "Store logo"} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
+      <img alt={deriveLogoAltText(senderName)} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
     )
   ) : null;
 
   return (
-    <div aria-label="Live notification preview" style={{ background: branding.backgroundColor, border: "1px solid #d6d6d6", borderRadius: "8px", display: "grid", gap: "10px", padding: "12px" }}>
-      <span style={{ color: "#616161", fontSize: "12px", lineHeight: 1.3 }}>{branding.previewText}</span>
-      <div style={{ background: branding.surfaceColor, borderRadius: "8px", color: branding.textColor, display: "grid", gap: "10px", padding: "14px" }}>
-        <strong style={{ color: branding.textColor, fontSize: "16px", lineHeight: "22px" }}>{subject}</strong>
-        <p style={{ lineHeight: 1.5, margin: 0, whiteSpace: "pre-wrap" }}>{body}</p>
-        <div style={notificationPreviewFooterStyle(branding)}>
+    <div aria-label="Live notification preview" className="customer-email-preview" style={notificationPreviewFrameStyle}>
+      <style>{NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS}</style>
+      <article className="customer-email-preview__surface" style={notificationPreviewSurfaceStyle}>
+        <h2 style={notificationPreviewTitleStyle}>{subject}</h2>
+        <p style={notificationPreviewBodyStyle}>{body}</p>
+        <hr aria-hidden="true" style={notificationPreviewDividerStyle} />
+        <div className="customer-email-preview__footer" style={notificationPreviewFooterBoxStyle}>
           {footerLogo}
-          <span style={{ color: branding.textColor, fontSize: "12px" }}>{branding.footerText}</span>
-          {branding.showPoweredByClever ? <span style={{ color: branding.accentColor, fontSize: "12px", fontWeight: 700 }}>Powered by CLEVER</span> : null}
+          <p className="customer-email-preview__muted" style={notificationPreviewFooterTextStyle}>{branding.footerText}</p>
         </div>
-      </div>
+      </article>
     </div>
   );
 }
@@ -519,15 +515,97 @@ function notificationPreviewLogoStyle(logoWidth) {
   };
 }
 
-function notificationPreviewFooterStyle(branding) {
-  return {
-    borderTop: `1px solid ${branding.accentColor}`,
-    display: "grid",
-    gap: "6px",
-    justifyItems: "start",
-    paddingTop: "10px",
-  };
+function deriveLogoAltText(senderName) {
+  const normalized = String(senderName ?? "").replace(/[<>]/gu, "").replace(/\s+/gu, " ").trim();
+  return normalized || "Brand";
 }
+
+const logoSettingsBlockStyle = {
+  border: "1px solid #d0d7de",
+  borderRadius: "8px",
+  display: "grid",
+  gap: "10px",
+  padding: "12px",
+};
+
+const NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS = `
+@media (prefers-color-scheme: dark) {
+  .customer-email-preview {
+    background: #161b22;
+    border-color: #30363d;
+  }
+
+  .customer-email-preview__surface {
+    background: #0d1117;
+    color: #e6edf3;
+  }
+
+  .customer-email-preview__footer {
+    background: #161b22 !important;
+    border-color: #30363d !important;
+  }
+
+  .customer-email-preview__muted {
+    color: #c9d1d9 !important;
+  }
+}
+`;
+
+const notificationPreviewFrameStyle = {
+  background: "#f3f4f6",
+  border: "1px solid #d0d7de",
+  borderRadius: "8px",
+  display: "grid",
+  padding: "16px",
+};
+
+const notificationPreviewSurfaceStyle = {
+  background: "#ffffff",
+  borderRadius: "8px",
+  color: "#1f2328",
+  display: "grid",
+  gap: "16px",
+  margin: 0,
+  padding: "24px",
+};
+
+const notificationPreviewTitleStyle = {
+  fontSize: "24px",
+  fontWeight: 700,
+  lineHeight: "32px",
+  margin: 0,
+};
+
+const notificationPreviewBodyStyle = {
+  fontSize: "14px",
+  lineHeight: "22px",
+  margin: 0,
+  whiteSpace: "pre-wrap",
+};
+
+const notificationPreviewDividerStyle = {
+  border: 0,
+  borderTop: "1px solid #d0d7de",
+  margin: 0,
+};
+
+const notificationPreviewFooterBoxStyle = {
+  background: "#f6f8fa",
+  border: "1px solid #d0d7de",
+  borderRadius: "8px",
+  display: "grid",
+  gap: "8px",
+  justifyItems: "start",
+  padding: "12px",
+};
+
+const notificationPreviewFooterTextStyle = {
+  color: "#57606a",
+  fontSize: "12px",
+  lineHeight: "18px",
+  margin: 0,
+  whiteSpace: "pre-wrap",
+};
 
 export function ErrorBoundary() {
   return boundary.error(useRouteError());
