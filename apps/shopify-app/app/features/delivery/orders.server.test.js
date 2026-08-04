@@ -3,7 +3,14 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   bulkUpdateDeliveryOrders,
+  createDeliveryOrdersSelectionSnapshot,
   fetchDeliveryOrders,
+  fetchDeliveryOrderFacets,
+  fetchDeliveryOrderMapPoints,
+  fetchDeliveryOrdersPage,
+  fetchDeliveryOrdersReconciliationStatus,
+  replaceDeliveryOrdersSelectionExclusions,
+  startDeliveryOrdersReconciliation,
   syncDeliveryOrders,
 } from "./orders.server.js";
 import { clearDeliveryApiResponseCache } from "./route-plans.server.js";
@@ -111,6 +118,298 @@ test("bulk-updates delivery orders through the delivery Admin API", async () => 
     orders: [{ id: "order-id", financialStatus: "PENDING" }],
     updated: 1,
   });
+});
+
+test("resolves a frozen order selection by opaque token without sending member ids", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  let requestBody;
+
+  try {
+    const result = await bulkUpdateDeliveryOrders(
+      new Request("https://app.example/app/orders"),
+      { field: "state", selectionToken: "opaque-token", value: "PLANNED" },
+      {
+        fetch: async (_url, options) => {
+          requestBody = JSON.parse(options.body);
+          return Response.json({
+            data: { selected: 5, resolved: 4, updated: 3, skipped: 1, noOp: 1 },
+            error: null,
+          });
+        },
+        sessionToken: "client-session-token",
+      },
+    );
+
+    assert.deepEqual(requestBody, {
+      field: "state",
+      selectionToken: "opaque-token",
+      value: "PLANNED",
+    });
+    assert.deepEqual(result, {
+      errors: [],
+      noOp: 1,
+      orders: [],
+      resolved: 4,
+      selected: 5,
+      skipped: 1,
+      updated: 3,
+    });
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
+    else process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  }
+});
+
+test("fetches a bounded order page with one cursor and normalizes its envelope", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  const calls = [];
+
+  try {
+    const result = await fetchDeliveryOrdersPage(
+      new Request("https://app.example/app/orders"),
+      { after: "next-cursor", before: "ignored-cursor", search: "kim" },
+      {
+        fetch: async (url, options) => {
+          calls.push({ url, options });
+          return Response.json({
+            data: {
+              rows: [{ id: "order-1" }],
+              pageInfo: {
+                endCursor: "end",
+                hasNextPage: true,
+                hasPreviousPage: false,
+                pageSize: 50,
+                sort: "id_desc",
+                startCursor: "start",
+              },
+              result: {
+                count: null,
+                countPrecision: "unknown",
+                filterHash: "hmac-sha256:abc",
+                readWatermark: "2026-08-04T00:00:00.000Z",
+              },
+              freshness: { status: "healthy", orderCount: 123 },
+            },
+            error: null,
+          });
+        },
+        sessionToken: "client-session-token",
+      },
+    );
+
+    const url = new URL(calls[0].url);
+    assert.equal(url.pathname, "/admin/orders/page");
+    assert.equal(url.searchParams.get("pageSize"), "50");
+    assert.equal(url.searchParams.get("sort"), "id_desc");
+    assert.equal(url.searchParams.get("after"), "next-cursor");
+    assert.equal(url.searchParams.has("before"), false);
+    assert.equal(url.searchParams.get("search"), "kim");
+    assert.deepEqual(result.pageInfo, {
+      endCursor: "end",
+      hasNextPage: true,
+      hasPreviousPage: false,
+      pageSize: 50,
+      sort: "id_desc",
+      startCursor: "start",
+    });
+    assert.equal(result.result.filterHash, "hmac-sha256:abc");
+    assert.equal(result.freshness.canonicalOrderCount, 123);
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
+    else process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  }
+});
+
+test("uses independent facet, map, and selection snapshot contracts", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  const calls = [];
+  const fetch = async (url, options) => {
+    calls.push({ url, options });
+    const path = new URL(url).pathname;
+    if (path.endsWith("/facets")) {
+      return Response.json({ data: { countPrecision: "exact", facets: { deliveryAreas: [] }, filterHash: "hash", totalCount: 2 }, error: null });
+    }
+    if (path.endsWith("/map-points")) {
+      return Response.json({ data: { filterHash: "hash", generatedAt: "now", omittedCount: 0, points: [{ orderId: "1" }] }, error: null });
+    }
+    return Response.json({ data: { expiresAt: "later", filterHash: "hash", selectedCount: 2, selectionToken: "opaque", snapshotWatermark: "now" }, error: null });
+  };
+
+  try {
+    const options = { fetch, sessionToken: "client-session-token" };
+    assert.equal((await fetchDeliveryOrderFacets(new Request("https://app.example/app/orders"), { search: "kim" }, options)).totalCount, 2);
+    assert.equal((await fetchDeliveryOrderMapPoints(new Request("https://app.example/app/orders"), { search: "kim", limit: 1000 }, options)).points.length, 1);
+    assert.equal((await createDeliveryOrdersSelectionSnapshot(new Request("https://app.example/app/orders"), { filters: { search: "kim" }, excludeOrderIds: ["1"] }, options)).selectionToken, "opaque");
+    await replaceDeliveryOrdersSelectionExclusions(new Request("https://app.example/app/orders"), { selectionToken: "opaque", excludeOrderIds: ["1"] }, options);
+
+    assert.deepEqual(calls.map(({ url, options }) => [new URL(url).pathname, options.method]), [
+      ["/admin/orders/facets", "GET"],
+      ["/admin/orders/map-points", "GET"],
+      ["/admin/orders/selection-snapshots", "POST"],
+      ["/admin/orders/selection-snapshots", "PATCH"],
+    ]);
+    assert.deepEqual(JSON.parse(calls[2].options.body), {
+      excludeOrderIds: ["1"],
+      filters: { search: "kim" },
+      sort: "id_desc",
+    });
+    assert.deepEqual(JSON.parse(calls[3].options.body), {
+      excludeOrderIds: ["1"],
+      selectionToken: "opaque",
+    });
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
+    else process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  }
+});
+
+test("starts background order reconciliation through the 202 job contract", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  const calls = [];
+
+  try {
+    const result = await startDeliveryOrdersReconciliation(
+      new Request("https://app.example/app/orders"),
+      { correlationId: "refresh-1", mode: "FULL", overlapWindowSeconds: 600, pageSize: 25 },
+      {
+        fetch: async (url, options) => {
+          calls.push({ url, options });
+          return Response.json(
+            {
+              data: {
+                job: {
+                  counts: {
+                    failed: 1,
+                    scanned: 10,
+                    staleSkipped: 2,
+                    updated: 8,
+                  },
+                  correlationId: "refresh-1",
+                  id: "job-1",
+                  pageCursor: "cursor-1",
+                  status: "RUNNING",
+                  lastError: {
+                    authorization: "Bearer secret",
+                    message: "failed for id_token=secret&email=customer@example.com",
+                  },
+                },
+              },
+              error: null,
+            },
+            { status: 202 },
+          );
+        },
+        sessionToken: "client-session-token",
+      },
+    );
+
+    assert.equal(calls[0].url, "https://delivery.example/admin/orders/reconciliations");
+    assert.equal(calls[0].options.method, "POST");
+    assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
+    assert.deepEqual(JSON.parse(calls[0].options.body), {
+      correlationId: "refresh-1",
+      mode: "FULL",
+      overlapWindowSeconds: 600,
+      pageSize: 25,
+    });
+    assert.deepEqual(result, {
+      errors: [],
+      job: {
+        attemptCount: null,
+        appliedCount: 8,
+        correlationId: "refresh-1",
+        counts: {
+          created: null,
+          failed: 1,
+          finalCanonical: null,
+          scanned: 10,
+          staleSkipped: 2,
+          unchanged: null,
+          updated: 8,
+        },
+        createdAt: null,
+        cursor: "cursor-1",
+        deadLetteredAt: null,
+        failedCount: 1,
+        finishedAt: null,
+        highWatermark: null,
+        jobId: "job-1",
+        lastError: {
+          authorization: "[REDACTED]",
+          message: "failed for [REDACTED]&email=[REDACTED]",
+        },
+        mode: null,
+        nextRunAt: null,
+        overlapWindowSeconds: null,
+        pageCount: null,
+        pageSize: null,
+        progress: null,
+        queueDepth: null,
+        scannedCount: 10,
+        skippedStaleCount: 2,
+        startedAt: null,
+        startedFrom: null,
+        status: "running",
+        updatedAt: null,
+        warningsCount: null,
+      },
+    });
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.CLEVER_DELIVERY_API_URL;
+    } else {
+      process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    }
+  }
+});
+
+test("normalizes order reconciliation status polling responses", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  const calls = [];
+
+  try {
+    const result = await fetchDeliveryOrdersReconciliationStatus(
+      new Request("https://app.example/app/orders"),
+      "job/1",
+      {
+        fetch: async (url, options) => {
+          calls.push({ url, options });
+          return Response.json({
+            data: {
+              job: {
+                id: "job/1",
+                status: "DEAD_LETTER",
+                progress: { pages: 3 },
+                counts: { failed: 1 },
+                warningCount: 2,
+              },
+            },
+            error: null,
+          });
+        },
+        sessionToken: "client-session-token",
+      },
+    );
+
+    assert.equal(calls[0].url, "https://delivery.example/admin/orders/reconciliations/job%2F1");
+    assert.equal(calls[0].options.method, "GET");
+    assert.equal(result.job.status, "dead_letter");
+    assert.equal(result.job.pageCount, 3);
+    assert.equal(result.job.failedCount, 1);
+    assert.equal(result.job.warningsCount, 2);
+    assert.deepEqual(result.errors, []);
+  } finally {
+    if (previousBaseUrl === undefined) {
+      delete process.env.CLEVER_DELIVERY_API_URL;
+    } else {
+      process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    }
+  }
 });
 
 test("fetches delivery orders with serialized non-empty filters and the request bearer token", async () => {

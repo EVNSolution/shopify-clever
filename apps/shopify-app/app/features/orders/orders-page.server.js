@@ -1,4 +1,17 @@
-import { bulkUpdateDeliveryOrders, fetchDeliveryOrders, patchDeliveryOrderMetadata, syncDeliveryOrders } from "../delivery/orders.server";
+import { data } from "react-router";
+import {
+  bulkUpdateDeliveryOrders,
+  createDeliveryOrdersSelectionSnapshot,
+  fetchDeliveryOrderFacets,
+  fetchDeliveryOrderMapPoints,
+  fetchDeliveryOrders,
+  fetchDeliveryOrdersPage,
+  fetchDeliveryOrdersReconciliationStatus,
+  patchDeliveryOrderMetadata,
+  replaceDeliveryOrdersSelectionExclusions,
+  startDeliveryOrdersReconciliation,
+  syncDeliveryOrders,
+} from "../delivery/orders.server";
 import { createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
@@ -23,8 +36,15 @@ import {
   mergeShopifyOrderRowsWithCanonicalRows,
 } from "./canonical-orders";
 import { collectServiceErrors, normalizeCaughtServiceError } from "../service-errors";
-import { clearShopifyOrdersCache, fetchShopifyOrders } from "./shopify-orders.server";
+import { clearShopifyOrdersCache, fetchShopifyOrders, fetchShopifyOrdersByIds } from "./shopify-orders.server";
 import { authenticate } from "../../shopify.server";
+import {
+  buildServerTimingHeader,
+  createTelemetryRequestId,
+  hashShopIdentifier,
+  logStructuredMetric,
+  sanitizeRequestPath,
+} from "../telemetry/structured-telemetry.server";
 import {
   DEFAULT_ROUTE_PLAN_TITLE,
   getSafePerformanceNow,
@@ -32,6 +52,8 @@ import {
   textOrUndefined,
   withPromiseTimeout,
 } from "./orders-page.shared";
+import { getOrderFiltersFromSearchParams } from "./order-filters";
+import { resolveOrdersResourceFeatureFlags } from "./orders-resource-flags";
 import {
   fetchShopifyShopTimeZone,
   getShopLocalDate,
@@ -41,8 +63,30 @@ const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
 const ORDERS_PAGE_LOAD_TIMEOUT_MS = 15_000;
 
+function isFeatureFlagEnabled(name, defaultValue = false) {
+  const value = process.env[name];
+  if (value == null || value === "") return defaultValue;
+  return /^(1|true|yes|on)$/iu.test(value);
+}
+
 function shouldFetchShopifyOrders() {
   return process.env.CLEVER_ORDERS_SOURCE_MODE !== "delivery_only";
+}
+
+function shouldUseCanonicalFirstOrders() {
+  return isFeatureFlagEnabled("CLEVER_ORDERS_CANONICAL_FIRST");
+}
+
+function shouldAutoSyncOrdersOnLoad() {
+  return isFeatureFlagEnabled("CLEVER_ORDERS_AUTO_SYNC_ON_LOAD");
+}
+
+function shouldUseBackgroundReconciliation() {
+  return isFeatureFlagEnabled("CLEVER_ORDERS_BACKGROUND_RECONCILIATION");
+}
+
+function getOrdersResourceFeatureFlags() {
+  return resolveOrdersResourceFeatureFlags(process.env);
 }
 
 function getDeliveryOnlyDepartureLocationData() {
@@ -226,6 +270,27 @@ async function handleOrdersAction(request) {
       ...result,
       refreshRequestId,
     });
+
+    if (shouldUseBackgroundReconciliation()) {
+      const reconciliationData = await startDeliveryOrdersReconciliation(
+        request,
+        { correlationId: refreshRequestId, mode: "FULL" },
+        { sessionToken: shopifySessionToken },
+      );
+
+      return completeRefresh({
+        errors: reconciliationData.errors,
+        reconciliationJob: reconciliationData.job,
+        reconciliationMode: "background",
+        refreshedRoutes: 0,
+        routePlanIds: [],
+        skippedRoutes: [],
+        syncedOrders: [],
+        sync: null,
+        updatedOrders: reconciliationData.job?.appliedCount ?? 0,
+      });
+    }
+
     const preferencesData = await fetchShopifyAppPreferences(admin);
     if ((preferencesData.errors ?? []).length > 0) {
       return completeRefresh({
@@ -316,6 +381,23 @@ async function handleOrdersAction(request) {
     });
   }
 
+  if (intent === "pollOrdersReconciliation") {
+    const refreshRequestId = textOrUndefined(formData.get("refreshRequestId"));
+    const jobId = textOrUndefined(formData.get("jobId"));
+    const statusData = await fetchDeliveryOrdersReconciliationStatus(
+      request,
+      jobId,
+      { sessionToken: shopifySessionToken },
+    );
+
+    return {
+      errors: statusData.errors,
+      reconciliationJob: statusData.job,
+      reconciliationMode: "background",
+      refreshRequestId,
+    };
+  }
+
 
   if (intent === "patchOrderData") {
     const orderId = textOrUndefined(formData.get("orderId"));
@@ -346,6 +428,7 @@ async function handleOrdersAction(request) {
   }
 
   if (intent === "bulkUpdateOrders") {
+    const selectionToken = textOrUndefined(formData.get("selectionToken"));
     let orderIds = [];
 
     try {
@@ -359,7 +442,7 @@ async function handleOrdersAction(request) {
 
     const field = textOrUndefined(formData.get("field"));
     const value = textOrUndefined(formData.get("value"));
-    if (!Array.isArray(orderIds) || orderIds.length === 0 || !field || !value) {
+    if ((!selectionToken && (!Array.isArray(orderIds) || orderIds.length === 0)) || !field || !value) {
       return {
         bulkUpdate: null,
         errors: [{ message: "변경할 주문과 값을 선택해주세요." }],
@@ -368,13 +451,17 @@ async function handleOrdersAction(request) {
 
     const bulkUpdateData = await bulkUpdateDeliveryOrders(
       request,
-      { field, orderIds, value },
+      { field, orderIds, selectionToken, value },
       { sessionToken: shopifySessionToken },
     );
 
     return {
       bulkUpdate: {
         field,
+        ...(bulkUpdateData.noOp != null ? { noOp: bulkUpdateData.noOp } : {}),
+        ...(bulkUpdateData.resolved != null ? { resolved: bulkUpdateData.resolved } : {}),
+        ...(bulkUpdateData.selected != null ? { selected: bulkUpdateData.selected } : {}),
+        ...(bulkUpdateData.skipped != null ? { skipped: bulkUpdateData.skipped } : {}),
         value,
         updated: bulkUpdateData.updated,
       },
@@ -558,20 +645,42 @@ async function resolvePlannedOrdersForAction({
 }) {
   const shopifyDataStartedAt = getSafePerformanceNow();
   const preferencesData = await fetchShopifyAppPreferences(admin);
-  const [orderData, departureLocationData] = await Promise.all([
-    shouldFetchShopifyOrders()
-      ? fetchShopifyOrders(admin, { deliveryCycle: preferencesData.appPreferences.deliveryCycle })
-      : Promise.resolve({ orders: [], errors: [] }),
+  const canonicalFirst = shouldUseCanonicalFirstOrders();
+  const plannedOrderIdSet = new Set(plannedOrderIds);
+  const [canonicalOrderData, departureLocationData] = await Promise.all([
+    fetchDeliveryOrders(
+      request,
+      {},
+      { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
+    ),
     shouldFetchShopifyOrders()
       ? fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey })
       : Promise.resolve(getDeliveryOnlyDepartureLocationData()),
   ]);
+  const canonicalRows = mapCanonicalOrdersToOrderRows(canonicalOrderData.orders);
+  timings.canonicalOrdersMs = roundPerfDuration(getSafePerformanceNow() - shopifyDataStartedAt);
+  const canonicalOrderById = new Map(
+    canonicalRows.map((order) => [textOrUndefined(order.id), order]).filter(([orderId]) => orderId),
+  );
+  const missingPlannedOrderIds = plannedOrderIds.filter((orderId) => !canonicalOrderById.has(orderId));
+  const orderData = canonicalFirst
+    ? (
+        missingPlannedOrderIds.length > 0 && shouldFetchShopifyOrders()
+          ? await fetchShopifyOrdersByIds(admin, missingPlannedOrderIds, {
+              deliveryCycle: preferencesData.appPreferences.deliveryCycle,
+            })
+          : { orders: [], errors: [] }
+      )
+    : (
+        shouldFetchShopifyOrders()
+          ? await fetchShopifyOrders(admin, { deliveryCycle: preferencesData.appPreferences.deliveryCycle })
+          : { orders: [], errors: [] }
+      );
   timings.shopifyDataMs = roundPerfDuration(getSafePerformanceNow() - shopifyDataStartedAt);
 
-  const plannedOrderIdSet = new Set(plannedOrderIds);
-  const plannedShopifyOrders = orderData.orders.filter((order) =>
-    plannedOrderIdSet.has(order.id),
-  );
+  const plannedShopifyOrders = canonicalFirst
+    ? orderData.orders
+    : orderData.orders.filter((order) => plannedOrderIdSet.has(order.id));
   const plannedShopifyOrderSnapshots = getOrderSyncSnapshots(plannedShopifyOrders);
   const syncOrdersStartedAt = getSafePerformanceNow();
   const syncedOrderData =
@@ -599,14 +708,6 @@ async function resolvePlannedOrdersForAction({
     };
   }
 
-  const canonicalOrdersStartedAt = getSafePerformanceNow();
-  const canonicalOrderData = await fetchDeliveryOrders(
-    request,
-    {},
-    { cacheKey: shopifyShopCacheKey, sessionToken: shopifySessionToken },
-  );
-  timings.canonicalOrdersMs = roundPerfDuration(getSafePerformanceNow() - canonicalOrdersStartedAt);
-
   if ((canonicalOrderData.errors ?? []).length > 0) {
     return {
       errors: [
@@ -620,7 +721,7 @@ async function resolvePlannedOrdersForAction({
   }
 
   const canonicalOrders = mergeShopifyOrderRowsWithCanonicalRows(
-    mapCanonicalOrdersToOrderRows(canonicalOrderData.orders),
+    canonicalRows,
     mapCanonicalOrdersToOrderRows(syncedOrderData.orders),
   );
   const orderById = new Map(canonicalOrders.map((order) => [order.id, order]));
@@ -661,28 +762,46 @@ async function resolvePlannedOrdersForAction({
 export const loader = async ({ request }) => {
   const loaderStartedAt = getSafePerformanceNow();
   const { admin, session } = await authenticate.admin(request);
+  const requestId = createTelemetryRequestId();
+  const shopHash = hashShopIdentifier(session?.shop);
+  const path = sanitizeRequestPath(request.url);
+  const ordersPageData = withPromiseTimeout(
+    loadOrdersPageData({
+      admin,
+      loaderStartedAt,
+      path,
+      request,
+      requestId,
+      session,
+      shopHash,
+    }),
+    ORDERS_PAGE_LOAD_TIMEOUT_MS,
+    "Orders data loading timed out.",
+  );
+  const timingHeader = buildServerTimingHeader({
+    "orders-loader-start": roundPerfDuration(getSafePerformanceNow() - loaderStartedAt),
+  });
 
-  return {
-    ordersPageData: withPromiseTimeout(
-      loadOrdersPageData({
-        admin,
-        loaderStartedAt,
-        request,
-        session,
-      }),
-      ORDERS_PAGE_LOAD_TIMEOUT_MS,
-      "Orders data loading timed out.",
-    ),
-  };
+  return data(
+    { ordersPageData },
+    timingHeader ? { headers: { "Server-Timing": timingHeader } } : undefined,
+  );
 };
 
-async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) {
+async function loadOrdersPageData({ admin, loaderStartedAt, path, request, requestId, session, shopHash }) {
   const shopifyShopCacheKey = session?.shop;
   const activeOrdersView = new URL(request.url).searchParams.get("view") === "inventory"
     ? "inventory"
     : "orders";
   const shouldLoadOrders = activeOrdersView !== "inventory";
-  const shouldLoadShopifyOrders = shouldLoadOrders && shouldFetchShopifyOrders();
+  const canonicalFirst = shouldUseCanonicalFirstOrders();
+  const autoSyncOrdersOnLoad = shouldAutoSyncOrdersOnLoad();
+  const backgroundReconciliation = shouldUseBackgroundReconciliation();
+  const resourceFlags = getOrdersResourceFeatureFlags();
+  const shouldLoadShopifyMetadata =
+    shouldLoadOrders && shouldFetchShopifyOrders();
+  const shouldLoadShopifyOrders =
+    shouldLoadShopifyMetadata && !canonicalFirst;
 
   const preferencesStartedAt = getSafePerformanceNow();
   const preferencesDataPromise = shouldLoadOrders
@@ -705,7 +824,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
 
   const departureLocationStartedAt = getSafePerformanceNow();
   const departureLocationDataPromise = shouldLoadOrders
-    ? (shouldLoadShopifyOrders
+    ? (shouldLoadShopifyMetadata
       ? fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey })
       : Promise.resolve(getDeliveryOnlyDepartureLocationData())).then((departureLocationData) => ({
         data: departureLocationData,
@@ -718,7 +837,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
   const routeGroupsStartedAt = getSafePerformanceNow();
   const shopTimeZoneStartedAt = getSafePerformanceNow();
   const shopTimeZoneDataPromise = shouldLoadOrders
-    ? (shouldLoadShopifyOrders
+    ? (shouldLoadShopifyMetadata
       ? fetchShopifyShopTimeZone(admin, { cacheKey: shopifyShopCacheKey })
       : Promise.resolve(getDeliveryOnlyShopTimeZoneData())).then((shopTimeZoneData) => ({
         data: shopTimeZoneData,
@@ -729,12 +848,25 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
         durationMs: 0,
       });
 
+  const serverOrdersRequestPromise = shouldLoadOrders
+    ? (resourceFlags.pagination
+      ? shopTimeZoneDataPromise.then(({ data: shopTimeZoneData }) => fetchDeliveryOrdersPage(
+          request,
+          {
+            ...getOrderFiltersFromSearchParams(new URL(request.url).searchParams),
+            routeOpsToday: getShopLocalDate(shopTimeZoneData),
+          },
+          { cacheKey: shopifyShopCacheKey },
+        ).then((pageData) => ({ ...pageData, orders: pageData.rows })))
+      : fetchDeliveryOrders(
+          request,
+          {},
+          { cacheKey: shopifyShopCacheKey },
+        ))
+    : null;
+
   const serverOrderDataPromise = shouldLoadOrders
-    ? fetchDeliveryOrders(
-        request,
-        {},
-        { cacheKey: shopifyShopCacheKey },
-      ).then(
+    ? serverOrdersRequestPromise.then(
         (serverOrderData) => ({
           data: serverOrderData,
           durationMs: roundPerfDuration(getSafePerformanceNow() - serverOrdersStartedAt),
@@ -812,14 +944,43 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
   const routeGroupData = routeGroupDataResult.data;
   const shopLocalDate = getShopLocalDate(shopTimeZoneData);
   const serverOrderRows = mapCanonicalOrdersToOrderRows(serverOrderData.orders);
-  const mergedOrders = mergeShopifyOrderRowsWithCanonicalRows(
-    orderData.orders,
-    serverOrderRows,
-    {
-      includeCanonicalOnly:
-        !shouldLoadShopifyOrders || orderData.complete !== true,
-    },
-  );
+  const mergedOrders = canonicalFirst
+    ? serverOrderRows
+    : mergeShopifyOrderRowsWithCanonicalRows(
+        orderData.orders,
+        serverOrderRows,
+        {
+          includeCanonicalOnly:
+            !shouldLoadShopifyOrders || orderData.complete !== true,
+        },
+      );
+  const loaderTimings = {
+    activeOrdersView,
+    canonicalFirst,
+    totalMs: roundPerfDuration(getSafePerformanceNow() - loaderStartedAt),
+    shopifyOrdersCacheStatus: orderData.cacheStatus ?? (shouldLoadOrders ? "unknown" : "skipped"),
+    preferencesMs: preferencesDataResult.durationMs,
+    shopifyOrdersMs: orderDataResult.durationMs,
+    departureLocationMs: departureLocationDataResult.durationMs,
+    serverOrdersMs: serverOrderDataResult.durationMs,
+    inventoriesMs: inventoryDataResult.durationMs,
+    routeGroupsMs: routeGroupDataResult.durationMs,
+    shopTimeZoneMs: shopTimeZoneDataResult.durationMs,
+  };
+
+  logStructuredMetric("orders.loader", {
+    ...loaderTimings,
+    canonicalOrderCount: serverOrderData.orders?.length ?? 0,
+    correlationId: requestId,
+    inventoryCount: inventoryData.inventories?.length ?? 0,
+    loaderMode: canonicalFirst ? "canonical_first" : "shopify_merge",
+    orderCount: mergedOrders.length,
+    path,
+    requestId,
+    routeGroupCount: routeGroupData.routeGroups?.length ?? 0,
+    shopHash,
+    syncStatus: serverOrderData.freshness?.syncStatus ?? "unknown",
+  });
 
   return {
     orders: mergedOrders,
@@ -834,23 +995,253 @@ async function loadOrdersPageData({ admin, loaderStartedAt, request, session }) 
     ),
     departureLocation: departureLocationData.departureLocation,
     deliveryCycle: preferencesData.appPreferences.deliveryCycle ?? null,
+    featureFlags: {
+      autoSyncOrdersOnLoad,
+      backgroundReconciliation,
+      canonicalFirst,
+      ...resourceFlags,
+    },
+    pageInfo: serverOrderData.pageInfo ?? null,
+    pageResult: serverOrderData.result ?? null,
+    freshness: serverOrderData.freshness ?? {
+      canonicalOrderCount: serverOrderData.orders?.length ?? 0,
+      lastReconciliationAt: null,
+      lastWebhookAt: null,
+      oldestPendingReconciliationAt: null,
+      oldestPendingWebhookAt: null,
+      queueDepth: null,
+      syncStatus: "unknown",
+    },
+    requestId,
     shopLocalDate,
     shopTimeZone: shopTimeZoneData.ianaTimezone ?? null,
     perf: {
-      loader: {
-        activeOrdersView,
-        totalMs: roundPerfDuration(getSafePerformanceNow() - loaderStartedAt),
-        shopifyOrdersCacheStatus: orderData.cacheStatus ?? (shouldLoadOrders ? "unknown" : "skipped"),
-        preferencesMs: preferencesDataResult.durationMs,
-        shopifyOrdersMs: orderDataResult.durationMs,
-        departureLocationMs: departureLocationDataResult.durationMs,
-        serverOrdersMs: serverOrderDataResult.durationMs,
-        inventoriesMs: inventoryDataResult.durationMs,
-        routeGroupsMs: routeGroupDataResult.durationMs,
-        shopTimeZoneMs: shopTimeZoneDataResult.durationMs,
-      },
+      loader: loaderTimings,
     },
   };
+}
+
+export async function loadOrdersPageResource(request) {
+  const payload = await readOrdersQueryResourcePayload(request);
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.page.fetch", async () => {
+    requireOrdersResourceFlag("pagination");
+    const pageData = await fetchDeliveryOrdersPage(
+      request,
+      {
+        ...payload.filters,
+        after: payload.after,
+        before: payload.before,
+      },
+      { sessionToken: payload.shopifySessionToken },
+    );
+
+    return {
+      metric: {
+        cursorVersion: 1,
+        filterHash: pageData.result?.filterHash,
+        rowCount: pageData.rows?.length ?? 0,
+      },
+      value: {
+        ...pageData,
+        _requestKey: payload._requestKey ?? null,
+        rows: mapCanonicalOrdersToOrderRows(pageData.rows),
+      },
+    };
+  });
+}
+
+export async function loadOrdersFacetsResource(request) {
+  const payload = await readOrdersQueryResourcePayload(request);
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.facets.fetch", async () => {
+    requireOrdersResourceFlag("pagination");
+    const result = await fetchDeliveryOrderFacets(
+      request,
+      payload.filters,
+      { sessionToken: payload.shopifySessionToken },
+    );
+    return {
+      metric: {
+        countPrecision: result.countPrecision,
+        filterHash: result.filterHash,
+        totalCount: result.totalCount,
+      },
+      value: { ...result, _requestKey: payload._requestKey ?? null },
+    };
+  });
+}
+
+export async function loadOrdersMapPointsResource(request) {
+  const payload = await readOrdersQueryResourcePayload(request);
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.map_points.fetch", async () => {
+    requireOrdersResourceFlag("compactMap");
+    const result = await fetchDeliveryOrderMapPoints(
+      request,
+      {
+        ...payload.filters,
+        limit: payload.limit,
+      },
+      { sessionToken: payload.shopifySessionToken },
+    );
+    return {
+      metric: {
+        filterHash: result.filterHash,
+        pointCount: result.points?.length ?? 0,
+      },
+      value: { ...result, _requestKey: payload._requestKey ?? null },
+    };
+  });
+}
+
+export async function handleOrdersSelectionSnapshotsResource(request) {
+  const payload = await readResourcePayload(request);
+  const sessionToken = textOrUndefined(payload.shopifySessionToken);
+  if (!sessionToken) {
+    throw new Response("Shopify session token required", { status: 401 });
+  }
+  return measureOrdersResource(authenticatedResourceRequest(request, sessionToken), "orders.selection.snapshot", async () => {
+    requireOrdersResourceFlag("selectionSnapshots");
+
+    if (request.method === "POST") {
+      const result = await createDeliveryOrdersSelectionSnapshot(request, {
+        excludeOrderIds: payload.excludeOrderIds,
+        filters: payload.filters,
+        sort: "id_desc",
+      }, { sessionToken });
+      return {
+        metric: {
+          selectedCount: result.selectedCount ?? result.totalCount,
+          skippedCount: payload.excludeOrderIds?.length ?? 0,
+        },
+        value: {
+          ...result,
+          _requestKey: payload._requestKey ?? null,
+          _selectionOperation: "create",
+        },
+      };
+    }
+
+    if (request.method === "PATCH") {
+      const result = await replaceDeliveryOrdersSelectionExclusions(request, {
+        excludeOrderIds: payload.excludeOrderIds,
+        selectionToken: payload.selectionToken,
+      }, { sessionToken });
+      return {
+        metric: { skippedCount: payload.excludeOrderIds?.length ?? 0 },
+        value: {
+          ...result,
+          _requestKey: payload._requestKey ?? null,
+          _selectionOperation: "replace",
+        },
+      };
+    }
+
+    throw new Response("Method not allowed", { status: 405 });
+  });
+}
+
+async function measureOrdersResource(request, name, operation) {
+  const startedAt = getSafePerformanceNow();
+  const { session } = await authenticate.admin(request);
+  const requestId = createTelemetryRequestId();
+  const baseMetric = {
+    correlationId: requestId,
+    path: sanitizeRequestPath(request.url),
+    requestId,
+    shopHash: hashShopIdentifier(session?.shop),
+  };
+
+  try {
+    const result = await operation();
+    logStructuredMetric(name, {
+      ...baseMetric,
+      ...result.metric,
+      durationMs: roundPerfDuration(getSafePerformanceNow() - startedAt),
+      errorCount: 0,
+      status: "success",
+    });
+    return result.value;
+  } catch (error) {
+    logStructuredMetric(name, {
+      ...baseMetric,
+      durationMs: roundPerfDuration(getSafePerformanceNow() - startedAt),
+      errorCount: 1,
+      status: error instanceof Response ? `http_${error.status}` : "error",
+    });
+    throw error;
+  }
+}
+
+function requireOrdersResourceFlag(flag) {
+  if (!getOrdersResourceFeatureFlags()[flag]) {
+    throw new Response("Orders resource disabled", { status: 404 });
+  }
+}
+
+async function readResourcePayload(request) {
+  const contentType = request.headers.get("content-type") ?? "";
+  if (contentType.includes("application/json")) {
+    const value = await request.json();
+    return value && typeof value === "object" && !Array.isArray(value) ? value : {};
+  }
+
+  const formData = await request.formData();
+  return {
+    after: textOrUndefined(formData.get("after")),
+    before: textOrUndefined(formData.get("before")),
+    excludeOrderIds: parseJsonArray(formData.get("excludeOrderIds")),
+    filters: parseJsonObject(formData.get("filters")),
+    limit: textOrUndefined(formData.get("limit")),
+    _requestKey: textOrUndefined(formData.get("_requestKey")),
+    selectionToken: textOrUndefined(formData.get("selectionToken")),
+    shopifySessionToken: textOrUndefined(formData.get("shopifySessionToken")),
+  };
+}
+
+async function readOrdersQueryResourcePayload(request) {
+  if (request.method !== "POST") {
+    throw new Response("Method not allowed", { status: 405 });
+  }
+  const payload = await readResourcePayload(request);
+  const sessionToken = textOrUndefined(payload.shopifySessionToken);
+  if (!sessionToken) {
+    throw new Response("Shopify session token required", { status: 401 });
+  }
+  return {
+    _requestKey: textOrUndefined(payload._requestKey),
+    after: textOrUndefined(payload.after),
+    before: textOrUndefined(payload.before),
+    filters: payload.filters && typeof payload.filters === "object" && !Array.isArray(payload.filters)
+      ? payload.filters
+      : {},
+    limit: textOrUndefined(payload.limit),
+    shopifySessionToken: sessionToken,
+  };
+}
+
+function authenticatedResourceRequest(request, sessionToken) {
+  const headers = new Headers(request.headers);
+  headers.set("authorization", `Bearer ${sessionToken}`);
+  headers.delete("content-length");
+  headers.delete("content-type");
+  return new Request(request.url, { headers, method: "GET" });
+}
+
+function parseJsonArray(value) {
+  try {
+    const parsed = JSON.parse(value ?? "[]");
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function parseJsonObject(value) {
+  try {
+    const parsed = JSON.parse(value ?? "{}");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
 }
 
 function hasSessionTokenRefreshError(results) {

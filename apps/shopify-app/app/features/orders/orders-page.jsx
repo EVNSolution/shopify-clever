@@ -14,6 +14,16 @@ import { installPmtilesProtocol } from "../maps/pmtiles-protocol";
 import { getOrderSyncSnapshots, mapCanonicalOrdersToOrderRows, mergeShopifyOrderRowsWithCanonicalRows } from "./canonical-orders";
 import { getOrderAreaSuggestion } from "./order-area-suggestion";
 import {
+  buildOrdersResourceRequest,
+  getOrdersPageCacheKey,
+  getReverseOrdersPageCacheEntry,
+  mapCompactOrderPointsToRows,
+  shouldApplyOrdersResourceResponse,
+  updateOrdersSelectionExclusions,
+  updateVisibleOrdersSelectionExclusions,
+} from "./orders-resource-state";
+import { createOrdersResourceSessionTokenGetter } from "./orders-session-token-cache";
+import {
   DEFAULT_CENTER,
   INITIAL_HOME_ZOOM,
   MAP_RECOVERY_DELAY_MS,
@@ -65,14 +75,28 @@ import {
   createOrdersViewSnapshot,
   DEFAULT_ROUTE_PLAN_TITLE,
   formatLatestShopifyOrderUpdatedAt,
+  getOrdersReconciliationStatusMessage,
   getOrdersRefreshCompletion,
+  getOrdersReconciliationPollingCompletion,
   getPendingOrdersView,
   getSafePerformanceNow,
+  isOrdersReconciliationTerminalFailure,
+  isOrdersReconciliationTerminalSuccess,
   restoreOrdersViewSnapshot,
   roundPerfDuration,
+  shouldPollOrdersReconciliationJob,
   shouldRequestOrdersData,
   textOrUndefined,
 } from "./orders-page.shared";
+
+function submitOrdersResourceRequest(submit, resource, filterSearchParams, options) {
+  const request = buildOrdersResourceRequest(resource, filterSearchParams, options);
+  submit(request.payload, {
+    action: request.action,
+    encType: "application/json",
+    method: "post",
+  });
+}
 
 const PERF_ENDPOINT = "/perf";
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
@@ -1586,6 +1610,23 @@ function emitPerformanceMetric(metric) {
   }).catch(() => {});
 }
 
+function emitOrdersResourceTiming(name, data, startedAtByRequestKey, metric = {}) {
+  const requestKey = data?._requestKey;
+  const startedAt = requestKey ? startedAtByRequestKey.get(requestKey) : undefined;
+  if (!Number.isFinite(startedAt)) return;
+
+  startedAtByRequestKey.delete(requestKey);
+  emitPerformanceMetric({
+    name,
+    category: "orders-resource",
+    durationMs: roundPerfDuration(getSafePerformanceNow() - startedAt),
+    errorCount: Array.isArray(data?.errors) ? data.errors.length : 0,
+    filterHash: data?.filterHash ?? data?.result?.filterHash ?? null,
+    status: (data?.errors?.length ?? 0) > 0 ? "error" : "success",
+    ...metric,
+  });
+}
+
 function getOrderSortValue(order, columnKey, referenceDate) {
   if (columnKey === "hasCoordinates") {
     return order.hasCoordinates ? "Yes" : "No";
@@ -2444,7 +2485,21 @@ function OrdersPageContent({ loaderData }) {
   const orderBulkUpdateFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
   const ordersRefreshFetcher = useFetcher();
+  const ordersReconciliationStatusFetcher = useFetcher();
+  const ordersPageFetcher = useFetcher();
+  const ordersPagePrefetchFetcher = useFetcher();
+  const ordersFacetsFetcher = useFetcher();
+  const ordersMapPointsFetcher = useFetcher();
+  const ordersSelectionFetcher = useFetcher();
+  const submitOrdersPageResource = ordersPageFetcher.submit;
+  const submitOrdersPagePrefetchResource = ordersPagePrefetchFetcher.submit;
+  const submitOrdersFacetsResource = ordersFacetsFetcher.submit;
+  const submitOrdersMapPointsResource = ordersMapPointsFetcher.submit;
   const shopify = useAppBridge();
+  const getOrdersResourceSessionToken = useMemo(
+    () => createOrdersResourceSessionTokenGetter(() => shopify.idToken()),
+    [shopify],
+  );
   const navigate = useNavigate();
   const navigation = useNavigation();
   const revalidator = useRevalidator();
@@ -2464,8 +2519,33 @@ function OrdersPageContent({ loaderData }) {
     [loaderData],
   );
   const displayLoaderData = restoredOrdersView.loaderData;
-  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, needsSessionTokenRefresh, perf, shopLocalDate } = displayLoaderData;
+  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, needsSessionTokenRefresh, perf, shopLocalDate } = displayLoaderData;
   const { deliveryCycle, shopTimeZone } = displayLoaderData;
+  const autoSyncOrdersOnLoad = featureFlags?.autoSyncOrdersOnLoad === true;
+  const backgroundReconciliationEnabled = featureFlags?.backgroundReconciliation === true;
+  const paginationEnabled = featureFlags?.pagination === true;
+  const compactMapEnabled = featureFlags?.compactMap === true;
+  const selectionSnapshotsEnabled = featureFlags?.selectionSnapshots === true;
+  const [tableRows, setTableRows] = useState(() => Array.isArray(orders) ? orders : []);
+  const [ordersPageInfo, setOrdersPageInfo] = useState(() => displayLoaderData.pageInfo ?? null);
+  const [ordersPageResult, setOrdersPageResult] = useState(() => displayLoaderData.pageResult ?? null);
+  const [ordersFacets, setOrdersFacets] = useState(null);
+  const [ordersMapPoints, setOrdersMapPoints] = useState([]);
+  const [selectionSnapshot, setSelectionSnapshot] = useState(null);
+  const [selectionExcludedOrderIds, setSelectionExcludedOrderIds] = useState([]);
+  const resourceSequenceRef = useRef(0);
+  const latestPageRequestKeyRef = useRef(null);
+  const latestFacetsRequestKeyRef = useRef(null);
+  const latestMapRequestKeyRef = useRef(null);
+  const latestSelectionRequestKeyRef = useRef(null);
+  const pendingSelectionExclusionsRef = useRef(null);
+  const ordersPageCacheRef = useRef(new Map());
+  const ordersPagePrefetchRequestRef = useRef(null);
+  const pendingPageNavigationRef = useRef(null);
+  const initializedResourceFiltersRef = useRef(false);
+  const resourceMetricStartedAtRef = useRef(new Map());
+  const firstUsableMetricEmittedRef = useRef(false);
+  const bulkMetricStartedAtRef = useRef(null);
 
   useEffect(() => {
     if (!sourceOrdersLoaded || typeof window === "undefined") return;
@@ -2473,8 +2553,8 @@ function OrdersPageContent({ loaderData }) {
   }, [loaderData, sourceOrdersLoaded]);
   const [optimisticOrderFilters, setOptimisticOrderFilters] = useState(null);
   const safeOrders = useMemo(
-    () => (Array.isArray(orders) ? orders : []),
-    [orders],
+    () => paginationEnabled ? tableRows : (Array.isArray(orders) ? orders : []),
+    [orders, paginationEnabled, tableRows],
   );
   const safeInventories = useMemo(
     () => (Array.isArray(inventories) ? inventories : []),
@@ -2521,6 +2601,12 @@ function OrdersPageContent({ loaderData }) {
     () => getOrderFiltersFromSearchParams(searchParams),
     [searchParams],
   );
+  const resourceFilterSearchParams = useMemo(() => {
+    const resourceFilters = updateOrderFilterSearchParams(new URLSearchParams(), urlOrderFilters);
+    if (shopLocalDate) resourceFilters.set("routeOpsToday", shopLocalDate);
+    return resourceFilters;
+  }, [shopLocalDate, urlOrderFilters]);
+  const resourceFilterKey = resourceFilterSearchParams.toString();
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? new Date(),
@@ -2537,6 +2623,249 @@ function OrdersPageContent({ loaderData }) {
         : orderFilters,
     [activeOrderFilters, orderFilters],
   );
+
+  useEffect(() => {
+    ordersPageCacheRef.current.clear();
+    ordersPagePrefetchRequestRef.current = null;
+    pendingPageNavigationRef.current = null;
+  }, [resourceFilterKey]);
+
+  useEffect(() => {
+    if (!paginationEnabled) return undefined;
+
+    const sequence = resourceSequenceRef.current + 1;
+    resourceSequenceRef.current = sequence;
+    const pageRequestKey = `page-${sequence}`;
+    const facetsRequestKey = `facets-${sequence}`;
+    const mapRequestKey = `map-${sequence}`;
+    const shouldLoadPage = initializedResourceFiltersRef.current;
+    initializedResourceFiltersRef.current = true;
+    latestPageRequestKeyRef.current = pageRequestKey;
+    latestFacetsRequestKeyRef.current = facetsRequestKey;
+    latestMapRequestKeyRef.current = mapRequestKey;
+    latestSelectionRequestKeyRef.current = null;
+    pendingSelectionExclusionsRef.current = null;
+    setSelectionSnapshot(null);
+    setSelectionExcludedOrderIds([]);
+    let cancelled = false;
+
+    resourceMetricStartedAtRef.current.set(facetsRequestKey, getSafePerformanceNow());
+    if (shouldLoadPage) {
+      resourceMetricStartedAtRef.current.set(pageRequestKey, getSafePerformanceNow());
+    }
+    if (compactMapEnabled) {
+      resourceMetricStartedAtRef.current.set(mapRequestKey, getSafePerformanceNow());
+    }
+
+    getOrdersResourceSessionToken().then((idToken) => {
+      if (cancelled || !idToken) return;
+
+      if (shouldLoadPage) {
+        submitOrdersResourceRequest(submitOrdersPageResource, "page", resourceFilterSearchParams, {
+          idToken,
+          requestKey: pageRequestKey,
+        });
+      }
+      submitOrdersResourceRequest(submitOrdersFacetsResource, "facets", resourceFilterSearchParams, {
+        idToken,
+        requestKey: facetsRequestKey,
+      });
+      if (compactMapEnabled) {
+        submitOrdersResourceRequest(submitOrdersMapPointsResource, "map", resourceFilterSearchParams, {
+          idToken,
+          limit: 1000,
+          requestKey: mapRequestKey,
+        });
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    compactMapEnabled,
+    submitOrdersFacetsResource,
+    submitOrdersMapPointsResource,
+    submitOrdersPageResource,
+    getOrdersResourceSessionToken,
+    paginationEnabled,
+    resourceFilterKey,
+    resourceFilterSearchParams,
+  ]);
+
+  useEffect(() => {
+    if (!paginationEnabled) return;
+    setTableRows(Array.isArray(orders) ? orders : []);
+    setOrdersPageInfo(displayLoaderData.pageInfo ?? null);
+    setOrdersPageResult(displayLoaderData.pageResult ?? null);
+  }, [displayLoaderData.pageInfo, displayLoaderData.pageResult, orders, paginationEnabled]);
+
+  useEffect(() => {
+    if (
+      ordersPageFetcher.state !== "idle" ||
+      !shouldApplyOrdersResourceResponse(ordersPageFetcher.data, latestPageRequestKeyRef.current)
+    ) return;
+
+    const pendingNavigation = pendingPageNavigationRef.current;
+    if (pendingNavigation?.requestKey === ordersPageFetcher.data._requestKey) {
+      const reverseEntry = getReverseOrdersPageCacheEntry({
+        currentPage: pendingNavigation.currentPage,
+        direction: pendingNavigation.direction,
+        filterKey: resourceFilterKey,
+        targetPage: ordersPageFetcher.data,
+      });
+      if (reverseEntry) ordersPageCacheRef.current.set(reverseEntry.key, reverseEntry.value);
+      pendingPageNavigationRef.current = null;
+    }
+
+    setTableRows(Array.isArray(ordersPageFetcher.data.rows) ? ordersPageFetcher.data.rows : []);
+    setOrdersPageInfo(ordersPageFetcher.data.pageInfo ?? null);
+    setOrdersPageResult(ordersPageFetcher.data.result ?? null);
+    emitOrdersResourceTiming(
+      "orders.page.fetch",
+      ordersPageFetcher.data,
+      resourceMetricStartedAtRef.current,
+      { rowCount: ordersPageFetcher.data.rows?.length ?? 0 },
+    );
+  }, [ordersPageFetcher.data, ordersPageFetcher.state, resourceFilterKey]);
+
+  useEffect(() => {
+    const prefetchRequest = ordersPagePrefetchRequestRef.current;
+    if (
+      ordersPagePrefetchFetcher.state !== "idle" ||
+      !prefetchRequest ||
+      !shouldApplyOrdersResourceResponse(
+        ordersPagePrefetchFetcher.data,
+        prefetchRequest.requestKey,
+      )
+    ) return;
+
+    ordersPageCacheRef.current.set(prefetchRequest.cacheKey, ordersPagePrefetchFetcher.data);
+    ordersPagePrefetchRequestRef.current = null;
+  }, [ordersPagePrefetchFetcher.data, ordersPagePrefetchFetcher.state]);
+
+  useEffect(() => {
+    if (
+      !paginationEnabled ||
+      ordersPageFetcher.state !== "idle" ||
+      ordersPagePrefetchFetcher.state !== "idle" ||
+      !ordersPageInfo?.hasNextPage ||
+      !ordersPageInfo?.endCursor
+    ) return;
+
+    const cacheKey = getOrdersPageCacheKey(
+      resourceFilterKey,
+      "next",
+      ordersPageInfo.endCursor,
+    );
+    if (!cacheKey || ordersPageCacheRef.current.has(cacheKey)) return;
+
+    const requestKey = `prefetch-${resourceSequenceRef.current + 1}`;
+    resourceSequenceRef.current += 1;
+    ordersPagePrefetchRequestRef.current = { cacheKey, requestKey };
+    let cancelled = false;
+
+    getOrdersResourceSessionToken().then((idToken) => {
+      if (cancelled || !idToken) return;
+      submitOrdersResourceRequest(
+        submitOrdersPagePrefetchResource,
+        "page",
+        resourceFilterSearchParams,
+        {
+          after: ordersPageInfo.endCursor,
+          idToken,
+          requestKey,
+        },
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    getOrdersResourceSessionToken,
+    submitOrdersPagePrefetchResource,
+    ordersPageFetcher.state,
+    ordersPageInfo?.endCursor,
+    ordersPageInfo?.hasNextPage,
+    ordersPagePrefetchFetcher.state,
+    paginationEnabled,
+    resourceFilterKey,
+    resourceFilterSearchParams,
+  ]);
+
+  useEffect(() => {
+    if (
+      ordersFacetsFetcher.state !== "idle" ||
+      !shouldApplyOrdersResourceResponse(ordersFacetsFetcher.data, latestFacetsRequestKeyRef.current)
+    ) return;
+    setOrdersFacets(ordersFacetsFetcher.data);
+    emitOrdersResourceTiming(
+      "orders.facets.fetch",
+      ordersFacetsFetcher.data,
+      resourceMetricStartedAtRef.current,
+      {
+        countPrecision: ordersFacetsFetcher.data.countPrecision,
+        totalCount: ordersFacetsFetcher.data.totalCount,
+      },
+    );
+  }, [ordersFacetsFetcher.data, ordersFacetsFetcher.state]);
+
+  useEffect(() => {
+    if (
+      ordersMapPointsFetcher.state !== "idle" ||
+      !shouldApplyOrdersResourceResponse(ordersMapPointsFetcher.data, latestMapRequestKeyRef.current)
+    ) return;
+    setOrdersMapPoints(Array.isArray(ordersMapPointsFetcher.data.points) ? ordersMapPointsFetcher.data.points : []);
+    emitOrdersResourceTiming(
+      "orders.map_points.fetch",
+      ordersMapPointsFetcher.data,
+      resourceMetricStartedAtRef.current,
+      { pointCount: ordersMapPointsFetcher.data.points?.length ?? 0 },
+    );
+  }, [ordersMapPointsFetcher.data, ordersMapPointsFetcher.state]);
+
+  useEffect(() => {
+    if (
+      ordersSelectionFetcher.state !== "idle" ||
+      !ordersSelectionFetcher.data ||
+      !shouldApplyOrdersResourceResponse(ordersSelectionFetcher.data, latestSelectionRequestKeyRef.current)
+    ) return;
+
+    const errors = Array.isArray(ordersSelectionFetcher.data.errors)
+      ? ordersSelectionFetcher.data.errors
+      : [];
+    if (errors.length > 0) {
+      pendingSelectionExclusionsRef.current = null;
+      setBulkUpdateClientError(errors[0]?.message ?? "주문 선택을 저장하지 못했습니다.");
+      return;
+    }
+
+    if (ordersSelectionFetcher.data._selectionOperation === "replace") {
+      const pendingExclusions = pendingSelectionExclusionsRef.current;
+      setSelectionSnapshot((currentSnapshot) => currentSnapshot
+        ? {
+            ...currentSnapshot,
+            expiresAt: ordersSelectionFetcher.data.expiresAt ?? currentSnapshot.expiresAt,
+            selectedCount: ordersSelectionFetcher.data.selectedCount ?? currentSnapshot.selectedCount,
+          }
+        : currentSnapshot);
+      if (pendingExclusions?.requestKey === ordersSelectionFetcher.data._requestKey) {
+        setSelectionExcludedOrderIds(pendingExclusions.excludeOrderIds);
+      }
+      pendingSelectionExclusionsRef.current = null;
+    } else if (ordersSelectionFetcher.data.selectionToken) {
+      setSelectionSnapshot(ordersSelectionFetcher.data);
+      setSelectionExcludedOrderIds([]);
+    }
+    setBulkUpdateClientError(null);
+    emitOrdersResourceTiming(
+      "orders.selection.snapshot",
+      ordersSelectionFetcher.data,
+      resourceMetricStartedAtRef.current,
+      { selectedCount: ordersSelectionFetcher.data.selectedCount ?? 0 },
+    );
+  }, [ordersSelectionFetcher.data, ordersSelectionFetcher.state]);
   const orderFilterOptionOrders = useMemo(
     () =>
       activeOrderFilters
@@ -2556,7 +2885,9 @@ function OrdersPageContent({ loaderData }) {
     [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate],
   );
   const orderFilterOptions = useMemo(
-    () => ({
+    () => paginationEnabled && ordersFacets
+      ? getServerOrderFilterOptions(ordersFacets.facets)
+      : ({
       deliveryAreas: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
         ...effectiveOrderFilters,
         tab: "all",
@@ -2588,7 +2919,7 @@ function OrdersPageContent({ loaderData }) {
         referenceDate: orderFilterReferenceDate,
       })).serviceTypes,
     }),
-    [orderFilterOptionOrders, effectiveOrderFilters, orderFilterReferenceDate],
+    [effectiveOrderFilters, orderFilterOptionOrders, orderFilterReferenceDate, ordersFacets, paginationEnabled],
   );
   const filteredOrders = useMemo(
     () =>
@@ -2618,11 +2949,40 @@ function OrdersPageContent({ loaderData }) {
     setOrderActionModalOpen(false);
     setBulkUpdateClientError(null);
     setCheckedOrderIds([]);
+    setSelectionSnapshot(null);
+    setSelectionExcludedOrderIds([]);
+    pendingSelectionExclusionsRef.current = null;
+  }, [orderBulkUpdateFetcher.data, orderBulkUpdateFetcher.state]);
+
+  useEffect(() => {
+    if (
+      orderBulkUpdateFetcher.state !== "idle" ||
+      !orderBulkUpdateFetcher.data ||
+      !Number.isFinite(bulkMetricStartedAtRef.current?.startedAt)
+    ) return;
+
+    const { selectedCount, startedAt } = bulkMetricStartedAtRef.current;
+    bulkMetricStartedAtRef.current = null;
+    const bulkUpdate = orderBulkUpdateFetcher.data.bulkUpdate ?? {};
+    emitPerformanceMetric({
+      name: "orders.bulk.resolve",
+      category: "orders-resource",
+      durationMs: roundPerfDuration(getSafePerformanceNow() - startedAt),
+      errorCount: orderBulkUpdateFetcher.data.errors?.length ?? 0,
+      noOpCount: bulkUpdate.noOp ?? 0,
+      resolvedCount: bulkUpdate.resolved ?? 0,
+      selectedCount: bulkUpdate.selected ?? selectedCount,
+      skippedCount: bulkUpdate.skipped ?? 0,
+      status: (orderBulkUpdateFetcher.data.errors?.length ?? 0) > 0 ? "error" : "success",
+      updatedCount: bulkUpdate.updated ?? 0,
+    });
   }, [orderBulkUpdateFetcher.data, orderBulkUpdateFetcher.state]);
 
   const locatedOrders = useMemo(
-    () => filteredOrders.filter((order) => order.hasCoordinates),
-    [filteredOrders],
+    () => compactMapEnabled
+      ? mapCompactOrderPointsToRows(ordersMapPoints)
+      : filteredOrders.filter((order) => order.hasCoordinates),
+    [compactMapEnabled, filteredOrders, ordersMapPoints],
   );
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
   const [createInventoryClientError, setCreateInventoryClientError] = useState(null);
@@ -2651,9 +3011,12 @@ function OrdersPageContent({ loaderData }) {
   const isDeletingInventory = inventoryDeleteFetcher.state !== "idle";
   const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
   const [ordersRefreshPhase, setOrdersRefreshPhase] = useState("idle");
+  const [ordersReconciliationJob, setOrdersReconciliationJob] = useState(null);
+  const [ordersReconciliationError, setOrdersReconciliationError] = useState(null);
   const isRefreshingAllRoutes =
     ordersRefreshFetcher.state !== "idle" ||
-    ordersRefreshPhase === "syncing";
+    ordersRefreshPhase === "enqueueing" ||
+    ordersRefreshPhase === "polling";
   const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
@@ -2706,7 +3069,9 @@ function OrdersPageContent({ loaderData }) {
   const submittedInventorySessionTokenRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
   const activeOrdersRefreshRequestIdRef = useRef(null);
+  const activeOrdersReconciliationRef = useRef(null);
   const handledOrdersRefreshRequestIdRef = useRef(null);
+  const ordersReconciliationRevalidatedJobIdRef = useRef(null);
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
   const orderedDateFieldRef = useRef(null);
@@ -3040,23 +3405,39 @@ function OrdersPageContent({ loaderData }) {
     const formData = new FormData();
     formData.set("_intent", "refreshAllRoutes");
     formData.set("refreshRequestId", refreshRequestId);
+    formData.set("reconciliationMode", backgroundReconciliationEnabled ? "background" : "legacy");
     activeOrdersRefreshRequestIdRef.current = refreshRequestId;
-    setOrdersRefreshPhase("syncing");
+    activeOrdersReconciliationRef.current = null;
+    setOrdersReconciliationJob(null);
+    setOrdersReconciliationError(null);
+    setOrdersRefreshPhase("enqueueing");
 
     try {
-      formData.set("shopifySessionToken", await shopify.idToken());
+      const sessionToken = await shopify.idToken();
+      formData.set("shopifySessionToken", sessionToken);
+      if (backgroundReconciliationEnabled) {
+        activeOrdersReconciliationRef.current = {
+          jobId: null,
+          requestId: refreshRequestId,
+          sessionToken,
+        };
+      }
     } catch {
       // The server action returns the actionable authentication error.
     }
 
     ordersRefreshFetcher.submit(formData, { method: "post" });
-  }, [isRefreshingAllRoutes, ordersRefreshFetcher, shopify]);
+  }, [backgroundReconciliationEnabled, isRefreshingAllRoutes, ordersRefreshFetcher, shopify]);
 
   const ordersRefreshButtonLabel = isRefreshingAllRoutes
     ? "Updating Shopify orders…"
     : "Update Shopify orders";
   const ordersRefreshStatusMessage =
-    ordersRefreshPhase === "syncing" ? "Updating in the background…" : null;
+    ordersRefreshPhase === "enqueueing"
+      ? "Starting reconciliation…"
+      : ordersReconciliationError
+        ? ordersReconciliationError
+        : getOrdersReconciliationStatusMessage(ordersReconciliationJob, null);
 
   const ordersViewTabs = (
     <div style={ordersViewTabsRowStyle}>
@@ -3209,6 +3590,21 @@ function OrdersPageContent({ loaderData }) {
     [checkedOrderIds],
   );
 
+  const selectionExcludedOrderIdSet = useMemo(
+    () => new Set(selectionExcludedOrderIds),
+    [selectionExcludedOrderIds],
+  );
+
+  const snapshotSelectionActive = Boolean(selectionSnapshot?.selectionToken);
+  const snapshotSelectionUpdating =
+    snapshotSelectionActive && ordersSelectionFetcher.state !== "idle";
+  const selectedOrderCount = snapshotSelectionActive
+    ? selectionSnapshot?.selectedCount ?? 0
+    : checkedOrderIds.length;
+  const hasOrderActionSelection = snapshotSelectionActive
+    ? selectedOrderCount > 0
+    : checkedOrderIds.length > 0;
+
   const plannedOrderIdSet = useMemo(
     () => new Set(plannedOrderIds),
     [plannedOrderIds],
@@ -3262,6 +3658,9 @@ function OrdersPageContent({ loaderData }) {
   );
   const orderActionValueOptions =
     orderActionField === "state" ? ORDER_STATE_CHANGE_OPTIONS : ORDER_PAYMENT_CHANGE_OPTIONS;
+  const availableOrderBulkActionOptions = snapshotSelectionActive
+    ? ORDER_BULK_ACTION_OPTIONS.filter((option) => option.value !== ORDER_DATA_FIX_ACTION)
+    : ORDER_BULK_ACTION_OPTIONS;
   const isOrderDataAction = orderActionField === ORDER_DATA_FIX_ACTION;
 
   const plannedOrders = useMemo(() => {
@@ -3285,6 +3684,10 @@ function OrdersPageContent({ loaderData }) {
   const selectableTableOrders = useMemo(
     () => tableOrders.filter((order) => !plannedOrderIdSet.has(order.id)),
     [plannedOrderIdSet, tableOrders],
+  );
+  const snapshotSelectableTableOrders = useMemo(
+    () => tableOrders.filter((order) => Boolean(order.orderId)),
+    [tableOrders],
   );
 
   const plannedLocatedOrders = useMemo(() => plannedOrders.filter((order) => order.hasCoordinates), [plannedOrders]);
@@ -3319,9 +3722,11 @@ function OrdersPageContent({ loaderData }) {
     };
   }, [plannedOrders]);
 
-  const allVisibleOrdersChecked =
-    selectableTableOrders.length > 0 &&
-    selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
+  const allVisibleOrdersChecked = snapshotSelectionActive
+    ? snapshotSelectableTableOrders.length > 0 &&
+      snapshotSelectableTableOrders.every((order) => !selectionExcludedOrderIdSet.has(order.orderId))
+    : selectableTableOrders.length > 0 &&
+      selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
   const createRouteDisabled = plannedOrders.length === 0 || routePlanFetcher.state !== "idle";
   const addToRouteDisabled = createRouteDisabled || safeRouteGroups.length === 0;
   const createInventoryDisabled = plannedOrders.length === 0 || isCreatingInventory;
@@ -3709,6 +4114,110 @@ function OrdersPageContent({ loaderData }) {
     );
   };
 
+  const handleOrdersPageChange = async (direction) => {
+    if (!paginationEnabled || ordersPageFetcher.state !== "idle") return;
+    const cursor = direction === "next"
+      ? ordersPageInfo?.endCursor
+      : ordersPageInfo?.startCursor;
+    if (!cursor) return;
+
+    const requestKey = `page-${resourceSequenceRef.current + 1}`;
+    resourceSequenceRef.current += 1;
+    latestPageRequestKeyRef.current = requestKey;
+    resourceMetricStartedAtRef.current.set(requestKey, getSafePerformanceNow());
+    const currentPage = {
+      pageInfo: ordersPageInfo,
+      result: ordersPageResult,
+      rows: tableRows,
+    };
+    const cacheKey = getOrdersPageCacheKey(resourceFilterKey, direction, cursor);
+    const cachedPage = cacheKey ? ordersPageCacheRef.current.get(cacheKey) : null;
+
+    if (cachedPage) {
+      ordersPageCacheRef.current.delete(cacheKey);
+      const reverseEntry = getReverseOrdersPageCacheEntry({
+        currentPage,
+        direction,
+        filterKey: resourceFilterKey,
+        targetPage: cachedPage,
+      });
+      if (reverseEntry) ordersPageCacheRef.current.set(reverseEntry.key, reverseEntry.value);
+
+      setTableRows(Array.isArray(cachedPage.rows) ? cachedPage.rows : []);
+      setOrdersPageInfo(cachedPage.pageInfo ?? null);
+      setOrdersPageResult(cachedPage.result ?? null);
+      emitOrdersResourceTiming(
+        "orders.page.fetch",
+        { ...cachedPage, _requestKey: requestKey },
+        resourceMetricStartedAtRef.current,
+        { rowCount: cachedPage.rows?.length ?? 0 },
+      );
+      return;
+    }
+
+    pendingPageNavigationRef.current = { currentPage, direction, requestKey };
+    const idToken = await getOrdersResourceSessionToken();
+    if (!idToken) return;
+
+    submitOrdersResourceRequest(submitOrdersPageResource, "page", resourceFilterSearchParams, {
+      ...(direction === "next" ? { after: cursor } : { before: cursor }),
+      idToken,
+      requestKey,
+    });
+  };
+
+  const handleSelectAllFilteredOrders = async () => {
+    if (
+      !selectionSnapshotsEnabled ||
+      snapshotSelectionActive ||
+      ordersSelectionFetcher.state !== "idle"
+    ) return;
+    const requestKey = `selection-${resourceSequenceRef.current + 1}`;
+    resourceSequenceRef.current += 1;
+    latestSelectionRequestKeyRef.current = requestKey;
+    resourceMetricStartedAtRef.current.set(requestKey, getSafePerformanceNow());
+    const formData = new FormData();
+    formData.set("filters", JSON.stringify(Object.fromEntries(resourceFilterSearchParams)));
+    formData.set("excludeOrderIds", "[]");
+    formData.set("_requestKey", requestKey);
+    formData.set("shopifySessionToken", await getOrdersResourceSessionToken());
+    ordersSelectionFetcher.submit(formData, {
+      action: "/app/orders/selection-snapshots",
+      method: "post",
+    });
+  };
+
+  const replaceSelectionExclusions = async (excludeOrderIds) => {
+    if (
+      !selectionSnapshot?.selectionToken ||
+      ordersSelectionFetcher.state !== "idle"
+    ) return;
+
+    const requestKey = `selection-${resourceSequenceRef.current + 1}`;
+    resourceSequenceRef.current += 1;
+    latestSelectionRequestKeyRef.current = requestKey;
+    resourceMetricStartedAtRef.current.set(requestKey, getSafePerformanceNow());
+    pendingSelectionExclusionsRef.current = { excludeOrderIds, requestKey };
+    const formData = new FormData();
+    formData.set("selectionToken", selectionSnapshot.selectionToken);
+    formData.set("excludeOrderIds", JSON.stringify(excludeOrderIds));
+    formData.set("_requestKey", requestKey);
+    formData.set("shopifySessionToken", await getOrdersResourceSessionToken());
+    ordersSelectionFetcher.submit(formData, {
+      action: "/app/orders/selection-snapshots",
+      method: "patch",
+    });
+  };
+
+  const handleClearOrderSelection = () => {
+    latestSelectionRequestKeyRef.current = null;
+    pendingSelectionExclusionsRef.current = null;
+    setCheckedOrderIds([]);
+    setSelectionSnapshot(null);
+    setSelectionExcludedOrderIds([]);
+    setBulkUpdateClientError(null);
+  };
+
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
 
@@ -3844,7 +4353,21 @@ function OrdersPageContent({ loaderData }) {
   }, [isMapReady]);
 
 
-  const toggleOrderCheck = (orderId, checked) => {
+  const toggleOrderCheck = (order, checked) => {
+    if (snapshotSelectionActive) {
+      if (!order?.orderId || snapshotSelectionUpdating) return;
+      void replaceSelectionExclusions(
+        updateOrdersSelectionExclusions(
+          selectionExcludedOrderIds,
+          order.orderId,
+          checked,
+        ),
+      );
+      return;
+    }
+
+    const orderId = order?.id;
+    if (!orderId) return;
     if (plannedOrderIdSet.has(orderId)) return;
 
     setCheckedOrderIds((currentOrderIds) => checked
@@ -3854,6 +4377,18 @@ function OrdersPageContent({ loaderData }) {
   };
 
   const toggleAllVisibleOrderChecks = () => {
+    if (snapshotSelectionActive) {
+      if (snapshotSelectionUpdating || snapshotSelectableTableOrders.length === 0) return;
+      void replaceSelectionExclusions(
+        updateVisibleOrdersSelectionExclusions(
+          selectionExcludedOrderIds,
+          snapshotSelectableTableOrders.map((order) => order.orderId),
+          !allVisibleOrdersChecked,
+        ),
+      );
+      return;
+    }
+
     if (!allVisibleOrdersChecked) {
       setCheckedOrderIds((currentOrderIds) =>
         Array.from(
@@ -3942,15 +4477,24 @@ function OrdersPageContent({ loaderData }) {
   };
 
   const handleOpenOrderAction = () => {
-    if (checkedOrderIds.length === 0) return;
+    if (!hasOrderActionSelection) return;
     setBulkUpdateClientError(null);
+    if (snapshotSelectionActive && orderActionField === ORDER_DATA_FIX_ACTION) {
+      setOrderActionField("state");
+      setOrderActionValue(ORDER_STATE_CHANGE_OPTIONS[0].value);
+    }
     setOrderActionModalOpen(true);
-    if (orderActionField === ORDER_DATA_FIX_ACTION) selectOrderDataOrder(orderDataRows[0]?.order);
+    if (!snapshotSelectionActive && orderActionField === ORDER_DATA_FIX_ACTION) {
+      selectOrderDataOrder(orderDataRows[0]?.order);
+    }
   };
 
   const handleOpenOrderDataAction = (order) => {
     setBulkUpdateClientError(null);
     setCheckedOrderIds([]);
+    setSelectionSnapshot(null);
+    setSelectionExcludedOrderIds([]);
+    pendingSelectionExclusionsRef.current = null;
     setOrderActionField(ORDER_DATA_FIX_ACTION);
     setOrderActionValue("");
     selectOrderDataOrder(order);
@@ -3963,6 +4507,11 @@ function OrdersPageContent({ loaderData }) {
 
   const handleSaveOrderAction = async () => {
     if (isBulkUpdatingOrders) return;
+
+    if (snapshotSelectionActive && orderActionField === ORDER_DATA_FIX_ACTION) {
+      setBulkUpdateClientError("전체 선택에서는 상태 또는 결제만 일괄 변경할 수 있습니다.");
+      return;
+    }
 
     const formData = new FormData();
     const sessionToken = await shopify.idToken();
@@ -3982,7 +4531,7 @@ function OrdersPageContent({ loaderData }) {
       return;
     }
 
-    if (checkedServerOrderIds.length === 0) {
+    if (checkedServerOrderIds.length === 0 && !hasOrderActionSelection) {
       setBulkUpdateClientError("서버에 저장된 주문만 변경할 수 있습니다. 주문 동기화 후 다시 시도해주세요.");
       return;
     }
@@ -3990,8 +4539,16 @@ function OrdersPageContent({ loaderData }) {
     formData.set("_intent", "bulkUpdateOrders");
     formData.set("field", orderActionField);
     formData.set("value", orderActionValue);
-    formData.set("orderIds", JSON.stringify(checkedServerOrderIds));
+    if (selectionSnapshot?.selectionToken) {
+      formData.set("selectionToken", selectionSnapshot.selectionToken);
+    } else {
+      formData.set("orderIds", JSON.stringify(checkedServerOrderIds));
+    }
     formData.set("shopifySessionToken", sessionToken);
+    bulkMetricStartedAtRef.current = {
+      selectedCount: selectionSnapshot?.selectedCount ?? checkedServerOrderIds.length,
+      startedAt: getSafePerformanceNow(),
+    };
     orderBulkUpdateFetcher.submit(formData, { method: "post" });
   };
 
@@ -4136,6 +4693,7 @@ function OrdersPageContent({ loaderData }) {
   }, [needsSessionTokenRefresh, searchParams, setSearchParams, shopify]);
 
   useEffect(() => {
+    if (!autoSyncOrdersOnLoad) return;
     if (!sourceOrdersLoaded) return;
     if (orderSyncSubmittedRef.current) return;
 
@@ -4163,7 +4721,7 @@ function OrdersPageContent({ loaderData }) {
     return () => {
       cancelled = true;
     };
-  }, [ordersSyncFetcher, safeOrders, shopify, sourceOrdersLoaded]);
+  }, [autoSyncOrdersOnLoad, ordersSyncFetcher, safeOrders, shopify, sourceOrdersLoaded]);
 
   useEffect(() => {
     const completion = getOrdersRefreshCompletion({
@@ -4182,15 +4740,133 @@ function OrdersPageContent({ loaderData }) {
     }
 
     const refreshResult = completion.data ?? {};
-    const updatedOrders = Number(refreshResult.updatedOrders ?? 0);
+    const reconciliationJob = refreshResult.reconciliationJob;
+    const isBackgroundReconciliation = refreshResult.reconciliationMode === "background";
+    const updatedOrders = Number(refreshResult.updatedOrders ?? reconciliationJob?.appliedCount ?? 0);
     const refreshedRoutes = Number(refreshResult.refreshedRoutes ?? 0);
     const skippedRoutes = refreshResult.skippedRoutes?.length ?? 0;
     const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} active or terminal routes skipped` : "";
+    if (isBackgroundReconciliation) {
+      const jobId = textOrUndefined(reconciliationJob?.jobId);
+      if (!jobId) {
+        activeOrdersRefreshRequestIdRef.current = null;
+        activeOrdersReconciliationRef.current = null;
+        setOrdersReconciliationError("Reconciliation job was not returned.");
+        setOrdersRefreshPhase("error");
+        return;
+      }
+
+      activeOrdersReconciliationRef.current = {
+        ...(activeOrdersReconciliationRef.current ?? {}),
+        jobId,
+        requestId: completion.requestId,
+      };
+      setOrdersReconciliationJob(reconciliationJob);
+      shopify.toast.show(`Order reconciliation queued (${jobId})`);
+      if (isOrdersReconciliationTerminalSuccess(reconciliationJob)) {
+        activeOrdersRefreshRequestIdRef.current = null;
+        activeOrdersReconciliationRef.current = null;
+        setOrdersRefreshPhase("idle");
+        if (ordersReconciliationRevalidatedJobIdRef.current !== jobId) {
+          ordersReconciliationRevalidatedJobIdRef.current = jobId;
+          revalidator.revalidate();
+        }
+        return;
+      }
+      if (isOrdersReconciliationTerminalFailure(reconciliationJob)) {
+        activeOrdersRefreshRequestIdRef.current = null;
+        activeOrdersReconciliationRef.current = null;
+        setOrdersReconciliationError(getOrdersReconciliationStatusMessage(reconciliationJob, "Reconciliation failed"));
+        setOrdersRefreshPhase("error");
+        return;
+      }
+      setOrdersRefreshPhase(shouldPollOrdersReconciliationJob(reconciliationJob) ? "polling" : "idle");
+      return;
+    }
+
     activeOrdersRefreshRequestIdRef.current = null;
+    activeOrdersReconciliationRef.current = null;
     setOrdersRefreshPhase("idle");
     shopify.toast.show(`${updatedOrders} orders synced; ${refreshedRoutes} READY routes refreshed${skippedMessage}`);
     revalidator.revalidate();
   }, [ordersRefreshFetcher.data, ordersRefreshFetcher.state, revalidator, shopify]);
+
+  useEffect(() => {
+    if (ordersRefreshPhase !== "polling") return;
+    const active = activeOrdersReconciliationRef.current;
+    if (!active?.jobId || !active?.requestId || !active?.sessionToken) return;
+    if (!shouldPollOrdersReconciliationJob(ordersReconciliationJob)) return;
+    if (ordersReconciliationStatusFetcher.state !== "idle") return;
+
+    const timeout = window.setTimeout(() => {
+      const current = activeOrdersReconciliationRef.current;
+      if (current?.jobId !== active.jobId || current?.requestId !== active.requestId) return;
+
+      const formData = new FormData();
+      formData.set("_intent", "pollOrdersReconciliation");
+      formData.set("jobId", active.jobId);
+      formData.set("refreshRequestId", active.requestId);
+      formData.set("shopifySessionToken", active.sessionToken);
+      ordersReconciliationStatusFetcher.submit(formData, { method: "post" });
+    }, 1500);
+
+    return () => {
+      window.clearTimeout(timeout);
+    };
+  }, [
+    ordersReconciliationJob,
+    ordersReconciliationStatusFetcher,
+    ordersReconciliationStatusFetcher.state,
+    ordersRefreshPhase,
+  ]);
+
+  useEffect(() => {
+    const active = activeOrdersReconciliationRef.current;
+    const completion = getOrdersReconciliationPollingCompletion({
+      activeJobId: active?.jobId,
+      activeRequestId: active?.requestId,
+      data: ordersReconciliationStatusFetcher.data,
+      fetcherState: ordersReconciliationStatusFetcher.state,
+    });
+    if (!completion) return;
+
+    if (completion.hasErrors) {
+      setOrdersReconciliationError("Reconciliation status could not be checked.");
+      setOrdersRefreshPhase("error");
+      return;
+    }
+
+    const job = completion.job;
+    setOrdersReconciliationJob(job);
+    setOrdersReconciliationError(null);
+
+    if (isOrdersReconciliationTerminalSuccess(job)) {
+      activeOrdersRefreshRequestIdRef.current = null;
+      activeOrdersReconciliationRef.current = null;
+      setOrdersRefreshPhase("idle");
+      shopify.toast.show(getOrdersReconciliationStatusMessage(job, "Order reconciliation complete"));
+      if (ordersReconciliationRevalidatedJobIdRef.current !== completion.jobId) {
+        ordersReconciliationRevalidatedJobIdRef.current = completion.jobId;
+        revalidator.revalidate();
+      }
+      return;
+    }
+
+    if (isOrdersReconciliationTerminalFailure(job)) {
+      activeOrdersRefreshRequestIdRef.current = null;
+      activeOrdersReconciliationRef.current = null;
+      setOrdersReconciliationError(getOrdersReconciliationStatusMessage(job, "Reconciliation failed"));
+      setOrdersRefreshPhase("error");
+      return;
+    }
+
+    setOrdersRefreshPhase("polling");
+  }, [
+    ordersReconciliationStatusFetcher.data,
+    ordersReconciliationStatusFetcher.state,
+    revalidator,
+    shopify,
+  ]);
 
   useEffect(() => {
     const createdRouteGroup = routePlanFetcher.data?.routeGroup;
@@ -4266,6 +4942,29 @@ function OrdersPageContent({ loaderData }) {
       orderCount: safeOrders.length,
     });
   }, [perf?.loader, safeInventories.length, safeOrders.length]);
+
+  useEffect(() => {
+    if (
+      firstUsableMetricEmittedRef.current ||
+      activeOrdersView !== "orders" ||
+      !ordersLoaded ||
+      (errors?.length ?? 0) > 0 ||
+      !perf?.loader
+    ) return;
+
+    firstUsableMetricEmittedRef.current = true;
+    emitPerformanceMetric({
+      name: "orders.loader.first_usable",
+      category: "orders-loader",
+      durationMs: roundPerfDuration(
+        (perf.loader.totalMs ?? 0) +
+        (getSafePerformanceNow() - initialRenderStartedAtRef.current),
+      ),
+      errorCount: Array.isArray(errors) ? errors.length : 0,
+      orderCount: safeOrders.length,
+      status: (errors?.length ?? 0) > 0 ? "error" : "success",
+    });
+  }, [activeOrdersView, errors, ordersLoaded, perf?.loader, safeOrders.length]);
 
   useEffect(() => () => {
     clearMapRecoveryTimer();
@@ -4980,9 +5679,34 @@ function OrdersPageContent({ loaderData }) {
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Visible order count" style={orderSelectionCountStyle}>
                 Orders: {filteredOrders.length}
-                {filteredOrders.length === displayOrders.length ? "" : ` / ${displayOrders.length}`}
+                {paginationEnabled && ordersPageResult?.countPrecision === "exact"
+                  ? ` / ${ordersPageResult.count}`
+                  : filteredOrders.length === displayOrders.length ? "" : ` / ${displayOrders.length}`}
               </span>
-              <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
+              <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {selectedOrderCount}</span>
+              {selectionSnapshot ? (
+                <span aria-label="Frozen selected orders" style={orderSelectionCountStyle}>
+                  Frozen selected set
+                </span>
+              ) : null}
+              {selectionSnapshotsEnabled ? (
+                <button
+                  type="button"
+                  style={ordersSelectionFetcher.state === "idle" && !snapshotSelectionActive ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
+                  disabled={ordersSelectionFetcher.state !== "idle" || snapshotSelectionActive}
+                  onClick={handleSelectAllFilteredOrders}
+                >{snapshotSelectionActive
+                    ? "All filtered selected"
+                    : ordersSelectionFetcher.state === "idle" ? "Select all filtered" : "Freezing…"}</button>
+              ) : null}
+              {selectedOrderCount > 0 ? (
+                <button
+                  type="button"
+                  style={orderFilterButtonStyle}
+                  disabled={snapshotSelectionUpdating}
+                  onClick={handleClearOrderSelection}
+                >Clear selection</button>
+              ) : null}
               <button
                 type="button"
                 title="Return to the planning Unplanned view"
@@ -4993,21 +5717,21 @@ function OrdersPageContent({ loaderData }) {
               <button
                 type="button"
                 style={
-                  checkedOrderIds.length === 0
+                  checkedOrderIds.length === 0 || snapshotSelectionActive
                     ? disabledCreateRouteButtonStyle
                     : addToPlanButtonStyle
                 }
-                disabled={checkedOrderIds.length === 0}
+                disabled={checkedOrderIds.length === 0 || snapshotSelectionActive}
                 onClick={handleAddToPlan}
               >Add to map</button>
               <button
                 type="button"
                 style={
-                  checkedOrderIds.length === 0 || isBulkUpdatingOrders
+                  !hasOrderActionSelection || isBulkUpdatingOrders
                     ? disabledCreateRouteButtonStyle
                     : addToPlanButtonStyle
                 }
-                disabled={checkedOrderIds.length === 0 || isBulkUpdatingOrders}
+                disabled={!hasOrderActionSelection || isBulkUpdatingOrders}
                 onClick={handleOpenOrderAction}
               >Action</button>
             </div>
@@ -5023,9 +5747,9 @@ function OrdersPageContent({ loaderData }) {
                 >
                   <div aria-modal="true" role="dialog" style={isOrderDataAction ? orderDataDialogStyle : orderActionDialogStyle}>
                     <strong>Action</strong>
-                    <span style={orderSelectionCountStyle}>Selected: {checkedOrderIds.length}</span>
+                    <span style={orderSelectionCountStyle}>Selected: {selectedOrderCount}</span>
                     <div style={orderActionToggleStyle}>
-                      {ORDER_BULK_ACTION_OPTIONS.map((option) => (
+                      {availableOrderBulkActionOptions.map((option) => (
                         <button
                           key={option.value}
                           type="button"
@@ -5244,7 +5968,9 @@ function OrdersPageContent({ loaderData }) {
                       type="checkbox"
                       aria-label="Select all visible orders for plan"
                       checked={allVisibleOrdersChecked}
-                      disabled={selectableTableOrders.length === 0}
+                      disabled={snapshotSelectionActive
+                        ? snapshotSelectableTableOrders.length === 0 || snapshotSelectionUpdating
+                        : selectableTableOrders.length === 0}
                       onChange={toggleAllVisibleOrderChecks}
                     />
                   </th>
@@ -5285,7 +6011,9 @@ function OrdersPageContent({ loaderData }) {
               <tbody>
                 {tableOrders.map((order) => {
                   const orderIsPlanned = plannedOrderIdSet.has(order.id);
-                  const checkboxChecked = orderIsPlanned || checkedOrderIdSet.has(order.id);
+                  const checkboxChecked = snapshotSelectionActive
+                    ? Boolean(order.orderId) && !selectionExcludedOrderIdSet.has(order.orderId)
+                    : orderIsPlanned || checkedOrderIdSet.has(order.id);
                   const areaPillTone = getOrderAreaPillTone(order);
                   const areaPillDetails = getOrderAreaPillDetails(order);
                   const areaPill = renderDetailPill({
@@ -5320,14 +6048,18 @@ function OrdersPageContent({ loaderData }) {
                         <input
                           type="checkbox"
                           aria-label={
-                            orderIsPlanned
+                            snapshotSelectionActive
+                              ? `Select ${order.name} in frozen set`
+                              : orderIsPlanned
                               ? `${order.name} already added to map`
                               : `Select ${order.name} for plan`
                           }
-                          title={orderIsPlanned ? "Already added to map" : ""}
+                          title={!snapshotSelectionActive && orderIsPlanned ? "Already added to map" : ""}
                           checked={checkboxChecked}
-                          disabled={orderIsPlanned}
-                          onChange={(event) => toggleOrderCheck(order.id, event.currentTarget.checked)}
+                          disabled={snapshotSelectionActive
+                            ? !order.orderId || snapshotSelectionUpdating
+                            : orderIsPlanned}
+                          onChange={(event) => toggleOrderCheck(order, event.currentTarget.checked)}
                         />
                       </td>
                       <td style={tableCellStyle}>
@@ -5529,9 +6261,57 @@ function OrdersPageContent({ loaderData }) {
                 })}
               </tbody>
             </table>
+            {paginationEnabled ? (
+              <div aria-label="Orders pagination" style={orderControlsTrailingStyle}>
+                <button
+                  type="button"
+                  style={ordersPageInfo?.hasPreviousPage && ordersPageFetcher.state === "idle" ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
+                  disabled={!ordersPageInfo?.hasPreviousPage || ordersPageFetcher.state !== "idle"}
+                  onClick={() => handleOrdersPageChange("previous")}
+                >Previous</button>
+                <button
+                  type="button"
+                  style={ordersPageInfo?.hasNextPage && ordersPageFetcher.state === "idle" ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
+                  disabled={!ordersPageInfo?.hasNextPage || ordersPageFetcher.state !== "idle"}
+                  onClick={() => handleOrdersPageChange("next")}
+                >Next</button>
+              </div>
+            ) : null}
           </div>
         </div>
       }
     />
   );
+}
+
+function getServerOrderFilterOptions(facets) {
+  const safeFacets = facets && typeof facets === "object" && !Array.isArray(facets)
+    ? facets
+    : {};
+
+  return {
+    deliveryAreas: getFacetValues(safeFacets.deliveryAreas),
+    deliveryDates: getFacetCountValues(safeFacets.deliveryDates),
+    deliveryStates: getFacetValues(safeFacets.deliveryStates),
+    deliveryWeekdays: getFacetValues(safeFacets.deliveryWeekdays),
+    serviceTypes: getFacetValues(safeFacets.serviceTypes),
+  };
+}
+
+function getFacetValues(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const facetValue = typeof entry === "string" ? entry : entry?.value;
+    return typeof facetValue === "string" && facetValue ? [facetValue] : [];
+  });
+}
+
+function getFacetCountValues(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry === "string" && entry) return [{ count: 0, value: entry }];
+    return typeof entry?.value === "string" && entry.value
+      ? [{ count: Number.isFinite(Number(entry.count)) ? Number(entry.count) : 0, value: entry.value }]
+      : [];
+  });
 }

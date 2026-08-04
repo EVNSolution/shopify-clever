@@ -9,6 +9,7 @@ import {
   getServiceErrorMessage,
   normalizeGraphqlErrors as normalizeServiceGraphqlErrors,
 } from "../service-errors.js";
+import { logStructuredMetric } from "../telemetry/structured-telemetry.server.js";
 
 const SHOPIFY_ORDERS_PAGE_SIZE = 50;
 const SHOPIFY_ORDER_NODES_BATCH_SIZE = 100;
@@ -272,12 +273,18 @@ export async function fetchShopifyOrdersByIds(admin, orderIds, options = {}) {
       let response;
       try {
         assertReadOnlyShopifyOrdersOperation(ordersQuery);
-        response = await admin.graphql(ordersQuery, { variables: { ids: batchIds } });
+        response = await runReadOnlyShopifyOrdersGraphql(admin, ordersQuery, {
+          metric: { orderCount: batchIds.length, topic: "orders_by_ids" },
+          variables: { ids: batchIds },
+        });
       } catch (error) {
         if (ordersQuery !== SHOPIFY_ORDERS_BY_IDS_QUERY || !isCustomerScopeAccessError(error)) throw error;
         ordersQuery = SHOPIFY_ORDERS_BY_IDS_QUERY_WITHOUT_CUSTOMER_NOTE;
         assertReadOnlyShopifyOrdersOperation(ordersQuery);
-        response = await admin.graphql(ordersQuery, { variables: { ids: batchIds } });
+        response = await runReadOnlyShopifyOrdersGraphql(admin, ordersQuery, {
+          metric: { orderCount: batchIds.length, status: "without_customer_note", topic: "orders_by_ids" },
+          variables: { ids: batchIds },
+        });
       }
 
       const payload = await response.json();
@@ -329,12 +336,18 @@ async function loadShopifyOrders(admin, options = {}) {
       let response;
       try {
         assertReadOnlyShopifyOrdersOperation(ordersQuery);
-        response = await admin.graphql(ordersQuery, { variables });
+        response = await runReadOnlyShopifyOrdersGraphql(admin, ordersQuery, {
+          metric: { pageCount: 1, topic: "orders_full_scan" },
+          variables,
+        });
       } catch (error) {
         if (ordersQuery !== SHOPIFY_ORDERS_QUERY || !isCustomerScopeAccessError(error)) throw error;
         ordersQuery = SHOPIFY_ORDERS_QUERY_WITHOUT_CUSTOMER_NOTE;
         assertReadOnlyShopifyOrdersOperation(ordersQuery);
-        response = await admin.graphql(ordersQuery, { variables });
+        response = await runReadOnlyShopifyOrdersGraphql(admin, ordersQuery, {
+          metric: { pageCount: 1, status: "without_customer_note", topic: "orders_full_scan" },
+          variables,
+        });
       }
       const payload = await response.json();
       errors.push(...normalizeGraphqlErrors(payload.errors));
@@ -418,7 +431,8 @@ async function hydrateShopifyOrderLineItems(admin, orderNodes) {
       seenCursors.add(after);
 
       assertReadOnlyShopifyOrdersOperation(SHOPIFY_ORDER_LINE_ITEMS_QUERY);
-      const response = await admin.graphql(SHOPIFY_ORDER_LINE_ITEMS_QUERY, {
+      const response = await runReadOnlyShopifyOrdersGraphql(admin, SHOPIFY_ORDER_LINE_ITEMS_QUERY, {
+        metric: { orderCount: 1, topic: "order_line_items" },
         variables: {
           after,
           first: SHOPIFY_ORDER_LINE_ITEMS_PAGE_SIZE,
@@ -454,6 +468,32 @@ async function hydrateShopifyOrderLineItems(admin, orderNodes) {
   }
 
   return { errors, nodes };
+}
+
+async function runReadOnlyShopifyOrdersGraphql(admin, operation, options = {}) {
+  const startedAt = Date.now();
+  try {
+    assertReadOnlyShopifyOrdersOperation(operation);
+    const response = await admin.graphql(operation, { variables: options.variables });
+    logStructuredMetric("shopify.graphql.orders", {
+      count: 1,
+      durationMs: Date.now() - startedAt,
+      graphqlCallCount: 1,
+      status: "ok",
+      ...(options.metric ?? {}),
+    });
+    return response;
+  } catch (error) {
+    logStructuredMetric("shopify.graphql.orders", {
+      count: 1,
+      durationMs: Date.now() - startedAt,
+      errorCount: 1,
+      graphqlCallCount: 1,
+      status: "error",
+      ...(options.metric ?? {}),
+    });
+    throw error;
+  }
 }
 
 function getShopifyOrderNodes(value) {
