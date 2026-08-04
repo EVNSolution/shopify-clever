@@ -2066,6 +2066,9 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /const ordersTotalPages = getPositiveInteger\(ordersPageInfo\?\.totalPages\)/);
   assert.match(ordersPageSource, /import \{ getOrdersPageNumbers \} from "\.\/orders-pagination"/);
   assert.match(ordersPageSource, /ordersPageNumbers\.map\(\(pageNumber\) =>/);
+  assert.match(ordersPageSource, /\{ordersPageResult\.count\} total orders/);
+  assert.match(ordersPageSource, /Page \{ordersCurrentPage\} of \{ordersTotalPages\}/);
+  assert.doesNotMatch(ordersPageSource, /\? `, \$\{ordersPageResult\.count\} orders`/);
   assert.match(ordersPageSource, /typeof pageNumber !== "number"/);
   assert.match(ordersPageSource, /aria-current=\{active \? "page" : undefined\}/);
   assert.match(ordersPageSource, /onClick=\{\(\) => handleOrdersPageChange\(pageNumber\)\}/);
