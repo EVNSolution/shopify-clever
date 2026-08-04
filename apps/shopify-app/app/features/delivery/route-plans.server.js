@@ -636,6 +636,7 @@ async function executeDeliveryApiRequest({
 }) {
   const startedAt = Date.now();
   let response;
+  const shouldSetJsonContentType = body && !isFormDataBody(body) && !hasContentTypeHeader(requestHeaders);
 
   try {
     response = await fetchImpl(url, {
@@ -643,8 +644,8 @@ async function executeDeliveryApiRequest({
       headers: {
         authorization,
         "x-clever-app-id": appId,
+        ...(shouldSetJsonContentType ? { "content-type": "application/json" } : {}),
         ...requestHeaders,
-        ...(body ? { "content-type": "application/json" } : {}),
       },
       method,
     });
@@ -707,6 +708,17 @@ async function executeDeliveryApiRequest({
     data: payload?.data ?? null,
     errors: [],
   };
+}
+
+function isFormDataBody(body) {
+  return typeof FormData !== "undefined" && body instanceof FormData;
+}
+
+function hasContentTypeHeader(headers) {
+  if (!headers) return false;
+  if (headers instanceof Headers) return headers.has("content-type");
+
+  return Object.keys(headers).some((header) => header.toLowerCase() === "content-type");
 }
 
 function normalizeDeliveryApiNetworkError(error, path) {

@@ -7,6 +7,7 @@ import {
   fetchCustomerEmailSettings,
   saveCustomerEmailSettings,
   sendCustomerEmailTest,
+  uploadCustomerEmailLogo,
 } from "../features/delivery/customer-email.server";
 import {
   SettingsLayout,
@@ -45,6 +46,8 @@ const BRANDING_COLOR_FIELDS = [
   ["surfaceColor", "Surface"],
   ["textColor", "Text"],
 ];
+const CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
+const CUSTOMER_EMAIL_LOGO_MAX_BYTES = 1024 * 1024;
 
 const DEFAULT_BRANDING = {
   accentColor: "#1f6feb",
@@ -82,6 +85,17 @@ export const action = async ({ request }) => {
     return saveCustomerEmailSettings(request, readCustomerEmailSettings(formData), {
       sessionToken: formText(formData.get("shopifySessionToken")),
     });
+  }
+
+  if (formData.get("_intent") === "uploadCustomerEmailLogo") {
+    const uploadFormData = new FormData();
+    const logo = formData.get("logo");
+    if (logo) uploadFormData.set("logo", logo);
+
+    const result = await uploadCustomerEmailLogo(request, uploadFormData, {
+      sessionToken: formText(formData.get("shopifySessionToken")),
+    });
+    return Response.json(result);
   }
 
   if (formData.get("_intent") === "testCustomerEmail") {
@@ -227,6 +241,7 @@ function CustomerEmailSettings({ initialSettings }) {
   const [activeSignal, setActiveSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
   const [testRecipient, setTestRecipient] = useState("");
   const [testConfirmed, setTestConfirmed] = useState(false);
+  const [logoUploadStatus, setLogoUploadStatus] = useState({ kind: "idle", message: "", progress: 0 });
   const intent = fetcher.formData?.get("_intent");
   const busy = fetcher.state !== "idle";
   const activeTemplate = settings.templates[activeSignal] ?? { body: "", subject: "" };
@@ -289,6 +304,54 @@ function CustomerEmailSettings({ initialSettings }) {
     setSettings((current) => updateNestedSettings(current, "branding", field, value));
   };
 
+  const handleLogoUpload = async (event) => {
+    const logo = event.target.files?.[0] ?? null;
+    if (!logo) return;
+
+    if (!CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES.has(logo.type)) {
+      setLogoUploadStatus({ kind: "error", message: "Choose a PNG, JPEG, or WebP image.", progress: 0 });
+      event.target.value = "";
+      return;
+    }
+
+    if (logo.size > CUSTOMER_EMAIL_LOGO_MAX_BYTES) {
+      setLogoUploadStatus({ kind: "error", message: "Logo must be 1 MiB or smaller.", progress: 0 });
+      event.target.value = "";
+      return;
+    }
+
+    const formData = new FormData();
+    formData.set("_intent", "uploadCustomerEmailLogo");
+    formData.set("shopifySessionToken", await shopify.idToken());
+    formData.set("logo", logo);
+    setLogoUploadStatus({ kind: "uploading", message: "Uploading logo...", progress: 0 });
+
+    try {
+      const result = await uploadLogoWithProgress(formData, (progress) => {
+        setLogoUploadStatus({ kind: "uploading", message: "Uploading logo...", progress });
+      });
+      const uploadError = result.errors?.[0];
+      const logoUrl = result.logoAsset?.url;
+      if (uploadError || !logoUrl) {
+        throw new Error(uploadError?.message ?? "Logo upload did not return a URL.");
+      }
+
+      setSettings((current) => ({
+        ...current,
+        branding: {
+          ...current.branding,
+          logoMode: "image",
+          logoUrl,
+        },
+      }));
+      setLogoUploadStatus({ kind: "success", message: "Logo uploaded. Save notification settings to keep this logo.", progress: 100 });
+    } catch (error) {
+      setLogoUploadStatus({ kind: "error", message: error?.message ?? "Unable to upload logo.", progress: 0 });
+    } finally {
+      event.target.value = "";
+    }
+  };
+
   return (
     <div style={settingsFormStyle}>
       <fieldset style={settingsFieldsetStyle}>
@@ -318,8 +381,20 @@ function CustomerEmailSettings({ initialSettings }) {
             </label>
           ))}
         </div>
+        <label style={settingsLabelStyle}>
+          Logo image
+          <input accept="image/png,image/jpeg,image/webp" onChange={handleLogoUpload} style={settingsInputStyle} type="file" />
+        </label>
+        {logoUploadStatus.kind !== "idle" ? (
+          <div aria-live="polite" style={logoUploadStatus.kind === "error" ? settingsErrorStyle : settingsMessageStyle}>
+            <span>{logoUploadStatus.message}</span>
+            {logoUploadStatus.kind === "uploading" ? (
+              <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
+            ) : null}
+          </div>
+        ) : null}
         <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>HTTPS logo URL<input onChange={(event) => updateBranding("logoUrl", event.target.value)} placeholder="https://cdn.example.com/logo.png" style={settingsInputStyle} type="url" value={branding.logoUrl} /></label>
+          <label style={settingsLabelStyle}>Advanced logo URL<input onChange={(event) => updateBranding("logoUrl", event.target.value)} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={branding.logoUrl} /></label>
           <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => updateBranding("logoMode", event.target.value)} style={settingsSelectStyle} value={branding.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
         </div>
         <div style={settingsCoordinateGridStyle}>
@@ -371,32 +446,87 @@ function CustomerEmailSettings({ initialSettings }) {
   );
 }
 
+function uploadLogoWithProgress(formData, onProgress) {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `${window.location.pathname}${window.location.search}`);
+    xhr.setRequestHeader("Accept", "application/json");
+    xhr.upload.onprogress = (event) => {
+      if (!event.lengthComputable) return;
+      onProgress(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))));
+    };
+    xhr.onload = () => {
+      let payload = null;
+      try {
+        payload = JSON.parse(xhr.responseText);
+      } catch {
+        reject(new Error("Logo upload returned an invalid response."));
+        return;
+      }
+
+      if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new Error(payload?.errors?.[0]?.message ?? "Unable to upload logo."));
+        return;
+      }
+
+      resolve(payload);
+    };
+    xhr.onerror = () => reject(new Error("Unable to upload logo."));
+    xhr.send(formData);
+  });
+}
+
 function NotificationPreview({ activeTemplate, branding, senderName }) {
   const logo = branding.logoMode === "image" && branding.logoUrl.startsWith("https://");
   const logoWidth = Math.max(48, Math.min(320, Number(branding.logoWidth) || DEFAULT_BRANDING.logoWidth));
   const subject = activeTemplate.subject || "Delivery scheduled";
   const body = activeTemplate.body || "Hi {{ customer.firstName }}, your delivery is scheduled.";
+  const footerLogo = logo ? (
+    branding.logoLinkUrl.startsWith("https://") ? (
+      <a href={branding.logoLinkUrl} rel="noreferrer" style={{ justifySelf: "start" }} target="_blank">
+        <img alt={branding.logoAltText || senderName || "Store logo"} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
+      </a>
+    ) : (
+      <img alt={branding.logoAltText || senderName || "Store logo"} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
+    )
+  ) : null;
 
   return (
     <div aria-label="Live notification preview" style={{ background: branding.backgroundColor, border: "1px solid #d6d6d6", borderRadius: "8px", display: "grid", gap: "10px", padding: "12px" }}>
       <span style={{ color: "#616161", fontSize: "12px", lineHeight: 1.3 }}>{branding.previewText}</span>
       <div style={{ background: branding.surfaceColor, borderRadius: "8px", color: branding.textColor, display: "grid", gap: "10px", padding: "14px" }}>
-        {logo ? (
-          branding.logoLinkUrl.startsWith("https://") ? (
-            <a href={branding.logoLinkUrl} rel="noreferrer" target="_blank"><img alt={branding.logoAltText || senderName || "Store logo"} src={branding.logoUrl} style={{ display: "block", maxWidth: "100%", width: `${logoWidth}px` }} /></a>
-          ) : (
-            <img alt={branding.logoAltText || senderName || "Store logo"} src={branding.logoUrl} style={{ display: "block", maxWidth: "100%", width: `${logoWidth}px` }} />
-          )
-        ) : null}
         <strong style={{ color: branding.textColor, fontSize: "16px", lineHeight: "22px" }}>{subject}</strong>
         <p style={{ lineHeight: 1.5, margin: 0, whiteSpace: "pre-wrap" }}>{body}</p>
-        <div style={{ borderTop: `1px solid ${branding.accentColor}`, display: "grid", gap: "4px", paddingTop: "10px" }}>
+        <div style={notificationPreviewFooterStyle(branding)}>
+          {footerLogo}
           <span style={{ color: branding.textColor, fontSize: "12px" }}>{branding.footerText}</span>
           {branding.showPoweredByClever ? <span style={{ color: branding.accentColor, fontSize: "12px", fontWeight: 700 }}>Powered by CLEVER</span> : null}
         </div>
       </div>
     </div>
   );
+}
+
+function notificationPreviewLogoStyle(logoWidth) {
+  return {
+    display: "block",
+    height: "auto",
+    justifySelf: "start",
+    maxHeight: "64px",
+    maxWidth: "160px",
+    objectFit: "contain",
+    width: `${Math.min(logoWidth, 160)}px`,
+  };
+}
+
+function notificationPreviewFooterStyle(branding) {
+  return {
+    borderTop: `1px solid ${branding.accentColor}`,
+    display: "grid",
+    gap: "6px",
+    justifyItems: "start",
+    paddingTop: "10px",
+  };
 }
 
 export function ErrorBoundary() {
