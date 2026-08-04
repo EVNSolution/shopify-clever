@@ -6,6 +6,7 @@ import {
   fetchCustomerEmailSettings,
   previewRouteCustomerEmail,
   saveCustomerEmailSettings,
+  sendCustomerEmailTest,
   sendRouteCustomerEmail,
 } from "../app/features/delivery/customer-email.server.js";
 
@@ -38,6 +39,20 @@ test("customer email settings stay in the delivery API", async () => {
   await saveCustomerEmailSettings(request(), input, { fetch, sessionToken: "token" });
   assert.equal(fetch.calls[1].init.method, "PATCH");
   assert.deepEqual(JSON.parse(fetch.calls[1].init.body), input);
+});
+
+test("customer email test forwards its correlation id", async () => {
+  const fetch = fakeFetch({ data: { test: { messageId: "message-1", provider: "brevo" } }, error: null });
+  const result = await sendCustomerEmailTest(request(), {
+    attemptId: "attempt-1",
+    confirmed: true,
+    recipientEmail: "customer@example.com",
+    signal: "DELIVERY_SCHEDULED",
+  }, { fetch, sessionToken: "token" });
+
+  assert.equal(fetch.calls[0].init.headers["x-correlation-id"], "attempt-1");
+  assert.equal(result.attemptId, "attempt-1");
+  assert.equal(result.test.messageId, "message-1");
 });
 
 test("route email requires separate preview and send endpoints", async () => {

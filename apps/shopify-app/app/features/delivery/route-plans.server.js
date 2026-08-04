@@ -578,6 +578,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
       fetchImpl,
       method,
       path,
+      requestHeaders: options.headers,
       url,
       suppressErrorStatuses: options.suppressErrorStatuses,
     });
@@ -610,6 +611,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
     fetchImpl,
     method,
     path,
+    requestHeaders: options.headers,
     url,
     suppressErrorStatuses: options.suppressErrorStatuses,
   });
@@ -628,6 +630,7 @@ async function executeDeliveryApiRequest({
   fetchImpl,
   method,
   path,
+  requestHeaders,
   url,
   suppressErrorStatuses,
 }) {
@@ -640,6 +643,7 @@ async function executeDeliveryApiRequest({
       headers: {
         authorization,
         "x-clever-app-id": appId,
+        ...requestHeaders,
         ...(body ? { "content-type": "application/json" } : {}),
       },
       method,
