@@ -235,6 +235,22 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.doesNotMatch(notificationsPageSource, /placeholder="https:\/\/cdn\.example\.com\/logo\.png"/);
 });
 
+test("Customer Notifications edits branding and templates in focused modals", () => {
+  assert.match(notificationsPageSource, /function SettingsEditorModal/);
+  assert.match(notificationsPageSource, /aria-modal="true" role="dialog"/);
+  assert.match(notificationsPageSource, />Edit branding<\/button>/);
+  assert.match(notificationsPageSource, /ariaLabel="Edit notification branding"/);
+  assert.match(notificationsPageSource, /className="notification-branding-editor"/);
+  assert.match(notificationsPageSource, /<NotificationPreview activeTemplate=\{activeTemplate\} branding=\{brandingDraft\}/);
+  assert.match(notificationsPageSource, /aria-label=\{`Edit \$\{label\} template`\}/);
+  assert.match(notificationsPageSource, /aria-label="Template variables"/);
+  assert.match(notificationsPageSource, /insertTemplateVariable/);
+  assert.match(notificationsPageSource, /setSelectionRange\(cursor, cursor\)/);
+  assert.match(notificationsPageSource, />Apply changes<\/button>/);
+  assert.match(notificationsPageSource, />Apply template<\/button>/);
+  assert.doesNotMatch(notificationsPageSource, /onChange=\{\(event\) => updateTemplate/);
+});
+
 test("Customer Notifications preview renders the logo from the footer upper-left", () => {
   assert.match(notificationsPageSource, /const footerLogo = logo \? \(/);
   assert.match(notificationsPageSource, /justifySelf: "start"/);
