@@ -9,7 +9,6 @@ import {
   saveCustomerEmailGlobal,
   saveCustomerEmailTemplate,
   sendCustomerEmailTest,
-  uploadCustomerEmailLogo,
 } from "../features/customer-notifications/customer-email.server";
 import {
   TemplateTokenEditor,
@@ -51,6 +50,7 @@ const CUSTOMER_EMAIL_SIGNALS = [
 
 const CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const CUSTOMER_EMAIL_LOGO_MAX_BYTES = 3 * 1024 * 1024;
+const CUSTOMER_EMAIL_LOGO_UPLOAD_PATH = "/app/settings/notifications/logo";
 
 const DEFAULT_BRANDING = {
   address: "",
@@ -97,17 +97,6 @@ export const action = async ({ request }) => {
     });
   }
 
-  if (formData.get("_intent") === "uploadCustomerEmailLogo") {
-    const uploadFormData = new FormData();
-    const logo = formData.get("logo");
-    if (logo) uploadFormData.set("logo", logo);
-
-    const result = await uploadCustomerEmailLogo(request, uploadFormData, {
-      sessionToken: formText(formData.get("shopifySessionToken")),
-    });
-    return Response.json(result);
-  }
-
   if (formData.get("_intent") === "testCustomerEmail") {
     const attemptId = formText(formData.get("attemptId")) || crypto.randomUUID();
     const recipientEmail = formText(formData.get("recipientEmail"));
@@ -139,7 +128,7 @@ export const action = async ({ request }) => {
 
 function readCustomerEmailGlobalSettings(formData) {
   return {
-    expectedVersion: formNullableText(formData.get("expectedVersion")),
+    expectedVersion: numberFromFormValue(formData.get("expectedVersion")),
     branding: {
       address: formText(formData.get("branding.address")),
       businessName: formText(formData.get("branding.businessName")),
@@ -187,7 +176,7 @@ function readCustomerEmailTemplateSettings(formData) {
     customerEmailTemplate: {
       body,
       enabled,
-      expectedVersion: formNullableText(formData.get("expectedVersion")),
+      expectedVersion: numberFromFormValue(formData.get("expectedVersion")),
       subject,
     },
     errors: [],
@@ -723,8 +712,12 @@ function SettingsEditorModal({ ariaLabel, children, onClose, title }) {
 function uploadLogoWithProgress(formData, onProgress) {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
-    xhr.open("POST", `${window.location.pathname}${window.location.search}`);
+    xhr.open("POST", CUSTOMER_EMAIL_LOGO_UPLOAD_PATH);
     xhr.setRequestHeader("Accept", "application/json");
+    const sessionToken = formData.get("shopifySessionToken");
+    if (typeof sessionToken === "string" && sessionToken) {
+      xhr.setRequestHeader("Authorization", `Bearer ${sessionToken}`);
+    }
     xhr.upload.onprogress = (event) => {
       if (!event.lengthComputable) return;
       onProgress(Math.max(1, Math.min(99, Math.round((event.loaded / event.total) * 100))));
@@ -1077,6 +1070,8 @@ const notificationModalStyle = {
   borderRadius: "12px",
   boxShadow: "0 20px 48px rgba(0, 0, 0, 0.24)",
   boxSizing: "border-box",
+  display: "grid",
+  gridTemplateRows: "auto minmax(0, 1fr)",
   maxHeight: "calc(100vh - 32px)",
   maxWidth: "1180px",
   overflow: "hidden",
@@ -1109,9 +1104,11 @@ const notificationModalCloseStyle = {
 };
 
 const notificationModalBodyStyle = {
+  boxSizing: "border-box",
   display: "grid",
   gap: "14px",
   maxHeight: "calc(100vh - 82px)",
+  minHeight: 0,
   overflowY: "auto",
   padding: "18px",
 };
