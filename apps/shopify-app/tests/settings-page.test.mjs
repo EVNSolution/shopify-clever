@@ -300,6 +300,8 @@ test("Customer Notifications shows a narrow scrollable branding editor beside it
   assert.match(notificationsPageSource, /aria-label="Uploaded logo preview"/);
   assert.match(notificationsPageSource, /gridTemplateColumns: "minmax\(280px, 360px\) minmax\(0, 1fr\)"/);
   assert.match(notificationsPageSource, /const notificationBrandingEditorPaneStyle = \{[\s\S]*?overflowY: "auto"/);
+  assert.match(templateExampleModalSource, /<section aria-label="Edit branding"[\s\S]*?<div style=\{notificationBrandingActionsStyle\}>[\s\S]*?>Apply changes<\/button>[\s\S]*?<\/section>/);
+  assert.match(notificationsPageSource, /const notificationBrandingPreviewPaneStyle = \{[\s\S]*?overflowY: "auto"/);
   assert.match(notificationsPageSource, /\.customer-notification-branding-editor \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) !important/);
   assert.match(notificationsPageSource, /"Save template"/);
   assert.doesNotMatch(notificationsPageSource, /onChange=\{\(event\) => updateTemplate/);

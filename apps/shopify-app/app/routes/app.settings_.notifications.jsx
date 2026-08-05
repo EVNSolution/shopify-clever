@@ -588,6 +588,10 @@ function CustomerEmailSettings({ initialSettings }) {
                   <label style={settingsLabelStyle}>Note<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, note: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "92px" }} value={brandingDraft.note} /></label>
                 </div>
               </div>
+              <div style={notificationBrandingActionsStyle}>
+                <button onClick={() => setTemplateExampleOpen(false)} style={settingsResetButtonStyle} type="button">Close</button>
+                <button onClick={applyBrandingDraft} style={settingsButtonStyle} type="button">Apply changes</button>
+              </div>
             </section>
             <aside aria-label="Branding preview" style={notificationBrandingPreviewPaneStyle}>
               <div>
@@ -596,10 +600,6 @@ function CustomerEmailSettings({ initialSettings }) {
               </div>
               <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} senderName={settings.senderName} />
             </aside>
-          </div>
-          <div style={settingsActionRowStyle}>
-            <button onClick={() => setTemplateExampleOpen(false)} style={settingsResetButtonStyle} type="button">Close</button>
-            <button onClick={applyBrandingDraft} style={settingsButtonStyle} type="button">Apply changes</button>
           </div>
         </SettingsEditorModal>
       ) : null}
@@ -881,9 +881,23 @@ const notificationBrandingPreviewPaneStyle = {
   alignContent: "start",
   display: "grid",
   gap: "12px",
+  maxHeight: "calc(100vh - 164px)",
   minWidth: 0,
+  overflowY: "auto",
+  paddingRight: "6px",
+};
+
+const notificationBrandingActionsStyle = {
+  alignItems: "center",
+  background: "#ffffff",
+  borderTop: "1px solid #e3e3e3",
+  bottom: 0,
+  display: "flex",
+  gap: "8px",
+  justifyContent: "flex-end",
+  padding: "12px 0 4px",
   position: "sticky",
-  top: 0,
+  zIndex: 1,
 };
 
 const notificationCardHeaderStyle = {
