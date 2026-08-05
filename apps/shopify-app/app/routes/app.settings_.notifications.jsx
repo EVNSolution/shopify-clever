@@ -830,10 +830,9 @@ function notificationPreviewLogoStyle(logoWidth) {
     display: "block",
     height: "auto",
     justifySelf: "start",
-    maxHeight: "64px",
-    maxWidth: "160px",
+    maxWidth: "100%",
     objectFit: "contain",
-    width: `${Math.min(logoWidth, 160)}px`,
+    width: `${logoWidth}px`,
   };
 }
 
