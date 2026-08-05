@@ -4,7 +4,7 @@ import { fetchDeliveryDrivers } from "./drivers.server";
 import {
   previewRouteCustomerEmail,
   sendRouteCustomerEmail,
-} from "./customer-email.server";
+} from "../customer-notifications/customer-email.server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
 import {
   deleteDeliveryRouteGroup,
@@ -324,6 +324,32 @@ function readRouteStopOverridePayload(formData) {
   };
 }
 
+function readDeliveryStopIds(formData) {
+  const values = formData.getAll("deliveryStopIds");
+  const deliveryStopIds = [];
+
+  for (const value of values) {
+    const text = textOrUndefined(value);
+    if (!text) continue;
+
+    if (text.startsWith("[")) {
+      try {
+        const parsed = JSON.parse(text);
+        if (Array.isArray(parsed)) {
+          deliveryStopIds.push(...parsed.map(textOrUndefined).filter(Boolean));
+          continue;
+        }
+      } catch {
+        // Fall through and treat the field as a single stop id.
+      }
+    }
+
+    deliveryStopIds.push(text);
+  }
+
+  return [...new Set(deliveryStopIds)];
+}
+
 export const routeDetailLoader = async ({ params, request }) => {
   const routeId = cleanRoutePathParam(params.routeId);
   const routeGroupIdHint = getRouteGroupIdHint(request);
@@ -543,6 +569,7 @@ export const routeDetailAction = async ({ params, request }) => {
 
   if (intent === "previewCustomerEmail") {
     return previewRouteCustomerEmail(request, routeId, {
+      deliveryStopIds: readDeliveryStopIds(formData),
       signal: textOrUndefined(formData.get("signal")),
     }, { sessionToken: shopifySessionToken });
   }
@@ -551,6 +578,9 @@ export const routeDetailAction = async ({ params, request }) => {
     return sendRouteCustomerEmail(request, routeId, {
       commandId: textOrUndefined(formData.get("commandId")),
       confirmed: formData.get("confirmed") === "true",
+      deliveryStopIds: readDeliveryStopIds(formData),
+      missingValuesConfirmed: formData.get("missingValuesConfirmed") === "true",
+      resendConfirmed: formData.get("resendConfirmed") === "true",
       signal: textOrUndefined(formData.get("signal")),
     }, { sessionToken: shopifySessionToken });
   }

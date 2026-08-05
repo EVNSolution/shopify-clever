@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import process from "node:process";
 import test from "node:test";
 
 const routesDir = path.resolve("app/routes");
@@ -48,3 +49,37 @@ test("custom client entry leaves Shopify boundary responses to App Bridge", () =
   assert.match(source, /if \(!isShopifyBoundaryResponse\(\)\)/);
   assert.match(source, /<HydratedRouter \/>/);
 });
+
+test("customer notification Shopify lane stays behind delivery API boundaries", () => {
+  const customerNotificationSources = [
+    "app/features/customer-notifications/customer-email.server.js",
+    "app/routes/app.settings.jsx",
+  ].map((filePath) => fs.readFileSync(path.resolve(filePath), "utf8")).join("\n");
+
+  assert.match(customerNotificationSources, /deliveryApiRequest/);
+  assert.match(customerNotificationSources, /saveCustomerNotificationSettings/);
+  assert.doesNotMatch(customerNotificationSources, /orderUpdate|customerUpdate/);
+  assert.doesNotMatch(customerNotificationSources, /customer\s*\{/);
+  assert.doesNotMatch(customerNotificationSources, /\bemail\b[\s\S]{0,80}currentAppInstallation/);
+  assert.doesNotMatch(customerNotificationSources, /previewText|logoAlt|rawHtml|raw HTML/i);
+});
+
+test("Shopify order GraphQL documents do not add protected customer email fields or mutations", () => {
+  const orderSource = fs.readFileSync(
+    path.resolve("app/features/orders/shopify-orders.server.js"),
+    "utf8",
+  );
+  const graphqlDocuments = extractGraphqlDocuments(orderSource).map((document) =>
+    document.replace(/\bcustomer\s*\{\s*note\s*\}/gu, " "),
+  ).join("\n");
+
+  assert.ok(graphqlDocuments.trim(), "expected Shopify order GraphQL documents");
+  assert.doesNotMatch(graphqlDocuments, /\bemail\b/u);
+  assert.doesNotMatch(graphqlDocuments, /\bcustomer\s*\{/u);
+  assert.doesNotMatch(graphqlDocuments, /\borderUpdate\b|\bcustomerUpdate\b/u);
+  assert.doesNotMatch(graphqlDocuments, /\bmutation\b/u);
+});
+
+function extractGraphqlDocuments(source) {
+  return [...source.matchAll(/`#graphql([\s\S]*?)`/gu)].map((match) => match[1]);
+}
