@@ -34,7 +34,6 @@ import {
   settingsSaveStatusStyle,
   settingsSectionCardStyle,
   settingsSelectStyle,
-  settingsTemplateTabsStyle,
   settingsTextareaStyle,
 } from "../features/settings/settings-layout";
 import { authenticate } from "../shopify.server";
@@ -267,7 +266,6 @@ function CustomerEmailSettings({ initialSettings }) {
   const [testConfirmed, setTestConfirmed] = useState(false);
   const [logoUploadStatus, setLogoUploadStatus] = useState({ kind: "idle", message: "", progress: 0 });
   const [templateExampleOpen, setTemplateExampleOpen] = useState(false);
-  const [templateExampleMode, setTemplateExampleMode] = useState("preview");
   const [brandingDraft, setBrandingDraft] = useState(() => ({ ...settings.branding }));
   const [templateEditorSignal, setTemplateEditorSignal] = useState(null);
   const [templateDraft, setTemplateDraft] = useState({ body: "", enabled: true, subject: "" });
@@ -387,13 +385,12 @@ function CustomerEmailSettings({ initialSettings }) {
   const openTemplateExample = () => {
     setBrandingDraft({ ...branding });
     setLogoUploadStatus({ kind: "idle", message: "", progress: 0 });
-    setTemplateExampleMode("preview");
     setTemplateExampleOpen(true);
   };
 
   const applyBrandingDraft = () => {
     setSettings((current) => ({ ...current, branding: { ...brandingDraft } }));
-    setTemplateExampleMode("preview");
+    setTemplateExampleOpen(false);
   };
 
   const openTemplateEditor = (signal) => {
@@ -550,15 +547,12 @@ function CustomerEmailSettings({ initialSettings }) {
 
       {templateExampleOpen ? (
         <SettingsEditorModal ariaLabel="Template example" onClose={() => setTemplateExampleOpen(false)} title="Template example">
-          <div aria-label="Template example mode" role="tablist" style={settingsTemplateTabsStyle}>
-            <button aria-selected={templateExampleMode === "preview"} onClick={() => setTemplateExampleMode("preview")} role="tab" style={templateExampleMode === "preview" ? settingsButtonStyle : settingsResetButtonStyle} type="button">Preview</button>
-            <button aria-selected={templateExampleMode === "edit"} onClick={() => setTemplateExampleMode("edit")} role="tab" style={templateExampleMode === "edit" ? settingsButtonStyle : settingsResetButtonStyle} type="button">Edit</button>
-          </div>
-          {templateExampleMode === "preview" ? (
-            <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} senderName={settings.senderName} />
-          ) : null}
-          {templateExampleMode === "edit" ? (
-            <div aria-label="Branding controls">
+          <div className="customer-notification-branding-editor" style={notificationBrandingEditorLayoutStyle}>
+            <section aria-label="Edit branding" style={notificationBrandingEditorPaneStyle}>
+              <div>
+                <strong>Edit</strong>
+                <p style={settingsMessageStyle}>Changes appear in Preview before saving. Apply them here, then use Save sender and footer.</p>
+              </div>
               <div aria-label="Logo settings" style={logoSettingsBlockStyle}>
                 <label style={settingsLabelStyle}>
                   Logo upload
@@ -594,11 +588,18 @@ function CustomerEmailSettings({ initialSettings }) {
                   <label style={settingsLabelStyle}>Note<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, note: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "92px" }} value={brandingDraft.note} /></label>
                 </div>
               </div>
-            </div>
-          ) : null}
+            </section>
+            <aside aria-label="Branding preview" style={notificationBrandingPreviewPaneStyle}>
+              <div>
+                <strong>Preview</strong>
+                <p style={settingsMessageStyle}>This is the branding that Apply changes will move into the saved settings form.</p>
+              </div>
+              <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} senderName={settings.senderName} />
+            </aside>
+          </div>
           <div style={settingsActionRowStyle}>
             <button onClick={() => setTemplateExampleOpen(false)} style={settingsResetButtonStyle} type="button">Close</button>
-            {templateExampleMode === "edit" ? <button onClick={applyBrandingDraft} style={settingsButtonStyle} type="button">Apply changes</button> : null}
+            <button onClick={applyBrandingDraft} style={settingsButtonStyle} type="button">Apply changes</button>
           </div>
         </SettingsEditorModal>
       ) : null}
@@ -857,6 +858,33 @@ const notificationUploadedLogoPreviewStyle = {
   display: "flex",
   minHeight: "88px",
   padding: "12px",
+};
+
+const notificationBrandingEditorLayoutStyle = {
+  alignItems: "start",
+  display: "grid",
+  gap: "20px",
+  gridTemplateColumns: "minmax(280px, 360px) minmax(0, 1fr)",
+  minHeight: 0,
+};
+
+const notificationBrandingEditorPaneStyle = {
+  alignContent: "start",
+  display: "grid",
+  gap: "12px",
+  maxHeight: "calc(100vh - 164px)",
+  minHeight: 0,
+  overflowY: "auto",
+  paddingRight: "6px",
+};
+
+const notificationBrandingPreviewPaneStyle = {
+  alignContent: "start",
+  display: "grid",
+  gap: "12px",
+  minWidth: 0,
+  position: "sticky",
+  top: 0,
 };
 
 const notificationCardHeaderStyle = {
@@ -1130,6 +1158,10 @@ const notificationModalBodyStyle = {
 
 const CUSTOMER_NOTIFICATION_RESPONSIVE_CSS = `
 @media (max-width: 900px) {
+  .customer-notification-branding-editor {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
   .customer-notification-template-editor {
     grid-template-columns: minmax(0, 1fr) !important;
   }
