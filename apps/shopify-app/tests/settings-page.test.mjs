@@ -279,16 +279,17 @@ test("Customer Notifications modal includes padding inside its scroll height", (
   assert.match(notificationsPageSource, /const notificationModalStyle = \{[\s\S]*?gridTemplateRows: "auto minmax\(0, 1fr\)"/);
 });
 
-test("Customer Notifications keeps the template example behind preview and brand-only edit modes", () => {
+test("Customer Notifications shows a narrow scrollable branding editor beside its live draft preview", () => {
   assert.match(notificationsPageSource, /function SettingsEditorModal/);
   assert.match(notificationsPageSource, /aria-modal="true"[\s\S]*role="dialog"/);
   assert.match(notificationsPageSource, />Template example<\/button>/);
   assert.match(notificationsPageSource, /ariaLabel="Template example"/);
-  assert.match(notificationsPageSource, />Preview<\/button>/);
-  assert.match(notificationsPageSource, />Edit<\/button>/);
-  assert.match(notificationsPageSource, /templateExampleMode === "preview"/);
-  assert.match(notificationsPageSource, /templateExampleMode === "edit"/);
-  assert.match(templateExampleModalSource, /aria-label="Branding controls"/);
+  assert.doesNotMatch(notificationsPageSource, /templateExampleMode/);
+  assert.match(templateExampleModalSource, /className="customer-notification-branding-editor"/);
+  assert.match(templateExampleModalSource, /aria-label="Edit branding"/);
+  assert.match(templateExampleModalSource, /aria-label="Branding preview"/);
+  assert.match(templateExampleModalSource, />Edit<\/strong>/);
+  assert.match(templateExampleModalSource, />Preview<\/strong>/);
   assert.match(templateExampleModalSource, /<NotificationPreview activeTemplate=\{activeTemplate\} branding=\{brandingDraft\}/);
   assert.doesNotMatch(notificationBrandingSectionSource, /NotificationPreview/);
   assert.doesNotMatch(templateExampleModalSource, /templateDraft|>Subject<|>Body</);
@@ -297,6 +298,9 @@ test("Customer Notifications keeps the template example behind preview and brand
   assert.match(notificationsPageSource, />Apply changes<\/button>/);
   assert.match(notificationsPageSource, /<NotificationPreview activeTemplate=\{activeTemplate\} branding=\{brandingDraft\}/);
   assert.match(notificationsPageSource, /aria-label="Uploaded logo preview"/);
+  assert.match(notificationsPageSource, /gridTemplateColumns: "minmax\(280px, 360px\) minmax\(0, 1fr\)"/);
+  assert.match(notificationsPageSource, /const notificationBrandingEditorPaneStyle = \{[\s\S]*?overflowY: "auto"/);
+  assert.match(notificationsPageSource, /\.customer-notification-branding-editor \{[\s\S]*?grid-template-columns: minmax\(0, 1fr\) !important/);
   assert.match(notificationsPageSource, /"Save template"/);
   assert.doesNotMatch(notificationsPageSource, /onChange=\{\(event\) => updateTemplate/);
 });
