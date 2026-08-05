@@ -50,7 +50,7 @@ const CUSTOMER_EMAIL_SIGNALS = [
 ];
 
 const CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
-const CUSTOMER_EMAIL_LOGO_MAX_BYTES = 1024 * 1024;
+const CUSTOMER_EMAIL_LOGO_MAX_BYTES = 3 * 1024 * 1024;
 
 const DEFAULT_BRANDING = {
   address: "",
@@ -457,7 +457,7 @@ function CustomerEmailSettings({ initialSettings }) {
     }
 
     if (logo.size > CUSTOMER_EMAIL_LOGO_MAX_BYTES) {
-      setLogoUploadStatus({ kind: "error", message: "Logo must be 1 MiB or smaller.", progress: 0 });
+      setLogoUploadStatus({ kind: "error", message: "Logo must be 3 MiB or smaller.", progress: 0 });
       event.target.value = "";
       return;
     }
