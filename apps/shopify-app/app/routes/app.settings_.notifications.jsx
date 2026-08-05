@@ -555,7 +555,7 @@ function CustomerEmailSettings({ initialSettings }) {
             <button aria-selected={templateExampleMode === "edit"} onClick={() => setTemplateExampleMode("edit")} role="tab" style={templateExampleMode === "edit" ? settingsButtonStyle : settingsResetButtonStyle} type="button">Edit</button>
           </div>
           {templateExampleMode === "preview" ? (
-            <NotificationPreview activeTemplate={activeTemplate} branding={branding} senderName={settings.senderName} />
+            <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} senderName={settings.senderName} />
           ) : null}
           {templateExampleMode === "edit" ? (
             <div aria-label="Branding controls">
@@ -570,6 +570,11 @@ function CustomerEmailSettings({ initialSettings }) {
                     {logoUploadStatus.kind === "uploading" ? (
                       <progress aria-label="Logo upload progress" max="100" style={{ width: "100%" }} value={logoUploadStatus.progress} />
                     ) : null}
+                  </div>
+                ) : null}
+                {brandingDraft.logoMode === "image" && brandingDraft.logoUrl.startsWith("https://") ? (
+                  <div aria-label="Uploaded logo preview" style={notificationUploadedLogoPreviewStyle}>
+                    <img alt={deriveLogoAltText(settings.senderName)} src={brandingDraft.logoUrl} style={notificationPreviewLogoStyle(brandingDraft.logoWidth)} />
                   </div>
                 ) : null}
                 <label style={settingsLabelStyle}>Logo URL<input onChange={(event) => setBrandingDraft((current) => ({ ...current, logoUrl: event.target.value }))} placeholder="https://cdn.cleversystem.ai/logo.png" style={settingsInputStyle} type="url" value={brandingDraft.logoUrl} /></label>
@@ -841,6 +846,16 @@ const logoSettingsBlockStyle = {
   borderRadius: "8px",
   display: "grid",
   gap: "10px",
+  padding: "12px",
+};
+
+const notificationUploadedLogoPreviewStyle = {
+  alignItems: "center",
+  background: "#f7f7f7",
+  border: "1px solid #e3e3e3",
+  borderRadius: "8px",
+  display: "flex",
+  minHeight: "88px",
   padding: "12px",
 };
 
