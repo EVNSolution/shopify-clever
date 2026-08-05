@@ -3,7 +3,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   hasUnsupportedTemplateSegments,
-  insertTemplateToken,
   parseTemplateDocument,
   serializeTemplateDocument,
 } from "./template-document.js";
@@ -33,93 +32,86 @@ export function TemplateTokenEditor({
   onUnsupportedChange,
   value,
 }) {
-  const [document, setDocument] = useState(() => parseTemplateDocument(value));
-  const [selectedSegmentIndex, setSelectedSegmentIndex] = useState(null);
   const editorRef = useRef(null);
+  const savedRangeRef = useRef(null);
+  const [variableMenuOpen, setVariableMenuOpen] = useState(false);
+  const [variableQuery, setVariableQuery] = useState("");
+  const parsedDocument = useMemo(() => parseTemplateDocument(value), [value]);
+  const hasUnsupported = hasUnsupportedTemplateSegments(parsedDocument);
+  const filteredVariables = CUSTOMER_NOTIFICATION_TOKEN_OPTIONS.filter(([, tokenLabel]) => (
+    tokenLabel.toLowerCase().includes(variableQuery.trim().toLowerCase())
+  ));
 
   useEffect(() => {
-    setDocument(parseTemplateDocument(value));
-  }, [value]);
-
-  const hasUnsupported = useMemo(() => hasUnsupportedTemplateSegments(document), [document]);
+    const editor = editorRef.current;
+    if (!editor) return;
+    const nextValue = serializeTemplateDocument(parsedDocument);
+    if (serializeEditorDocument(editor) === nextValue || editor === editor.ownerDocument.activeElement) return;
+    renderTemplateDocument(editor, parsedDocument);
+  }, [parsedDocument]);
 
   useEffect(() => {
     onUnsupportedChange?.(hasUnsupported);
   }, [hasUnsupported, onUnsupportedChange]);
 
-  const commitDocument = (nextDocument) => {
-    const serialized = serializeTemplateDocument(nextDocument).slice(0, maxLength);
-    const reparsed = parseTemplateDocument(serialized);
-    setDocument(reparsed);
+  const commitEditorValue = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const serialized = serializeEditorDocument(editor).slice(0, maxLength);
     onChange?.(serialized);
   };
 
-  const updateTextSegment = (index, nextValue) => {
-    if (!document.segments[index]) {
-      commitDocument({
-        diagnostics: document.diagnostics,
-        segments: nextValue
-          ? [...document.segments, { type: "text", value: nextValue }]
-          : document.segments,
-      });
-      return;
-    }
-
-    commitDocument({
-      diagnostics: document.diagnostics,
-      segments: document.segments.map((segment, segmentIndex) => (
-        segmentIndex === index ? { type: "text", value: nextValue } : segment
-      )),
-    });
+  const rememberSelection = () => {
+    const editor = editorRef.current;
+    const selection = editor?.ownerDocument.getSelection();
+    if (!editor || !selection?.rangeCount) return;
+    const range = selection.getRangeAt(0);
+    if (editor.contains(range.commonAncestorContainer)) savedRangeRef.current = range.cloneRange();
   };
 
   const insertToken = (tokenKey) => {
-    const insertionIndex = selectedSegmentIndex == null
-      ? document.segments.length
-      : selectedSegmentIndex + 1;
-    commitDocument(insertTemplateToken(document, tokenKey, insertionIndex));
-    setSelectedSegmentIndex(insertionIndex);
-  };
+    const editor = editorRef.current;
+    if (!editor || disabled) return;
+    editor.focus();
 
-  const removeSelectedSegment = () => {
-    if (selectedSegmentIndex == null) return;
-    const segment = document.segments[selectedSegmentIndex];
-    if (segment?.type === "text") return;
-
-    commitDocument({
-      diagnostics: document.diagnostics,
-      segments: document.segments.filter((_, index) => index !== selectedSegmentIndex),
-    });
-    setSelectedSegmentIndex(null);
-  };
-
-  const handleKeyDown = (event) => {
-    if ((event.key === "Backspace" || event.key === "Delete") && selectedSegmentIndex != null) {
-      event.preventDefault();
-      removeSelectedSegment();
-    }
+    const selection = editor.ownerDocument.getSelection();
+    const range = selectionRangeInsideEditor(editor, savedRangeRef.current)
+      ?? selectionRangeInsideEditor(editor, selection?.rangeCount ? selection.getRangeAt(0) : null)
+      ?? rangeAtEditorEnd(editor);
+    const token = createTokenElement(editor.ownerDocument, tokenKey);
+    range.deleteContents();
+    range.insertNode(token);
+    range.setStartAfter(token);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    savedRangeRef.current = range.cloneRange();
+    setVariableMenuOpen(false);
+    setVariableQuery("");
+    commitEditorValue();
   };
 
   const handlePaste = (event) => {
     const pastedText = event.clipboardData?.getData("text/plain");
     if (!pastedText) return;
-
     event.preventDefault();
-    const pastedDocument = parseTemplateDocument(pastedText);
-    const insertionIndex = selectedSegmentIndex == null
-      ? document.segments.length
-      : selectedSegmentIndex + 1;
-    commitDocument({
-      diagnostics: [
-        ...document.diagnostics,
-        ...pastedDocument.diagnostics,
-      ],
-      segments: [
-        ...document.segments.slice(0, insertionIndex),
-        ...pastedDocument.segments,
-        ...document.segments.slice(insertionIndex),
-      ],
-    });
+
+    const selection = editorRef.current?.ownerDocument.getSelection();
+    if (!selection?.rangeCount || !editorRef.current) return;
+    const range = selection.getRangeAt(0);
+    if (!editorRef.current.contains(range.commonAncestorContainer)) return;
+
+    const fragment = createTemplateFragment(editorRef.current.ownerDocument, parseTemplateDocument(pastedText));
+    const lastNode = fragment.lastChild;
+    range.deleteContents();
+    range.insertNode(fragment);
+    if (lastNode) {
+      range.setStartAfter(lastNode);
+      range.collapse(true);
+      selection.removeAllRanges();
+      selection.addRange(range);
+    }
+    commitEditorValue();
   };
 
   return (
@@ -132,96 +124,159 @@ export function TemplateTokenEditor({
       </div>
       <div
         aria-label={label}
+        aria-multiline={!compact}
+        contentEditable={!disabled}
         id={id}
-        onKeyDown={handleKeyDown}
+        onBlur={() => {
+          rememberSelection();
+          commitEditorValue();
+        }}
+        onInput={commitEditorValue}
+        onKeyDown={(event) => {
+          if (compact && event.key === "Enter") event.preventDefault();
+        }}
+        onKeyUp={rememberSelection}
+        onMouseUp={rememberSelection}
         onPaste={handlePaste}
         ref={editorRef}
         role="textbox"
+        spellCheck="true"
         style={editorSurfaceStyle({ compact, disabled })}
+        suppressContentEditableWarning
         tabIndex={disabled ? -1 : 0}
-      >
-        {document.segments.length === 0 ? (
-          <span
-            contentEditable={!disabled}
-            onBlur={(event) => updateTextSegment(0, event.currentTarget.textContent ?? "")}
-            suppressContentEditableWarning
-            style={templateTextSegmentStyle}
-          />
+      />
+      <div style={templateVariableControlStyle}>
+        <button
+          aria-expanded={variableMenuOpen}
+          aria-haspopup="listbox"
+          disabled={disabled}
+          onClick={() => {
+            rememberSelection();
+            setVariableMenuOpen((open) => !open);
+          }}
+          style={templateVariableTriggerStyle}
+          type="button"
+        >
+          <span aria-hidden="true" style={templateVariableTriggerIconStyle}>＋</span>
+          Insert variable
+          <span aria-hidden="true">⌄</span>
+        </button>
+        {variableMenuOpen ? (
+          <div style={templateVariablePopoverStyle}>
+            <label style={templateVariableSearchLabelStyle}>
+              <span>Find a variable</span>
+              <input
+                onChange={(event) => setVariableQuery(event.target.value)}
+                placeholder="Search variables"
+                style={templateVariableSearchStyle}
+                value={variableQuery}
+              />
+            </label>
+            <div aria-label="Template variables" role="listbox" style={templateVariableMenuStyle}>
+              {filteredVariables.map(([tokenKey, tokenLabel]) => (
+                <button
+                  aria-selected="false"
+                  key={tokenKey}
+                  onClick={() => insertToken(tokenKey)}
+                  role="option"
+                  style={templateVariableOptionStyle}
+                  type="button"
+                >
+                  <span>{tokenLabel}</span>
+                  <span aria-hidden="true" style={templateVariableOptionPlusStyle}>＋</span>
+                </button>
+              ))}
+              {filteredVariables.length === 0 ? <span style={templateVariableEmptyStyle}>No matching variables</span> : null}
+            </div>
+          </div>
         ) : null}
-        {document.segments.map((segment, index) => {
-          if (segment.type === "token") {
-            return (
-              <button
-                aria-label={`Token ${CUSTOMER_NOTIFICATION_TOKEN_LABELS[segment.key] ?? segment.key}`}
-                aria-pressed={selectedSegmentIndex === index}
-                disabled={disabled}
-                key={`${index}-${segment.key}`}
-                onClick={() => setSelectedSegmentIndex(index)}
-                style={selectedSegmentIndex === index ? templateTokenSelectedStyle : templateTokenStyle}
-                type="button"
-              >
-                {CUSTOMER_NOTIFICATION_TOKEN_LABELS[segment.key] ?? segment.key}
-              </button>
-            );
-          }
-
-          if (segment.type === "unsupported") {
-            return (
-              <button
-                aria-label="Unsupported template variable"
-                aria-pressed={selectedSegmentIndex === index}
-                disabled={disabled}
-                key={`${index}-${segment.raw}`}
-                onClick={() => setSelectedSegmentIndex(index)}
-                style={selectedSegmentIndex === index ? templateUnsupportedSelectedStyle : templateUnsupportedStyle}
-                type="button"
-              >
-                Unsupported variable
-              </button>
-            );
-          }
-
-          return (
-            <span
-              contentEditable={!disabled}
-              key={`${index}-${segment.value}`}
-              onBlur={(event) => updateTextSegment(index, event.currentTarget.textContent ?? "")}
-              onFocus={() => setSelectedSegmentIndex(index)}
-              suppressContentEditableWarning
-              style={templateTextSegmentStyle}
-            >
-            {segment.value}
-          </span>
-          );
-        })}
-        {document.segments.length > 0 && document.segments.at(-1)?.type !== "text" ? (
-          <span
-            contentEditable={!disabled}
-            onBlur={(event) => updateTextSegment(document.segments.length, event.currentTarget.textContent ?? "")}
-            suppressContentEditableWarning
-            style={templateTextSegmentStyle}
-          />
-        ) : null}
-      </div>
-      <div>
-        <strong style={templateVariableTitleStyle}>Insert variable</strong>
-        <div aria-label="Template variables" style={templateVariableListStyle}>
-          {CUSTOMER_NOTIFICATION_TOKEN_OPTIONS.map(([tokenKey, tokenLabel]) => (
-            <button
-              disabled={disabled}
-              key={tokenKey}
-              onClick={() => insertToken(tokenKey)}
-              style={templateVariableButtonStyle}
-              type="button"
-            >
-              {tokenLabel}
-            </button>
-          ))}
-        </div>
       </div>
     </div>
   );
 }
+
+function renderTemplateDocument(editor, templateDocument) {
+  editor.replaceChildren(createTemplateFragment(editor.ownerDocument, templateDocument));
+}
+
+function createTemplateFragment(ownerDocument, templateDocument) {
+  const fragment = ownerDocument.createDocumentFragment();
+  for (const segment of templateDocument.segments) {
+    if (segment.type === "token") {
+      fragment.append(createTokenElement(ownerDocument, segment.key));
+    } else if (segment.type === "unsupported") {
+      fragment.append(createUnsupportedElement(ownerDocument, segment.raw));
+    } else {
+      fragment.append(ownerDocument.createTextNode(segment.value));
+    }
+  }
+  return fragment;
+}
+
+function createTokenElement(ownerDocument, tokenKey) {
+  const token = ownerDocument.createElement("span");
+  token.contentEditable = "false";
+  token.dataset.templateToken = tokenKey;
+  token.setAttribute("aria-label", `Variable: ${CUSTOMER_NOTIFICATION_TOKEN_LABELS[tokenKey] ?? tokenKey}`);
+  token.style.cssText = TEMPLATE_TOKEN_CSS_TEXT;
+  token.textContent = CUSTOMER_NOTIFICATION_TOKEN_LABELS[tokenKey] ?? tokenKey;
+  return token;
+}
+
+function createUnsupportedElement(ownerDocument, raw) {
+  const token = ownerDocument.createElement("span");
+  token.contentEditable = "false";
+  token.dataset.unsupportedTemplateToken = raw;
+  token.setAttribute("aria-label", "Unsupported template variable");
+  token.style.cssText = TEMPLATE_UNSUPPORTED_TOKEN_CSS_TEXT;
+  token.textContent = "Unsupported variable";
+  return token;
+}
+
+function serializeEditorDocument(editor) {
+  return [...editor.childNodes].map(serializeEditorNode).join("").replaceAll("\u200B", "");
+}
+
+function serializeEditorNode(node) {
+  if (node.nodeType === node.TEXT_NODE) return node.textContent ?? "";
+  if (node.nodeType !== node.ELEMENT_NODE) return "";
+  if (node.dataset?.templateToken) return serializeTemplateDocument({ segments: [{ key: node.dataset.templateToken, type: "token" }] });
+  if (node.dataset?.unsupportedTemplateToken) return node.dataset.unsupportedTemplateToken;
+  if (node.tagName === "BR") return "\n";
+
+  const text = [...node.childNodes].map(serializeEditorNode).join("");
+  return /^(DIV|P)$/u.test(node.tagName) ? `${text}\n` : text;
+}
+
+function selectionRangeInsideEditor(editor, range) {
+  if (!range || !editor.contains(range.commonAncestorContainer)) return null;
+  return range.cloneRange();
+}
+
+function rangeAtEditorEnd(editor) {
+  const range = editor.ownerDocument.createRange();
+  range.selectNodeContents(editor);
+  range.collapse(false);
+  return range;
+}
+
+const TEMPLATE_TOKEN_CSS_TEXT = [
+  "background:#eef4ff",
+  "border:1px solid #b4d0ff",
+  "border-radius:6px",
+  "box-decoration-break:clone",
+  "color:#003a8c",
+  "display:inline-block",
+  "font-size:12px",
+  "font-weight:650",
+  "line-height:20px",
+  "margin:1px 2px",
+  "padding:1px 7px",
+  "user-select:all",
+  "vertical-align:baseline",
+].join(";");
+
+const TEMPLATE_UNSUPPORTED_TOKEN_CSS_TEXT = `${TEMPLATE_TOKEN_CSS_TEXT};background:#fff1f0;border-color:#ffb3a7;color:#8e1f0b`;
 
 const templateEditorShellStyle = {
   display: "grid",
@@ -242,19 +297,17 @@ const templateEditorLabelStyle = {
 };
 
 const templateEditorSurfaceStyle = {
-  alignItems: "center",
   background: "#ffffff",
-  border: "1px solid #c9c9c9",
+  border: "1px solid #8a8a8a",
   borderRadius: "8px",
   boxSizing: "border-box",
   color: "#303030",
-  display: "flex",
-  flexWrap: "wrap",
   font: "inherit",
-  gap: "6px",
-  lineHeight: "20px",
-  minHeight: "140px",
-  padding: "8px",
+  lineHeight: "24px",
+  minHeight: "180px",
+  overflowWrap: "anywhere",
+  padding: "10px 12px",
+  whiteSpace: "pre-wrap",
   width: "100%",
 };
 
@@ -267,46 +320,10 @@ const templateEditorDisabledStyle = {
 function editorSurfaceStyle({ compact, disabled }) {
   return {
     ...(disabled ? templateEditorDisabledStyle : templateEditorSurfaceStyle),
-    minHeight: compact ? "40px" : templateEditorSurfaceStyle.minHeight,
+    minHeight: compact ? "42px" : templateEditorSurfaceStyle.minHeight,
+    padding: compact ? "8px 10px" : templateEditorSurfaceStyle.padding,
   };
 }
-
-const templateTextSegmentStyle = {
-  minHeight: "24px",
-  minWidth: "2ch",
-  outline: "none",
-  whiteSpace: "pre-wrap",
-};
-
-const templateTokenStyle = {
-  background: "#eef4ff",
-  border: "1px solid #b4d0ff",
-  borderRadius: "999px",
-  color: "#003a8c",
-  cursor: "pointer",
-  font: "inherit",
-  fontSize: "12px",
-  fontWeight: 650,
-  minHeight: "26px",
-  padding: "3px 8px",
-};
-
-const templateTokenSelectedStyle = {
-  ...templateTokenStyle,
-  boxShadow: "0 0 0 2px #005bd3",
-};
-
-const templateUnsupportedStyle = {
-  ...templateTokenStyle,
-  background: "#fff1f0",
-  borderColor: "#ffb3a7",
-  color: "#8e1f0b",
-};
-
-const templateUnsupportedSelectedStyle = {
-  ...templateUnsupportedStyle,
-  boxShadow: "0 0 0 2px #d72c0d",
-};
 
 const templateEditorErrorStyle = {
   color: "#8e1f0b",
@@ -314,21 +331,98 @@ const templateEditorErrorStyle = {
   fontWeight: 650,
 };
 
-const templateVariableTitleStyle = {
-  display: "block",
-  fontSize: "13px",
-  marginBottom: "8px",
+const templateVariableControlStyle = {
+  justifySelf: "start",
+  position: "relative",
 };
 
-const templateVariableListStyle = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "6px",
-};
-
-const templateVariableButtonStyle = {
-  ...templateTokenStyle,
+const templateVariableTriggerStyle = {
+  alignItems: "center",
+  appearance: "none",
   background: "#ffffff",
-  borderColor: "#c9c9c9",
+  border: "1px solid #c9c9c9",
+  borderRadius: "8px",
   color: "#303030",
+  cursor: "pointer",
+  display: "inline-flex",
+  font: "inherit",
+  fontSize: "13px",
+  fontWeight: 650,
+  gap: "7px",
+  minHeight: "34px",
+  padding: "6px 10px",
+};
+
+const templateVariableTriggerIconStyle = {
+  color: "#005bd3",
+  fontSize: "16px",
+  lineHeight: 1,
+};
+
+const templateVariablePopoverStyle = {
+  background: "#ffffff",
+  border: "1px solid #d0d0d0",
+  borderRadius: "10px",
+  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.16)",
+  display: "grid",
+  gap: "8px",
+  left: 0,
+  marginTop: "6px",
+  maxWidth: "320px",
+  padding: "10px",
+  position: "absolute",
+  top: "100%",
+  width: "min(320px, calc(100vw - 48px))",
+  zIndex: 5,
+};
+
+const templateVariableSearchLabelStyle = {
+  display: "grid",
+  fontSize: "12px",
+  fontWeight: 650,
+  gap: "5px",
+};
+
+const templateVariableSearchStyle = {
+  border: "1px solid #8a8a8a",
+  borderRadius: "7px",
+  boxSizing: "border-box",
+  font: "inherit",
+  minHeight: "34px",
+  padding: "6px 9px",
+  width: "100%",
+};
+
+const templateVariableMenuStyle = {
+  display: "grid",
+  maxHeight: "260px",
+  overflowY: "auto",
+};
+
+const templateVariableOptionStyle = {
+  alignItems: "center",
+  appearance: "none",
+  background: "transparent",
+  border: 0,
+  borderRadius: "7px",
+  color: "#303030",
+  cursor: "pointer",
+  display: "flex",
+  font: "inherit",
+  fontSize: "13px",
+  justifyContent: "space-between",
+  minHeight: "36px",
+  padding: "7px 8px",
+  textAlign: "left",
+};
+
+const templateVariableOptionPlusStyle = {
+  color: "#005bd3",
+  fontWeight: 700,
+};
+
+const templateVariableEmptyStyle = {
+  color: "#616161",
+  fontSize: "13px",
+  padding: "10px 8px",
 };
