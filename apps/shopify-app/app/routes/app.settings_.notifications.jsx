@@ -275,9 +275,6 @@ function CustomerEmailSettings({ initialSettings }) {
   const [settings, setSettings] = useState(() => normalizeCustomerEmailSettings(initialSettings));
   const [activeSignal, setActiveSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
   const [testRecipient, setTestRecipient] = useState("");
-  const [testSubject, setTestSubject] = useState(() => settings.templates[CUSTOMER_EMAIL_SIGNALS[0][0]]?.subject ?? "");
-  const [testBody, setTestBody] = useState(() => settings.templates[CUSTOMER_EMAIL_SIGNALS[0][0]]?.body ?? "");
-  const [lastSyncedTestSignal, setLastSyncedTestSignal] = useState(CUSTOMER_EMAIL_SIGNALS[0][0]);
   const [testConfirmed, setTestConfirmed] = useState(false);
   const [logoUploadStatus, setLogoUploadStatus] = useState({ kind: "idle", message: "", progress: 0 });
   const [templateExampleOpen, setTemplateExampleOpen] = useState(false);
@@ -366,13 +363,6 @@ function CustomerEmailSettings({ initialSettings }) {
     }));
   }, [errors.length, fetcher.data?.customerEmailTemplate, fetcher.data?.templateVersion, fetcher.state, intent, savingTemplateSignal]);
 
-  useEffect(() => {
-    if (lastSyncedTestSignal === activeSignal) return;
-    setTestSubject(activeTemplate.subject);
-    setTestBody(activeTemplate.body);
-    setLastSyncedTestSignal(activeSignal);
-  }, [activeSignal, activeTemplate.body, activeTemplate.subject, lastSyncedTestSignal]);
-
   const submit = async (nextIntent) => {
     const formData = new FormData();
     formData.set("_intent", nextIntent);
@@ -382,14 +372,14 @@ function CustomerEmailSettings({ initialSettings }) {
       console.info("customer_email.test.button.clicked", {
         attemptId,
         recipientDomain: emailDomain(testRecipient),
-        signal: activeSignal,
+        signal: templateEditorSignal,
       });
       formData.set("attemptId", attemptId);
-      formData.set("body", testBody);
+      formData.set("body", renderTemplatePreviewValue(templateDraft.body));
       formData.set("confirmed", String(testConfirmed));
       formData.set("recipientEmail", testRecipient);
-      formData.set("signal", activeSignal);
-      formData.set("subject", testSubject);
+      formData.set("signal", templateEditorSignal ?? "");
+      formData.set("subject", renderTemplatePreviewValue(templateDraft.subject));
     } else if (nextIntent === "saveCustomerEmailGlobal") {
       formData.set("expectedVersion", settings.globalVersion ?? "");
       formData.set("senderName", settings.senderName);
@@ -426,6 +416,7 @@ function CustomerEmailSettings({ initialSettings }) {
       subject: hasUnsupportedTemplateSegments(parseTemplateDocument(template.subject)),
     });
     setSavingTemplateSignal(null);
+    setTestConfirmed(false);
     setTemplateEditorSignal(signal);
   };
 
@@ -498,6 +489,7 @@ function CustomerEmailSettings({ initialSettings }) {
 
   return (
     <div style={settingsFormStyle}>
+      <style>{CUSTOMER_NOTIFICATION_RESPONSIVE_CSS}</style>
       <fieldset style={settingsFieldsetStyle}>
         <legend style={settingsLegendStyle}>Customer Notifications</legend>
         <p style={settingsMessageStyle}>Messages are sent manually from a child route. Saving a template never queues or sends email.</p>
@@ -526,57 +518,37 @@ function CustomerEmailSettings({ initialSettings }) {
         <div style={notificationCardHeaderStyle}>
           <div>
             <strong>Templates</strong>
-            <p style={settingsMessageStyle}>Open a template to edit its wording and insert supported variables.</p>
+            <p style={settingsMessageStyle}>Edit the message, preview the finished email, and send a test from one place.</p>
           </div>
         </div>
-        <div aria-label="Email templates" style={notificationTemplateListStyle}>
-          {CUSTOMER_EMAIL_SIGNALS.map(([signal, label]) => (
-            <button
-              aria-label={`Edit ${label} template`}
-              key={signal}
-              onClick={() => openTemplateEditor(signal)}
-              style={notificationTemplateRowStyle}
-              type="button"
-            >
-              <span style={notificationTemplateCopyStyle}>
-                <strong>{label}</strong>
-                <span style={settingsMessageStyle}>{settings.templates[signal]?.subject || "No subject"}</span>
-              </span>
-              <span style={settings.templates[signal]?.enabled === false ? notificationTemplateDisabledStatusStyle : notificationTemplateEnabledStatusStyle}>
-                {settings.templates[signal]?.enabled === false ? "Disabled" : "Enabled"}
-              </span>
-              <span style={notificationTemplateEditLabelStyle}>Edit</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      <section aria-label="Send a test notification" style={settingsSectionCardStyle}>
-        <strong>Send a test</strong>
-        <p style={settingsMessageStyle}>A test goes only to the address entered below. It does not use customer data.</p>
-        <input aria-label="Test recipient email" onChange={(event) => setTestRecipient(event.target.value)} placeholder="name@example.com" style={settingsInputStyle} type="email" value={testRecipient} />
-        <TemplateTokenEditor
-          compact
-          id="test-customer-email-subject"
-          label="Test subject"
-          maxLength={200}
-          onChange={setTestSubject}
-          value={testSubject}
-        />
-        <TemplateTokenEditor
-          id="test-customer-email-body"
-          label="Test body"
-          maxLength={10000}
-          onChange={setTestBody}
-          value={testBody}
-        />
-        <label style={{ ...settingsLabelStyle, alignItems: "center", display: "flex", gridTemplateColumns: "auto 1fr" }}>
-          <input checked={testConfirmed} onChange={(event) => setTestConfirmed(event.target.checked)} type="checkbox" />
-          Confirm one test email to this address
-        </label>
-        <div style={settingsActionRowStyle}>
-          <span>{intent === "testCustomerEmail" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Test email accepted{fetcher.data.attemptId ? ` Ref ${fetcher.data.attemptId.slice(0, 8)}` : ""}</span> : null}</span>
-          <button disabled={busy || !testConfirmed || !testRecipient} onClick={() => submit("testCustomerEmail")} style={busy || !testConfirmed || !testRecipient ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{testBusy ? "Sending..." : "Send test"}</button>
+        <div className="customer-notification-template-table" style={notificationTemplateTableFrameStyle}>
+          <table aria-label="Email templates" style={notificationTemplateTableStyle}>
+            <thead>
+              <tr style={notificationTemplateHeaderRowStyle}>
+                <th scope="col" style={notificationTemplateHeaderCellStyle}>Notification</th>
+                <th scope="col" style={notificationTemplateHeaderCellStyle}>Subject</th>
+                <th scope="col" style={notificationTemplateStatusHeaderStyle}>Status</th>
+                <th aria-label="Actions" scope="col" style={notificationTemplateActionHeaderStyle} />
+              </tr>
+            </thead>
+            <tbody>
+              {CUSTOMER_EMAIL_SIGNALS.map(([signal, label]) => (
+                <tr key={signal} style={notificationTemplateRowStyle}>
+                  <th scope="row" style={notificationTemplateNameCellStyle}>{label}</th>
+                  <td style={notificationTemplateSubjectCellStyle}>{settings.templates[signal]?.subject || <span style={notificationTemplateEmptyTextStyle}>No subject</span>}</td>
+                  <td style={notificationTemplateStatusCellStyle}>
+                    <span style={settings.templates[signal]?.enabled === false ? notificationTemplateDisabledStatusStyle : notificationTemplateEnabledStatusStyle}>
+                      <span aria-hidden="true" style={notificationTemplateStatusDotStyle} />
+                      {settings.templates[signal]?.enabled === false ? "Disabled" : "Enabled"}
+                    </span>
+                  </td>
+                  <td style={notificationTemplateActionCellStyle}>
+                    <button aria-label={`Edit ${label} template`} onClick={() => openTemplateEditor(signal)} style={notificationTemplateEditButtonStyle} type="button">Edit</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </section>
 
@@ -639,28 +611,70 @@ function CustomerEmailSettings({ initialSettings }) {
 
       {templateEditorSignal ? (
         <SettingsEditorModal ariaLabel={`Edit ${templateEditorLabel} template`} onClose={() => setTemplateEditorSignal(null)} title={templateEditorLabel}>
-          <TemplateTokenEditor
-            compact
-            id={`template-${templateEditorSignal}-subject`}
-            label="Subject"
-            maxLength={200}
-            onChange={(subject) => setTemplateDraft((current) => ({ ...current, subject }))}
-            onUnsupportedChange={setTemplateDraftSubjectUnsupported}
-            value={templateDraft.subject}
-          />
-          <label style={{ ...settingsLabelStyle, alignItems: "center", display: "flex", gridTemplateColumns: "auto 1fr" }}>
-            <input checked={templateDraft.enabled} onChange={(event) => setTemplateDraft((current) => ({ ...current, enabled: event.target.checked }))} type="checkbox" />
-            Enabled
-          </label>
-          <TemplateTokenEditor
-            id={`template-${templateEditorSignal}-body`}
-            label="Body"
-            onChange={(body) => setTemplateDraft((current) => ({ ...current, body }))}
-            onUnsupportedChange={setTemplateDraftBodyUnsupported}
-            value={templateDraft.body}
-          />
-          <p style={templateDraftHasUnsupported ? settingsErrorStyle : settingsMessageStyle}>Variables are shown as chips. Unsupported pasted variables must be removed before this template can be saved.</p>
-          <div style={settingsActionRowStyle}>
+          <div className="customer-notification-template-editor" style={notificationTemplateEditorLayoutStyle}>
+            <div style={notificationTemplateComposerStyle}>
+              <div style={notificationTemplateEditorIntroStyle}>
+                <div>
+                  <strong>Message</strong>
+                  <p style={settingsMessageStyle}>Type normally. Insert customer and delivery details from the variable menu.</p>
+                </div>
+                <label style={notificationTemplateEnabledToggleStyle}>
+                  <input checked={templateDraft.enabled} onChange={(event) => setTemplateDraft((current) => ({ ...current, enabled: event.target.checked }))} type="checkbox" />
+                  Enabled
+                </label>
+              </div>
+              <TemplateTokenEditor
+                compact
+                id={`template-${templateEditorSignal}-subject`}
+                label="Subject"
+                maxLength={200}
+                onChange={(subject) => setTemplateDraft((current) => ({ ...current, subject }))}
+                onUnsupportedChange={setTemplateDraftSubjectUnsupported}
+                value={templateDraft.subject}
+              />
+              <TemplateTokenEditor
+                id={`template-${templateEditorSignal}-body`}
+                label="Body"
+                onChange={(body) => setTemplateDraft((current) => ({ ...current, body }))}
+                onUnsupportedChange={setTemplateDraftBodyUnsupported}
+                value={templateDraft.body}
+              />
+              <p style={templateDraftHasUnsupported ? settingsErrorStyle : notificationTemplateHelpStyle}>
+                {templateDraftHasUnsupported
+                  ? "Remove the red unsupported variable before saving or sending a test."
+                  : "Variables stay connected to customer data even though the original template syntax is hidden."}
+              </p>
+            </div>
+            <aside aria-label="Email preview and test" style={notificationTemplatePreviewPanelStyle}>
+              <div style={notificationTemplatePreviewHeaderStyle}>
+                <div>
+                  <strong>Email preview</strong>
+                  <p style={notificationTemplatePreviewHintStyle}>Example customer data</p>
+                </div>
+                <span style={notificationTemplatePreviewBadgeStyle}>Live</span>
+              </div>
+              <NotificationPreview activeTemplate={templateDraft} branding={branding} senderName={settings.senderName} />
+              <div style={notificationTestPanelStyle}>
+                <div>
+                  <strong>Send this preview</strong>
+                  <p style={settingsMessageStyle}>Sends one test using the current draft and example data.</p>
+                </div>
+                <label style={settingsLabelStyle}>
+                  Recipient email
+                  <input aria-label="Test recipient email" onChange={(event) => setTestRecipient(event.target.value)} placeholder="name@example.com" style={settingsInputStyle} type="email" value={testRecipient} />
+                </label>
+                <label style={notificationTestConfirmStyle}>
+                  <input checked={testConfirmed} onChange={(event) => setTestConfirmed(event.target.checked)} type="checkbox" />
+                  Confirm one test email to this address
+                </label>
+                <div style={settingsActionRowStyle}>
+                  <span>{intent === "testCustomerEmail" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Test accepted{fetcher.data.attemptId ? ` · ${fetcher.data.attemptId.slice(0, 8)}` : ""}</span> : null}</span>
+                  <button disabled={busy || !testConfirmed || !testRecipient || templateDraftHasUnsupported} onClick={() => submit("testCustomerEmail")} style={busy || !testConfirmed || !testRecipient || templateDraftHasUnsupported ? settingsDisabledButtonStyle : settingsResetButtonStyle} type="button">{testBusy ? "Sending..." : "Send test"}</button>
+                </div>
+              </div>
+            </aside>
+          </div>
+          <div style={notificationModalFooterStyle}>
             <button onClick={() => setTemplateEditorSignal(null)} style={settingsResetButtonStyle} type="button">Cancel</button>
             <button
               disabled={busy || templateDraftHasUnsupported}
@@ -694,7 +708,7 @@ function SettingsEditorModal({ ariaLabel, children, onClose, title }) {
       role="presentation"
       style={notificationModalOverlayStyle}
     >
-      <section aria-label={ariaLabel} aria-modal="true" role="dialog" style={notificationModalStyle}>
+      <section aria-label={ariaLabel} aria-modal="true" className="customer-notification-modal" role="dialog" style={notificationModalStyle}>
         <header style={notificationModalHeaderStyle}>
           <strong>{title}</strong>
           <button aria-label="Close editor" onClick={onClose} style={notificationModalCloseStyle} type="button">×</button>
@@ -739,8 +753,8 @@ function uploadLogoWithProgress(formData, onProgress) {
 function NotificationPreview({ activeTemplate, branding, senderName }) {
   const logo = branding.logoMode === "image" && branding.logoUrl.startsWith("https://");
   const logoWidth = Math.max(48, Math.min(320, Number(branding.logoWidth) || DEFAULT_BRANDING.logoWidth));
-  const subject = activeTemplate.subject || "Delivery scheduled";
-  const body = activeTemplate.body || "Hi Mina, your delivery is scheduled.";
+  const subject = renderTemplatePreviewValue(activeTemplate.subject) || "Delivery scheduled";
+  const body = renderTemplatePreviewValue(activeTemplate.body) || "Hi Mina, your delivery is scheduled.";
   const footerItems = buildCommonFooterItems(branding);
   const hasCommonFooter = logo || footerItems.length > 0;
   const footerLogo = logo ? (
@@ -775,6 +789,27 @@ function NotificationPreview({ activeTemplate, branding, senderName }) {
       </article>
     </div>
   );
+}
+
+const TEMPLATE_PREVIEW_VALUES = {
+  customerName: "Mina Park",
+  deliveryAddress: "15 Market Street, Melbourne VIC 3000",
+  deliveryDate: "Wed, 5 Aug 2026",
+  deliveryWeekday: "Wednesday",
+  eta: "2:30 PM – 3:00 PM",
+  inventoryList: "Fresh kimchi × 2\nKorean pear × 1",
+  orderNumber: "#1048",
+  routeName: "Melbourne CBD",
+  sequence: "Stop 7",
+  shopName: "CLEVER Market",
+};
+
+function renderTemplatePreviewValue(value) {
+  return parseTemplateDocument(value).segments.map((segment) => {
+    if (segment.type === "token") return TEMPLATE_PREVIEW_VALUES[segment.key] ?? "";
+    if (segment.type === "unsupported") return "[Unsupported variable]";
+    return segment.value;
+  }).join("");
 }
 
 function buildCommonFooterItems(branding) {
@@ -823,54 +858,207 @@ const notificationCardHeaderStyle = {
   justifyContent: "space-between",
 };
 
-const notificationTemplateListStyle = {
+const notificationTemplateTableFrameStyle = {
   border: "1px solid #e3e3e3",
   borderRadius: "8px",
-  display: "grid",
-  overflow: "hidden",
+  overflowX: "auto",
 };
 
-const notificationTemplateRowStyle = {
-  alignItems: "center",
-  appearance: "none",
-  background: "#ffffff",
-  border: 0,
-  borderBottom: "1px solid #e3e3e3",
+const notificationTemplateTableStyle = {
+  borderCollapse: "collapse",
   color: "#303030",
-  cursor: "pointer",
-  display: "flex",
-  font: "inherit",
-  gap: "16px",
-  justifyContent: "space-between",
-  minHeight: "56px",
-  padding: "10px 12px",
+  tableLayout: "fixed",
   textAlign: "left",
   width: "100%",
 };
 
-const notificationTemplateCopyStyle = {
-  display: "grid",
-  gap: "3px",
-  minWidth: 0,
+const notificationTemplateHeaderRowStyle = {
+  background: "#f7f7f7",
 };
 
-const notificationTemplateEditLabelStyle = {
+const notificationTemplateHeaderCellStyle = {
+  borderBottom: "1px solid #e3e3e3",
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 650,
+  padding: "9px 12px",
+  width: "28%",
+};
+
+const notificationTemplateStatusHeaderStyle = {
+  ...notificationTemplateHeaderCellStyle,
+  width: "100px",
+};
+
+const notificationTemplateActionHeaderStyle = {
+  ...notificationTemplateHeaderCellStyle,
+  width: "72px",
+};
+
+const notificationTemplateRowStyle = {
+  borderBottom: "1px solid #e3e3e3",
+};
+
+const notificationTemplateNameCellStyle = {
+  fontSize: "14px",
+  fontWeight: 650,
+  padding: "13px 12px",
+};
+
+const notificationTemplateSubjectCellStyle = {
+  color: "#616161",
+  fontSize: "13px",
+  overflow: "hidden",
+  padding: "13px 12px",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
+const notificationTemplateEmptyTextStyle = {
+  color: "#8a8a8a",
+  fontStyle: "italic",
+};
+
+const notificationTemplateStatusCellStyle = {
+  padding: "13px 12px",
+};
+
+const notificationTemplateActionCellStyle = {
+  padding: "8px 12px",
+  textAlign: "right",
+};
+
+const notificationTemplateEditButtonStyle = {
+  appearance: "none",
+  background: "transparent",
+  border: 0,
+  borderRadius: "6px",
   color: "#005bd3",
-  flex: "0 0 auto",
+  cursor: "pointer",
+  font: "inherit",
   fontSize: "13px",
   fontWeight: 650,
+  padding: "7px 8px",
 };
 
 const notificationTemplateEnabledStatusStyle = {
-  color: "#008060",
-  flex: "0 0 auto",
+  alignItems: "center",
+  background: "#eaf4ee",
+  borderRadius: "999px",
+  color: "#17663a",
+  display: "inline-flex",
   fontSize: "12px",
   fontWeight: 650,
+  gap: "6px",
+  padding: "3px 8px",
 };
 
 const notificationTemplateDisabledStatusStyle = {
   ...notificationTemplateEnabledStatusStyle,
-  color: "#8e1f0b",
+  background: "#f1f1f1",
+  color: "#616161",
+};
+
+const notificationTemplateStatusDotStyle = {
+  background: "currentColor",
+  borderRadius: "50%",
+  height: "6px",
+  width: "6px",
+};
+
+const notificationTemplateEditorLayoutStyle = {
+  display: "grid",
+  gap: "18px",
+  gridTemplateColumns: "minmax(0, 1.05fr) minmax(340px, 0.95fr)",
+};
+
+const notificationTemplateComposerStyle = {
+  alignContent: "start",
+  display: "grid",
+  gap: "14px",
+  minWidth: 0,
+};
+
+const notificationTemplateEditorIntroStyle = {
+  alignItems: "start",
+  display: "flex",
+  gap: "16px",
+  justifyContent: "space-between",
+};
+
+const notificationTemplateEnabledToggleStyle = {
+  alignItems: "center",
+  display: "flex",
+  flex: "0 0 auto",
+  fontSize: "13px",
+  fontWeight: 650,
+  gap: "7px",
+};
+
+const notificationTemplateHelpStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  lineHeight: "18px",
+  margin: 0,
+};
+
+const notificationTemplatePreviewPanelStyle = {
+  alignContent: "start",
+  background: "#f7f7f7",
+  border: "1px solid #e3e3e3",
+  borderRadius: "10px",
+  display: "grid",
+  gap: "12px",
+  minWidth: 0,
+  padding: "14px",
+};
+
+const notificationTemplatePreviewHeaderStyle = {
+  alignItems: "start",
+  display: "flex",
+  justifyContent: "space-between",
+};
+
+const notificationTemplatePreviewHintStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  margin: "3px 0 0",
+};
+
+const notificationTemplatePreviewBadgeStyle = {
+  background: "#eaf4ee",
+  borderRadius: "999px",
+  color: "#17663a",
+  fontSize: "11px",
+  fontWeight: 700,
+  padding: "3px 8px",
+};
+
+const notificationTestPanelStyle = {
+  background: "#ffffff",
+  border: "1px solid #e3e3e3",
+  borderRadius: "8px",
+  display: "grid",
+  gap: "10px",
+  padding: "12px",
+};
+
+const notificationTestConfirmStyle = {
+  alignItems: "start",
+  display: "flex",
+  fontSize: "12px",
+  gap: "7px",
+  lineHeight: "18px",
+};
+
+const notificationModalFooterStyle = {
+  alignItems: "center",
+  borderTop: "1px solid #e3e3e3",
+  display: "flex",
+  gap: "8px",
+  justifyContent: "flex-end",
+  margin: "2px -18px -18px",
+  padding: "14px 18px 0",
 };
 
 const notificationModalOverlayStyle = {
@@ -890,7 +1078,7 @@ const notificationModalStyle = {
   boxShadow: "0 20px 48px rgba(0, 0, 0, 0.24)",
   boxSizing: "border-box",
   maxHeight: "calc(100vh - 32px)",
-  maxWidth: "960px",
+  maxWidth: "1180px",
   overflow: "hidden",
   width: "100%",
 };
@@ -925,8 +1113,30 @@ const notificationModalBodyStyle = {
   gap: "14px",
   maxHeight: "calc(100vh - 82px)",
   overflowY: "auto",
-  padding: "16px",
+  padding: "18px",
 };
+
+const CUSTOMER_NOTIFICATION_RESPONSIVE_CSS = `
+@media (max-width: 900px) {
+  .customer-notification-template-editor {
+    grid-template-columns: minmax(0, 1fr) !important;
+  }
+
+  .customer-notification-modal {
+    max-width: 760px !important;
+  }
+}
+
+@media (max-width: 620px) {
+  .customer-notification-template-table {
+    margin-inline: -12px;
+  }
+
+  .customer-notification-template-table table {
+    min-width: 640px;
+  }
+}
+`;
 
 const NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS = `
 @media (prefers-color-scheme: dark) {

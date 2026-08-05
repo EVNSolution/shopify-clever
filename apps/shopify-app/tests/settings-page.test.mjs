@@ -238,15 +238,13 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /contactEmail/);
   assert.match(notificationsPageSource, /websiteUrl/);
   assert.match(notificationsPageSource, /note/);
-  assert.match(notificationsPageSource, /formData\.set\("subject", testSubject\)/);
-  assert.match(notificationsPageSource, /formData\.set\("body", testBody\)/);
+  assert.match(notificationsPageSource, /formData\.set\("subject", renderTemplatePreviewValue\(templateDraft\.subject\)\)/);
+  assert.match(notificationsPageSource, /formData\.set\("body", renderTemplatePreviewValue\(templateDraft\.body\)\)/);
   assert.match(notificationsPageSource, /subject: formText\(formData\.get\("subject"\)\)/);
   assert.match(notificationsPageSource, /body: formText\(formData\.get\("body"\)\)/);
-  assert.match(notificationsPageSource, /id="test-customer-email-subject"/);
-  assert.match(notificationsPageSource, /label="Test subject"/);
-  assert.match(notificationsPageSource, /id="test-customer-email-body"/);
-  assert.match(notificationsPageSource, /label="Test body"/);
-  assert.match(notificationsPageSource, /lastSyncedTestSignal/);
+  assert.doesNotMatch(notificationsPageSource, /id="test-customer-email-subject"|label="Test subject"/);
+  assert.doesNotMatch(notificationsPageSource, /id="test-customer-email-body"|label="Test body"/);
+  assert.doesNotMatch(notificationsPageSource, /lastSyncedTestSignal|testSubject|testBody/);
   assert.doesNotMatch(notificationsPageSource, /BRANDING_COLOR_FIELDS/);
   assert.doesNotMatch(notificationsPageSource, /type="color"/);
   assert.doesNotMatch(notificationsPageSource, />Logo alt text</);
@@ -263,7 +261,7 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
 
 test("Customer Notifications keeps the template example behind preview and brand-only edit modes", () => {
   assert.match(notificationsPageSource, /function SettingsEditorModal/);
-  assert.match(notificationsPageSource, /aria-modal="true" role="dialog"/);
+  assert.match(notificationsPageSource, /aria-modal="true"[\s\S]*role="dialog"/);
   assert.match(notificationsPageSource, />Template example<\/button>/);
   assert.match(notificationsPageSource, /ariaLabel="Template example"/);
   assert.match(notificationsPageSource, />Preview<\/button>/);
@@ -281,30 +279,46 @@ test("Customer Notifications keeps the template example behind preview and brand
   assert.doesNotMatch(notificationsPageSource, /onChange=\{\(event\) => updateTemplate/);
 });
 
-test("Customer Notifications uses atomic token editing without exposing raw template syntax controls", () => {
+test("Customer Notifications uses one caret-aware token editor without duplicate test editing", () => {
   assert.match(notificationsPageSource, /import \{\s*TemplateTokenEditor,\s*\} from "\.\.\/features\/customer-notifications\/template-token-editor"/);
   assert.doesNotMatch(notificationsPageSource, /insertTemplateVariable|setSelectionRange|templateBodyRef/);
   assert.doesNotMatch(notificationsPageSource, /<textarea maxLength=\{10000\}[\s\S]*templateDraft\.body/);
   assert.doesNotMatch(notificationsPageSource, /<textarea aria-label="Test body"|<input aria-label="Test subject"/);
   assert.doesNotMatch(notificationsPageSource, /<label style=\{settingsLabelStyle\}>Subject<input/);
   assert.doesNotMatch(notificationsPageSource, /`\{\{\$\{variable\}\}\}`/);
-  assert.match(notificationsPageSource, /compact[\s\S]*id="test-customer-email-subject"/);
-  assert.match(notificationsPageSource, /id="test-customer-email-body"/);
+  assert.doesNotMatch(notificationsPageSource, /id="test-customer-email-subject"|id="test-customer-email-body"/);
   assert.match(notificationsPageSource, /id=\{`template-\$\{templateEditorSignal\}-subject`\}/);
   assert.match(notificationsPageSource, /id=\{`template-\$\{templateEditorSignal\}-body`\}/);
   assert.match(templateTokenEditorSource, /parseTemplateDocument/);
   assert.match(templateTokenEditorSource, /serializeTemplateDocument/);
-  assert.match(templateTokenEditorSource, /insertTemplateToken/);
+  assert.match(templateTokenEditorSource, /selectionRangeInsideEditor/);
+  assert.match(templateTokenEditorSource, /range\.insertNode\(token\)/);
   assert.match(templateTokenEditorSource, /onPaste=\{handlePaste\}/);
   assert.match(templateTokenEditorSource, /role="textbox"/);
   assert.match(templateTokenEditorSource, /contentEditable=\{!disabled\}/);
-  assert.match(templateTokenEditorSource, /aria-label="Unsupported template variable"/);
-  assert.match(templateTokenEditorSource, />\s*Unsupported variable\s*<\/button>/);
+  assert.match(templateTokenEditorSource, /setAttribute\("aria-label", "Unsupported template variable"\)/);
+  assert.match(templateTokenEditorSource, /token\.textContent = "Unsupported variable"/);
   assert.doesNotMatch(templateTokenEditorSource, /aria-label=\{`Unsupported variable \$\{segment\.raw\}`\}|Unsupported: \{segment\.raw/);
   assert.match(templateTokenEditorSource, /deliveryWeekday: "Delivery weekday"/);
   assert.match(templateTokenEditorSource, /inventoryList: "Inventory list"/);
-  assert.match(templateTokenEditorSource, /\.\.\.document\.segments, \{ type: "text", value: nextValue \}/);
+  assert.match(templateTokenEditorSource, />\s*Insert variable\s*/);
+  assert.match(templateTokenEditorSource, /placeholder="Search variables"/);
+  assert.doesNotMatch(templateTokenEditorSource, /display: "flex",\s*flexWrap: "wrap"/);
   assert.doesNotMatch(templateTokenEditorSource, /raw\/source|Source mode|Raw template/i);
+});
+
+test("Customer Notifications uses a fixed template table and contextual live preview", () => {
+  assert.match(notificationsPageSource, /<table aria-label="Email templates"/);
+  assert.match(notificationsPageSource, />Notification<\/th>/);
+  assert.match(notificationsPageSource, />Subject<\/th>/);
+  assert.match(notificationsPageSource, />Status<\/th>/);
+  assert.match(notificationsPageSource, /aria-label="Email preview and test"/);
+  assert.match(notificationsPageSource, /<NotificationPreview activeTemplate=\{templateDraft\}/);
+  assert.match(notificationsPageSource, />Send this preview<\/strong>/);
+  assert.match(notificationsPageSource, /Sends one test using the current draft and example data\./);
+  assert.doesNotMatch(notificationsPageSource, /<section aria-label="Send a test notification"/);
+  assert.match(notificationsPageSource, /gridTemplateColumns: "minmax\(0, 1\.05fr\) minmax\(340px, 0\.95fr\)"/);
+  assert.match(notificationsPageSource, /@media \(max-width: 900px\)/);
 });
 
 test("Customer Notifications saves global and template changes through isolated partial BFF intents", () => {
