@@ -1,6 +1,6 @@
 # Shopify Protected Customer Data Field Map
 
-_Last updated: 2026-05-14_
+_Last updated: 2026-08-05_
 
 This field map supports the Partner Dashboard protected customer data request for the current `clever` release.
 
@@ -43,6 +43,7 @@ Source: `apps/shopify-app/app/features/orders/shopify-orders.server.js`
 | `lineItems.title/name/variantTitle/quantity/sku` | Order data | Help merchants identify delivery items per stop. |
 | `displayFinancialStatus`, `displayFulfillmentStatus`, `currentTotalPriceSet` | Order data | Show operational order status/amount labels in planning tables. |
 | `createdAt`, `updatedAt`, `processedAt`, `cancelledAt`, `note` | Order data | Filter/sort/sync operational order records. |
+| `customer.note` | Customer profile data | Preserve the existing customer delivery note used by the current order read path. It does not include customer email. |
 
 ### Delivery API background sync query
 
@@ -55,8 +56,7 @@ The delivery API sync query mirrors the embedded app fields for updated orders a
 The current Shopify Admin GraphQL queries intentionally do **not** request:
 
 - `email`
-- `customer { ... }`
-- customer profile fields
+- customer email or other customer profile fields beyond the existing `customer.note`
 - `read_customers`
 - `read_all_orders`
 - payment data

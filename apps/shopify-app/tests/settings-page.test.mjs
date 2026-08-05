@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 
 const root = process.cwd();
@@ -12,9 +13,17 @@ const notificationsPageSource = readFileSync(
   join(root, "app/routes/app.settings_.notifications.jsx"),
   "utf8",
 );
+const templateTokenEditorSource = readFileSync(
+  join(root, "app/features/customer-notifications/template-token-editor.jsx"),
+  "utf8",
+);
 const notificationPreviewSource = notificationsPageSource.slice(
   notificationsPageSource.indexOf("function NotificationPreview"),
   notificationsPageSource.indexOf("export function ErrorBoundary"),
+);
+const normalizeCustomerEmailSettingsSource = notificationsPageSource.slice(
+  notificationsPageSource.indexOf("function normalizeCustomerEmailSettings"),
+  notificationsPageSource.indexOf("function formText"),
 );
 const templateExampleModalSource = notificationsPageSource.slice(
   notificationsPageSource.indexOf("{templateExampleOpen ? ("),
@@ -49,6 +58,14 @@ test("Settings tab reads the Shopify departure location", () => {
   assert.match(settingsPageSource, /fetchShopifyAppPreferences\(admin\)/);
   assert.doesNotMatch(settingsPageSource, /fetchCustomerEmailSettings/);
   assert.doesNotMatch(settingsPageSource, /useSearchParams|searchParams\.get\("section"\)/);
+});
+
+test("Customer Notifications route uses the canonical BFF boundary", () => {
+  assert.match(notificationsPageSource, /from "\.\.\/features\/customer-notifications\/customer-email\.server"/);
+  assert.doesNotMatch(notificationsPageSource, /features\/delivery\/customer-email\.server/);
+  assert.doesNotMatch(settingsPageSource, /fetchCustomerNotificationSettings|saveCustomerNotificationSettingsFromForm|saveCustomerEmailSettings/);
+  assert.doesNotMatch(notificationsPageSource, /metafieldsSet[\s\S]*customerEmail/i);
+  assert.doesNotMatch(notificationsPageSource, /customerEmail[\s\S]*currentAppInstallation/i);
 });
 
 test("Settings tab saves language and departure location settings without adding a database migration", () => {
@@ -195,9 +212,9 @@ test("Settings splits General and Customer Notifications into internal routes", 
 
 test("Customer Notifications keeps sender, templates, explicit tests, and compact logo preview", () => {
   assert.match(notificationsPageSource, /fetchCustomerEmailSettings/);
-  assert.match(notificationsPageSource, /saveCustomerEmailSettings/);
+  assert.match(notificationsPageSource, /saveCustomerEmailGlobal/);
+  assert.match(notificationsPageSource, /saveCustomerEmailTemplate/);
   assert.match(notificationsPageSource, /sendCustomerEmailTest/);
-  assert.match(notificationsPageSource, /version: 2/);
   assert.match(notificationsPageSource, /branding: \{/);
   assert.match(notificationsPageSource, /senderEmail/);
   assert.match(notificationsPageSource, /senderName/);
@@ -217,24 +234,25 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /logoMode/);
   assert.match(notificationsPageSource, /logoWidth/);
   assert.match(notificationsPageSource, /logoLinkUrl/);
-  assert.match(notificationsPageSource, /logoAltText/);
-  assert.match(notificationsPageSource, /previewText/);
-  assert.match(notificationsPageSource, /footerText/);
-  assert.match(notificationsPageSource, /showPoweredByClever/);
+  assert.match(notificationsPageSource, /businessName/);
+  assert.match(notificationsPageSource, /contactEmail/);
+  assert.match(notificationsPageSource, /websiteUrl/);
+  assert.match(notificationsPageSource, /note/);
   assert.match(notificationsPageSource, /formData\.set\("subject", testSubject\)/);
   assert.match(notificationsPageSource, /formData\.set\("body", testBody\)/);
   assert.match(notificationsPageSource, /subject: formText\(formData\.get\("subject"\)\)/);
   assert.match(notificationsPageSource, /body: formText\(formData\.get\("body"\)\)/);
-  assert.match(notificationsPageSource, /aria-label="Test subject"/);
-  assert.match(notificationsPageSource, /aria-label="Test body"/);
-  assert.match(notificationsPageSource, /aria-label="Test subject" maxLength=\{200\}/);
-  assert.match(notificationsPageSource, /aria-label="Test body" maxLength=\{10000\}/);
+  assert.match(notificationsPageSource, /id="test-customer-email-subject"/);
+  assert.match(notificationsPageSource, /label="Test subject"/);
+  assert.match(notificationsPageSource, /id="test-customer-email-body"/);
+  assert.match(notificationsPageSource, /label="Test body"/);
   assert.match(notificationsPageSource, /lastSyncedTestSignal/);
   assert.doesNotMatch(notificationsPageSource, /BRANDING_COLOR_FIELDS/);
   assert.doesNotMatch(notificationsPageSource, /type="color"/);
   assert.doesNotMatch(notificationsPageSource, />Logo alt text</);
   assert.doesNotMatch(notificationsPageSource, />Preview text</);
   assert.doesNotMatch(notificationsPageSource, />Show powered by CLEVER</);
+  assert.doesNotMatch(notificationsPageSource, />Footer text</);
   assert.doesNotMatch(notificationsPageSource, /primaryColor|poweredByEnabled|logoHref|logoAlt:/);
   assert.match(notificationsPageSource, /Live notification preview/);
   assert.match(notificationsPageSource, /Email templates/);
@@ -257,28 +275,126 @@ test("Customer Notifications keeps the template example behind preview and brand
   assert.doesNotMatch(notificationBrandingSectionSource, /NotificationPreview/);
   assert.doesNotMatch(templateExampleModalSource, /templateDraft|>Subject<|>Body</);
   assert.match(notificationsPageSource, /aria-label=\{`Edit \$\{label\} template`\}/);
-  assert.match(notificationsPageSource, /aria-label="Template variables"/);
-  assert.match(notificationsPageSource, /insertTemplateVariable/);
-  assert.match(notificationsPageSource, /setSelectionRange\(cursor, cursor\)/);
+  assert.match(notificationsPageSource, /<TemplateTokenEditor/);
   assert.match(notificationsPageSource, />Apply changes<\/button>/);
-  assert.match(notificationsPageSource, />Apply template<\/button>/);
+  assert.match(notificationsPageSource, /"Save template"/);
   assert.doesNotMatch(notificationsPageSource, /onChange=\{\(event\) => updateTemplate/);
 });
 
-test("Customer Notifications preview renders the logo from the footer upper-left", () => {
+test("Customer Notifications uses atomic token editing without exposing raw template syntax controls", () => {
+  assert.match(notificationsPageSource, /import \{\s*TemplateTokenEditor,\s*\} from "\.\.\/features\/customer-notifications\/template-token-editor"/);
+  assert.doesNotMatch(notificationsPageSource, /insertTemplateVariable|setSelectionRange|templateBodyRef/);
+  assert.doesNotMatch(notificationsPageSource, /<textarea maxLength=\{10000\}[\s\S]*templateDraft\.body/);
+  assert.doesNotMatch(notificationsPageSource, /<textarea aria-label="Test body"|<input aria-label="Test subject"/);
+  assert.doesNotMatch(notificationsPageSource, /<label style=\{settingsLabelStyle\}>Subject<input/);
+  assert.doesNotMatch(notificationsPageSource, /`\{\{\$\{variable\}\}\}`/);
+  assert.match(notificationsPageSource, /compact[\s\S]*id="test-customer-email-subject"/);
+  assert.match(notificationsPageSource, /id="test-customer-email-body"/);
+  assert.match(notificationsPageSource, /id=\{`template-\$\{templateEditorSignal\}-subject`\}/);
+  assert.match(notificationsPageSource, /id=\{`template-\$\{templateEditorSignal\}-body`\}/);
+  assert.match(templateTokenEditorSource, /parseTemplateDocument/);
+  assert.match(templateTokenEditorSource, /serializeTemplateDocument/);
+  assert.match(templateTokenEditorSource, /insertTemplateToken/);
+  assert.match(templateTokenEditorSource, /onPaste=\{handlePaste\}/);
+  assert.match(templateTokenEditorSource, /role="textbox"/);
+  assert.match(templateTokenEditorSource, /contentEditable=\{!disabled\}/);
+  assert.match(templateTokenEditorSource, /aria-label="Unsupported template variable"/);
+  assert.match(templateTokenEditorSource, />\s*Unsupported variable\s*<\/button>/);
+  assert.doesNotMatch(templateTokenEditorSource, /aria-label=\{`Unsupported variable \$\{segment\.raw\}`\}|Unsupported: \{segment\.raw/);
+  assert.match(templateTokenEditorSource, /deliveryWeekday: "Delivery weekday"/);
+  assert.match(templateTokenEditorSource, /inventoryList: "Inventory list"/);
+  assert.match(templateTokenEditorSource, /\.\.\.document\.segments, \{ type: "text", value: nextValue \}/);
+  assert.doesNotMatch(templateTokenEditorSource, /raw\/source|Source mode|Raw template/i);
+});
+
+test("Customer Notifications saves global and template changes through isolated partial BFF intents", () => {
+  const templateSettingsReader = notificationsPageSource.slice(
+    notificationsPageSource.indexOf("function readCustomerEmailTemplateSettings"),
+    notificationsPageSource.indexOf("function normalizeCustomerEmailSettings"),
+  );
+  const globalSettingsReader = notificationsPageSource.slice(
+    notificationsPageSource.indexOf("function readCustomerEmailGlobalSettings"),
+    notificationsPageSource.indexOf("function readCustomerEmailTemplateSettings"),
+  );
+
+  assert.match(notificationsPageSource, /formData\.get\("_intent"\) === "saveCustomerEmailTemplate"/);
+  assert.match(notificationsPageSource, /formData\.get\("_intent"\) === "saveCustomerEmailGlobal"/);
+  assert.match(notificationsPageSource, /saveCustomerEmailGlobal\(request, readCustomerEmailGlobalSettings\(formData\)/);
+  assert.match(notificationsPageSource, /saveCustomerEmailTemplate\(request, payload\.signal, payload\.customerEmailTemplate/);
+  assert.match(notificationsPageSource, /formData\.set\("_intent", "saveCustomerEmailTemplate"\)/);
+  assert.match(notificationsPageSource, /formData\.set\("_intent", nextIntent\)/);
+  assert.match(notificationsPageSource, /formData\.set\("expectedVersion", settings\.globalVersion \?\? ""\)/);
+  assert.match(notificationsPageSource, /formData\.set\("expectedVersion", settings\.templates\[templateEditorSignal\]\?\.version \?\? ""\)/);
+  assert.match(globalSettingsReader, /expectedVersion: formNullableText\(formData\.get\("expectedVersion"\)\)/);
+  assert.match(globalSettingsReader, /businessName: formText\(formData\.get\("branding\.businessName"\)\)/);
+  assert.match(globalSettingsReader, /address: formText\(formData\.get\("branding\.address"\)\)/);
+  assert.match(globalSettingsReader, /phone: formText\(formData\.get\("branding\.phone"\)\)/);
+  assert.match(globalSettingsReader, /contactEmail: formText\(formData\.get\("branding\.contactEmail"\)\)/);
+  assert.match(globalSettingsReader, /websiteUrl: formHttpsUrl\(formData\.get\("branding\.websiteUrl"\)\)/);
+  assert.match(globalSettingsReader, /note: formText\(formData\.get\("branding\.note"\)\)/);
+  assert.match(templateSettingsReader, /expectedVersion: formNullableText\(formData\.get\("expectedVersion"\)\)/);
+  assert.match(templateSettingsReader, /body,/);
+  assert.match(templateSettingsReader, /enabled,/);
+  assert.match(templateSettingsReader, /subject,/);
+  assert.match(templateSettingsReader, /hasUnsupportedTemplateSegments\(parseTemplateDocument\(subject\)\)/);
+  assert.match(templateSettingsReader, /hasUnsupportedTemplateSegments\(parseTemplateDocument\(body\)\)/);
+  assert.match(notificationsPageSource, /templateDraftUnsupported\.body \|\| templateDraftUnsupported\.subject/);
+  assert.match(notificationsPageSource, /const setTemplateDraftSubjectUnsupported = useCallback\(\(hasUnsupported\) =>/);
+  assert.match(notificationsPageSource, /const setTemplateDraftBodyUnsupported = useCallback\(\(hasUnsupported\) =>/);
+  assert.match(notificationsPageSource, /current\.subject === hasUnsupported \? current : \{ \.\.\.current, subject: hasUnsupported \}/);
+  assert.match(notificationsPageSource, /current\.body === hasUnsupported \? current : \{ \.\.\.current, body: hasUnsupported \}/);
+  assert.match(notificationsPageSource, /onUnsupportedChange=\{setTemplateDraftSubjectUnsupported\}/);
+  assert.match(notificationsPageSource, /onUnsupportedChange=\{setTemplateDraftBodyUnsupported\}/);
+  assert.doesNotMatch(notificationsPageSource, /setTemplateDraftUnsupportedFlag\("subject"\)|setTemplateDraftUnsupportedFlag\("body"\)/);
+  assert.doesNotMatch(templateSettingsReader, /Object\.fromEntries\(CUSTOMER_EMAIL_SIGNALS/);
+  assert.doesNotMatch(notificationsPageSource, /currentCustomerEmailSettings|appendCurrentSettings|readCurrentCustomerEmailSettings|parseJsonObject/);
+  assert.doesNotMatch(globalSettingsReader, /templates:|template\.\$\{signal\}|nearbyStopsThreshold|footerText/);
+  assert.match(notificationsPageSource, /setTemplateEditorSignal\(null\)/);
+  assert.match(notificationsPageSource, /intent !== "saveCustomerEmailTemplate"/);
+  assert.match(notificationsPageSource, /fetcher\.state !== "idle"/);
+  assert.match(notificationsPageSource, /fetcher\.data\.customerEmailTemplate/);
+  assert.match(notificationsPageSource, /fetcher\.data\.globalVersion/);
+});
+
+test("Customer Notifications keeps Route Ops nearby threshold ownership out of this page", () => {
+  assert.doesNotMatch(notificationsPageSource, /nearbyStopsThreshold|Nearby trigger stops/);
+});
+
+test("Customer Notifications normalizes structured common footer fields with legacy footerText as note only", () => {
+  assert.match(normalizeCustomerEmailSettingsSource, /businessName: branding\.businessName \?\? ""/);
+  assert.match(normalizeCustomerEmailSettingsSource, /address: branding\.address \?\? ""/);
+  assert.match(normalizeCustomerEmailSettingsSource, /phone: branding\.phone \?\? ""/);
+  assert.match(normalizeCustomerEmailSettingsSource, /contactEmail: branding\.contactEmail \?\? ""/);
+  assert.match(normalizeCustomerEmailSettingsSource, /websiteUrl: branding\.websiteUrl \?\? ""/);
+  assert.match(normalizeCustomerEmailSettingsSource, /note: branding\.note \?\? branding\.footerText \?\? ""/);
+  assert.doesNotMatch(normalizeCustomerEmailSettingsSource, /footerText:/);
+});
+
+test("Customer Notifications preview renders an optional boxed structured common footer", () => {
   assert.match(notificationsPageSource, /const footerLogo = logo \? \(/);
   assert.match(notificationsPageSource, /justifySelf: "start"/);
   assert.match(notificationsPageSource, /objectFit: "contain"/);
   assert.match(notificationsPageSource, /maxHeight: "64px"/);
   assert.match(notificationsPageSource, /maxWidth: "160px"/);
   assert.match(notificationsPageSource, /fontSize: "24px"/);
-  assert.match(notificationsPageSource, /<hr aria-hidden="true" style=\{notificationPreviewDividerStyle\} \/>/);
-  assert.match(notificationsPageSource, /<div className="customer-email-preview__footer" style=\{notificationPreviewFooterBoxStyle\}>[\s\S]*\{footerLogo\}/);
+  assert.match(notificationPreviewSource, /const footerItems = buildCommonFooterItems\(branding\)/);
+  assert.match(notificationPreviewSource, /const hasCommonFooter = logo \|\| footerItems\.length > 0/);
+  assert.match(notificationPreviewSource, /\{hasCommonFooter \? \(/);
+  assert.match(notificationPreviewSource, /<hr aria-hidden="true" style=\{notificationPreviewDividerStyle\} \/>/);
+  assert.match(notificationPreviewSource, /<div className="customer-email-preview__footer" style=\{notificationPreviewFooterBoxStyle\}>[\s\S]*\{footerLogo\}/);
+  assert.match(notificationPreviewSource, /footerItems\.map/);
+  assert.match(notificationsPageSource, /\["businessName", branding\.businessName\]/);
+  assert.match(notificationsPageSource, /\["address", branding\.address\]/);
+  assert.match(notificationsPageSource, /\["phone", branding\.phone\]/);
+  assert.match(notificationsPageSource, /\["contactEmail", branding\.contactEmail\]/);
+  assert.match(notificationsPageSource, /\["websiteUrl", branding\.websiteUrl\]/);
+  assert.match(notificationsPageSource, /\["note", branding\.note\]/);
   assert.match(notificationsPageSource, /background: "#f3f4f6"/);
   assert.match(notificationsPageSource, /@media \(prefers-color-scheme: dark\)/);
   assert.doesNotMatch(notificationPreviewSource, /branding\.previewText/);
   assert.doesNotMatch(notificationPreviewSource, /branding\.accentColor/);
   assert.doesNotMatch(notificationPreviewSource, /branding\.logoAltText/);
+  assert.doesNotMatch(notificationPreviewSource, /branding\.footerText/);
   assert.doesNotMatch(notificationsPageSource, /<strong[\s\S]*\{subject\}<\/strong>[\s\S]*<p[\s\S]*\{body\}<\/p>[\s\S]*<div[\s\S]*<img/);
 });
 

@@ -1,15 +1,23 @@
 /* eslint-disable react/prop-types */
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFetcher, useLoaderData, useRouteError } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   fetchCustomerEmailSettings,
-  saveCustomerEmailSettings,
+  saveCustomerEmailGlobal,
+  saveCustomerEmailTemplate,
   sendCustomerEmailTest,
   uploadCustomerEmailLogo,
-} from "../features/delivery/customer-email.server";
+} from "../features/customer-notifications/customer-email.server";
+import {
+  TemplateTokenEditor,
+} from "../features/customer-notifications/template-token-editor";
+import {
+  hasUnsupportedTemplateSegments,
+  parseTemplateDocument,
+} from "../features/customer-notifications/template-document";
 import {
   SettingsLayout,
   settingsActionRowStyle,
@@ -41,33 +49,20 @@ const CUSTOMER_EMAIL_SIGNALS = [
   ["MISSED_DELIVERY", "Missed delivery"],
 ];
 
-const CUSTOMER_EMAIL_TEMPLATE_VARIABLES = [
-  ["customerName", "Customer name"],
-  ["orderNumber", "Order number"],
-  ["deliveryDate", "Delivery date"],
-  ["deliveryAddress", "Delivery address"],
-  ["eta", "ETA"],
-  ["routeName", "Route name"],
-  ["sequence", "Stop sequence"],
-  ["shopName", "Shop name"],
-];
-
 const CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const CUSTOMER_EMAIL_LOGO_MAX_BYTES = 1024 * 1024;
 
 const DEFAULT_BRANDING = {
-  accentColor: "#1f6feb",
-  backgroundColor: "#f6f8fa",
-  footerText: "",
-  logoAltText: "CLEVER",
+  address: "",
+  businessName: "",
+  contactEmail: "",
   logoLinkUrl: "",
   logoMode: "hidden",
   logoUrl: "",
   logoWidth: 160,
-  previewText: "",
-  showPoweredByClever: true,
-  surfaceColor: "#ffffff",
-  textColor: "#24292f",
+  note: "",
+  phone: "",
+  websiteUrl: "",
 };
 
 export const loader = async ({ request }) => {
@@ -87,8 +82,17 @@ export const action = async ({ request }) => {
   await authenticate.admin(request);
   const formData = await request.formData();
 
-  if (formData.get("_intent") === "saveCustomerEmailSettings") {
-    return saveCustomerEmailSettings(request, readCustomerEmailSettings(formData), {
+  if (formData.get("_intent") === "saveCustomerEmailGlobal") {
+    return saveCustomerEmailGlobal(request, readCustomerEmailGlobalSettings(formData), {
+      sessionToken: formText(formData.get("shopifySessionToken")),
+    });
+  }
+
+  if (formData.get("_intent") === "saveCustomerEmailTemplate") {
+    const payload = readCustomerEmailTemplateSettings(formData);
+    if (payload.errors.length > 0) return payload;
+
+    return saveCustomerEmailTemplate(request, payload.signal, payload.customerEmailTemplate, {
       sessionToken: formText(formData.get("shopifySessionToken")),
     });
   }
@@ -133,32 +137,61 @@ export const action = async ({ request }) => {
   return { errors: [{ message: "Unknown notification settings action." }] };
 };
 
-function readCustomerEmailSettings(formData) {
+function readCustomerEmailGlobalSettings(formData) {
   return {
+    expectedVersion: formNullableText(formData.get("expectedVersion")),
     branding: {
-      accentColor: formText(formData.get("branding.accentColor")),
-      backgroundColor: formText(formData.get("branding.backgroundColor")),
-      footerText: formText(formData.get("branding.footerText")),
-      logoAltText: formText(formData.get("branding.logoAltText")),
+      address: formText(formData.get("branding.address")),
+      businessName: formText(formData.get("branding.businessName")),
+      contactEmail: formText(formData.get("branding.contactEmail")),
+      note: formText(formData.get("branding.note")),
+      phone: formText(formData.get("branding.phone")),
+      websiteUrl: formHttpsUrl(formData.get("branding.websiteUrl")),
       logoLinkUrl: formHttpsUrl(formData.get("branding.logoLinkUrl")),
       logoMode: formText(formData.get("branding.logoMode")) || DEFAULT_BRANDING.logoMode,
       logoUrl: formHttpsUrl(formData.get("branding.logoUrl")),
       logoWidth: numberFromFormValue(formData.get("branding.logoWidth")) ?? DEFAULT_BRANDING.logoWidth,
-      previewText: formText(formData.get("branding.previewText")),
-      showPoweredByClever: formData.get("branding.showPoweredByClever") === "true",
-      surfaceColor: formText(formData.get("branding.surfaceColor")),
-      textColor: formText(formData.get("branding.textColor")),
     },
-    nearbyStopsThreshold: numberFromFormValue(formData.get("nearbyStopsThreshold")) ?? 3,
     replyTo: formText(formData.get("replyTo")),
     senderEmail: formText(formData.get("senderEmail")),
     senderName: formText(formData.get("senderName")),
-    templates: Object.fromEntries(CUSTOMER_EMAIL_SIGNALS.map(([signal]) => [signal, {
-      body: formText(formData.get(`template.${signal}.body`)),
-      enabled: true,
-      subject: formText(formData.get(`template.${signal}.subject`)),
-    }])),
-    version: 2,
+  };
+}
+
+function readCustomerEmailTemplateSettings(formData) {
+  const signal = formText(formData.get("templateSignal"));
+  const body = formText(formData.get("body"));
+  const subject = formText(formData.get("subject"));
+  const enabled = formData.get("enabled") === "true";
+
+  if (!CUSTOMER_EMAIL_SIGNALS.some(([candidate]) => candidate === signal)) {
+    return {
+      customerEmailTemplate: null,
+      errors: [{ code: "CUSTOMER_EMAIL_TEMPLATE_SIGNAL_INVALID", message: "Choose a supported notification template.", status: 400 }],
+      signal: null,
+    };
+  }
+
+  if (
+    hasUnsupportedTemplateSegments(parseTemplateDocument(subject))
+    || hasUnsupportedTemplateSegments(parseTemplateDocument(body))
+  ) {
+    return {
+      customerEmailTemplate: null,
+      errors: [{ code: "CUSTOMER_EMAIL_TEMPLATE_VARIABLE_UNSUPPORTED", message: "Remove unsupported variables before saving this template.", status: 400 }],
+      signal,
+    };
+  }
+
+  return {
+    customerEmailTemplate: {
+      body,
+      enabled,
+      expectedVersion: formNullableText(formData.get("expectedVersion")),
+      subject,
+    },
+    errors: [],
+    signal,
   };
 }
 
@@ -169,20 +202,17 @@ function normalizeCustomerEmailSettings(settings) {
 
   return {
     branding: {
-      accentColor: branding.accentColor ?? DEFAULT_BRANDING.accentColor,
-      backgroundColor: branding.backgroundColor ?? DEFAULT_BRANDING.backgroundColor,
-      footerText: branding.footerText ?? DEFAULT_BRANDING.footerText,
-      logoAltText: branding.logoAltText ?? DEFAULT_BRANDING.logoAltText,
+      address: branding.address ?? "",
+      businessName: branding.businessName ?? "",
+      contactEmail: branding.contactEmail ?? "",
+      note: branding.note ?? branding.footerText ?? "",
       logoLinkUrl: branding.logoLinkUrl ?? "",
       logoMode: branding.logoMode ?? DEFAULT_BRANDING.logoMode,
       logoUrl: branding.logoUrl ?? "",
       logoWidth: branding.logoWidth ?? DEFAULT_BRANDING.logoWidth,
-      previewText: branding.previewText ?? DEFAULT_BRANDING.previewText,
-      showPoweredByClever: branding.showPoweredByClever ?? DEFAULT_BRANDING.showPoweredByClever,
-      surfaceColor: branding.surfaceColor ?? DEFAULT_BRANDING.surfaceColor,
-      textColor: branding.textColor ?? DEFAULT_BRANDING.textColor,
+      phone: branding.phone ?? "",
+      websiteUrl: branding.websiteUrl ?? "",
     },
-    nearbyStopsThreshold: settings?.nearbyStopsThreshold ?? 3,
     replyTo: settings?.replyTo ?? "",
     senderEmail: settings?.senderEmail ?? sender.email ?? "",
     senderName: settings?.senderName ?? sender.name ?? "",
@@ -190,7 +220,9 @@ function normalizeCustomerEmailSettings(settings) {
       body: templates?.[signal]?.body ?? "",
       enabled: templates?.[signal]?.enabled ?? true,
       subject: templates?.[signal]?.subject ?? "",
+      version: templates?.[signal]?.version ?? null,
     }])),
+    globalVersion: settings?.globalVersion ?? settings?.settingsVersion ?? null,
   };
 }
 
@@ -198,6 +230,11 @@ function formText(value) {
   if (value == null) return "";
 
   return String(value).trim();
+}
+
+function formNullableText(value) {
+  const text = formText(value);
+  return text || null;
 }
 
 function formHttpsUrl(value) {
@@ -247,21 +284,87 @@ function CustomerEmailSettings({ initialSettings }) {
   const [templateExampleMode, setTemplateExampleMode] = useState("preview");
   const [brandingDraft, setBrandingDraft] = useState(() => ({ ...settings.branding }));
   const [templateEditorSignal, setTemplateEditorSignal] = useState(null);
-  const [templateDraft, setTemplateDraft] = useState({ body: "", subject: "" });
-  const templateBodyRef = useRef(null);
+  const [templateDraft, setTemplateDraft] = useState({ body: "", enabled: true, subject: "" });
+  const [templateDraftUnsupported, setTemplateDraftUnsupported] = useState({ body: false, subject: false });
+  const [savingTemplateSignal, setSavingTemplateSignal] = useState(null);
   const intent = fetcher.formData?.get("_intent");
   const busy = fetcher.state !== "idle";
   const activeTemplate = settings.templates[activeSignal] ?? { body: "", subject: "" };
   const templateEditorLabel = CUSTOMER_EMAIL_SIGNALS.find(([signal]) => signal === templateEditorSignal)?.[1] ?? "Template";
   const branding = settings.branding;
   const errors = fetcher.data?.errors ?? [];
-  const saveBusy = busy && intent === "saveCustomerEmailSettings";
+  const globalSaveBusy = busy && intent === "saveCustomerEmailGlobal";
+  const templateSaveBusy = busy && intent === "saveCustomerEmailTemplate";
+  const templateDraftHasUnsupported = templateDraftUnsupported.body || templateDraftUnsupported.subject;
   const testBusy = busy && intent === "testCustomerEmail";
 
   useEffect(() => {
     if (!fetcher.data?.customerEmailSettings || errors.length > 0) return;
     setSettings(normalizeCustomerEmailSettings(fetcher.data.customerEmailSettings));
   }, [errors.length, fetcher.data?.customerEmailSettings]);
+
+  useEffect(() => {
+    if (
+      fetcher.state !== "idle"
+      || intent !== "saveCustomerEmailGlobal"
+      || errors.length > 0
+      || !fetcher.data
+    ) {
+      return;
+    }
+
+    setSettings((current) => {
+      if (fetcher.data.customerEmailSettings) {
+        return normalizeCustomerEmailSettings(fetcher.data.customerEmailSettings);
+      }
+
+      return {
+        ...current,
+        globalVersion: fetcher.data.globalVersion ?? current.globalVersion,
+      };
+    });
+  }, [errors.length, fetcher.data, fetcher.state, intent]);
+
+  useEffect(() => {
+    if (
+      fetcher.state !== "idle"
+      || intent !== "saveCustomerEmailTemplate"
+      || errors.length > 0
+      || (!fetcher.data?.customerEmailSettings && !fetcher.data?.customerEmailTemplate)
+    ) {
+      return;
+    }
+
+    setTemplateEditorSignal(null);
+    setSavingTemplateSignal(null);
+  }, [errors.length, fetcher.data?.customerEmailSettings, fetcher.data?.customerEmailTemplate, fetcher.state, intent]);
+
+  useEffect(() => {
+    if (
+      fetcher.state !== "idle"
+      || intent !== "saveCustomerEmailTemplate"
+      || errors.length > 0
+      || !fetcher.data?.customerEmailTemplate
+      || !savingTemplateSignal
+    ) {
+      return;
+    }
+
+    setSettings((current) => ({
+      ...current,
+      templates: {
+        ...current.templates,
+        [savingTemplateSignal]: {
+          ...current.templates[savingTemplateSignal],
+          ...fetcher.data.customerEmailTemplate,
+          version: fetcher.data.templateVersion
+            ?? fetcher.data.customerEmailTemplate.version
+            ?? current.templates[savingTemplateSignal]?.version
+            ?? null,
+        },
+      },
+    }));
+  }, [errors.length, fetcher.data?.customerEmailTemplate, fetcher.data?.templateVersion, fetcher.state, intent, savingTemplateSignal]);
 
   useEffect(() => {
     if (lastSyncedTestSignal === activeSignal) return;
@@ -287,21 +390,16 @@ function CustomerEmailSettings({ initialSettings }) {
       formData.set("recipientEmail", testRecipient);
       formData.set("signal", activeSignal);
       formData.set("subject", testSubject);
-    } else {
+    } else if (nextIntent === "saveCustomerEmailGlobal") {
+      formData.set("expectedVersion", settings.globalVersion ?? "");
       formData.set("senderName", settings.senderName);
       formData.set("senderEmail", settings.senderEmail);
       formData.set("replyTo", settings.replyTo);
-      formData.set("nearbyStopsThreshold", String(settings.nearbyStopsThreshold));
-      for (const field of ["accentColor", "backgroundColor", "surfaceColor", "textColor"]) {
-        formData.set(`branding.${field}`, branding[field]);
-      }
-      for (const field of ["logoUrl", "logoMode", "logoWidth", "logoLinkUrl", "logoAltText", "previewText", "footerText"]) {
+      for (const field of ["logoUrl", "logoMode", "logoWidth", "logoLinkUrl"]) {
         formData.set(`branding.${field}`, String(branding[field] ?? ""));
       }
-      formData.set("branding.showPoweredByClever", String(branding.showPoweredByClever));
-      for (const [signal, template] of Object.entries(settings.templates)) {
-        formData.set(`template.${signal}.subject`, template.subject);
-        formData.set(`template.${signal}.body`, template.body);
+      for (const field of ["businessName", "address", "phone", "contactEmail", "websiteUrl", "note"]) {
+        formData.set(`branding.${field}`, String(branding[field] ?? ""));
       }
     }
     fetcher.submit(formData, { method: "post" });
@@ -320,36 +418,41 @@ function CustomerEmailSettings({ initialSettings }) {
   };
 
   const openTemplateEditor = (signal) => {
-    const template = settings.templates[signal] ?? { body: "", subject: "" };
+    const template = settings.templates[signal] ?? { body: "", enabled: true, subject: "" };
     setActiveSignal(signal);
-    setTemplateDraft({ body: template.body, subject: template.subject });
+    setTemplateDraft({ body: template.body, enabled: template.enabled ?? true, subject: template.subject });
+    setTemplateDraftUnsupported({
+      body: hasUnsupportedTemplateSegments(parseTemplateDocument(template.body)),
+      subject: hasUnsupportedTemplateSegments(parseTemplateDocument(template.subject)),
+    });
+    setSavingTemplateSignal(null);
     setTemplateEditorSignal(signal);
   };
 
-  const applyTemplateDraft = () => {
-    if (!templateEditorSignal) return;
-    setSettings((current) => ({
-      ...current,
-      templates: {
-        ...current.templates,
-        [templateEditorSignal]: { ...current.templates[templateEditorSignal], ...templateDraft },
-      },
-    }));
-    setTemplateEditorSignal(null);
-  };
+  const setTemplateDraftSubjectUnsupported = useCallback((hasUnsupported) => {
+    setTemplateDraftUnsupported((current) => (
+      current.subject === hasUnsupported ? current : { ...current, subject: hasUnsupported }
+    ));
+  }, []);
 
-  const insertTemplateVariable = (variable) => {
-    const token = `{{${variable}}}`;
-    const textarea = templateBodyRef.current;
-    const start = textarea?.selectionStart ?? templateDraft.body.length;
-    const end = textarea?.selectionEnd ?? start;
-    const body = `${templateDraft.body.slice(0, start)}${token}${templateDraft.body.slice(end)}`;
-    setTemplateDraft((current) => ({ ...current, body }));
-    window.requestAnimationFrame(() => {
-      const cursor = start + token.length;
-      templateBodyRef.current?.focus();
-      templateBodyRef.current?.setSelectionRange(cursor, cursor);
-    });
+  const setTemplateDraftBodyUnsupported = useCallback((hasUnsupported) => {
+    setTemplateDraftUnsupported((current) => (
+      current.body === hasUnsupported ? current : { ...current, body: hasUnsupported }
+    ));
+  }, []);
+
+  const saveTemplateDraft = async () => {
+    if (!templateEditorSignal) return;
+    const formData = new FormData();
+    formData.set("_intent", "saveCustomerEmailTemplate");
+    formData.set("shopifySessionToken", await shopify.idToken());
+    formData.set("body", templateDraft.body);
+    formData.set("enabled", String(templateDraft.enabled));
+    formData.set("expectedVersion", settings.templates[templateEditorSignal]?.version ?? "");
+    formData.set("subject", templateDraft.subject);
+    formData.set("templateSignal", templateEditorSignal);
+    setSavingTemplateSignal(templateEditorSignal);
+    fetcher.submit(formData, { method: "post" });
   };
 
   const handleLogoUpload = async (event) => {
@@ -406,10 +509,7 @@ function CustomerEmailSettings({ initialSettings }) {
           <label style={settingsLabelStyle}>Sender name<input onChange={(event) => setSettings({ ...settings, senderName: event.target.value })} style={settingsInputStyle} value={settings.senderName} /></label>
           <label style={settingsLabelStyle}>Sender email<input onChange={(event) => setSettings({ ...settings, senderEmail: event.target.value })} style={settingsInputStyle} type="email" value={settings.senderEmail} /></label>
         </div>
-        <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>Reply-to email<input onChange={(event) => setSettings({ ...settings, replyTo: event.target.value })} style={settingsInputStyle} type="email" value={settings.replyTo} /></label>
-          <label style={settingsLabelStyle}>Nearby trigger stops<input max="25" min="1" onChange={(event) => setSettings({ ...settings, nearbyStopsThreshold: event.target.value })} style={settingsInputStyle} type="number" value={settings.nearbyStopsThreshold} /></label>
-        </div>
+        <label style={settingsLabelStyle}>Reply-to email<input onChange={(event) => setSettings({ ...settings, replyTo: event.target.value })} style={settingsInputStyle} type="email" value={settings.replyTo} /></label>
       </section>
 
       <section aria-label="Notification branding" style={settingsSectionCardStyle}>
@@ -442,6 +542,9 @@ function CustomerEmailSettings({ initialSettings }) {
                 <strong>{label}</strong>
                 <span style={settingsMessageStyle}>{settings.templates[signal]?.subject || "No subject"}</span>
               </span>
+              <span style={settings.templates[signal]?.enabled === false ? notificationTemplateDisabledStatusStyle : notificationTemplateEnabledStatusStyle}>
+                {settings.templates[signal]?.enabled === false ? "Disabled" : "Enabled"}
+              </span>
               <span style={notificationTemplateEditLabelStyle}>Edit</span>
             </button>
           ))}
@@ -452,8 +555,21 @@ function CustomerEmailSettings({ initialSettings }) {
         <strong>Send a test</strong>
         <p style={settingsMessageStyle}>A test goes only to the address entered below. It does not use customer data.</p>
         <input aria-label="Test recipient email" onChange={(event) => setTestRecipient(event.target.value)} placeholder="name@example.com" style={settingsInputStyle} type="email" value={testRecipient} />
-        <label style={settingsLabelStyle}>Subject<input aria-label="Test subject" maxLength={200} onChange={(event) => setTestSubject(event.target.value)} style={settingsInputStyle} value={testSubject} /></label>
-        <label style={settingsLabelStyle}>Body<textarea aria-label="Test body" maxLength={10000} onChange={(event) => setTestBody(event.target.value)} style={settingsTextareaStyle} value={testBody} /></label>
+        <TemplateTokenEditor
+          compact
+          id="test-customer-email-subject"
+          label="Test subject"
+          maxLength={200}
+          onChange={setTestSubject}
+          value={testSubject}
+        />
+        <TemplateTokenEditor
+          id="test-customer-email-body"
+          label="Test body"
+          maxLength={10000}
+          onChange={setTestBody}
+          value={testBody}
+        />
         <label style={{ ...settingsLabelStyle, alignItems: "center", display: "flex", gridTemplateColumns: "auto 1fr" }}>
           <input checked={testConfirmed} onChange={(event) => setTestConfirmed(event.target.checked)} type="checkbox" />
           Confirm one test email to this address
@@ -465,8 +581,8 @@ function CustomerEmailSettings({ initialSettings }) {
       </section>
 
       <div style={settingsActionRowStyle}>
-        <span>{intent === "saveCustomerEmailSettings" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Email settings saved</span> : null}</span>
-        <button disabled={busy} onClick={() => submit("saveCustomerEmailSettings")} style={busy ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{saveBusy ? "Saving..." : "Save notification settings"}</button>
+        <span>{intent === "saveCustomerEmailGlobal" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Email sender and footer saved</span> : null}</span>
+        <button disabled={busy} onClick={() => submit("saveCustomerEmailGlobal")} style={busy ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{globalSaveBusy ? "Saving..." : "Save sender and footer"}</button>
       </div>
 
       {errors.length > 0 ? <p role="alert" style={settingsErrorStyle}>{errors[0]?.message ?? "Unable to save email settings."}</p> : null}
@@ -501,7 +617,16 @@ function CustomerEmailSettings({ initialSettings }) {
                   <label style={settingsLabelStyle}>Logo mode<select onChange={(event) => setBrandingDraft((current) => ({ ...current, logoMode: event.target.value }))} style={settingsSelectStyle} value={brandingDraft.logoMode}><option value="hidden">Hidden</option><option value="image">Image</option></select></label>
                   <label style={settingsLabelStyle}>Logo width<input max="320" min="48" onChange={(event) => setBrandingDraft((current) => ({ ...current, logoWidth: Number(event.target.value) }))} style={settingsInputStyle} type="number" value={brandingDraft.logoWidth} /></label>
                 </div>
-                <label style={settingsLabelStyle}>Footer text<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, footerText: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "92px" }} value={brandingDraft.footerText} /></label>
+                <div aria-label="Common footer" style={logoSettingsBlockStyle}>
+                  <label style={settingsLabelStyle}>Business name<input onChange={(event) => setBrandingDraft((current) => ({ ...current, businessName: event.target.value }))} style={settingsInputStyle} value={brandingDraft.businessName} /></label>
+                  <label style={settingsLabelStyle}>Address<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, address: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "72px" }} value={brandingDraft.address} /></label>
+                  <div style={settingsCoordinateGridStyle}>
+                    <label style={settingsLabelStyle}>Phone<input onChange={(event) => setBrandingDraft((current) => ({ ...current, phone: event.target.value }))} style={settingsInputStyle} type="tel" value={brandingDraft.phone} /></label>
+                    <label style={settingsLabelStyle}>Contact email<input onChange={(event) => setBrandingDraft((current) => ({ ...current, contactEmail: event.target.value }))} style={settingsInputStyle} type="email" value={brandingDraft.contactEmail} /></label>
+                  </div>
+                  <label style={settingsLabelStyle}>Website<input onChange={(event) => setBrandingDraft((current) => ({ ...current, websiteUrl: event.target.value }))} placeholder="https://store.cleversystem.ai" style={settingsInputStyle} type="url" value={brandingDraft.websiteUrl} /></label>
+                  <label style={settingsLabelStyle}>Note<textarea onChange={(event) => setBrandingDraft((current) => ({ ...current, note: event.target.value }))} style={{ ...settingsTextareaStyle, minHeight: "92px" }} value={brandingDraft.note} /></label>
+                </div>
               </div>
             </div>
           ) : null}
@@ -514,20 +639,37 @@ function CustomerEmailSettings({ initialSettings }) {
 
       {templateEditorSignal ? (
         <SettingsEditorModal ariaLabel={`Edit ${templateEditorLabel} template`} onClose={() => setTemplateEditorSignal(null)} title={templateEditorLabel}>
-          <label style={settingsLabelStyle}>Subject<input maxLength={200} onChange={(event) => setTemplateDraft((current) => ({ ...current, subject: event.target.value }))} style={settingsInputStyle} value={templateDraft.subject} /></label>
-          <label style={settingsLabelStyle}>Body<textarea maxLength={10000} onChange={(event) => setTemplateDraft((current) => ({ ...current, body: event.target.value }))} ref={templateBodyRef} style={settingsTextareaStyle} value={templateDraft.body} /></label>
-          <div>
-            <strong style={notificationVariablesTitleStyle}>Insert variable</strong>
-            <div aria-label="Template variables" style={settingsTemplateTabsStyle}>
-              {CUSTOMER_EMAIL_TEMPLATE_VARIABLES.map(([variable, label]) => (
-                <button key={variable} onClick={() => insertTemplateVariable(variable)} style={notificationVariableButtonStyle} type="button">{label}</button>
-              ))}
-            </div>
-          </div>
-          <p style={settingsMessageStyle}>Variables are rendered by the delivery server. Unknown variables are rejected before sending.</p>
+          <TemplateTokenEditor
+            compact
+            id={`template-${templateEditorSignal}-subject`}
+            label="Subject"
+            maxLength={200}
+            onChange={(subject) => setTemplateDraft((current) => ({ ...current, subject }))}
+            onUnsupportedChange={setTemplateDraftSubjectUnsupported}
+            value={templateDraft.subject}
+          />
+          <label style={{ ...settingsLabelStyle, alignItems: "center", display: "flex", gridTemplateColumns: "auto 1fr" }}>
+            <input checked={templateDraft.enabled} onChange={(event) => setTemplateDraft((current) => ({ ...current, enabled: event.target.checked }))} type="checkbox" />
+            Enabled
+          </label>
+          <TemplateTokenEditor
+            id={`template-${templateEditorSignal}-body`}
+            label="Body"
+            onChange={(body) => setTemplateDraft((current) => ({ ...current, body }))}
+            onUnsupportedChange={setTemplateDraftBodyUnsupported}
+            value={templateDraft.body}
+          />
+          <p style={templateDraftHasUnsupported ? settingsErrorStyle : settingsMessageStyle}>Variables are shown as chips. Unsupported pasted variables must be removed before this template can be saved.</p>
           <div style={settingsActionRowStyle}>
             <button onClick={() => setTemplateEditorSignal(null)} style={settingsResetButtonStyle} type="button">Cancel</button>
-            <button onClick={applyTemplateDraft} style={settingsButtonStyle} type="button">Apply template</button>
+            <button
+              disabled={busy || templateDraftHasUnsupported}
+              onClick={saveTemplateDraft}
+              style={busy || templateDraftHasUnsupported ? settingsDisabledButtonStyle : settingsButtonStyle}
+              type="button"
+            >
+              {templateSaveBusy && savingTemplateSignal === templateEditorSignal ? "Saving..." : "Save template"}
+            </button>
           </div>
         </SettingsEditorModal>
       ) : null}
@@ -598,7 +740,9 @@ function NotificationPreview({ activeTemplate, branding, senderName }) {
   const logo = branding.logoMode === "image" && branding.logoUrl.startsWith("https://");
   const logoWidth = Math.max(48, Math.min(320, Number(branding.logoWidth) || DEFAULT_BRANDING.logoWidth));
   const subject = activeTemplate.subject || "Delivery scheduled";
-  const body = activeTemplate.body || "Hi {{ customer.firstName }}, your delivery is scheduled.";
+  const body = activeTemplate.body || "Hi Mina, your delivery is scheduled.";
+  const footerItems = buildCommonFooterItems(branding);
+  const hasCommonFooter = logo || footerItems.length > 0;
   const footerLogo = logo ? (
     branding.logoLinkUrl.startsWith("https://") ? (
       <a href={branding.logoLinkUrl} rel="noreferrer" style={{ justifySelf: "start" }} target="_blank">
@@ -615,14 +759,36 @@ function NotificationPreview({ activeTemplate, branding, senderName }) {
       <article className="customer-email-preview__surface" style={notificationPreviewSurfaceStyle}>
         <h2 style={notificationPreviewTitleStyle}>{subject}</h2>
         <p style={notificationPreviewBodyStyle}>{body}</p>
-        <hr aria-hidden="true" style={notificationPreviewDividerStyle} />
-        <div className="customer-email-preview__footer" style={notificationPreviewFooterBoxStyle}>
-          {footerLogo}
-          <p className="customer-email-preview__muted" style={notificationPreviewFooterTextStyle}>{branding.footerText}</p>
-        </div>
+        {hasCommonFooter ? (
+          <>
+            <hr aria-hidden="true" style={notificationPreviewDividerStyle} />
+            <div className="customer-email-preview__footer" style={notificationPreviewFooterBoxStyle}>
+              {footerLogo}
+              {footerItems.map((item) => (
+                <p className="customer-email-preview__muted" key={item.key} style={item.kind === "note" ? notificationPreviewFooterNoteStyle : notificationPreviewFooterTextStyle}>
+                  {item.value}
+                </p>
+              ))}
+            </div>
+          </>
+        ) : null}
       </article>
     </div>
   );
+}
+
+function buildCommonFooterItems(branding) {
+  return [
+    ["businessName", branding.businessName],
+    ["address", branding.address],
+    ["phone", branding.phone],
+    ["contactEmail", branding.contactEmail],
+    ["websiteUrl", branding.websiteUrl],
+    ["note", branding.note],
+  ].flatMap(([key, value]) => {
+    const text = String(value ?? "").trim();
+    return text ? [{ key, kind: key === "note" ? "note" : "detail", value: text }] : [];
+  });
 }
 
 function notificationPreviewLogoStyle(logoWidth) {
@@ -695,6 +861,18 @@ const notificationTemplateEditLabelStyle = {
   fontWeight: 650,
 };
 
+const notificationTemplateEnabledStatusStyle = {
+  color: "#008060",
+  flex: "0 0 auto",
+  fontSize: "12px",
+  fontWeight: 650,
+};
+
+const notificationTemplateDisabledStatusStyle = {
+  ...notificationTemplateEnabledStatusStyle,
+  color: "#8e1f0b",
+};
+
 const notificationModalOverlayStyle = {
   alignItems: "center",
   background: "rgba(0, 0, 0, 0.38)",
@@ -748,19 +926,6 @@ const notificationModalBodyStyle = {
   maxHeight: "calc(100vh - 82px)",
   overflowY: "auto",
   padding: "16px",
-};
-
-const notificationVariablesTitleStyle = {
-  display: "block",
-  fontSize: "13px",
-  marginBottom: "8px",
-};
-
-const notificationVariableButtonStyle = {
-  ...settingsResetButtonStyle,
-  fontWeight: 550,
-  minHeight: "30px",
-  padding: "4px 8px",
 };
 
 const NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS = `
@@ -840,6 +1005,12 @@ const notificationPreviewFooterTextStyle = {
   lineHeight: "18px",
   margin: 0,
   whiteSpace: "pre-wrap",
+};
+
+const notificationPreviewFooterNoteStyle = {
+  ...notificationPreviewFooterTextStyle,
+  borderTop: "1px solid #d0d7de",
+  paddingTop: "8px",
 };
 
 export function ErrorBoundary() {
