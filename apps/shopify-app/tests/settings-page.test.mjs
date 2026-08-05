@@ -289,12 +289,14 @@ test("Customer Notifications keeps the template example behind preview and brand
   assert.match(notificationsPageSource, /templateExampleMode === "preview"/);
   assert.match(notificationsPageSource, /templateExampleMode === "edit"/);
   assert.match(templateExampleModalSource, /aria-label="Branding controls"/);
-  assert.match(templateExampleModalSource, /<NotificationPreview activeTemplate=\{activeTemplate\} branding=\{branding\}/);
+  assert.match(templateExampleModalSource, /<NotificationPreview activeTemplate=\{activeTemplate\} branding=\{brandingDraft\}/);
   assert.doesNotMatch(notificationBrandingSectionSource, /NotificationPreview/);
   assert.doesNotMatch(templateExampleModalSource, /templateDraft|>Subject<|>Body</);
   assert.match(notificationsPageSource, /aria-label=\{`Edit \$\{label\} template`\}/);
   assert.match(notificationsPageSource, /<TemplateTokenEditor/);
   assert.match(notificationsPageSource, />Apply changes<\/button>/);
+  assert.match(notificationsPageSource, /<NotificationPreview activeTemplate=\{activeTemplate\} branding=\{brandingDraft\}/);
+  assert.match(notificationsPageSource, /aria-label="Uploaded logo preview"/);
   assert.match(notificationsPageSource, /"Save template"/);
   assert.doesNotMatch(notificationsPageSource, /onChange=\{\(event\) => updateTemplate/);
 });
