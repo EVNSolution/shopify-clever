@@ -13,6 +13,10 @@ const notificationsPageSource = readFileSync(
   join(root, "app/routes/app.settings_.notifications.jsx"),
   "utf8",
 );
+const notificationLogoUploadRouteSource = readFileSync(
+  join(root, "app/routes/app.settings_.notifications_.logo.jsx"),
+  "utf8",
+);
 const templateTokenEditorSource = readFileSync(
   join(root, "app/features/customer-notifications/template-token-editor.jsx"),
   "utf8",
@@ -225,6 +229,9 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /CUSTOMER_EMAIL_LOGO_MAX_BYTES = 3 \* 1024 \* 1024/);
   assert.match(notificationsPageSource, /Logo must be 3 MiB or smaller\./);
   assert.match(notificationsPageSource, /uploadCustomerEmailLogo/);
+  assert.match(notificationsPageSource, /CUSTOMER_EMAIL_LOGO_UPLOAD_PATH/);
+  assert.match(notificationsPageSource, /xhr\.open\("POST", CUSTOMER_EMAIL_LOGO_UPLOAD_PATH\)/);
+  assert.match(notificationsPageSource, /xhr\.setRequestHeader\("Authorization", `Bearer \$\{sessionToken\}`\)/);
   assert.match(notificationsPageSource, /_intent", "uploadCustomerEmailLogo"/);
   assert.match(notificationsPageSource, /xhr\.upload\.onprogress/);
   assert.match(notificationsPageSource, /setLogoUploadStatus\(\{ kind: "success"/);
@@ -258,6 +265,18 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /Send test/);
   assert.doesNotMatch(notificationsPageSource, /HTTPS logo URL/);
   assert.doesNotMatch(notificationsPageSource, /placeholder="https:\/\/cdn\.example\.com\/logo\.png"/);
+});
+
+test("Customer Notifications uses numeric optimistic-lock versions and a JSON resource upload route", () => {
+  assert.match(notificationsPageSource, /expectedVersion: numberFromFormValue\(formData\.get\("expectedVersion"\)\)/);
+  assert.match(notificationLogoUploadRouteSource, /export const action/);
+  assert.match(notificationLogoUploadRouteSource, /authenticate\.admin\(request\)/);
+  assert.match(notificationLogoUploadRouteSource, /return Response\.json\(result\)/);
+});
+
+test("Customer Notifications modal includes padding inside its scroll height", () => {
+  assert.match(notificationsPageSource, /const notificationModalBodyStyle = \{[\s\S]*?boxSizing: "border-box"/);
+  assert.match(notificationsPageSource, /const notificationModalStyle = \{[\s\S]*?gridTemplateRows: "auto minmax\(0, 1fr\)"/);
 });
 
 test("Customer Notifications keeps the template example behind preview and brand-only edit modes", () => {
@@ -340,14 +359,14 @@ test("Customer Notifications saves global and template changes through isolated 
   assert.match(notificationsPageSource, /formData\.set\("_intent", nextIntent\)/);
   assert.match(notificationsPageSource, /formData\.set\("expectedVersion", settings\.globalVersion \?\? ""\)/);
   assert.match(notificationsPageSource, /formData\.set\("expectedVersion", settings\.templates\[templateEditorSignal\]\?\.version \?\? ""\)/);
-  assert.match(globalSettingsReader, /expectedVersion: formNullableText\(formData\.get\("expectedVersion"\)\)/);
+  assert.match(globalSettingsReader, /expectedVersion: numberFromFormValue\(formData\.get\("expectedVersion"\)\)/);
   assert.match(globalSettingsReader, /businessName: formText\(formData\.get\("branding\.businessName"\)\)/);
   assert.match(globalSettingsReader, /address: formText\(formData\.get\("branding\.address"\)\)/);
   assert.match(globalSettingsReader, /phone: formText\(formData\.get\("branding\.phone"\)\)/);
   assert.match(globalSettingsReader, /contactEmail: formText\(formData\.get\("branding\.contactEmail"\)\)/);
   assert.match(globalSettingsReader, /websiteUrl: formHttpsUrl\(formData\.get\("branding\.websiteUrl"\)\)/);
   assert.match(globalSettingsReader, /note: formText\(formData\.get\("branding\.note"\)\)/);
-  assert.match(templateSettingsReader, /expectedVersion: formNullableText\(formData\.get\("expectedVersion"\)\)/);
+  assert.match(templateSettingsReader, /expectedVersion: numberFromFormValue\(formData\.get\("expectedVersion"\)\)/);
   assert.match(templateSettingsReader, /body,/);
   assert.match(templateSettingsReader, /enabled,/);
   assert.match(templateSettingsReader, /subject,/);
