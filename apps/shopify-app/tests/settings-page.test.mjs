@@ -222,7 +222,8 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /settings\?\.senderName \?\? sender\.name/);
   assert.match(notificationsPageSource, /Logo upload/);
   assert.match(notificationsPageSource, /accept="image\/png,image\/jpeg,image\/webp"/);
-  assert.match(notificationsPageSource, /CUSTOMER_EMAIL_LOGO_MAX_BYTES = 1024 \* 1024/);
+  assert.match(notificationsPageSource, /CUSTOMER_EMAIL_LOGO_MAX_BYTES = 3 \* 1024 \* 1024/);
+  assert.match(notificationsPageSource, /Logo must be 3 MiB or smaller\./);
   assert.match(notificationsPageSource, /uploadCustomerEmailLogo/);
   assert.match(notificationsPageSource, /_intent", "uploadCustomerEmailLogo"/);
   assert.match(notificationsPageSource, /xhr\.upload\.onprogress/);
