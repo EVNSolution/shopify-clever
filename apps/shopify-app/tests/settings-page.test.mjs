@@ -414,8 +414,9 @@ test("Customer Notifications preview renders an optional boxed structured common
   assert.match(notificationsPageSource, /const footerLogo = logo \? \(/);
   assert.match(notificationsPageSource, /justifySelf: "start"/);
   assert.match(notificationsPageSource, /objectFit: "contain"/);
-  assert.match(notificationsPageSource, /maxHeight: "64px"/);
-  assert.match(notificationsPageSource, /maxWidth: "160px"/);
+  assert.match(notificationsPageSource, /maxWidth: "100%"/);
+  assert.match(notificationsPageSource, /width: `\$\{logoWidth\}px`/);
+  assert.doesNotMatch(notificationsPageSource, /Math\.min\(logoWidth, 160\)|maxHeight: "64px"/);
   assert.match(notificationsPageSource, /fontSize: "24px"/);
   assert.match(notificationPreviewSource, /const footerItems = buildCommonFooterItems\(branding\)/);
   assert.match(notificationPreviewSource, /const hasCommonFooter = logo \|\| footerItems\.length > 0/);
