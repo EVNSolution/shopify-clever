@@ -474,12 +474,12 @@ test("child action cell styles initialize after the shared styles they extend", 
   assert.ok(actionsCellIndex > orderCellIndex);
 });
 
-test("child timeline keeps breathing room and stop digits share a browser-neutral optical correction", () => {
+test("child timeline keeps breathing room while table stop digits stay geometrically centered", () => {
   assert.match(routeDetailSource, /const childRouteTimelineStyle = \{[\s\S]*padding: "8px 8px 16px"/);
   assert.match(routeDetailSource, /aria-label="Child route stop timeline"[\s\S]*style=\{childRouteTimelineStyle\}/);
-  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "flex"[\s\S]*margin: "0 auto"/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "grid"[\s\S]*placeItems: "center"[\s\S]*margin: "0 auto"/);
   assert.match(routeDetailSource, /const routeNumberMarkerGlyphStyle = \{[\s\S]*lineHeight: 1[\s\S]*transform: "translateY\(0\.1em\)"/);
-  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "11px"[\s\S]*fontWeight: 700/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "11px"[\s\S]*fontWeight: 700[\s\S]*transform: "none"/);
   assert.match(routeDetailSource, /<span style=\{routeNumberMarkerGlyphStyle\}>\{stop\.stop\}<\/span>/);
   assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
   assert.doesNotMatch(routeDetailSource, /textBox:/);

@@ -131,8 +131,8 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID/);
   assert.match(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted\)/);
   assert.match(routeMapSource, /"circle-color": "#008060"/);
-  assert.match(routeMapSource, /"circle-translate": \[-10, -28\]/);
-  assert.match(routeMapSource, /"text-translate": \[-10, -28\]/);
+  assert.match(routeMapSource, /"circle-translate": \[-16, -28\]/);
+  assert.match(routeMapSource, /"text-translate": \[-16, -28\]/);
   assert.match(routeMapSource, /"text-field": "✓"/);
   assert.doesNotMatch(routeMapSource, /const stopOpacity = isTrackingView \? 0\.42 : 1/);
   assert.match(routeDetailSource, /const completedTrackingStopIds = useMemo\(\s*\(\) => new Set\(routeTrackingProgress\?\.completedStopIds \?\? \[\]\)/);
@@ -189,6 +189,8 @@ test("Tracking map focuses the live driver position and keeps freshness visible 
   assert.match(routeDetailSource, /map\.on\("dblclick", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionDoubleClick\)/);
   assert.match(routeDetailSource, /map\.easeTo\(\{[\s\S]*center: \[Number\(coordinates\[0\]\), Number\(coordinates\[1\]\)\][\s\S]*zoom: Math\.max\(map\.getZoom\?\.\(\) \?\? 0, 15\)/);
   assert.match(routeDetailSource, /window\.setInterval\(\(\) => setRouteTrackingClock\(Date\.now\(\)\), 1_000\)/);
+  assert.match(routeDetailSource, /getRouteTrackingCompletionTime\(displayedRouteTrackingSnapshot\)/);
+  assert.match(routeDetailSource, /shouldShowRouteTrackingFreshness\(/);
   assert.match(routeDetailSource, /Current position/);
   assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(/);
   assert.match(routeDetailSource, /<span style=\{routeChildTrackingMetricLabelStyle\}>Range<\/span>/);

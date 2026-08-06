@@ -1346,3 +1346,8 @@ test("child detail renders note disclosure and route totals", () => {
   assert.match(routeDetailSource, /Total shipping price:/);
   assert.match(routeDetailSource, /Total price:/);
 });
+
+test("child detail centers stop numbers inside table markers", () => {
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[^}]*display: "grid"[^}]*placeItems: "center"/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[^}]*transform: "none"/);
+});
