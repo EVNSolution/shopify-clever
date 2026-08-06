@@ -318,8 +318,13 @@ test("child stop actions call server intents only for status and CLEVER field ed
   assert.doesNotMatch(routeDetailSource, /\["deliveryArea", "Delivery area"\]/);
   assert.doesNotMatch(routeDetailSource, /\["deliveryNote", "Delivery note"\]/);
   assert.doesNotMatch(routeDetailSource, /\["serviceType", "Service type"\]/);
-  assert.match(routeDetailSource, /const canDraftEditChildStopMembership = !isRouteExecutionLockedForStopMembership\(routeExecutionStatus\)/);
-  assert.match(routeDetailSource, /disabled=\{!canDraftEditChildStopMembership\}/);
+  assert.match(routeDetailSource, /const routeMembershipChangeIsInProgress = isRouteExecutionInProgressForStopMembership\(routeExecutionStatus\)/);
+  assert.match(routeDetailSource, /const canAddOrRemoveChildStops = canDraftEditChildStopMembership \|\| routeMembershipChangeIsInProgress/);
+  assert.match(routeDetailSource, /disabled=\{!canAddOrRemoveChildStops\}/);
+  assert.match(routeDetailSource, /disabled=\{!canDraftEditChildStopMembership \|\| childStopSendTargetRows\.length === 0\}/);
+  assert.match(routeDetailSource, /heading: "Change in-progress route\?"/);
+  assert.match(routeDetailSource, /Adding an order changes the active stop list/);
+  assert.match(routeDetailSource, /Removing .* changes the active stop list/);
   assert.match(routeDetailServerSource, /intent === "transitionRouteStop"/);
   assert.match(routeDetailServerSource, /transitionDeliveryRoutePlanStop\(\s*request,\s*routeId,\s*deliveryStopId/);
   assert.match(routeDetailServerSource, /intent === "updateRouteStop"/);

@@ -1354,6 +1354,9 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /heading: "Cannot reverse stops"[\s\S]*At least two stops are required/);
   assert.match(routeDetailSource, /disabled=\{routeGroupActionBusy\}[\s\S]*onClick=\{handleAddOrderToCurrentRoute\}/);
   assert.match(routeDetailSource, /disabled=\{routeGroupActionBusy\}[\s\S]*onClick=\{handleReverseCurrentRouteStops\}/);
+  assert.match(routeDetailSource, /pendingInProgressRouteChange \? \([\s\S]*aria-label="Confirm in-progress route change"[\s\S]*role="alert"[\s\S]*Continue/);
+  assert.match(routeDetailSource, /if \(routeMembershipChangeIsInProgress\) \{[\s\S]*type: "add"/);
+  assert.match(routeDetailSource, /if \(routeMembershipChangeIsInProgress\) \{[\s\S]*type: "remove"/);
   assert.doesNotMatch(routeDetailSource, /requestRouteNavigation\(`\/app\/orders\?addToRouteGroupId=/);
   assert.match(routeDetailSource, /reverseRouteStopIds/);
 });
