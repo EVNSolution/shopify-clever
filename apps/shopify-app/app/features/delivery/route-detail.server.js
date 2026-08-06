@@ -7,6 +7,7 @@ import {
 } from "../customer-notifications/customer-email.server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
 import {
+  copyDeliveryRouteGroup,
   deleteDeliveryRouteGroup,
   fetchDeliveryRouteGroupDetail,
   fetchNextDeliveryRouteGroupRouteIdx,
@@ -574,6 +575,13 @@ export const routeDetailAction = async ({ params, request }) => {
       return deleteDeliveryRouteGroup(request, routeGroupIdFromParams, { sessionToken: shopifySessionToken });
     }
     return deleteDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
+  }
+
+  if (intent === "copyRouteGroup") {
+    if (!routeGroupIdFromParams || routeId) {
+      return { routeGroup: null, errors: [{ message: "복사할 route group을 찾을 수 없습니다." }] };
+    }
+    return copyDeliveryRouteGroup(request, routeGroupIdFromParams, { sessionToken: shopifySessionToken });
   }
 
   if (intent === "refreshRouteOrders") {

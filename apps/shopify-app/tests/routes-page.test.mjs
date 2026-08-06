@@ -503,6 +503,17 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routeDetailSource, /const contextRouteRowsSource = useMemo\([\s\S]*isRouteGroupDetail/);
 });
 
+test("Route group detail copies the parent title and orders without copying child routes", () => {
+  assert.match(routeDetailServerSource, /copyDeliveryRouteGroup/);
+  assert.match(routeDetailServerSource, /intent === "copyRouteGroup"/);
+  assert.match(routeDetailServerSource, /copyDeliveryRouteGroup\(request, routeGroupIdFromParams/);
+  assert.match(routeDetailSource, /const copyRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "copyRouteGroup"/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("copyRouteGroup"\)/);
+  assert.match(routeDetailSource, /lastRouteActionIntentRef\.current !== "copyRouteGroup"/);
+  assert.match(routeDetailSource, /navigate\(routeGroupPath\(copiedRouteGroup\.id\)\)/);
+  assert.match(routeDetailSource, /\{copyRouteGroupBusy \? "Copying…" : "Copy Group Route"\}/);
+});
+
 test("Route detail loader reads the selected persisted route plan", () => {
   assert.match(routeDetailServerSource, /import \{ fetchDeliveryOrders, syncDeliveryOrders \} from "\.\/orders\.server"/);
   assert.match(routeDetailServerSource, /deleteDeliveryRoutePlan,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\/route-plans\.server"/);

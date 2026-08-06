@@ -3171,6 +3171,7 @@ export default function RouteDetailPage() {
   const addRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "addRouteOrders";
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
+  const copyRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "copyRouteGroup";
   const refreshRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "refreshRouteOrders";
   const canRefreshRouteOrders = Boolean(effectiveRoutePlan?.id) || siblingRouteRows.length > 0;
   const mapContainerRef = useRef(null);
@@ -5053,6 +5054,15 @@ export default function RouteDetailPage() {
     submitRouteAction("refreshRouteOrders");
   };
 
+  const handleCopyRouteGroup = () => {
+    if (!isRouteGroupDetail || routeGroupActionBusy) return;
+    if (hasRouteAllocationDraft) {
+      setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
+      return;
+    }
+    submitRouteGroupAction("copyRouteGroup");
+  };
+
   const handleDeleteRoute = async () => {
     if (routeGroupActionBusy) return;
     if (isMaterializedChildRouteDetail) {
@@ -5134,6 +5144,21 @@ export default function RouteDetailPage() {
     lastRouteActionIntentRef.current = null;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) navigate(ROUTES_ROOT_PATH);
   }, [navigate, routeActionFetcher.data, routeActionFetcher.state]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "copyRouteGroup") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+
+    const copiedRouteGroup = routeActionFetcher.data?.routeGroup;
+    if (!copiedRouteGroup?.id) {
+      setRouteGroupClientError("복사된 route group을 찾지 못했습니다.");
+      return;
+    }
+    shopify.toast.show("Route group copied");
+    navigate(routeGroupPath(copiedRouteGroup.id));
+  }, [navigate, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -6060,6 +6085,17 @@ export default function RouteDetailPage() {
                 >
                   View inventory
                 </button>
+                {isRouteGroupDetail ? (
+                  <button
+                    disabled={routeGroupActionBusy || hasRouteAllocationDraft}
+                    onClick={handleCopyRouteGroup}
+                    style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this group title and orders"}
+                    type="button"
+                  >
+                    {copyRouteGroupBusy ? "Copying…" : "Copy Group Route"}
+                  </button>
+                ) : null}
                 <button
                   disabled={routeGroupActionBusy || (isRouteGroupDetail && hasRouteAllocationDraft) || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
                   onClick={handleDeleteRoute}
