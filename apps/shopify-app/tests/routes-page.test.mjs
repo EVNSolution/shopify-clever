@@ -1325,7 +1325,9 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /hasRouteAllocationDraftRef\.current = hasRouteAllocationDraft/);
   assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, />Add order<\/button>/);
-  assert.match(routeDetailSource, />Reverse stops<\/button>/);
+  assert.match(routeDetailSource, /<details[^>]*aria-label="Stop actions"/);
+  assert.match(routeDetailSource, /<summary[^>]*>Stop actions<\/summary>/);
+  assert.match(routeDetailSource, /<summary[^>]*>Stop actions<\/summary>[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>[\s\S]*>\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}<\/button>[\s\S]*<\/details>/);
   assert.match(routeDetailSource, /reverseRouteStopIds/);
 });
 

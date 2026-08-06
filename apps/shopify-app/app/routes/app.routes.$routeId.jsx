@@ -687,6 +687,40 @@ const routeActionButtonStyle = {
   whiteSpace: "nowrap",
 };
 
+const routeStopActionsStyle = {
+  position: "relative",
+  width: "100%",
+};
+
+const routeAddOrderButtonStyle = {
+  ...routeActionButtonStyle,
+  background: "#303030",
+  borderColor: "#303030",
+  color: "#ffffff",
+};
+
+const routeStopActionsSummaryStyle = {
+  ...routeActionButtonStyle,
+  boxSizing: "border-box",
+  textAlign: "center",
+  width: "100%",
+};
+
+const routeStopActionsMenuStyle = {
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.14)",
+  display: "grid",
+  gap: "4px",
+  padding: "6px",
+  position: "absolute",
+  right: 0,
+  top: "calc(100% + 4px)",
+  width: "148px",
+  zIndex: 4,
+};
+
 const routeHeaderActionsStyle = {
   alignItems: "center",
   display: "flex",
@@ -6131,33 +6165,38 @@ export default function RouteDetailPage() {
                   <button
                     disabled={routeGroupActionBusy || !canDraftEditChildStopMembership}
                     onClick={handleAddOrderToCurrentRoute}
-                    style={routeActionButtonStyle}
+                    style={routeAddOrderButtonStyle}
                     type="button"
                   >Add order</button>
                 ) : null}
-                {isMaterializedChildRouteDetail ? (
-                  <button
-                    disabled={routeGroupActionBusy || !canDraftEditChildStopMembership || (currentTimelineRouteRow?.stops.length ?? 0) < 2}
-                    onClick={handleReverseCurrentRouteStops}
-                    style={routeActionButtonStyle}
-                    type="button"
-                  >Reverse stops</button>
-                ) : null}
-                <button
-                  disabled={routeGroupActionBusy || !hasEditableRouteRows}
-                  onClick={handlePreviewRouteOptimization}
-                  style={{
-                    ...routeActionButtonStyle,
-                    ...(!hasEditableRouteRows ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                  }}
-                  type="button"
-                >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
-                <button
-                  disabled={routeGroupActionBusy}
-                  onClick={handleAddEmptyRoute}
-                  style={routeActionButtonStyle}
-                  type="button"
-                >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
+                <details aria-label="Stop actions" style={routeStopActionsStyle}>
+                  <summary style={routeStopActionsSummaryStyle}>Stop actions</summary>
+                  <div style={routeStopActionsMenuStyle}>
+                    {isMaterializedChildRouteDetail ? (
+                      <button
+                        disabled={routeGroupActionBusy || !canDraftEditChildStopMembership || (currentTimelineRouteRow?.stops.length ?? 0) < 2}
+                        onClick={handleReverseCurrentRouteStops}
+                        style={routeActionButtonStyle}
+                        type="button"
+                      >Reverse stops</button>
+                    ) : null}
+                    <button
+                      disabled={routeGroupActionBusy || !hasEditableRouteRows}
+                      onClick={handlePreviewRouteOptimization}
+                      style={{
+                        ...routeActionButtonStyle,
+                        ...(!hasEditableRouteRows ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                      }}
+                      type="button"
+                    >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
+                    <button
+                      disabled={routeGroupActionBusy}
+                      onClick={handleAddEmptyRoute}
+                      style={routeActionButtonStyle}
+                      type="button"
+                    >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
+                  </div>
+                </details>
               </div>
             </section>
           ) : null}
