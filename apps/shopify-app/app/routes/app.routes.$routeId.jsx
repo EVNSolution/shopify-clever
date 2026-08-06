@@ -3242,6 +3242,7 @@ export default function RouteDetailPage() {
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [isAddOrderDialogOpen, setIsAddOrderDialogOpen] = useState(false);
   const [isRouteActionsMenuOpen, setIsRouteActionsMenuOpen] = useState(false);
+  const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
@@ -4889,26 +4890,57 @@ export default function RouteDetailPage() {
   };
 
   const handleReverseCurrentRouteStops = () => {
-    if (!canDraftEditChildStopMembership || routeGroupActionBusy || !currentTimelineRouteRow || currentTimelineRouteRow.stops.length < 2) return;
     setIsRouteActionsMenuOpen(false);
+    if (routeGroupActionBusy) return;
+    if (!canDraftEditChildStopMembership) {
+      setRouteActionNotice({
+        heading: "Cannot reverse stops",
+        message: "Stops can only be reversed before the route has started.",
+      });
+      return;
+    }
+    if (!currentTimelineRouteRow || currentTimelineRouteRow.stops.length < 2) {
+      setRouteActionNotice({
+        heading: "Cannot reverse stops",
+        message: "At least two stops are required to reverse this route.",
+      });
+      return;
+    }
     setRoutePreviewByKey({});
-    setRouteTimelineOrderByRouteId((currentOrderByRouteId) => ({
-      ...currentOrderByRouteId,
-      [currentTimelineRouteRow.id]: reverseRouteStopIds(
-        getTimelineRouteStopIds(routeRows, currentOrderByRouteId, currentTimelineRouteRow.id),
-      ),
-    }));
+    animateRouteTimelineChange(() => {
+      setRouteTimelineOrderByRouteId((currentOrderByRouteId) => {
+        const nextOrderByRouteId = {
+          ...currentOrderByRouteId,
+          [currentTimelineRouteRow.id]: reverseRouteStopIds(
+            getTimelineRouteStopIds(routeRows, currentOrderByRouteId, currentTimelineRouteRow.id),
+          ),
+        };
+        routeTimelineOrderByRouteIdRef.current = nextOrderByRouteId;
+        return nextOrderByRouteId;
+      });
+    });
   };
 
   const handleAddOrderToCurrentRoute = () => {
     if (!routeGroupId || !effectiveRoutePlan?.id) return;
+    if (routeGroupActionBusy) return;
+    if (!canDraftEditChildStopMembership) {
+      setRouteActionNotice({
+        heading: "Cannot add orders",
+        message: "Orders can only be added before the route has started.",
+      });
+      return;
+    }
     if (hasRouteAllocationDraft) {
       setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
       return;
     }
     setRouteGroupClientError(null);
     if (addOrderCandidates.length === 0) {
-      shopify.modal.show("no-add-orders-modal");
+      setRouteActionNotice({
+        heading: "No orders remaining",
+        message: "No orders are remaining for this delivery date and day.",
+      });
       return;
     }
     setSelectedAddOrderIds([]);
@@ -6291,7 +6323,7 @@ export default function RouteDetailPage() {
               <div aria-label="Route actions" style={routeActionColumnStyle}>
                 {isMaterializedChildRouteDetail ? (
                   <button
-                    disabled={routeGroupActionBusy || !canDraftEditChildStopMembership}
+                    disabled={routeGroupActionBusy}
                     onClick={handleAddOrderToCurrentRoute}
                     style={routeAddOrderButtonStyle}
                     type="button"
@@ -6324,7 +6356,7 @@ export default function RouteDetailPage() {
                     <div aria-label="Route action menu" role="menu" style={routeActionsMenuStyle}>
                       {isMaterializedChildRouteDetail ? (
                       <button
-                        disabled={routeGroupActionBusy || !canDraftEditChildStopMembership || (currentTimelineRouteRow?.stops.length ?? 0) < 2}
+                        disabled={routeGroupActionBusy}
                         onClick={handleReverseCurrentRouteStops}
                         role="menuitem"
                         style={routeActionButtonStyle}
@@ -7277,10 +7309,28 @@ export default function RouteDetailPage() {
           </div>
         ) : null}
 
-        <s-modal id="no-add-orders-modal" heading="No orders remaining">
-          <s-paragraph>No orders are remaining for this delivery date and day.</s-paragraph>
-          <s-button slot="primary-action" commandFor="no-add-orders-modal" command="--hide">Close</s-button>
-        </s-modal>
+        {routeActionNotice ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Close route action notice"
+              onClick={() => setRouteActionNotice(null)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div
+              aria-label={routeActionNotice.heading}
+              aria-modal="true"
+              role="dialog"
+              style={routeLineEditorDialogStyle}
+            >
+              <h2 style={routeLineEditorTitleStyle}>{routeActionNotice.heading}</h2>
+              <p style={routeLineEditorLabelStyle}>{routeActionNotice.message}</p>
+              <div style={routeLineEditorActionsStyle}>
+                <button onClick={() => setRouteActionNotice(null)} style={routeActionButtonStyle} type="button">Close</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
 
         {isAddOrderDialogOpen ? (
           <div style={routeLineEditorOverlayStyle}>
