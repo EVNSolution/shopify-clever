@@ -17,6 +17,10 @@ function stringArray(value) {
   return Array.isArray(value) ? value.map(textOrUndefined).filter(Boolean) : [];
 }
 
+export function reverseRouteStopIds(stopIds) {
+  return stringArray(stopIds).reverse();
+}
+
 function readRouteDraftRow(route) {
   const row = route && typeof route === "object" && !Array.isArray(route) ? route : {};
   return {

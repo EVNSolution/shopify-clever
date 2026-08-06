@@ -32,6 +32,7 @@ test("orders query reads order and customer notes", () => {
   assert.match(SHOPIFY_ORDERS_QUERY, /processedAt/);
   assert.match(SHOPIFY_ORDERS_QUERY, /paymentGatewayNames/);
   assert.match(SHOPIFY_ORDERS_QUERY, /currentTotalPriceSet\s*\{/);
+  assert.match(SHOPIFY_ORDERS_QUERY, /currentShippingPriceSet\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /customAttributes\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /lineItems\(first: 20\)\s*\{/);
   assert.match(SHOPIFY_ORDERS_QUERY, /lineItems\(first: 20\)\s*\{[\s\S]*pageInfo\s*\{[\s\S]*hasNextPage[\s\S]*endCursor/);

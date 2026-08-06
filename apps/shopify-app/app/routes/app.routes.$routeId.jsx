@@ -7,11 +7,13 @@ import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
   buildChildRouteOrderRows,
+  summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
   formatStoreLocalOrderDate,
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
+import { reverseRouteStopIds } from "../features/delivery/route-draft";
 import {
   RouteStartTimePicker,
   buildRouteStartDateTimeValue,
@@ -58,7 +60,6 @@ import {
 } from "../features/delivery/route-detail-map";
 import {
   consumeRouteTrackingSseChunk,
-  doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
@@ -70,6 +71,7 @@ import {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  shouldRevalidateTrackingEta,
 } from "../features/delivery/route-tracking";
 import { MAP_MARKER_PALETTE } from "../features/maps/map-markers";
 import { createMapLibreMap } from "../features/maps/maplibre-map";
@@ -2281,6 +2283,8 @@ function buildRouteStops(stops) {
       province: getRouteStopAddressValue(stop, "province"),
       postalCode: getRouteStopAddressValue(stop, "postalCode"),
       countryCode: getRouteStopAddressValue(stop, "countryCode"),
+      currencyCode: textOrUndefined(stop.currencyCode),
+      customerNoteContext: stop.customerNoteContext,
       latitude: coordinates?.[1] ?? null,
       longitude: coordinates?.[0] ?? null,
       status: stop.status ?? stop.assignmentStatus ?? "PENDING",
@@ -2298,8 +2302,10 @@ function buildRouteStops(stops) {
       distanceFromPreviousMeters: numberOrUndefined(stop.distanceFromPreviousMeters),
       serviceMinutes: numberOrUndefined(stop.serviceMinutes),
       serviceType: textOrUndefined(stop.serviceType ?? stop.method),
+      shippingPriceAmount: numberOrUndefined(stop.shippingPriceAmount),
       timeWindowEnd: textOrUndefined(stop.timeWindowEnd),
       timeWindowStart: textOrUndefined(stop.timeWindowStart),
+      totalPriceAmount: numberOrUndefined(stop.totalPriceAmount),
       instructions: getRouteStopInstructions(stop),
       itemCount,
       items,
@@ -3063,6 +3069,7 @@ export default function RouteDetailPage() {
   shopifyRef.current = shopify;
   const revalidatorRef = useRef(revalidator);
   revalidatorRef.current = revalidator;
+  const hasRouteAllocationDraftRef = useRef(false);
   const mapLibraryRef = useRef(null);
   const routeMapCenterRef = useRef(DEFAULT_CENTER);
   const markersRef = useRef([]);
@@ -3330,6 +3337,7 @@ export default function RouteDetailPage() {
       : []),
     [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
   );
+  const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
   childRouteOrderRowsRef.current = childRouteOrderRows;
   const routeTrackingPresentation = useMemo(
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
@@ -3381,6 +3389,7 @@ export default function RouteDetailPage() {
     || Object.keys(routeLineEdits).length > 0
     || Object.keys(routePreviewByKey).length > 0
     || removedOrderIds.length > 0;
+  hasRouteAllocationDraftRef.current = hasRouteAllocationDraft;
   const hasIncompatibleAddEmptyDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || deletedRoutePlanIds.length > 0
     || Object.keys(routeLineEdits).length > 0
@@ -3595,7 +3604,7 @@ export default function RouteDetailPage() {
         const progressEvent = trackingEvent.data?.progress ?? trackingEvent.data;
         if (!isRouteTrackingPayloadForRoute(progressEvent, trackingStreamRoutePlanId)) return;
         setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingEvent(currentStatus, progressEvent));
-        if (doesTrackingEventRefreshEta(progressEvent)) {
+        if (shouldRevalidateTrackingEta(progressEvent, hasRouteAllocationDraftRef.current)) {
           revalidatorRef.current.revalidate();
         }
         setRouteTrackingSnapshot((currentSnapshot) => {
@@ -4755,6 +4764,22 @@ export default function RouteDetailPage() {
       })();
     setClientRouteRows((rows) => [...rows, routeRow]);
     submitRouteGroupAction("queryNextRouteIdx", { tempId });
+  };
+
+  const handleReverseCurrentRouteStops = () => {
+    if (!canDraftEditChildStopMembership || routeGroupActionBusy || !currentTimelineRouteRow || currentTimelineRouteRow.stops.length < 2) return;
+    setRoutePreviewByKey({});
+    setRouteTimelineOrderByRouteId((currentOrderByRouteId) => ({
+      ...currentOrderByRouteId,
+      [currentTimelineRouteRow.id]: reverseRouteStopIds(
+        getTimelineRouteStopIds(routeRows, currentOrderByRouteId, currentTimelineRouteRow.id),
+      ),
+    }));
+  };
+
+  const handleAddOrderToCurrentRoute = () => {
+    if (!routeGroupId || !effectiveRoutePlan?.id) return;
+    requestRouteNavigation(`/app/orders?addToRouteGroupId=${encodeURIComponent(routeGroupId)}&addToRoutePlanId=${encodeURIComponent(effectiveRoutePlan.id)}`);
   };
 
   const handlePreviewRouteOptimization = () => {
@@ -6102,6 +6127,22 @@ export default function RouteDetailPage() {
                 <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
               </section>
               <div aria-label="Route actions" style={routeActionColumnStyle}>
+                {isMaterializedChildRouteDetail ? (
+                  <button
+                    disabled={routeGroupActionBusy || !canDraftEditChildStopMembership}
+                    onClick={handleAddOrderToCurrentRoute}
+                    style={routeActionButtonStyle}
+                    type="button"
+                  >Add order</button>
+                ) : null}
+                {isMaterializedChildRouteDetail ? (
+                  <button
+                    disabled={routeGroupActionBusy || !canDraftEditChildStopMembership || (currentTimelineRouteRow?.stops.length ?? 0) < 2}
+                    onClick={handleReverseCurrentRouteStops}
+                    style={routeActionButtonStyle}
+                    type="button"
+                  >Reverse stops</button>
+                ) : null}
                 <button
                   disabled={routeGroupActionBusy || !hasEditableRouteRows}
                   onClick={handlePreviewRouteOptimization}
@@ -6216,7 +6257,24 @@ export default function RouteDetailPage() {
                       <td style={childRouteOrderCellStyle}>{row.order}</td>
                       <td style={childRouteOrderCellStyle}>{row.status}</td>
                       <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
-                      <td style={childRouteOrderCellStyle}>{row.address}</td>
+                      <td style={childRouteOrderCellStyle}>
+                        <span>{row.address}</span>
+                        {row.note ? (
+                          <button
+                            aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "note"}
+                            aria-haspopup="dialog"
+                            aria-label={`Show ${row.order} note`}
+                            data-child-order-disclosure-trigger="true"
+                            onClick={(event) => handleToggleChildOrderDisclosure(event, row.id, "note")}
+                            onBlur={handleChildOrderDisclosureMouseLeave}
+                            onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "note")}
+                            onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "note")}
+                            onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                            style={{ ...childRouteDisclosureButtonStyle, marginLeft: "6px" }}
+                            type="button"
+                          ><s-icon type="note" /></button>
+                        ) : null}
+                      </td>
                       <td style={childRouteExpectedArrivalCellStyle}>{row.expectedArrival}</td>
                       <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
@@ -6281,6 +6339,22 @@ export default function RouteDetailPage() {
                   ))}
                 </tbody>
               </table>
+              <div
+                aria-label="Child route totals"
+                style={{
+                  alignItems: "center",
+                  borderTop: "1px solid #dedede",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  fontSize: "13px",
+                  gap: "8px 18px",
+                  padding: "10px 14px",
+                }}
+              >
+                <span>Total drive time: {routeTotalDriveTime} ({routeTotalDistance})</span>
+                <span>Total shipping price: {childRouteMoney.shippingPriceLabel}</span>
+                <span>Total price: {childRouteMoney.totalPriceLabel}</span>
+              </div>
             </div>
           ) : isMaterializedChildRouteDetail && childDetailTab === "tracking" ? (
             <section aria-label="Child route tracking" style={routeChildTrackingStyle}>
@@ -6625,7 +6699,7 @@ export default function RouteDetailPage() {
               onMouseLeave={handleChildOrderDisclosureMouseLeave}
               ref={childOrderDisclosurePopoverRef}
               role={activeChildOrderDisclosure.mode === "pinned" ? "dialog" : "tooltip"}
-              aria-label={`${activeChildOrderDisclosure.type === "items" ? "Items" : "Attributes"} for ${activeChildOrderDisclosureRow.order}`}
+              aria-label={`${activeChildOrderDisclosure.type === "items" ? "Items" : activeChildOrderDisclosure.type === "note" ? "Note" : "Attributes"} for ${activeChildOrderDisclosureRow.order}`}
               style={{
                 ...childRouteDisclosurePopoverStyle,
                 transform: `translate3d(${Math.round(activeChildOrderDisclosure.left)}px, ${Math.round(activeChildOrderDisclosure.top)}px, 0)`,
@@ -6633,7 +6707,7 @@ export default function RouteDetailPage() {
               }}
             >
               <div style={childRouteDisclosurePopoverHeaderStyle}>
-                <span>{activeChildOrderDisclosure.type === "items" ? "Items" : "Attributes"} · {activeChildOrderDisclosureRow.order}</span>
+                <span>{activeChildOrderDisclosure.type === "items" ? "Items" : activeChildOrderDisclosure.type === "note" ? "Note" : "Attributes"} · {activeChildOrderDisclosureRow.order}</span>
                 {activeChildOrderDisclosure.mode === "pinned" ? (
                   <button
                     aria-label="Close order detail"
@@ -6662,6 +6736,8 @@ export default function RouteDetailPage() {
                     ))}
                   </ul>
                 ) : <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.itemsDetail}</span>
+              ) : activeChildOrderDisclosure.type === "note" ? (
+                <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.note}</span>
               ) : (
                 activeChildOrderDisclosureRow.attributes.length > 0 ? (
                   <div style={childRouteDisclosureListStyle}>

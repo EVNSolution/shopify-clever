@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   buildRouteGroupChildDeleteDraft,
   buildRouteGroupChildrenDeleteDraft,
+  buildRouteGroupAddOrdersDraft,
   createDeliveryRouteGroup,
   deleteDeliveryRouteGroup,
   deleteDeliveryRouteGroupChildRoute,
@@ -16,6 +17,30 @@ import {
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupOrders,
 } from "../app/features/delivery/route-groups.server.js";
+
+test("route group add-order draft assigns new orders to the requested child", () => {
+  const draft = buildRouteGroupAddOrdersDraft({
+    assignments: [
+      { orderId: "order-1" },
+      { orderId: "order-2" },
+      { orderId: "order-3" },
+    ],
+    children: [
+      { orderIds: ["order-1"], routeIdx: 1, routePlanId: "route-1" },
+      { orderIds: ["order-2"], routeIdx: 2, routePlanId: "route-2" },
+    ],
+  }, ["order-3"], "route-2");
+
+  assert.deepEqual(draft.routes.map((route) => route.orderIds), [
+    ["order-1"],
+    ["order-2", "order-3"],
+  ]);
+  assert.equal(draft.mode, "MANUAL_ORDER");
+  assert.equal(buildRouteGroupAddOrdersDraft({
+    assignments: [{ orderId: "order-1" }, { orderId: "order-2" }],
+    children: [{ orderIds: ["order-1"], routePlanId: "route-1" }],
+  }, ["order-2"], "missing-route"), null);
+});
 
 process.env.CLEVER_DELIVERY_API_URL = "https://delivery.test/";
 process.env.CLEVER_APP_ID = "clever-route-dev";

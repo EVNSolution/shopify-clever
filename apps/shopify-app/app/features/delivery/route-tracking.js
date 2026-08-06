@@ -888,6 +888,10 @@ function doesTrackingEventRefreshEta(event) {
   return eventType === "ROUTE_STARTED" || eventType === "STOP_ARRIVED";
 }
 
+function shouldRevalidateTrackingEta(event, hasRouteAllocationDraft) {
+  return !hasRouteAllocationDraft && doesTrackingEventRefreshEta(event);
+}
+
 function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
   const executionStatus = normalizeRouteExecutionStatus(routeStatus);
   const hasHistory = Boolean(snapshot?.latestPosition) || (snapshot?.recentPositions?.length ?? 0) > 0;
@@ -933,6 +937,7 @@ function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
 export {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
+  shouldRevalidateTrackingEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingLineFeatures,
   getRouteTrackingPathPoints,

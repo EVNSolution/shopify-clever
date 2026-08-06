@@ -4,7 +4,7 @@ import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
-import { appendIdToken, routeGroupPath, routePlanPath } from "../delivery/route-paths";
+import { appendIdToken, routeGroupChildPath, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
 import { getAppstleSubscriptionOrderKind } from "../delivery/delivery-labels";
 import { createDepartureMarkerElement } from "../maps/map-markers";
@@ -2561,6 +2561,8 @@ function OrdersPageContent({ loaderData }) {
     ordersLoadAutoRetryAttempted = false;
   }, []);
   const [searchParams, setSearchParams] = useSearchParams();
+  const addToRouteGroupId = searchParams.get("addToRouteGroupId") ?? "";
+  const addToRoutePlanId = searchParams.get("addToRoutePlanId") ?? "";
   const currentOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
   const activeOrdersView = getPendingOrdersView(navigation.location) ?? currentOrdersView;
   const sourceOrdersLoaded = loaderData.ordersLoaded === true;
@@ -3095,7 +3097,7 @@ function OrdersPageContent({ loaderData }) {
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [routeAddModalOpen, setRouteAddModalOpen] = useState(false);
   const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
-  const [selectedRouteGroupId, setSelectedRouteGroupId] = useState("");
+  const [selectedRouteGroupId, setSelectedRouteGroupId] = useState(addToRouteGroupId);
   const [activeOrderPopupId, setActiveOrderPopupId] = useState(null);
   const [sortConfig, setSortConfig] = useState({
     key: "name",
@@ -4481,6 +4483,7 @@ function OrdersPageContent({ loaderData }) {
     );
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
+    setPlanFitRequest((requestCount) => requestCount + 1);
   }, [displayOrderById, plannedOrderIdSet, plannedOrderIds]);
 
 
@@ -4683,6 +4686,9 @@ function OrdersPageContent({ loaderData }) {
       formData.set("_intent", "addOrdersToRouteGroup");
       formData.set("plannedOrderIds", JSON.stringify(plannedOrders.map((order) => order.id)));
       formData.set("routeGroupId", selectedRouteGroup.id);
+      if (addToRoutePlanId && selectedRouteGroup.id === addToRouteGroupId) {
+        formData.set("targetRoutePlanId", addToRoutePlanId);
+      }
       if (selectedRouteGroup.updatedAt) formData.set("expectedUpdatedAt", selectedRouteGroup.updatedAt);
       formData.set("shopifySessionToken", sessionToken);
       setRouteAddModalOpen(false);
@@ -4936,7 +4942,10 @@ function OrdersPageContent({ loaderData }) {
 
     if (createdRouteGroup?.id) {
       submittedRouteSessionTokenRef.current = null;
-      navigate(appendIdToken(routeGroupPath(createdRouteGroup.id), sessionToken));
+      const destination = addToRoutePlanId && createdRouteGroup.id === addToRouteGroupId
+        ? routeGroupChildPath(createdRouteGroup.id, addToRoutePlanId)
+        : routeGroupPath(createdRouteGroup.id);
+      navigate(appendIdToken(destination, sessionToken));
       return;
     }
 
@@ -4944,7 +4953,7 @@ function OrdersPageContent({ loaderData }) {
 
     submittedRouteSessionTokenRef.current = null;
     navigate(appendIdToken(routePlanPath(createdRoutePlan.id), sessionToken));
-  }, [navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
+  }, [addToRouteGroupId, addToRoutePlanId, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
 
   useEffect(() => {
     const createdInventory = inventoryFetcher.data?.inventory;

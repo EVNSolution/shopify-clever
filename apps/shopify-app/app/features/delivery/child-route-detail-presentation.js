@@ -349,6 +349,45 @@ function getStopInstructions(stop) {
   );
 }
 
+function getStopNote(stop) {
+  return firstText(
+    stop?.customerNoteContext?.customerNote,
+    stop?.customerNote,
+    stop?.note,
+    stop?.order?.note,
+    stop?.shopifyOrderSnapshot?.note,
+    stop?.rawPayload?.note,
+  );
+}
+
+function formatCurrencyAmount(amount, currencyCode) {
+  if (amount === undefined || !currencyCode) return EMPTY_LABEL;
+  try {
+    return new Intl.NumberFormat("en-US", {
+      currency: currencyCode,
+      style: "currency",
+    }).format(amount);
+  } catch {
+    return EMPTY_LABEL;
+  }
+}
+
+export function summarizeChildRouteMoney(rows) {
+  const routeRows = Array.isArray(rows) ? rows : [];
+  const currencies = [...new Set(routeRows.map((row) => textOrUndefined(row?.currencyCode)).filter(Boolean))];
+  const currencyCode = currencies.length === 1 ? currencies[0] : undefined;
+  const shippingPrices = routeRows.map((row) => numberOrUndefined(row?.shippingPriceAmount)).filter((amount) => amount !== undefined);
+  const totalPrices = routeRows.map((row) => numberOrUndefined(row?.totalPriceAmount)).filter((amount) => amount !== undefined);
+  const shippingPrice = shippingPrices.length > 0 ? shippingPrices.reduce((total, amount) => total + amount, 0) : undefined;
+  const totalPrice = totalPrices.length > 0 ? totalPrices.reduce((total, amount) => total + amount, 0) : undefined;
+
+  return {
+    currencyCode: currencyCode ?? null,
+    shippingPriceLabel: formatCurrencyAmount(shippingPrice, currencyCode),
+    totalPriceLabel: formatCurrencyAmount(totalPrice, currencyCode),
+  };
+}
+
 function normalizeAttributes(attributes) {
   if (typeof attributes === "string") {
     const value = attributes.trim();
@@ -444,6 +483,7 @@ export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ia
       status: formatChildOrderStatus(getOrderStatusSource(stop)),
       orderDate: formatStoreLocalOrderDate(getOrderDateSource(stop), ianaTimezone),
       address: getStopAddress(stop),
+      currencyCode: firstText(stop?.currencyCode),
       expectedArrival: formatChildEtaLabel(firstText(stop?.estimatedArrivalAt, stop?.eta, stop?.arrivalAt), ianaTimezone),
       actualArrival: formatChildEtaLabel(actualArrivalByStopId[deliveryStopId], ianaTimezone),
       driveTime: formatChildDriveTimeLabel(stop?.durationFromPreviousSeconds, stop?.distanceFromPreviousMeters),
@@ -453,7 +493,10 @@ export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ia
       itemsSummary: formatItemsSummary(items, stop?.itemCount ?? stop?.itemsCount),
       itemsDetail: formatItemsDetail(items, stop?.itemCount ?? stop?.itemsCount),
       method: serviceType ?? EMPTY_LABEL,
+      note: getStopNote(stop),
       payment: formatPaymentStatus(stop),
+      shippingPriceAmount: numberOrUndefined(stop?.shippingPriceAmount),
+      totalPriceAmount: numberOrUndefined(stop?.totalPriceAmount),
       attributes,
       attributesSummary: formatAttributesSummary(attributes),
       attributesDetail: attributes.length > 0 ? attributes.map((attribute) => attribute.label).join("\n") : EMPTY_LABEL,

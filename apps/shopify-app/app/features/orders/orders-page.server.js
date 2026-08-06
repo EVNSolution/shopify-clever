@@ -20,7 +20,9 @@ import {
   fetchDeliveryRoutePlans,
 } from "../delivery/route-plans.server";
 import {
+  buildRouteGroupAddOrdersDraft,
   createDeliveryRouteGroup,
+  fetchDeliveryRouteGroupDetail,
   fetchDeliveryRouteGroups,
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupOrders,
@@ -146,46 +148,6 @@ function getFirstRouteGroupRoutePlan(routeGroup) {
   const firstChild = routeGroup?.children?.find(getRouteGroupChildRoutePlanId);
   if (!firstChild) return null;
   return firstChild.routePlan ?? { id: getRouteGroupChildRoutePlanId(firstChild) };
-}
-
-function buildFirstRouteDraftPayload(routeGroup, addedOrderIds = []) {
-  const children = getVisibleRouteGroupChildren(routeGroup);
-  if (children.length === 0) return null;
-
-  const assignmentOrderIds = Array.isArray(routeGroup?.assignments)
-    ? routeGroup.assignments.map((assignment) => textOrUndefined(assignment?.orderId)).filter(Boolean)
-    : [];
-  const fallbackOrderIds = [
-    ...children.flatMap((child) => Array.isArray(child?.orderIds) ? child.orderIds : []),
-    ...addedOrderIds,
-  ].map(textOrUndefined).filter(Boolean);
-  const groupOrderIds = assignmentOrderIds.length > 0 ? assignmentOrderIds : [...new Set(fallbackOrderIds)];
-  const groupOrderIdSet = new Set(groupOrderIds);
-  const draftedOrderIds = new Set();
-
-  const routes = children.map((child) => {
-    const orderIds = (Array.isArray(child?.orderIds) ? child.orderIds : [])
-      .map(textOrUndefined)
-      .filter((orderId) => orderId && groupOrderIdSet.has(orderId) && !draftedOrderIds.has(orderId));
-    orderIds.forEach((orderId) => draftedOrderIds.add(orderId));
-
-    return {
-      branchId: null,
-      ...(child?.color ? { color: child.color } : {}),
-      ...(child?.label ? { label: child.label } : {}),
-      orderIds,
-      ...(child?.routeIdx == null ? {} : { routeIdx: child.routeIdx }),
-      routePlanId: getRouteGroupChildRoutePlanId(child),
-      ...(child?.sortOrder == null ? {} : { sortOrder: child.sortOrder }),
-    };
-  });
-
-  routes[0].orderIds = [
-    ...routes[0].orderIds,
-    ...groupOrderIds.filter((orderId) => !draftedOrderIds.has(orderId)),
-  ];
-
-  return { mode: "MANUAL_ORDER", routes };
 }
 
 export const action = async ({ request }) => {
@@ -517,10 +479,25 @@ async function handleOrdersAction(request) {
 
   if (intent === "addOrdersToRouteGroup") {
     const routeGroupId = textOrUndefined(formData.get("routeGroupId"));
+    const targetRoutePlanId = textOrUndefined(formData.get("targetRoutePlanId"));
     const expectedUpdatedAt = textOrUndefined(formData.get("expectedUpdatedAt"));
 
     if (!routeGroupId) {
       return { errors: [{ message: "추가할 route를 선택해주세요." }] };
+    }
+
+    if (targetRoutePlanId) {
+      const currentRouteGroup = await fetchDeliveryRouteGroupDetail(
+        request,
+        routeGroupId,
+        { sessionToken: shopifySessionToken },
+      );
+      if ((currentRouteGroup.errors ?? []).length > 0) return currentRouteGroup;
+      const targetExists = getVisibleRouteGroupChildren(currentRouteGroup.routeGroup)
+        .some((child) => getRouteGroupChildRoutePlanId(child) === targetRoutePlanId);
+      if (!targetExists) {
+        return { errors: [{ message: "선택한 child route를 찾지 못했습니다. Route 화면에서 다시 시도해주세요." }] };
+      }
     }
 
     const addOrderIds = plannedOrders.map((order) => order.orderId).filter(Boolean);
@@ -543,8 +520,13 @@ async function handleOrdersAction(request) {
       };
     }
 
-    const draftPayload = buildFirstRouteDraftPayload(addResult.routeGroup, addOrderIds);
-    if (!draftPayload) return { routeGroup: addResult.routeGroup, errors: [] };
+    const draftPayload = buildRouteGroupAddOrdersDraft(addResult.routeGroup, addOrderIds, targetRoutePlanId);
+    if (!draftPayload) return {
+      routeGroup: addResult.routeGroup,
+      errors: targetRoutePlanId
+        ? [{ message: "선택한 child route를 찾지 못했습니다. Route 화면에서 다시 시도해주세요." }]
+        : [],
+    };
 
     const draftResult = await saveDeliveryRouteGroupDraft(
       request,
