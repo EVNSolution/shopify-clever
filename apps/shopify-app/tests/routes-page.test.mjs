@@ -761,7 +761,7 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailMapSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
-  assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Add orders|Start free trial/);
+  assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Start free trial/);
 });
 
 test("Route detail maps expose the shared accessible height control", () => {
@@ -1247,9 +1247,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /textAlign: "center"/);
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
   assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
-  assert.doesNotMatch(routeDetailSource, />Order<\/th>/);
   assert.doesNotMatch(routeDetailSource, />Recipient<\/th>/);
-  assert.doesNotMatch(routeDetailSource, />Address<\/th>/);
   assert.doesNotMatch(routeDetailSource, /Same-date orders/);
   assert.doesNotMatch(routeDetailSource, /Save order/);
 });
@@ -1325,9 +1323,12 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /hasRouteAllocationDraftRef\.current = hasRouteAllocationDraft/);
   assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, />Add order<\/button>/);
-  assert.match(routeDetailSource, /<details[^>]*aria-label="Stop actions"/);
-  assert.match(routeDetailSource, /<summary[^>]*>Stop actions<\/summary>/);
-  assert.match(routeDetailSource, /<summary[^>]*>Stop actions<\/summary>[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>[\s\S]*>\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}<\/button>[\s\S]*<\/details>/);
+  assert.match(routeDetailSource, />\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}<\/button>[\s\S]*aria-label="Actions"/);
+  assert.match(routeDetailSource, /aria-expanded=\{isRouteActionsMenuOpen\}[\s\S]*>Actions<\/button>/);
+  assert.match(routeDetailSource, /aria-label="Route action menu"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
+  assert.doesNotMatch(routeDetailSource, />Stop actions<\//);
+  assert.match(routeDetailSource, /aria-label="Add orders to current route"[\s\S]*aria-modal="true"[\s\S]*aria-label="Available orders for current delivery date"/);
+  assert.doesNotMatch(routeDetailSource, /requestRouteNavigation\(`\/app\/orders\?addToRouteGroupId=/);
   assert.match(routeDetailSource, /reverseRouteStopIds/);
 });
 

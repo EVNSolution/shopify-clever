@@ -12,6 +12,7 @@ import {
   fetchNextDeliveryRouteGroupRouteIdx,
   previewDeliveryRouteGroupOptimization,
   saveDeliveryRouteGroupDraft,
+  updateDeliveryRouteGroupOrders,
 } from "./route-groups.server";
 import {
   clearDeliveryApiResponseCache,
@@ -25,6 +26,7 @@ import {
   firstArray,
   getRouteGroupChildRoutePlanId,
   getRouteGroupChildRouteName,
+  getVisibleRouteGroupChildren,
   numberOrUndefined,
   readRouteOptimizedSnapshot,
   textOrUndefined,
@@ -41,6 +43,7 @@ import { fetchShopifyAppPreferences } from "../settings/app-preferences.server";
 import { authenticate } from "../../shopify.server";
 import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "./route-timezone.server";
 import { readRouteDraftPayload } from "./route-draft";
+import { buildRouteAddOrderCandidates } from "./route-add-order-candidates";
 import {
   collectRouteRefreshOrderGids,
   collectRouteRefreshRoutePlanIdsFromOrders,
@@ -350,6 +353,15 @@ function readDeliveryStopIds(formData) {
   return [...new Set(deliveryStopIds)];
 }
 
+function readJsonTextArray(value) {
+  try {
+    const parsed = JSON.parse(value ?? "[]");
+    return Array.isArray(parsed) ? [...new Set(parsed.map(textOrUndefined).filter(Boolean))] : [];
+  } catch {
+    return [];
+  }
+}
+
 export const routeDetailLoader = async ({ params, request }) => {
   const routeId = cleanRoutePathParam(params.routeId);
   const routeGroupIdHint = getRouteGroupIdHint(request);
@@ -429,6 +441,10 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     });
 
     return {
+      addOrderCandidates: buildRouteAddOrderCandidates(orderData.orders, {
+        routeGroup: routeGroupData.routeGroup,
+        routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
+      }),
       routePlan: currentChildDetail?.routePlan ?? null,
       routeGeometry: currentChildDetail?.routeGeometry ?? null,
       routeMetrics: currentChildDetail?.routeMetrics ?? null,
@@ -515,6 +531,10 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
 
   return {
     ...routePlanData,
+    addOrderCandidates: buildRouteAddOrderCandidates(orderData.orders, {
+      routeGroup: routeGroupData.routeGroup,
+      routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
+    }),
     routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
     stops: currentChildDetail?.stops ?? routePlanData.stops ?? [],
     errors: [
@@ -565,6 +585,58 @@ export const routeDetailAction = async ({ params, request }) => {
       sessionToken: shopifySessionToken,
       shopifyShopCacheKey: session?.shop,
     });
+  }
+
+  if (intent === "addRouteOrders") {
+    const targetRouteGroupId = routeGroupIdFromParams ?? routeGroupId;
+    const requestedOrderIds = readJsonTextArray(formData.get("orderIds"));
+    if (!targetRouteGroupId || !routeId || requestedOrderIds.length === 0) {
+      return { errors: [{ message: "추가할 주문을 선택해주세요." }] };
+    }
+
+    const [routeGroupData, routePlanData, orderData] = await Promise.all([
+      fetchDeliveryRouteGroupDetail(request, targetRouteGroupId, { sessionToken: shopifySessionToken }),
+      fetchDeliveryRoutePlanDetail(request, routeId, { sessionToken: shopifySessionToken }),
+      fetchDeliveryOrders(request, {}, { sessionToken: shopifySessionToken }),
+    ]);
+    const preflightErrors = [
+      ...(routeGroupData.errors ?? []),
+      ...(routePlanData.errors ?? []),
+      ...(orderData.errors ?? []),
+    ];
+    if (preflightErrors.length > 0) return { errors: preflightErrors };
+
+    const targetExists = getVisibleRouteGroupChildren(routeGroupData.routeGroup)
+      .some((child) => getRouteGroupChildRoutePlanId(child) === routeId);
+    if (!targetExists) {
+      return { errors: [{ message: "현재 child route를 찾지 못했습니다. 페이지를 새로고침해주세요." }] };
+    }
+
+    const candidateOrderIdSet = new Set(buildRouteAddOrderCandidates(orderData.orders, {
+      routeGroup: routeGroupData.routeGroup,
+      routePlan: routePlanData.routePlan,
+    }).map((order) => order.orderId));
+    const addOrderIds = requestedOrderIds.filter((orderId) => candidateOrderIdSet.has(orderId));
+    if (addOrderIds.length !== requestedOrderIds.length) {
+      return { errors: [{ message: "선택한 주문 중 현재 Route의 배송 날짜 또는 요일에 추가할 수 없는 주문이 있습니다." }] };
+    }
+
+    const addResult = await updateDeliveryRouteGroupOrders(
+      request,
+      targetRouteGroupId,
+      {
+        addOrderIds,
+        ...(routeGroupData.routeGroup?.updatedAt ? { expectedUpdatedAt: routeGroupData.routeGroup.updatedAt } : {}),
+        targetRoutePlanId: routeId,
+      },
+      { sessionToken: shopifySessionToken },
+    );
+    if ((addResult.errors ?? []).length === 0) clearDeliveryApiResponseCache();
+    return {
+      addedOrders: addOrderIds.length,
+      routeGroup: addResult.routeGroup,
+      errors: addResult.errors ?? [],
+    };
   }
 
   if (intent === "previewCustomerEmail") {
