@@ -127,13 +127,11 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /const ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID/);
   assert.match(routeMapSource, /"circle-color": "#d82c0d"/);
   assert.doesNotMatch(routeMapSource, /featureType: "stopArrival"|arrivalStopCount|arrivalDetailsJson/);
-  assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID/);
-  assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID/);
+  assert.match(routeMapSource, /const ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID/);
   assert.match(routeMapSource, /isCompleted: Boolean\(stop\.isTrackingCompleted\)/);
-  assert.match(routeMapSource, /"circle-color": "#008060"/);
-  assert.match(routeMapSource, /"circle-translate": \[-16, -28\]/);
-  assert.match(routeMapSource, /"text-translate": \[-16, -28\]/);
-  assert.match(routeMapSource, /"text-field": "✓"/);
+  assert.match(routeMapSource, /createMapCheckBadgeImageData/);
+  assert.match(routeMapSource, /"icon-translate": \[-16, -28\]/);
+  assert.doesNotMatch(routeMapSource, /"text-field": "✓"/);
   assert.doesNotMatch(routeMapSource, /const stopOpacity = isTrackingView \? 0\.42 : 1/);
   assert.match(routeDetailSource, /const completedTrackingStopIds = useMemo\(\s*\(\) => new Set\(routeTrackingProgress\?\.completedStopIds \?\? \[\]\)/);
   assert.doesNotMatch(routeDetailSource, /completedStopIds\.add\(stop\.(?:id|deliveryStopId)\)/);

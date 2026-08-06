@@ -101,6 +101,38 @@ export function createMapPinImageData(color, options = {}) {
   return context.getImageData(0, 0, width, height);
 }
 
+export function createMapCheckBadgeImageData(options = {}) {
+  const pixelRatio = options.pixelRatio ?? MAP_PIN_PIXEL_RATIO;
+  const size = 20;
+  const canvas = document.createElement("canvas");
+  canvas.width = size * pixelRatio;
+  canvas.height = size * pixelRatio;
+
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+
+  context.scale(pixelRatio, pixelRatio);
+  context.beginPath();
+  context.arc(size / 2, size / 2, 7, 0, Math.PI * 2);
+  context.fillStyle = options.color ?? MAP_MARKER_PALETTE.departure.color;
+  context.fill();
+  context.strokeStyle = "#ffffff";
+  context.lineWidth = 2;
+  context.stroke();
+
+  context.beginPath();
+  context.moveTo(6.5, 10);
+  context.lineTo(9, 12.5);
+  context.lineTo(13.5, 7.5);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  context.lineWidth = 2;
+  context.strokeStyle = "#ffffff";
+  context.stroke();
+
+  return context.getImageData(0, 0, canvas.width, canvas.height);
+}
+
 export function createDepartureMarkerImageData(options = {}) {
   const pixelRatio = options.pixelRatio ?? MAP_PIN_PIXEL_RATIO;
   const width = 26 * pixelRatio;
