@@ -6,35 +6,12 @@ import {
   isOrderRouteCreated,
 } from "../orders/order-filters.js";
 
-export function buildRouteAddOrderCandidates(orders, { routeGroup, routePlan } = {}) {
-  const deliveryDate = getOrderDeliveryDateValue({
-    deliveryDate:
-      routePlan?.routeScope?.deliveryDate
-      ?? routePlan?.deliveryDate
-      ?? routePlan?.planDate
-      ?? routeGroup?.routeScope?.deliveryDate
-      ?? routeGroup?.deliveryDate
-      ?? routeGroup?.planDate
-      ?? routeGroup?.dateRangeStart,
-  });
-  const deliveryDay = getOrderDeliveryWeekday({
-    deliveryDate,
-    deliveryDay:
-      routePlan?.routeScope?.deliveryDay
-      ?? routePlan?.deliveryDay
-      ?? routePlan?.deliveryWeekday
-      ?? routeGroup?.routeScope?.deliveryDay
-      ?? routeGroup?.deliveryDay
-      ?? routeGroup?.deliveryWeekday,
-  });
-  if (!deliveryDate && !deliveryDay) return [];
-
+export function buildRouteAddOrderCandidates(orders) {
   return (Array.isArray(orders) ? orders : [])
     .filter((order) => {
       if (!text(order?.orderId) || order?.hasCoordinates !== true) return false;
       if (isOrderRouteCreated(order) || isOrderCancelled(order) || isOrderDeliveryComplete(order)) return false;
-      if (deliveryDate && getOrderDeliveryDateValue(order) !== deliveryDate) return false;
-      return !deliveryDay || getOrderDeliveryWeekday(order) === deliveryDay;
+      return true;
     })
     .map((order) => ({
       address: getOrderAddress(order),
@@ -44,8 +21,33 @@ export function buildRouteAddOrderCandidates(orders, { routeGroup, routePlan } =
       id: text(order?.id ?? order?.shopifyOrderGid ?? order?.orderId),
       itemCount: getOrderItemCount(order),
       name: text(order?.name) ?? text(order?.orderId),
+      orderDate: normalizeDateOnly(order?.orderedDate) ?? "–",
       orderId: text(order?.orderId),
     }));
+}
+
+export function filterRouteAddOrderCandidatesByDate(candidates, filter = {}) {
+  const orders = Array.isArray(candidates) ? candidates : [];
+  const field = filter.field === "orderDate" ? "orderDate" : "deliveryDate";
+  const mode = ["single", "range"].includes(filter.mode) ? filter.mode : "all";
+  if (mode === "all") return orders;
+
+  const startDate = normalizeDateOnly(filter.startDate);
+  const endDate = normalizeDateOnly(filter.endDate);
+  if (mode === "single") {
+    return startDate ? orders.filter((order) => normalizeDateOnly(order?.[field]) === startDate) : orders;
+  }
+  if (!startDate && !endDate) return orders;
+
+  const [lowerDate, upperDate] = startDate && endDate && startDate > endDate
+    ? [endDate, startDate]
+    : [startDate, endDate];
+  return orders.filter((order) => {
+    const orderDate = normalizeDateOnly(order?.[field]);
+    if (!orderDate) return false;
+    if (lowerDate && orderDate < lowerDate) return false;
+    return !upperDate || orderDate <= upperDate;
+  });
 }
 
 function getOrderAddress(order) {
@@ -83,4 +85,9 @@ function text(value) {
   if (value == null) return undefined;
   const normalized = String(value).trim();
   return normalized || undefined;
+}
+
+function normalizeDateOnly(value) {
+  const normalized = text(value)?.slice(0, 10);
+  return /^\d{4}-\d{2}-\d{2}$/.test(normalized ?? "") ? normalized : undefined;
 }
