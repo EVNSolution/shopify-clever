@@ -687,7 +687,7 @@ const routeActionButtonStyle = {
   whiteSpace: "nowrap",
 };
 
-const routeStopActionsStyle = {
+const routeActionsStyle = {
   position: "relative",
   width: "100%",
 };
@@ -699,14 +699,14 @@ const routeAddOrderButtonStyle = {
   color: "#ffffff",
 };
 
-const routeStopActionsSummaryStyle = {
+const routeActionsButtonStyle = {
   ...routeActionButtonStyle,
   boxSizing: "border-box",
   textAlign: "center",
   width: "100%",
 };
 
-const routeStopActionsMenuStyle = {
+const routeActionsMenuStyle = {
   background: "#ffffff",
   border: "1px solid #d6d6d6",
   borderRadius: "10px",
@@ -1507,6 +1507,79 @@ const customerEmailDialogStyle = {
   ...routeLineEditorDialogStyle,
   maxWidth: "calc(100vw - 48px)",
   width: "920px",
+};
+
+const routeAddOrderDialogStyle = {
+  ...routeLineEditorDialogStyle,
+  maxHeight: "calc(100vh - 48px)",
+  maxWidth: "calc(100vw - 48px)",
+  width: "1040px",
+};
+
+const routeAddOrderHeaderStyle = {
+  alignItems: "start",
+  display: "flex",
+  gap: "16px",
+  justifyContent: "space-between",
+};
+
+const routeAddOrderScopeStyle = {
+  color: "#616161",
+  display: "flex",
+  flexWrap: "wrap",
+  fontSize: "13px",
+  gap: "6px 14px",
+};
+
+const routeAddOrderTableWrapStyle = {
+  border: "1px solid #e3e3e3",
+  borderRadius: "10px",
+  maxHeight: "min(520px, calc(100vh - 250px))",
+  overflow: "auto",
+};
+
+const routeAddOrderTableStyle = {
+  borderCollapse: "separate",
+  borderSpacing: 0,
+  minWidth: "820px",
+  tableLayout: "fixed",
+  width: "100%",
+};
+
+const routeAddOrderHeaderCellStyle = {
+  background: "#f7f7f7",
+  borderBottom: "1px solid #d6d6d6",
+  color: "#4b5563",
+  fontSize: "12px",
+  fontWeight: 700,
+  padding: "9px 10px",
+  position: "sticky",
+  textAlign: "left",
+  top: 0,
+  whiteSpace: "nowrap",
+  zIndex: 1,
+};
+
+const routeAddOrderCellStyle = {
+  borderBottom: "1px solid #eeeeee",
+  color: "#303030",
+  fontSize: "13px",
+  overflow: "hidden",
+  padding: "9px 10px",
+  textOverflow: "ellipsis",
+  verticalAlign: "middle",
+  whiteSpace: "nowrap",
+};
+
+const routeAddOrderAddressCellStyle = {
+  ...routeAddOrderCellStyle,
+  whiteSpace: "normal",
+};
+
+const routeAddOrderEmptyStyle = {
+  color: "#6d7175",
+  padding: "28px 16px",
+  textAlign: "center",
 };
 
 const customerEmailDialogGridStyle = {
@@ -3010,6 +3083,7 @@ export default function RouteDetailPage() {
   const routeActionFetcher = useFetcher();
   const customerEmailFetcher = useFetcher();
   const {
+    addOrderCandidates = [],
     childRouteDetails = [],
     currentDepartureLocation = null,
     drivers = [],
@@ -3092,6 +3166,7 @@ export default function RouteDetailPage() {
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
   const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
   const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx";
+  const addRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "addRouteOrders";
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
   const refreshRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "refreshRouteOrders";
@@ -3165,6 +3240,9 @@ export default function RouteDetailPage() {
     setRouteStopsMapHeight(nextHeight);
   }, [isTrackingMapView]);
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
+  const [isAddOrderDialogOpen, setIsAddOrderDialogOpen] = useState(false);
+  const [isRouteActionsMenuOpen, setIsRouteActionsMenuOpen] = useState(false);
+  const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
   const [isCustomerEmailDialogOpen, setIsCustomerEmailDialogOpen] = useState(false);
@@ -3372,6 +3450,15 @@ export default function RouteDetailPage() {
     [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
   );
   const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
+  const selectedAddOrderIdSet = useMemo(() => new Set(selectedAddOrderIds), [selectedAddOrderIds]);
+  const allAddOrderCandidatesSelected = addOrderCandidates.length > 0
+    && addOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
+  const addOrderDeliveryDay = textOrUndefined(
+    effectiveRoutePlan?.routeScope?.deliveryDay
+      ?? effectiveRoutePlan?.deliveryDay
+      ?? effectiveRoutePlan?.deliveryWeekday
+      ?? addOrderCandidates[0]?.deliveryDay,
+  );
   childRouteOrderRowsRef.current = childRouteOrderRows;
   const routeTrackingPresentation = useMemo(
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
@@ -4746,6 +4833,7 @@ export default function RouteDetailPage() {
 
   const handleAddEmptyRoute = () => {
     if (routeGroupActionBusy) return;
+    setIsRouteActionsMenuOpen(false);
     if (hasIncompatibleAddEmptyDraft) {
       setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
       return;
@@ -4802,6 +4890,7 @@ export default function RouteDetailPage() {
 
   const handleReverseCurrentRouteStops = () => {
     if (!canDraftEditChildStopMembership || routeGroupActionBusy || !currentTimelineRouteRow || currentTimelineRouteRow.stops.length < 2) return;
+    setIsRouteActionsMenuOpen(false);
     setRoutePreviewByKey({});
     setRouteTimelineOrderByRouteId((currentOrderByRouteId) => ({
       ...currentOrderByRouteId,
@@ -4813,10 +4902,32 @@ export default function RouteDetailPage() {
 
   const handleAddOrderToCurrentRoute = () => {
     if (!routeGroupId || !effectiveRoutePlan?.id) return;
-    requestRouteNavigation(`/app/orders?addToRouteGroupId=${encodeURIComponent(routeGroupId)}&addToRoutePlanId=${encodeURIComponent(effectiveRoutePlan.id)}`);
+    if (hasRouteAllocationDraft) {
+      setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
+      return;
+    }
+    setRouteGroupClientError(null);
+    setSelectedAddOrderIds([]);
+    setIsAddOrderDialogOpen(true);
+  };
+
+  const handleToggleAddOrder = (orderId, checked) => {
+    setSelectedAddOrderIds((orderIds) => checked
+      ? [...new Set([...orderIds, orderId])]
+      : orderIds.filter((candidateOrderId) => candidateOrderId !== orderId));
+  };
+
+  const handleToggleAllAddOrders = (checked) => {
+    setSelectedAddOrderIds(checked ? addOrderCandidates.map((order) => order.orderId) : []);
+  };
+
+  const handleAddSelectedOrders = () => {
+    if (selectedAddOrderIds.length === 0 || routeGroupActionBusy) return;
+    submitRouteGroupAction("addRouteOrders", { orderIds: JSON.stringify(selectedAddOrderIds) });
   };
 
   const handlePreviewRouteOptimization = () => {
+    setIsRouteActionsMenuOpen(false);
     submitRouteGroupAction("previewRouteOptimization", {
       draft: JSON.stringify(buildRouteDraftPayload(contextTimelineRouteRows, {
         deletedRoutePlanIds,
@@ -4984,6 +5095,19 @@ export default function RouteDetailPage() {
     const skippedRoutes = routeActionFetcher.data?.skippedRoutes?.length ?? 0;
     const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} terminal routes skipped` : "";
     shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes${skippedMessage}`);
+  }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "addRouteOrders") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+
+    const addedOrders = Number(routeActionFetcher.data?.addedOrders ?? 0);
+    setIsAddOrderDialogOpen(false);
+    setSelectedAddOrderIds([]);
+    revalidator.revalidate();
+    shopify.toast.show(`${addedOrders} order${addedOrders === 1 ? "" : "s"} added to route`);
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
@@ -6169,34 +6293,53 @@ export default function RouteDetailPage() {
                     type="button"
                   >Add order</button>
                 ) : null}
-                <details aria-label="Stop actions" style={routeStopActionsStyle}>
-                  <summary style={routeStopActionsSummaryStyle}>Stop actions</summary>
-                  <div style={routeStopActionsMenuStyle}>
-                    {isMaterializedChildRouteDetail ? (
+                <button
+                  disabled={routeGroupActionBusy}
+                  onClick={handleAddEmptyRoute}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
+                <div
+                  aria-label="Actions"
+                  onBlur={(event) => {
+                    if (!event.currentTarget.contains(event.relatedTarget)) setIsRouteActionsMenuOpen(false);
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setIsRouteActionsMenuOpen(false);
+                  }}
+                  role="toolbar"
+                  style={routeActionsStyle}
+                >
+                  <button
+                    aria-expanded={isRouteActionsMenuOpen}
+                    onClick={() => setIsRouteActionsMenuOpen((open) => !open)}
+                    style={routeActionsButtonStyle}
+                    type="button"
+                  >Actions</button>
+                  {isRouteActionsMenuOpen ? (
+                    <div aria-label="Route action menu" role="menu" style={routeActionsMenuStyle}>
+                      {isMaterializedChildRouteDetail ? (
                       <button
                         disabled={routeGroupActionBusy || !canDraftEditChildStopMembership || (currentTimelineRouteRow?.stops.length ?? 0) < 2}
                         onClick={handleReverseCurrentRouteStops}
+                        role="menuitem"
                         style={routeActionButtonStyle}
                         type="button"
                       >Reverse stops</button>
-                    ) : null}
-                    <button
-                      disabled={routeGroupActionBusy || !hasEditableRouteRows}
-                      onClick={handlePreviewRouteOptimization}
-                      style={{
-                        ...routeActionButtonStyle,
-                        ...(!hasEditableRouteRows ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                      }}
-                      type="button"
-                    >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
-                    <button
-                      disabled={routeGroupActionBusy}
-                      onClick={handleAddEmptyRoute}
-                      style={routeActionButtonStyle}
-                      type="button"
-                    >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
-                  </div>
-                </details>
+                      ) : null}
+                      <button
+                        disabled={routeGroupActionBusy || !hasEditableRouteRows}
+                        onClick={handlePreviewRouteOptimization}
+                        role="menuitem"
+                        style={{
+                          ...routeActionButtonStyle,
+                          ...(!hasEditableRouteRows ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                        }}
+                        type="button"
+                      >{reOptimizeRouteGroupBusy ? "Working…" : "Re-optimize"}</button>
+                    </div>
+                  ) : null}
+                </div>
               </div>
             </section>
           ) : null}
@@ -7125,6 +7268,106 @@ export default function RouteDetailPage() {
                 >
                   {customerEmailFetcher.state !== "idle" && customerEmailFetcher.formData?.get("_intent") === "sendCustomerEmail" ? "Sending…" : "Send"}
                 </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {isAddOrderDialogOpen ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Close add order dialog"
+              onClick={() => setIsAddOrderDialogOpen(false)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div
+              aria-label="Add orders to current route"
+              aria-modal="true"
+              role="dialog"
+              style={routeAddOrderDialogStyle}
+            >
+              <div style={routeAddOrderHeaderStyle}>
+                <div>
+                  <h2 style={routeLineEditorTitleStyle}>Add orders</h2>
+                  <div style={routeAddOrderScopeStyle}>
+                    <span>Delivery date: <strong>{routeDetail.deliveryDate}</strong></span>
+                    {addOrderDeliveryDay ? <span>Day: <strong>{addOrderDeliveryDay}</strong></span> : null}
+                  </div>
+                </div>
+                <strong>{selectedAddOrderIds.length} selected</strong>
+              </div>
+              <div style={routeAddOrderTableWrapStyle}>
+                {addOrderCandidates.length > 0 ? (
+                  <table aria-label="Available orders for current delivery date" style={routeAddOrderTableStyle}>
+                    <colgroup>
+                      <col style={{ width: "48px" }} />
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "160px" }} />
+                      <col />
+                      <col style={{ width: "118px" }} />
+                      <col style={{ width: "110px" }} />
+                      <col style={{ width: "72px" }} />
+                    </colgroup>
+                    <thead>
+                      <tr>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>
+                          <input
+                            aria-label="Select all available orders"
+                            checked={allAddOrderCandidatesSelected}
+                            onChange={(event) => handleToggleAllAddOrders(event.currentTarget.checked)}
+                            type="checkbox"
+                          />
+                        </th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Order</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Customer</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Address</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Delivery date</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Day</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Items</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {addOrderCandidates.map((order) => (
+                        <tr key={order.orderId}>
+                          <td style={routeAddOrderCellStyle}>
+                            <input
+                              aria-label={`Select ${order.name}`}
+                              checked={selectedAddOrderIdSet.has(order.orderId)}
+                              onChange={(event) => handleToggleAddOrder(order.orderId, event.currentTarget.checked)}
+                              type="checkbox"
+                            />
+                          </td>
+                          <td style={{ ...routeAddOrderCellStyle, fontWeight: 700 }}>{order.name}</td>
+                          <td style={routeAddOrderCellStyle} title={order.customer}>{order.customer}</td>
+                          <td style={routeAddOrderAddressCellStyle}>{order.address}</td>
+                          <td style={routeAddOrderCellStyle}>{order.deliveryDate}</td>
+                          <td style={routeAddOrderCellStyle}>{order.deliveryDay}</td>
+                          <td style={routeAddOrderCellStyle}>{order.itemCount}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <div style={routeAddOrderEmptyStyle}>No unplanned orders match this route’s delivery date and day.</div>
+                )}
+              </div>
+              <div style={routeLineEditorActionsStyle}>
+                <button
+                  disabled={addRouteOrdersBusy}
+                  onClick={() => setIsAddOrderDialogOpen(false)}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >Cancel</button>
+                <button
+                  disabled={addRouteOrdersBusy || selectedAddOrderIds.length === 0}
+                  onClick={handleAddSelectedOrders}
+                  style={{
+                    ...routeLineEditorPrimaryButtonStyle,
+                    ...(addRouteOrdersBusy || selectedAddOrderIds.length === 0 ? { opacity: 0.55 } : null),
+                  }}
+                  type="button"
+                >{addRouteOrdersBusy ? "Adding…" : `Add ${selectedAddOrderIds.length || ""}`.trim()}</button>
               </div>
             </div>
           </div>
