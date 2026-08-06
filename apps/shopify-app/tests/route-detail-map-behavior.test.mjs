@@ -192,24 +192,21 @@ test("route marker sync preserves an existing stop point lookup through the mark
   );
 });
 
-test("Stops and Tracking show the same completion check badges", () => {
+test("Stops and Tracking show one complete check marker above route pins", () => {
   const fake = createFakeMap();
   fake.map.addLayer({ id: "route-detail-stop-markers", type: "symbol", paint: {} });
   fake.map.addLayer({ id: "route-detail-departure-marker", type: "symbol", paint: {} });
   fake.map.addLayer({ id: "route-detail-snapped-stop-points", type: "circle", paint: {} });
-  fake.map.addLayer({ id: "route-detail-stop-completion-badges", type: "circle", layout: {} });
-  fake.map.addLayer({ id: "route-detail-stop-completion-checks", type: "symbol", layout: {} });
+  fake.map.addLayer({ id: "route-detail-stop-completion-markers", type: "symbol", layout: {} });
 
   assert.equal(syncRouteDetailMapViewEmphasis(fake.map, true), true);
   assert.equal(fake.layers.get("route-detail-stop-markers").paint["icon-opacity"], 1);
   assert.equal(fake.layers.get("route-detail-departure-marker").paint["icon-opacity"], 1);
   assert.equal(fake.layers.get("route-detail-snapped-stop-points").paint["circle-opacity"], 1);
-  assert.equal(fake.layers.get("route-detail-stop-completion-badges").layout.visibility, "visible");
-  assert.equal(fake.layers.get("route-detail-stop-completion-checks").layout.visibility, "visible");
+  assert.equal(fake.layers.get("route-detail-stop-completion-markers").layout.visibility, "visible");
 
   assert.equal(syncRouteDetailMapViewEmphasis(fake.map, false), true);
-  assert.equal(fake.layers.get("route-detail-stop-completion-badges").layout.visibility, "visible");
-  assert.equal(fake.layers.get("route-detail-stop-completion-checks").layout.visibility, "visible");
+  assert.equal(fake.layers.get("route-detail-stop-completion-markers").layout.visibility, "visible");
 });
 
 test("tracking completion preserves the route marker and exposes the common check badge", () => {
@@ -313,10 +310,11 @@ test("planned route line stays below stop markers", () => {
   ]);
 });
 
-test("completed stop badges sit left of their numbered pins", () => {
+test("completed stops use one check image layer above numbered pins", () => {
   const fake = createFakeMap({
     images: [
       "route-detail-departure-pin",
+      "route-detail-stop-completion-badge",
       "route-detail-stop-pin-006fbb-1",
     ],
   });
@@ -337,14 +335,14 @@ test("completed stop badges sit left of their numbered pins", () => {
     "#006fbb",
   ), true);
 
-  assert.deepEqual(
-    fake.layers.get("route-detail-stop-completion-badges").paint["circle-translate"],
-    [-16, -28],
-  );
-  assert.deepEqual(
-    fake.layers.get("route-detail-stop-completion-checks").paint["text-translate"],
-    [-16, -28],
-  );
+  const completionLayer = fake.layers.get("route-detail-stop-completion-markers");
+  assert.equal(completionLayer.type, "symbol");
+  assert.equal(completionLayer.layout["icon-image"], "route-detail-stop-completion-badge");
+  assert.equal(completionLayer.layout["icon-anchor"], "center");
+  assert.deepEqual(completionLayer.layout["symbol-sort-key"], ["get", "sortKey"]);
+  assert.deepEqual(completionLayer.paint["icon-translate"], [-16, -28]);
+  assert.ok(fake.calls.addLayer.indexOf("route-detail-stop-completion-markers") > fake.calls.addLayer.indexOf("route-detail-stop-markers"));
+  assert.equal(fake.layers.has("route-detail-stop-completion-checks"), false);
 });
 
 test("map popup pan correction uses only the overflow outside the visible frame", () => {

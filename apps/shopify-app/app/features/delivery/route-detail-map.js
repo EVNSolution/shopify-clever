@@ -1,4 +1,4 @@
-import { addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers.js";
+import { addMapPinImage, createDepartureMarkerImageData, createMapCheckBadgeImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers.js";
 import { numberOrUndefined, textOrUndefined } from "./route-helpers.js";
 import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures } from "./route-tracking.js";
 
@@ -8,8 +8,7 @@ const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
 const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers";
 const ROUTE_DETAIL_DEPARTURE_LAYER_ID = "route-detail-departure-marker";
 const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers";
-const ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID = "route-detail-stop-completion-badges";
-const ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID = "route-detail-stop-completion-checks";
+const ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID = "route-detail-stop-completion-markers";
 const ROUTE_DETAIL_STOP_POINT_SOURCE_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking";
@@ -23,6 +22,7 @@ const ROUTE_DETAIL_TRACKING_LAYER_IDS = [
 ];
 const ROUTE_DETAIL_COMPLETED_STOP_COLOR = "#8c9196";
 const ROUTE_DETAIL_DEPARTURE_IMAGE_ID = "route-detail-departure-pin";
+const ROUTE_DETAIL_STOP_COMPLETION_IMAGE_ID = "route-detail-stop-completion-badge";
 const ROUTE_DETAIL_POLYGON_SOURCE_ID = "route-detail-edit-polygon";
 const ROUTE_DETAIL_POLYGON_FILL_LAYER_ID = "route-detail-edit-polygon-fill";
 const ROUTE_DETAIL_POLYGON_LINE_LAYER_ID = "route-detail-edit-polygon-line";
@@ -239,8 +239,7 @@ function moveRouteDetailRouteLineBelowMarkers(map) {
     ROUTE_DETAIL_STOP_POINT_LAYER_ID,
     ROUTE_DETAIL_DEPARTURE_LAYER_ID,
     ROUTE_DETAIL_STOP_LAYER_ID,
-    ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID,
-    ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID,
+    ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID,
   ].find((layerId) => map.getLayer?.(layerId));
   if (firstMarkerLayerId) map.moveLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID, firstMarkerLayerId);
 }
@@ -405,13 +404,8 @@ function syncRouteDetailMapViewEmphasis(map) {
     map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-opacity", 1);
     map.setPaintProperty?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, "circle-stroke-opacity", 1);
   }
-  for (const layerId of [
-    ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID,
-    ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID,
-  ]) {
-    if (map.getLayer?.(layerId)) {
-      map.setLayoutProperty?.(layerId, "visibility", "visible");
-    }
+  if (map.getLayer?.(ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID)) {
+    map.setLayoutProperty?.(ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID, "visibility", "visible");
   }
   return true;
 }
@@ -723,6 +717,17 @@ function ensureRouteDetailMarkerImages(map, departureLocation, routeStops, route
     }
   }
 
+  if (routeStops.some((stop) => stop.isTrackingCompleted)) {
+    if (typeof map?.hasImage !== "function" || typeof map?.addImage !== "function") return false;
+    if (!map.hasImage(ROUTE_DETAIL_STOP_COMPLETION_IMAGE_ID) && !addMapPinImage(
+      map,
+      ROUTE_DETAIL_STOP_COMPLETION_IMAGE_ID,
+      createMapCheckBadgeImageData(),
+    )) {
+      return false;
+    }
+  }
+
   for (const stop of routeStops) {
     const routeStopPoint = findRouteStopPoint(stop, routeStopPoints);
     const markerCoordinates = getRouteStopPointerCoordinates(stop, routeStopPoint);
@@ -884,40 +889,21 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
       ["==", ["get", "featureType"], "routeStop"],
       ["==", ["get", "isCompleted"], true],
     ];
-    if (!map.getLayer?.(ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID)) {
-      map.addLayer({
-        id: ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID,
-        type: "circle",
+    if (!map.getLayer?.(ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID)) {
+      const completionLayer = createMapPinSymbolLayer({
+        id: ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID,
+        iconImage: ROUTE_DETAIL_STOP_COMPLETION_IMAGE_ID,
+        iconSize: 1,
         source: ROUTE_DETAIL_MARKER_SOURCE_ID,
-        filter: completedStopFilter,
-        paint: {
-          "circle-color": "#008060",
-          "circle-radius": 7,
-          "circle-stroke-color": "#ffffff",
-          "circle-stroke-width": 2,
-          "circle-translate": [-16, -28],
-          "circle-translate-anchor": "viewport",
-        },
+        sortKey: ["get", "sortKey"],
       });
-    }
-    if (!map.getLayer?.(ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID)) {
-      map.addLayer({
-        id: ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID,
-        type: "symbol",
-        source: ROUTE_DETAIL_MARKER_SOURCE_ID,
-        filter: completedStopFilter,
-        layout: {
-          "text-allow-overlap": true,
-          "text-field": "✓",
-          "text-ignore-placement": true,
-          "text-size": 10,
-        },
-        paint: {
-          "text-color": "#ffffff",
-          "text-translate": [-16, -28],
-          "text-translate-anchor": "viewport",
-        },
-      });
+      completionLayer.filter = completedStopFilter;
+      completionLayer.layout["icon-anchor"] = "center";
+      completionLayer.paint = {
+        "icon-translate": [-16, -28],
+        "icon-translate-anchor": "viewport",
+      };
+      map.addLayer(completionLayer);
     }
 
     const existingStopPointSource = map.getSource?.(ROUTE_DETAIL_STOP_POINT_SOURCE_ID);

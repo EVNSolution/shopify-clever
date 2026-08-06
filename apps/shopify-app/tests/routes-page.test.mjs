@@ -825,7 +825,7 @@ test("Route detail keeps Shopify fulfillment separate from delivery stop status"
 
 test("Route detail places stop and departure markers through MapLibre source layers", () => {
   assert.match(routeDetailSource, /import \{ MAP_MARKER_PALETTE \} from "\.\.\/features\/maps\/map-markers"/);
-  assert.match(routeDetailMapSource, /import \{ addMapPinImage, createDepartureMarkerImageData, createMapPinImageData, createMapPinSymbolLayer \}/);
+  assert.match(routeDetailMapSource, /import \{ addMapPinImage, createDepartureMarkerImageData, createMapCheckBadgeImageData, createMapPinImageData, createMapPinSymbolLayer \}/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_MARKER_SOURCE_ID = "route-detail-markers"/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_DEPARTURE_LAYER_ID = "route-detail-departure-marker"/);
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_LAYER_ID = "route-detail-stop-markers"/);
