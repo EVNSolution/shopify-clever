@@ -1981,6 +1981,17 @@ const routeDetailErrorStyle = {
   padding: "10px 12px",
 };
 
+const routeInProgressWarningStyle = {
+  background: "#fff7cc",
+  border: "1px solid #eadf9b",
+  borderRadius: "8px",
+  color: "#5f4b00",
+  fontSize: "13px",
+  lineHeight: 1.4,
+  margin: 0,
+  padding: "10px 12px",
+};
+
 
 export const loader = routeDetailLoader;
 export const action = routeDetailAction;
@@ -2134,6 +2145,12 @@ function getLiveTrackingStopStatus(row, progress) {
 
 function isRouteExecutionLockedForStopMembership(status) {
   return ["IN_PROGRESS", "EN_ROUTE", "ARRIVED", "COMPLETED", "DELIVERED", "FAILED", "SKIPPED", "CANCELLED"].includes(
+    String(status ?? "").trim().replace(/-/g, "_").toUpperCase(),
+  );
+}
+
+function isRouteExecutionInProgressForStopMembership(status) {
+  return ["IN_PROGRESS", "EN_ROUTE", "ARRIVED"].includes(
     String(status ?? "").trim().replace(/-/g, "_").toUpperCase(),
   );
 }
@@ -3259,6 +3276,7 @@ export default function RouteDetailPage() {
   const [isAddOrderDialogOpen, setIsAddOrderDialogOpen] = useState(false);
   const [isRouteActionsMenuOpen, setIsRouteActionsMenuOpen] = useState(false);
   const [routeActionNotice, setRouteActionNotice] = useState(null);
+  const [pendingInProgressRouteChange, setPendingInProgressRouteChange] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
   const [addOrderDateField, setAddOrderDateField] = useState("deliveryDate");
   const [addOrderDateMode, setAddOrderDateMode] = useState("all");
@@ -3489,6 +3507,8 @@ export default function RouteDetailPage() {
     [displayedRouteTrackingSnapshot, routeExecutionStatus, routeTrackingClock],
   );
   const canDraftEditChildStopMembership = !isRouteExecutionLockedForStopMembership(routeExecutionStatus);
+  const routeMembershipChangeIsInProgress = isRouteExecutionInProgressForStopMembership(routeExecutionStatus);
+  const canAddOrRemoveChildStops = canDraftEditChildStopMembership || routeMembershipChangeIsInProgress;
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
     ? trackingRoutePlanId
     : null;
@@ -4413,8 +4433,8 @@ export default function RouteDetailPage() {
     setActiveChildStopEditRow(null);
   };
 
-  const handleRemoveChildStopFromGroup = (row) => {
-    if (!canDraftEditChildStopMembership || !row?.id) return;
+  const removeChildStopFromGroup = (row) => {
+    if (!row?.id) return;
     setRoutePreviewByKey({});
     if (row.orderId) setRemovedOrderIds((orderIds) => [...new Set([...orderIds, row.orderId])]);
     animateRouteTimelineChange(() => {
@@ -4425,6 +4445,21 @@ export default function RouteDetailPage() {
       ));
     });
     setActiveChildStopActions(null);
+  };
+
+  const handleRemoveChildStopFromGroup = (row) => {
+    if (!canAddOrRemoveChildStops || !row?.id) return;
+    if (routeMembershipChangeIsInProgress) {
+      setPendingInProgressRouteChange({
+        heading: "Change in-progress route?",
+        message: `Removing ${row.order} changes the active stop list. The driver may need to refresh the route before continuing.`,
+        row,
+        type: "remove",
+      });
+      setActiveChildStopActions(null);
+      return;
+    }
+    removeChildStopFromGroup(row);
   };
 
   const handleSendChildStopToRoute = (row, targetRouteRow) => {
@@ -4958,13 +4993,21 @@ export default function RouteDetailPage() {
     });
   };
 
+  const openAddOrderDialog = () => {
+    setSelectedAddOrderIds([]);
+    setAddOrderDateField("deliveryDate");
+    setAddOrderDateMode("all");
+    setAddOrderDateStart("");
+    setAddOrderDateEnd("");
+    setIsAddOrderDialogOpen(true);
+  };
+
   const handleAddOrderToCurrentRoute = () => {
-    if (!routeGroupId || !effectiveRoutePlan?.id) return;
-    if (routeGroupActionBusy) return;
-    if (!canDraftEditChildStopMembership) {
+    if (!routeGroupId || !effectiveRoutePlan?.id || routeGroupActionBusy) return;
+    if (!canAddOrRemoveChildStops) {
       setRouteActionNotice({
         heading: "Cannot add orders",
-        message: "Orders can only be added before the route has started.",
+        message: "Orders cannot be added after the route has finished.",
       });
       return;
     }
@@ -4980,12 +5023,25 @@ export default function RouteDetailPage() {
       });
       return;
     }
-    setSelectedAddOrderIds([]);
-    setAddOrderDateField("deliveryDate");
-    setAddOrderDateMode("all");
-    setAddOrderDateStart("");
-    setAddOrderDateEnd("");
-    setIsAddOrderDialogOpen(true);
+    if (routeMembershipChangeIsInProgress) {
+      setPendingInProgressRouteChange({
+        heading: "Change in-progress route?",
+        message: "Adding an order changes the active stop list. The driver may need to refresh the route before continuing.",
+        type: "add",
+      });
+      return;
+    }
+    openAddOrderDialog();
+  };
+
+  const handleConfirmInProgressRouteChange = () => {
+    const pendingChange = pendingInProgressRouteChange;
+    setPendingInProgressRouteChange(null);
+    if (pendingChange?.type === "add") {
+      openAddOrderDialog();
+      return;
+    }
+    if (pendingChange?.type === "remove") removeChildStopFromGroup(pendingChange.row);
   };
 
   const handleToggleAddOrder = (orderId, checked) => {
@@ -7101,12 +7157,12 @@ export default function RouteDetailPage() {
                 Edit stop
               </button>
               <button
-                disabled={!canDraftEditChildStopMembership}
+                disabled={!canAddOrRemoveChildStops}
                 onClick={() => handleRemoveChildStopFromGroup(activeChildStopActionsRow)}
                 role="menuitem"
                 style={{
                   ...childStopActionsMenuItemStyle,
-                  ...(!canDraftEditChildStopMembership ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                  ...(!canAddOrRemoveChildStops ? { cursor: "not-allowed", opacity: 0.55 } : null),
                 }}
                 type="button"
               >
@@ -7406,6 +7462,38 @@ export default function RouteDetailPage() {
               <p style={routeLineEditorLabelStyle}>{routeActionNotice.message}</p>
               <div style={routeLineEditorActionsStyle}>
                 <button onClick={() => setRouteActionNotice(null)} style={routeActionButtonStyle} type="button">Close</button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
+        {pendingInProgressRouteChange ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Cancel in-progress route change"
+              onClick={() => setPendingInProgressRouteChange(null)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <div
+              aria-label="Confirm in-progress route change"
+              aria-modal="true"
+              role="dialog"
+              style={routeLineEditorDialogStyle}
+            >
+              <h2 style={routeLineEditorTitleStyle}>{pendingInProgressRouteChange.heading}</h2>
+              <p role="alert" style={routeInProgressWarningStyle}>{pendingInProgressRouteChange.message}</p>
+              <div style={routeLineEditorActionsStyle}>
+                <button
+                  onClick={() => setPendingInProgressRouteChange(null)}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >Cancel</button>
+                <button
+                  onClick={handleConfirmInProgressRouteChange}
+                  style={routeLineEditorPrimaryButtonStyle}
+                  type="button"
+                >Continue</button>
               </div>
             </div>
           </div>
