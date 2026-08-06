@@ -99,6 +99,41 @@ export async function createDeliveryRouteGroup(request, payload, options = {}) {
   };
 }
 
+export function buildRouteGroupCopyPayload(routeGroup) {
+  const dateRangeStart = textOrUndefined(routeGroup?.dateRangeStart ?? routeGroup?.planDate);
+  const dateRangeEnd = textOrUndefined(routeGroup?.dateRangeEnd) ?? dateRangeStart;
+  const planDate = textOrUndefined(routeGroup?.planDate) ?? dateRangeStart;
+  const orderIds = uniqueTexts([
+    ...(Array.isArray(routeGroup?.assignments)
+      ? routeGroup.assignments.map((assignment) => assignment?.orderId)
+      : []),
+    ...getVisibleRouteGroupChildren(routeGroup).flatMap(getRouteGroupChildOrderIds),
+  ]);
+
+  return {
+    ...(dateRangeEnd ? { dateRangeEnd } : {}),
+    ...(dateRangeStart ? { dateRangeStart } : {}),
+    name: `${textOrUndefined(routeGroup?.name) ?? "Route"} copied`,
+    orderIds,
+    ...(planDate ? { planDate } : {}),
+  };
+}
+
+export async function copyDeliveryRouteGroup(request, routeGroupId, options = {}) {
+  const routeGroupData = await fetchDeliveryRouteGroupDetail(request, routeGroupId, options);
+  if ((routeGroupData.errors ?? []).length > 0 || !routeGroupData.routeGroup) return routeGroupData;
+
+  const payload = buildRouteGroupCopyPayload(routeGroupData.routeGroup);
+  if (payload.orderIds.length === 0) {
+    return {
+      routeGroup: null,
+      errors: [{ message: "복사할 주문이 없습니다." }],
+    };
+  }
+
+  return createDeliveryRouteGroup(request, payload, options);
+}
+
 export async function fetchDeliveryRouteGroups(request, query = {}, options = {}) {
   const result = await deliveryApiRequest(request, `/admin/route-groups${buildQueryString(query)}`, {
     cacheKey: options.cacheKey,
