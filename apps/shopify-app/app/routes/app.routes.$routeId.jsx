@@ -13,6 +13,7 @@ import {
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
+import { filterRouteAddOrderCandidatesByDate } from "../features/delivery/route-add-order-candidates";
 import { reverseRouteStopIds } from "../features/delivery/route-draft";
 import {
   RouteStartTimePicker,
@@ -1515,7 +1516,7 @@ const routeAddOrderDialogStyle = {
   ...routeLineEditorDialogStyle,
   maxHeight: "calc(100vh - 48px)",
   maxWidth: "calc(100vw - 48px)",
-  width: "1040px",
+  width: "1160px",
 };
 
 const routeAddOrderHeaderStyle = {
@@ -1525,12 +1526,24 @@ const routeAddOrderHeaderStyle = {
   justifyContent: "space-between",
 };
 
-const routeAddOrderScopeStyle = {
-  color: "#616161",
+const routeAddOrderFiltersStyle = {
+  alignItems: "end",
   display: "flex",
   flexWrap: "wrap",
-  fontSize: "13px",
-  gap: "6px 14px",
+  gap: "8px",
+  marginTop: "8px",
+};
+
+const routeAddOrderFilterFieldStyle = {
+  display: "grid",
+  gap: "3px",
+  minWidth: "132px",
+};
+
+const routeAddOrderFilterLabelStyle = {
+  color: "#616161",
+  fontSize: "11px",
+  fontWeight: 650,
 };
 
 const routeAddOrderTableWrapStyle = {
@@ -1543,7 +1556,7 @@ const routeAddOrderTableWrapStyle = {
 const routeAddOrderTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "820px",
+  minWidth: "980px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -3247,6 +3260,10 @@ export default function RouteDetailPage() {
   const [isRouteActionsMenuOpen, setIsRouteActionsMenuOpen] = useState(false);
   const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
+  const [addOrderDateField, setAddOrderDateField] = useState("deliveryDate");
+  const [addOrderDateMode, setAddOrderDateMode] = useState("all");
+  const [addOrderDateStart, setAddOrderDateStart] = useState("");
+  const [addOrderDateEnd, setAddOrderDateEnd] = useState("");
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
   const [isCustomerEmailDialogOpen, setIsCustomerEmailDialogOpen] = useState(false);
@@ -3455,14 +3472,17 @@ export default function RouteDetailPage() {
   );
   const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
   const selectedAddOrderIdSet = useMemo(() => new Set(selectedAddOrderIds), [selectedAddOrderIds]);
-  const allAddOrderCandidatesSelected = addOrderCandidates.length > 0
-    && addOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
-  const addOrderDeliveryDay = textOrUndefined(
-    effectiveRoutePlan?.routeScope?.deliveryDay
-      ?? effectiveRoutePlan?.deliveryDay
-      ?? effectiveRoutePlan?.deliveryWeekday
-      ?? addOrderCandidates[0]?.deliveryDay,
+  const filteredAddOrderCandidates = useMemo(
+    () => filterRouteAddOrderCandidatesByDate(addOrderCandidates, {
+      endDate: addOrderDateEnd,
+      field: addOrderDateField,
+      mode: addOrderDateMode,
+      startDate: addOrderDateStart,
+    }),
+    [addOrderCandidates, addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart],
   );
+  const allAddOrderCandidatesSelected = filteredAddOrderCandidates.length > 0
+    && filteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
   childRouteOrderRowsRef.current = childRouteOrderRows;
   const routeTrackingPresentation = useMemo(
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
@@ -4956,11 +4976,15 @@ export default function RouteDetailPage() {
     if (addOrderCandidates.length === 0) {
       setRouteActionNotice({
         heading: "No orders remaining",
-        message: "No orders are remaining for this delivery date and day.",
+        message: "No orders are remaining to add.",
       });
       return;
     }
     setSelectedAddOrderIds([]);
+    setAddOrderDateField("deliveryDate");
+    setAddOrderDateMode("all");
+    setAddOrderDateStart("");
+    setAddOrderDateEnd("");
     setIsAddOrderDialogOpen(true);
   };
 
@@ -4971,7 +4995,10 @@ export default function RouteDetailPage() {
   };
 
   const handleToggleAllAddOrders = (checked) => {
-    setSelectedAddOrderIds(checked ? addOrderCandidates.map((order) => order.orderId) : []);
+    const visibleOrderIds = new Set(filteredAddOrderCandidates.map((order) => order.orderId));
+    setSelectedAddOrderIds((orderIds) => checked
+      ? [...new Set([...orderIds, ...visibleOrderIds])]
+      : orderIds.filter((orderId) => !visibleOrderIds.has(orderId)));
   };
 
   const handleAddSelectedOrders = () => {
@@ -7401,19 +7428,81 @@ export default function RouteDetailPage() {
               <div style={routeAddOrderHeaderStyle}>
                 <div>
                   <h2 style={routeLineEditorTitleStyle}>Add orders</h2>
-                  <div style={routeAddOrderScopeStyle}>
-                    <span>Delivery date: <strong>{routeDetail.deliveryDate}</strong></span>
-                    {addOrderDeliveryDay ? <span>Day: <strong>{addOrderDeliveryDay}</strong></span> : null}
+                  <div style={routeAddOrderFiltersStyle}>
+                    <label style={routeAddOrderFilterFieldStyle}>
+                      <span style={routeAddOrderFilterLabelStyle}>Date field</span>
+                      <select
+                        aria-label="Date field"
+                        onChange={(event) => setAddOrderDateField(event.currentTarget.value)}
+                        style={routeLineEditorInputStyle}
+                        value={addOrderDateField}
+                      >
+                        <option value="deliveryDate">Delivery date</option>
+                        <option value="orderDate">Order date</option>
+                      </select>
+                    </label>
+                    <label style={routeAddOrderFilterFieldStyle}>
+                      <span style={routeAddOrderFilterLabelStyle}>Date</span>
+                      <select
+                        aria-label="Date selection"
+                        onChange={(event) => setAddOrderDateMode(event.currentTarget.value)}
+                        style={routeLineEditorInputStyle}
+                        value={addOrderDateMode}
+                      >
+                        <option value="all">All</option>
+                        <option value="single">Specific date</option>
+                        <option value="range">Date range</option>
+                      </select>
+                    </label>
+                    {addOrderDateMode === "single" ? (
+                      <label style={routeAddOrderFilterFieldStyle}>
+                        <span style={routeAddOrderFilterLabelStyle}>Selected date</span>
+                        <input
+                          aria-label="Selected date"
+                          onChange={(event) => setAddOrderDateStart(event.currentTarget.value)}
+                          style={routeLineEditorInputStyle}
+                          type="date"
+                          value={addOrderDateStart}
+                        />
+                      </label>
+                    ) : null}
+                    {addOrderDateMode === "range" ? (
+                      <>
+                        <label style={routeAddOrderFilterFieldStyle}>
+                          <span style={routeAddOrderFilterLabelStyle}>Start date</span>
+                          <input
+                            aria-label="Start date"
+                            max={addOrderDateEnd || undefined}
+                            onChange={(event) => setAddOrderDateStart(event.currentTarget.value)}
+                            style={routeLineEditorInputStyle}
+                            type="date"
+                            value={addOrderDateStart}
+                          />
+                        </label>
+                        <label style={routeAddOrderFilterFieldStyle}>
+                          <span style={routeAddOrderFilterLabelStyle}>End date</span>
+                          <input
+                            aria-label="End date"
+                            min={addOrderDateStart || undefined}
+                            onChange={(event) => setAddOrderDateEnd(event.currentTarget.value)}
+                            style={routeLineEditorInputStyle}
+                            type="date"
+                            value={addOrderDateEnd}
+                          />
+                        </label>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 <strong>{selectedAddOrderIds.length} selected</strong>
               </div>
               <div style={routeAddOrderTableWrapStyle}>
-                {addOrderCandidates.length > 0 ? (
-                  <table aria-label="Available orders for current delivery date" style={routeAddOrderTableStyle}>
+                {filteredAddOrderCandidates.length > 0 ? (
+                  <table aria-label="Available orders" style={routeAddOrderTableStyle}>
                     <colgroup>
                       <col style={{ width: "48px" }} />
                       <col style={{ width: "110px" }} />
+                      <col style={{ width: "118px" }} />
                       <col style={{ width: "160px" }} />
                       <col />
                       <col style={{ width: "118px" }} />
@@ -7431,6 +7520,7 @@ export default function RouteDetailPage() {
                           />
                         </th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Order</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Order date</th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Customer</th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Address</th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Delivery date</th>
@@ -7439,7 +7529,7 @@ export default function RouteDetailPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {addOrderCandidates.map((order) => (
+                      {filteredAddOrderCandidates.map((order) => (
                         <tr key={order.orderId}>
                           <td style={routeAddOrderCellStyle}>
                             <input
@@ -7450,6 +7540,7 @@ export default function RouteDetailPage() {
                             />
                           </td>
                           <td style={{ ...routeAddOrderCellStyle, fontWeight: 700 }}>{order.name}</td>
+                          <td style={routeAddOrderCellStyle}>{order.orderDate}</td>
                           <td style={routeAddOrderCellStyle} title={order.customer}>{order.customer}</td>
                           <td style={routeAddOrderAddressCellStyle}>{order.address}</td>
                           <td style={routeAddOrderCellStyle}>{order.deliveryDate}</td>
@@ -7460,7 +7551,7 @@ export default function RouteDetailPage() {
                     </tbody>
                   </table>
                 ) : (
-                  <div style={routeAddOrderEmptyStyle}>No unplanned orders match this route’s delivery date and day.</div>
+                  <div style={routeAddOrderEmptyStyle}>No orders match the selected date filter.</div>
                 )}
               </div>
               <div style={routeLineEditorActionsStyle}>

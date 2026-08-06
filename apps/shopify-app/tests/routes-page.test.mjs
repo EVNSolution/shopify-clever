@@ -1338,8 +1338,15 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /aria-expanded=\{isRouteActionsMenuOpen\}[\s\S]*>Actions<\/button>/);
   assert.match(routeDetailSource, /aria-label="Route action menu"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Stop actions<\//);
-  assert.match(routeDetailSource, /aria-label="Add orders to current route"[\s\S]*aria-modal="true"[\s\S]*aria-label="Available orders for current delivery date"/);
-  assert.match(routeDetailSource, /if \(addOrderCandidates\.length === 0\) \{[\s\S]*heading: "No orders remaining"[\s\S]*No orders are remaining for this delivery date and day\./);
+  assert.match(routeDetailSource, /filterRouteAddOrderCandidatesByDate\(addOrderCandidates, \{/);
+  assert.match(routeDetailSource, /aria-label="Date field"[\s\S]*value="deliveryDate"[\s\S]*Delivery date[\s\S]*value="orderDate"[\s\S]*Order date/);
+  assert.match(routeDetailSource, /aria-label="Date selection"[\s\S]*value="all"[\s\S]*All[\s\S]*value="single"[\s\S]*Specific date[\s\S]*value="range"[\s\S]*Date range/);
+  assert.match(routeDetailSource, /aria-label="Selected date"[\s\S]*type="date"/);
+  assert.match(routeDetailSource, /aria-label="Start date"[\s\S]*type="date"[\s\S]*aria-label="End date"[\s\S]*type="date"/);
+  assert.match(routeDetailSource, /aria-label="Add orders to current route"[\s\S]*aria-modal="true"[\s\S]*aria-label="Available orders"/);
+  assert.match(routeDetailSource, /filteredAddOrderCandidates\.map\(\(order\) =>/);
+  assert.match(routeDetailSource, /if \(addOrderCandidates\.length === 0\) \{[\s\S]*heading: "No orders remaining"[\s\S]*No orders are remaining to add\./);
+  assert.match(routeDetailSource, /No orders match the selected date filter\./);
   assert.match(routeDetailSource, /routeActionNotice \? \([\s\S]*aria-label=\{routeActionNotice\.heading\}[\s\S]*aria-modal="true"[\s\S]*role="dialog"/);
   assert.doesNotMatch(routeDetailSource, /shopify\.modal\.show\("no-add-orders-modal"\)/);
   assert.doesNotMatch(routeDetailSource, /<s-modal id="no-add-orders-modal"/);
