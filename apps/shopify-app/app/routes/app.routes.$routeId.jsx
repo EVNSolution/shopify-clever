@@ -61,6 +61,7 @@ import {
 import {
   consumeRouteTrackingSseChunk,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingCompletionTime,
   getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
@@ -71,6 +72,7 @@ import {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  shouldShowRouteTrackingFreshness,
   shouldRevalidateTrackingEta,
 } from "../features/delivery/route-tracking";
 import { MAP_MARKER_PALETTE } from "../features/maps/map-markers";
@@ -794,16 +796,15 @@ const childRouteOrderRowStyle = {
 };
 
 const childRouteTableStopMarkerStyle = {
-  alignItems: "center",
   background: "var(--route-marker-color, #0b84d8)",
   borderRadius: "999px",
   boxSizing: "border-box",
   color: "#ffffff",
-  display: "flex",
+  display: "grid",
   height: "20px",
-  justifyContent: "center",
   margin: "0 auto",
   padding: 0,
+  placeItems: "center",
   width: "20px",
 };
 
@@ -818,6 +819,7 @@ const childRouteTableStopMarkerTextStyle = {
   fontSize: "11px",
   fontWeight: 700,
   fontVariantNumeric: "tabular-nums",
+  transform: "none",
 };
 
 const childRouteDisclosureCellStyle = {
@@ -3478,6 +3480,20 @@ export default function RouteDetailPage() {
   const routeTrackingProgress = displayedRouteTrackingSnapshot?.progress;
   const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
   const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? latestTrackingPosition?.occurredAt;
+  const routeTrackingCompletionTime = getRouteTrackingCompletionTime(displayedRouteTrackingSnapshot);
+  const routeTrackingDeliveryDate = textOrUndefined(
+    effectiveRoutePlan?.routeScope?.deliveryDate
+      ?? effectiveRoutePlan?.deliveryDate
+      ?? effectiveRoutePlan?.planDate,
+  );
+  const showRouteTrackingFreshness = shouldShowRouteTrackingFreshness({
+    completionTime: routeTrackingCompletionTime,
+    deliveryDate: routeTrackingDeliveryDate,
+    executionStatus: routeExecutionStatus,
+    ianaTimezone,
+    now: routeTrackingClock,
+  });
+  const routeTrackingFreshnessTime = routeTrackingCompletionTime ?? routeTrackingClock;
   const routeTrackingPathSummary = useMemo(
     () => getRouteTrackingPathSummary(displayedRouteTrackingSnapshot),
     [displayedRouteTrackingSnapshot],
@@ -3823,11 +3839,11 @@ export default function RouteDetailPage() {
   }, [trackingStreamRoutePlanId]);
 
   useEffect(() => {
-    if (!isTrackingMapView || !latestTrackingReceivedAt) return undefined;
+    if (!isTrackingMapView || !latestTrackingReceivedAt || routeTrackingCompletionTime != null || !showRouteTrackingFreshness) return undefined;
     setRouteTrackingClock(Date.now());
     const clock = window.setInterval(() => setRouteTrackingClock(Date.now()), 1_000);
     return () => window.clearInterval(clock);
-  }, [isTrackingMapView, latestTrackingReceivedAt]);
+  }, [isTrackingMapView, latestTrackingReceivedAt, routeTrackingCompletionTime, showRouteTrackingFreshness]);
 
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
@@ -6290,14 +6306,14 @@ export default function RouteDetailPage() {
                     <span>Actual GPS tracking</span>
                   </span>
                 </div>
-                {latestTrackingReceivedAt ? (
+                {latestTrackingReceivedAt && showRouteTrackingFreshness ? (
                   <div
                     aria-label="Current position freshness"
                     style={routeTrackingMapFreshnessStyle}
                     title={`Last received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}. Double-click the red marker to focus.`}
                   >
                     <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
-                    <span>Current position {formatTrackingElapsedSeconds(latestTrackingReceivedAt, routeTrackingClock)}</span>
+                    <span>Current position {formatTrackingElapsedSeconds(latestTrackingReceivedAt, routeTrackingFreshnessTime)}</span>
                   </div>
                 ) : null}
               </>

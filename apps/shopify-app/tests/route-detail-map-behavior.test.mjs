@@ -23,7 +23,7 @@ function createFakeMap(options = {}) {
   const sources = new Map();
   const layers = new Map();
   const images = new Set(options.images ?? []);
-  const calls = { addImage: [], addLayer: [], addSource: [], setLayoutProperty: [], setPaintProperty: [] };
+  const calls = { addImage: [], addLayer: [], addSource: [], moveLayer: [], setLayoutProperty: [], setPaintProperty: [] };
   const map = {
     addImage(id) {
       calls.addImage.push(id);
@@ -53,6 +53,9 @@ function createFakeMap(options = {}) {
     },
     getStyle() {
       return {};
+    },
+    moveLayer(id, beforeId) {
+      calls.moveLayer.push([id, beforeId]);
     },
     setLayoutProperty(id, property, value) {
       calls.setLayoutProperty.push([id, property, value]);
@@ -274,6 +277,74 @@ test("Tracking planned route remains a solid, visible reference under dashed GPS
   assert.equal(routeLayer.paint["line-opacity"], 0.42);
   assert.equal(routeLayer.paint["line-width"], 3.5);
   assert.equal(routeLayer.paint["line-dasharray"], undefined);
+});
+
+test("planned route line stays below stop markers", () => {
+  const fake = createFakeMap({
+    images: [
+      "route-detail-departure-pin",
+      "route-detail-stop-pin-006fbb-1",
+    ],
+  });
+  const routeGeometry = {
+    coordinates: [[126.92, 37.51], [126.93, 37.52]],
+    type: "LineString",
+  };
+
+  assert.equal(syncRouteDetailRouteLine(fake.map, routeGeometry, "#006fbb"), true);
+  assert.equal(syncRouteDetailMapMarkerLayers(
+    fake.map,
+    { coordinates: [126.92, 37.51], hasCoordinates: true },
+    [{
+      coordinates: [126.93, 37.52],
+      deliveryStopId: "stop-1",
+      hasCoordinates: true,
+      id: "order-1",
+      routeColor: "#006fbb",
+      stop: 1,
+    }],
+    [],
+    "#006fbb",
+  ), true);
+
+  assert.deepEqual(fake.calls.moveLayer.at(-1), [
+    "route-detail-osrm-route-line",
+    "route-detail-snapped-stop-points",
+  ]);
+});
+
+test("completed stop badges sit left of their numbered pins", () => {
+  const fake = createFakeMap({
+    images: [
+      "route-detail-departure-pin",
+      "route-detail-stop-pin-006fbb-1",
+    ],
+  });
+
+  assert.equal(syncRouteDetailMapMarkerLayers(
+    fake.map,
+    { coordinates: [126.92, 37.51], hasCoordinates: true },
+    [{
+      coordinates: [126.93, 37.52],
+      deliveryStopId: "stop-1",
+      hasCoordinates: true,
+      id: "order-1",
+      isTrackingCompleted: true,
+      routeColor: "#006fbb",
+      stop: 1,
+    }],
+    [],
+    "#006fbb",
+  ), true);
+
+  assert.deepEqual(
+    fake.layers.get("route-detail-stop-completion-badges").paint["circle-translate"],
+    [-16, -28],
+  );
+  assert.deepEqual(
+    fake.layers.get("route-detail-stop-completion-checks").paint["text-translate"],
+    [-16, -28],
+  );
 });
 
 test("map popup pan correction uses only the overflow outside the visible frame", () => {

@@ -232,6 +232,19 @@ function softenRouteColor(routeColor) {
   return `rgb(${mix(color.slice(0, 2))}, ${mix(color.slice(2, 4))}, ${mix(color.slice(4, 6))})`;
 }
 
+function moveRouteDetailRouteLineBelowMarkers(map) {
+  if (!map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) return;
+
+  const firstMarkerLayerId = [
+    ROUTE_DETAIL_STOP_POINT_LAYER_ID,
+    ROUTE_DETAIL_DEPARTURE_LAYER_ID,
+    ROUTE_DETAIL_STOP_LAYER_ID,
+    ROUTE_DETAIL_STOP_COMPLETION_BADGE_LAYER_ID,
+    ROUTE_DETAIL_STOP_COMPLETION_CHECK_LAYER_ID,
+  ].find((layerId) => map.getLayer?.(layerId));
+  if (firstMarkerLayerId) map.moveLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID, firstMarkerLayerId);
+}
+
 function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", options = {}) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
@@ -273,6 +286,7 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
     map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-opacity", routeLineOpacity);
     map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-width", routeLineWidth);
   }
+  moveRouteDetailRouteLineBelowMarkers(map);
   return true;
 }
 
@@ -881,7 +895,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
           "circle-radius": 7,
           "circle-stroke-color": "#ffffff",
           "circle-stroke-width": 2,
-          "circle-translate": [-10, -28],
+          "circle-translate": [-16, -28],
           "circle-translate-anchor": "viewport",
         },
       });
@@ -900,7 +914,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
         },
         paint: {
           "text-color": "#ffffff",
-          "text-translate": [-10, -28],
+          "text-translate": [-16, -28],
           "text-translate-anchor": "viewport",
         },
       });
@@ -931,6 +945,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
       });
     }
     map.moveLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, ROUTE_DETAIL_DEPARTURE_LAYER_ID);
+    moveRouteDetailRouteLineBelowMarkers(map);
 
     emitRouteDetailMarkerDiagnostics(onDiagnostics, {
       ...getRouteDetailMarkerLayerState(map),

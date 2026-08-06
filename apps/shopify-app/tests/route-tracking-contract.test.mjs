@@ -9,6 +9,7 @@ import {
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
+  getRouteTrackingCompletionTime,
   getRouteTrackingFitCoordinates,
   getRouteTrackingPresentation,
   getRouteTrackingStreamInactivityMs,
@@ -18,6 +19,7 @@ import {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  shouldShowRouteTrackingFreshness,
   shouldRevalidateTrackingEta,
 } from "../app/features/delivery/route-tracking.js";
 import {
@@ -694,6 +696,43 @@ test("route lifecycle progress events update the displayed execution status", ()
   assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "ROUTE_PAUSED" }), "READY");
   assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "ROUTE_COMPLETED" }), "COMPLETED");
   assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", { eventType: "STOP_DELIVERED" }), "IN_PROGRESS");
+});
+
+test("completed tracking freezes freshness at the completion event", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    progress: {
+      latestEvent: {
+        eventType: "ROUTE_COMPLETED",
+        occurredAt: "2026-08-06T04:00:00.000Z",
+      },
+    },
+  });
+
+  assert.equal(
+    getRouteTrackingCompletionTime(snapshot),
+    Date.parse("2026-08-06T04:00:00.000Z"),
+  );
+  assert.equal(shouldShowRouteTrackingFreshness({
+    completionTime: getRouteTrackingCompletionTime(snapshot),
+    deliveryDate: "2026-08-01",
+    executionStatus: "COMPLETED",
+    ianaTimezone: "America/Toronto",
+    now: Date.parse("2026-08-06T12:00:00.000Z"),
+  }), true);
+});
+
+test("completed tracking without a completion timestamp hides after its delivery date", () => {
+  const common = {
+    completionTime: null,
+    deliveryDate: "2026-08-05",
+    executionStatus: "COMPLETED",
+    ianaTimezone: "America/Toronto",
+    now: Date.parse("2026-08-06T12:00:00.000Z"),
+  };
+
+  assert.equal(shouldShowRouteTrackingFreshness(common), false);
+  assert.equal(shouldShowRouteTrackingFreshness({ ...common, executionStatus: "IN_PROGRESS" }), true);
+  assert.equal(shouldShowRouteTrackingFreshness({ ...common, deliveryDate: "2026-08-06" }), true);
 });
 
 test("only server ETA lifecycle events refresh route detail ETAs", () => {

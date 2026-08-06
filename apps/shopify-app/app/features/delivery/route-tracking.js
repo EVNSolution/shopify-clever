@@ -883,6 +883,42 @@ function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
   return status;
 }
 
+function getRouteTrackingCompletionTime(snapshot) {
+  const latestEvent = snapshot?.progress?.latestEvent;
+  if (textOrNull(latestEvent?.eventType)?.toUpperCase() !== "ROUTE_COMPLETED") return null;
+
+  const completionTime = Date.parse(latestEvent.occurredAt ?? latestEvent.receivedAt ?? "");
+  return Number.isFinite(completionTime) ? completionTime : null;
+}
+
+function getDateKeyInTimeZone(value, ianaTimezone) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime()) || !textOrNull(ianaTimezone)) return null;
+
+  try {
+    const parts = new Intl.DateTimeFormat("en", {
+      day: "2-digit",
+      month: "2-digit",
+      timeZone: ianaTimezone,
+      year: "numeric",
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}-${values.month}-${values.day}`;
+  } catch {
+    return null;
+  }
+}
+
+function shouldShowRouteTrackingFreshness({ completionTime, deliveryDate, executionStatus, ianaTimezone, now = Date.now() }) {
+  if (normalizeRouteExecutionStatus(executionStatus) !== "COMPLETED" || Number.isFinite(completionTime)) return true;
+
+  const routeDeliveryDate = textOrNull(deliveryDate);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(routeDeliveryDate ?? "")) return true;
+
+  const today = getDateKeyInTimeZone(now, ianaTimezone);
+  return !today || routeDeliveryDate >= today;
+}
+
 function doesTrackingEventRefreshEta(event) {
   const eventType = textOrNull(event?.eventType);
   return eventType === "ROUTE_STARTED" || eventType === "STOP_ARRIVED";
@@ -939,6 +975,7 @@ export {
   doesTrackingEventRefreshEta,
   shouldRevalidateTrackingEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteTrackingCompletionTime,
   getRouteTrackingLineFeatures,
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
@@ -953,4 +990,5 @@ export {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  shouldShowRouteTrackingFreshness,
 };
