@@ -1328,6 +1328,8 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /aria-label="Route action menu"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Stop actions<\//);
   assert.match(routeDetailSource, /aria-label="Add orders to current route"[\s\S]*aria-modal="true"[\s\S]*aria-label="Available orders for current delivery date"/);
+  assert.match(routeDetailSource, /if \(addOrderCandidates\.length === 0\) \{[\s\S]*shopify\.modal\.show\("no-add-orders-modal"\)/);
+  assert.match(routeDetailSource, /<s-modal id="no-add-orders-modal" heading="No orders remaining"[\s\S]*No orders are remaining for this delivery date and day\./);
   assert.doesNotMatch(routeDetailSource, /requestRouteNavigation\(`\/app\/orders\?addToRouteGroupId=/);
   assert.match(routeDetailSource, /reverseRouteStopIds/);
 });

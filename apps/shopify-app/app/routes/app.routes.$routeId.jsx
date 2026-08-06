@@ -4907,6 +4907,10 @@ export default function RouteDetailPage() {
       return;
     }
     setRouteGroupClientError(null);
+    if (addOrderCandidates.length === 0) {
+      shopify.modal.show("no-add-orders-modal");
+      return;
+    }
     setSelectedAddOrderIds([]);
     setIsAddOrderDialogOpen(true);
   };
@@ -7272,6 +7276,11 @@ export default function RouteDetailPage() {
             </div>
           </div>
         ) : null}
+
+        <s-modal id="no-add-orders-modal" heading="No orders remaining">
+          <s-paragraph>No orders are remaining for this delivery date and day.</s-paragraph>
+          <s-button slot="primary-action" commandFor="no-add-orders-modal" command="--hide">Close</s-button>
+        </s-modal>
 
         {isAddOrderDialogOpen ? (
           <div style={routeLineEditorOverlayStyle}>
