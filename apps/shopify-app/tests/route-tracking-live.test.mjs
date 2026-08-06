@@ -96,7 +96,7 @@ test("live tracking keeps the server past-path snapshot while the stream connect
 test("server ETA lifecycle events revalidate distinct expected and actual arrival columns", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
 
-  assert.match(routeDetailSource, /doesTrackingEventRefreshEta\(progressEvent\)/);
+  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, /revalidatorRef\.current\.revalidate\(\)/);
   assert.match(routeDetailSource, /\["Expected arrival", "120px"\]/);
   assert.match(routeDetailSource, /\["Actual arrival", "120px"\]/);

@@ -8,6 +8,7 @@ import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
   buildChildRouteOrderRows,
+  summarizeChildRouteMoney,
   formatChildDriveTimeLabel,
   formatChildEtaLabel,
   formatChildOrderStatus,
@@ -17,6 +18,30 @@ import {
   isMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../app/features/delivery/child-route-detail-presentation.js";
+
+test("child route rows expose notes and summarize shipping and order totals", () => {
+  const rows = buildChildRouteOrderRows([{
+    currencyCode: "CAD",
+    customerNoteContext: { customerNote: "Leave at side door" },
+    orderId: "order-1",
+    shippingPriceAmount: "10.00",
+    totalPriceAmount: "1539.57",
+  }], { ianaTimezone: "America/Toronto" });
+
+  assert.equal(rows[0].note, "Leave at side door");
+  assert.equal(rows[0].shippingPriceAmount, 10);
+  assert.equal(rows[0].totalPriceAmount, 1539.57);
+  assert.deepEqual(summarizeChildRouteMoney(rows), {
+    currencyCode: "CAD",
+    shippingPriceLabel: "CA$10.00",
+    totalPriceLabel: "CA$1,539.57",
+  });
+  assert.deepEqual(summarizeChildRouteMoney([{ currencyCode: "CAD" }]), {
+    currencyCode: "CAD",
+    shippingPriceLabel: "–",
+    totalPriceLabel: "–",
+  });
+});
 
 const root = process.cwd();
 const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");

@@ -1320,3 +1320,18 @@ test("Route detail can move between child routes in the same route group", () =>
   assert.match(routeDetailSource, /siblingRouteRows\.map\(\(routeRow\) => \(/);
   assert.doesNotMatch(routeDetailSource, /<select[\s\S]*aria-label="Route in group"/);
 });
+
+test("child detail supports adding and reversing stops without refreshing over a draft", () => {
+  assert.match(routeDetailSource, /hasRouteAllocationDraftRef\.current = hasRouteAllocationDraft/);
+  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
+  assert.match(routeDetailSource, />Add order<\/button>/);
+  assert.match(routeDetailSource, />Reverse stops<\/button>/);
+  assert.match(routeDetailSource, /reverseRouteStopIds/);
+});
+
+test("child detail renders note disclosure and route totals", () => {
+  assert.match(routeDetailSource, /type === "note"/);
+  assert.match(routeDetailSource, /Total drive time:/);
+  assert.match(routeDetailSource, /Total shipping price:/);
+  assert.match(routeDetailSource, /Total price:/);
+});

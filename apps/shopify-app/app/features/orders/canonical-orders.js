@@ -53,6 +53,17 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       updatedAt: textOrUndefined(order?.updatedAtShopify),
       cancelledAt: textOrUndefined(order?.cancelledAt),
       totalPriceAmount: textOrUndefined(order?.totalPriceAmount),
+      ...(textOrUndefined(
+        order?.shippingPriceAmount
+          ?? order?.shopifyOrderSnapshot?.currentShippingPriceSet?.shopMoney?.amount
+          ?? order?.rawPayload?.currentShippingPriceSet?.shopMoney?.amount,
+      ) ? {
+        shippingPriceAmount: textOrUndefined(
+          order?.shippingPriceAmount
+            ?? order?.shopifyOrderSnapshot?.currentShippingPriceSet?.shopMoney?.amount
+            ?? order?.rawPayload?.currentShippingPriceSet?.shopMoney?.amount,
+        ),
+      } : {}),
       currencyCode: textOrUndefined(order?.currencyCode),
       lineItems: order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems,
       attributes: formatDeliveryAttributes(deliveryArea, deliveryDay),
@@ -179,6 +190,10 @@ function sanitizeShopifyOrderSyncSnapshot(snapshot) {
 
   if (Object.hasOwn(snapshot, "currentTotalPriceSet")) {
     output.currentTotalPriceSet = sanitizeMoneySet(snapshot.currentTotalPriceSet);
+  }
+
+  if (Object.hasOwn(snapshot, "currentShippingPriceSet")) {
+    output.currentShippingPriceSet = sanitizeMoneySet(snapshot.currentShippingPriceSet);
   }
 
   if (Object.hasOwn(snapshot, "customAttributes")) {

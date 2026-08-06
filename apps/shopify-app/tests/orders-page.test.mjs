@@ -861,7 +861,7 @@ test("Orders page creates a childless route group from scoped planned orders", (
   assert.match(ordersPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /const createdRouteGroup = routePlanFetcher\.data\?\.routeGroup/);
-  assert.match(ordersPageSource, /navigate\(appendIdToken\(routeGroupPath\(createdRouteGroup\.id\), sessionToken\)\)/);
+  assert.match(ordersPageSource, /navigate\(appendIdToken\(destination, sessionToken\)\)/);
   assert.match(ordersPageSource, /navigate\(appendIdToken\(routePlanPath\(createdRoutePlan\.id\), sessionToken\)\)/);
   assert.match(ordersPageSource, />Assign<\/button>/);
   assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);
@@ -878,20 +878,24 @@ test("Orders page keeps the UI label as route creation while using route groups 
   assert.match(ordersPageSource, />Create route<\/button>/);
 });
 
-test("Orders page adds planned orders to an existing route group first child", () => {
+test("Orders page adds planned orders to the selected route child", () => {
   assert.match(ordersPageSource, /fetchDeliveryRouteGroups/);
   assert.match(ordersPageSource, /updateDeliveryRouteGroupOrders/);
   assert.match(ordersPageSource, /saveDeliveryRouteGroupDraft/);
-  assert.match(ordersPageSource, /function buildFirstRouteDraftPayload\(routeGroup, addedOrderIds = \[\]\)/);
-  assert.match(ordersPageSource, /const children = getVisibleRouteGroupChildren\(routeGroup\)/);
-  assert.match(ordersPageSource, /routes\[0\]\.orderIds = \[/);
-  assert.match(ordersPageSource, /return \{ mode: "MANUAL_ORDER", routes \}/);
+  assert.match(ordersPageSource, /buildRouteGroupAddOrdersDraft/);
+  assert.match(ordersPageSource, /targetRoutePlanId/);
+  assert.match(ordersPageSource, /fetchDeliveryRouteGroupDetail/);
+  assert.ok(
+    ordersPageSource.indexOf("const targetExists = getVisibleRouteGroupChildren")
+      < ordersPageSource.indexOf("const addResult = await updateDeliveryRouteGroupOrders"),
+  );
   assert.match(ordersPageSource, /if \(intent === "addOrdersToRouteGroup"\) \{/);
   assert.match(ordersPageSource, /addOrderIds,/);
   assert.match(ordersPageSource, /expectedUpdatedAt/);
-  assert.match(ordersPageSource, /if \(!draftPayload\) return \{ routeGroup: addResult\.routeGroup, errors: \[\] \}/);
+  assert.match(ordersPageSource, /if \(!draftPayload\) return \{/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "addOrdersToRouteGroup"\)/);
   assert.match(ordersPageSource, /formData\.set\("routeGroupId", selectedRouteGroup\.id\)/);
+  assert.match(ordersPageSource, /addToRoutePlanId && selectedRouteGroup\.id === addToRouteGroupId/);
   assert.match(ordersPageSource, /const handleOpenAddRoutePreview = \(\) => \{/);
   assert.match(ordersPageSource, /function buildRouteAddSnapshotOrders\(routeGroup, orders\)/);
   assert.match(ordersPageSource, /function RouteAddSnapshotMap\(\{ departureLocation, orders \}\)/);
@@ -1757,9 +1761,9 @@ test("Orders map captures MapLibre tile errors without long visible copy", () =>
   assert.doesNotMatch(ordersPageSource, /지도 타일을 불러오지 못했습니다/);
 });
 
-test("Orders map zooms to fit the route plan only when the table Add to map action registers orders", () => {
+test("Orders map zooms to fit the route plan when either Add to map action registers orders", () => {
   const markerPopupAddBlock = ordersPageSource.match(
-    /const handleAddOrderToPlan = useCallback\(\(orderId\) => \{[\s\S]*?\}, \[plannedOrderIdSet\]\);/,
+    /const handleAddOrderToPlan = useCallback\(\(orderId\) => \{[\s\S]*?\n {2}\}, \[[^\]]+\]\);/,
   )?.[0] ?? "";
   const tableAddBlock = ordersPageSource.match(
     /const handleAddToPlan = \(\) => \{[\s\S]*?\n {2}\};/,
@@ -1771,7 +1775,7 @@ test("Orders map zooms to fit the route plan only when the table Add to map acti
   assert.match(ordersPageSource, /const fitMapToOrders = useCallback\(\(ordersToFit\) => \{/);
   assert.match(ordersPageSource, /new maplibregl\.LngLatBounds\(/);
   assert.match(ordersPageSource, /mapRef\.current\.fitBounds\(bounds,/);
-  assert.doesNotMatch(markerPopupAddBlock, /setPlanFitRequest/);
+  assert.match(markerPopupAddBlock, /setPlanFitRequest\(\(requestCount\) => requestCount \+ 1\)/);
   assert.match(tableAddBlock, /setPlanFitRequest\(\(requestCount\) => requestCount \+ 1\)/);
   assert.match(ordersPageSource, /if \(planFitRequest === 0\) return/);
   assert.match(ordersPageSource, /const routeFitLocations = useMemo\(\s*\(\) =>/);

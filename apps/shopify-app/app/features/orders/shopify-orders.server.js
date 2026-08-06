@@ -42,6 +42,12 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
               currencyCode
             }
           }
+          currentShippingPriceSet {
+            shopMoney {
+              amount
+              currencyCode
+            }
+          }
           customAttributes {
             key
             value
@@ -108,6 +114,12 @@ export const SHOPIFY_ORDERS_BY_IDS_QUERY = `#graphql
         paymentGatewayNames
         displayFulfillmentStatus
         currentTotalPriceSet {
+          shopMoney {
+            amount
+            currencyCode
+          }
+        }
+        currentShippingPriceSet {
           shopMoney {
             amount
             currencyCode
@@ -624,6 +636,9 @@ function mapOrderNode(order, options = {}) {
     totalPriceAmount: textOrUndefined(
       order.currentTotalPriceSet?.shopMoney?.amount,
     ),
+    ...(textOrUndefined(order.currentShippingPriceSet?.shopMoney?.amount)
+      ? { shippingPriceAmount: textOrUndefined(order.currentShippingPriceSet.shopMoney.amount) }
+      : {}),
     currencyCode: textOrUndefined(
       order.currentTotalPriceSet?.shopMoney?.currencyCode,
     ),

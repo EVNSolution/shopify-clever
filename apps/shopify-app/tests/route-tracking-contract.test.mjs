@@ -18,6 +18,7 @@ import {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  shouldRevalidateTrackingEta,
 } from "../app/features/delivery/route-tracking.js";
 import {
   proxyDeliveryRouteTrackingSnapshot,
@@ -701,6 +702,8 @@ test("only server ETA lifecycle events refresh route detail ETAs", () => {
   assert.equal(doesTrackingEventRefreshEta({ eventType: "STOP_DELIVERED" }), false);
   assert.equal(doesTrackingEventRefreshEta({ eventType: "LOCATION_UPDATED" }), false);
   assert.equal(doesTrackingEventRefreshEta(null), false);
+  assert.equal(shouldRevalidateTrackingEta({ eventType: "STOP_ARRIVED" }, false), true);
+  assert.equal(shouldRevalidateTrackingEta({ eventType: "STOP_ARRIVED" }, true), false);
 });
 
 test("tracking progress keeps the current driver stage and completed stop ids", () => {

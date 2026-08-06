@@ -8,6 +8,50 @@ import {
 
 export const DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_GROUP_ID_MISSING";
 
+export function buildRouteGroupAddOrdersDraft(routeGroup, addedOrderIds = [], targetRoutePlanId) {
+  const children = getVisibleRouteGroupChildren(routeGroup);
+  if (children.length === 0) return null;
+
+  const assignmentOrderIds = Array.isArray(routeGroup?.assignments)
+    ? routeGroup.assignments.map((assignment) => textOrUndefined(assignment?.orderId)).filter(Boolean)
+    : [];
+  const fallbackOrderIds = [
+    ...children.flatMap((child) => Array.isArray(child?.orderIds) ? child.orderIds : []),
+    ...addedOrderIds,
+  ].map(textOrUndefined).filter(Boolean);
+  const groupOrderIds = assignmentOrderIds.length > 0 ? assignmentOrderIds : [...new Set(fallbackOrderIds)];
+  const groupOrderIdSet = new Set(groupOrderIds);
+  const draftedOrderIds = new Set();
+
+  const routes = children.map((child) => {
+    const orderIds = (Array.isArray(child?.orderIds) ? child.orderIds : [])
+      .map(textOrUndefined)
+      .filter((orderId) => orderId && groupOrderIdSet.has(orderId) && !draftedOrderIds.has(orderId));
+    orderIds.forEach((orderId) => draftedOrderIds.add(orderId));
+
+    return {
+      branchId: null,
+      ...(child?.color ? { color: child.color } : {}),
+      ...(child?.label ? { label: child.label } : {}),
+      orderIds,
+      ...(child?.routeIdx == null ? {} : { routeIdx: child.routeIdx }),
+      routePlanId: getRouteGroupChildRoutePlanId(child),
+      ...(child?.sortOrder == null ? {} : { sortOrder: child.sortOrder }),
+    };
+  });
+
+  const targetRoute = targetRoutePlanId
+    ? routes.find((route) => route.routePlanId === targetRoutePlanId)
+    : routes[0];
+  if (!targetRoute) return null;
+  targetRoute.orderIds = [
+    ...targetRoute.orderIds,
+    ...groupOrderIds.filter((orderId) => !draftedOrderIds.has(orderId)),
+  ];
+
+  return { mode: "MANUAL_ORDER", routes };
+}
+
 function logRouteGroupLifecycle(name, metric = {}) {
   console.info(name, {
     measuredAt: new Date().toISOString(),

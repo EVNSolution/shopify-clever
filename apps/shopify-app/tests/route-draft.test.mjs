@@ -2,7 +2,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { readRouteDraftPayload } from "../app/features/delivery/route-draft.js";
+import { readRouteDraftPayload, reverseRouteStopIds } from "../app/features/delivery/route-draft.js";
+
+test("reverse route stops returns a reversed copy without changing the source", () => {
+  const stopIds = ["order-1", "order-2", "order-3"];
+
+  assert.deepEqual(reverseRouteStopIds(stopIds), ["order-3", "order-2", "order-1"]);
+  assert.deepEqual(stopIds, ["order-1", "order-2", "order-3"]);
+});
 
 test("route draft adapter preserves the complete atomic save contract", () => {
   const draft = readRouteDraftPayload(JSON.stringify({
