@@ -1220,6 +1220,16 @@ test("Orders selection does not lock the table or filters before Add to map", ()
   assert.match(ordersPageSource, /\.\.\.selectableTableOrders\.map\(\(order\) => order\.id\)/);
 });
 
+test("Orders route draft survives paginated table data changes", () => {
+  assert.match(ordersPageSource, /const \[plannedOrderRows, setPlannedOrderRows\] = useState\(\[\]\)/);
+  assert.match(ordersPageSource, /displayOrderById\.get\(orderId\) \?\? plannedOrderRowById\.get\(orderId\)/);
+  assert.match(ordersPageSource, /displayOrderById\.get\(nextOrderId\) \?\? plannedOrderRowById\.get\(nextOrderId\)/);
+  assert.doesNotMatch(
+    ordersPageSource,
+    /setPlannedOrderIds\(\(currentOrderIds\) => \{[\s\S]*?displayOrderIds\.has\(orderId\)/,
+  );
+});
+
 test("Orders table keeps route-created orders visible and relies on State labels", () => {
   assert.match(ordersPageSource, /filterOrders\(displayOrders, \{[\s\S]*tab: "all",[\s\S]*referenceDate: orderFilterReferenceDate/);
   assert.match(ordersPageSource, /const stateValue = getOrderDeliveryStateFilterValue\(order, referenceDate\)/);
@@ -2094,7 +2104,8 @@ test("Orders map and route plan share an accessible resizable height", () => {
 });
 
 test("Orders map renders planned pins and the focused table-click pin", () => {
-  assert.match(ordersPageSource, /const locatedOrders = useMemo\(\s*\(\) => compactMapEnabled\s*\?\s*mapCompactOrderPointsToRows\(ordersMapPoints\)\s*:\s*filteredOrders\.filter\(\(order\) => order\.hasCoordinates\),\s*\[compactMapEnabled, filteredOrders, ordersMapPoints\],\s*\)/);
+  assert.match(ordersPageSource, /const resourceLocatedOrders = useMemo\(\s*\(\) => compactMapEnabled\s*\?\s*mapCompactOrderPointsToRows\(ordersMapPoints\)\s*:\s*filteredOrders\.filter\(\(order\) => order\.hasCoordinates\),\s*\[compactMapEnabled, filteredOrders, ordersMapPoints\],\s*\)/);
+  assert.match(ordersPageSource, /mergeLocatedOrderRows\(resourceLocatedOrders, plannedOrders\)/);
   assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds, activeOrderPopupId\)/);
   assert.match(ordersPageSource, /if \(!ordersLayerSynced\) \{\s*mapSourceSyncPendingRef\.current = true;\s*scheduleMapSourceSyncRetry\(\);\s*return undefined;\s*\}/);
   assert.match(ordersPageSource, /mapSourceSyncPendingRef\.current = false/);

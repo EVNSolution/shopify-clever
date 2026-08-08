@@ -6,10 +6,40 @@ import {
   getOrdersPageCacheKey,
   getReverseOrdersPageCacheEntry,
   mapCompactOrderPointsToRows,
+  mergeLocatedOrderRows,
+  shouldSyncOrdersLoaderPage,
   shouldApplyOrdersResourceResponse,
   updateOrdersSelectionExclusions,
   updateVisibleOrdersSelectionExclusions,
 } from "../app/features/orders/orders-resource-state.js";
+
+test("Orders pagination does not let a page-one loader revalidation replace page two", () => {
+  assert.equal(
+    shouldSyncOrdersLoaderPage(
+      { currentPage: 2, totalPages: 12 },
+      { currentPage: 1, totalPages: 12 },
+    ),
+    false,
+  );
+  assert.equal(
+    shouldSyncOrdersLoaderPage(
+      { currentPage: 2, totalPages: 12 },
+      { currentPage: 2, totalPages: 12 },
+    ),
+    true,
+  );
+  assert.equal(shouldSyncOrdersLoaderPage({ currentPage: 2 }, null), false);
+});
+
+test("Orders map keeps planned rows as a fallback when compact points are incomplete", () => {
+  const compactPoint = { id: "order-1", coordinates: [-79.4, 43.7], hasCoordinates: true };
+  const plannedRow = { id: "order-2", coordinates: [-79.5, 43.8], hasCoordinates: true };
+
+  assert.deepEqual(
+    mergeLocatedOrderRows([compactPoint], [plannedRow, { id: "order-3", hasCoordinates: false }]),
+    [compactPoint, plannedRow],
+  );
+});
 
 test("Orders resource requests keep filters and session tokens out of URLs", () => {
   const request = buildOrdersResourceRequest(
