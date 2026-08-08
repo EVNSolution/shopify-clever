@@ -33,6 +33,12 @@ export function shouldApplyOrdersResourceResponse(data, requestKey) {
   return Boolean(requestKey) && data?._requestKey === requestKey;
 }
 
+export function shouldSyncOrdersLoaderPage(currentPageInfo, loaderPageInfo) {
+  const currentPage = positiveInteger(currentPageInfo?.currentPage);
+  const loaderPage = positiveInteger(loaderPageInfo?.currentPage);
+  return currentPage == null || (loaderPage != null && currentPage === loaderPage);
+}
+
 export function getOrdersPageCacheKey(filterKey, direction, cursor) {
   if (!cursor || !["next", "previous", "page"].includes(direction)) return null;
   return `${String(filterKey ?? "")}\n${direction}\n${cursor}`;
@@ -94,10 +100,29 @@ export function mapCompactOrderPointsToRows(points) {
   });
 }
 
+export function mergeLocatedOrderRows(primaryRows, fallbackRows) {
+  const rows = [];
+  const seenOrderIds = new Set();
+
+  for (const order of [...(primaryRows ?? []), ...(fallbackRows ?? [])]) {
+    const id = text(order?.id);
+    if (!id || seenOrderIds.has(id) || !order?.hasCoordinates) continue;
+    seenOrderIds.add(id);
+    rows.push(order);
+  }
+
+  return rows;
+}
+
 function finiteNumber(value) {
   if (value == null || value === "") return null;
   const number = Number(value);
   return Number.isFinite(number) ? number : null;
+}
+
+function positiveInteger(value) {
+  const number = Number(value);
+  return Number.isInteger(number) && number > 0 ? number : null;
 }
 
 function text(value) {

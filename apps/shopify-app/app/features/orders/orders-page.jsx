@@ -17,6 +17,8 @@ import {
   buildOrdersResourceRequest,
   getOrdersPageCacheKey,
   mapCompactOrderPointsToRows,
+  mergeLocatedOrderRows,
+  shouldSyncOrdersLoaderPage,
   shouldApplyOrdersResourceResponse,
   updateOrdersSelectionExclusions,
   updateVisibleOrdersSelectionExclusions,
@@ -2753,10 +2755,11 @@ function OrdersPageContent({ loaderData }) {
 
   useEffect(() => {
     if (!paginationEnabled) return;
+    if (!shouldSyncOrdersLoaderPage(ordersPageInfo, displayLoaderData.pageInfo)) return;
     setTableRows(Array.isArray(orders) ? orders : []);
     setOrdersPageInfo(displayLoaderData.pageInfo ?? null);
     setOrdersPageResult(displayLoaderData.pageResult ?? null);
-  }, [displayLoaderData.pageInfo, displayLoaderData.pageResult, orders, paginationEnabled]);
+  }, [displayLoaderData.pageInfo, displayLoaderData.pageResult, orders, ordersPageInfo, paginationEnabled]);
 
   useEffect(() => {
     if (
@@ -3035,7 +3038,7 @@ function OrdersPageContent({ loaderData }) {
     });
   }, [orderBulkUpdateFetcher.data, orderBulkUpdateFetcher.state]);
 
-  const locatedOrders = useMemo(
+  const resourceLocatedOrders = useMemo(
     () => compactMapEnabled
       ? mapCompactOrderPointsToRows(ordersMapPoints)
       : filteredOrders.filter((order) => order.hasCoordinates),
@@ -3088,6 +3091,7 @@ function OrdersPageContent({ loaderData }) {
   const [checkedInventoryIds, setCheckedInventoryIds] = useState([]);
   const [checkedOrderIds, setCheckedOrderIds] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
+  const [plannedOrderRows, setPlannedOrderRows] = useState([]);
   const [orderActionModalOpen, setOrderActionModalOpen] = useState(false);
   const [orderActionField, setOrderActionField] = useState("state");
   const [orderActionValue, setOrderActionValue] = useState(ORDER_STATE_CHANGE_OPTIONS[0].value);
@@ -3642,6 +3646,10 @@ function OrdersPageContent({ loaderData }) {
     () => new Map(displayOrders.map((order) => [order.id, order])),
     [displayOrders],
   );
+  const plannedOrderRowById = useMemo(
+    () => new Map(plannedOrderRows.map((order) => [order.id, order])),
+    [plannedOrderRows],
+  );
 
   const checkedOrderIdSet = useMemo(
     () => new Set(checkedOrderIds),
@@ -3729,9 +3737,14 @@ function OrdersPageContent({ loaderData }) {
 
   const plannedOrders = useMemo(() => {
     return plannedOrderIds
-      .map((orderId) => displayOrderById.get(orderId))
+      .map((orderId) => displayOrderById.get(orderId) ?? plannedOrderRowById.get(orderId))
       .filter(Boolean);
-  }, [displayOrderById, plannedOrderIds]);
+  }, [displayOrderById, plannedOrderIds, plannedOrderRowById]);
+
+  const locatedOrders = useMemo(
+    () => mergeLocatedOrderRows(resourceLocatedOrders, plannedOrders),
+    [plannedOrders, resourceLocatedOrders],
+  );
 
   const activeOrderPopup = activeOrderPopupId
     ? displayOrderById.get(activeOrderPopupId) ?? null
@@ -3807,7 +3820,6 @@ function OrdersPageContent({ loaderData }) {
   }, [filteredOrders, selectedOrderId]);
 
   useEffect(() => {
-    const displayOrderIds = new Set(displayOrders.map((order) => order.id));
     const selectableOrderIds = new Set(
       filteredOrders
         .filter((order) => !plannedOrderIdSet.has(order.id))
@@ -3824,15 +3836,6 @@ function OrdersPageContent({ loaderData }) {
         : nextOrderIds;
     });
 
-    setPlannedOrderIds((currentOrderIds) => {
-      const nextOrderIds = currentOrderIds.filter((orderId) =>
-        displayOrderIds.has(orderId),
-      );
-
-      return nextOrderIds.length === currentOrderIds.length
-        ? currentOrderIds
-        : nextOrderIds;
-    });
   }, [displayOrders, filteredOrders, plannedOrderIdSet]);
 
   const selectedOrder =
@@ -4473,10 +4476,11 @@ function OrdersPageContent({ loaderData }) {
 
     const nextOrderIds = Array.from(new Set([...plannedOrderIds, orderId]));
     const nextOrders = nextOrderIds
-      .map((nextOrderId) => displayOrderById.get(nextOrderId))
+      .map((nextOrderId) => displayOrderById.get(nextOrderId) ?? plannedOrderRowById.get(nextOrderId))
       .filter(Boolean);
 
     setPlannedOrderIds(nextOrderIds);
+    setPlannedOrderRows(nextOrders);
     setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setCheckedOrderIds((currentOrderIds) =>
       currentOrderIds.filter((checkedOrderId) => checkedOrderId !== orderId),
@@ -4484,7 +4488,7 @@ function OrdersPageContent({ loaderData }) {
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
     setPlanFitRequest((requestCount) => requestCount + 1);
-  }, [displayOrderById, plannedOrderIdSet, plannedOrderIds]);
+  }, [displayOrderById, plannedOrderIdSet, plannedOrderIds, plannedOrderRowById]);
 
 
   const handleAddToPlan = () => {
@@ -4498,10 +4502,11 @@ function OrdersPageContent({ loaderData }) {
 
     const nextOrderIds = Array.from(new Set([...plannedOrderIds, ...selectedOrderIds]));
     const nextOrders = nextOrderIds
-      .map((orderId) => displayOrderById.get(orderId))
+      .map((orderId) => displayOrderById.get(orderId) ?? plannedOrderRowById.get(orderId))
       .filter(Boolean);
 
     setPlannedOrderIds(nextOrderIds);
+    setPlannedOrderRows(nextOrders);
     setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setCheckedOrderIds([]);
     setCreateRouteClientError(null);
@@ -4615,6 +4620,7 @@ function OrdersPageContent({ loaderData }) {
 
   const handleClearPlan = () => {
     setPlannedOrderIds([]);
+    setPlannedOrderRows([]);
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
     setRouteAssignActionsOpen(false);
     setRouteAddModalOpen(false);
