@@ -3076,7 +3076,8 @@ function OrdersPageContent({ loaderData }) {
   const isRefreshingAllRoutes =
     ordersRefreshFetcher.state !== "idle" ||
     ordersRefreshPhase === "enqueueing" ||
-    ordersRefreshPhase === "polling";
+    ordersRefreshPhase === "polling" ||
+    ordersRefreshPhase === "reloading";
   const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
@@ -3133,6 +3134,8 @@ function OrdersPageContent({ loaderData }) {
   const activeOrdersReconciliationRef = useRef(null);
   const handledOrdersRefreshRequestIdRef = useRef(null);
   const ordersReconciliationRevalidatedJobIdRef = useRef(null);
+  const pendingOrdersRefreshCompletionRef = useRef(null);
+  const ordersRefreshRevalidationObservedRef = useRef(false);
   const sessionTokenRefreshSubmittedRef = useRef(false);
   const orderedDateCalendarRef = useRef(null);
   const orderedDateFieldRef = useRef(null);
@@ -3470,6 +3473,8 @@ function OrdersPageContent({ loaderData }) {
     formData.set("reconciliationMode", backgroundReconciliationEnabled ? "background" : "legacy");
     activeOrdersRefreshRequestIdRef.current = refreshRequestId;
     activeOrdersReconciliationRef.current = null;
+    pendingOrdersRefreshCompletionRef.current = null;
+    ordersRefreshRevalidationObservedRef.current = false;
     setOrdersReconciliationJob(null);
     setOrdersReconciliationError(null);
     setOrdersRefreshPhase("enqueueing");
@@ -3491,12 +3496,16 @@ function OrdersPageContent({ loaderData }) {
     ordersRefreshFetcher.submit(formData, { method: "post" });
   }, [backgroundReconciliationEnabled, isRefreshingAllRoutes, ordersRefreshFetcher, shopify]);
 
-  const ordersRefreshButtonLabel = isRefreshingAllRoutes
-    ? "Updating Shopify orders…"
+  const ordersRefreshButtonLabel = ordersRefreshPhase === "reloading"
+    ? "Refreshing Orders…"
+    : isRefreshingAllRoutes
+      ? "Updating Shopify orders…"
     : "Update Shopify orders";
   const ordersRefreshStatusMessage =
     ordersRefreshPhase === "enqueueing"
       ? "Starting reconciliation…"
+      : ordersRefreshPhase === "reloading"
+        ? "Update completed. Refreshing the Orders view…"
       : ordersReconciliationError
         ? ordersReconciliationError
         : getOrdersReconciliationStatusMessage(ordersReconciliationJob, null);
@@ -4836,9 +4845,16 @@ function OrdersPageContent({ loaderData }) {
       if (isOrdersReconciliationTerminalSuccess(reconciliationJob)) {
         activeOrdersRefreshRequestIdRef.current = null;
         activeOrdersReconciliationRef.current = null;
-        setOrdersRefreshPhase("idle");
         if (ordersReconciliationRevalidatedJobIdRef.current !== jobId) {
           ordersReconciliationRevalidatedJobIdRef.current = jobId;
+          pendingOrdersRefreshCompletionRef.current = {
+            message: getOrdersReconciliationStatusMessage(
+              reconciliationJob,
+              "Order reconciliation complete",
+            ),
+          };
+          ordersRefreshRevalidationObservedRef.current = false;
+          setOrdersRefreshPhase("reloading");
           revalidator.revalidate();
         }
         return;
@@ -4856,8 +4872,11 @@ function OrdersPageContent({ loaderData }) {
 
     activeOrdersRefreshRequestIdRef.current = null;
     activeOrdersReconciliationRef.current = null;
-    setOrdersRefreshPhase("idle");
-    shopify.toast.show(`${updatedOrders} orders synced; ${refreshedRoutes} READY routes refreshed${skippedMessage}`);
+    pendingOrdersRefreshCompletionRef.current = {
+      message: `${updatedOrders} orders synced; ${refreshedRoutes} READY routes refreshed${skippedMessage}`,
+    };
+    ordersRefreshRevalidationObservedRef.current = false;
+    setOrdersRefreshPhase("reloading");
     revalidator.revalidate();
   }, [ordersRefreshFetcher.data, ordersRefreshFetcher.state, revalidator, shopify]);
 
@@ -4913,10 +4932,13 @@ function OrdersPageContent({ loaderData }) {
     if (isOrdersReconciliationTerminalSuccess(job)) {
       activeOrdersRefreshRequestIdRef.current = null;
       activeOrdersReconciliationRef.current = null;
-      setOrdersRefreshPhase("idle");
-      shopify.toast.show(getOrdersReconciliationStatusMessage(job, "Order reconciliation complete"));
       if (ordersReconciliationRevalidatedJobIdRef.current !== completion.jobId) {
         ordersReconciliationRevalidatedJobIdRef.current = completion.jobId;
+        pendingOrdersRefreshCompletionRef.current = {
+          message: getOrdersReconciliationStatusMessage(job, "Order reconciliation complete"),
+        };
+        ordersRefreshRevalidationObservedRef.current = false;
+        setOrdersRefreshPhase("reloading");
         revalidator.revalidate();
       }
       return;
@@ -4937,6 +4959,22 @@ function OrdersPageContent({ loaderData }) {
     revalidator,
     shopify,
   ]);
+
+  useEffect(() => {
+    if (ordersRefreshPhase !== "reloading") return;
+
+    if (revalidator.state !== "idle") {
+      ordersRefreshRevalidationObservedRef.current = true;
+      return;
+    }
+    if (!ordersRefreshRevalidationObservedRef.current) return;
+
+    const completion = pendingOrdersRefreshCompletionRef.current;
+    pendingOrdersRefreshCompletionRef.current = null;
+    ordersRefreshRevalidationObservedRef.current = false;
+    setOrdersRefreshPhase("idle");
+    if (completion?.message) shopify.toast.show(completion.message);
+  }, [ordersRefreshPhase, revalidator.state, shopify]);
 
   useEffect(() => {
     const createdRouteGroup = routePlanFetcher.data?.routeGroup;
