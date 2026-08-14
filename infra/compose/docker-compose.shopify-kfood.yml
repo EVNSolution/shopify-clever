@@ -16,7 +16,7 @@ services:
       CLEVER_DELIVERY_API_URL: http://clever-route-api:3000
       CLEVER_APP_ID: clever-route-kfood
       CLEVER_ORDERS_BACKGROUND_RECONCILIATION: "1"
-      CLEVER_ORDERS_SERVER_PAGINATION: "0"
+      CLEVER_ORDERS_SERVER_PAGINATION: "1"
       GEOCODING_SEARCH_URL: https://nominatim.openstreetmap.org/search
     restart: unless-stopped
     volumes:
