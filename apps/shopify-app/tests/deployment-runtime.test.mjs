@@ -27,7 +27,7 @@ test("Shopify compose files run only the app containers on the route-server netw
   assert.match(workflowSource, /docker-compose\.shopify-main\.yml/);
   assert.match(workflowSource, /docker-compose\.shopify-dev\.yml/);
   assert.match(kfoodCompose, /CLEVER_ORDERS_BACKGROUND_RECONCILIATION: "1"/);
-  assert.match(kfoodCompose, /CLEVER_ORDERS_SERVER_PAGINATION: "0"/);
+  assert.match(kfoodCompose, /CLEVER_ORDERS_SERVER_PAGINATION: "1"/);
   assert.doesNotMatch(workflowSource, /delivery-api-migrate/);
   assert.doesNotMatch(workflowSource, /up -d postgres/);
   const deployAction = readRepoFile(".github/actions/ec2-shopify-deploy/action.yml");
