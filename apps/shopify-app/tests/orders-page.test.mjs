@@ -1147,9 +1147,13 @@ test("Orders owns global Shopify order update and safe route refresh", () => {
   assert.match(ordersPageSource, /refreshResult\.updatedOrders \?\? reconciliationJob\?\.appliedCount/);
   assert.match(ordersPageSource, /Order reconciliation queued/);
   assert.match(ordersPageSource, /\$\{updatedOrders\} orders synced; \$\{refreshedRoutes\} READY routes refreshed\$\{skippedMessage\}/);
+  assert.match(ordersPageSource, /ordersRefreshPhase === "reloading"/);
+  assert.match(ordersPageSource, /pendingOrdersRefreshCompletionRef\.current = \{[\s\S]*message:/);
+  assert.match(ordersPageSource, /if \(!ordersRefreshRevalidationObservedRef\.current\) return/);
+  assert.match(ordersPageSource, /shopify\.toast\.show\(completion\.message\)/);
   assert.match(
     ordersPageSource,
-    /isOrdersReconciliationTerminalSuccess\(job\)[\s\S]*ordersReconciliationRevalidatedJobIdRef\.current !== completion\.jobId[\s\S]*revalidator\.revalidate\(\)/,
+    /isOrdersReconciliationTerminalSuccess\(job\)[\s\S]*ordersReconciliationRevalidatedJobIdRef\.current !== completion\.jobId[\s\S]*setOrdersRefreshPhase\("reloading"\)[\s\S]*revalidator\.revalidate\(\)/,
   );
   assert.match(ordersPageSource, /isOrdersReconciliationTerminalFailure\(job\)/);
   assert.match(ordersPageSource, /window\.clearTimeout\(timeout\)/);
