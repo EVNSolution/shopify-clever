@@ -14,6 +14,7 @@ import {
   getLatestShopifyOrderUpdatedAt,
   isOrdersReconciliationTerminalFailure,
   isOrdersReconciliationTerminalSuccess,
+  shouldIgnoreTransientEmptyOrdersPageResponse,
   shouldPollOrdersReconciliationJob,
 } from "../app/features/orders/orders-page.shared.js";
 
@@ -292,6 +293,33 @@ test("Orders loader can isolate CLEVER delivery orders for synthetic dev data", 
     /const shouldLoadShopifyOrders =\s*shouldLoadShopifyMetadata && !canonicalFirst/,
   );
   assert.match(ordersPageSource, /canonicalFirst\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows/);
+});
+
+test("Order page keeps the current rows when a failed pagination response is empty", () => {
+  assert.equal(
+    shouldIgnoreTransientEmptyOrdersPageResponse({
+      errors: [{ message: "Orders pagination requires a complete visible-order sequence backfill" }],
+      rows: [],
+      result: { count: 603 },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldIgnoreTransientEmptyOrdersPageResponse({
+      errors: [],
+      rows: [],
+      result: { count: 0 },
+    }),
+    false,
+  );
+  assert.equal(
+    shouldIgnoreTransientEmptyOrdersPageResponse({
+      errors: [{ message: "temporary failure" }],
+      rows: [{ id: "order-1" }],
+      result: { count: 603 },
+    }),
+    false,
+  );
 });
 
 test("Orders canonical-first first load skips Shopify full order fetch and disables mount sync by default", () => {
@@ -1955,7 +1983,9 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /deliveryDates: getOrderDeliveryDateFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryDate: ""/);
   assert.match(ordersPageSource, /deliveryWeekdays: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryWeekday: ""/);
   assert.match(ordersPageSource, /serviceTypes: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?serviceType: ""/);
-  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
+  assert.match(ordersPageSource, /const appliedOrdersPageFilterKeyRef = useRef\(resourceFilterKey\)/);
+  assert.match(ordersPageSource, /appliedOrdersPageFilterKeyRef\.current = resourceFilterKey/);
+  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*paginationEnabled && appliedOrdersPageFilterKeyRef\.current !== resourceFilterKey\s*\?\s*displayOrders\s*:\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate, paginationEnabled, resourceFilterKey\],\s*\)/);
   assert.match(ordersPageSource, /getOrderSortValue\(leftOrder, sortConfig\.key, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return sortOrdersByDeliveryDatePriority\(filteredOrders\)/);
   assert.match(ordersPageSource, /aria-label="Filter orders by ordered date"/);
