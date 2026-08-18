@@ -83,6 +83,7 @@ const ROUTE_AWAITING_DELIVERY_STATUSES = new Set([
 ]);
 const CANCELLED_STATUSES = new Set(["cancelled", "canceled", "voided"]);
 const ROUTE_ASSIGNED_STATUSES = new Set(["assigned", "arrived", "en_route", "published"]);
+const SHOPIFY_UNFULFILLED_STATUSES = new Set(["open", "restocked", "unfulfilled"]);
 const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
 export function filterOrders(orders, filters = {}) {
@@ -405,11 +406,12 @@ export function getOrderShopifyFulfillmentState(order) {
     order?.rawPayload?.displayFulfillmentStatus ??
       order?.shopifyOrderSnapshot?.displayFulfillmentStatus ??
       order?.displayFulfillmentStatus ??
-      order?.fulfillmentStatus,
+      order?.fulfillmentStatus ??
+      order?.status,
   );
 
   if (fulfillmentStatus === "fulfilled") return "fulfilled";
-  if (fulfillmentStatus === "unfulfilled") return "unfulfilled";
+  if (SHOPIFY_UNFULFILLED_STATUSES.has(fulfillmentStatus)) return "unfulfilled";
 
   return null;
 }

@@ -165,11 +165,23 @@ test("filters Shopify fulfillment states without replacing CLEVER delivery state
       planningStatus: "PLANNED",
       fulfillmentStatus: "PARTIALLY_FULFILLED",
     },
+    {
+      id: "open",
+      planningStatus: "UNPLANNED",
+      fulfillmentStatus: "OPEN",
+    },
+    {
+      id: "restocked",
+      planningStatus: "UNPLANNED",
+      fulfillmentStatus: "RESTOCKED",
+    },
   ];
 
   assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[0]), "fulfilled");
   assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[1]), "unfulfilled");
   assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[2]), null);
+  assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[3]), "unfulfilled");
+  assert.equal(getOrderShopifyFulfillmentState(fulfillmentOrders[4]), "unfulfilled");
   assert.deepEqual(
     filterOrders(fulfillmentOrders, {
       deliveryState: "fulfilled",
@@ -182,7 +194,7 @@ test("filters Shopify fulfillment states without replacing CLEVER delivery state
       deliveryState: "unfulfilled",
       scope: "history",
     }).map((order) => order.id),
-    ["unfulfilled"],
+    ["unfulfilled", "open", "restocked"],
   );
   assert.deepEqual(
     filterOrders(fulfillmentOrders, {
@@ -190,6 +202,28 @@ test("filters Shopify fulfillment states without replacing CLEVER delivery state
       scope: "history",
     }).map((order) => order.id),
     ["fulfilled", "partial"],
+  );
+});
+
+test("filters canonical order rows by their fulfillment status field", () => {
+  const canonicalOrders = [
+    { id: "fulfilled", status: "FULFILLED" },
+    { id: "unfulfilled", status: "UNFULFILLED" },
+  ];
+
+  assert.deepEqual(
+    filterOrders(canonicalOrders, {
+      deliveryState: "fulfilled",
+      scope: "history",
+    }).map((order) => order.id),
+    ["fulfilled"],
+  );
+  assert.deepEqual(
+    filterOrders(canonicalOrders, {
+      deliveryState: "unfulfilled",
+      scope: "history",
+    }).map((order) => order.id),
+    ["unfulfilled"],
   );
 });
 
