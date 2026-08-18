@@ -2114,6 +2114,16 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /const ordersTotalPages = getPositiveInteger\(ordersPageInfo\?\.totalPages\)/);
   assert.match(ordersPageSource, /import \{ getOrdersPageNumbers \} from "\.\/orders-pagination"/);
   assert.match(ordersPageSource, /ordersPageNumbers\.map\(\(pageNumber\) =>/);
+  assert.match(
+    ordersPageSource,
+    /const ordersPageUpdating =\s*paginationEnabled &&[\s\S]*ordersPageFetcher\.state !== "idle"[\s\S]*appliedOrdersPageFilterKeyRef\.current !== resourceFilterKey/,
+  );
+  assert.match(
+    ordersPageSource,
+    /<s-spinner size="base" accessibilityLabel="Loading order results"><\/s-spinner>/,
+  );
+  assert.match(ordersPageSource, />Updating order results…<\/span>/);
+  assert.match(ordersPageSource, /const disabled = active \|\| ordersPageUpdating/);
   assert.match(ordersPageSource, /\{ordersPageResult\.count\} total orders/);
   assert.match(ordersPageSource, /Page \{ordersCurrentPage\} of \{ordersTotalPages\}/);
   assert.doesNotMatch(ordersPageSource, /\? `, \$\{ordersPageResult\.count\} orders`/);

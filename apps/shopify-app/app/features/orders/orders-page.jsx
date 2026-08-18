@@ -3695,6 +3695,12 @@ function OrdersPageContent({ loaderData }) {
   const tableOrders = sortedOrders;
   const ordersCurrentPage = getPositiveInteger(ordersPageInfo?.currentPage);
   const ordersTotalPages = getPositiveInteger(ordersPageInfo?.totalPages);
+  const ordersPageUpdating =
+    paginationEnabled &&
+    (
+      ordersPageFetcher.state !== "idle" ||
+      appliedOrdersPageFilterKeyRef.current !== resourceFilterKey
+    );
   const ordersPageNumbers = useMemo(
     () => getOrdersPageNumbers(ordersCurrentPage, ordersTotalPages),
     [ordersCurrentPage, ordersTotalPages],
@@ -5813,10 +5819,12 @@ function OrdersPageContent({ loaderData }) {
             />
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Visible order count" style={orderSelectionCountStyle}>
-                Orders: {filteredOrders.length}
-                {paginationEnabled && ordersPageResult?.countPrecision === "exact"
+                Orders: {ordersPageUpdating ? "Updating…" : filteredOrders.length}
+                {!ordersPageUpdating && paginationEnabled && ordersPageResult?.countPrecision === "exact"
                   ? ` / ${ordersPageResult.count}`
-                  : filteredOrders.length === displayOrders.length ? "" : ` / ${displayOrders.length}`}
+                  : !ordersPageUpdating && filteredOrders.length !== displayOrders.length
+                    ? ` / ${displayOrders.length}`
+                    : ""}
               </span>
               <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {selectedOrderCount}</span>
               {selectionSnapshotsEnabled ? (
@@ -6078,15 +6086,25 @@ function OrdersPageContent({ loaderData }) {
               )
             : null}
           {paginationEnabled ? (
-            <nav aria-label="Orders pagination" style={ordersPaginationBlockStyle}>
+            <nav aria-busy={ordersPageUpdating} aria-label="Orders pagination" style={ordersPaginationBlockStyle}>
               <span
-                aria-label="Orders page status"
-                style={{ ...orderSelectionCountStyle, display: "flex", gap: "12px" }}
+                aria-label={ordersPageUpdating ? "Loading order results" : "Orders page status"}
+                aria-live="polite"
+                style={{ ...orderSelectionCountStyle, alignItems: "center", display: "flex", gap: "12px" }}
               >
-                {ordersPageResult?.countPrecision === "exact" && ordersPageResult.count != null
-                  ? <span>{ordersPageResult.count} total orders</span>
-                  : null}
-                <span>Page {ordersCurrentPage} of {ordersTotalPages}</span>
+                {ordersPageUpdating ? (
+                  <>
+                    <s-spinner size="base" accessibilityLabel="Loading order results"></s-spinner>
+                    <span>Updating order results…</span>
+                  </>
+                ) : (
+                  <>
+                    {ordersPageResult?.countPrecision === "exact" && ordersPageResult.count != null
+                      ? <span>{ordersPageResult.count} total orders</span>
+                      : null}
+                    <span>Page {ordersCurrentPage} of {ordersTotalPages}</span>
+                  </>
+                )}
               </span>
               <div style={ordersPaginationButtonsStyle}>
                 {ordersPageNumbers.map((pageNumber) => {
@@ -6094,7 +6112,7 @@ function OrdersPageContent({ loaderData }) {
                     return <span key={pageNumber} aria-hidden="true">…</span>;
                   }
                   const active = pageNumber === ordersCurrentPage;
-                  const disabled = active || ordersPageFetcher.state !== "idle";
+                  const disabled = active || ordersPageUpdating;
                   return (
                     <button
                       key={pageNumber}
