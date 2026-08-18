@@ -312,6 +312,25 @@ export function createOrdersViewSnapshot(loaderData, capturedAt = Date.now()) {
   };
 }
 
+export function shouldIgnoreTransientEmptyOrdersPageResponse(response = {}) {
+  const rows = Array.isArray(response?.rows) ? response.rows : [];
+  if (rows.length > 0) return false;
+
+  const errors = Array.isArray(response?.errors) ? response.errors : [];
+  if (errors.length === 0) return false;
+
+  const resultCount = numberOrNull(response?.result?.count);
+  if (resultCount > 0) return true;
+
+  return errors.some((error) => {
+    const message = textOrUndefined(error?.message)?.toLowerCase() ?? "";
+    const code = textOrUndefined(error?.code)?.toLowerCase() ?? "";
+    return message.includes("backfill")
+      || message.includes("visible-order sequence")
+      || code.includes("backfill");
+  });
+}
+
 export function restoreOrdersViewSnapshot(
   loaderData,
   snapshot,

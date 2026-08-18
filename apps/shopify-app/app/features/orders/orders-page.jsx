@@ -86,6 +86,7 @@ import {
   isOrdersReconciliationTerminalSuccess,
   restoreOrdersViewSnapshot,
   roundPerfDuration,
+  shouldIgnoreTransientEmptyOrdersPageResponse,
   shouldPollOrdersReconciliationJob,
   shouldRequestOrdersData,
   textOrUndefined,
@@ -2667,6 +2668,7 @@ function OrdersPageContent({ loaderData }) {
     return resourceFilters;
   }, [shopLocalDate, urlOrderFilters]);
   const resourceFilterKey = resourceFilterSearchParams.toString();
+  const appliedOrdersPageFilterKeyRef = useRef(resourceFilterKey);
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? new Date(),
@@ -2775,9 +2777,12 @@ function OrdersPageContent({ loaderData }) {
       pendingPageNavigationRef.current = null;
     }
 
-    setTableRows(Array.isArray(ordersPageFetcher.data.rows) ? ordersPageFetcher.data.rows : []);
-    setOrdersPageInfo(ordersPageFetcher.data.pageInfo ?? null);
-    setOrdersPageResult(ordersPageFetcher.data.result ?? null);
+    if (!shouldIgnoreTransientEmptyOrdersPageResponse(ordersPageFetcher.data)) {
+      appliedOrdersPageFilterKeyRef.current = resourceFilterKey;
+      setTableRows(Array.isArray(ordersPageFetcher.data.rows) ? ordersPageFetcher.data.rows : []);
+      setOrdersPageInfo(ordersPageFetcher.data.pageInfo ?? null);
+      setOrdersPageResult(ordersPageFetcher.data.result ?? null);
+    }
     emitOrdersResourceTiming(
       "orders.page.fetch",
       ordersPageFetcher.data,
@@ -2983,14 +2988,16 @@ function OrdersPageContent({ loaderData }) {
   );
   const filteredOrders = useMemo(
     () =>
-      activeOrderFilters
+      paginationEnabled && appliedOrdersPageFilterKeyRef.current !== resourceFilterKey
+        ? displayOrders
+        : activeOrderFilters
         ? filterOrders(displayOrders, {
             ...effectiveOrderFilters,
             tab: "all",
             referenceDate: orderFilterReferenceDate,
           })
         : displayOrders,
-    [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate],
+    [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate, paginationEnabled, resourceFilterKey],
   );
 
   useEffect(() => {
