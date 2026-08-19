@@ -65,7 +65,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
         ),
       } : {}),
       currencyCode: textOrUndefined(order?.currencyCode),
-      lineItems: order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems,
+      lineItems: getCanonicalOrderLineItems(order),
       attributes: formatDeliveryAttributes(deliveryArea, deliveryDay),
       attributeList: formatCanonicalAttributeList(deliveryArea, deliveryDay),
       deliveryArea,
@@ -149,6 +149,14 @@ export function isOrderReadyToPlan(order) {
   if (!readiness) return true;
 
   return readiness === "READY_TO_PLAN";
+}
+
+function getCanonicalOrderLineItems(order) {
+  if (Array.isArray(order?.items)) {
+    return { nodes: order.items };
+  }
+
+  return order?.lineItems ?? order?.shopifyOrderSnapshot?.lineItems ?? order?.rawPayload?.lineItems;
 }
 
 export function getOrderSyncSnapshots(orders) {

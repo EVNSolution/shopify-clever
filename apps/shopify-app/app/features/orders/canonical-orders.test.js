@@ -151,6 +151,37 @@ test("canonical order adapter falls back safely and only trusts numeric coordina
   assert.equal(row.hasCoordinates, false);
 });
 
+test("canonical order adapter exposes Delivery API items as Shopify-style line items", () => {
+  const [row] = mapCanonicalOrdersToOrderRows([
+    {
+      shopifyOrderGid: "gid://shopify/Order/1003",
+      items: [
+        {
+          name: "Premium meal kit",
+          options: [{ key: "Size", value: "Large" }],
+          productId: 101,
+          quantity: 2,
+          sku: "MEAL-L",
+          variationId: 202,
+        },
+      ],
+    },
+  ]);
+
+  assert.deepEqual(row.lineItems, {
+    nodes: [
+      {
+        name: "Premium meal kit",
+        options: [{ key: "Size", value: "Large" }],
+        productId: 101,
+        quantity: 2,
+        sku: "MEAL-L",
+        variationId: 202,
+      },
+    ],
+  });
+});
+
 test("canonical order adapter labels pickup orders as Pickup area", () => {
   const [row] = mapCanonicalOrdersToOrderRows([
     {
