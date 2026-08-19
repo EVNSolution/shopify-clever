@@ -562,35 +562,41 @@ const ordersPaginationBlockStyle = {
   borderTop: "1px solid #ebebeb",
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "6px",
   justifyContent: "space-between",
-  margin: "12px 10px 14px",
-  padding: "10px 0",
+  margin: "6px 10px 8px",
+  padding: "4px 0",
 };
 
 const ordersPaginationButtonsStyle = {
   alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "6px",
+  gap: "4px",
+};
+
+const compactOrdersPageButtonStyle = {
+  borderRadius: "6px",
+  fontSize: "12px",
+  lineHeight: "18px",
+  minHeight: "26px",
+  minWidth: "28px",
+  padding: "2px 8px",
 };
 
 const activeOrdersPageButtonStyle = {
   ...createRouteButtonStyle,
-  minWidth: "32px",
-  padding: "4px 10px",
+  ...compactOrdersPageButtonStyle,
 };
 
 const ordersPageButtonStyle = {
   ...orderFilterButtonStyle,
-  minWidth: "32px",
-  padding: "4px 10px",
+  ...compactOrdersPageButtonStyle,
 };
 
 const disabledOrdersPageButtonStyle = {
   ...disabledOrderFilterButtonStyle,
-  minWidth: "32px",
-  padding: "4px 10px",
+  ...compactOrdersPageButtonStyle,
 };
 
 const orderFilterControlStyle = {
