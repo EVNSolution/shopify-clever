@@ -38,6 +38,14 @@ const riskRules = [
       return /\bDROP\s+(?:TABLE|COLUMN|INDEX|CONSTRAINT)\b/i.test(sql);
     },
   },
+  {
+    name: "data-mutation",
+    matches(sql) {
+      return /\b(?:UPDATE\b[^;]*\bSET\b|DELETE\s+FROM\b|INSERT\s+INTO\b)/i.test(
+        sql,
+      );
+    },
+  },
 ];
 
 const incompleteValue = /^(?:pending|none|n\/a|todo|-)?$/i;

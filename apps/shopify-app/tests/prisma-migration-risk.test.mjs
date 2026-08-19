@@ -35,6 +35,18 @@ test("Prisma migration risk scan detects destructive and data-sensitive SQL", ()
   ]);
 });
 
+test("Prisma migration risk scan requires review for data mutations", () => {
+  const statements = [
+    'UPDATE "Session" SET "scope" = \'read_orders\';',
+    'DELETE FROM "Session" WHERE "shop" = \'old.example\';',
+    'INSERT INTO "Session" ("id") VALUES (\'seed\');',
+  ];
+
+  for (const sql of statements) {
+    assert.deepEqual(findMigrationRisks(sql), ["data-mutation"]);
+  }
+});
+
 test("risky Prisma migrations require a concrete production review record", () => {
   const riskySql = 'DROP TABLE "Session";';
 
