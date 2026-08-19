@@ -61,7 +61,7 @@ import {
   getShopLocalDate,
 } from "../shopify/shop-timezone.server";
 
-const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
+const PERF_CAPTURE_ENABLED = import.meta.env.DEV || process.env.CLEVER_PERF_CAPTURE === "1";
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
 const ORDERS_PAGE_LOAD_TIMEOUT_MS = 15_000;
 
@@ -869,37 +869,27 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
       )
     : Promise.resolve({ data: { orders: [], errors: [] }, durationMs: 0 });
 
-  const inventoryDataPromise = fetchDeliveryInventories(
-    request,
-    {},
-    { cacheKey: shopifyShopCacheKey },
-  ).then(
-    (inventoryData) => ({
-      data: inventoryData,
-      durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
-    }),
-    () => ({
-      data: { inventories: [], errors: [{ code: DELIVERY_API_ERROR_CODE, message: "Inventory API 호출에 실패했습니다." }] },
-      durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
-    }),
-  );
-
-  const routeGroupDataPromise = shouldLoadOrders
-    ? fetchDeliveryRouteGroups(
+  const inventoryDataPromise = activeOrdersView === "inventory"
+    ? fetchDeliveryInventories(
         request,
         {},
         { cacheKey: shopifyShopCacheKey },
       ).then(
-        (routeGroupData) => ({
-          data: routeGroupData,
-          durationMs: roundPerfDuration(getSafePerformanceNow() - routeGroupsStartedAt),
+        (inventoryData) => ({
+          data: inventoryData,
+          durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
         }),
         () => ({
-          data: { routeGroups: [], errors: [{ code: DELIVERY_API_ERROR_CODE, message: "Route group API 호출에 실패했습니다." }] },
-          durationMs: roundPerfDuration(getSafePerformanceNow() - routeGroupsStartedAt),
+          data: { inventories: [], errors: [{ code: DELIVERY_API_ERROR_CODE, message: "Inventory API 호출에 실패했습니다." }] },
+          durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
         }),
       )
-    : Promise.resolve({ data: { routeGroups: [], errors: [] }, durationMs: 0 });
+    : Promise.resolve({ data: { inventories: [], errors: [] }, durationMs: 0 });
+
+  const routeGroupDataPromise = Promise.resolve({
+    data: { routeGroups: [], errors: [] },
+    durationMs: roundPerfDuration(getSafePerformanceNow() - routeGroupsStartedAt),
+  });
 
   const [
     preferencesDataResult,
@@ -982,6 +972,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
       autoSyncOrdersOnLoad,
       backgroundReconciliation,
       canonicalFirst,
+      performanceCapture: PERF_CAPTURE_ENABLED,
       ...resourceFlags,
     },
     pageInfo: serverOrderData.pageInfo ?? null,
@@ -1075,6 +1066,25 @@ export async function loadOrdersMapPointsResource(request) {
   });
 }
 
+export async function loadOrdersRouteGroupsResource(request) {
+  const payload = await readOrdersQueryResourcePayload(request);
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.route_groups.fetch", async () => {
+    const routeGroupData = await fetchDeliveryRouteGroups(
+      request,
+      {},
+      { sessionToken: payload.shopifySessionToken },
+    );
+
+    return {
+      metric: { routeGroupCount: routeGroupData.routeGroups?.length ?? 0 },
+      value: {
+        ...routeGroupData,
+        _requestKey: payload._requestKey ?? null,
+      },
+    };
+  });
+}
+
 export async function handleOrdersSelectionSnapshotsResource(request) {
   const payload = await readResourcePayload(request);
   const sessionToken = textOrUndefined(payload.shopifySessionToken);
@@ -1135,12 +1145,13 @@ async function measureOrdersResource(request, name, operation) {
 
   try {
     const result = await operation();
+    const errorCount = Array.isArray(result.value?.errors) ? result.value.errors.length : 0;
     logStructuredMetric(name, {
       ...baseMetric,
       ...result.metric,
       durationMs: roundPerfDuration(getSafePerformanceNow() - startedAt),
-      errorCount: 0,
-      status: "success",
+      errorCount,
+      status: errorCount > 0 ? "error" : "success",
     });
     return result.value;
   } catch (error) {

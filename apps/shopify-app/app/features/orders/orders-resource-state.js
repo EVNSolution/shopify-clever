@@ -2,6 +2,7 @@ const ORDERS_RESOURCE_PATHS = {
   facets: "/app/orders/facets",
   map: "/app/orders/map-points",
   page: "/app/orders/page",
+  routeGroups: "/app/orders/route-groups",
   selection: "/app/orders/selection-snapshots",
 };
 

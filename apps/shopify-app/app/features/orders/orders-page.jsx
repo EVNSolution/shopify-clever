@@ -76,7 +76,7 @@ import {
   buildOrdersViewNavigationMetric,
   createOrdersViewSnapshot,
   DEFAULT_ROUTE_PLAN_TITLE,
-  formatLatestShopifyOrderUpdatedAt,
+  formatOrdersResultGeneratedAt,
   getOrdersReconciliationStatusMessage,
   getOrdersRefreshCompletion,
   getOrdersReconciliationPollingCompletion,
@@ -115,7 +115,6 @@ function getPositiveInteger(value, fallback = 1) {
 }
 
 const PERF_ENDPOINT = "/perf";
-const PERF_CAPTURE_ENABLED = import.meta.env.DEV;
 let lastOrdersViewSnapshot = null;
 const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
 const ORDER_DATA_FIX_ACTION = "fixData";
@@ -229,9 +228,6 @@ const ordersLoadingRetryButtonStyle = {
   marginTop: "8px",
   padding: "8px 14px",
 };
-
-const ORDERS_AUTO_RETRY_DELAY_MS = 750;
-let ordersLoadAutoRetryAttempted = false;
 
 const routePlanPanelStyle = {
   boxSizing: "border-box",
@@ -1633,7 +1629,10 @@ function getSanitizedUrl(url) {
 }
 
 function emitPerformanceMetric(metric) {
-  if (!PERF_CAPTURE_ENABLED || typeof window === "undefined") return;
+  if (
+    typeof window === "undefined" ||
+    (!import.meta.env.DEV && window.__cleverPerfCaptureEnabled !== true)
+  ) return;
 
   const payload = {
     app: "clever-route-app",
@@ -2464,22 +2463,7 @@ function OrdersPageLoading() {
 
 function OrdersPageLoadError() {
   const revalidator = useRevalidator();
-  const [automaticRetryPending, setAutomaticRetryPending] = useState(
-    () => !ordersLoadAutoRetryAttempted,
-  );
-  const retrying = automaticRetryPending || revalidator.state !== "idle";
-
-  useEffect(() => {
-    if (ordersLoadAutoRetryAttempted) return undefined;
-
-    setAutomaticRetryPending(true);
-    const timeoutId = window.setTimeout(() => {
-      ordersLoadAutoRetryAttempted = true;
-      revalidator.revalidate();
-    }, ORDERS_AUTO_RETRY_DELAY_MS);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [revalidator]);
+  const retrying = revalidator.state !== "idle";
 
   return (
     <TabLayout
@@ -2487,11 +2471,11 @@ function OrdersPageLoadError() {
       primary={
         <div aria-live="assertive" role="alert" style={ordersLoadingPanelStyle}>
           <div style={ordersLoadingStatusStyle}>
-            <strong>{retrying ? "Orders are taking longer than usual" : "Orders loading stopped"}</strong>
+            <strong>{retrying ? "Retrying Orders…" : "Orders loading stopped"}</strong>
             <span>
               {retrying
-                ? "The first request exceeded 15 seconds. Retrying automatically…"
-                : "The automatic retry also did not finish. Retry when ready."}
+                ? "The current retry is still running."
+                : "The request exceeded 15 seconds. Retry when ready."}
             </span>
             <button
               type="button"
@@ -2546,11 +2530,13 @@ function OrdersPageContent({ loaderData }) {
   const ordersPagePrefetchFetcher = useFetcher();
   const ordersFacetsFetcher = useFetcher();
   const ordersMapPointsFetcher = useFetcher();
+  const routeGroupsFetcher = useFetcher();
   const ordersSelectionFetcher = useFetcher();
   const submitOrdersPageResource = ordersPageFetcher.submit;
   const submitOrdersPagePrefetchResource = ordersPagePrefetchFetcher.submit;
   const submitOrdersFacetsResource = ordersFacetsFetcher.submit;
   const submitOrdersMapPointsResource = ordersMapPointsFetcher.submit;
+  const submitOrdersRouteGroupsResource = routeGroupsFetcher.submit;
   const shopify = useAppBridge();
   const getOrdersResourceSessionToken = useMemo(
     () => createOrdersResourceSessionTokenGetter(() => shopify.idToken()),
@@ -2560,9 +2546,6 @@ function OrdersPageContent({ loaderData }) {
   const navigation = useNavigation();
   const revalidator = useRevalidator();
 
-  useEffect(() => {
-    ordersLoadAutoRetryAttempted = false;
-  }, []);
   const [searchParams, setSearchParams] = useSearchParams();
   const addToRouteGroupId = searchParams.get("addToRouteGroupId") ?? "";
   const addToRoutePlanId = searchParams.get("addToRoutePlanId") ?? "";
@@ -2577,24 +2560,41 @@ function OrdersPageContent({ loaderData }) {
     [loaderData],
   );
   const displayLoaderData = restoredOrdersView.loaderData;
-  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, needsSessionTokenRefresh, perf, shopLocalDate } = displayLoaderData;
+  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, perf, shopLocalDate } = displayLoaderData;
   const { deliveryCycle, shopTimeZone } = displayLoaderData;
   const autoSyncOrdersOnLoad = featureFlags?.autoSyncOrdersOnLoad === true;
   const backgroundReconciliationEnabled = featureFlags?.backgroundReconciliation === true;
   const paginationEnabled = featureFlags?.pagination === true;
   const compactMapEnabled = featureFlags?.compactMap === true;
   const selectionSnapshotsEnabled = featureFlags?.selectionSnapshots === true;
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    window.__cleverPerfCaptureEnabled = featureFlags?.performanceCapture === true;
+    return () => {
+      delete window.__cleverPerfCaptureEnabled;
+    };
+  }, [featureFlags?.performanceCapture]);
   const [tableRows, setTableRows] = useState(() => Array.isArray(orders) ? orders : []);
   const [ordersPageInfo, setOrdersPageInfo] = useState(() => displayLoaderData.pageInfo ?? null);
   const [ordersPageResult, setOrdersPageResult] = useState(() => displayLoaderData.pageResult ?? null);
+  const [ordersFreshness, setOrdersFreshness] = useState(() => freshness ?? null);
   const [ordersFacets, setOrdersFacets] = useState(null);
+  const [ordersFacetsFilterKey, setOrdersFacetsFilterKey] = useState(null);
   const [ordersMapPoints, setOrdersMapPoints] = useState([]);
+  const [ordersMapFilterKey, setOrdersMapFilterKey] = useState(null);
+  const [ordersPageTokenPending, setOrdersPageTokenPending] = useState(false);
+  const [ordersResourceError, setOrdersResourceError] = useState(null);
+  const [loadedRouteGroups, setLoadedRouteGroups] = useState(
+    () => Array.isArray(routeGroups) ? routeGroups : [],
+  );
+  const [routeGroupsError, setRouteGroupsError] = useState(null);
   const [selectionSnapshot, setSelectionSnapshot] = useState(null);
   const [selectionExcludedOrderIds, setSelectionExcludedOrderIds] = useState([]);
   const resourceSequenceRef = useRef(0);
   const latestPageRequestKeyRef = useRef(null);
   const latestFacetsRequestKeyRef = useRef(null);
   const latestMapRequestKeyRef = useRef(null);
+  const latestRouteGroupsRequestKeyRef = useRef(null);
   const latestSelectionRequestKeyRef = useRef(null);
   const pendingSelectionExclusionsRef = useRef(null);
   const ordersPageCacheRef = useRef(new Map());
@@ -2604,6 +2604,7 @@ function OrdersPageContent({ loaderData }) {
   const resourceMetricStartedAtRef = useRef(new Map());
   const firstUsableMetricEmittedRef = useRef(false);
   const bulkMetricStartedAtRef = useRef(null);
+  const routeGroupsRequestedRef = useRef(false);
 
   useEffect(() => {
     if (!sourceOrdersLoaded || typeof window === "undefined") return;
@@ -2619,8 +2620,8 @@ function OrdersPageContent({ loaderData }) {
     [inventories],
   );
   const safeRouteGroups = useMemo(
-    () => (Array.isArray(routeGroups) ? routeGroups.filter((routeGroup) => routeGroup?.id) : []),
-    [routeGroups],
+    () => loadedRouteGroups.filter((routeGroup) => routeGroup?.id),
+    [loadedRouteGroups],
   );
   const syncedOrders = useMemo(
     () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders),
@@ -2651,9 +2652,12 @@ function OrdersPageContent({ loaderData }) {
     },
     [bulkUpdatedOrders, refreshedOrders, safeOrders, syncedOrders],
   );
-  const latestShopifyOrderUpdatedAt = useMemo(
-    () => formatLatestShopifyOrderUpdatedAt(displayOrders, shopTimeZone),
-    [displayOrders, shopTimeZone],
+  const ordersResultGeneratedAt = useMemo(
+    () => formatOrdersResultGeneratedAt(
+      ordersFreshness?.resultGeneratedAt ?? ordersPageInfo?.readWatermark,
+      shopTimeZone,
+    ),
+    [ordersFreshness?.resultGeneratedAt, ordersPageInfo?.readWatermark, shopTimeZone],
   );
   const urlOrderFilters = useMemo(
     () => getOrderFiltersFromSearchParams(searchParams),
@@ -2690,7 +2694,69 @@ function OrdersPageContent({ loaderData }) {
     ordersPageCacheRef.current.clear();
     ordersPagePrefetchRequestRef.current = null;
     pendingPageNavigationRef.current = null;
+    setOrdersFacetsFilterKey(null);
+    setOrdersMapFilterKey(null);
+    setOrdersMapPoints([]);
+    setOrdersResourceError(null);
   }, [resourceFilterKey]);
+
+  useEffect(() => {
+    if (activeOrdersView !== "orders" || routeGroupsRequestedRef.current) return;
+
+    routeGroupsRequestedRef.current = true;
+    const requestKey = `route-groups-${resourceSequenceRef.current + 1}`;
+    resourceSequenceRef.current += 1;
+    latestRouteGroupsRequestKeyRef.current = requestKey;
+    resourceMetricStartedAtRef.current.set(requestKey, getSafePerformanceNow());
+
+    void (async () => {
+      try {
+        const idToken = await getOrdersResourceSessionToken();
+        if (!idToken) {
+          setRouteGroupsError("Route groups could not be loaded. Retry by reopening Orders.");
+          return;
+        }
+        submitOrdersResourceRequest(
+          submitOrdersRouteGroupsResource,
+          "routeGroups",
+          new URLSearchParams(),
+          { idToken, requestKey },
+        );
+      } catch {
+        setRouteGroupsError("Route groups could not be loaded. Retry by reopening Orders.");
+      }
+    })();
+  }, [activeOrdersView, getOrdersResourceSessionToken, submitOrdersRouteGroupsResource]);
+
+  useEffect(() => {
+    if (
+      routeGroupsFetcher.state !== "idle" ||
+      !shouldApplyOrdersResourceResponse(
+        routeGroupsFetcher.data,
+        latestRouteGroupsRequestKeyRef.current,
+      )
+    ) return;
+
+    const resourceErrors = Array.isArray(routeGroupsFetcher.data.errors)
+      ? routeGroupsFetcher.data.errors
+      : [];
+    if (resourceErrors.length > 0) {
+      setRouteGroupsError(resourceErrors[0]?.message ?? "Route groups could not be loaded.");
+    } else {
+      setLoadedRouteGroups(
+        Array.isArray(routeGroupsFetcher.data.routeGroups)
+          ? routeGroupsFetcher.data.routeGroups
+          : [],
+      );
+      setRouteGroupsError(null);
+    }
+    emitOrdersResourceTiming(
+      "orders.route_groups.fetch",
+      routeGroupsFetcher.data,
+      resourceMetricStartedAtRef.current,
+      { routeGroupCount: routeGroupsFetcher.data.routeGroups?.length ?? 0 },
+    );
+  }, [routeGroupsFetcher.data, routeGroupsFetcher.state]);
 
   useEffect(() => {
     if (!paginationEnabled) return undefined;
@@ -2719,30 +2785,45 @@ function OrdersPageContent({ loaderData }) {
       resourceMetricStartedAtRef.current.set(mapRequestKey, getSafePerformanceNow());
     }
 
-    getOrdersResourceSessionToken().then((idToken) => {
-      if (cancelled || !idToken) return;
+    if (shouldLoadPage) setOrdersPageTokenPending(true);
+    void (async () => {
+      try {
+        const idToken = await getOrdersResourceSessionToken();
+        if (cancelled) return;
+        if (!idToken) {
+          setOrdersResourceError("The secure session expired before order results could load.");
+          return;
+        }
 
-      if (shouldLoadPage) {
-        submitOrdersResourceRequest(submitOrdersPageResource, "page", resourceFilterSearchParams, {
+        if (shouldLoadPage) {
+          submitOrdersResourceRequest(submitOrdersPageResource, "page", resourceFilterSearchParams, {
+            idToken,
+            requestKey: pageRequestKey,
+          });
+        }
+        submitOrdersResourceRequest(submitOrdersFacetsResource, "facets", resourceFilterSearchParams, {
           idToken,
-          requestKey: pageRequestKey,
+          requestKey: facetsRequestKey,
         });
+        if (compactMapEnabled) {
+          submitOrdersResourceRequest(submitOrdersMapPointsResource, "map", resourceFilterSearchParams, {
+            idToken,
+            limit: 1000,
+            requestKey: mapRequestKey,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setOrdersResourceError("Order results could not start loading. Retry the filter or page.");
+        }
+      } finally {
+        if (!cancelled && shouldLoadPage) setOrdersPageTokenPending(false);
       }
-      submitOrdersResourceRequest(submitOrdersFacetsResource, "facets", resourceFilterSearchParams, {
-        idToken,
-        requestKey: facetsRequestKey,
-      });
-      if (compactMapEnabled) {
-        submitOrdersResourceRequest(submitOrdersMapPointsResource, "map", resourceFilterSearchParams, {
-          idToken,
-          limit: 1000,
-          requestKey: mapRequestKey,
-        });
-      }
-    });
+    })();
 
     return () => {
       cancelled = true;
+      if (shouldLoadPage) setOrdersPageTokenPending(false);
     };
   }, [
     compactMapEnabled,
@@ -2761,7 +2842,8 @@ function OrdersPageContent({ loaderData }) {
     setTableRows(Array.isArray(orders) ? orders : []);
     setOrdersPageInfo(displayLoaderData.pageInfo ?? null);
     setOrdersPageResult(displayLoaderData.pageResult ?? null);
-  }, [displayLoaderData.pageInfo, displayLoaderData.pageResult, orders, ordersPageInfo, paginationEnabled]);
+    setOrdersFreshness(displayLoaderData.freshness ?? null);
+  }, [displayLoaderData.freshness, displayLoaderData.pageInfo, displayLoaderData.pageResult, orders, ordersPageInfo, paginationEnabled]);
 
   useEffect(() => {
     if (
@@ -2777,11 +2859,20 @@ function OrdersPageContent({ loaderData }) {
       pendingPageNavigationRef.current = null;
     }
 
-    if (!shouldIgnoreTransientEmptyOrdersPageResponse(ordersPageFetcher.data)) {
+    const resourceErrors = Array.isArray(ordersPageFetcher.data.errors)
+      ? ordersPageFetcher.data.errors
+      : [];
+    if (shouldIgnoreTransientEmptyOrdersPageResponse(ordersPageFetcher.data)) {
+      setOrdersResourceError(
+        resourceErrors[0]?.message ?? "Order results could not be refreshed. Showing previous results.",
+      );
+    } else {
       appliedOrdersPageFilterKeyRef.current = resourceFilterKey;
       setTableRows(Array.isArray(ordersPageFetcher.data.rows) ? ordersPageFetcher.data.rows : []);
       setOrdersPageInfo(ordersPageFetcher.data.pageInfo ?? null);
       setOrdersPageResult(ordersPageFetcher.data.result ?? null);
+      setOrdersFreshness(ordersPageFetcher.data.freshness ?? null);
+      setOrdersResourceError(null);
     }
     emitOrdersResourceTiming(
       "orders.page.fetch",
@@ -2864,7 +2955,15 @@ function OrdersPageContent({ loaderData }) {
       ordersFacetsFetcher.state !== "idle" ||
       !shouldApplyOrdersResourceResponse(ordersFacetsFetcher.data, latestFacetsRequestKeyRef.current)
     ) return;
+    const resourceErrors = Array.isArray(ordersFacetsFetcher.data.errors)
+      ? ordersFacetsFetcher.data.errors
+      : [];
+    if (resourceErrors.length > 0) {
+      setOrdersResourceError(resourceErrors[0]?.message ?? "Order filters could not be refreshed.");
+      return;
+    }
     setOrdersFacets(ordersFacetsFetcher.data);
+    setOrdersFacetsFilterKey(resourceFilterKey);
     emitOrdersResourceTiming(
       "orders.facets.fetch",
       ordersFacetsFetcher.data,
@@ -2874,21 +2973,29 @@ function OrdersPageContent({ loaderData }) {
         totalCount: ordersFacetsFetcher.data.totalCount,
       },
     );
-  }, [ordersFacetsFetcher.data, ordersFacetsFetcher.state]);
+  }, [ordersFacetsFetcher.data, ordersFacetsFetcher.state, resourceFilterKey]);
 
   useEffect(() => {
     if (
       ordersMapPointsFetcher.state !== "idle" ||
       !shouldApplyOrdersResourceResponse(ordersMapPointsFetcher.data, latestMapRequestKeyRef.current)
     ) return;
+    const resourceErrors = Array.isArray(ordersMapPointsFetcher.data.errors)
+      ? ordersMapPointsFetcher.data.errors
+      : [];
+    if (resourceErrors.length > 0) {
+      setOrdersResourceError(resourceErrors[0]?.message ?? "Order map points could not be refreshed.");
+      return;
+    }
     setOrdersMapPoints(Array.isArray(ordersMapPointsFetcher.data.points) ? ordersMapPointsFetcher.data.points : []);
+    setOrdersMapFilterKey(resourceFilterKey);
     emitOrdersResourceTiming(
       "orders.map_points.fetch",
       ordersMapPointsFetcher.data,
       resourceMetricStartedAtRef.current,
       { pointCount: ordersMapPointsFetcher.data.points?.length ?? 0 },
     );
-  }, [ordersMapPointsFetcher.data, ordersMapPointsFetcher.state]);
+  }, [ordersMapPointsFetcher.data, ordersMapPointsFetcher.state, resourceFilterKey]);
 
   useEffect(() => {
     if (
@@ -2950,7 +3057,7 @@ function OrdersPageContent({ loaderData }) {
     [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate],
   );
   const orderFilterOptions = useMemo(
-    () => paginationEnabled && ordersFacets
+    () => paginationEnabled && ordersFacets && ordersFacetsFilterKey === resourceFilterKey
       ? getServerOrderFilterOptions(ordersFacets.facets)
       : ({
       deliveryAreas: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
@@ -2984,7 +3091,7 @@ function OrdersPageContent({ loaderData }) {
         referenceDate: orderFilterReferenceDate,
       })).serviceTypes,
     }),
-    [effectiveOrderFilters, orderFilterOptionOrders, orderFilterReferenceDate, ordersFacets, paginationEnabled],
+    [effectiveOrderFilters, orderFilterOptionOrders, orderFilterReferenceDate, ordersFacets, ordersFacetsFilterKey, paginationEnabled, resourceFilterKey],
   );
   const filteredOrders = useMemo(
     () =>
@@ -3047,9 +3154,9 @@ function OrdersPageContent({ loaderData }) {
 
   const resourceLocatedOrders = useMemo(
     () => compactMapEnabled
-      ? mapCompactOrderPointsToRows(ordersMapPoints)
+      ? mapCompactOrderPointsToRows(ordersMapFilterKey === resourceFilterKey ? ordersMapPoints : [])
       : filteredOrders.filter((order) => order.hasCoordinates),
-    [compactMapEnabled, filteredOrders, ordersMapPoints],
+    [compactMapEnabled, filteredOrders, ordersMapFilterKey, ordersMapPoints, resourceFilterKey],
   );
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
   const [createInventoryClientError, setCreateInventoryClientError] = useState(null);
@@ -3542,7 +3649,7 @@ function OrdersPageContent({ loaderData }) {
         <div style={ordersUpdateActionStyle}>
           <div style={ordersUpdateMetaStyle}>
             <span style={ordersLatestUpdateStyle}>
-              Latest update: {latestShopifyOrderUpdatedAt}
+              Results as of: {ordersResultGeneratedAt}
             </span>
             {ordersRefreshStatusMessage ? (
               <span aria-live="polite" role="status" style={ordersRefreshStatusStyle}>
@@ -3698,8 +3805,12 @@ function OrdersPageContent({ loaderData }) {
   const ordersPageUpdating =
     paginationEnabled &&
     (
+      ordersPageTokenPending ||
       ordersPageFetcher.state !== "idle" ||
-      appliedOrdersPageFilterKeyRef.current !== resourceFilterKey
+      (
+        appliedOrdersPageFilterKeyRef.current !== resourceFilterKey &&
+        !ordersResourceError
+      )
     );
   const ordersPageNumbers = useMemo(
     () => getOrdersPageNumbers(ordersCurrentPage, ordersTotalPages),
@@ -4215,6 +4326,7 @@ function OrdersPageContent({ loaderData }) {
     latestPageRequestKeyRef.current = requestKey;
     resourceMetricStartedAtRef.current.set(requestKey, getSafePerformanceNow());
     const currentPage = {
+      freshness: ordersFreshness,
       pageInfo: ordersPageInfo,
       result: ordersPageResult,
       rows: tableRows,
@@ -4230,6 +4342,8 @@ function OrdersPageContent({ loaderData }) {
       setTableRows(Array.isArray(cachedPage.rows) ? cachedPage.rows : []);
       setOrdersPageInfo(cachedPage.pageInfo ?? null);
       setOrdersPageResult(cachedPage.result ?? null);
+      setOrdersFreshness(cachedPage.freshness ?? null);
+      setOrdersResourceError(null);
       emitOrdersResourceTiming(
         "orders.page.fetch",
         { ...cachedPage, _requestKey: requestKey },
@@ -4240,15 +4354,28 @@ function OrdersPageContent({ loaderData }) {
     }
 
     pendingPageNavigationRef.current = { currentPage, requestKey };
-    const idToken = await getOrdersResourceSessionToken();
-    if (!idToken) return;
+    setOrdersPageTokenPending(true);
+    setOrdersResourceError(null);
+    try {
+      const idToken = await getOrdersResourceSessionToken();
+      if (!idToken) {
+        pendingPageNavigationRef.current = null;
+        setOrdersResourceError("The secure session expired before the next page could load.");
+        return;
+      }
 
-    submitOrdersResourceRequest(submitOrdersPageResource, "page", resourceFilterSearchParams, {
-      idToken,
-      page: nextPage,
-      readWatermark: ordersPageInfo?.readWatermark,
-      requestKey,
-    });
+      submitOrdersResourceRequest(submitOrdersPageResource, "page", resourceFilterSearchParams, {
+        idToken,
+        page: nextPage,
+        readWatermark: ordersPageInfo?.readWatermark,
+        requestKey,
+      });
+    } catch {
+      pendingPageNavigationRef.current = null;
+      setOrdersResourceError("The next page could not start loading. Please retry.");
+    } finally {
+      setOrdersPageTokenPending(false);
+    }
   };
 
   const handleSelectAllFilteredOrders = async () => {
@@ -5134,7 +5261,10 @@ function OrdersPageContent({ loaderData }) {
         });
         mapRef.current = map;
         installMissingMapImageFallback(map);
-        if (PERF_CAPTURE_ENABLED && typeof window !== "undefined") {
+        if (
+          typeof window !== "undefined" &&
+          (import.meta.env.DEV || window.__cleverPerfCaptureEnabled === true)
+        ) {
           window.__cleverOrdersMap = map;
         }
 
@@ -5217,8 +5347,8 @@ function OrdersPageContent({ loaderData }) {
       markersRef.current = [];
       const singleMapRemoveStartedAt = performance.now();
       if (
-        PERF_CAPTURE_ENABLED &&
         typeof window !== "undefined" &&
+        (import.meta.env.DEV || window.__cleverPerfCaptureEnabled === true) &&
         window.__cleverOrdersMap === mapRef.current
       ) {
         delete window.__cleverOrdersMap;
@@ -6099,6 +6229,9 @@ function OrdersPageContent({ loaderData }) {
                   </>
                 ) : (
                   <>
+                    {ordersResourceError ? (
+                      <span role="status">Showing previous results — {ordersResourceError}</span>
+                    ) : null}
                     {ordersPageResult?.countPrecision === "exact" && ordersPageResult.count != null
                       ? <span>{ordersPageResult.count} total orders</span>
                       : null}
@@ -6131,6 +6264,11 @@ function OrdersPageContent({ loaderData }) {
                 })}
               </div>
             </nav>
+          ) : null}
+          {routeGroupsError ? (
+            <div aria-live="polite" role="status" style={orderPageNoticeStyle}>
+              {routeGroupsError}
+            </div>
           ) : null}
           <div style={tableWrapStyle}>
             <table

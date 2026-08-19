@@ -955,3 +955,39 @@ test("keeps explicit delivery order cache keys scoped by shop", async () => {
     clearDeliveryApiResponseCache();
   }
 });
+
+test("live Orders page resources bypass the shared GET response cache", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  const previousTtl = process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = "5000";
+  clearDeliveryApiResponseCache();
+  let requestCount = 0;
+  const options = {
+    fetch: async () => {
+      requestCount += 1;
+      return Response.json({
+        data: {
+          freshness: { resultGeneratedAt: "2026-08-19T00:00:00.000Z", syncStatus: "query_complete" },
+          pageInfo: { currentPage: 1, totalPages: 1 },
+          result: { count: 1, countPrecision: "exact" },
+          rows: [{ id: "order-1" }],
+        },
+        error: null,
+      });
+    },
+    sessionToken: "client-session-token",
+  };
+
+  try {
+    await fetchDeliveryOrdersPage(new Request("https://app.example/app/orders"), { page: 1 }, options);
+    await fetchDeliveryOrdersPage(new Request("https://app.example/app/orders"), { page: 1 }, options);
+    assert.equal(requestCount, 2);
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
+    else process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+    if (previousTtl === undefined) delete process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS;
+    else process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = previousTtl;
+    clearDeliveryApiResponseCache();
+  }
+});

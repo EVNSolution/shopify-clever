@@ -8,6 +8,7 @@ import { mapCanonicalOrdersToOrderRows } from "../app/features/orders/canonical-
 import {
   buildOrderTimelineDetails,
   formatLatestShopifyOrderUpdatedAt,
+  formatOrdersResultGeneratedAt,
   getOrdersReconciliationPollingCompletion,
   getOrdersReconciliationStatusMessage,
   getOrdersRefreshCompletion,
@@ -105,8 +106,8 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.equal(packageJson.dependencies.pmtiles?.length > 0, true);
 });
 
-test("Orders update action shows the latest individual Shopify order update", () => {
-  assert.match(ordersPageSource, /Latest update: \{latestShopifyOrderUpdatedAt\}/);
+test("Orders update action shows when the current query result was generated", () => {
+  assert.match(ordersPageSource, /Results as of: \{ordersResultGeneratedAt\}/);
   assert.match(ordersPageSource, /Update Shopify orders/);
   assert.doesNotMatch(ordersPageSource, />Update routes</);
   assert.match(ordersPageSource, /clearShopifyOrdersCache\(shopifyShopCacheKey\)/);
@@ -134,6 +135,11 @@ test("Orders update action shows the latest individual Shopify order update", ()
     "2026-07-29, 14:00:00",
   );
   assert.equal(formatLatestShopifyOrderUpdatedAt([], "Asia/Seoul"), "—");
+  assert.equal(
+    formatOrdersResultGeneratedAt("2026-07-29T05:00:00.000Z", "Asia/Seoul"),
+    "2026-07-29, 14:00:00",
+  );
+  assert.equal(formatOrdersResultGeneratedAt("not-a-date", "Asia/Seoul"), "—");
 });
 
 test("Orders Shopify refresh completion is handled once per background request", () => {
@@ -301,6 +307,14 @@ test("Order page keeps the current rows when a failed pagination response is emp
       errors: [{ message: "Orders pagination requires a complete visible-order sequence backfill" }],
       rows: [],
       result: { count: 603 },
+    }),
+    true,
+  );
+  assert.equal(
+    shouldIgnoreTransientEmptyOrdersPageResponse({
+      errors: [{ message: "temporary delivery API failure" }],
+      rows: [],
+      result: { count: null },
     }),
     true,
   );
@@ -1975,7 +1989,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, needsSessionTokenRefresh, perf, shopLocalDate \} = displayLoaderData/);
+  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, perf, shopLocalDate \} = displayLoaderData/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
@@ -2118,6 +2132,12 @@ test("Orders paginated resource defaults to all history orders and renders numer
     ordersPageSource,
     /const ordersPageUpdating =\s*paginationEnabled &&[\s\S]*ordersPageFetcher\.state !== "idle"[\s\S]*appliedOrdersPageFilterKeyRef\.current !== resourceFilterKey/,
   );
+  assert.match(ordersPageSource, /ordersPageTokenPending/);
+  assert.match(
+    ordersPageSource,
+    /setOrdersPageTokenPending\(true\)[\s\S]*await getOrdersResourceSessionToken\(\)/,
+  );
+  assert.match(ordersPageSource, /ordersFacetsFilterKey === resourceFilterKey/);
   assert.match(
     ordersPageSource,
     /<s-spinner size="base" accessibilityLabel="Loading order results"><\/s-spinner>/,
@@ -2135,6 +2155,19 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.doesNotMatch(ordersPageSource, /Frozen selected set/);
 });
 
+test("Orders initial loader leaves optional route and inventory data off the critical path", () => {
+  assert.match(
+    ordersPageServerSource,
+    /const inventoryDataPromise = activeOrdersView === "inventory"/,
+  );
+  assert.doesNotMatch(
+    ordersPageServerSource,
+    /const routeGroupDataPromise = shouldLoadOrders[\s\S]*fetchDeliveryRouteGroups/,
+  );
+  assert.match(ordersPageSource, /const routeGroupsFetcher = useFetcher\(\)/);
+  assert.match(ordersPageSource, /submitOrdersResourceRequest\([\s\S]*"routeGroups"/);
+});
+
 test("Orders map and route plan share an accessible resizable height", () => {
   assert.match(mapPanelSource, /export function MapResizeHandle/);
   assert.match(mapPanelSource, /role="slider"/);
@@ -2147,8 +2180,8 @@ test("Orders map and route plan share an accessible resizable height", () => {
   assert.match(ordersPageSource, /\[isMapReady, isMapWide, ordersMapHeight\]/);
 });
 
-test("Orders map renders planned pins and the focused table-click pin", () => {
-  assert.match(ordersPageSource, /const resourceLocatedOrders = useMemo\(\s*\(\) => compactMapEnabled\s*\?\s*mapCompactOrderPointsToRows\(ordersMapPoints\)\s*:\s*filteredOrders\.filter\(\(order\) => order\.hasCoordinates\),\s*\[compactMapEnabled, filteredOrders, ordersMapPoints\],\s*\)/);
+test("Orders map renders current-filter planned pins and the focused table-click pin", () => {
+  assert.match(ordersPageSource, /mapCompactOrderPointsToRows\(ordersMapFilterKey === resourceFilterKey \? ordersMapPoints : \[\]\)/);
   assert.match(ordersPageSource, /mergeLocatedOrderRows\(resourceLocatedOrders, plannedOrders\)/);
   assert.match(ordersPageSource, /syncOrdersMapMarkerLayer\(map, locatedOrders, plannedOrderIds, activeOrderPopupId\)/);
   assert.match(ordersPageSource, /if \(!ordersLayerSynced\) \{\s*mapSourceSyncPendingRef\.current = true;\s*scheduleMapSourceSyncRetry\(\);\s*return undefined;\s*\}/);

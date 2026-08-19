@@ -84,6 +84,17 @@ export function formatLatestShopifyOrderUpdatedAt(orders, shopTimeZone) {
   const latestUpdatedAt = getLatestShopifyOrderUpdatedAt(orders);
   if (!latestUpdatedAt) return "—";
 
+  return formatOrdersTimestamp(latestUpdatedAt, shopTimeZone);
+}
+
+export function formatOrdersResultGeneratedAt(value, shopTimeZone) {
+  const timestamp = textOrUndefined(value);
+  if (!timestamp || Number.isNaN(new Date(timestamp).getTime())) return "—";
+
+  return formatOrdersTimestamp(timestamp, shopTimeZone);
+}
+
+function formatOrdersTimestamp(value, shopTimeZone) {
   return new Intl.DateTimeFormat("en-CA", {
     day: "2-digit",
     hour: "2-digit",
@@ -93,7 +104,7 @@ export function formatLatestShopifyOrderUpdatedAt(orders, shopTimeZone) {
     second: "2-digit",
     ...(shopTimeZone ? { timeZone: shopTimeZone } : {}),
     year: "numeric",
-  }).format(new Date(latestUpdatedAt));
+  }).format(new Date(value));
 }
 
 const DATE_FORMAT_OPTIONS = {
@@ -318,17 +329,7 @@ export function shouldIgnoreTransientEmptyOrdersPageResponse(response = {}) {
 
   const errors = Array.isArray(response?.errors) ? response.errors : [];
   if (errors.length === 0) return false;
-
-  const resultCount = numberOrNull(response?.result?.count);
-  if (resultCount > 0) return true;
-
-  return errors.some((error) => {
-    const message = textOrUndefined(error?.message)?.toLowerCase() ?? "";
-    const code = textOrUndefined(error?.code)?.toLowerCase() ?? "";
-    return message.includes("backfill")
-      || message.includes("visible-order sequence")
-      || code.includes("backfill");
-  });
+  return true;
 }
 
 export function restoreOrdersViewSnapshot(
