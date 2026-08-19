@@ -111,9 +111,10 @@ export function formatSavedDriverPhone(phone) {
 }
 
 const DRIVER_RELEASE_FOLDER_URL = "https://drive.google.com/drive/folders/15Am4CFvcp2szOuuKpGnWgJEB22H96rwZ";
-const DEFAULT_DRIVER_DOWNLOAD_URL = "https://drive.google.com/file/d/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2/view?usp=sharing";
+const DEFAULT_DRIVER_DOWNLOAD_URL = "https://clever-route.cleversystem.ai/routes-app";
 const LEGACY_DRIVER_DOWNLOAD_URLS = new Set([
   "https://clever.delivery/driver/download",
+  "https://drive.google.com/file/d/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2/view?usp=sharing",
   DRIVER_RELEASE_FOLDER_URL,
 ]);
 

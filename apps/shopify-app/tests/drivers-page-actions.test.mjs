@@ -43,7 +43,9 @@ test("Drivers download action opens a QR modal without navigating the admin page
   assert.match(source, /rel="noreferrer"/);
   const qrAssetPath = join(root, "public/icons/driver-download-qr.svg");
   assert.equal(existsSync(qrAssetPath), true);
-  assert.match(readFileSync(qrAssetPath, "utf8"), /https:\/\/drive\.google\.com\/file\/d\/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2\/view\?usp=sharing/);
+  const qrAsset = readFileSync(qrAssetPath, "utf8");
+  assert.match(qrAsset, /https:\/\/clever-route\.cleversystem\.ai\/routes-app/);
+  assert.doesNotMatch(qrAsset, /drive\.(?:google|usercontent)\.com/);
 });
 
 test("Drivers actions use the app compact button height", () => {
