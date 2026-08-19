@@ -220,11 +220,6 @@ function formText(value) {
   return String(value).trim();
 }
 
-function formNullableText(value) {
-  const text = formText(value);
-  return text || null;
-}
-
 function formHttpsUrl(value) {
   const url = formText(value);
   return url.startsWith("https://") ? url : "";

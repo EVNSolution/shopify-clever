@@ -9,7 +9,7 @@
     "generate": "shopify app generate",
     "deploy": "npm run deploy:prod",
     "env": "shopify app env",
-    "start": "react-router-serve ./build/server/index.js",
+    "start": "node ./scripts/start-server.mjs ./build/server/index.js",
     "docker-start": "npm run setup && npm run start",
     "setup": "prisma generate && prisma migrate deploy",
     "lint": "eslint --ignore-path .gitignore --cache --cache-location ./node_modules/.cache/eslint .",
