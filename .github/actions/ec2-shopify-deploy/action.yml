@@ -99,7 +99,7 @@ runs:
           -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
           ./ "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}:${{ inputs.deploy-path }}/"
 
-    - name: Build and restart Shopify service on EC2
+    - name: Build, migrate, and restart Shopify service on EC2
       shell: bash
       run: |
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}" "
@@ -110,8 +110,13 @@ runs:
           sudo touch '${{ inputs.sqlite-path }}'
           sudo chown \"\$(id -u):\$(id -g)\" '${{ inputs.sqlite-path }}'
           chmod 600 '${{ inputs.env-file }}' '${{ inputs.sqlite-path }}'
+          test -r '${{ inputs.sqlite-path }}'
+          test -w '${{ inputs.sqlite-path }}'
           docker compose -f '${{ inputs.compose-file }}' config --quiet
           docker compose -f '${{ inputs.compose-file }}' build
+          docker compose -f '${{ inputs.compose-file }}' run --rm --no-deps '${{ inputs.service }}' npm run prisma:migrate:deploy
+          docker compose -f '${{ inputs.compose-file }}' run --rm --no-deps '${{ inputs.service }}' npm run prisma:migrate:status
+          docker compose -f '${{ inputs.compose-file }}' run --rm --no-deps '${{ inputs.service }}' npm run prisma:migrate:drift
           docker compose -f '${{ inputs.compose-file }}' up -d --remove-orphans '${{ inputs.service }}'
           docker compose -f '${{ inputs.compose-file }}' ps
         "
