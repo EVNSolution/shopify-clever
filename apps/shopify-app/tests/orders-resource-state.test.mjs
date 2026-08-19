@@ -63,6 +63,22 @@ test("Orders resource requests keep filters and session tokens out of URLs", () 
   });
 });
 
+test("Orders optional route-group data uses the same token-safe resource transport", () => {
+  const request = buildOrdersResourceRequest(
+    "routeGroups",
+    new URLSearchParams({ search: "ignored for route groups" }),
+    { idToken: "token", requestKey: "route-groups-1" },
+  );
+
+  assert.equal(request.action, "/app/orders/route-groups");
+  assert.equal(request.action.includes("?"), false);
+  assert.deepEqual(request.payload, {
+    _requestKey: "route-groups-1",
+    filters: { search: "ignored for route groups" },
+    shopifySessionToken: "token",
+  });
+});
+
 test("Orders adjacent page cache binds filters, direction, and cursor without persistence", () => {
   const currentPage = { rows: [{ id: "order-1" }] };
   const targetPage = {

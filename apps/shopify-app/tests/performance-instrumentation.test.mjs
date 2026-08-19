@@ -130,12 +130,7 @@ test("Orders loading leaves the skeleton for a retryable error when data stalls"
   assert.match(ordersPageSource, /<Await resolve=\{ordersPageData\} errorElement=\{<OrdersPageLoadError \/>\}>/);
   assert.match(ordersPageSource, /function OrdersPageLoadError\(\)/);
   assert.match(ordersPageSource, /const revalidator = useRevalidator\(\)/);
-  assert.match(ordersPageSource, /ordersLoadAutoRetryAttempted/);
-  assert.match(
-    ordersPageSource,
-    /window\.setTimeout\(\(\) => \{[\s\S]*ordersLoadAutoRetryAttempted = true;[\s\S]*revalidator\.revalidate\(\);[\s\S]*\}, ORDERS_AUTO_RETRY_DELAY_MS\)/,
-  );
-  assert.match(ordersPageSource, /ordersLoadAutoRetryAttempted = false/);
+  assert.doesNotMatch(ordersPageSource, /ordersLoadAutoRetryAttempted|ORDERS_AUTO_RETRY_DELAY_MS/);
   assert.match(ordersPageSource, /onClick=\{\(\) => revalidator\.revalidate\(\)\}/);
   assert.match(ordersPageSource, /Shopify and delivery data are loading asynchronously/);
 });
@@ -444,6 +439,7 @@ test("performance capture endpoint stores browser metrics outside app data", () 
   assert.match(perfRouteSource, /appendFile/);
   assert.match(perfRouteSource, /function shouldLogMetricToConsole\(metric\) \{/);
   assert.match(perfRouteSource, /metric\.name\.startsWith\("routes\.detail\.map\."\)/);
+  assert.match(perfRouteSource, /metric\.name\.startsWith\("orders\."\)/);
   assert.match(perfRouteSource, /console\.info\(metric\.name, entry\)/);
   assert.doesNotMatch(perfRouteSource, /prisma|migrate|Session/);
 });

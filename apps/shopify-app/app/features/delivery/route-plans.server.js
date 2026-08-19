@@ -71,7 +71,9 @@ export function primeDeliveryApiGetResponseCache(request, path, result, options 
 
   if (!authorization || !path || result?.errors?.length > 0) return false;
 
-  const cacheTtlMs = getDeliveryApiGetCacheTtlMs();
+  const cacheTtlMs = Number.isFinite(options.cacheTtlMs)
+    ? Math.max(0, Number(options.cacheTtlMs))
+    : getDeliveryApiGetCacheTtlMs();
   if (cacheTtlMs <= 0) return false;
 
   const fetchImpl = options.fetch ?? fetch;
@@ -549,7 +551,9 @@ export async function deliveryApiRequest(request, path, options = {}) {
     };
   }
   const url = `${baseUrl}${path}`;
-  const cacheTtlMs = getDeliveryApiGetCacheTtlMs();
+  const cacheTtlMs = Number.isFinite(options.cacheTtlMs)
+    ? Math.max(0, Number(options.cacheTtlMs))
+    : getDeliveryApiGetCacheTtlMs();
   const canUseCache = method === "GET" && !options.body && cacheTtlMs > 0;
 
   if (canUseCache) {

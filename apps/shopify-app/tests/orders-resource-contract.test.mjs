@@ -13,6 +13,7 @@ function read(relativePath) {
 const pageRouteSource = read("app/routes/app.orders_.page.jsx");
 const facetsRouteSource = read("app/routes/app.orders_.facets.jsx");
 const mapRouteSource = read("app/routes/app.orders_.map-points.jsx");
+const routeGroupsRouteSource = read("app/routes/app.orders_.route-groups.jsx");
 const selectionRouteSource = read("app/routes/app.orders_.selection-snapshots.jsx");
 const ordersPageServerSource = read("app/features/orders/orders-page.server.js");
 const ordersResourceStateSource = read("app/features/orders/orders-resource-state.js");
@@ -30,6 +31,10 @@ test("Orders pagination, facets, and map use independent authenticated POST reso
   assert.match(mapRouteSource, /export const action/);
   assert.doesNotMatch(mapRouteSource, /export default/);
 
+  assert.match(routeGroupsRouteSource, /loadOrdersRouteGroupsResource/);
+  assert.match(routeGroupsRouteSource, /export const action/);
+  assert.doesNotMatch(routeGroupsRouteSource, /export default/);
+
   assert.match(
     ordersPageServerSource,
     /export async function loadOrdersPageResource\(request\) \{[\s\S]*readOrdersQueryResourcePayload\(request\)[\s\S]*authenticatedResourceRequest\(request, payload\.shopifySessionToken\)[\s\S]*fetchDeliveryOrdersPage\(/,
@@ -41,6 +46,10 @@ test("Orders pagination, facets, and map use independent authenticated POST reso
   assert.match(
     ordersPageServerSource,
     /export async function loadOrdersMapPointsResource\(request\) \{[\s\S]*readOrdersQueryResourcePayload\(request\)[\s\S]*fetchDeliveryOrderMapPoints\(/,
+  );
+  assert.match(
+    ordersPageServerSource,
+    /export async function loadOrdersRouteGroupsResource\(request\) \{[\s\S]*fetchDeliveryRouteGroups\(/,
   );
   assert.match(
     ordersPageServerSource,

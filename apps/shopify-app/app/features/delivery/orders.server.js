@@ -74,6 +74,7 @@ export async function fetchDeliveryOrdersPage(request, filters = {}, options = {
     request,
     buildDeliveryOrdersResourcePath("page", normalizePageFilters(filters)),
     {
+      cacheTtlMs: 0,
       fetch: options.fetch,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -94,6 +95,7 @@ export async function fetchDeliveryOrderFacets(request, filters = {}, options = 
     request,
     buildDeliveryOrdersResourcePath("facets", filters),
     {
+      cacheTtlMs: 0,
       fetch: options.fetch,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -114,6 +116,7 @@ export async function fetchDeliveryOrderMapPoints(request, filters = {}, options
     request,
     buildDeliveryOrdersResourcePath("map-points", filters),
     {
+      cacheTtlMs: 0,
       fetch: options.fetch,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -362,6 +365,7 @@ function normalizeOrdersFreshness(value) {
       oldestPendingReconciliationAt: null,
       oldestPendingWebhookAt: null,
       queueDepth: null,
+      resultGeneratedAt: null,
       syncStatus: "unknown",
     };
   }
@@ -373,6 +377,7 @@ function normalizeOrdersFreshness(value) {
     oldestPendingReconciliationAt: textOrNull(value.oldestPendingReconciliationAt),
     oldestPendingWebhookAt: textOrNull(value.oldestPendingWebhookAt),
     queueDepth: numberOrNull(value.queueDepth),
+    resultGeneratedAt: textOrNull(value.resultGeneratedAt ?? value.generatedAt),
     syncStatus: textOrNull(value.syncStatus ?? value.status) ?? "unknown",
   };
 }

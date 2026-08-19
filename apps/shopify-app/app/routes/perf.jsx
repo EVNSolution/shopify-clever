@@ -53,7 +53,8 @@ function getPerfLogPath(metric) {
 }
 
 function shouldLogMetricToConsole(metric) {
-  return typeof metric?.name === "string" && metric.name.startsWith("routes.detail.map.");
+  if (typeof metric?.name !== "string") return false;
+  return metric.name.startsWith("routes.detail.map.") || metric.name.startsWith("orders.");
 }
 
 async function parseMetricPayload(request) {
