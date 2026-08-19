@@ -625,7 +625,8 @@ test("Orders table uses a compact centered layout", () => {
 });
 
 test("Orders table has a compact checkbox column for route-plan candidates", () => {
-  assert.match(ordersPageSource, /const \[checkedOrderIds, setCheckedOrderIds\] = useState\(\[\]\)/);
+  assert.match(ordersPageSource, /const \[selectedOrderRows, setSelectedOrderRows\] = useState\(\[\]\)/);
+  assert.match(ordersPageSource, /const checkedOrderIds = useMemo\(/);
   assert.match(ordersPageSource, /const \[plannedOrderIds, setPlannedOrderIds\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /const ORDER_TABLE_COLUMN_WIDTHS = \{/);
   assert.match(ordersPageSource, /select: "2\.5%"/);
@@ -1031,7 +1032,7 @@ test("Orders data fix suggests a nearby delivery area without saving it", () => 
 test("Area and Date pending pills open Fix data without keeping the row selected", () => {
   assert.match(ordersPageSource, /const handleOpenOrderDataAction = \(order\) => \{/);
   assert.match(ordersPageSource, /const pillOrderDataOrder = activeOrderDataOrderId && checkedOrders\.length === 0/);
-  assert.match(ordersPageSource, /setCheckedOrderIds\(\[\]\)/);
+  assert.match(ordersPageSource, /setSelectedOrderRows\(\[\]\)/);
   assert.match(ordersPageSource, /setOrderActionField\(ORDER_DATA_FIX_ACTION\)/);
   assert.match(ordersPageSource, /selectOrderDataOrder\(order\)/);
   assert.match(ordersPageSource, /setOrderActionModalOpen\(true\)/);
@@ -1248,7 +1249,8 @@ test("Orders page keeps background sync errors out of the route creation alert",
 });
 
 test("Orders route draft lets filters guide selection without client route-scope locks", () => {
-  assert.match(ordersPageSource, /const selectedOrderIds = checkedOrderIds\.filter\(\(orderId\) =>\s*displayOrderById\.has\(orderId\) && !plannedOrderIdSet\.has\(orderId\),\s*\)/);
+  assert.match(ordersPageSource, /const selectedOrders = selectedOrderRows\.filter\(\(order\) =>\s*!plannedOrderIdSet\.has\(order\.id\),\s*\)/);
+  assert.match(ordersPageSource, /const selectedOrderIds = selectedOrders\.map\(\(order\) => order\.id\)/);
   assert.match(ordersPageSource, /Array\.from\(new Set\(\[\.\.\.plannedOrderIds, \.\.\.selectedOrderIds\]\)\)/);
   assert.match(ordersPageSource, /setRoutePlanTitle\(buildRoutePlanTitleFromOrders\(nextOrders\)\)/);
   assert.doesNotMatch(ordersPageSource, /worksetAvailabilityContext/);
@@ -1263,10 +1265,17 @@ test("Orders selection does not lock the table or filters before Add to map", ()
   assert.doesNotMatch(ordersPageSource, /autoAppliedDeliveryDateFilter/);
   assert.doesNotMatch(ordersPageSource, /applyDeliveryDateFilterLock/);
   assert.doesNotMatch(ordersPageSource, /applyOrderDeliveryDateSelectionLock/);
-  assert.match(ordersPageSource, /\.\.\.selectableTableOrders\.map\(\(order\) => order\.id\)/);
+  assert.match(ordersPageSource, /updatePagedOrderSelection\(currentOrders, selectableTableOrders, true\)/);
 });
 
-test("Orders route draft survives paginated table data changes", () => {
+test("Orders pending selection and route draft survive paginated table data changes", () => {
+  assert.match(ordersPageSource, /const \[selectedOrderRows, setSelectedOrderRows\] = useState\(\[\]\)/);
+  assert.match(ordersPageSource, /const checkedOrders = selectedOrderRows/);
+  assert.match(ordersPageSource, /updatePagedOrderSelection\(currentOrders, \[order\], checked\)/);
+  assert.match(ordersPageSource, /const selectedOrderById = new Map\(selectedOrders\.map\(\(order\) => \[order\.id, order\]\)\)/);
+  assert.match(ordersPageSource, /selectedOrderById\.get\(orderId\) \?\? displayOrderById\.get\(orderId\) \?\? plannedOrderRowById\.get\(orderId\)/);
+  assert.doesNotMatch(ordersPageSource, /const selectableOrderIds = new Set\(/);
+  assert.match(ordersPageSource, /useEffect\(\(\) => \{\s*setSelectedOrderRows\(\[\]\);\s*\}, \[resourceFilterKey\]\)/);
   assert.match(ordersPageSource, /const \[plannedOrderRows, setPlannedOrderRows\] = useState\(\[\]\)/);
   assert.match(ordersPageSource, /displayOrderById\.get\(orderId\) \?\? plannedOrderRowById\.get\(orderId\)/);
   assert.match(ordersPageSource, /displayOrderById\.get\(nextOrderId\) \?\? plannedOrderRowById\.get\(nextOrderId\)/);
@@ -1519,8 +1528,8 @@ test("Orders table keeps planned orders visible but removes them from selectable
   assert.match(ordersPageSource, /const selectableTableOrders = useMemo\(/);
   assert.match(ordersPageSource, /tableOrders\.filter\(\(order\) => !plannedOrderIdSet\.has\(order\.id\)\)/);
   assert.match(ordersPageSource, /selectableTableOrders\.length > 0 &&\s*selectableTableOrders\.every\(\(order\) => checkedOrderIdSet\.has\(order\.id\)\)/);
-  assert.match(ordersPageSource, /const visibleOrderIds = new Set\(selectableTableOrders\.map\(\(order\) => order\.id\)\)/);
-  assert.match(ordersPageSource, /\.\.\.selectableTableOrders\.map\(\(order\) => order\.id\)/);
+  assert.match(ordersPageSource, /updatePagedOrderSelection\(currentOrders, selectableTableOrders, false\)/);
+  assert.match(ordersPageSource, /updatePagedOrderSelection\(currentOrders, selectableTableOrders, true\)/);
   assert.match(ordersPageSource, /\{tableOrders\.map\(\(order\) => \{/);
   assert.doesNotMatch(ordersPageSource, /\{sortedOrders\.map\(\(order\) => \(/);
 });

@@ -11,6 +11,7 @@ import {
   mergeLocatedOrderRows,
   shouldSyncOrdersLoaderPage,
   shouldApplyOrdersResourceResponse,
+  updatePagedOrderSelection,
   updateOrdersSelectionExclusions,
   updateVisibleOrdersSelectionExclusions,
 } from "../app/features/orders/orders-resource-state.js";
@@ -179,4 +180,40 @@ test("Orders frozen selection exclusions survive pages and support deselect or r
     updateVisibleOrdersSelectionExclusions(["order-1", "order-2", "order-9"], ["order-1", "order-2"], true),
     ["order-9"],
   );
+});
+
+test("Orders manual selection accumulates rows across server-paginated pages", () => {
+  const pageOneRows = [
+    { id: "order-1", name: "#1001" },
+    { id: "order-2", name: "#1002" },
+  ];
+  const pageTwoRows = [
+    { id: "order-51", name: "#1051" },
+    { id: "order-52", name: "#1052" },
+  ];
+
+  const pageOneSelection = updatePagedOrderSelection([], pageOneRows, true);
+  const crossPageSelection = updatePagedOrderSelection(pageOneSelection, pageTwoRows, true);
+
+  assert.deepEqual(
+    crossPageSelection.map((order) => order.id),
+    ["order-1", "order-2", "order-51", "order-52"],
+  );
+  assert.deepEqual(
+    updatePagedOrderSelection(crossPageSelection, [pageOneRows[1]], false).map((order) => order.id),
+    ["order-1", "order-51", "order-52"],
+  );
+});
+
+test("Orders manual selection refreshes a revisited row without duplicating it", () => {
+  const selectedRows = updatePagedOrderSelection(
+    [{ id: "order-1", name: "Old label" }, { id: "order-51", name: "#1051" }],
+    [{ id: "order-1", name: "Updated label" }],
+    true,
+  );
+
+  assert.deepEqual(selectedRows, [
+    { id: "order-1", name: "Updated label" },
+    { id: "order-51", name: "#1051" },
+  ]);
 });

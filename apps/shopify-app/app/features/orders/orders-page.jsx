@@ -22,6 +22,7 @@ import {
   mergeLocatedOrderRows,
   shouldSyncOrdersLoaderPage,
   shouldApplyOrdersResourceResponse,
+  updatePagedOrderSelection,
   updateOrdersSelectionExclusions,
   updateVisibleOrdersSelectionExclusions,
 } from "./orders-resource-state";
@@ -3154,7 +3155,7 @@ function OrdersPageContent({ loaderData }) {
 
     setOrderActionModalOpen(false);
     setBulkUpdateClientError(null);
-    setCheckedOrderIds([]);
+    setSelectedOrderRows([]);
     setSelectionSnapshot(null);
     setSelectionExcludedOrderIds([]);
     pendingSelectionExclusionsRef.current = null;
@@ -3236,7 +3237,7 @@ function OrdersPageContent({ loaderData }) {
   const [notePopoverPosition, setNotePopoverPosition] = useState(null);
   const [activeOrderDetailPopover, setActiveOrderDetailPopover] = useState(null);
   const [checkedInventoryIds, setCheckedInventoryIds] = useState([]);
-  const [checkedOrderIds, setCheckedOrderIds] = useState([]);
+  const [selectedOrderRows, setSelectedOrderRows] = useState([]);
   const [plannedOrderIds, setPlannedOrderIds] = useState([]);
   const [plannedOrderRows, setPlannedOrderRows] = useState([]);
   const [orderActionModalOpen, setOrderActionModalOpen] = useState(false);
@@ -3806,6 +3807,11 @@ function OrdersPageContent({ loaderData }) {
     [plannedOrderRows],
   );
 
+  const checkedOrderIds = useMemo(
+    () => selectedOrderRows.map((order) => order.id),
+    [selectedOrderRows],
+  );
+
   const checkedOrderIdSet = useMemo(
     () => new Set(checkedOrderIds),
     [checkedOrderIds],
@@ -3848,10 +3854,7 @@ function OrdersPageContent({ loaderData }) {
     [ordersCurrentPage, ordersTotalPages],
   );
   const tableWidth = lockedTableWidth ? `max(100%, ${lockedTableWidth}px)` : "100%";
-  const checkedOrders = useMemo(
-    () => checkedOrderIds.map((orderId) => displayOrderById.get(orderId)).filter(Boolean),
-    [checkedOrderIds, displayOrderById],
-  );
+  const checkedOrders = selectedOrderRows;
   const checkedServerOrderIds = useMemo(
     () => checkedOrders.map((order) => order.orderId).filter(Boolean),
     [checkedOrders],
@@ -3984,23 +3987,8 @@ function OrdersPageContent({ loaderData }) {
   }, [filteredOrders, selectedOrderId]);
 
   useEffect(() => {
-    const selectableOrderIds = new Set(
-      filteredOrders
-        .filter((order) => !plannedOrderIdSet.has(order.id))
-        .map((order) => order.id),
-    );
-
-    setCheckedOrderIds((currentOrderIds) => {
-      const nextOrderIds = currentOrderIds.filter((orderId) =>
-        selectableOrderIds.has(orderId),
-      );
-
-      return nextOrderIds.length === currentOrderIds.length
-        ? currentOrderIds
-        : nextOrderIds;
-    });
-
-  }, [displayOrders, filteredOrders, plannedOrderIdSet]);
+    setSelectedOrderRows([]);
+  }, [resourceFilterKey]);
 
   const selectedOrder =
     displayOrders.find((order) => order.id === selectedOrderId) ?? filteredOrders[0];
@@ -4457,7 +4445,7 @@ function OrdersPageContent({ loaderData }) {
   const handleClearOrderSelection = () => {
     latestSelectionRequestKeyRef.current = null;
     pendingSelectionExclusionsRef.current = null;
-    setCheckedOrderIds([]);
+    setSelectedOrderRows([]);
     setSelectionSnapshot(null);
     setSelectionExcludedOrderIds([]);
     setBulkUpdateClientError(null);
@@ -4615,9 +4603,8 @@ function OrdersPageContent({ loaderData }) {
     if (!orderId) return;
     if (plannedOrderIdSet.has(orderId)) return;
 
-    setCheckedOrderIds((currentOrderIds) => checked
-      ? Array.from(new Set([...currentOrderIds, orderId]))
-      : currentOrderIds.filter((selectedOrderId) => selectedOrderId !== orderId));
+    setSelectedOrderRows((currentOrders) =>
+      updatePagedOrderSelection(currentOrders, [order], checked));
     setCreateRouteClientError(null);
   };
 
@@ -4635,22 +4622,14 @@ function OrdersPageContent({ loaderData }) {
     }
 
     if (!allVisibleOrdersChecked) {
-      setCheckedOrderIds((currentOrderIds) =>
-        Array.from(
-          new Set([
-            ...currentOrderIds,
-            ...selectableTableOrders.map((order) => order.id),
-          ]),
-        ),
-      );
+      setSelectedOrderRows((currentOrders) =>
+        updatePagedOrderSelection(currentOrders, selectableTableOrders, true));
       setCreateRouteClientError(null);
       return;
     }
 
-    setCheckedOrderIds((currentOrderIds) => {
-      const visibleOrderIds = new Set(selectableTableOrders.map((order) => order.id));
-      return currentOrderIds.filter((orderId) => !visibleOrderIds.has(orderId));
-    });
+    setSelectedOrderRows((currentOrders) =>
+      updatePagedOrderSelection(currentOrders, selectableTableOrders, false));
   };
 
   const handleAddOrderToPlan = useCallback((orderId) => {
@@ -4664,9 +4643,8 @@ function OrdersPageContent({ loaderData }) {
     setPlannedOrderIds(nextOrderIds);
     setPlannedOrderRows(nextOrders);
     setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
-    setCheckedOrderIds((currentOrderIds) =>
-      currentOrderIds.filter((checkedOrderId) => checkedOrderId !== orderId),
-    );
+    setSelectedOrderRows((currentOrders) =>
+      updatePagedOrderSelection(currentOrders, [{ id: orderId }], false));
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
     setPlanFitRequest((requestCount) => requestCount + 1);
@@ -4676,21 +4654,23 @@ function OrdersPageContent({ loaderData }) {
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
 
-    const selectedOrderIds = checkedOrderIds.filter((orderId) =>
-      displayOrderById.has(orderId) && !plannedOrderIdSet.has(orderId),
+    const selectedOrders = selectedOrderRows.filter((order) =>
+      !plannedOrderIdSet.has(order.id),
     );
+    const selectedOrderIds = selectedOrders.map((order) => order.id);
 
     if (selectedOrderIds.length === 0) return;
 
     const nextOrderIds = Array.from(new Set([...plannedOrderIds, ...selectedOrderIds]));
+    const selectedOrderById = new Map(selectedOrders.map((order) => [order.id, order]));
     const nextOrders = nextOrderIds
-      .map((orderId) => displayOrderById.get(orderId) ?? plannedOrderRowById.get(orderId))
+      .map((orderId) => selectedOrderById.get(orderId) ?? displayOrderById.get(orderId) ?? plannedOrderRowById.get(orderId))
       .filter(Boolean);
 
     setPlannedOrderIds(nextOrderIds);
     setPlannedOrderRows(nextOrders);
     setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
-    setCheckedOrderIds([]);
+    setSelectedOrderRows([]);
     setCreateRouteClientError(null);
     setCreateInventoryClientError(null);
     setPlanFitRequest((requestCount) => requestCount + 1);
@@ -4739,7 +4719,7 @@ function OrdersPageContent({ loaderData }) {
 
   const handleOpenOrderDataAction = (order) => {
     setBulkUpdateClientError(null);
-    setCheckedOrderIds([]);
+    setSelectedOrderRows([]);
     setSelectionSnapshot(null);
     setSelectionExcludedOrderIds([]);
     pendingSelectionExclusionsRef.current = null;
