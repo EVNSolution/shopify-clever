@@ -137,6 +137,7 @@ export async function copyDeliveryRouteGroup(request, routeGroupId, options = {}
 export async function fetchDeliveryRouteGroups(request, query = {}, options = {}) {
   const result = await deliveryApiRequest(request, `/admin/route-groups${buildQueryString(query)}`, {
     cacheKey: options.cacheKey,
+    correlationId: options.correlationId,
     fetch: options.fetch,
     method: "GET",
     sessionToken: options.sessionToken,

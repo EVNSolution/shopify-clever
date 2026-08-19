@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { AppDistribution } from "@shopify/shopify-app-react-router/server";
+import { ApiVersion, AppDistribution } from "@shopify/shopify-app-react-router/server";
 import { resolveShopifyAppDistribution } from "../app/shopify-distribution.server.js";
 
 const root = process.cwd();
 const packageJson = JSON.parse(readFileSync(join(root, "package.json"), "utf8"));
 const shopifyServerSource = readFileSync(join(root, "app/shopify.server.js"), "utf8");
+const graphQlRcSource = readFileSync(join(root, ".graphqlrc.js"), "utf8");
+const protectedCustomerDataMap = readFileSync(
+  join(root, "../../docs/shopify-protected-customer-data-field-map.md"),
+  "utf8",
+);
 const publicEnvExample = readFileSync(join(root, "../../infra/env/shopify-app.env.example"), "utf8");
 const devEnvExample = readFileSync(
   join(root, "../../infra/env/shopify-app-clever-route.env.example"),
@@ -21,6 +26,10 @@ const kfoodShopifyAppConfig = readFileSync(join(root, "shopify.app.kfood.toml"),
 function readTomlString(source, key) {
   const match = source.match(new RegExp(`^${key} = "([^"]+)"$`, "m"));
   return match?.[1] ?? "";
+}
+
+function readScopes(source) {
+  return readTomlString(source, "scopes").split(",").filter(Boolean).sort();
 }
 
 test("Shopify app distribution defaults to App Store for the public app", () => {
@@ -43,6 +52,28 @@ test("shopify.server uses env-selected distribution instead of a hard-coded runt
   assert.match(shopifyServerSource, /resolveShopifyAppDistribution\(\)/);
   assert.doesNotMatch(shopifyServerSource, /distribution:\s*AppDistribution\.AppStore/);
   assert.doesNotMatch(shopifyServerSource, /distribution:\s*AppDistribution\.SingleMerchant/);
+});
+
+test("Shopify Admin GraphQL runtime and codegen use the 2026-07 API version", () => {
+  assert.equal(ApiVersion.July26, "2026-07");
+  assert.match(shopifyServerSource, /apiVersion:\s*ApiVersion\.July26/);
+  assert.match(shopifyServerSource, /export const apiVersion = ApiVersion\.July26/);
+  assert.match(graphQlRcSource, /apiVersion:\s*ApiVersion\.July26/);
+  assert.doesNotMatch(shopifyServerSource, /ApiVersion\.October25/);
+  assert.doesNotMatch(graphQlRcSource, /ApiVersion\.October25/);
+});
+
+test("protected customer data field map matches requested scopes and customer note usage", () => {
+  const expectedScopes = ["read_customers", "read_locations", "read_orders"];
+
+  assert.deepEqual(readScopes(publicShopifyAppConfig), expectedScopes);
+  assert.deepEqual(readScopes(devShopifyAppConfig), expectedScopes);
+  assert.deepEqual(readScopes(kfoodShopifyAppConfig), expectedScopes);
+  assert.match(protectedCustomerDataMap, /scopes = "read_orders,read_locations,read_customers"/);
+  assert.match(protectedCustomerDataMap, /`customer\.note`/);
+  assert.match(protectedCustomerDataMap, /`read_customers`/);
+  assert.doesNotMatch(protectedCustomerDataMap, /No `read_customers`/);
+  assert.doesNotMatch(protectedCustomerDataMap, /beyond the existing `customer\.note`/);
 });
 
 test("public, dev/custom-store, and KFood env examples declare their intended distributions", () => {

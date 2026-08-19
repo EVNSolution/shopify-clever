@@ -16,6 +16,7 @@ export async function syncDeliveryOrders(request, payload = {}, options = {}) {
       reason: payload.reason ?? DELIVERY_ORDERS_SYNC_REASON,
       orders: Array.isArray(payload.orders) ? payload.orders : [],
     }),
+    correlationId: options.correlationId,
     fetch: options.fetch,
     method: "PATCH",
     sessionToken: options.sessionToken,
@@ -51,6 +52,7 @@ export async function fetchDeliveryOrders(request, filters = {}, options = {}) {
     buildDeliveryOrdersPath(filters),
     {
       fetch: options.fetch,
+      correlationId: options.correlationId,
       cacheKey: options.cacheKey,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -75,6 +77,7 @@ export async function fetchDeliveryOrdersPage(request, filters = {}, options = {
     buildDeliveryOrdersResourcePath("page", normalizePageFilters(filters)),
     {
       cacheTtlMs: 0,
+      correlationId: options.correlationId,
       fetch: options.fetch,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -96,6 +99,7 @@ export async function fetchDeliveryOrderFacets(request, filters = {}, options = 
     buildDeliveryOrdersResourcePath("facets", filters),
     {
       cacheTtlMs: 0,
+      correlationId: options.correlationId,
       fetch: options.fetch,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -117,6 +121,7 @@ export async function fetchDeliveryOrderMapPoints(request, filters = {}, options
     buildDeliveryOrdersResourcePath("map-points", filters),
     {
       cacheTtlMs: 0,
+      correlationId: options.correlationId,
       fetch: options.fetch,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -139,6 +144,7 @@ export async function createDeliveryOrdersSelectionSnapshot(request, payload = {
       filters: normalizeObject(payload.filters),
       sort: textOrUndefined(payload.sort) ?? "id_desc",
     }),
+    correlationId: options.correlationId,
     fetch: options.fetch,
     method: "POST",
     sessionToken: options.sessionToken,
@@ -153,6 +159,7 @@ export async function replaceDeliveryOrdersSelectionExclusions(request, payload 
       excludeOrderIds: normalizeStringArray(payload.excludeOrderIds),
       selectionToken: textOrUndefined(payload.selectionToken) ?? "",
     }),
+    correlationId: options.correlationId,
     fetch: options.fetch,
     method: "PATCH",
     sessionToken: options.sessionToken,
@@ -171,6 +178,7 @@ export async function startDeliveryOrdersReconciliation(request, payload = {}, o
 
   const result = await deliveryApiRequest(request, "/admin/orders/reconciliations", {
     body: JSON.stringify(body),
+    correlationId: options.correlationId,
     fetch: options.fetch,
     method: "POST",
     sessionToken: options.sessionToken,
@@ -197,6 +205,7 @@ export async function fetchDeliveryOrdersReconciliationStatus(request, jobId, op
     `/admin/orders/reconciliations/${encodeURIComponent(normalizedJobId)}`,
     {
       fetch: options.fetch,
+      correlationId: options.correlationId,
       method: "GET",
       sessionToken: options.sessionToken,
       suppressErrorStatuses: [404],
@@ -212,6 +221,7 @@ export async function fetchDeliveryOrdersReconciliationStatus(request, jobId, op
 export async function patchDeliveryOrderMetadata(request, orderId, patch = {}, options = {}) {
   const result = await deliveryApiRequest(request, `/admin/orders/${encodeURIComponent(orderId)}/metadata`, {
     body: JSON.stringify(patch),
+    correlationId: options.correlationId,
     fetch: options.fetch,
     method: "PATCH",
     sessionToken: options.sessionToken,
@@ -234,6 +244,7 @@ export async function bulkUpdateDeliveryOrders(request, payload = {}, options = 
         : { orderIds: Array.isArray(payload.orderIds) ? payload.orderIds : [] }),
       value: payload.value,
     }),
+    correlationId: options.correlationId,
     fetch: options.fetch,
     method: "PATCH",
     sessionToken: options.sessionToken,

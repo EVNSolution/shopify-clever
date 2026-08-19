@@ -35,6 +35,7 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
       orders,
     },
     {
+      correlationId: "orders-resource-123",
       fetch: async (url, options) => {
         calls.push({ url, options });
         return Response.json({
@@ -61,6 +62,7 @@ test("syncs delivery orders through the delivery Admin API with an explicit clie
   assert.equal(calls[0].options.method, "PATCH");
   assert.equal(calls[0].options.headers.authorization, "Bearer client-session-token");
   assert.equal(calls[0].options.headers["x-clever-app-id"], "clever-route-dev");
+  assert.equal(calls[0].options.headers["x-clever-client-request-id"], "orders-resource-123");
   assert.equal(calls[0].options.headers["content-type"], "application/json");
   assert.deepEqual(JSON.parse(calls[0].options.body), {
     deliveryCycle: {
