@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { shouldLoadShopifyAppBridge } from "../app/features/shopify/app-bridge-bootstrap.js";
 
 const rootRouteSource = readFileSync(
   join(process.cwd(), "app/routes/_index/route.jsx"),
@@ -121,10 +122,28 @@ const webhookForwardingHelperPath = join(
   "app/features/delivery/webhook-forwarding.server.js",
 );
 
-test("root document server-renders the Shopify App Bridge CDN bootstrap", () => {
+test("direct login guidance skips App Bridge until Shopify supplies store context", () => {
+  assert.equal(
+    shouldLoadShopifyAppBridge("https://clever-kfood-app.cleversystem.ai/auth/login"),
+    false,
+  );
+  assert.equal(
+    shouldLoadShopifyAppBridge(
+      "https://clever-kfood-app.cleversystem.ai/auth/login?shop=k-food-company.myshopify.com",
+    ),
+    true,
+  );
+  assert.equal(
+    shouldLoadShopifyAppBridge("https://clever-kfood-app.cleversystem.ai/app/orders"),
+    true,
+  );
+});
+
+test("root document server-renders the Shopify App Bridge CDN bootstrap when required", () => {
   assert.match(rootDocumentSource, /useLoaderData/);
-  assert.match(rootDocumentSource, /export const loader = \(\) =>/);
+  assert.match(rootDocumentSource, /export const loader = \(\{ request \}\) =>/);
   assert.match(rootDocumentSource, /shopifyApiKey: process\.env\.SHOPIFY_API_KEY \|\| ""/);
+  assert.match(rootDocumentSource, /loadAppBridge: shouldLoadShopifyAppBridge\(request\.url\)/);
   assert.match(rootDocumentSource, /<meta name="shopify-api-key" content=\{shopifyApiKey\} \/>/);
   assert.match(rootDocumentSource, /<script src="https:\/\/cdn\.shopify\.com\/shopifycloud\/app-bridge\.js"><\/script>/);
   assert.ok(
