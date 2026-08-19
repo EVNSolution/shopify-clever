@@ -2681,6 +2681,19 @@ function OrdersPageContent({ loaderData }) {
   }, [shopLocalDate, urlOrderFilters]);
   const resourceFilterKey = resourceFilterSearchParams.toString();
   const appliedOrdersPageFilterKeyRef = useRef(resourceFilterKey);
+  const optimisticResourceFilterKey = useMemo(() => {
+    if (optimisticOrderFilters === null) return null;
+    const optimisticSearchParams = updateOrderFilterSearchParams(
+      new URLSearchParams(),
+      getOrdersResourceFilters(optimisticOrderFilters),
+    );
+    if (shopLocalDate) optimisticSearchParams.set("routeOpsToday", shopLocalDate);
+    return optimisticSearchParams.toString();
+  }, [optimisticOrderFilters, shopLocalDate]);
+  const ordersResourceTransitionPending =
+    paginationEnabled &&
+    optimisticResourceFilterKey !== null &&
+    appliedOrdersPageFilterKeyRef.current !== optimisticResourceFilterKey;
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? new Date(),
@@ -3111,7 +3124,11 @@ function OrdersPageContent({ loaderData }) {
   );
   const filteredOrders = useMemo(
     () =>
-      paginationEnabled && appliedOrdersPageFilterKeyRef.current !== resourceFilterKey
+      paginationEnabled &&
+      (
+        ordersResourceTransitionPending ||
+        appliedOrdersPageFilterKeyRef.current !== resourceFilterKey
+      )
         ? displayOrders
         : activeOrderFilters
         ? filterOrders(displayOrders, {
@@ -3120,7 +3137,7 @@ function OrdersPageContent({ loaderData }) {
             referenceDate: orderFilterReferenceDate,
           })
         : displayOrders,
-    [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate, paginationEnabled, resourceFilterKey],
+    [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate, ordersResourceTransitionPending, paginationEnabled, resourceFilterKey],
   );
 
   useEffect(() => {
@@ -3820,6 +3837,7 @@ function OrdersPageContent({ loaderData }) {
   const ordersTotalPages = getPositiveInteger(ordersPageInfo?.totalPages);
   const ordersPageUpdating = isOrdersPageUpdating({
     enabled: paginationEnabled,
+    filterTransitionPending: ordersResourceTransitionPending,
     pendingRequestKey: ordersPagePendingRequestKey,
     fetcherState: ordersPageFetcher.state,
     appliedFilterKey: appliedOrdersPageFilterKeyRef.current,

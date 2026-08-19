@@ -31,6 +31,18 @@ test("Orders pagination stays visibly busy until the matching response is applie
   assert.equal(
     isOrdersPageUpdating({
       enabled: true,
+      filterTransitionPending: true,
+      pendingRequestKey: null,
+      fetcherState: "idle",
+      appliedFilterKey: "deliveryState=FULFILLED",
+      requestedFilterKey: "deliveryState=FULFILLED",
+    }),
+    true,
+  );
+  assert.equal(
+    isOrdersPageUpdating({
+      enabled: true,
+      filterTransitionPending: false,
       pendingRequestKey: null,
       fetcherState: "idle",
       appliedFilterKey: "deliveryState=UNFULFILLED",
