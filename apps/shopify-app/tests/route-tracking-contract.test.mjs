@@ -869,7 +869,10 @@ test("reconnect snapshots without latest events cannot regress newer live progre
 test("tracking proxy forwards authentication and streams the upstream body without buffering", async () => {
   const abortController = new AbortController();
   const request = new Request("https://app.test/app/route-tracking/route-1", {
-    headers: { authorization: "Bearer shopify-token" },
+    headers: {
+      authorization: "Bearer shopify-token",
+      "x-clever-client-request-id": "tracking-stream-123",
+    },
     signal: abortController.signal,
   });
   let upstreamRequest = null;
@@ -887,10 +890,68 @@ test("tracking proxy forwards authentication and streams the upstream body witho
   assert.equal(upstreamRequest.url, "https://delivery.test/admin/route-plans/route-1/tracking/stream");
   assert.equal(upstreamRequest.options.headers.authorization, "Bearer shopify-token");
   assert.equal(upstreamRequest.options.headers["x-clever-app-id"], "clever-route-dev");
+  assert.equal(upstreamRequest.options.headers["x-clever-client-request-id"], "tracking-stream-123");
   assert.equal(upstreamRequest.options.cache, "no-store");
   assert.equal(upstreamRequest.options.signal, request.signal);
   assert.equal(response.headers.get("cache-control"), "no-store, no-transform");
   assert.match(await response.text(), /tracking_snapshot/);
+});
+
+test("tracking proxy encodes route plan IDs before forwarding delivery API URLs", async () => {
+  const request = new Request("https://app.test/app/route-tracking/route%201", {
+    headers: { authorization: "Bearer shopify-token" },
+  });
+  const forwardedUrls = [];
+  const fetch = async (url) => {
+    forwardedUrls.push(url);
+    return new Response("event: tracking_snapshot\ndata: {}\n\n", {
+      headers: { "content-type": "text/event-stream; charset=utf-8" },
+    });
+  };
+
+  await proxyDeliveryRouteTrackingStream(request, "route 1/branch", {
+    appId: "clever-route-dev",
+    baseUrl: "https://delivery.test",
+    fetch,
+  });
+  await proxyDeliveryRouteTrackingSnapshot(request, "route 1/branch", {
+    appId: "clever-route-dev",
+    baseUrl: "https://delivery.test",
+    fetch: async (url) => {
+      forwardedUrls.push(url);
+      return Response.json({ data: { recentPositions: [] }, error: null });
+    },
+  });
+
+  assert.deepEqual(forwardedUrls, [
+    "https://delivery.test/admin/route-plans/route%201%2Fbranch/tracking/stream",
+    "https://delivery.test/admin/route-plans/route%201%2Fbranch/tracking",
+  ]);
+});
+
+test("tracking proxy sends a safe generated client request ID when input is unsafe", async () => {
+  const request = new Request("https://app.test/app/route-tracking/route-1?mode=snapshot", {
+    headers: {
+      authorization: "Bearer shopify-token",
+      "x-clever-client-request-id": "unsafe/request id",
+    },
+  });
+  let upstreamRequest = null;
+
+  await proxyDeliveryRouteTrackingSnapshot(request, "route-1", {
+    appId: "clever-route-dev",
+    baseUrl: "https://delivery.test",
+    correlationId: "also unsafe/request id",
+    fetch: async (url, options) => {
+      upstreamRequest = { url, options };
+      return Response.json({ data: { recentPositions: [] }, error: null });
+    },
+  });
+
+  const clientRequestId = upstreamRequest.options.headers["x-clever-client-request-id"];
+  assert.match(clientRequestId, /^[A-Za-z0-9._:-]{1,120}$/u);
+  assert.notEqual(clientRequestId, "unsafe/request id");
+  assert.notEqual(clientRequestId, "also unsafe/request id");
 });
 
 test("tracking snapshot proxy reads historical positions without opening an SSE stream", async () => {

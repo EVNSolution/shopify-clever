@@ -9,6 +9,8 @@ const SENSITIVE_VALUE_PATTERNS = [
   /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/giu,
   /\+?\d[\d\s().-]{7,}\d/gu,
 ];
+const SAFE_CORRELATION_ID_FIELDS = new Set(["correlationId", "requestId"]);
+const SAFE_CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]{1,120}$/u;
 
 const ALLOWED_METRIC_FIELDS = new Set([
   "activeOrdersView",
@@ -136,7 +138,12 @@ export function allowlistTelemetryMetric(metric = {}) {
   return Object.fromEntries(
     Object.entries(metric)
       .filter(([key]) => ALLOWED_METRIC_FIELDS.has(key))
-      .map(([key, value]) => [key, sanitizeTelemetryValue(value)]),
+      .map(([key, value]) => [
+        key,
+        SAFE_CORRELATION_ID_FIELDS.has(key) && typeof value === "string" && SAFE_CORRELATION_ID_PATTERN.test(value)
+          ? value
+          : sanitizeTelemetryValue(value),
+      ]),
   );
 }
 

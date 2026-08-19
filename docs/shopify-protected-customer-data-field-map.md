@@ -1,6 +1,6 @@
 # Shopify Protected Customer Data Field Map
 
-_Last updated: 2026-08-05_
+_Last updated: 2026-08-19_
 
 This field map supports the Partner Dashboard protected customer data request for the current `clever` release.
 
@@ -20,10 +20,12 @@ Do **not** request customer email for the current release unless the Shopify Adm
 Current app scopes in `apps/shopify-app/shopify.app.toml`:
 
 ```toml
-scopes = "read_orders,read_locations"
+scopes = "read_orders,read_locations,read_customers"
 ```
 
-No `read_customers`, `read_all_orders`, payment, checkout, or customer profile scopes are requested.
+`read_customers` is requested because the active order read path reads `customer.note`. No
+`read_all_orders`, payment, checkout, customer email, or broader customer profile scopes are
+requested.
 
 ## Active Shopify Admin GraphQL fields
 
@@ -56,8 +58,7 @@ The delivery API sync query mirrors the embedded app fields for updated orders a
 The current Shopify Admin GraphQL queries intentionally do **not** request:
 
 - `email`
-- customer email or other customer profile fields beyond the existing `customer.note`
-- `read_customers`
+- customer email or customer profile fields other than `customer.note`
 - `read_all_orders`
 - payment data
 

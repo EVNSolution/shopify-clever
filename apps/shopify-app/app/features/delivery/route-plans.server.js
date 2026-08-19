@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import { buildRouteScopeFromOrders } from "./route-scope.js";
 import {
+  createTelemetryRequestId,
   logStructuredMetric,
   sanitizeRequestPath,
   sanitizeTelemetryValue,
@@ -534,6 +535,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
   const fetchImpl = options.fetch ?? fetch;
   const method = (options.method ?? "GET").toUpperCase();
   const appId = options.appId ?? getCleverAppId();
+  const correlationId = normalizeClientRequestId(options.correlationId) ?? createTelemetryRequestId();
   let baseUrl;
   try {
     baseUrl = getDeliveryApiBaseUrl();
@@ -579,6 +581,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
       appId,
       authorization,
       body: options.body,
+      correlationId,
       fetchImpl,
       method,
       path,
@@ -612,6 +615,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
     appId,
     authorization,
     body: options.body,
+    correlationId,
     fetchImpl,
     method,
     path,
@@ -631,6 +635,7 @@ async function executeDeliveryApiRequest({
   appId,
   authorization,
   body,
+  correlationId,
   fetchImpl,
   method,
   path,
@@ -648,6 +653,7 @@ async function executeDeliveryApiRequest({
       headers: {
         authorization,
         "x-clever-app-id": appId,
+        "x-clever-client-request-id": correlationId,
         ...(shouldSetJsonContentType ? { "content-type": "application/json" } : {}),
         ...requestHeaders,
       },
@@ -655,9 +661,10 @@ async function executeDeliveryApiRequest({
     });
   } catch (error) {
     const normalizedError = normalizeDeliveryApiNetworkError(error, path);
-    logDeliveryApiFailure({ appId, error: normalizedError, method, path, status: 0 });
+    logDeliveryApiFailure({ appId, correlationId, error: normalizedError, method, path, status: 0 });
     logDeliveryApiTiming({
       appId,
+      correlationId,
       durationMs: Date.now() - startedAt,
       errorCount: 1,
       method,
@@ -678,6 +685,7 @@ async function executeDeliveryApiRequest({
     if (!shouldSuppressDeliveryApiError(response.status, suppressErrorStatuses)) {
       logDeliveryApiFailure({
         appId,
+        correlationId,
         error: normalizedError,
         method,
         path,
@@ -686,6 +694,7 @@ async function executeDeliveryApiRequest({
     }
     logDeliveryApiTiming({
       appId,
+      correlationId,
       durationMs: Date.now() - startedAt,
       errorCount: 1,
       method,
@@ -701,6 +710,7 @@ async function executeDeliveryApiRequest({
 
   logDeliveryApiTiming({
     appId,
+    correlationId,
     durationMs: Date.now() - startedAt,
     errorCount: 0,
     method,
@@ -740,9 +750,10 @@ function shouldSuppressDeliveryApiError(status, suppressErrorStatuses) {
   return Array.isArray(suppressErrorStatuses) && suppressErrorStatuses.includes(status);
 }
 
-function logDeliveryApiFailure({ appId, error, method, path, status }) {
+function logDeliveryApiFailure({ appId, correlationId, error, method, path, status }) {
   console.warn("delivery_api_request_failed", {
     appId,
+    correlationId,
     code: error?.code ?? DELIVERY_API_ERROR_CODE,
     message: sanitizeTelemetryValue(error?.message),
     method,
@@ -751,10 +762,11 @@ function logDeliveryApiFailure({ appId, error, method, path, status }) {
   });
 }
 
-function logDeliveryApiTiming({ appId, durationMs, errorCount, method, path, status }) {
+function logDeliveryApiTiming({ appId, correlationId, durationMs, errorCount, method, path, status }) {
   logStructuredMetric("delivery_api_request", {
     category: "delivery-api",
     count: 1,
+    correlationId,
     durationMs,
     errorCount,
     httpStatus: status,
@@ -762,6 +774,13 @@ function logDeliveryApiTiming({ appId, durationMs, errorCount, method, path, sta
     status: method,
     topic: appId,
   });
+}
+
+function normalizeClientRequestId(value) {
+  if (typeof value !== "string") return null;
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9._:-]{1,120}$/u.test(normalized)) return null;
+  return normalized;
 }
 
 function readDeliveryApiGetCache(cacheKey, now) {

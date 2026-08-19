@@ -35,10 +35,14 @@ test("Shopify proxies the authenticated delivery tracking stream without exposin
   assert.match(resourceSource, /mode === "snapshot"/);
   assert.match(resourceSource, /proxyDeliveryRouteTrackingSnapshot\(request, params\.routePlanId\)/);
   assert.match(resourceSource, /proxyDeliveryRouteTrackingStream\(request, params\.routePlanId\)/);
-  assert.match(proxySource, /\/admin\/route-plans\/\$\{safeRoutePlanId\}\/tracking`/);
-  assert.match(proxySource, /\/admin\/route-plans\/\$\{safeRoutePlanId\}\/tracking\/stream/);
+  assert.match(proxySource, /encodeURIComponent\(safeRoutePlanId\)/);
+  assert.match(proxySource, /\/admin\/route-plans\/\$\{encodedRoutePlanId\}\/tracking`/);
+  assert.match(proxySource, /\/admin\/route-plans\/\$\{encodedRoutePlanId\}\/tracking\/stream/);
   assert.match(proxySource, /authorization/);
   assert.match(proxySource, /"x-clever-app-id"/);
+  assert.match(proxySource, /createTelemetryRequestId/);
+  assert.match(proxySource, /"x-clever-client-request-id"/);
+  assert.match(proxySource, /\[CLIENT_REQUEST_ID_HEADER\]: clientRequestId/);
   assert.match(proxySource, /signal: request\.signal/);
   assert.match(proxySource, /"cache-control": "no-store, no-transform"/);
 });

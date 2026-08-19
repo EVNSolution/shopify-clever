@@ -997,7 +997,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
 
 export async function loadOrdersPageResource(request) {
   const payload = await readOrdersQueryResourcePayload(request);
-  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.page.fetch", async () => {
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.page.fetch", async (correlationId) => {
     requireOrdersResourceFlag("pagination");
     const pageData = await fetchDeliveryOrdersPage(
       request,
@@ -1006,7 +1006,7 @@ export async function loadOrdersPageResource(request) {
         page: payload.page ?? 1,
         readWatermark: payload.readWatermark,
       },
-      { sessionToken: payload.shopifySessionToken },
+      { correlationId, sessionToken: payload.shopifySessionToken },
     );
 
     return {
@@ -1026,12 +1026,12 @@ export async function loadOrdersPageResource(request) {
 
 export async function loadOrdersFacetsResource(request) {
   const payload = await readOrdersQueryResourcePayload(request);
-  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.facets.fetch", async () => {
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.facets.fetch", async (correlationId) => {
     requireOrdersResourceFlag("pagination");
     const result = await fetchDeliveryOrderFacets(
       request,
       payload.filters,
-      { sessionToken: payload.shopifySessionToken },
+      { correlationId, sessionToken: payload.shopifySessionToken },
     );
     return {
       metric: {
@@ -1046,7 +1046,7 @@ export async function loadOrdersFacetsResource(request) {
 
 export async function loadOrdersMapPointsResource(request) {
   const payload = await readOrdersQueryResourcePayload(request);
-  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.map_points.fetch", async () => {
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.map_points.fetch", async (correlationId) => {
     requireOrdersResourceFlag("compactMap");
     const result = await fetchDeliveryOrderMapPoints(
       request,
@@ -1054,7 +1054,7 @@ export async function loadOrdersMapPointsResource(request) {
         ...payload.filters,
         limit: payload.limit,
       },
-      { sessionToken: payload.shopifySessionToken },
+      { correlationId, sessionToken: payload.shopifySessionToken },
     );
     return {
       metric: {
@@ -1068,11 +1068,11 @@ export async function loadOrdersMapPointsResource(request) {
 
 export async function loadOrdersRouteGroupsResource(request) {
   const payload = await readOrdersQueryResourcePayload(request);
-  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.route_groups.fetch", async () => {
+  return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.route_groups.fetch", async (correlationId) => {
     const routeGroupData = await fetchDeliveryRouteGroups(
       request,
       {},
-      { sessionToken: payload.shopifySessionToken },
+      { correlationId, sessionToken: payload.shopifySessionToken },
     );
 
     return {
@@ -1091,7 +1091,7 @@ export async function handleOrdersSelectionSnapshotsResource(request) {
   if (!sessionToken) {
     throw new Response("Shopify session token required", { status: 401 });
   }
-  return measureOrdersResource(authenticatedResourceRequest(request, sessionToken), "orders.selection.snapshot", async () => {
+  return measureOrdersResource(authenticatedResourceRequest(request, sessionToken), "orders.selection.snapshot", async (correlationId) => {
     requireOrdersResourceFlag("selectionSnapshots");
 
     if (request.method === "POST") {
@@ -1099,7 +1099,7 @@ export async function handleOrdersSelectionSnapshotsResource(request) {
         excludeOrderIds: payload.excludeOrderIds,
         filters: payload.filters,
         sort: "id_desc",
-      }, { sessionToken });
+      }, { correlationId, sessionToken });
       return {
         metric: {
           selectedCount: result.selectedCount ?? result.totalCount,
@@ -1117,7 +1117,7 @@ export async function handleOrdersSelectionSnapshotsResource(request) {
       const result = await replaceDeliveryOrdersSelectionExclusions(request, {
         excludeOrderIds: payload.excludeOrderIds,
         selectionToken: payload.selectionToken,
-      }, { sessionToken });
+      }, { correlationId, sessionToken });
       return {
         metric: { skippedCount: payload.excludeOrderIds?.length ?? 0 },
         value: {
@@ -1144,7 +1144,7 @@ async function measureOrdersResource(request, name, operation) {
   };
 
   try {
-    const result = await operation();
+    const result = await operation(requestId);
     const errorCount = Array.isArray(result.value?.errors) ? result.value.errors.length : 0;
     logStructuredMetric(name, {
       ...baseMetric,

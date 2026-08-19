@@ -9,6 +9,9 @@ Shopify embedded app for CLEVER. The delivery backend now lives in the separate 
 The Shopify app calls the operating delivery API through `CLEVER_DELIVERY_API_URL`.
 On EC2 compose, Shopify app containers join the external route-server Docker network and call `http://clever-route-api:3000`.
 
+API request correlation and the bounded `/perf` capture contract are documented
+in [`docs/api-observability.md`](docs/api-observability.md).
+
 ## Public and dev endpoints
 
 Production/App Store runtime:

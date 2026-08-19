@@ -39,6 +39,7 @@ const entryServerSource = readFileSync(join(root, "app/entry.server.jsx"), "utf8
 const perfRoutePath = join(root, "app/routes/perf.jsx");
 const perfScriptPath = join(root, "scripts/perf-orders.mjs");
 const perfCohortScriptPath = join(root, "scripts/orders-browser-performance-cohorts.mjs");
+const apiObservabilityDoc = readFileSync(join(root, "../../docs/api-observability.md"), "utf8");
 
 test("performance evaluator captures real browser Orders navigation timings", () => {
   assert.equal(packageJson.scripts["perf:orders"], "node scripts/perf-orders.mjs");
@@ -429,6 +430,15 @@ test("structured telemetry keeps only allowlisted scalar metric fields", () => {
   );
 });
 
+test("structured telemetry preserves safe UUID correlation identifiers", () => {
+  const correlationId = "ddb836e9-ced8-4f15-9810-3eef5fc49f00";
+
+  assert.deepEqual(
+    allowlistTelemetryMetric({ correlationId, requestId: correlationId }),
+    { correlationId, requestId: correlationId },
+  );
+});
+
 test("performance capture endpoint stores browser metrics outside app data", () => {
   assert.equal(existsSync(perfRoutePath), true, "app/routes/perf.jsx should exist");
 
@@ -442,6 +452,14 @@ test("performance capture endpoint stores browser metrics outside app data", () 
   assert.match(perfRouteSource, /metric\.name\.startsWith\("orders\."\)/);
   assert.match(perfRouteSource, /console\.info\(metric\.name, entry\)/);
   assert.doesNotMatch(perfRouteSource, /prisma|migrate|Session/);
+});
+
+test("API observability docs define correlation, privacy, and perf retention boundaries", () => {
+  assert.match(apiObservabilityDoc, /x-clever-client-request-id/);
+  assert.match(apiObservabilityDoc, /shopify_admin_api_surface_request/);
+  assert.match(apiObservabilityDoc, /Neither log stores[\s\S]*request\/response bodies/);
+  assert.match(apiObservabilityDoc, /CLEVER_PERF_CAPTURE=1/);
+  assert.match(apiObservabilityDoc, /does not[\s\S]*retention or rotation/);
 });
 
 test("app shell records page navigation metrics by target page", () => {
