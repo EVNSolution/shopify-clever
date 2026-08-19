@@ -2590,6 +2590,7 @@ function OrdersPageContent({ loaderData }) {
   const [ordersFacetsFilterKey, setOrdersFacetsFilterKey] = useState(null);
   const [ordersMapPoints, setOrdersMapPoints] = useState([]);
   const [ordersMapFilterKey, setOrdersMapFilterKey] = useState(null);
+  const [filterInputPending, setFilterInputPending] = useState(false);
   const [ordersPagePendingRequestKey, setOrdersPagePendingRequestKey] = useState(null);
   const [ordersResourceError, setOrdersResourceError] = useState(null);
   const [loadedRouteGroups, setLoadedRouteGroups] = useState(
@@ -2681,19 +2682,21 @@ function OrdersPageContent({ loaderData }) {
   }, [shopLocalDate, urlOrderFilters]);
   const resourceFilterKey = resourceFilterSearchParams.toString();
   const appliedOrdersPageFilterKeyRef = useRef(resourceFilterKey);
-  const optimisticResourceFilterKey = useMemo(() => {
-    if (optimisticOrderFilters === null) return null;
-    const optimisticSearchParams = updateOrderFilterSearchParams(
+  const ordersResourceTransitionPending = paginationEnabled && filterInputPending;
+  const beginOrderResourceTransition = useCallback((nextFilters) => {
+    const nextResourceSearchParams = updateOrderFilterSearchParams(
       new URLSearchParams(),
-      getOrdersResourceFilters(optimisticOrderFilters),
+      getOrdersResourceFilters(nextFilters),
     );
-    if (shopLocalDate) optimisticSearchParams.set("routeOpsToday", shopLocalDate);
-    return optimisticSearchParams.toString();
-  }, [optimisticOrderFilters, shopLocalDate]);
-  const ordersResourceTransitionPending =
-    paginationEnabled &&
-    optimisticResourceFilterKey !== null &&
-    appliedOrdersPageFilterKeyRef.current !== optimisticResourceFilterKey;
+    if (shopLocalDate) nextResourceSearchParams.set("routeOpsToday", shopLocalDate);
+    const pageRequestWillChange =
+      paginationEnabled && nextResourceSearchParams.toString() !== resourceFilterKey;
+
+    flushSync(() => {
+      setOptimisticOrderFilters(nextFilters);
+      setFilterInputPending(pageRequestWillChange);
+    });
+  }, [paginationEnabled, resourceFilterKey, shopLocalDate]);
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? new Date(),
@@ -3142,6 +3145,7 @@ function OrdersPageContent({ loaderData }) {
 
   useEffect(() => {
     setOptimisticOrderFilters(null);
+    setFilterInputPending(false);
   }, [searchParams]);
 
   useEffect(() => {
@@ -4169,7 +4173,7 @@ function OrdersPageContent({ loaderData }) {
       [filterKey]: filterValue,
     };
 
-    flushSync(() => setOptimisticOrderFilters(nextFilters));
+    beginOrderResourceTransition(nextFilters);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -4193,7 +4197,7 @@ function OrdersPageContent({ loaderData }) {
       nextFilters[filterKey] = "";
     }
 
-    flushSync(() => setOptimisticOrderFilters(nextFilters));
+    beginOrderResourceTransition(nextFilters);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -4211,7 +4215,7 @@ function OrdersPageContent({ loaderData }) {
       orderedDateTo: endDate,
     };
 
-    flushSync(() => setOptimisticOrderFilters(nextFilters));
+    beginOrderResourceTransition(nextFilters);
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -4220,7 +4224,7 @@ function OrdersPageContent({ loaderData }) {
         replace: true,
       },
     );
-  }, [orderFilters, searchParams, setSearchParams]);
+  }, [beginOrderResourceTransition, orderFilters, searchParams, setSearchParams]);
 
   const positionOrderedDateCalendar = useCallback(() => {
     const rect = orderedDateFieldRef.current?.getBoundingClientRect();
@@ -4332,7 +4336,7 @@ function OrdersPageContent({ loaderData }) {
       tab: "unplanned",
     };
 
-    flushSync(() => setOptimisticOrderFilters(nextFilters));
+    beginOrderResourceTransition(nextFilters);
     setPendingOrderedDateStart("");
     setOrderedDateCalendarOpen(false);
     setOrderedDateCalendarPosition(null);
