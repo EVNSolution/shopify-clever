@@ -2038,7 +2038,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /applyOrderedDateRange\(pendingOrderedDateStart, pendingOrderedDateStart\)/);
   assert.match(ordersPageSource, /getCalendarDayStyle\(day, orderFilters, pendingOrderedDateStart\)/);
   assert.match(ordersPageSource, /const nextFilters = \{\s*\.\.\.orderFilters,\s*orderedDateFrom: startDate,\s*orderedDateTo: endDate,\s*\}/);
-  assert.match(ordersPageSource, /beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(\s*updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
+  assert.match(ordersPageSource, /const nextSearchParams = beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(\s*nextSearchParams/);
   assert.match(ordersPageSource, /const handleClearOrderFilter = \(filterKey\) => \{/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateFrom = ""/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateTo = ""/);
@@ -2046,7 +2046,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /onClick=\{handleOrderedDateCalendarOpen\}/);
   assert.match(ordersPageSource, /aria-label="Filter orders by delivery day"/);
   assert.match(ordersPageSource, /value=\{orderFilters\.deliveryWeekday\}/);
-  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?beginOrderResourceTransition\(nextFilters\);[\s\S]*?updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
+  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?const nextSearchParams = beginOrderResourceTransition\(nextFilters\);[\s\S]*?setSearchParams\(\s*nextSearchParams/);
   assert.match(ordersPageSource, /label="Delivery day"/);
   assert.match(ordersPageSource, /renderOrderFilterChevron\(\)/);
   assert.match(ordersPageSource, /options=\{ORDER_WEEKDAY_OPTIONS\}/);
@@ -2077,7 +2077,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.doesNotMatch(ordersPageSource, /stateOption\) => orderFilterOptions\.deliveryStates\.includes/);
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryState", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear state filter"/);
-  assert.match(ordersPageSource, /beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(/);
+  assert.match(ordersPageSource, /const nextSearchParams = beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(/);
   assert.match(ordersPageSource, />Clear filters<\/button>/);
   assert.match(ordersPageSource, />Clear selection<\/button>/);
   assert.match(ordersPageSource, />Clear<\/button>/);
@@ -2118,7 +2118,7 @@ test("Orders paginated resource defaults to all history orders and renders numer
   );
   assert.match(
     ordersPageSource,
-    /const beginOrderResourceTransition = useCallback\([\s\S]*setFilterInputPending\(pageRequestWillChange\)[\s\S]*\[paginationEnabled, resourceFilterKey, shopLocalDate\]/,
+    /const beginOrderResourceTransition = useCallback\([\s\S]*const navigationWillChange = nextSearchParams\.toString\(\) !== searchParams\.toString\(\)[\s\S]*setFilterInputPending\(paginationEnabled && navigationWillChange\)[\s\S]*return nextSearchParams[\s\S]*\[paginationEnabled, searchParams\]/,
   );
   assert.match(
     ordersPageSource,

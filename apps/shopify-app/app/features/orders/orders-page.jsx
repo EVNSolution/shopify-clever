@@ -2684,19 +2684,15 @@ function OrdersPageContent({ loaderData }) {
   const appliedOrdersPageFilterKeyRef = useRef(resourceFilterKey);
   const ordersResourceTransitionPending = paginationEnabled && filterInputPending;
   const beginOrderResourceTransition = useCallback((nextFilters) => {
-    const nextResourceSearchParams = updateOrderFilterSearchParams(
-      new URLSearchParams(),
-      getOrdersResourceFilters(nextFilters),
-    );
-    if (shopLocalDate) nextResourceSearchParams.set("routeOpsToday", shopLocalDate);
-    const pageRequestWillChange =
-      paginationEnabled && nextResourceSearchParams.toString() !== resourceFilterKey;
+    const nextSearchParams = updateOrderFilterSearchParams(searchParams, nextFilters);
+    const navigationWillChange = nextSearchParams.toString() !== searchParams.toString();
 
     flushSync(() => {
       setOptimisticOrderFilters(nextFilters);
-      setFilterInputPending(pageRequestWillChange);
+      setFilterInputPending(paginationEnabled && navigationWillChange);
     });
-  }, [paginationEnabled, resourceFilterKey, shopLocalDate]);
+    return nextSearchParams;
+  }, [paginationEnabled, searchParams]);
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? new Date(),
@@ -4173,10 +4169,10 @@ function OrdersPageContent({ loaderData }) {
       [filterKey]: filterValue,
     };
 
-    beginOrderResourceTransition(nextFilters);
+    const nextSearchParams = beginOrderResourceTransition(nextFilters);
 
     setSearchParams(
-      updateOrderFilterSearchParams(searchParams, nextFilters),
+      nextSearchParams,
       {
         preventScrollReset: true,
         replace: true,
@@ -4197,10 +4193,10 @@ function OrdersPageContent({ loaderData }) {
       nextFilters[filterKey] = "";
     }
 
-    beginOrderResourceTransition(nextFilters);
+    const nextSearchParams = beginOrderResourceTransition(nextFilters);
 
     setSearchParams(
-      updateOrderFilterSearchParams(searchParams, nextFilters),
+      nextSearchParams,
       {
         preventScrollReset: true,
         replace: true,
@@ -4215,16 +4211,16 @@ function OrdersPageContent({ loaderData }) {
       orderedDateTo: endDate,
     };
 
-    beginOrderResourceTransition(nextFilters);
+    const nextSearchParams = beginOrderResourceTransition(nextFilters);
 
     setSearchParams(
-      updateOrderFilterSearchParams(searchParams, nextFilters),
+      nextSearchParams,
       {
         preventScrollReset: true,
         replace: true,
       },
     );
-  }, [beginOrderResourceTransition, orderFilters, searchParams, setSearchParams]);
+  }, [beginOrderResourceTransition, orderFilters, setSearchParams]);
 
   const positionOrderedDateCalendar = useCallback(() => {
     const rect = orderedDateFieldRef.current?.getBoundingClientRect();
@@ -4336,13 +4332,13 @@ function OrdersPageContent({ loaderData }) {
       tab: "unplanned",
     };
 
-    beginOrderResourceTransition(nextFilters);
+    const nextSearchParams = beginOrderResourceTransition(nextFilters);
     setPendingOrderedDateStart("");
     setOrderedDateCalendarOpen(false);
     setOrderedDateCalendarPosition(null);
 
     setSearchParams(
-      updateOrderFilterSearchParams(searchParams, nextFilters),
+      nextSearchParams,
       {
         preventScrollReset: true,
         replace: true,
