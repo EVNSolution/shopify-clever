@@ -34,6 +34,30 @@ export function shouldApplyOrdersResourceResponse(data, requestKey) {
   return Boolean(requestKey) && data?._requestKey === requestKey;
 }
 
+export function completeOrdersPageRequest(pendingRequestKey, completedRequestKey) {
+  return pendingRequestKey && pendingRequestKey === completedRequestKey
+    ? null
+    : pendingRequestKey ?? null;
+}
+
+export function isOrdersPageUpdating({
+  enabled,
+  pendingRequestKey,
+  fetcherState,
+  appliedFilterKey,
+  requestedFilterKey,
+  resourceError,
+}) {
+  return Boolean(
+    enabled &&
+    (
+      pendingRequestKey ||
+      fetcherState !== "idle" ||
+      (appliedFilterKey !== requestedFilterKey && !resourceError)
+    )
+  );
+}
+
 export function shouldSyncOrdersLoaderPage(currentPageInfo, loaderPageInfo) {
   const currentPage = positiveInteger(currentPageInfo?.currentPage);
   const loaderPage = positiveInteger(loaderPageInfo?.currentPage);
