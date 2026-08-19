@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types */
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
@@ -4169,7 +4169,7 @@ function OrdersPageContent({ loaderData }) {
       [filterKey]: filterValue,
     };
 
-    setOptimisticOrderFilters(nextFilters);
+    flushSync(() => setOptimisticOrderFilters(nextFilters));
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -4193,7 +4193,7 @@ function OrdersPageContent({ loaderData }) {
       nextFilters[filterKey] = "";
     }
 
-    setOptimisticOrderFilters(nextFilters);
+    flushSync(() => setOptimisticOrderFilters(nextFilters));
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -4211,7 +4211,7 @@ function OrdersPageContent({ loaderData }) {
       orderedDateTo: endDate,
     };
 
-    setOptimisticOrderFilters(nextFilters);
+    flushSync(() => setOptimisticOrderFilters(nextFilters));
 
     setSearchParams(
       updateOrderFilterSearchParams(searchParams, nextFilters),
@@ -4332,7 +4332,7 @@ function OrdersPageContent({ loaderData }) {
       tab: "unplanned",
     };
 
-    setOptimisticOrderFilters(nextFilters);
+    flushSync(() => setOptimisticOrderFilters(nextFilters));
     setPendingOrderedDateStart("");
     setOrderedDateCalendarOpen(false);
     setOrderedDateCalendarPosition(null);

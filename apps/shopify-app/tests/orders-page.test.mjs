@@ -2038,7 +2038,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /applyOrderedDateRange\(pendingOrderedDateStart, pendingOrderedDateStart\)/);
   assert.match(ordersPageSource, /getCalendarDayStyle\(day, orderFilters, pendingOrderedDateStart\)/);
   assert.match(ordersPageSource, /const nextFilters = \{\s*\.\.\.orderFilters,\s*orderedDateFrom: startDate,\s*orderedDateTo: endDate,\s*\}/);
-  assert.match(ordersPageSource, /setOptimisticOrderFilters\(nextFilters\);\s*setSearchParams\(\s*updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
+  assert.match(ordersPageSource, /flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);\s*setSearchParams\(\s*updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
   assert.match(ordersPageSource, /const handleClearOrderFilter = \(filterKey\) => \{/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateFrom = ""/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateTo = ""/);
@@ -2046,7 +2046,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /onClick=\{handleOrderedDateCalendarOpen\}/);
   assert.match(ordersPageSource, /aria-label="Filter orders by delivery day"/);
   assert.match(ordersPageSource, /value=\{orderFilters\.deliveryWeekday\}/);
-  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?setOptimisticOrderFilters\(nextFilters\);[\s\S]*?updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
+  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);[\s\S]*?updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
   assert.match(ordersPageSource, /label="Delivery day"/);
   assert.match(ordersPageSource, /renderOrderFilterChevron\(\)/);
   assert.match(ordersPageSource, /options=\{ORDER_WEEKDAY_OPTIONS\}/);
@@ -2077,7 +2077,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.doesNotMatch(ordersPageSource, /stateOption\) => orderFilterOptions\.deliveryStates\.includes/);
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryState", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear state filter"/);
-  assert.match(ordersPageSource, /setOptimisticOrderFilters\(nextFilters\);\s*setSearchParams\(/);
+  assert.match(ordersPageSource, /flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);\s*setSearchParams\(/);
   assert.match(ordersPageSource, />Clear filters<\/button>/);
   assert.match(ordersPageSource, />Clear selection<\/button>/);
   assert.match(ordersPageSource, />Clear<\/button>/);
@@ -2111,6 +2111,11 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
 });
 
 test("Orders paginated resource defaults to all history orders and renders numeric page buttons", () => {
+  assert.match(ordersPageSource, /import \{ createPortal, flushSync \} from "react-dom"/);
+  assert.match(
+    ordersPageSource,
+    /flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);[\s\S]*setSearchParams\(/,
+  );
   assert.match(
     ordersPageSource,
     /function getOrdersResourceFilters\(filters = \{\}\) \{[\s\S]*scope: ORDER_HISTORY_SCOPE,[\s\S]*tab: "all"/,
