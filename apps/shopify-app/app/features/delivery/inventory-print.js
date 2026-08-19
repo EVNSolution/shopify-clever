@@ -4,7 +4,7 @@ export function getInventoryPrintTextLineCount(value, unitsPerLine = PRINT_TEXT_
   if (typeof value !== "string" || value.trim() === "") return 0;
   return value.split(/\r?\n/u).reduce((total, line) => {
     const widthUnits = Array.from(line).reduce(
-      (sum, character) => sum + (/[^\u0000-\u00ff]/u.test(character) ? 2 : 1),
+      (sum, character) => sum + (character.codePointAt(0) > 0xff ? 2 : 1),
       0,
     );
     return total + Math.max(1, Math.ceil(widthUnits / unitsPerLine));
