@@ -1999,7 +1999,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /serviceTypes: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?serviceType: ""/);
   assert.match(ordersPageSource, /const appliedOrdersPageFilterKeyRef = useRef\(resourceFilterKey\)/);
   assert.match(ordersPageSource, /appliedOrdersPageFilterKeyRef\.current = resourceFilterKey/);
-  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*paginationEnabled && appliedOrdersPageFilterKeyRef\.current !== resourceFilterKey\s*\?\s*displayOrders\s*:\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate, paginationEnabled, resourceFilterKey\],\s*\)/);
+  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*paginationEnabled &&\s*\(\s*ordersResourceTransitionPending \|\|\s*appliedOrdersPageFilterKeyRef\.current !== resourceFilterKey\s*\)\s*\?\s*displayOrders\s*:\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate, ordersResourceTransitionPending, paginationEnabled, resourceFilterKey\],\s*\)/);
   assert.match(ordersPageSource, /getOrderSortValue\(leftOrder, sortConfig\.key, orderFilterReferenceDate\)/);
   assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return sortOrdersByDeliveryDatePriority\(filteredOrders\)/);
   assert.match(ordersPageSource, /aria-label="Filter orders by ordered date"/);
@@ -2130,7 +2130,7 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /ordersPageNumbers\.map\(\(pageNumber\) =>/);
   assert.match(
     ordersPageSource,
-    /const ordersPageUpdating = isOrdersPageUpdating\(\{[\s\S]*pendingRequestKey: ordersPagePendingRequestKey,[\s\S]*fetcherState: ordersPageFetcher\.state,[\s\S]*appliedFilterKey: appliedOrdersPageFilterKeyRef\.current,[\s\S]*requestedFilterKey: resourceFilterKey/,
+    /const ordersPageUpdating = isOrdersPageUpdating\(\{[\s\S]*filterTransitionPending: ordersResourceTransitionPending,[\s\S]*pendingRequestKey: ordersPagePendingRequestKey,[\s\S]*fetcherState: ordersPageFetcher\.state,[\s\S]*appliedFilterKey: appliedOrdersPageFilterKeyRef\.current,[\s\S]*requestedFilterKey: resourceFilterKey/,
   );
   assert.match(ordersPageSource, /ordersPagePendingRequestKey/);
   assert.match(

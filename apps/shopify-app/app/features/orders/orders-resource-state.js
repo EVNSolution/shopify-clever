@@ -42,6 +42,7 @@ export function completeOrdersPageRequest(pendingRequestKey, completedRequestKey
 
 export function isOrdersPageUpdating({
   enabled,
+  filterTransitionPending,
   pendingRequestKey,
   fetcherState,
   appliedFilterKey,
@@ -51,6 +52,7 @@ export function isOrdersPageUpdating({
   return Boolean(
     enabled &&
     (
+      filterTransitionPending ||
       pendingRequestKey ||
       fetcherState !== "idle" ||
       (appliedFilterKey !== requestedFilterKey && !resourceError)
