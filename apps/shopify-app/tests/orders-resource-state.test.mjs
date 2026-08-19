@@ -3,8 +3,10 @@ import test from "node:test";
 
 import {
   buildOrdersResourceRequest,
+  completeOrdersPageRequest,
   getOrdersPageCacheKey,
   getReverseOrdersPageCacheEntry,
+  isOrdersPageUpdating,
   mapCompactOrderPointsToRows,
   mergeLocatedOrderRows,
   shouldSyncOrdersLoaderPage,
@@ -12,6 +14,31 @@ import {
   updateOrdersSelectionExclusions,
   updateVisibleOrdersSelectionExclusions,
 } from "../app/features/orders/orders-resource-state.js";
+
+test("Orders pagination stays visibly busy until the matching response is applied", () => {
+  assert.equal(
+    isOrdersPageUpdating({
+      enabled: true,
+      pendingRequestKey: "page-12",
+      fetcherState: "idle",
+      appliedFilterKey: "deliveryState=FULFILLED",
+      requestedFilterKey: "deliveryState=UNFULFILLED",
+    }),
+    true,
+  );
+  assert.equal(completeOrdersPageRequest("page-12", "page-11"), "page-12");
+  assert.equal(completeOrdersPageRequest("page-12", "page-12"), null);
+  assert.equal(
+    isOrdersPageUpdating({
+      enabled: true,
+      pendingRequestKey: null,
+      fetcherState: "idle",
+      appliedFilterKey: "deliveryState=UNFULFILLED",
+      requestedFilterKey: "deliveryState=UNFULFILLED",
+    }),
+    false,
+  );
+});
 
 test("Orders pagination does not let a page-one loader revalidation replace page two", () => {
   assert.equal(

@@ -15,7 +15,9 @@ import { getOrderSyncSnapshots, mapCanonicalOrdersToOrderRows, mergeShopifyOrder
 import { getOrderAreaSuggestion } from "./order-area-suggestion";
 import {
   buildOrdersResourceRequest,
+  completeOrdersPageRequest,
   getOrdersPageCacheKey,
+  isOrdersPageUpdating,
   mapCompactOrderPointsToRows,
   mergeLocatedOrderRows,
   shouldSyncOrdersLoaderPage,
@@ -2588,7 +2590,7 @@ function OrdersPageContent({ loaderData }) {
   const [ordersFacetsFilterKey, setOrdersFacetsFilterKey] = useState(null);
   const [ordersMapPoints, setOrdersMapPoints] = useState([]);
   const [ordersMapFilterKey, setOrdersMapFilterKey] = useState(null);
-  const [ordersPageTokenPending, setOrdersPageTokenPending] = useState(false);
+  const [ordersPagePendingRequestKey, setOrdersPagePendingRequestKey] = useState(null);
   const [ordersResourceError, setOrdersResourceError] = useState(null);
   const [loadedRouteGroups, setLoadedRouteGroups] = useState(
     () => Array.isArray(routeGroups) ? routeGroups : [],
@@ -2791,12 +2793,14 @@ function OrdersPageContent({ loaderData }) {
       resourceMetricStartedAtRef.current.set(mapRequestKey, getSafePerformanceNow());
     }
 
-    if (shouldLoadPage) setOrdersPageTokenPending(true);
+    if (shouldLoadPage) setOrdersPagePendingRequestKey(pageRequestKey);
     void (async () => {
       try {
         const idToken = await getOrdersResourceSessionToken();
         if (cancelled) return;
         if (!idToken) {
+          setOrdersPagePendingRequestKey((pendingRequestKey) =>
+            completeOrdersPageRequest(pendingRequestKey, pageRequestKey));
           setOrdersResourceError("The secure session expired before order results could load.");
           return;
         }
@@ -2820,16 +2824,19 @@ function OrdersPageContent({ loaderData }) {
         }
       } catch {
         if (!cancelled) {
+          setOrdersPagePendingRequestKey((pendingRequestKey) =>
+            completeOrdersPageRequest(pendingRequestKey, pageRequestKey));
           setOrdersResourceError("Order results could not start loading. Retry the filter or page.");
         }
-      } finally {
-        if (!cancelled && shouldLoadPage) setOrdersPageTokenPending(false);
       }
     })();
 
     return () => {
       cancelled = true;
-      if (shouldLoadPage) setOrdersPageTokenPending(false);
+      if (shouldLoadPage) {
+        setOrdersPagePendingRequestKey((pendingRequestKey) =>
+          completeOrdersPageRequest(pendingRequestKey, pageRequestKey));
+      }
     };
   }, [
     compactMapEnabled,
@@ -2856,6 +2863,9 @@ function OrdersPageContent({ loaderData }) {
       ordersPageFetcher.state !== "idle" ||
       !shouldApplyOrdersResourceResponse(ordersPageFetcher.data, latestPageRequestKeyRef.current)
     ) return;
+
+    setOrdersPagePendingRequestKey((pendingRequestKey) =>
+      completeOrdersPageRequest(pendingRequestKey, ordersPageFetcher.data._requestKey));
 
     const pendingNavigation = pendingPageNavigationRef.current;
     if (pendingNavigation?.requestKey === ordersPageFetcher.data._requestKey) {
@@ -3808,16 +3818,14 @@ function OrdersPageContent({ loaderData }) {
   const tableOrders = sortedOrders;
   const ordersCurrentPage = getPositiveInteger(ordersPageInfo?.currentPage);
   const ordersTotalPages = getPositiveInteger(ordersPageInfo?.totalPages);
-  const ordersPageUpdating =
-    paginationEnabled &&
-    (
-      ordersPageTokenPending ||
-      ordersPageFetcher.state !== "idle" ||
-      (
-        appliedOrdersPageFilterKeyRef.current !== resourceFilterKey &&
-        !ordersResourceError
-      )
-    );
+  const ordersPageUpdating = isOrdersPageUpdating({
+    enabled: paginationEnabled,
+    pendingRequestKey: ordersPagePendingRequestKey,
+    fetcherState: ordersPageFetcher.state,
+    appliedFilterKey: appliedOrdersPageFilterKeyRef.current,
+    requestedFilterKey: resourceFilterKey,
+    resourceError: ordersResourceError,
+  });
   const ordersPageNumbers = useMemo(
     () => getOrdersPageNumbers(ordersCurrentPage, ordersTotalPages),
     [ordersCurrentPage, ordersTotalPages],
@@ -4360,12 +4368,14 @@ function OrdersPageContent({ loaderData }) {
     }
 
     pendingPageNavigationRef.current = { currentPage, requestKey };
-    setOrdersPageTokenPending(true);
+    setOrdersPagePendingRequestKey(requestKey);
     setOrdersResourceError(null);
     try {
       const idToken = await getOrdersResourceSessionToken();
       if (!idToken) {
         pendingPageNavigationRef.current = null;
+        setOrdersPagePendingRequestKey((pendingRequestKey) =>
+          completeOrdersPageRequest(pendingRequestKey, requestKey));
         setOrdersResourceError("The secure session expired before the next page could load.");
         return;
       }
@@ -4378,9 +4388,9 @@ function OrdersPageContent({ loaderData }) {
       });
     } catch {
       pendingPageNavigationRef.current = null;
+      setOrdersPagePendingRequestKey((pendingRequestKey) =>
+        completeOrdersPageRequest(pendingRequestKey, requestKey));
       setOrdersResourceError("The next page could not start loading. Please retry.");
-    } finally {
-      setOrdersPageTokenPending(false);
     }
   };
 

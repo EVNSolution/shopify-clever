@@ -2130,12 +2130,16 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /ordersPageNumbers\.map\(\(pageNumber\) =>/);
   assert.match(
     ordersPageSource,
-    /const ordersPageUpdating =\s*paginationEnabled &&[\s\S]*ordersPageFetcher\.state !== "idle"[\s\S]*appliedOrdersPageFilterKeyRef\.current !== resourceFilterKey/,
+    /const ordersPageUpdating = isOrdersPageUpdating\(\{[\s\S]*pendingRequestKey: ordersPagePendingRequestKey,[\s\S]*fetcherState: ordersPageFetcher\.state,[\s\S]*appliedFilterKey: appliedOrdersPageFilterKeyRef\.current,[\s\S]*requestedFilterKey: resourceFilterKey/,
   );
-  assert.match(ordersPageSource, /ordersPageTokenPending/);
+  assert.match(ordersPageSource, /ordersPagePendingRequestKey/);
   assert.match(
     ordersPageSource,
-    /setOrdersPageTokenPending\(true\)[\s\S]*await getOrdersResourceSessionToken\(\)/,
+    /setOrdersPagePendingRequestKey\(pageRequestKey\)[\s\S]*await getOrdersResourceSessionToken\(\)/,
+  );
+  assert.match(
+    ordersPageSource,
+    /completeOrdersPageRequest\(pendingRequestKey, ordersPageFetcher\.data\._requestKey\)/,
   );
   assert.match(ordersPageSource, /ordersFacetsFilterKey === resourceFilterKey/);
   assert.match(
