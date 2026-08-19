@@ -18,7 +18,7 @@ services:
       GEOCODING_SEARCH_URL: https://nominatim.openstreetmap.org/search
     restart: unless-stopped
     volumes:
-      - /srv/shopify-clever/data/shopify/dev.sqlite:/app/prisma/dev.sqlite
+      - /srv/shopify-clever/data/shopify:/app/data
     networks:
       route-server:
         aliases:

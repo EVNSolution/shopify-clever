@@ -148,6 +148,11 @@ The table `main.Session` does not exist in the current database.
 
 Create the database for Prisma. Run the `setup` script in `package.json` using `npm`, `yarn` or `pnpm`.
 
+This command is for local setup. Production migrations run as an explicit release phase before
+the Shopify service is replaced. See the repository
+[`docs/runbooks/prisma-migrations.md`](../../docs/runbooks/prisma-migrations.md) runbook for the
+required migration, verification, and recovery procedure.
+
 ### Navigating/redirecting breaks an embedded app
 
 Embedded apps must maintain the user session, which can be tricky inside an iFrame. To avoid issues:

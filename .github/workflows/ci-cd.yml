@@ -49,6 +49,10 @@ jobs:
         working-directory: apps/shopify-app
         run: npm ci --prefer-offline --no-audit --no-fund
 
+      - name: Validate Prisma migrations
+        working-directory: apps/shopify-app
+        run: npm run prisma:migrate:check
+
       - name: Build app
         run: npm run build
 
