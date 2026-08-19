@@ -47,10 +47,12 @@ test("route detail loader exposes canonical order and timezone owned fields with
   assert.doesNotMatch(routeDetailServerSource, /paymentMethodTitle/);
 });
 
-test("route detail owns eligible add-order candidates and persists through the existing CLEVER route-group boundary", () => {
+test("route detail owns eligible add-order candidates and persists to a selected group destination", () => {
   assert.match(routeDetailServerSource, /addOrderCandidates: buildRouteAddOrderCandidates\(orderData\.orders/);
+  assert.match(routeDetailServerSource, /intent === "loadAddOrderCandidates"/);
   assert.match(routeDetailServerSource, /intent === "addRouteOrders"/);
-  assert.match(routeDetailServerSource, /updateDeliveryRouteGroupOrders\([\s\S]*targetRoutePlanId: routeId/);
+  assert.match(routeDetailServerSource, /const targetRoutePlanId = textOrUndefined\(formData\.get\("targetRoutePlanId"\)\) \?\? routeId/);
+  assert.match(routeDetailServerSource, /updateDeliveryRouteGroupOrders\([\s\S]*\.\.\.\(targetRoutePlanId \? \{ targetRoutePlanId \} : \{\}\)/);
   assert.doesNotMatch(routeDetailServerSource, /buildRouteGroupAddOrdersDraft/);
   assert.match(routeDetailServerSource, /addOrderIds\.length !== requestedOrderIds\.length/);
   assert.doesNotMatch(routeDetailServerSource, /orderUpdate|customerUpdate/);

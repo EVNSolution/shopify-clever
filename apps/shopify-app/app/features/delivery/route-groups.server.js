@@ -1,4 +1,8 @@
-import { deleteDeliveryRoutePlan, deliveryApiRequest } from "./route-plans.server.js";
+import {
+  clearDeliveryApiResponseCache,
+  deleteDeliveryRoutePlan,
+  deliveryApiRequest,
+} from "./route-plans.server.js";
 import {
   getRouteGroupChildRouteName,
   getRouteGroupChildRoutePlanId,
@@ -171,6 +175,39 @@ export async function fetchDeliveryRouteGroupDetail(request, routeGroupId, optio
 
 export async function updateDeliveryRouteGroupOrders(request, routeGroupId, payload, options = {}) {
   return mutateRouteGroup(request, routeGroupId, "/orders", payload, options, "수정할 route group ID가 없습니다.");
+}
+
+export async function createDeliveryRouteGroupCustomStop(request, routeGroupId, payload, options = {}) {
+  return mutateRouteGroupCustomStop(request, routeGroupId, null, payload, {
+    ...options,
+    method: "POST",
+  });
+}
+
+export async function updateDeliveryRouteGroupCustomStop(
+  request,
+  routeGroupId,
+  deliveryStopId,
+  payload,
+  options = {},
+) {
+  return mutateRouteGroupCustomStop(request, routeGroupId, deliveryStopId, payload, {
+    ...options,
+    method: "PATCH",
+  });
+}
+
+export async function deleteDeliveryRouteGroupCustomStop(
+  request,
+  routeGroupId,
+  deliveryStopId,
+  payload,
+  options = {},
+) {
+  return mutateRouteGroupCustomStop(request, routeGroupId, deliveryStopId, payload, {
+    ...options,
+    method: "DELETE",
+  });
 }
 
 export async function saveDeliveryRouteGroupDraft(request, routeGroupId, payload, options = {}) {
@@ -493,6 +530,37 @@ async function mutateRouteGroup(request, routeGroupId, suffix, payload, options,
 
   return {
     routeGroup: normalizeRouteGroup(result.data?.routeGroup),
+    errors: result.errors,
+  };
+}
+
+async function mutateRouteGroupCustomStop(request, routeGroupId, deliveryStopId, payload, options) {
+  const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
+  const safeDeliveryStopId = deliveryStopId == null ? null : encodeURIComponent(deliveryStopId);
+  if (!safeRouteGroupId || (deliveryStopId != null && !safeDeliveryStopId)) {
+    return missingRouteGroupResult("수정할 custom stop의 route group 또는 stop ID가 없습니다.");
+  }
+
+  let suffix = safeDeliveryStopId
+    ? `/stops/${safeDeliveryStopId}/custom`
+    : "/stops/custom";
+  const expectedUpdatedAt = textOrUndefined(payload?.expectedUpdatedAt);
+  if (options.method === "DELETE" && expectedUpdatedAt) {
+    suffix += `?expectedUpdatedAt=${encodeURIComponent(expectedUpdatedAt)}`;
+  }
+  const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}${suffix}`, {
+    ...(options.method === "DELETE" ? {} : { body: JSON.stringify(payload ?? {}) }),
+    fetch: options.fetch,
+    method: options.method,
+    sessionToken: options.sessionToken,
+  });
+
+  if (result.errors.length === 0) clearDeliveryApiResponseCache();
+
+  return {
+    deletedStopId: result.data?.deletedStopId ?? result.data?.deliveryStopId ?? null,
+    routeGroup: normalizeRouteGroup(result.data?.routeGroup),
+    stop: result.data?.stop ?? result.data?.customStop ?? null,
     errors: result.errors,
   };
 }

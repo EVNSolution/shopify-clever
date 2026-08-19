@@ -8,11 +8,13 @@ import {
 import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
 import {
   copyDeliveryRouteGroup,
+  createDeliveryRouteGroupCustomStop,
   deleteDeliveryRouteGroup,
   fetchDeliveryRouteGroupDetail,
   fetchNextDeliveryRouteGroupRouteIdx,
   previewDeliveryRouteGroupOptimization,
   saveDeliveryRouteGroupDraft,
+  updateDeliveryRouteGroupCustomStop,
   updateDeliveryRouteGroupOrders,
 } from "./route-groups.server";
 import {
@@ -38,6 +40,7 @@ import {
 } from "./route-detail-enrichment.server";
 import { routeGroupChildPath } from "./route-paths";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
+import { geocodeAddress } from "../locations/address-geocoding.server";
 import { getOrderSyncSnapshots } from "../orders/canonical-orders";
 import { fetchShopifyOrdersByIds } from "../orders/shopify-orders.server";
 import { fetchShopifyAppPreferences } from "../settings/app-preferences.server";
@@ -45,6 +48,12 @@ import { authenticate } from "../../shopify.server";
 import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "./route-timezone.server";
 import { readRouteDraftPayload } from "./route-draft";
 import { buildRouteAddOrderCandidates } from "./route-add-order-candidates";
+import {
+  buildCustomStopAddress,
+  buildCustomStopPayload,
+  createCustomStopDraft,
+  validateCustomStopDraft,
+} from "./custom-stop-form";
 import {
   collectRouteRefreshOrderGids,
   collectRouteRefreshRoutePlanIdsFromOrders,
@@ -328,6 +337,70 @@ function readRouteStopOverridePayload(formData) {
   };
 }
 
+function readCustomStopDraft(formData) {
+  return createCustomStopDraft({
+    address1: formData.get("address1"),
+    address2: formData.get("address2"),
+    city: formData.get("city"),
+    countryCode: formData.get("countryCode"),
+    email: formData.get("email"),
+    instructions: formData.get("instructions"),
+    latitude: formData.get("latitude"),
+    longitude: formData.get("longitude"),
+    phone: formData.get("phone"),
+    postalCode: formData.get("postalCode"),
+    priority: formData.get("priority"),
+    province: formData.get("province"),
+    recipientName: formData.get("recipientName"),
+    serviceMinutes: formData.get("serviceMinutes"),
+    stopName: formData.get("stopName"),
+    timeWindowEnd: formData.get("timeWindowEnd"),
+    timeWindowStart: formData.get("timeWindowStart"),
+  });
+}
+
+async function readCustomStopPayload(formData, context = {}) {
+  const draft = readCustomStopDraft(formData);
+  const fieldErrors = validateCustomStopDraft(draft);
+  if (Object.keys(fieldErrors).length > 0) {
+    return {
+      draft,
+      fieldErrors,
+      payload: null,
+      errors: [{ message: "Custom stop 정보를 확인해주세요." }],
+    };
+  }
+
+  let latitude = numberOrUndefined(draft.latitude);
+  let longitude = numberOrUndefined(draft.longitude);
+  if (latitude == null || longitude == null) {
+    const location = await geocodeAddress(buildCustomStopAddress(draft));
+    if (!location) {
+      return {
+        draft,
+        fieldErrors: {
+          address1: "Location을 찾지 못했습니다. 주소를 확인하거나 위도와 경도를 입력해주세요.",
+        },
+        payload: null,
+        errors: [{ message: "Custom stop location을 확인하지 못했습니다." }],
+      };
+    }
+    latitude = location.latitude;
+    longitude = location.longitude;
+  }
+
+  return {
+    draft,
+    fieldErrors: {},
+    payload: buildCustomStopPayload({
+      ...draft,
+      latitude,
+      longitude,
+    }, context),
+    errors: [],
+  };
+}
+
 function readDeliveryStopIds(formData) {
   const values = formData.getAll("deliveryStopIds");
   const deliveryStopIds = [];
@@ -595,16 +668,36 @@ export const routeDetailAction = async ({ params, request }) => {
     });
   }
 
+  if (intent === "loadAddOrderCandidates") {
+    const targetRouteGroupId = routeGroupIdFromParams ?? routeGroupId;
+    if (!targetRouteGroupId) return { addOrderCandidates: [], errors: [{ message: "Route group을 찾지 못했습니다." }] };
+
+    const [routeGroupData, orderData] = await Promise.all([
+      fetchDeliveryRouteGroupDetail(request, targetRouteGroupId, { sessionToken: shopifySessionToken }),
+      fetchDeliveryOrders(request, {}, { sessionToken: shopifySessionToken }),
+    ]);
+    const candidateErrors = [...(routeGroupData.errors ?? []), ...(orderData.errors ?? [])];
+    return {
+      addOrderCandidates: candidateErrors.length > 0
+        ? []
+        : buildRouteAddOrderCandidates(orderData.orders, { routeGroup: routeGroupData.routeGroup }),
+      errors: candidateErrors,
+    };
+  }
+
   if (intent === "addRouteOrders") {
     const targetRouteGroupId = routeGroupIdFromParams ?? routeGroupId;
+    const targetRoutePlanId = textOrUndefined(formData.get("targetRoutePlanId")) ?? routeId;
     const requestedOrderIds = readJsonTextArray(formData.get("orderIds"));
-    if (!targetRouteGroupId || !routeId || requestedOrderIds.length === 0) {
+    if (!targetRouteGroupId || requestedOrderIds.length === 0) {
       return { errors: [{ message: "추가할 주문을 선택해주세요." }] };
     }
 
     const [routeGroupData, routePlanData, orderData] = await Promise.all([
       fetchDeliveryRouteGroupDetail(request, targetRouteGroupId, { sessionToken: shopifySessionToken }),
-      fetchDeliveryRoutePlanDetail(request, routeId, { sessionToken: shopifySessionToken }),
+      targetRoutePlanId
+        ? fetchDeliveryRoutePlanDetail(request, targetRoutePlanId, { sessionToken: shopifySessionToken })
+        : Promise.resolve({ routePlan: null, errors: [] }),
       fetchDeliveryOrders(request, {}, { sessionToken: shopifySessionToken }),
     ]);
     const preflightErrors = [
@@ -614,8 +707,8 @@ export const routeDetailAction = async ({ params, request }) => {
     ];
     if (preflightErrors.length > 0) return { errors: preflightErrors };
 
-    const targetExists = getVisibleRouteGroupChildren(routeGroupData.routeGroup)
-      .some((child) => getRouteGroupChildRoutePlanId(child) === routeId);
+    const targetExists = !targetRoutePlanId || getVisibleRouteGroupChildren(routeGroupData.routeGroup)
+      .some((child) => getRouteGroupChildRoutePlanId(child) === targetRoutePlanId);
     if (!targetExists) {
       return { errors: [{ message: "현재 child route를 찾지 못했습니다. 페이지를 새로고침해주세요." }] };
     }
@@ -632,7 +725,7 @@ export const routeDetailAction = async ({ params, request }) => {
       {
         addOrderIds,
         ...(routeGroupData.routeGroup?.updatedAt ? { expectedUpdatedAt: routeGroupData.routeGroup.updatedAt } : {}),
-        targetRoutePlanId: routeId,
+        ...(targetRoutePlanId ? { targetRoutePlanId } : {}),
       },
       { sessionToken: shopifySessionToken },
     );
@@ -641,6 +734,65 @@ export const routeDetailAction = async ({ params, request }) => {
       addedOrders: addOrderIds.length,
       routeGroup: addResult.routeGroup,
       errors: addResult.errors ?? [],
+    };
+  }
+
+  if (intent === "createCustomStop" || intent === "updateCustomStop") {
+    const targetRouteGroupId = routeGroupIdFromParams ?? routeGroupId;
+    const targetRoutePlanId = textOrUndefined(formData.get("targetRoutePlanId")) ?? routeId;
+    const deliveryStopId = textOrUndefined(formData.get("deliveryStopId"));
+    if (!targetRouteGroupId || (intent === "updateCustomStop" && !deliveryStopId)) {
+      return { errors: [{ message: "Custom stop의 route group 또는 stop을 찾지 못했습니다." }] };
+    }
+
+    const routeGroupData = await fetchDeliveryRouteGroupDetail(
+      request,
+      targetRouteGroupId,
+      { sessionToken: shopifySessionToken },
+    );
+    if ((routeGroupData.errors ?? []).length > 0 || !routeGroupData.routeGroup) {
+      return { errors: routeGroupData.errors ?? [{ message: "Route group을 찾지 못했습니다." }] };
+    }
+
+    const targetExists = !targetRoutePlanId || getVisibleRouteGroupChildren(routeGroupData.routeGroup)
+      .some((child) => getRouteGroupChildRoutePlanId(child) === targetRoutePlanId);
+    if (!targetExists) {
+      return { errors: [{ message: "선택한 child route를 찾지 못했습니다. 페이지를 새로고침해주세요." }] };
+    }
+
+    const customStopInput = await readCustomStopPayload(formData, {
+      expectedUpdatedAt: routeGroupData.routeGroup.updatedAt,
+      targetRoutePlanId: intent === "createCustomStop" ? targetRoutePlanId : null,
+    });
+    if (!customStopInput.payload) {
+      return {
+        customStopDraft: customStopInput.draft,
+        fieldErrors: customStopInput.fieldErrors,
+        errors: customStopInput.errors,
+      };
+    }
+
+    const result = intent === "createCustomStop"
+      ? await createDeliveryRouteGroupCustomStop(
+          request,
+          targetRouteGroupId,
+          customStopInput.payload,
+          { sessionToken: shopifySessionToken },
+        )
+      : await updateDeliveryRouteGroupCustomStop(
+          request,
+          targetRouteGroupId,
+          deliveryStopId,
+          customStopInput.payload,
+          { sessionToken: shopifySessionToken },
+        );
+
+    return {
+      customStopDraft: customStopInput.draft,
+      fieldErrors: result.errors?.length > 0 ? {} : undefined,
+      routeGroup: result.routeGroup,
+      stop: result.stop,
+      errors: result.errors ?? [],
     };
   }
 
