@@ -218,7 +218,7 @@ test("child order table columns include a sticky Actions column with the confirm
 
   assert.deepEqual(CHILD_ROUTE_ORDER_COLUMNS.map((column) => column.label), [
     "Stop",
-    "Order",
+    "Order / stop",
     "Status",
     "Order date",
     "Address",
@@ -256,11 +256,24 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, /handleMarkChildStopStatus\(activeChildStopActionsRow, "COMPLETED"\)/);
   assert.ok(actionsMenuStart >= 0 && actionsMenuEnd > actionsMenuStart);
   assert.doesNotMatch(actionsMenuSource, /Attempted/);
-  assert.match(routeDetailSource, />\s*Edit stop\s*<\/button>/);
+  assert.match(routeDetailSource, /activeChildStopActionsRow\.isCustomStop \? "Edit custom stop" : "Edit stop"/);
   assert.match(routeDetailSource, />\s*Remove from group\s*<\/button>/);
   assert.match(routeDetailSource, />\s*Send to route\s*<\/button>/);
   assert.match(routeDetailSource, />\s*View in Shopify\s*<\/a>/);
   assert.match(routeDetailSource, />\s*Open tracking\s*<\/button>/);
+});
+
+test("custom stops stay visible but never become Shopify-linked child rows", () => {
+  const [row] = buildChildRouteOrderRows([{
+    deliveryStopId: "custom-stop-1",
+    orderName: "Warehouse pickup",
+    sourcePlatform: "CUSTOM",
+  }]);
+
+  assert.equal(row.isCustomStop, true);
+  assert.equal(row.order, "Warehouse pickup");
+  assert.equal(row.shopifyOrderGid, undefined);
+  assert.equal(row.priority, 0);
 });
 
 test("child order rows preserve canonical identifiers and flat operational edit fields for actions", () => {
@@ -278,6 +291,7 @@ test("child order rows preserve canonical identifiers and flat operational edit 
       id: "local-stop-id",
       instructions: "Use side door",
       deliveryStopId: "delivery-stop-1",
+      email: "minji@example.test",
       orderId: "canonical-order-1",
       orderName: "#1001",
       phone: "+14165550123",
@@ -299,6 +313,7 @@ test("child order rows preserve canonical identifiers and flat operational edit 
     address2: "Unit 2",
     city: "Toronto",
     countryCode: "CA",
+    email: "minji@example.test",
     instructions: "Use side door",
     latitude: 43.7,
     longitude: -79.4,
@@ -323,7 +338,7 @@ test("child stop actions call server intents only for status and CLEVER field ed
   assert.match(routeDetailSource, /disabled=\{!canAddOrRemoveChildStops\}/);
   assert.match(routeDetailSource, /disabled=\{!canDraftEditChildStopMembership \|\| childStopSendTargetRows\.length === 0\}/);
   assert.match(routeDetailSource, /heading: "Change in-progress route\?"/);
-  assert.match(routeDetailSource, /Adding an order changes the active stop list/);
+  assert.match(routeDetailSource, /Adding a stop changes the active stop list/);
   assert.match(routeDetailSource, /Removing .* changes the active stop list/);
   assert.match(routeDetailServerSource, /intent === "transitionRouteStop"/);
   assert.match(routeDetailServerSource, /transitionDeliveryRoutePlanStop\(\s*request,\s*routeId,\s*deliveryStopId/);

@@ -14,6 +14,12 @@ import {
   storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
 import { filterRouteAddOrderCandidatesByDate } from "../features/delivery/route-add-order-candidates";
+import { CustomStopDialog } from "../features/delivery/custom-stop-dialog";
+import {
+  createCustomStopDraft,
+  isCustomRouteStop,
+  validateCustomStopDraft,
+} from "../features/delivery/custom-stop-form";
 import { reverseRouteStopIds } from "../features/delivery/route-draft";
 import {
   RouteStartTimePicker,
@@ -86,6 +92,7 @@ const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-clever-lite.json";
 const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_EMPTY_LABEL = "–";
+const EMPTY_ROUTE_ADD_ORDER_CANDIDATES = Object.freeze([]);
 const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
 const ROUTE_TIMELINE_STOP_POPOVER_GAP = 4;
@@ -2404,6 +2411,8 @@ function buildRouteStops(stops) {
       deliveryStopId: textOrUndefined(stop.deliveryStopId) ?? null,
       orderId: textOrUndefined(stop.orderId) ?? null,
       routePlanId: textOrUndefined(stop.routePlanId ?? stop.routePlan?.id ?? stop.routeGroupingChild?.routePlanId) ?? null,
+      sourcePlatform: textOrUndefined(stop.sourcePlatform),
+      isCustomStop: isCustomRouteStop(stop),
       shopifyOrderGid: textOrUndefined(stop.shopifyOrderGid),
       shopifyOrderLegacyId: textOrUndefined(stop.shopifyOrderLegacyId ?? stop.legacyResourceId ?? stop.shopifyOrderSnapshot?.legacyResourceId),
       originalIndex: index,
@@ -2416,6 +2425,7 @@ function buildRouteStops(stops) {
       address: textOrUndefined(stop.addressLabel) ?? formatStopAddress(stop.address),
       recipientName: textOrUndefined(stop.recipientName ?? stop.recipient ?? stop.customerName),
       phone: getRouteStopPhone(stop),
+      email: textOrUndefined(stop.email),
       address1: getRouteStopAddressValue(stop, "address1"),
       address2: getRouteStopAddressValue(stop, "address2"),
       city: getRouteStopAddressValue(stop, "city"),
@@ -2440,6 +2450,7 @@ function buildRouteStops(stops) {
       durationFromPreviousSeconds: numberOrUndefined(stop.durationFromPreviousSeconds),
       distanceFromPreviousMeters: numberOrUndefined(stop.distanceFromPreviousMeters),
       serviceMinutes: numberOrUndefined(stop.serviceMinutes),
+      priority: numberOrUndefined(stop.priority) ?? 0,
       serviceType: textOrUndefined(stop.serviceType ?? stop.method),
       shippingPriceAmount: numberOrUndefined(stop.shippingPriceAmount),
       timeWindowEnd: textOrUndefined(stop.timeWindowEnd),
@@ -2460,22 +2471,23 @@ function buildRouteStops(stops) {
 }
 
 function buildRouteGroupStops(routeGroup, childRouteDetails, currentRouteStops) {
-  const stopsByOrderId = new Map();
-  const repairStopsByOrderId = new Map(
+  const stopIdentity = (stop) => textOrUndefined(stop.orderId) ?? textOrUndefined(stop.deliveryStopId) ?? textOrUndefined(stop.id);
+  const stopsByIdentity = new Map();
+  const repairStopsByIdentity = new Map(
     childRouteDetails
       .flatMap((detail) => buildRouteStops(detail?.stops ?? []))
-      .filter((stop) => stop.orderId && stop.hasCoordinates)
-      .map((stop) => [stop.orderId, stop]),
+      .filter((stop) => stopIdentity(stop) && stop.hasCoordinates)
+      .map((stop) => [stopIdentity(stop), stop]),
   );
   const assignmentStops = buildRouteStops(routeGroup?.assignments ?? []);
   const baseStops = assignmentStops.length > 0 ? assignmentStops : currentRouteStops;
 
   for (const stop of baseStops) {
-    const orderId = textOrUndefined(stop.orderId);
-    if (!orderId || stopsByOrderId.has(orderId)) continue;
+    const identity = stopIdentity(stop);
+    if (!identity || stopsByIdentity.has(identity)) continue;
 
-    const repairStop = repairStopsByOrderId.get(orderId);
-    stopsByOrderId.set(orderId, stop.hasCoordinates || !repairStop
+    const repairStop = repairStopsByIdentity.get(identity);
+    stopsByIdentity.set(identity, stop.hasCoordinates || !repairStop
       ? stop
       : {
         ...stop,
@@ -2485,13 +2497,14 @@ function buildRouteGroupStops(routeGroup, childRouteDetails, currentRouteStops) 
       });
   }
 
-  if (stopsByOrderId.size === 0) {
-    for (const stop of repairStopsByOrderId.values()) {
-      if (stop.orderId && !stopsByOrderId.has(stop.orderId)) stopsByOrderId.set(stop.orderId, stop);
+  if (stopsByIdentity.size === 0) {
+    for (const stop of repairStopsByIdentity.values()) {
+      const identity = stopIdentity(stop);
+      if (identity && !stopsByIdentity.has(identity)) stopsByIdentity.set(identity, stop);
     }
   }
 
-  return [...stopsByOrderId.values()];
+  return [...stopsByIdentity.values()];
 }
 
 function resequenceRouteStops(routeStops) {
@@ -2976,8 +2989,31 @@ function getShopifyOrderResourceId(row) {
 }
 
 function getShopifyOrderAdminHref(row) {
+  if (row?.isCustomStop) return null;
   const resourceId = getShopifyOrderResourceId(row);
   return resourceId ? `shopify://admin/orders/${encodeURIComponent(resourceId)}` : null;
+}
+
+function buildCustomStopDraftFromRow(row, ianaTimezone) {
+  const editFields = row?.editFields ?? row ?? {};
+  return createCustomStopDraft({
+    ...editFields,
+    priority: editFields.priority ?? row?.priority ?? 0,
+    stopName: editFields.stopName ?? row?.order,
+    timeWindowEnd: formatStoreLocalDateTimeInput(editFields.timeWindowEnd, ianaTimezone),
+    timeWindowStart: formatStoreLocalDateTimeInput(editFields.timeWindowStart, ianaTimezone),
+  });
+}
+
+function renderStopOrderLabel(row) {
+  return (
+    <span style={{ alignItems: "center", display: "inline-flex", flexWrap: "wrap", gap: "6px" }}>
+      <span>{row?.order ?? ROUTE_EMPTY_LABEL}</span>
+      {row?.isCustomStop ? (
+        <span style={{ background: "#e8f3ea", borderRadius: "999px", color: "#1f5f2c", fontSize: "11px", fontWeight: 700, padding: "2px 7px" }}>Custom</span>
+      ) : null}
+    </span>
+  );
 }
 
 function getCustomerEmailRecipients(preview) {
@@ -3115,7 +3151,7 @@ export default function RouteDetailPage() {
   const routeActionFetcher = useFetcher();
   const customerEmailFetcher = useFetcher();
   const {
-    addOrderCandidates = [],
+    addOrderCandidates = EMPTY_ROUTE_ADD_ORDER_CANDIDATES,
     childRouteDetails = [],
     currentDepartureLocation = null,
     drivers = [],
@@ -3198,7 +3234,10 @@ export default function RouteDetailPage() {
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
   const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
   const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx";
+  const loadAddOrderCandidatesBusy = routeGroupActionBusy && routeGroupActionIntent === "loadAddOrderCandidates";
   const addRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "addRouteOrders";
+  const createCustomStopBusy = routeGroupActionBusy && routeGroupActionIntent === "createCustomStop";
+  const updateCustomStopBusy = routeGroupActionBusy && routeGroupActionIntent === "updateCustomStop";
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
   const copyRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "copyRouteGroup";
@@ -3274,10 +3313,16 @@ export default function RouteDetailPage() {
   }, [isTrackingMapView]);
   const [isRouteLineEditorOpen, setIsRouteLineEditorOpen] = useState(false);
   const [isAddOrderDialogOpen, setIsAddOrderDialogOpen] = useState(false);
+  const [addStopMode, setAddStopMode] = useState(null);
+  const [addStopTargetRoutePlanId, setAddStopTargetRoutePlanId] = useState(() => effectiveRoutePlan?.id ?? "");
+  const [customStopDraft, setCustomStopDraft] = useState(() => createCustomStopDraft());
+  const [customStopFieldErrors, setCustomStopFieldErrors] = useState({});
+  const [activeCustomStopEditRow, setActiveCustomStopEditRow] = useState(null);
   const [isRouteActionsMenuOpen, setIsRouteActionsMenuOpen] = useState(false);
   const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [pendingInProgressRouteChange, setPendingInProgressRouteChange] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
+  const [availableAddOrderCandidates, setAvailableAddOrderCandidates] = useState(addOrderCandidates);
   const [addOrderDateField, setAddOrderDateField] = useState("deliveryDate");
   const [addOrderDateMode, setAddOrderDateMode] = useState("all");
   const [addOrderDateStart, setAddOrderDateStart] = useState("");
@@ -3488,16 +3533,24 @@ export default function RouteDetailPage() {
       : []),
     [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
   );
+  const addStopTargetRouteOptions = useMemo(() => (isRouteGroupDetail
+    ? [
+        { label: "Unassigned in group", value: "" },
+        ...routeGroupChildRows
+          .filter((routeRow) => routeRow.routePlanId && !routeRow.isPreviewOnly)
+          .map((routeRow) => ({ label: routeRow.title, value: routeRow.routePlanId })),
+      ]
+    : []), [isRouteGroupDetail, routeGroupChildRows]);
   const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
   const selectedAddOrderIdSet = useMemo(() => new Set(selectedAddOrderIds), [selectedAddOrderIds]);
   const filteredAddOrderCandidates = useMemo(
-    () => filterRouteAddOrderCandidatesByDate(addOrderCandidates, {
+    () => filterRouteAddOrderCandidatesByDate(availableAddOrderCandidates, {
       endDate: addOrderDateEnd,
       field: addOrderDateField,
       mode: addOrderDateMode,
       startDate: addOrderDateStart,
     }),
-    [addOrderCandidates, addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart],
+    [availableAddOrderCandidates, addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart],
   );
   const allAddOrderCandidatesSelected = filteredAddOrderCandidates.length > 0
     && filteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
@@ -4406,6 +4459,13 @@ export default function RouteDetailPage() {
 
   const handleOpenChildStopEditor = (row) => {
     if (!row?.deliveryStopId) return;
+    if (row.isCustomStop) {
+      setCustomStopDraft(buildCustomStopDraftFromRow(row, ianaTimezone));
+      setCustomStopFieldErrors({});
+      setActiveCustomStopEditRow(row);
+      setActiveChildStopActions(null);
+      return;
+    }
     setChildStopEditDraft(row.editFields ?? {});
     setActiveChildStopEditRow(row);
     setActiveChildStopActions(null);
@@ -4999,15 +5059,27 @@ export default function RouteDetailPage() {
     setAddOrderDateMode("all");
     setAddOrderDateStart("");
     setAddOrderDateEnd("");
+    setAddStopMode(null);
+    setAddStopTargetRoutePlanId(isRouteGroupDetail ? "" : effectiveRoutePlan?.id ?? "");
+    setCustomStopDraft(createCustomStopDraft());
+    setCustomStopFieldErrors({});
     setIsAddOrderDialogOpen(true);
   };
 
+  const handleChooseExistingOrders = () => {
+    setAddStopMode("existing");
+    if (isRouteGroupDetail) {
+      setAvailableAddOrderCandidates([]);
+      submitRouteGroupAction("loadAddOrderCandidates");
+    }
+  };
+
   const handleAddOrderToCurrentRoute = () => {
-    if (!routeGroupId || !effectiveRoutePlan?.id || routeGroupActionBusy) return;
-    if (!canAddOrRemoveChildStops) {
+    if (!routeGroupId || routeGroupActionBusy) return;
+    if (isMaterializedChildRouteDetail && (!effectiveRoutePlan?.id || !canAddOrRemoveChildStops)) {
       setRouteActionNotice({
-        heading: "Cannot add orders",
-        message: "Orders cannot be added after the route has finished.",
+        heading: "Cannot add stops",
+        message: "Stops cannot be added after the route has finished.",
       });
       return;
     }
@@ -5016,17 +5088,10 @@ export default function RouteDetailPage() {
       return;
     }
     setRouteGroupClientError(null);
-    if (addOrderCandidates.length === 0) {
-      setRouteActionNotice({
-        heading: "No orders remaining",
-        message: "No orders are remaining to add.",
-      });
-      return;
-    }
-    if (routeMembershipChangeIsInProgress) {
+    if (isMaterializedChildRouteDetail && routeMembershipChangeIsInProgress) {
       setPendingInProgressRouteChange({
         heading: "Change in-progress route?",
-        message: "Adding an order changes the active stop list. The driver may need to refresh the route before continuing.",
+        message: "Adding a stop changes the active stop list. The driver may need to refresh the route before continuing.",
         type: "add",
       });
       return;
@@ -5059,7 +5124,56 @@ export default function RouteDetailPage() {
 
   const handleAddSelectedOrders = () => {
     if (selectedAddOrderIds.length === 0 || routeGroupActionBusy) return;
-    submitRouteGroupAction("addRouteOrders", { orderIds: JSON.stringify(selectedAddOrderIds) });
+    submitRouteGroupAction("addRouteOrders", {
+      orderIds: JSON.stringify(selectedAddOrderIds),
+      targetRoutePlanId: addStopTargetRoutePlanId,
+    });
+  };
+
+  const handleCustomStopDraftChange = (field, value) => {
+    setCustomStopDraft((draft) => ({ ...draft, [field]: value }));
+    setCustomStopFieldErrors((errors) => {
+      if (!errors[field]) return errors;
+      const nextErrors = { ...errors };
+      delete nextErrors[field];
+      return nextErrors;
+    });
+  };
+
+  const submitCustomStop = (intent, row = null) => {
+    if (routeGroupActionBusy) return;
+    const fieldErrors = validateCustomStopDraft(customStopDraft);
+    if (Object.keys(fieldErrors).length > 0) {
+      setCustomStopFieldErrors(fieldErrors);
+      return;
+    }
+
+    const timeWindowStart = customStopDraft.timeWindowStart
+      ? storeLocalDateTimeToIso(customStopDraft.timeWindowStart, ianaTimezone)
+      : "";
+    const timeWindowEnd = customStopDraft.timeWindowEnd
+      ? storeLocalDateTimeToIso(customStopDraft.timeWindowEnd, ianaTimezone)
+      : "";
+    if ((customStopDraft.timeWindowStart && !timeWindowStart) || (customStopDraft.timeWindowEnd && !timeWindowEnd)) {
+      setCustomStopFieldErrors({ timeWindowEnd: "Enter a valid time window in the store timezone." });
+      return;
+    }
+
+    submitRouteGroupAction(intent, {
+      ...customStopDraft,
+      ...(row?.deliveryStopId ? { deliveryStopId: row.deliveryStopId } : {}),
+      targetRoutePlanId: addStopTargetRoutePlanId,
+      timeWindowEnd,
+      timeWindowStart,
+    });
+  };
+
+  const handleOpenCustomStopEditor = (row) => {
+    if (!row?.deliveryStopId || !row.isCustomStop) return;
+    setCustomStopDraft(buildCustomStopDraftFromRow(row, ianaTimezone));
+    setCustomStopFieldErrors({});
+    setActiveCustomStopEditRow(row);
+    setActiveRouteTimelineStopPopover(null);
   };
 
   const handlePreviewRouteOptimization = () => {
@@ -5189,6 +5303,18 @@ export default function RouteDetailPage() {
   }, [routeGroupActionIntent]);
 
   useEffect(() => {
+    setAvailableAddOrderCandidates(addOrderCandidates);
+  }, [addOrderCandidates]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "loadAddOrderCandidates") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+    setAvailableAddOrderCandidates(routeActionFetcher.data?.addOrderCandidates ?? []);
+  }, [routeActionFetcher.data, routeActionFetcher.state]);
+
+  useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "previewRouteOptimization") return;
     if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
@@ -5268,6 +5394,26 @@ export default function RouteDetailPage() {
     setSelectedAddOrderIds([]);
     revalidator.revalidate();
     shopify.toast.show(`${addedOrders} order${addedOrders === 1 ? "" : "s"} added to route`);
+  }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (!["createCustomStop", "updateCustomStop"].includes(lastRouteActionIntentRef.current)) return;
+    const intent = lastRouteActionIntentRef.current;
+    lastRouteActionIntentRef.current = null;
+    const fieldErrors = routeActionFetcher.data?.fieldErrors ?? {};
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) {
+      setCustomStopFieldErrors(fieldErrors);
+      return;
+    }
+
+    setCustomStopFieldErrors({});
+    setActiveCustomStopEditRow(null);
+    setIsAddOrderDialogOpen(false);
+    setAddStopMode(null);
+    setCustomStopDraft(createCustomStopDraft());
+    revalidator.revalidate();
+    shopify.toast.show(intent === "createCustomStop" ? "Custom stop added" : "Custom stop updated");
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
@@ -6456,7 +6602,7 @@ export default function RouteDetailPage() {
                 <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
               </section>
               <div aria-label="Route actions" style={routeActionColumnStyle}>
-                {isMaterializedChildRouteDetail ? (
+                {routeGroupId ? (
                   <button
                     disabled={routeGroupActionBusy}
                     onClick={handleAddOrderToCurrentRoute}
@@ -6607,7 +6753,7 @@ export default function RouteDetailPage() {
                   {childRouteOrderRows.map((row) => (
                     <tr key={row.id} style={childRouteOrderRowStyle}>
                       <td style={childRouteStopCellStyle}><span style={childRouteTableStopMarkerStyle}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
-                      <td style={childRouteOrderCellStyle}>{row.order}</td>
+                      <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
                       <td style={childRouteOrderCellStyle}>{row.status}</td>
                       <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
                       <td style={childRouteOrderCellStyle}>
@@ -6789,7 +6935,7 @@ export default function RouteDetailPage() {
                     <tr>
                       {[
                         ["Stop", "64px"],
-                        ["Order", "96px"],
+                        ["Order / stop", "112px"],
                         ["Status", "120px"],
                         ["Expected arrival", "120px"],
                         ["Actual arrival", "120px"],
@@ -6815,7 +6961,7 @@ export default function RouteDetailPage() {
                             ? ROUTE_DETAIL_COMPLETED_STOP_COLOR
                             : routeStopColorById.get(row.id) ?? routeLineColor,
                         }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
-                        <td style={childRouteOrderCellStyle}>{row.order}</td>
+                        <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
                         <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
                         <td style={childRouteExpectedArrivalCellStyle}>{row.expectedArrival}</td>
                         <td style={childRouteActualArrivalCellStyle}>{row.actualArrival}</td>
@@ -7001,7 +7147,7 @@ export default function RouteDetailPage() {
                   }}
                 >
                   <div style={routeTimelineStopPopoverHeaderStyle}>
-                    <span>{activeRouteTimelineStop.order}</span>
+                    {renderStopOrderLabel(activeRouteTimelineStop)}
                     <button
                       aria-label="Close route stop details"
                       onClick={() => setActiveRouteTimelineStopPopover(null)}
@@ -7033,14 +7179,20 @@ export default function RouteDetailPage() {
                     </span>
                   )}
                   {activeRouteTimelineStopPopover.mode === "pinned" ? (
-                    <button
-                      data-child-stop-actions-trigger="true"
-                      onClick={(event) => handleToggleChildStopActions(event, activeRouteTimelineStop.id)}
-                      style={routeTimelineStopPopoverActionStyle}
-                      type="button"
-                    >
-                      Actions
-                    </button>
+                    activeRouteTimelineStop.isCustomStop ? (
+                      <button
+                        onClick={() => handleOpenCustomStopEditor(activeRouteTimelineStop)}
+                        style={routeTimelineStopPopoverActionStyle}
+                        type="button"
+                      >Edit custom stop</button>
+                    ) : (
+                      <button
+                        data-child-stop-actions-trigger="true"
+                        onClick={(event) => handleToggleChildStopActions(event, activeRouteTimelineStop.id)}
+                        style={routeTimelineStopPopoverActionStyle}
+                        type="button"
+                      >Actions</button>
+                    )
                   ) : null}
                 </div>
               </>
@@ -7154,7 +7306,7 @@ export default function RouteDetailPage() {
                 style={childStopActionsMenuItemStyle}
                 type="button"
               >
-                Edit stop
+                {activeChildStopActionsRow.isCustomStop ? "Edit custom stop" : "Edit stop"}
               </button>
               <button
                 disabled={!canAddOrRemoveChildStops}
@@ -7201,7 +7353,7 @@ export default function RouteDetailPage() {
                   ))}
                 </div>
               ) : null}
-              {activeChildStopShopifyHref ? (
+              {activeChildStopActionsRow.isCustomStop ? null : activeChildStopShopifyHref ? (
                 <a
                   href={activeChildStopShopifyHref}
                   onClick={() => setActiveChildStopActions(null)}
@@ -7507,15 +7659,68 @@ export default function RouteDetailPage() {
               style={routeLineEditorBackdropButtonStyle}
               type="button"
             />
-            <div
-              aria-label="Add orders to current route"
-              aria-modal="true"
-              role="dialog"
-              style={routeAddOrderDialogStyle}
-            >
+            {addStopMode === "custom" ? (
+              <CustomStopDialog
+                busy={createCustomStopBusy}
+                draft={customStopDraft}
+                fieldErrors={customStopFieldErrors}
+                onCancel={() => setIsAddOrderDialogOpen(false)}
+                onChange={handleCustomStopDraftChange}
+                onSubmit={() => submitCustomStop("createCustomStop")}
+                onTargetRouteChange={setAddStopTargetRoutePlanId}
+                targetRouteOptions={addStopTargetRouteOptions}
+                targetRoutePlanId={addStopTargetRoutePlanId}
+              />
+            ) : (
+              <div
+                aria-label="Add stops"
+                aria-modal="true"
+                role="dialog"
+                style={addStopMode === "existing" ? routeAddOrderDialogStyle : routeLineEditorDialogStyle}
+              >
+                {addStopMode == null ? (
+                  <>
+                    <div>
+                      <h2 style={routeLineEditorTitleStyle}>Add stops</h2>
+                      <p style={routeLineEditorLabelStyle}>Choose what to add to this route group.</p>
+                    </div>
+                    <div style={{ display: "grid", gap: "8px" }}>
+                      <button
+                        onClick={handleChooseExistingOrders}
+                        style={routeLineEditorPrimaryButtonStyle}
+                        type="button"
+                      >Existing order</button>
+                      <button
+                        onClick={() => setAddStopMode("custom")}
+                        style={routeActionButtonStyle}
+                        type="button"
+                      >Add custom stop</button>
+                    </div>
+                    <div style={routeLineEditorActionsStyle}>
+                      <button onClick={() => setIsAddOrderDialogOpen(false)} style={routeActionButtonStyle} type="button">Cancel</button>
+                    </div>
+                  </>
+                ) : (
+                  <>
               <div style={routeAddOrderHeaderStyle}>
                 <div>
-                  <h2 style={routeLineEditorTitleStyle}>Add orders</h2>
+                  <h2 style={routeLineEditorTitleStyle}>Add existing orders</h2>
+                  {isRouteGroupDetail ? (
+                    <label style={{ ...routeAddOrderFilterFieldStyle, marginTop: "8px", maxWidth: "240px" }}>
+                      <span style={routeAddOrderFilterLabelStyle}>Add to</span>
+                      <select
+                        aria-label="Add orders to"
+                        disabled={addRouteOrdersBusy}
+                        onChange={(event) => setAddStopTargetRoutePlanId(event.currentTarget.value)}
+                        style={routeLineEditorInputStyle}
+                        value={addStopTargetRoutePlanId}
+                      >
+                        {addStopTargetRouteOptions.map((option) => (
+                          <option key={option.value || "unassigned"} value={option.value}>{option.label}</option>
+                        ))}
+                      </select>
+                    </label>
+                  ) : null}
                   <div style={routeAddOrderFiltersStyle}>
                     <label style={routeAddOrderFilterFieldStyle}>
                       <span style={routeAddOrderFilterLabelStyle}>Date field</span>
@@ -7585,7 +7790,11 @@ export default function RouteDetailPage() {
                 <strong>{selectedAddOrderIds.length} selected</strong>
               </div>
               <div style={routeAddOrderTableWrapStyle}>
-                {filteredAddOrderCandidates.length > 0 ? (
+                {loadAddOrderCandidatesBusy ? (
+                  <div style={routeAddOrderEmptyStyle}>
+                    <s-spinner accessibilityLabel="Loading available orders" size="base" />
+                  </div>
+                ) : filteredAddOrderCandidates.length > 0 ? (
                   <table aria-label="Available orders" style={routeAddOrderTableStyle}>
                     <colgroup>
                       <col style={{ width: "48px" }} />
@@ -7645,10 +7854,10 @@ export default function RouteDetailPage() {
               <div style={routeLineEditorActionsStyle}>
                 <button
                   disabled={addRouteOrdersBusy}
-                  onClick={() => setIsAddOrderDialogOpen(false)}
+                  onClick={() => setAddStopMode(null)}
                   style={routeActionButtonStyle}
                   type="button"
-                >Cancel</button>
+                >Back</button>
                 <button
                   disabled={addRouteOrdersBusy || selectedAddOrderIds.length === 0}
                   onClick={handleAddSelectedOrders}
@@ -7659,7 +7868,10 @@ export default function RouteDetailPage() {
                   type="button"
                 >{addRouteOrdersBusy ? "Adding…" : `Add ${selectedAddOrderIds.length || ""}`.trim()}</button>
               </div>
-            </div>
+                  </>
+                )}
+              </div>
+            )}
           </div>
         ) : null}
 
@@ -7710,6 +7922,27 @@ export default function RouteDetailPage() {
                 </button>
               </div>
             </div>
+          </div>
+        ) : null}
+
+        {activeCustomStopEditRow ? (
+          <div style={routeLineEditorOverlayStyle}>
+            <button
+              aria-label="Close custom stop editor"
+              onClick={() => setActiveCustomStopEditRow(null)}
+              style={routeLineEditorBackdropButtonStyle}
+              type="button"
+            />
+            <CustomStopDialog
+              busy={updateCustomStopBusy}
+              draft={customStopDraft}
+              fieldErrors={customStopFieldErrors}
+              isEdit
+              onCancel={() => setActiveCustomStopEditRow(null)}
+              onChange={handleCustomStopDraftChange}
+              onSubmit={() => submitCustomStop("updateCustomStop", activeCustomStopEditRow)}
+              onTargetRouteChange={() => {}}
+            />
           </div>
         ) : null}
 

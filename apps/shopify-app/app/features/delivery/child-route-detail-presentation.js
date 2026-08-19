@@ -1,8 +1,10 @@
+import { isCustomRouteStop } from "./custom-stop-form.js";
+
 const EMPTY_LABEL = "–";
 
 export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "stop", label: "Stop" },
-  { key: "order", label: "Order" },
+  { key: "order", label: "Order / stop" },
   { key: "status", label: "Status" },
   { key: "orderDate", label: "Order date" },
   { key: "address", label: "Address" },
@@ -476,6 +478,8 @@ export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ia
       id: firstText(stop?.id, stop?.deliveryStopId, stop?.shopifyOrderGid, stop?.orderId) ?? `child-order-${index + 1}`,
       orderId: firstText(stop?.orderId, stop?.sourceOrderId),
       deliveryStopId,
+      sourcePlatform: firstText(stop?.sourcePlatform),
+      isCustomStop: isCustomRouteStop(stop),
       shopifyOrderGid: firstText(stop?.shopifyOrderGid),
       shopifyOrderLegacyId: firstText(stop?.shopifyOrderLegacyId, stop?.legacyResourceId, stop?.shopifyOrderSnapshot?.legacyResourceId),
       stop: index + 1,
@@ -488,6 +492,8 @@ export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ia
       actualArrival: formatChildEtaLabel(actualArrivalByStopId[deliveryStopId], ianaTimezone),
       driveTime: formatChildDriveTimeLabel(stop?.durationFromPreviousSeconds, stop?.distanceFromPreviousMeters),
       stopTime: formatChildStopTimeLabel(stop?.serviceMinutes),
+      priority: numberOrUndefined(stop?.priority) ?? 0,
+      email: firstText(stop?.email),
       customer: getCustomerName(stop),
       items,
       itemsSummary: formatItemsSummary(items, stop?.itemCount ?? stop?.itemsCount),
@@ -502,6 +508,7 @@ export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ia
       attributesDetail: attributes.length > 0 ? attributes.map((attribute) => attribute.label).join("\n") : EMPTY_LABEL,
       editFields: {
         recipientName: firstText(stop?.recipientName, stop?.recipient, stop?.customerName),
+        email: firstText(stop?.email),
         phone: getStopPhone(stop),
         address1: getStopAddressField(stop, "address1"),
         address2: getStopAddressField(stop, "address2"),
