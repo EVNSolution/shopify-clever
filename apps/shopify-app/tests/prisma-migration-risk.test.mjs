@@ -38,8 +38,12 @@ test("Prisma migration risk scan detects destructive and data-sensitive SQL", ()
 test("Prisma migration risk scan requires review for data mutations", () => {
   const statements = [
     'UPDATE "Session" SET "scope" = \'read_orders\';',
+    'UPDATE OR FAIL "Session" SET "scope" = \'read_orders\';',
     'DELETE FROM "Session" WHERE "shop" = \'old.example\';',
     'INSERT INTO "Session" ("id") VALUES (\'seed\');',
+    'INSERT OR REPLACE INTO "Session" ("id") VALUES (\'seed\');',
+    'INSERT OR IGNORE INTO "Session" ("id") VALUES (\'seed\');',
+    'REPLACE INTO "Session" ("id") VALUES (\'seed\');',
   ];
 
   for (const sql of statements) {

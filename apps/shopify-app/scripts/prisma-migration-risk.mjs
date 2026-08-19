@@ -41,9 +41,11 @@ const riskRules = [
   {
     name: "data-mutation",
     matches(sql) {
-      return /\b(?:UPDATE\b[^;]*\bSET\b|DELETE\s+FROM\b|INSERT\s+INTO\b)/i.test(
-        sql,
-      );
+      const conflictClause = String.raw`(?:\s+OR\s+(?:ROLLBACK|ABORT|REPLACE|FAIL|IGNORE))?`;
+      return new RegExp(
+        String.raw`\b(?:UPDATE${conflictClause}\b[^;]*\bSET\b|DELETE\s+FROM\b|INSERT${conflictClause}\s+INTO\b|REPLACE\s+INTO\b)`,
+        "i",
+      ).test(sql);
     },
   },
 ];

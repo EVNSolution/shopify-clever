@@ -34,6 +34,7 @@ WAL, SHM 등 SQLite sidecar도 같은 persistent directory에 남겨야 하므�
    - default 없는 required column 추가
    - unique constraint/index 추가
    - table/column/index/constraint 삭제
+   - data mutation (`UPDATE`, `DELETE FROM`, `INSERT [OR ...] INTO`, `REPLACE INTO`)
 
    ```text
    issue: https://github.com/EVNSolution/shopify-clever/issues/<number>
