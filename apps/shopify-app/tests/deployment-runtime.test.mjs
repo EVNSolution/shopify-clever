@@ -62,6 +62,17 @@ test("manual Shopify deploys reuse a successful main validation instead of runni
   assert.doesNotMatch(deployWorkflow, /needs: validate/);
 });
 
+test("deploy smoke recognizes the context-free login guidance without App Bridge", () => {
+  const deployAction = readRepoFile(".github/actions/ec2-shopify-deploy/action.yml");
+
+  assert.match(deployAction, /grep -q 'Store context required' "\$body"/);
+  assert.match(deployAction, /grep -q 'name="shopify-api-key"' "\$body"/);
+  assert.match(
+    deployAction,
+    /! grep -q 'https:\/\/cdn\.shopify\.com\/shopifycloud\/app-bridge\.js' "\$body"/,
+  );
+});
+
 test("Prisma migrations are verified before a new Shopify container replaces the live service", () => {
   const packageManifest = JSON.parse(readRepoFile("apps/shopify-app/package.json"));
   const dockerfile = readRepoFile("apps/shopify-app/Dockerfile");

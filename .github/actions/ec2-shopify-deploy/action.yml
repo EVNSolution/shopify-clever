@@ -127,8 +127,9 @@ runs:
         body="$(mktemp)"
         for attempt in {1..12}; do
           if test "$(curl -sS -L -o "$body" -w '%{http_code}' '${{ inputs.smoke-url }}')" = "200" \
-            && grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$body" \
-            && grep -q 'name="shopify-api-key"' "$body"; then
+            && grep -q 'name="shopify-api-key"' "$body" \
+            && grep -q 'Store context required' "$body" \
+            && ! grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$body"; then
             exit 0
           fi
           sleep 5
