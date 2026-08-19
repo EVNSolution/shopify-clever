@@ -2150,6 +2150,17 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /typeof pageNumber !== "number"/);
   assert.match(ordersPageSource, /aria-current=\{active \? "page" : undefined\}/);
   assert.match(ordersPageSource, /onClick=\{\(\) => handleOrdersPageChange\(pageNumber\)\}/);
+  assert.match(
+    ordersPageSource,
+    /const ordersPaginationBlockStyle = \{[\s\S]*margin: "6px 10px 8px",[\s\S]*padding: "4px 0",[\s\S]*\};/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const compactOrdersPageButtonStyle = \{[\s\S]*minHeight: "26px",[\s\S]*minWidth: "28px",[\s\S]*padding: "2px 8px",[\s\S]*\};/,
+  );
+  assert.match(ordersPageSource, /const activeOrdersPageButtonStyle = \{[\s\S]*\.\.\.compactOrdersPageButtonStyle,[\s\S]*\};/);
+  assert.match(ordersPageSource, /const ordersPageButtonStyle = \{[\s\S]*\.\.\.compactOrdersPageButtonStyle,[\s\S]*\};/);
+  assert.match(ordersPageSource, /const disabledOrdersPageButtonStyle = \{[\s\S]*\.\.\.compactOrdersPageButtonStyle,[\s\S]*\};/);
   assert.match(ordersPageSource, /readWatermark: ordersPageInfo\?\.readWatermark/);
   assert.doesNotMatch(ordersPageSource, />Previous<\/button>|>Next<\/button>/);
   assert.doesNotMatch(ordersPageSource, /Frozen selected set/);
