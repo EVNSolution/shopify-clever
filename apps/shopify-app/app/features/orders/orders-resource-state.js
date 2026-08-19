@@ -105,6 +105,24 @@ export function updateVisibleOrdersSelectionExclusions(currentOrderIds, visibleO
   return [...exclusions];
 }
 
+export function updatePagedOrderSelection(currentOrders, changedOrders, checked) {
+  const selectedOrders = new Map();
+
+  for (const order of currentOrders ?? []) {
+    const orderId = text(order?.id);
+    if (orderId) selectedOrders.set(orderId, order);
+  }
+
+  for (const order of changedOrders ?? []) {
+    const orderId = text(order?.id);
+    if (!orderId) continue;
+    if (checked) selectedOrders.set(orderId, order);
+    else selectedOrders.delete(orderId);
+  }
+
+  return [...selectedOrders.values()];
+}
+
 export function mapCompactOrderPointsToRows(points) {
   if (!Array.isArray(points)) return [];
 
