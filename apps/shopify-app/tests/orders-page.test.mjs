@@ -1988,7 +1988,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const \[optimisticOrderFilters, setOptimisticOrderFilters\] = useState\(null\)/);
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
-  assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
+  assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*setFilterInputPending\(false\);\s*\}, \[searchParams\]\)/);
   assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, perf, shopLocalDate \} = displayLoaderData/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
@@ -2038,7 +2038,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /applyOrderedDateRange\(pendingOrderedDateStart, pendingOrderedDateStart\)/);
   assert.match(ordersPageSource, /getCalendarDayStyle\(day, orderFilters, pendingOrderedDateStart\)/);
   assert.match(ordersPageSource, /const nextFilters = \{\s*\.\.\.orderFilters,\s*orderedDateFrom: startDate,\s*orderedDateTo: endDate,\s*\}/);
-  assert.match(ordersPageSource, /flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);\s*setSearchParams\(\s*updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
+  assert.match(ordersPageSource, /beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(\s*updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
   assert.match(ordersPageSource, /const handleClearOrderFilter = \(filterKey\) => \{/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateFrom = ""/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateTo = ""/);
@@ -2046,7 +2046,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /onClick=\{handleOrderedDateCalendarOpen\}/);
   assert.match(ordersPageSource, /aria-label="Filter orders by delivery day"/);
   assert.match(ordersPageSource, /value=\{orderFilters\.deliveryWeekday\}/);
-  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);[\s\S]*?updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
+  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?beginOrderResourceTransition\(nextFilters\);[\s\S]*?updateOrderFilterSearchParams\(searchParams, nextFilters\)/);
   assert.match(ordersPageSource, /label="Delivery day"/);
   assert.match(ordersPageSource, /renderOrderFilterChevron\(\)/);
   assert.match(ordersPageSource, /options=\{ORDER_WEEKDAY_OPTIONS\}/);
@@ -2077,7 +2077,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.doesNotMatch(ordersPageSource, /stateOption\) => orderFilterOptions\.deliveryStates\.includes/);
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryState", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear state filter"/);
-  assert.match(ordersPageSource, /flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);\s*setSearchParams\(/);
+  assert.match(ordersPageSource, /beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(/);
   assert.match(ordersPageSource, />Clear filters<\/button>/);
   assert.match(ordersPageSource, />Clear selection<\/button>/);
   assert.match(ordersPageSource, />Clear<\/button>/);
@@ -2114,7 +2114,11 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /import \{ createPortal, flushSync \} from "react-dom"/);
   assert.match(
     ordersPageSource,
-    /flushSync\(\(\) => setOptimisticOrderFilters\(nextFilters\)\);[\s\S]*setSearchParams\(/,
+    /const \[filterInputPending, setFilterInputPending\] = useState\(false\)/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const beginOrderResourceTransition = useCallback\([\s\S]*setFilterInputPending\(pageRequestWillChange\)[\s\S]*\[paginationEnabled, resourceFilterKey, shopLocalDate\]/,
   );
   assert.match(
     ordersPageSource,
