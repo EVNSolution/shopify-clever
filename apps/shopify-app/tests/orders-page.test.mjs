@@ -1988,7 +1988,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const \[optimisticOrderFilters, setOptimisticOrderFilters\] = useState\(null\)/);
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
-  assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*setFilterInputPending\(false\);\s*\}, \[searchParams\]\)/);
+  assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
   assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, perf, shopLocalDate \} = displayLoaderData/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
@@ -2114,11 +2114,11 @@ test("Orders paginated resource defaults to all history orders and renders numer
   assert.match(ordersPageSource, /import \{ createPortal, flushSync \} from "react-dom"/);
   assert.match(
     ordersPageSource,
-    /const \[filterInputPending, setFilterInputPending\] = useState\(false\)/,
+    /const ordersResourceTransitionPending = paginationEnabled && optimisticOrderFilters !== null/,
   );
   assert.match(
     ordersPageSource,
-    /const beginOrderResourceTransition = useCallback\([\s\S]*const navigationWillChange = nextSearchParams\.toString\(\) !== searchParams\.toString\(\)[\s\S]*setFilterInputPending\(paginationEnabled && navigationWillChange\)[\s\S]*return nextSearchParams[\s\S]*\[paginationEnabled, searchParams\]/,
+    /const beginOrderResourceTransition = useCallback\([\s\S]*const navigationWillChange = nextSearchParams\.toString\(\) !== searchParams\.toString\(\)[\s\S]*setOptimisticOrderFilters\(\s*paginationEnabled \? \(navigationWillChange \? nextFilters : null\) : nextFilters,?\s*\)[\s\S]*return nextSearchParams[\s\S]*\[paginationEnabled, searchParams\]/,
   );
   assert.match(
     ordersPageSource,

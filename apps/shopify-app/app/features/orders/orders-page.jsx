@@ -2590,7 +2590,6 @@ function OrdersPageContent({ loaderData }) {
   const [ordersFacetsFilterKey, setOrdersFacetsFilterKey] = useState(null);
   const [ordersMapPoints, setOrdersMapPoints] = useState([]);
   const [ordersMapFilterKey, setOrdersMapFilterKey] = useState(null);
-  const [filterInputPending, setFilterInputPending] = useState(false);
   const [ordersPagePendingRequestKey, setOrdersPagePendingRequestKey] = useState(null);
   const [ordersResourceError, setOrdersResourceError] = useState(null);
   const [loadedRouteGroups, setLoadedRouteGroups] = useState(
@@ -2682,14 +2681,15 @@ function OrdersPageContent({ loaderData }) {
   }, [shopLocalDate, urlOrderFilters]);
   const resourceFilterKey = resourceFilterSearchParams.toString();
   const appliedOrdersPageFilterKeyRef = useRef(resourceFilterKey);
-  const ordersResourceTransitionPending = paginationEnabled && filterInputPending;
+  const ordersResourceTransitionPending = paginationEnabled && optimisticOrderFilters !== null;
   const beginOrderResourceTransition = useCallback((nextFilters) => {
     const nextSearchParams = updateOrderFilterSearchParams(searchParams, nextFilters);
     const navigationWillChange = nextSearchParams.toString() !== searchParams.toString();
 
     flushSync(() => {
-      setOptimisticOrderFilters(nextFilters);
-      setFilterInputPending(paginationEnabled && navigationWillChange);
+      setOptimisticOrderFilters(
+        paginationEnabled ? (navigationWillChange ? nextFilters : null) : nextFilters,
+      );
     });
     return nextSearchParams;
   }, [paginationEnabled, searchParams]);
@@ -3141,7 +3141,6 @@ function OrdersPageContent({ loaderData }) {
 
   useEffect(() => {
     setOptimisticOrderFilters(null);
-    setFilterInputPending(false);
   }, [searchParams]);
 
   useEffect(() => {
