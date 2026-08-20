@@ -290,13 +290,13 @@ test("Routes table selection column uses checkboxes and a single delete action",
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
-  assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);
   assert.match(routesPageSource, /navigateRouteDetail\(route\)/);
-  assert.match(routesPageSource, /navigate\(createRouteDetailHref\(route, idToken\)\)/);
+  assert.match(routesPageSource, /function navigateRouteDetail\(route\) \{\s*navigate\(route\.href\);\s*\}/);
+  assert.doesNotMatch(routesPageSource, /fallbackIdToken|searchParams\.get\("id_token"\)/);
   assert.match(routesPageSource, /onClick=\{\(\) => handleRouteRowClick\(route\)\}/);
   assert.match(routesPageSource, /onKeyDown=\{\(event\) => handleRouteRowKeyDown\(event, route\)\}/);
   assert.match(routesPageSource, /role=\{route\.isClickable \? "link" : undefined\}/);
@@ -372,7 +372,7 @@ test("Route detail stages driver assignment for the global route draft save", ()
 
 
 test("Route detail wires route group action buttons through App Bridge", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator \} from "react-router"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routeDetailServerSource, /previewDeliveryRouteGroupOptimization/);
   assert.doesNotMatch(routeDetailSource, /createDeliveryRouteGroupBranch/);
@@ -461,7 +461,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeDetailTitleOverride = null,\s+routeMetrics = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
@@ -478,7 +478,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
 
 test("Route group detail keeps its own page instead of becoming a child route", () => {
   assert.match(routeListRowsSource, /href: routeGroupPath\(routeGroup\.id\)/);
-  assert.match(routesPageSource, /function createRouteDetailHref\(route, idToken\) \{\n {2}return appendIdToken\(route\.href, idToken\);\n\}/);
+  assert.doesNotMatch(routesPageSource, /function createRouteDetailHref/);
   assert.match(routeGroupDetailSource, /routePlan: null/);
   assert.match(routeGroupDetailSource, /route_group_detail\.api\.summary/);
   assert.match(routeGroupDetailSource, /"delivery\.routeGroupDetail"/);
@@ -1278,7 +1278,7 @@ test("Route detail opens the driver selector and removes the unfinished vehicle 
 });
 
 test("Route detail page provides page navigation back to the route list", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteError \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator \} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = ROUTES_ROOT_PATH/);
   assert.match(routeDetailSource, /const requestRouteNavigation = \(href\) => \{/);

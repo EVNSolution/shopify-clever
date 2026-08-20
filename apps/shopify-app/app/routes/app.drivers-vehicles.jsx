@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { useFetcher, useLoaderData, useRouteError } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   createPendingDeliveryDriver,
@@ -18,6 +18,7 @@ import {
 import { countryDialCodeOptions, driverRows } from "../features/drivers/drivers-page-data";
 import { authenticate } from "../shopify.server";
 import { PageShell } from "../ui/page-shell";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 const driversPageStyle = {
   display: "flex",
@@ -1287,9 +1288,7 @@ export default function DriversVehiclesPage() {
   );
 }
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);

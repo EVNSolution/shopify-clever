@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useActionData, useFetcher, useLoaderData, useRouteError, useRevalidator, useSubmit } from "react-router";
+import { useActionData, useFetcher, useLoaderData, useRevalidator, useSubmit } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { geocodeAddress } from "../features/locations/address-geocoding.server";
 import {
   fetchShopifyDepartureLocation,
@@ -501,9 +502,7 @@ export default function SettingsPage() {
   );
 }
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);

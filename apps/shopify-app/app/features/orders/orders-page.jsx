@@ -4,7 +4,7 @@ import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
-import { appendIdToken, routeGroupChildPath, routeGroupPath, routePlanPath } from "../delivery/route-paths";
+import { routeGroupChildPath, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
 import { getAppstleSubscriptionOrderKind } from "../delivery/delivery-labels";
 import { createDepartureMarkerElement } from "../maps/map-markers";
@@ -119,7 +119,6 @@ function getPositiveInteger(value, fallback = 1) {
 
 const PERF_ENDPOINT = "/perf";
 let lastOrdersViewSnapshot = null;
-const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
 const ORDER_DATA_FIX_ACTION = "fixData";
 const ORDER_BULK_ACTION_OPTIONS = [
   { label: "State", value: "state" },
@@ -3194,7 +3193,10 @@ function OrdersPageContent({ loaderData }) {
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
   const [createInventoryClientError, setCreateInventoryClientError] = useState(null);
   const [bulkUpdateClientError, setBulkUpdateClientError] = useState(null);
-  const actionErrors = createRouteClientError
+  const [sessionRecoveryError, setSessionRecoveryError] = useState(null);
+  const actionErrors = sessionRecoveryError
+    ? [{ message: sessionRecoveryError }]
+    : createRouteClientError
     ? [{ message: createRouteClientError }]
     : createInventoryClientError
       ? [{ message: createInventoryClientError }]
@@ -3274,8 +3276,8 @@ function OrdersPageContent({ loaderData }) {
   const ordersLoadRequestedRef = useRef(false);
   const pendingOrdersViewNavigationRef = useRef(null);
   const initialRenderStartedAtRef = useRef(getSafePerformanceNow());
-  const submittedRouteSessionTokenRef = useRef(null);
-  const submittedInventorySessionTokenRef = useRef(null);
+  const submittedRouteRequestRef = useRef(false);
+  const submittedInventoryRequestRef = useRef(false);
   const orderSyncSubmittedRef = useRef(false);
   const activeOrdersRefreshRequestIdRef = useRef(null);
   const activeOrdersReconciliationRef = useRef(null);
@@ -3633,7 +3635,6 @@ function OrdersPageContent({ loaderData }) {
         activeOrdersReconciliationRef.current = {
           jobId: null,
           requestId: refreshRequestId,
-          sessionToken,
         };
       }
     } catch {
@@ -4823,7 +4824,7 @@ function OrdersPageContent({ loaderData }) {
     try {
       setCreateRouteClientError(null);
       const sessionToken = await shopify.idToken();
-      submittedRouteSessionTokenRef.current = sessionToken;
+      submittedRouteRequestRef.current = true;
 
       const routeDraftScope = buildRouteScopeFromOrders(plannedOrders);
       const formData = new FormData();
@@ -4835,7 +4836,7 @@ function OrdersPageContent({ loaderData }) {
       formData.set("shopifySessionToken", sessionToken);
       routePlanFetcher.submit(formData, { method: "post" });
     } catch {
-      submittedRouteSessionTokenRef.current = null;
+      submittedRouteRequestRef.current = false;
       setCreateRouteClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
@@ -4848,7 +4849,7 @@ function OrdersPageContent({ loaderData }) {
     try {
       setCreateRouteClientError(null);
       const sessionToken = await shopify.idToken();
-      submittedRouteSessionTokenRef.current = sessionToken;
+      submittedRouteRequestRef.current = true;
 
       const formData = new FormData();
       formData.set("_intent", "addOrdersToRouteGroup");
@@ -4862,7 +4863,7 @@ function OrdersPageContent({ loaderData }) {
       setRouteAddModalOpen(false);
       routePlanFetcher.submit(formData, { method: "post" });
     } catch {
-      submittedRouteSessionTokenRef.current = null;
+      submittedRouteRequestRef.current = false;
       setCreateRouteClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
@@ -4876,7 +4877,7 @@ function OrdersPageContent({ loaderData }) {
       setCreateInventoryClientError(null);
       setInventorySubmitAction(submitAction);
       const sessionToken = await shopify.idToken();
-      submittedInventorySessionTokenRef.current = sessionToken;
+      submittedInventoryRequestRef.current = true;
 
       const routeDraftScope = buildRouteScopeFromOrders(plannedOrders);
       const formData = new FormData();
@@ -4887,7 +4888,7 @@ function OrdersPageContent({ loaderData }) {
       formData.set("shopifySessionToken", sessionToken);
       inventoryFetcher.submit(formData, { method: "post" });
     } catch {
-      submittedInventorySessionTokenRef.current = null;
+      submittedInventoryRequestRef.current = false;
       setInventorySubmitAction(null);
       setCreateInventoryClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
@@ -4896,33 +4897,35 @@ function OrdersPageContent({ loaderData }) {
   };
 
   useEffect(() => {
-    if (!needsSessionTokenRefresh || searchParams.get(SESSION_TOKEN_REFRESH_PARAM)) return;
+    if (!needsSessionTokenRefresh) {
+      sessionTokenRefreshSubmittedRef.current = false;
+      setSessionRecoveryError(null);
+      return;
+    }
     if (sessionTokenRefreshSubmittedRef.current) return;
 
     let cancelled = false;
     sessionTokenRefreshSubmittedRef.current = true;
 
-    shopify
-      .idToken()
-      .then((sessionToken) => {
+    void (async () => {
+      try {
+        const sessionToken = await shopify.idToken();
         if (cancelled || !sessionToken) return;
-
-        const nextSearchParams = new URLSearchParams(searchParams);
-        nextSearchParams.set("id_token", sessionToken);
-        nextSearchParams.set(SESSION_TOKEN_REFRESH_PARAM, "1");
-        setSearchParams(nextSearchParams, {
-          preventScrollReset: true,
-          replace: true,
-        });
-      })
-      .catch(() => {
+        setSessionRecoveryError(null);
+        revalidator.revalidate();
+      } catch {
+        if (cancelled) return;
         sessionTokenRefreshSubmittedRef.current = false;
-      });
+        setSessionRecoveryError(
+          "Shopify session expired. Reload the page or reopen CLEVER from Shopify Admin.",
+        );
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [needsSessionTokenRefresh, searchParams, setSearchParams, shopify]);
+  }, [needsSessionTokenRefresh, revalidator, shopify]);
 
   useEffect(() => {
     if (!autoSyncOrdersOnLoad) return;
@@ -5036,23 +5039,40 @@ function OrdersPageContent({ loaderData }) {
   useEffect(() => {
     if (ordersRefreshPhase !== "polling") return;
     const active = activeOrdersReconciliationRef.current;
-    if (!active?.jobId || !active?.requestId || !active?.sessionToken) return;
+    if (!active?.jobId || !active?.requestId) return;
     if (!shouldPollOrdersReconciliationJob(ordersReconciliationJob)) return;
     if (ordersReconciliationStatusFetcher.state !== "idle") return;
 
-    const timeout = window.setTimeout(() => {
+    let cancelled = false;
+    const timeout = window.setTimeout(async () => {
       const current = activeOrdersReconciliationRef.current;
       if (current?.jobId !== active.jobId || current?.requestId !== active.requestId) return;
 
-      const formData = new FormData();
-      formData.set("_intent", "pollOrdersReconciliation");
-      formData.set("jobId", active.jobId);
-      formData.set("refreshRequestId", active.requestId);
-      formData.set("shopifySessionToken", active.sessionToken);
-      ordersReconciliationStatusFetcher.submit(formData, { method: "post" });
+      try {
+        const sessionToken = await shopify.idToken();
+        if (cancelled) return;
+        const latest = activeOrdersReconciliationRef.current;
+        if (latest?.jobId !== active.jobId || latest?.requestId !== active.requestId) return;
+
+        const formData = new FormData();
+        formData.set("_intent", "pollOrdersReconciliation");
+        formData.set("jobId", active.jobId);
+        formData.set("refreshRequestId", active.requestId);
+        formData.set("shopifySessionToken", sessionToken);
+        ordersReconciliationStatusFetcher.submit(formData, { method: "post" });
+      } catch {
+        if (cancelled) return;
+        activeOrdersRefreshRequestIdRef.current = null;
+        activeOrdersReconciliationRef.current = null;
+        setOrdersReconciliationError(
+          "Shopify session expired. Reload the page or reopen CLEVER from Shopify Admin.",
+        );
+        setOrdersRefreshPhase("error");
+      }
     }, 1500);
 
     return () => {
+      cancelled = true;
       window.clearTimeout(timeout);
     };
   }, [
@@ -5060,6 +5080,7 @@ function OrdersPageContent({ loaderData }) {
     ordersReconciliationStatusFetcher,
     ordersReconciliationStatusFetcher.state,
     ordersRefreshPhase,
+    shopify,
   ]);
 
   useEffect(() => {
@@ -5132,34 +5153,32 @@ function OrdersPageContent({ loaderData }) {
   useEffect(() => {
     const createdRouteGroup = routePlanFetcher.data?.routeGroup;
     const createdRoutePlan = routePlanFetcher.data?.routePlan;
-    const sessionToken = submittedRouteSessionTokenRef.current;
 
-    if (!sessionToken) return;
+    if (!submittedRouteRequestRef.current) return;
     if ((routePlanFetcher.data?.errors ?? []).length > 0) return;
 
     if (createdRouteGroup?.id) {
-      submittedRouteSessionTokenRef.current = null;
+      submittedRouteRequestRef.current = false;
       const destination = addToRoutePlanId && createdRouteGroup.id === addToRouteGroupId
         ? routeGroupChildPath(createdRouteGroup.id, addToRoutePlanId)
         : routeGroupPath(createdRouteGroup.id);
-      navigate(appendIdToken(destination, sessionToken));
+      navigate(destination);
       return;
     }
 
     if (!createdRoutePlan?.id) return;
 
-    submittedRouteSessionTokenRef.current = null;
-    navigate(appendIdToken(routePlanPath(createdRoutePlan.id), sessionToken));
+    submittedRouteRequestRef.current = false;
+    navigate(routePlanPath(createdRoutePlan.id));
   }, [addToRouteGroupId, addToRoutePlanId, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
 
   useEffect(() => {
     const createdInventory = inventoryFetcher.data?.inventory;
-    const sessionToken = submittedInventorySessionTokenRef.current;
 
-    if (!sessionToken || !createdInventory?.id) return;
+    if (!submittedInventoryRequestRef.current || !createdInventory?.id) return;
 
-    submittedInventorySessionTokenRef.current = null;
-    navigate(`/app/orders/inventory?id=${encodeURIComponent(createdInventory.id)}&id_token=${encodeURIComponent(sessionToken)}`);
+    submittedInventoryRequestRef.current = false;
+    navigate(`/app/orders/inventory?id=${encodeURIComponent(createdInventory.id)}`);
   }, [inventoryFetcher.data?.inventory, navigate]);
 
   useEffect(() => {

@@ -15,7 +15,6 @@ import {
 import { createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
-  DELIVERY_API_ERROR_CODE,
   DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
   fetchDeliveryRoutePlans,
 } from "../delivery/route-plans.server";
@@ -60,6 +59,7 @@ import {
   fetchShopifyShopTimeZone,
   getShopLocalDate,
 } from "../shopify/shop-timezone.server";
+import { getOrdersLoaderDeliveryErrors } from "./orders-loader-auth";
 
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV || process.env.CLEVER_PERF_CAPTURE === "1";
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
@@ -854,15 +854,13 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
           data: serverOrderData,
           durationMs: roundPerfDuration(getSafePerformanceNow() - serverOrdersStartedAt),
         }),
-        () => ({
+        (error) => ({
           data: {
             orders: [],
-            errors: [
-              {
-                code: DELIVERY_API_ERROR_CODE,
-                message: "Delivery orders API 호출에 실패해 Shopify 주문만 먼저 표시합니다.",
-              },
-            ],
+            errors: getOrdersLoaderDeliveryErrors(
+              error,
+              "Delivery orders API 호출에 실패해 Shopify 주문만 먼저 표시합니다.",
+            ),
           },
           durationMs: roundPerfDuration(getSafePerformanceNow() - serverOrdersStartedAt),
         }),
@@ -879,8 +877,11 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
           data: inventoryData,
           durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
         }),
-        () => ({
-          data: { inventories: [], errors: [{ code: DELIVERY_API_ERROR_CODE, message: "Inventory API 호출에 실패했습니다." }] },
+        (error) => ({
+          data: {
+            inventories: [],
+            errors: getOrdersLoaderDeliveryErrors(error, "Inventory API 호출에 실패했습니다."),
+          },
           durationMs: roundPerfDuration(getSafePerformanceNow() - inventoriesStartedAt),
         }),
       )

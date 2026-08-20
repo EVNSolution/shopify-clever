@@ -6,7 +6,6 @@ import {
   useLocation,
   useNavigate,
   useNavigation,
-  useRouteError,
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
@@ -14,6 +13,7 @@ import { syncShopifyOfflineTokenToDeliveryApi } from "../features/delivery/shopi
 import { fetchShopifyAppPreferences } from "../features/settings/app-preferences.server";
 import { DEFAULT_LANGUAGE, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 const APP_NAV_ITEMS = [
   { href: "/app/orders", labelKey: "nav.orders" },
@@ -243,9 +243,7 @@ export default function App() {
 }
 
 // Shopify needs React Router to catch some thrown responses, so that their headers are included in the response.
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);

@@ -101,7 +101,8 @@ test("Routes keeps route plan/group detail routes hidden behind the route table"
   assert.match(routesSource, /getRouteFilters\(searchParams\)/);
   assert.match(routesSource, /filterRouteRows\(allRouteRows, routeFilters\)/);
   assert.match(routesSource, /<table style=\{singleRouteTableStyle\}>/);
-  assert.match(routesSource, /createRouteDetailHref\(route, idToken\)/);
+  assert.match(routesSource, /navigate\(route\.href\)/);
+  assert.doesNotMatch(routesSource, /fallbackIdToken|createRouteDetailHref/);
 
   assert.match(detailSource, /route-overview-header/);
   assert.match(detailSource, /route-overview-summary/);

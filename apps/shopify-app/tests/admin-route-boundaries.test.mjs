@@ -28,8 +28,7 @@ test("document routes that authenticate admin requests export Shopify boundary h
       const relative = path.relative(process.cwd(), filePath);
       const missing = [];
 
-      if (!/useRouteError/.test(source)) missing.push("useRouteError");
-      if (!/boundary\.error\(useRouteError\(\)\)/.test(source)) {
+      if (!/AdminRouteErrorBoundary/.test(source)) {
         missing.push("ErrorBoundary");
       }
       if (!/boundary\.headers\(headersArgs\)/.test(source)) missing.push("headers");
@@ -47,6 +46,7 @@ test("custom client entry leaves Shopify boundary responses to App Bridge", () =
 
   assert.match(source, /document\.body\.firstElementChild\?\.textContent === "Handling response"/);
   assert.match(source, /if \(!isShopifyBoundaryResponse\(\)\)/);
+  assert.match(source, /installStaleBundleRecovery\(\)/);
   assert.match(source, /<HydratedRouter \/>/);
 });
 
