@@ -2528,7 +2528,6 @@ export default function OrdersPage() {
 
 function OrdersPageContent({ loaderData }) {
   const routePlanFetcher = useFetcher();
-  const inventoryFetcher = useFetcher();
   const inventoryDeleteFetcher = useFetcher();
   const orderBulkUpdateFetcher = useFetcher();
   const ordersSyncFetcher = useFetcher();
@@ -3191,32 +3190,28 @@ function OrdersPageContent({ loaderData }) {
     [compactMapEnabled, filteredOrders, ordersMapFilterKey, ordersMapPoints, resourceFilterKey],
   );
   const [createRouteClientError, setCreateRouteClientError] = useState(null);
-  const [createInventoryClientError, setCreateInventoryClientError] = useState(null);
   const [bulkUpdateClientError, setBulkUpdateClientError] = useState(null);
   const [sessionRecoveryError, setSessionRecoveryError] = useState(null);
   const actionErrors = sessionRecoveryError
     ? [{ message: sessionRecoveryError }]
     : createRouteClientError
-    ? [{ message: createRouteClientError }]
-    : createInventoryClientError
-      ? [{ message: createInventoryClientError }]
+      ? [{ message: createRouteClientError }]
       : bulkUpdateClientError
         ? [{ message: bulkUpdateClientError }]
         : orderBulkUpdateFetcher.data?.errors?.length
           ? orderBulkUpdateFetcher.data
-        : ordersRefreshFetcher.data?.errors?.length
-          ? ordersRefreshFetcher.data
-          : routePlanFetcher.data?.errors?.length
-        ? routePlanFetcher.data
-        : inventoryDeleteFetcher.data?.errors?.length
-          ? inventoryDeleteFetcher.data
-          : inventoryFetcher.data;
+          : ordersRefreshFetcher.data?.errors?.length
+            ? ordersRefreshFetcher.data
+            : routePlanFetcher.data?.errors?.length
+              ? routePlanFetcher.data
+              : inventoryDeleteFetcher.data?.errors?.length
+                ? inventoryDeleteFetcher.data
+                : undefined;
   const orderPageNoticeMessage = getServiceErrorNotice([
     actionErrors,
     { errors },
   ], { context: "orders_page" });
   const isCreatingRoute = routePlanFetcher.state !== "idle";
-  const isCreatingInventory = inventoryFetcher.state !== "idle";
   const isDeletingInventory = inventoryDeleteFetcher.state !== "idle";
   const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
   const [ordersRefreshPhase, setOrdersRefreshPhase] = useState("idle");
@@ -3227,7 +3222,6 @@ function OrdersPageContent({ loaderData }) {
     ordersRefreshPhase === "enqueueing" ||
     ordersRefreshPhase === "polling" ||
     ordersRefreshPhase === "reloading";
-  const [inventorySubmitAction, setInventorySubmitAction] = useState(null);
   const [selectedOrderId, setSelectedOrderId] = useState(
     filteredOrders[0]?.id ?? null,
   );
@@ -3250,7 +3244,6 @@ function OrdersPageContent({ loaderData }) {
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [routeAddModalOpen, setRouteAddModalOpen] = useState(false);
-  const [inventoryAssignActionsOpen, setInventoryAssignActionsOpen] = useState(false);
   const [selectedRouteGroupId, setSelectedRouteGroupId] = useState(addToRouteGroupId);
   const [activeOrderPopupId, setActiveOrderPopupId] = useState(null);
   const [sortConfig, setSortConfig] = useState({
@@ -3277,7 +3270,6 @@ function OrdersPageContent({ loaderData }) {
   const pendingOrdersViewNavigationRef = useRef(null);
   const initialRenderStartedAtRef = useRef(getSafePerformanceNow());
   const submittedRouteRequestRef = useRef(false);
-  const submittedInventoryRequestRef = useRef(false);
   const orderSyncSubmittedRef = useRef(false);
   const activeOrdersRefreshRequestIdRef = useRef(null);
   const activeOrdersReconciliationRef = useRef(null);
@@ -3974,7 +3966,6 @@ function OrdersPageContent({ loaderData }) {
       selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
   const createRouteDisabled = plannedOrders.length === 0 || routePlanFetcher.state !== "idle";
   const addToRouteDisabled = createRouteDisabled || safeRouteGroups.length === 0;
-  const createInventoryDisabled = plannedOrders.length === 0 || isCreatingInventory;
 
   useEffect(() => {
     if (filteredOrders.length === 0) {
@@ -4673,7 +4664,6 @@ function OrdersPageContent({ loaderData }) {
     setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setSelectedOrderRows([]);
     setCreateRouteClientError(null);
-    setCreateInventoryClientError(null);
     setPlanFitRequest((requestCount) => requestCount + 1);
   };
 
@@ -4787,8 +4777,6 @@ function OrdersPageContent({ loaderData }) {
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
     setRouteAssignActionsOpen(false);
     setRouteAddModalOpen(false);
-    setInventoryAssignActionsOpen(false);
-    setCreateInventoryClientError(null);
   };
 
   const handleZoomToPlanned = () => {
@@ -4810,13 +4798,6 @@ function OrdersPageContent({ loaderData }) {
     setCreateRouteClientError(null);
     setRouteAddModalOpen(true);
   };
-
-  const handleToggleInventoryAssignActions = () => {
-    if (createInventoryDisabled) return;
-
-    setInventoryAssignActionsOpen((isOpen) => !isOpen);
-  };
-
 
   const handleCreateRoute = async () => {
     if (plannedOrderIds.length === 0 || isCreatingRoute) return;
@@ -4865,32 +4846,6 @@ function OrdersPageContent({ loaderData }) {
     } catch {
       submittedRouteRequestRef.current = false;
       setCreateRouteClientError(
-        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
-      );
-    }
-  };
-
-  const handleAddInventory = async (submitAction = "add") => {
-    if (createInventoryDisabled) return;
-
-    try {
-      setCreateInventoryClientError(null);
-      setInventorySubmitAction(submitAction);
-      const sessionToken = await shopify.idToken();
-      submittedInventoryRequestRef.current = true;
-
-      const routeDraftScope = buildRouteScopeFromOrders(plannedOrders);
-      const formData = new FormData();
-      formData.set("_intent", "createInventory");
-      formData.set("plannedOrderIds", JSON.stringify(plannedOrders.map((order) => order.id)));
-      formData.set("routeScope", JSON.stringify(routeDraftScope));
-      formData.set("routeName", routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE);
-      formData.set("shopifySessionToken", sessionToken);
-      inventoryFetcher.submit(formData, { method: "post" });
-    } catch {
-      submittedInventoryRequestRef.current = false;
-      setInventorySubmitAction(null);
-      setCreateInventoryClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
     }
@@ -5171,15 +5126,6 @@ function OrdersPageContent({ loaderData }) {
     submittedRouteRequestRef.current = false;
     navigate(routePlanPath(createdRoutePlan.id));
   }, [addToRouteGroupId, addToRoutePlanId, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
-
-  useEffect(() => {
-    const createdInventory = inventoryFetcher.data?.inventory;
-
-    if (!submittedInventoryRequestRef.current || !createdInventory?.id) return;
-
-    submittedInventoryRequestRef.current = false;
-    navigate(`/app/orders/inventory?id=${encodeURIComponent(createdInventory.id)}`);
-  }, [inventoryFetcher.data?.inventory, navigate]);
 
   useEffect(() => {
     if (inventoryDeleteFetcher.state !== "idle" || !inventoryDeleteFetcher.data) return;
@@ -5768,54 +5714,6 @@ function OrdersPageContent({ loaderData }) {
                 disabled={createRouteDisabled}
                 onClick={handleCreateRoute}
               >Create route</button>
-            </div>
-          </div>
-
-          <div style={routePlanDetailStyle}>
-            <div style={routePlanHeaderStyle}>
-              <s-heading>Inventory</s-heading>
-              <div style={routePlanHeaderActionsStyle}>
-                <button
-                  type="button"
-                  style={
-                    createInventoryDisabled
-                      ? disabledCreateRouteButtonStyle
-                      : createRouteButtonStyle
-                  }
-                  aria-expanded={inventoryAssignActionsOpen}
-                  disabled={createInventoryDisabled}
-                  onClick={handleToggleInventoryAssignActions}
-                >Assign</button>
-              </div>
-            </div>
-            <div
-              style={{
-                ...routeAssignActionsStyle,
-                ...(inventoryAssignActionsOpen
-                  ? routeAssignActionsOpenStyle
-                  : routeAssignActionsClosedStyle),
-              }}
-            >
-              <button
-                type="button"
-                style={
-                  createInventoryDisabled
-                    ? disabledRouteAssignActionButtonStyle
-                    : routeAssignActionButtonStyle
-                }
-                disabled={createInventoryDisabled}
-                onClick={() => handleAddInventory("add")}
-              >{isCreatingInventory && inventorySubmitAction === "add" ? "Adding…" : "Add"}</button>
-              <button
-                type="button"
-                style={
-                  createInventoryDisabled
-                    ? disabledRouteAssignActionButtonStyle
-                    : routeAssignActionButtonStyle
-                }
-                disabled={createInventoryDisabled}
-                onClick={() => handleAddInventory("create")}
-              >{isCreatingInventory && inventorySubmitAction === "create" ? "Creating…" : "Create"}</button>
             </div>
           </div>
 

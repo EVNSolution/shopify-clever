@@ -210,19 +210,32 @@ test("customer email logo upload requires a multipart form data payload", async 
 
 test("route email requires separate preview and send endpoints", async () => {
   const fetch = fakeFetch({ data: { preview: { recipientCount: 2 } }, error: null });
-  await previewRouteCustomerEmail(request(), "route/1", { signal: "DELIVERED" }, { fetch, sessionToken: "token" });
+  await previewRouteCustomerEmail(request(), "route/1", {
+    deliveryStopIds: ["stop-1", "stop-2"],
+    signal: "DELIVERED",
+  }, { fetch, sessionToken: "token" });
   assert.equal(fetch.calls[0].url, "https://delivery.test/admin/route-plans/route%2F1/customer-email/preview");
   assert.equal(fetch.calls[0].init.method, "POST");
+  assert.deepEqual(JSON.parse(fetch.calls[0].init.body), {
+    deliveryStopIds: ["stop-1", "stop-2"],
+    signal: "DELIVERED",
+  });
 
   await sendRouteCustomerEmail(request(), "route/1", {
     commandId: "command-1",
     confirmed: true,
+    deliveryStopIds: ["stop-1"],
+    missingValuesConfirmed: true,
+    resendConfirmed: true,
     signal: "DELIVERED",
   }, { fetch, sessionToken: "token" });
   assert.equal(fetch.calls[1].url, "https://delivery.test/admin/route-plans/route%2F1/customer-email/send");
   assert.deepEqual(JSON.parse(fetch.calls[1].init.body), {
     commandId: "command-1",
     confirmed: true,
+    deliveryStopIds: ["stop-1"],
+    missingValuesConfirmed: true,
+    resendConfirmed: true,
     signal: "DELIVERED",
   });
 });

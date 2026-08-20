@@ -4,6 +4,7 @@ import { useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-ro
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
+import { getCustomerEmailSendReadiness } from "../features/customer-notifications/customer-email-send-state";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
@@ -1671,6 +1672,16 @@ const customerEmailWarningTextStyle = {
   fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1.35,
+};
+
+const customerEmailGateStatusStyle = {
+  background: "#f6f6f7",
+  borderRadius: "8px",
+  color: "#4a4a4a",
+  fontSize: "13px",
+  lineHeight: 1.4,
+  margin: 0,
+  padding: "8px 10px",
 };
 
 const customerEmailPreviewPanelStyle = {
@@ -3465,14 +3476,16 @@ export default function RouteDetailPage() {
     () => getCustomerEmailFailedSendDeliveryStopIds(customerEmailSendResult),
     [customerEmailSendResult],
   );
-  const customerEmailReadyToSend = Boolean(
-    customerEmailPreview
-    && customerEmailPreviewSignal === customerEmailSignal
-    && customerEmailSelectionCount > 0
-    && customerEmailConfirmed
-    && (!selectedCustomerEmailHasMissingValues || customerEmailMissingValuesConfirmed)
-    && (!selectedCustomerEmailHasPriorSends || customerEmailResendConfirmed),
-  );
+  const customerEmailSendReadiness = getCustomerEmailSendReadiness({
+    confirmed: customerEmailConfirmed,
+    hasMissingValues: selectedCustomerEmailHasMissingValues,
+    hasPriorSends: selectedCustomerEmailHasPriorSends,
+    missingValuesConfirmed: customerEmailMissingValuesConfirmed,
+    previewReady: Boolean(customerEmailPreview && customerEmailPreviewSignal === customerEmailSignal),
+    resendConfirmed: customerEmailResendConfirmed,
+    selectionCount: customerEmailSelectionCount,
+  });
+  const customerEmailReadyToSend = customerEmailSendReadiness.ready;
   routeTrackingSnapshotRef.current = routeTrackingSnapshot;
   const displayedRouteTrackingSnapshot = isRouteTrackingPayloadForRoute(routeTrackingSnapshot, trackingRoutePlanId)
     ? routeTrackingSnapshot
@@ -7670,40 +7683,44 @@ export default function RouteDetailPage() {
                   ) : null}
                 </div>
               ) : null}
-              <label style={{ alignItems: "center", display: "flex", gap: "8px" }}>
-                <input
-                  checked={customerEmailConfirmed}
-                  disabled={!customerEmailPreview || customerEmailSelectionCount === 0}
-                  onChange={(event) => setCustomerEmailConfirmed(event.target.checked)}
-                  type="checkbox"
-                />
-                Confirm this manual send to the selected recipients shown above
-              </label>
+              <s-checkbox
+                checked={customerEmailConfirmed}
+                details={customerEmailPreview && customerEmailSelectionCount > 0
+                  ? "Required before Send."
+                  : customerEmailPreview
+                    ? "Select at least one eligible recipient first."
+                    : "Preview recipients first."}
+                disabled={!customerEmailPreview || customerEmailSelectionCount === 0}
+                label="Confirm this manual send to the selected recipients shown above"
+                onChange={(event) => setCustomerEmailConfirmed(event.currentTarget.checked)}
+              />
               {selectedCustomerEmailHasMissingValues ? (
-                <label style={{ alignItems: "center", display: "flex", gap: "8px" }}>
-                  <input
-                    checked={customerEmailMissingValuesConfirmed}
-                    disabled={!customerEmailPreview || customerEmailSelectionCount === 0}
-                    onChange={(event) => setCustomerEmailMissingValuesConfirmed(event.target.checked)}
-                    type="checkbox"
-                  />
-                  Confirm selected previews with missing template values
-                </label>
+                <s-checkbox
+                  checked={customerEmailMissingValuesConfirmed}
+                  details="Required because one or more selected previews contain missing template values."
+                  disabled={!customerEmailPreview || customerEmailSelectionCount === 0}
+                  label="Confirm selected previews with missing template values"
+                  onChange={(event) => setCustomerEmailMissingValuesConfirmed(event.currentTarget.checked)}
+                />
               ) : null}
               {selectedCustomerEmailHasPriorSends ? (
-                <label style={{ alignItems: "center", display: "flex", gap: "8px" }}>
-                  <input
-                    checked={customerEmailResendConfirmed}
-                    disabled={!customerEmailPreview || customerEmailSelectionCount === 0}
-                    onChange={(event) => setCustomerEmailResendConfirmed(event.target.checked)}
-                    type="checkbox"
-                  />
-                  Confirm resend to recipients with prior send history
-                </label>
+                <s-checkbox
+                  checked={customerEmailResendConfirmed}
+                  details="Required because one or more selected recipients were emailed previously."
+                  disabled={!customerEmailPreview || customerEmailSelectionCount === 0}
+                  label="Confirm resend to recipients with prior send history"
+                  onChange={(event) => setCustomerEmailResendConfirmed(event.currentTarget.checked)}
+                />
               ) : null}
+              <p id="customer-email-send-status" role="status" style={customerEmailGateStatusStyle}>
+                {customerEmailSendReadiness.ready
+                  ? "Ready to send to the selected recipients."
+                  : customerEmailSendReadiness.blockers.join(" ")}
+              </p>
               <div style={routeLineEditorActionsStyle}>
                 <button onClick={closeCustomerEmailDialog} style={routeActionButtonStyle} type="button">Close</button>
                 <button
+                  aria-describedby="customer-email-send-status"
                   disabled={customerEmailFetcher.state !== "idle" || !customerEmailReadyToSend}
                   onClick={() => submitCustomerEmailAction("sendCustomerEmail")}
                   style={{
