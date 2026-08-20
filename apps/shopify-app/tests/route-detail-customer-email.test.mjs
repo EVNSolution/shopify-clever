@@ -39,7 +39,10 @@ test("route detail customer email send requires current preview, selection, conf
   assert.match(routeDetailSource, /formData\.set\("deliveryStopIds", JSON\.stringify\(selectedCustomerEmailDeliveryStopIds\)\)/);
   assert.match(routeDetailSource, /formData\.set\("missingValuesConfirmed", String\(customerEmailMissingValuesConfirmed\)\)/);
   assert.match(routeDetailSource, /formData\.set\("resendConfirmed", String\(customerEmailResendConfirmed\)\)/);
-  assert.match(routeDetailSource, /customerEmailSelectionCount > 0[\s\S]*customerEmailConfirmed[\s\S]*\(!selectedCustomerEmailHasMissingValues \|\| customerEmailMissingValuesConfirmed\)/);
+  assert.match(routeDetailSource, /getCustomerEmailSendReadiness\(\{[\s\S]*previewReady:[\s\S]*selectionCount: customerEmailSelectionCount/);
+  assert.match(routeDetailSource, /id="customer-email-send-status"[\s\S]*customerEmailSendReadiness\.blockers/);
+  assert.match(routeDetailSource, /<s-checkbox[\s\S]*label="Confirm this manual send to the selected recipients shown above"/);
+  assert.match(routeDetailSource, /aria-describedby="customer-email-send-status"/);
   assert.match(routeDetailSource, /Confirm selected previews with missing template values/);
 });
 
@@ -59,7 +62,8 @@ test("route detail customer email send requires independent resend acknowledgeme
   assert.match(routeDetailSource, /function getCustomerEmailRecipientHistory\(recipient\) \{/);
   assert.match(routeDetailSource, /function hasCustomerEmailPriorSend\(recipient\) \{/);
   assert.match(routeDetailSource, /const selectedCustomerEmailHasPriorSends = selectedCustomerEmailRecipients\.some\(hasCustomerEmailPriorSend\)/);
-  assert.match(routeDetailSource, /&& \(!selectedCustomerEmailHasPriorSends \|\| customerEmailResendConfirmed\)/);
+  assert.match(routeDetailSource, /hasPriorSends: selectedCustomerEmailHasPriorSends/);
+  assert.match(routeDetailSource, /resendConfirmed: customerEmailResendConfirmed/);
   assert.match(routeDetailSource, /formatCustomerEmailHistory\(getCustomerEmailRecipientHistory\(recipient\)\)/);
   assert.match(routeDetailSource, /Confirm resend to recipients with prior send history/);
 });

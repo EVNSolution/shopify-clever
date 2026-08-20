@@ -12,7 +12,7 @@ import {
   startDeliveryOrdersReconciliation,
   syncDeliveryOrders,
 } from "../delivery/orders.server";
-import { createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
+import { deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
 import {
   buildCreateRoutePlanPayload,
   DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
@@ -547,39 +547,6 @@ async function handleOrdersAction(request) {
     routeName,
     routeScope,
   });
-
-  if (intent === "createInventory") {
-    const createInventoryStartedAt = getSafePerformanceNow();
-    const { inventory, errors: inventoryErrors } = await createDeliveryInventory(
-      request,
-      {
-        name: routePlanPayload.name,
-        orderIds: plannedOrders.map((order) => order.orderId),
-      },
-      { sessionToken: shopifySessionToken },
-    );
-    const safeInventoryErrors = inventoryErrors ?? [];
-    createTimings.createInventoryMs = roundPerfDuration(getSafePerformanceNow() - createInventoryStartedAt);
-    logDevPerformanceMetric("orders.create_inventory.action", {
-      ...createTimings,
-      totalMs: roundPerfDuration(getSafePerformanceNow() - createStartedAt),
-      plannedOrderCount: plannedOrders.length,
-      syncedOrderCount,
-      canonicalOrderCount,
-      inventoryId: inventory?.id ?? null,
-      errorCount: safeInventoryErrors.length,
-    });
-
-    if (inventory?.id && safeInventoryErrors.length === 0) {
-      return { inventory, errors: [] };
-    }
-
-    return {
-      errors: safeInventoryErrors.length > 0
-        ? safeInventoryErrors
-        : [{ message: "Inventory를 만들지 못했습니다." }],
-    };
-  }
 
   const createRoutePlanStartedAt = getSafePerformanceNow();
   const { routeGroup, errors: routeGroupErrors } = await createDeliveryRouteGroup(

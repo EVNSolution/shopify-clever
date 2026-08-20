@@ -1146,7 +1146,7 @@ test("Orders reconciliation polling never retains or reuses a session token", ()
 test("Orders post-action navigation does not retain a submitted session token", () => {
   assert.doesNotMatch(ordersPageSource, /submittedRouteSessionTokenRef|submittedInventorySessionTokenRef/);
   assert.match(ordersPageSource, /submittedRouteRequestRef\.current = true/);
-  assert.match(ordersPageSource, /submittedInventoryRequestRef\.current = true/);
+  assert.doesNotMatch(ordersPageSource, /submittedInventoryRequestRef/);
   assert.doesNotMatch(ordersPageSource, /navigate\(appendIdToken\(/);
   assert.doesNotMatch(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?[^`]*id_token/);
 });
@@ -1588,19 +1588,13 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.doesNotMatch(ordersPageSource, /plannedOrders\.map\(\(order, orderIndex\) =>/);
   assert.doesNotMatch(ordersPageSource, /aria-label=\{`Remove \${order\.name} from route plan`\}/);
   assert.doesNotMatch(ordersPageSource, />Remove<\/button>/);
-  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Route plan<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Add to route<\/button>[\s\S]*>Create route<\/button>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
+  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Route plan<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Add to route<\/button>[\s\S]*>Create route<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
   assert.match(ordersPageSource, />Assign<\/button>[\s\S]*>Add to route<\/button>[\s\S]*>Create route<\/button>/);
   assert.doesNotMatch(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}[\s\S]{0,1200}aria-label="Route to add orders"/);
   assert.match(ordersPageSource, /aria-label="Add orders to route preview"[\s\S]*aria-label="Selected route snapshot"[\s\S]*>Add<\/button>/);
-  assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Inventory<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
-  assert.match(ordersPageSource, /const \[inventorySubmitAction, setInventorySubmitAction\] = useState\(null\)/);
-  assert.match(ordersPageSource, /const \[inventoryAssignActionsOpen, setInventoryAssignActionsOpen\] = useState\(false\)/);
-  assert.match(ordersPageSource, /const handleToggleInventoryAssignActions = \(\) => \{/);
-  assert.match(ordersPageSource, /const handleAddInventory = async \(submitAction = "add"\) => \{/);
-  assert.match(ordersPageSource, /aria-expanded=\{inventoryAssignActionsOpen\}/);
-  assert.match(ordersPageSource, /inventoryAssignActionsOpen[\s\S]*\? routeAssignActionsOpenStyle[\s\S]*: routeAssignActionsClosedStyle/);
-  assert.match(ordersPageSource, />Inventory<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*onClick=\{\(\) => handleAddInventory\("add"\)\}[\s\S]*inventorySubmitAction === "add" \? "Adding…" : "Add"[\s\S]*onClick=\{\(\) => handleAddInventory\("create"\)\}[\s\S]*inventorySubmitAction === "create" \? "Creating…" : "Create"/);
+  assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
+  assert.doesNotMatch(ordersPageSource, />Inventory<\/s-heading>[\s\S]*>Assign<\/button>/);
   assert.doesNotMatch(ordersPageSource, />Inventory plan<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Assign to inventory<\/button>/);
   assert.doesNotMatch(ordersPageSource, />Create<\/button>[\s\S]{0,80}disabled=\{true\}/);
@@ -2262,7 +2256,7 @@ test("Shopify order mapping reads only the Customer note and keeps coordinate me
 });
 
 
-test("Orders page exposes inventory as an Orders subview with the side-card shortcut", () => {
+test("Orders page keeps inventory browsing and deletion as an Orders subview", () => {
   assert.match(ordersPageSource, /fetchDeliveryInventories/);
   assert.match(ordersPageSource, />Inventory<\/button>/);
   assert.match(ordersPageSource, /ordersLoaded: shouldLoadOrders/);
@@ -2305,19 +2299,15 @@ test("Orders inventory tabs avoid border shorthand style collisions", () => {
   );
 });
 
-test("Orders inventory side-card Add creates standalone inventory without route ownership checks", () => {
-  assert.match(ordersPageSource, /import \{ createDeliveryInventory, deleteDeliveryInventory, fetchDeliveryInventories \}/);
-  assert.match(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
-  assert.match(ordersPageSource, /formData\.set\("_intent", "createInventory"\)/);
-  assert.match(ordersPageSource, /inventoryFetcher\.submit\(formData, \{ method: "post" \}\)/);
-  assert.match(ordersPageSource, /route_create_preflight/);
-  assert.match(ordersPageSource, /if \(intent === "createInventory"\) \{/);
-  assert.match(ordersPageSource, /createDeliveryInventory\(\s*request,/);
+test("Orders removes standalone inventory creation while keeping inventory browsing and deletion", () => {
+  assert.match(ordersPageSource, /import \{ deleteDeliveryInventory, fetchDeliveryInventories \}/);
+  assert.doesNotMatch(ordersPageSource, /const inventoryFetcher = useFetcher\(\)/);
+  assert.doesNotMatch(ordersPageSource, /formData\.set\("_intent", "createInventory"\)/);
+  assert.doesNotMatch(ordersPageSource, /if \(intent === "createInventory"\) \{/);
+  assert.doesNotMatch(ordersPageSource, /createDeliveryInventory\(/);
+  assert.doesNotMatch(ordersPageSource, />Inventory<\/s-heading>[\s\S]{0,800}>Assign<\/button>/);
+  assert.match(ordersPageSource, /aria-label="Inventory list"/);
   assert.match(ordersPageSource, /deleteDeliveryInventory\(request, inventoryId, \{ sessionToken: shopifySessionToken \}\)/);
-  assert.match(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.orderId\)/);
-  assert.match(ordersPageSource, /return \{ inventory, errors: \[\] \}/);
-  assert.match(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(createdInventory\.id\)\}`\)/);
-  assert.doesNotMatch(ordersPageSource, /inventoryRouteGroup/);
 });
 
 test("Orders inventory detail shows a printable product matrix without delta", () => {
