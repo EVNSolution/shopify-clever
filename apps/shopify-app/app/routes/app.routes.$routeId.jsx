@@ -23,6 +23,15 @@ import {
 } from "../features/delivery/custom-stop-form";
 import { reverseRouteStopIds } from "../features/delivery/route-draft";
 import {
+  beginRouteGroupCopySubmit,
+  cancelRouteGroupCopyDialog,
+  createRouteGroupCopyDialogState,
+  failRouteGroupCopySubmit,
+  openRouteGroupCopyDialog,
+  selectRouteGroupCopyMode,
+  succeedRouteGroupCopySubmit,
+} from "../features/delivery/route-group-copy-dialog-state";
+import {
   RouteStartTimePicker,
   buildRouteStartDateTimeValue,
   buildRouteStartDraft,
@@ -1771,6 +1780,52 @@ const routeLineEditorPrimaryButtonStyle = {
   color: "#ffffff",
 };
 
+const routeGroupCopyChoiceStyle = {
+  alignItems: "start",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  display: "grid",
+  gap: "3px",
+  gridTemplateColumns: "18px minmax(0, 1fr)",
+  padding: "12px",
+};
+
+const routeGroupCopyChoiceLabelStyle = {
+  cursor: "pointer",
+  fontWeight: 700,
+};
+
+const routeGroupCopyChoiceTextStyle = {
+  display: "grid",
+  gap: "3px",
+};
+
+const routeGroupCopyChoiceDescriptionStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  lineHeight: 1.4,
+};
+
+const routeGroupCopyDialogStyle = {
+  background: "#ffffff",
+  border: "1px solid #d7d7d7",
+  borderRadius: "12px",
+  boxShadow: "0 18px 48px rgba(0, 0, 0, 0.22)",
+  boxSizing: "border-box",
+  inset: 0,
+  margin: "auto",
+  maxWidth: "calc(100vw - 32px)",
+  padding: "16px",
+  position: "fixed",
+  width: "440px",
+  zIndex: 1,
+};
+
+const routeGroupCopyDialogContentStyle = {
+  display: "grid",
+  gap: "12px",
+};
+
 const routePolygonSaveButtonStyle = {
   ...routeActionButtonStyle,
   boxShadow: "0 2px 8px rgba(0, 0, 0, 0.12)",
@@ -3242,6 +3297,8 @@ export default function RouteDetailPage() {
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
   const copyRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "copyRouteGroup";
+  const [copyRouteGroupDialogState, setCopyRouteGroupDialogState] = useState(createRouteGroupCopyDialogState);
+  const copyRouteGroupRequestBusy = copyRouteGroupBusy || copyRouteGroupDialogState.isSubmitting;
   const refreshRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "refreshRouteOrders";
   const canRefreshRouteOrders = Boolean(effectiveRoutePlan?.id) || siblingRouteRows.length > 0;
   const mapContainerRef = useRef(null);
@@ -3275,6 +3332,10 @@ export default function RouteDetailPage() {
   const routeTimelineSuppressClickRef = useRef(false);
   const routeTimelineSuppressClickTimerRef = useRef(null);
   const lastRouteActionIntentRef = useRef(null);
+  const copyRouteGroupDialogRef = useRef(null);
+  const copyRouteGroupDialogStateRef = useRef(copyRouteGroupDialogState);
+  const copyRouteGroupInitialFocusRef = useRef(null);
+  copyRouteGroupDialogStateRef.current = copyRouteGroupDialogState;
   const navigateAfterRouteDraftSaveRef = useRef(null);
   const routePolygonCornerDragIndexRef = useRef(null);
   const routePolygonSkipNextMapClickRef = useRef(false);
@@ -4808,10 +4869,12 @@ export default function RouteDetailPage() {
       formData.set("shopifySessionToken", sessionToken);
       for (const [key, value] of Object.entries(fields)) formData.set(key, value);
       routeActionFetcher.submit(formData, { method: "post" });
+      return true;
     } catch {
       setRouteGroupClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
+      return false;
     }
   };
 
@@ -4952,6 +5015,22 @@ export default function RouteDetailPage() {
     }
     return submitRouteAction(intent, fields);
   };
+
+  const commitRouteGroupCopyDialogState = useCallback((nextState) => {
+    copyRouteGroupDialogStateRef.current = nextState;
+    setCopyRouteGroupDialogState(nextState);
+  }, []);
+
+  useEffect(() => {
+    const dialog = copyRouteGroupDialogRef.current;
+    if (!dialog) return;
+    if (copyRouteGroupDialogState.isOpen) {
+      if (!dialog.open) dialog.showModal();
+      copyRouteGroupInitialFocusRef.current?.focus();
+      return;
+    }
+    if (dialog.open) dialog.close();
+  }, [copyRouteGroupDialogState.isOpen]);
 
   const resetRouteDraftChanges = useCallback(() => {
     routeTimelineDragRef.current = null;
@@ -5258,7 +5337,40 @@ export default function RouteDetailPage() {
       setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
       return;
     }
-    submitRouteGroupAction("copyRouteGroup");
+    commitRouteGroupCopyDialogState(openRouteGroupCopyDialog());
+  };
+
+  const handleCloseCopyRouteGroupDialog = () => {
+    if (copyRouteGroupRequestBusy) return;
+    commitRouteGroupCopyDialogState(cancelRouteGroupCopyDialog(copyRouteGroupDialogStateRef.current));
+  };
+
+  const handleCopyRouteGroupDialogCancel = (event) => {
+    event.preventDefault();
+    handleCloseCopyRouteGroupDialog();
+  };
+
+  const handleSubmitCopyRouteGroup = async () => {
+    const submission = beginRouteGroupCopySubmit(copyRouteGroupDialogStateRef.current);
+    if (!submission.accepted || copyRouteGroupBusy) return;
+    commitRouteGroupCopyDialogState(submission.state);
+    if (!textOrUndefined(routeGroup?.updatedAt)) {
+      commitRouteGroupCopyDialogState(failRouteGroupCopySubmit(
+        submission.state,
+        "Route group revision이 없습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      ));
+      return;
+    }
+    const submitted = await submitRouteGroupAction("copyRouteGroup", {
+      copyMode: submission.state.mode,
+      expectedUpdatedAt: routeGroup.updatedAt,
+    });
+    if (!submitted) {
+      commitRouteGroupCopyDialogState(failRouteGroupCopySubmit(
+        copyRouteGroupDialogStateRef.current,
+        "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+      ));
+    }
   };
 
   const handleDeleteRoute = async () => {
@@ -5359,16 +5471,26 @@ export default function RouteDetailPage() {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "copyRouteGroup") return;
     lastRouteActionIntentRef.current = null;
-    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) {
+      commitRouteGroupCopyDialogState(failRouteGroupCopySubmit(
+        copyRouteGroupDialogStateRef.current,
+        routeActionFetcher.data.errors[0]?.message,
+      ));
+      return;
+    }
 
     const copiedRouteGroup = routeActionFetcher.data?.routeGroup;
     if (!copiedRouteGroup?.id) {
-      setRouteGroupClientError("복사된 route group을 찾지 못했습니다.");
+      commitRouteGroupCopyDialogState(failRouteGroupCopySubmit(
+        copyRouteGroupDialogStateRef.current,
+        "복사된 route group을 찾지 못했습니다.",
+      ));
       return;
     }
+    commitRouteGroupCopyDialogState(succeedRouteGroupCopySubmit());
     shopify.toast.show("Route group copied");
     navigate(routeGroupPath(copiedRouteGroup.id));
-  }, [navigate, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+  }, [commitRouteGroupCopyDialogState, navigate, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -7619,6 +7741,95 @@ export default function RouteDetailPage() {
             </div>
           </div>
         ) : null}
+
+        <dialog
+          aria-labelledby="copy-route-group-title"
+          onCancel={handleCopyRouteGroupDialogCancel}
+          ref={copyRouteGroupDialogRef}
+          style={routeGroupCopyDialogStyle}
+        >
+          <div style={routeGroupCopyDialogContentStyle}>
+            <div>
+              <h2 id="copy-route-group-title" style={routeLineEditorTitleStyle}>Copy Group Route</h2>
+              <p style={routeLineEditorLabelStyle}>복사 방식을 선택해주세요. 선택 전에는 복사가 실행되지 않습니다.</p>
+            </div>
+            <div aria-label="Route group copy mode" role="radiogroup" style={{ display: "grid", gap: "8px" }}>
+              <div style={routeGroupCopyChoiceStyle}>
+                <input
+                  aria-describedby="copy-route-group-reference-description"
+                  aria-labelledby="copy-route-group-reference-label"
+                  checked={copyRouteGroupDialogState.mode === "REFERENCE"}
+                  disabled={copyRouteGroupRequestBusy}
+                  id="copy-route-group-reference"
+                  name="copyRouteGroupMode"
+                  onChange={() => commitRouteGroupCopyDialogState(selectRouteGroupCopyMode(
+                    copyRouteGroupDialogStateRef.current,
+                    "REFERENCE",
+                  ))}
+                  ref={copyRouteGroupInitialFocusRef}
+                  type="radio"
+                  value="REFERENCE"
+                />
+                <span style={routeGroupCopyChoiceTextStyle}>
+                  <label
+                    htmlFor="copy-route-group-reference"
+                    id="copy-route-group-reference-label"
+                    style={routeGroupCopyChoiceLabelStyle}
+                  >실제 주문으로 복사</label>
+                  <span id="copy-route-group-reference-description" style={routeGroupCopyChoiceDescriptionStyle}>
+                    원본 주문을 공유하며 진행/잠금 상태의 영향을 받음
+                  </span>
+                </span>
+              </div>
+              <div style={routeGroupCopyChoiceStyle}>
+                <input
+                  aria-describedby="copy-route-group-virtual-description"
+                  aria-labelledby="copy-route-group-virtual-label"
+                  checked={copyRouteGroupDialogState.mode === "VIRTUAL"}
+                  disabled={copyRouteGroupRequestBusy}
+                  id="copy-route-group-virtual"
+                  name="copyRouteGroupMode"
+                  onChange={() => commitRouteGroupCopyDialogState(selectRouteGroupCopyMode(
+                    copyRouteGroupDialogStateRef.current,
+                    "VIRTUAL",
+                  ))}
+                  type="radio"
+                  value="VIRTUAL"
+                />
+                <span style={routeGroupCopyChoiceTextStyle}>
+                  <label
+                    htmlFor="copy-route-group-virtual"
+                    id="copy-route-group-virtual-label"
+                    style={routeGroupCopyChoiceLabelStyle}
+                  >가상 주문으로 독립 복사</label>
+                  <span id="copy-route-group-virtual-description" style={routeGroupCopyChoiceDescriptionStyle}>
+                    새 CLEVER 전용 ID를 만들며 Shopify와 동기화되지 않음
+                  </span>
+                </span>
+              </div>
+            </div>
+            {copyRouteGroupDialogState.error ? (
+              <p role="alert" style={routeInProgressWarningStyle}>{copyRouteGroupDialogState.error}</p>
+            ) : null}
+            <div style={routeLineEditorActionsStyle}>
+              <button
+                disabled={copyRouteGroupRequestBusy}
+                onClick={handleCloseCopyRouteGroupDialog}
+                style={routeActionButtonStyle}
+                type="button"
+              >Cancel</button>
+              <button
+                disabled={copyRouteGroupRequestBusy || !copyRouteGroupDialogState.mode}
+                onClick={handleSubmitCopyRouteGroup}
+                style={{
+                  ...routeLineEditorPrimaryButtonStyle,
+                  ...(copyRouteGroupRequestBusy || !copyRouteGroupDialogState.mode ? { opacity: 0.55 } : null),
+                }}
+                type="button"
+              >{copyRouteGroupRequestBusy ? "Copying…" : "Copy route group"}</button>
+            </div>
+          </div>
+        </dialog>
 
         {pendingInProgressRouteChange ? (
           <div style={routeLineEditorOverlayStyle}>

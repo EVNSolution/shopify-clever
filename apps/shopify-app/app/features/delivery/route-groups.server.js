@@ -11,6 +11,7 @@ import {
 } from "./route-helpers.js";
 
 export const DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_GROUP_ID_MISSING";
+const ROUTE_GROUP_COPY_MODES = new Set(["REFERENCE", "VIRTUAL"]);
 
 export function buildRouteGroupAddOrdersDraft(routeGroup, addedOrderIds = [], targetRoutePlanId) {
   const children = getVisibleRouteGroupChildren(routeGroup);
@@ -103,39 +104,57 @@ export async function createDeliveryRouteGroup(request, payload, options = {}) {
   };
 }
 
-export function buildRouteGroupCopyPayload(routeGroup) {
-  const dateRangeStart = textOrUndefined(routeGroup?.dateRangeStart ?? routeGroup?.planDate);
-  const dateRangeEnd = textOrUndefined(routeGroup?.dateRangeEnd) ?? dateRangeStart;
-  const planDate = textOrUndefined(routeGroup?.planDate) ?? dateRangeStart;
-  const orderIds = uniqueTexts([
-    ...(Array.isArray(routeGroup?.assignments)
-      ? routeGroup.assignments.map((assignment) => assignment?.orderId)
-      : []),
-    ...getVisibleRouteGroupChildren(routeGroup).flatMap(getRouteGroupChildOrderIds),
-  ]);
-
-  return {
-    ...(dateRangeEnd ? { dateRangeEnd } : {}),
-    ...(dateRangeStart ? { dateRangeStart } : {}),
-    name: `${textOrUndefined(routeGroup?.name) ?? "Route"} copied`,
-    orderIds,
-    ...(planDate ? { planDate } : {}),
-  };
-}
-
 export async function copyDeliveryRouteGroup(request, routeGroupId, options = {}) {
-  const routeGroupData = await fetchDeliveryRouteGroupDetail(request, routeGroupId, options);
-  if ((routeGroupData.errors ?? []).length > 0 || !routeGroupData.routeGroup) return routeGroupData;
+  const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
+  if (!safeRouteGroupId) return missingRouteGroupResult("복사할 route group ID가 없습니다.");
 
-  const payload = buildRouteGroupCopyPayload(routeGroupData.routeGroup);
-  if (payload.orderIds.length === 0) {
+  const mode = textOrUndefined(options.mode)?.toUpperCase();
+  if (!ROUTE_GROUP_COPY_MODES.has(mode)) {
     return {
       routeGroup: null,
-      errors: [{ message: "복사할 주문이 없습니다." }],
+      errors: [{ message: "복사 방식은 REFERENCE 또는 VIRTUAL이어야 합니다." }],
     };
   }
 
-  return createDeliveryRouteGroup(request, payload, options);
+  const expectedUpdatedAt = textOrUndefined(options.expectedUpdatedAt);
+  if (!expectedUpdatedAt) {
+    return {
+      routeGroup: null,
+      errors: [{ message: "Route group revision이 없어 복사를 안전하게 시작할 수 없습니다." }],
+    };
+  }
+
+  const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}/copies`, {
+    body: JSON.stringify({ expectedUpdatedAt, mode }),
+    fetch: options.fetch,
+    method: "POST",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    routeGroup: normalizeRouteGroup(result.data?.routeGroup),
+    errors: normalizeRouteGroupCopyErrors(result.errors),
+  };
+}
+
+function normalizeRouteGroupCopyErrors(errors) {
+  return (errors ?? []).map((error) => {
+    const code = textOrUndefined(error?.code)?.toUpperCase() ?? "";
+    const message = textOrUndefined(error?.message) ?? "Route group을 복사하지 못했습니다.";
+    if (code === "CUSTOM_ORDER_REFERENCE_COPY_NOT_ALLOWED") {
+      return {
+        ...error,
+        message: "CUSTOM 주문이 포함된 경로는 실제 주문 참조로 복사할 수 없습니다. 가상 주문으로 독립 복사를 선택해주세요.",
+      };
+    }
+    if (Number(error?.status) === 409) {
+      return {
+        ...error,
+        message: "경로가 변경되었거나 주문이 다른 진행 경로에 잠겨 복사할 수 없습니다. 최신 상태를 확인한 뒤 다시 시도해주세요.",
+      };
+    }
+    return { ...error, message };
+  });
 }
 
 export async function fetchDeliveryRouteGroups(request, query = {}, options = {}) {
