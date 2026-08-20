@@ -33,12 +33,20 @@ function logRoutePlanLifecycle(name, metric = {}) {
 }
 
 export function getShopifySessionBearer(request) {
+  return getShopifySessionHeaderBearer(request) ?? getShopifySessionUrlBearer(request);
+}
+
+function getShopifySessionHeaderBearer(request) {
   const authorizationHeader = request.headers.get("authorization");
 
   if (/^Bearer\s+\S+/i.test(authorizationHeader ?? "")) {
     return authorizationHeader;
   }
 
+  return null;
+}
+
+function getShopifySessionUrlBearer(request) {
   const requestUrl = new URL(request.url);
   const idToken = requestUrl.searchParams.get("id_token")?.trim();
 
@@ -67,8 +75,9 @@ export function clearDeliveryApiResponseCache() {
 
 export function primeDeliveryApiGetResponseCache(request, path, result, options = {}) {
   const authorization =
+    getShopifySessionHeaderBearer(request) ??
     normalizeShopifySessionBearer(options.sessionToken) ??
-    getShopifySessionBearer(request);
+    getShopifySessionUrlBearer(request);
 
   if (!authorization || !path || result?.errors?.length > 0) return false;
 
@@ -517,8 +526,9 @@ export async function deleteDeliveryRoutePlan(request, routePlanId, options = {}
 
 export async function deliveryApiRequest(request, path, options = {}) {
   const authorization =
+    getShopifySessionHeaderBearer(request) ??
     normalizeShopifySessionBearer(options.sessionToken) ??
-    getShopifySessionBearer(request);
+    getShopifySessionUrlBearer(request);
 
   if (!authorization) {
     return {
@@ -679,6 +689,36 @@ async function executeDeliveryApiRequest({
   }
 
   const payload = await readJsonResponse(response);
+
+  if (response.status === 401) {
+    const normalizedError = normalizeDeliveryApiError(payload?.error, response.status, path, url);
+    logDeliveryApiFailure({
+      appId,
+      correlationId,
+      error: normalizedError,
+      method,
+      path,
+      status: response.status,
+    });
+    logDeliveryApiTiming({
+      appId,
+      correlationId,
+      durationMs: Date.now() - startedAt,
+      errorCount: 1,
+      method,
+      path,
+      status: response.status,
+    });
+
+    throw new Response("Shopify session expired", {
+      headers: {
+        "content-type": "text/plain; charset=utf-8",
+        "X-Shopify-Retry-Invalid-Session-Request": "1",
+      },
+      status: 401,
+      statusText: "Unauthorized",
+    });
+  }
 
   if (!response.ok || payload?.error) {
     const normalizedError = normalizeDeliveryApiError(payload?.error, response.status, path, url);

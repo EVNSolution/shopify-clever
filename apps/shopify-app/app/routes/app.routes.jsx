@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteError, useSearchParams } from "react-router";
+import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatRouteStatus } from "../features/delivery/route-helpers";
 import {
@@ -11,11 +11,11 @@ import {
   getRouteDeletePayloadKeys,
   toggleRouteSelection,
 } from "../features/delivery/route-list-rows";
-import { appendIdToken } from "../features/delivery/route-paths";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 const routesTablePageStyle = {
   padding: "8px 12px 12px",
@@ -592,10 +592,6 @@ function getStatusBadgeStyle(status) {
   }
 }
 
-function createRouteDetailHref(route, idToken) {
-  return appendIdToken(route.href, idToken);
-}
-
 export default function RoutesPage() {
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
@@ -636,11 +632,7 @@ export default function RoutesPage() {
   }, [routeDeleteFetcher.data, routeDeleteFetcher.state]);
 
   function navigateRouteDetail(route) {
-    const fallbackIdToken = searchParams.get("id_token");
-
-    shopify.idToken()
-      .then((idToken) => navigate(createRouteDetailHref(route, idToken)))
-      .catch(() => navigate(createRouteDetailHref(route, fallbackIdToken)));
+    navigate(route.href);
   }
 
   function handleRouteRowClick(route) {
@@ -849,9 +841,7 @@ export default function RoutesPage() {
   );
 }
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);

@@ -1,4 +1,3 @@
-import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { fetchDeliveryDrivers } from "../features/delivery/drivers.server";
@@ -8,6 +7,7 @@ import { authenticate } from "../shopify.server";
 import { buildRouteGroupChildDetails, cleanRoutePathParam, routeDetailAction } from "../features/delivery/route-detail.server";
 import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "../features/delivery/route-timezone.server";
 import RouteDetailPage from "./app.routes.$routeId";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 function getTopLevelKeys(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return [];
@@ -83,8 +83,6 @@ export const loader = async ({ params, request }) => {
 export const action = routeDetailAction;
 export default RouteDetailPage;
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);

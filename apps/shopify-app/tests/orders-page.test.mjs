@@ -904,8 +904,8 @@ test("Orders page creates a childless route group from scoped planned orders", (
   assert.match(ordersPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /const createdRouteGroup = routePlanFetcher\.data\?\.routeGroup/);
-  assert.match(ordersPageSource, /navigate\(appendIdToken\(destination, sessionToken\)\)/);
-  assert.match(ordersPageSource, /navigate\(appendIdToken\(routePlanPath\(createdRoutePlan\.id\), sessionToken\)\)/);
+  assert.match(ordersPageSource, /navigate\(destination\)/);
+  assert.match(ordersPageSource, /navigate\(routePlanPath\(createdRoutePlan\.id\)\)/);
   assert.match(ordersPageSource, />Assign<\/button>/);
   assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);
   assert.match(ordersPageSource, /disabled=\{createRouteDisabled\}/);
@@ -1121,15 +1121,34 @@ test("Orders preserve every server-owned route membership while keeping a primar
   ]);
 });
 
-test("Orders page refreshes once with a Shopify id_token after a loader token auth error", () => {
+test("Orders page retries loader authentication without persisting a Shopify token in the URL", () => {
   assert.match(ordersPageSource, /const sessionTokenRefreshSubmittedRef = useRef\(false\)/);
-  assert.match(ordersPageSource, /const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed"/);
-  assert.match(ordersPageSource, /if \(!needsSessionTokenRefresh \|\| searchParams\.get\(SESSION_TOKEN_REFRESH_PARAM\)\) return/);
+  assert.match(ordersPageSource, /if \(!needsSessionTokenRefresh\) \{[\s\S]*sessionTokenRefreshSubmittedRef\.current = false/);
   assert.match(ordersPageSource, /if \(sessionTokenRefreshSubmittedRef\.current\) return/);
-  assert.match(ordersPageSource, /const nextSearchParams = new URLSearchParams\(searchParams\)/);
-  assert.match(ordersPageSource, /nextSearchParams\.set\("id_token", sessionToken\)/);
-  assert.match(ordersPageSource, /nextSearchParams\.set\(SESSION_TOKEN_REFRESH_PARAM, "1"\)/);
-  assert.match(ordersPageSource, /setSearchParams\(nextSearchParams, \{\s*preventScrollReset: true,\s*replace: true,\s*\}\)/);
+  assert.match(ordersPageSource, /await shopify\.idToken\(\)/);
+  assert.match(ordersPageSource, /revalidator\.revalidate\(\)/);
+  assert.doesNotMatch(ordersPageSource, /SESSION_TOKEN_REFRESH_PARAM/);
+  assert.doesNotMatch(ordersPageSource, /nextSearchParams\.set\("id_token"/);
+});
+
+test("Orders reconciliation polling never retains or reuses a session token", () => {
+  assert.doesNotMatch(
+    ordersPageSource,
+    /activeOrdersReconciliationRef\.current\s*=\s*\{[\s\S]{0,240}sessionToken/,
+  );
+  assert.match(
+    ordersPageSource,
+    /const sessionToken = await shopify\.idToken\(\)[\s\S]{0,500}formData\.set\("shopifySessionToken", sessionToken\)[\s\S]{0,300}ordersReconciliationStatusFetcher\.submit/,
+  );
+  assert.doesNotMatch(ordersPageSource, /active\.sessionToken|current\.sessionToken/);
+});
+
+test("Orders post-action navigation does not retain a submitted session token", () => {
+  assert.doesNotMatch(ordersPageSource, /submittedRouteSessionTokenRef|submittedInventorySessionTokenRef/);
+  assert.match(ordersPageSource, /submittedRouteRequestRef\.current = true/);
+  assert.match(ordersPageSource, /submittedInventoryRequestRef\.current = true/);
+  assert.doesNotMatch(ordersPageSource, /navigate\(appendIdToken\(/);
+  assert.doesNotMatch(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?[^`]*id_token/);
 });
 
 test("Orders page uses the Shopify shop timezone as today's delivery cutoff", () => {
@@ -2297,7 +2316,7 @@ test("Orders inventory side-card Add creates standalone inventory without route 
   assert.match(ordersPageSource, /deleteDeliveryInventory\(request, inventoryId, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(ordersPageSource, /orderIds: plannedOrders\.map\(\(order\) => order\.orderId\)/);
   assert.match(ordersPageSource, /return \{ inventory, errors: \[\] \}/);
-  assert.match(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(createdInventory\.id\)\}&id_token=\$\{encodeURIComponent\(sessionToken\)\}`\)/);
+  assert.match(ordersPageSource, /navigate\(`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(createdInventory\.id\)\}`\)/);
   assert.doesNotMatch(ordersPageSource, /inventoryRouteGroup/);
 });
 
@@ -2344,7 +2363,8 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /aria-label="Inventory detail view"/);
   assert.match(inventoryDetailSource, /needsSessionTokenRefresh: hasSessionTokenRefreshError\(errors\)/);
   assert.match(inventoryDetailSource, /shopify\s*\.\s*idToken\(\)/);
-  assert.match(inventoryDetailSource, /_shopify_session_refreshed/);
+  assert.match(inventoryDetailSource, /revalidator\.revalidate\(\)/);
+  assert.doesNotMatch(inventoryDetailSource, /_shopify_session_refreshed|nextSearchParams\.set\("id_token"/);
   assert.match(inventoryDetailSource, />Products<\/button>/);
   assert.match(inventoryDetailSource, />Orders<\/button>/);
   assert.match(inventoryDetailSource, /aria-label="Inventory orders"/);

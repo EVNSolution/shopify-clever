@@ -1,9 +1,10 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useFetcher, useLoaderData, useRouteError } from "react-router";
+import { useFetcher, useLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import {
   fetchCustomerEmailSettings,
   saveCustomerEmailGlobal,
@@ -1275,9 +1276,7 @@ const notificationPreviewFooterNoteStyle = {
   paddingTop: "8px",
 };
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);

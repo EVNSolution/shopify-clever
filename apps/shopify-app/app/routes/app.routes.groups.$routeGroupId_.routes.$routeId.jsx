@@ -1,8 +1,8 @@
-import { useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 
 import { cleanRoutePathParam, loadRoutePlanDetail, routeDetailAction } from "../features/delivery/route-detail.server";
 import RouteDetailPage from "./app.routes.$routeId";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 export const loader = async ({ params, request }) => loadRoutePlanDetail(
   request,
@@ -13,8 +13,6 @@ export const loader = async ({ params, request }) => loadRoutePlanDetail(
 export const action = routeDetailAction;
 export default RouteDetailPage;
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);

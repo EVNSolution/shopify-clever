@@ -1,6 +1,7 @@
-import { redirect, useRouteError } from "react-router";
+import { redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 function getSafeShopifyReloadRedirect(request) {
   const url = new URL(request.url);
@@ -30,6 +31,4 @@ export const headers = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;

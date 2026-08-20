@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Link, PrefetchPageLinks, useLoaderData, useRouteError, useSearchParams } from "react-router";
+import { Link, PrefetchPageLinks, useLoaderData, useRevalidator } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryOrderView } from "../features/delivery/inventories.server";
 import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
@@ -11,6 +11,7 @@ import {
   formatInventoryPaymentStatus,
 } from "../features/orders/inventory-payment";
 import { getServiceErrorNotice } from "../features/service-errors";
+import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 export const meta = ({ data }) => [{ title: data?.inventory?.name ?? "Inventory" }];
 
@@ -585,7 +586,6 @@ const PRINT_ORDER_NOTE_GAP_PX = 1 * CSS_PX_PER_MM;
 const PRINT_ORDER_NOTE_LINE_HEIGHT_PX = 17;
 const PRINT_ORDER_BREAK_SAFETY_PX = 12;
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
-const SESSION_TOKEN_REFRESH_PARAM = "_shopify_session_refreshed";
 const noticeStyle = {
   background: "#fff4f4",
   borderBottom: "1px solid #fed7d7",
@@ -996,10 +996,14 @@ function DateCellLabel({ label }) {
 export default function InventoryDetailPage() {
   const { errors, generatedAt, inventory, needsSessionTokenRefresh } = useLoaderData();
   const shopify = useAppBridge();
-  const [searchParams, setSearchParams] = useSearchParams();
+  const revalidator = useRevalidator();
   const sessionTokenRefreshSubmittedRef = useRef(false);
+  const [sessionRecoveryError, setSessionRecoveryError] = useState(null);
   const [inventoryDetailView, setInventoryDetailView] = useState("products");
-  const notice = getServiceErrorNotice([{ errors }], { context: "inventory_detail" });
+  const notice = getServiceErrorNotice([
+    sessionRecoveryError ? { errors: [{ message: sessionRecoveryError }] } : null,
+    { errors },
+  ], { context: "inventory_detail" });
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
   const matrix = buildInventoryProductMatrix(orders);
   const hasMatrix = matrix.rows.length > 0 && matrix.products.length > 0;
@@ -1008,33 +1012,35 @@ export default function InventoryDetailPage() {
   const orderRouteMeta = buildInventoryOrderRouteMeta(inventory, matrix, orders);
   const orderViewRows = buildInventoryOrderViewRows(orders);
   useEffect(() => {
-    if (!needsSessionTokenRefresh || searchParams.get(SESSION_TOKEN_REFRESH_PARAM)) return;
+    if (!needsSessionTokenRefresh) {
+      sessionTokenRefreshSubmittedRef.current = false;
+      setSessionRecoveryError(null);
+      return;
+    }
     if (sessionTokenRefreshSubmittedRef.current) return;
 
     let cancelled = false;
     sessionTokenRefreshSubmittedRef.current = true;
 
-    shopify
-      .idToken()
-      .then((sessionToken) => {
+    void (async () => {
+      try {
+        const sessionToken = await shopify.idToken();
         if (cancelled || !sessionToken) return;
-
-        const nextSearchParams = new URLSearchParams(searchParams);
-        nextSearchParams.set("id_token", sessionToken);
-        nextSearchParams.set(SESSION_TOKEN_REFRESH_PARAM, "1");
-        setSearchParams(nextSearchParams, {
-          preventScrollReset: true,
-          replace: true,
-        });
-      })
-      .catch(() => {
+        setSessionRecoveryError(null);
+        revalidator.revalidate();
+      } catch {
+        if (cancelled) return;
         sessionTokenRefreshSubmittedRef.current = false;
-      });
+        setSessionRecoveryError(
+          "Shopify session expired. Reload the page or reopen CLEVER from Shopify Admin.",
+        );
+      }
+    })();
 
     return () => {
       cancelled = true;
     };
-  }, [needsSessionTokenRefresh, searchParams, setSearchParams, shopify]);
+  }, [needsSessionTokenRefresh, revalidator, shopify]);
 
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
@@ -1317,8 +1323,6 @@ export default function InventoryDetailPage() {
   );
 }
 
-export function ErrorBoundary() {
-  return boundary.error(useRouteError());
-}
+export const ErrorBoundary = AdminRouteErrorBoundary;
 
 export const headers = (headersArgs) => boundary.headers(headersArgs);
