@@ -26,6 +26,7 @@ const routeGroupChildDetailSource = existsSync(routeGroupChildDetailPath)
   ? readFileSync(routeGroupChildDetailPath, "utf8")
   : "";
 const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
+const routeGroupsServerSource = readFileSync(join(root, "app/features/delivery/route-groups.server.js"), "utf8");
 const routeDetailMapSource = readFileSync(join(root, "app/features/delivery/route-detail-map.js"), "utf8");
 const routeHelpersSource = readFileSync(join(root, "app/features/delivery/route-helpers.js"), "utf8");
 const routeListRowsSource = readFileSync(join(root, "app/features/delivery/route-list-rows.js"), "utf8");
@@ -503,14 +504,33 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routeDetailSource, /const contextRouteRowsSource = useMemo\([\s\S]*isRouteGroupDetail/);
 });
 
-test("Route group detail copies the parent title and orders without copying child routes", () => {
+test("Route group detail requires an explicit atomic copy mode and preserves success navigation", () => {
+  assert.doesNotMatch(routeGroupsServerSource, /buildRouteGroupCopyPayload/);
+  assert.match(routeGroupsServerSource, /\/admin\/route-groups\/\$\{safeRouteGroupId\}\/copies/);
   assert.match(routeDetailServerSource, /copyDeliveryRouteGroup/);
   assert.match(routeDetailServerSource, /intent === "copyRouteGroup"/);
-  assert.match(routeDetailServerSource, /copyDeliveryRouteGroup\(request, routeGroupIdFromParams/);
+  assert.match(routeDetailServerSource, /copyMode = textOrUndefined\(formData\.get\("copyMode"\)\)/);
+  assert.match(routeDetailServerSource, /expectedUpdatedAt = textOrUndefined\(formData\.get\("expectedUpdatedAt"\)\)/);
+  assert.match(routeDetailServerSource, /copyDeliveryRouteGroup\(request, routeGroupIdFromParams, \{/);
+  assert.match(routeDetailServerSource, /mode: copyMode/);
+  assert.match(routeDetailServerSource, /expectedUpdatedAt/);
   assert.match(routeDetailSource, /const copyRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "copyRouteGroup"/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("copyRouteGroup"\)/);
+  assert.match(routeDetailSource, /createRouteGroupCopyDialogState/);
+  assert.match(routeDetailSource, /beginRouteGroupCopySubmit/);
+  assert.match(routeDetailSource, /<dialog/);
+  assert.match(routeDetailSource, /showModal\(\)/);
+  assert.match(routeDetailSource, /onCancel=\{handleCopyRouteGroupDialogCancel\}/);
+  assert.match(routeDetailSource, /aria-describedby="copy-route-group-reference-description"/);
+  assert.match(routeDetailSource, /aria-describedby="copy-route-group-virtual-description"/);
+  assert.match(routeDetailSource, /copyMode: submission\.state\.mode/);
+  assert.match(routeDetailSource, /expectedUpdatedAt: routeGroup\.updatedAt/);
   assert.match(routeDetailSource, /lastRouteActionIntentRef\.current !== "copyRouteGroup"/);
   assert.match(routeDetailSource, /navigate\(routeGroupPath\(copiedRouteGroup\.id\)\)/);
+  assert.match(routeDetailSource, />실제 주문으로 복사</);
+  assert.match(routeDetailSource, /원본 주문을 공유하며 진행\/잠금 상태의 영향을 받음/);
+  assert.match(routeDetailSource, />가상 주문으로 독립 복사</);
+  assert.match(routeDetailSource, /새 CLEVER 전용 ID를 만들며 Shopify와 동기화되지 않음/);
+  assert.match(routeDetailSource, /disabled=\{copyRouteGroupRequestBusy \|\| !copyRouteGroupDialogState\.mode\}/);
   assert.match(routeDetailSource, /\{copyRouteGroupBusy \? "Copying…" : "Copy Group Route"\}/);
 });
 

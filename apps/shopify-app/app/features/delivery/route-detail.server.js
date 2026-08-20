@@ -654,7 +654,13 @@ export const routeDetailAction = async ({ params, request }) => {
     if (!routeGroupIdFromParams || routeId) {
       return { routeGroup: null, errors: [{ message: "복사할 route group을 찾을 수 없습니다." }] };
     }
-    return copyDeliveryRouteGroup(request, routeGroupIdFromParams, { sessionToken: shopifySessionToken });
+    const copyMode = textOrUndefined(formData.get("copyMode"));
+    const expectedUpdatedAt = textOrUndefined(formData.get("expectedUpdatedAt"));
+    return copyDeliveryRouteGroup(request, routeGroupIdFromParams, {
+      expectedUpdatedAt,
+      mode: copyMode,
+      sessionToken: shopifySessionToken,
+    });
   }
 
   if (intent === "refreshRouteOrders") {

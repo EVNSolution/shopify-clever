@@ -3,7 +3,6 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  buildRouteGroupCopyPayload,
   buildRouteGroupChildDeleteDraft,
   buildRouteGroupChildrenDeleteDraft,
   buildRouteGroupAddOrdersDraft,
@@ -19,27 +18,6 @@ import {
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupOrders,
 } from "../app/features/delivery/route-groups.server.js";
-
-test("route group copy payload keeps the title, orders, and date scope without child routes", () => {
-  assert.deepEqual(buildRouteGroupCopyPayload({
-    assignments: [
-      { orderId: "order-1" },
-      { orderId: "order-2" },
-      { orderId: "order-1" },
-    ],
-    children: [{ routePlanId: "route-1" }],
-    dateRangeEnd: "2026-08-07",
-    dateRangeStart: "2026-08-06",
-    name: "Thursday route",
-    planDate: "2026-08-06",
-  }), {
-    dateRangeEnd: "2026-08-07",
-    dateRangeStart: "2026-08-06",
-    name: "Thursday route copied",
-    orderIds: ["order-1", "order-2"],
-    planDate: "2026-08-06",
-  });
-});
 
 test("route group add-order draft assigns new orders to the requested child", () => {
   const draft = buildRouteGroupAddOrdersDraft({
@@ -120,28 +98,16 @@ test("route group helper creates route groups through the Admin delivery API", a
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
 });
 
-test("route group helper copies a group through detail and create calls", async () => {
-  const fakeFetch = makeFetchSequence([
-    {
-      payload: {
-        data: {
-          routeGroup: {
-            assignments: [{ orderId: "order-1" }, { orderId: "order-2" }],
-            dateRangeEnd: "2026-08-06",
-            dateRangeStart: "2026-08-06",
-            id: "group-1",
-            name: "Thursday route",
-            planDate: "2026-08-06",
-          },
-        },
-        error: null,
-      },
-    },
-    { payload: { data: { routeGroup: { id: "group-2", name: "Thursday route copied" } }, error: null } },
-  ]);
+test("route group helper copies a group through the atomic copy command", async () => {
+  const fakeFetch = makeFetch({
+    data: { routeGroup: { id: "group-2", name: "Thursday route copied" } },
+    error: null,
+  }, 201);
 
   const result = await copyDeliveryRouteGroup(makeRequest(), "group/1", {
+    expectedUpdatedAt: "2026-08-06T10:15:00.000Z",
     fetch: fakeFetch,
+    mode: "VIRTUAL",
     sessionToken: "session-token",
   });
 
@@ -149,17 +115,64 @@ test("route group helper copies a group through detail and create calls", async 
     routeGroup: { id: "group-2", name: "Thursday route copied" },
     errors: [],
   });
-  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1");
-  assert.equal(fakeFetch.calls[0].init.method, "GET");
-  assert.equal(fakeFetch.calls[1].url, "https://delivery.test/admin/route-groups");
-  assert.equal(fakeFetch.calls[1].init.method, "POST");
-  assert.deepEqual(JSON.parse(fakeFetch.calls[1].init.body), {
-    dateRangeEnd: "2026-08-06",
-    dateRangeStart: "2026-08-06",
-    name: "Thursday route copied",
-    orderIds: ["order-1", "order-2"],
-    planDate: "2026-08-06",
+  assert.equal(fakeFetch.calls.length, 1);
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups/group%2F1/copies");
+  assert.equal(fakeFetch.calls[0].init.method, "POST");
+  assert.equal(fakeFetch.calls[0].init.headers.authorization, "Bearer session-token");
+  assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), {
+    expectedUpdatedAt: "2026-08-06T10:15:00.000Z",
+    mode: "VIRTUAL",
   });
+});
+
+test("route group helper rejects missing revision and invalid copy modes before calling the API", async () => {
+  const fakeFetch = makeFetch();
+
+  const missingRevision = await copyDeliveryRouteGroup(makeRequest(), "group-1", {
+    fetch: fakeFetch,
+    mode: "REFERENCE",
+    sessionToken: "session-token",
+  });
+  const invalidMode = await copyDeliveryRouteGroup(makeRequest(), "group-1", {
+    expectedUpdatedAt: "2026-08-06T10:15:00.000Z",
+    fetch: fakeFetch,
+    mode: "LEGACY",
+    sessionToken: "session-token",
+  });
+
+  assert.equal(fakeFetch.calls.length, 0);
+  assert.match(missingRevision.errors[0].message, /revision/i);
+  assert.match(invalidMode.errors[0].message, /REFERENCE.*VIRTUAL/);
+});
+
+test("route group helper turns copy conflicts into actionable merchant errors", async () => {
+  const staleFetch = makeFetch({
+    data: null,
+    error: { code: "ROUTE_GROUP_REVISION_CONFLICT", message: "Revision mismatch" },
+  }, 409);
+  const customFetch = makeFetch({
+    data: null,
+    error: {
+      code: "CUSTOM_ORDER_REFERENCE_COPY_NOT_ALLOWED",
+      message: "REFERENCE copy cannot include CUSTOM orders. Use VIRTUAL mode.",
+    },
+  }, 400);
+
+  const stale = await copyDeliveryRouteGroup(makeRequest(), "group-1", {
+    expectedUpdatedAt: "2026-08-06T10:15:00.000Z",
+    fetch: staleFetch,
+    mode: "REFERENCE",
+    sessionToken: "session-token",
+  });
+  const custom = await copyDeliveryRouteGroup(makeRequest(), "group-1", {
+    expectedUpdatedAt: "2026-08-06T10:15:00.000Z",
+    fetch: customFetch,
+    mode: "REFERENCE",
+    sessionToken: "session-token",
+  });
+
+  assert.match(stale.errors[0].message, /변경되었거나.*잠겨/);
+  assert.match(custom.errors[0].message, /CUSTOM.*가상 주문으로 독립 복사/);
 });
 
 test("route group helper lists groups with range query params only when present", async () => {
