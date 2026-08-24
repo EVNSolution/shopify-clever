@@ -172,7 +172,7 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.match(routeDetailSource, /routeTrackingConnectionLabel/);
   assert.match(routeDetailSource, /displayedRouteTrackingSnapshot\?\.policy/);
   assert.match(routeDetailSource, /Latest position/);
-  assert.match(routeDetailSource, /Last received/);
+  assert.match(routeDetailSource, /ariaLabel="Tracking evidence"/);
   assert.match(routeDetailSource, /formatTrackingTimestamp\([^,]+,\s*ianaTimezone\)/);
   assert.match(routeDetailSource, /timeZone:\s*ianaTimezone/);
   assert.match(routeDetailSource, /trackingConnectionState/);
@@ -193,8 +193,11 @@ test("Tracking map focuses the live driver position and keeps freshness visible 
   assert.match(routeDetailSource, /window\.setInterval\(\(\) => setRouteTrackingClock\(Date\.now\(\)\), 1_000\)/);
   assert.match(routeDetailSource, /getRouteTrackingCompletionTime\(displayedRouteTrackingSnapshot\)/);
   assert.match(routeDetailSource, /shouldShowRouteTrackingFreshness\(/);
-  assert.match(routeDetailSource, /Current position/);
-  assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(/);
+  assert.match(routeDetailSource, /ariaLabel="Tracking map operational state"/);
+  assert.doesNotMatch(routeDetailSource, /Vehicle GPS[^\n]*·[^\n]*Server confirmed/);
+  assert.match(routeDetailSource, /mapRouteOperationalState/);
+  assert.match(routeDetailSource, /ariaLabel="Tracking evidence"/);
+  assert.match(routeDetailSource, /routeOperationalPresentation\.pills/);
   assert.match(routeDetailSource, /<span style=\{routeChildTrackingMetricLabelStyle\}>Range<\/span>/);
   assert.match(routeDetailSource, /formatTrackingRange\(/);
   assert.doesNotMatch(routeDetailSource, />Recorded range</);

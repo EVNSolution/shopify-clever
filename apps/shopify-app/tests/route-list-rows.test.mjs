@@ -10,6 +10,16 @@ import {
   toggleRouteSelection,
 } from "../app/features/delivery/route-list-rows.js";
 
+test("route list preserves batched per-row operational state without follow-up requests", () => {
+  const operationalState = {
+    deviceProgress: { completedStopCount: 11, totalStopCount: 11 },
+    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
+    syncHealth: { state: "BLOCKED" },
+  };
+  const [row] = buildRouteRows([{ id: "route-kitchener", operationalState, status: "IN_PROGRESS" }]);
+  assert.equal(row.operationalState, operationalState);
+});
+
 test("route list shows a created child route immediately below its group", () => {
   const rows = buildRouteRows(
     [

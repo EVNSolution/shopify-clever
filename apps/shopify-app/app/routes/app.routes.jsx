@@ -4,6 +4,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { formatRouteStatus } from "../features/delivery/route-helpers";
+import { mapRouteOperationalState } from "../features/delivery/operational-state";
 import {
   buildRouteRows,
   getExpandedRouteDeleteKeys,
@@ -16,6 +17,7 @@ import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDel
 import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
+import { OperationalPillGroup } from "../ui/operational-pill-group";
 
 const routesTablePageStyle = {
   padding: "8px 12px 12px",
@@ -140,7 +142,7 @@ function getRouteColumnWidths(routeRows) {
     "14px",
     getRouteNameColumnWidth(routeRows),
     "104px",
-    "84px",
+    "420px",
     "56px",
     "1%",
     "1%",
@@ -287,40 +289,6 @@ const routeDisabledActionButtonStyle = {
   ...routeActionButtonStyle,
   cursor: "not-allowed",
   opacity: 0.55,
-};
-
-const routeStatusBadgeStyle = {
-  background: "#f1f1f1",
-  borderRadius: "999px",
-  color: "#616161",
-  display: "inline-flex",
-  fontSize: "12px",
-  fontWeight: 650,
-  padding: "3px 8px",
-};
-
-const routeReadyBadgeStyle = {
-  ...routeStatusBadgeStyle,
-  background: "#f1f1f1",
-  color: "#616161",
-};
-
-const routeInProgressBadgeStyle = {
-  ...routeStatusBadgeStyle,
-  background: "#e0f0ff",
-  color: "#00527c",
-};
-
-const routeCompletedBadgeStyle = {
-  ...routeStatusBadgeStyle,
-  background: "#e3f1df",
-  color: "#205c20",
-};
-
-const routeCancelledBadgeStyle = {
-  ...routeStatusBadgeStyle,
-  background: "#fee9e8",
-  color: "#8e1f0b",
 };
 
 const routesErrorStyle = {
@@ -577,21 +545,6 @@ function filterRouteRows(routeRows, routeFilters) {
     ];
 }
 
-function getStatusBadgeStyle(status) {
-  switch (formatRouteStatus(status)) {
-    case "Ready":
-      return routeReadyBadgeStyle;
-    case "In progress":
-      return routeInProgressBadgeStyle;
-    case "Completed":
-      return routeCompletedBadgeStyle;
-    case "Cancelled":
-      return routeCancelledBadgeStyle;
-    default:
-      return routeStatusBadgeStyle;
-  }
-}
-
 export default function RoutesPage() {
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
@@ -767,7 +720,7 @@ export default function RoutesPage() {
                   <th aria-hidden="true" style={routeGroupMarkerHeaderCellStyle}></th>
                   <th style={routeTableHeaderCellStyle}>Route</th>
                   <th style={routeTableHeaderCellStyle}>Date</th>
-                  <th style={routeTableHeaderCellStyle}>Status</th>
+                  <th style={routeTableHeaderCellStyle}>Operational state</th>
                   <th style={routeNumberHeaderCellStyle}>Orders</th>
                   <th style={routeTableHeaderCellStyle}>Area</th>
                   <th style={routeTableHeaderCellStyle}>Driver</th>
@@ -809,7 +762,13 @@ export default function RoutesPage() {
                     <td style={routeNameCellStyle}>{route.route}</td>
                     <td style={routeTableCellStyle}>{route.date}</td>
                     <td style={routeTableCellStyle}>
-                      <span style={getStatusBadgeStyle(route.status)}>{formatRouteStatus(route.status)}</span>
+                      <OperationalPillGroup
+                        ariaLabel={`${route.route} operational state`}
+                        pills={mapRouteOperationalState({
+                          operationalState: route.operationalState,
+                          routeStatus: route.status,
+                        }).pills}
+                      />
                     </td>
                     <td style={routeNumberCellStyle}>{route.orders}</td>
                     <td style={routeTableCellStyle}>{route.deliveryArea}</td>

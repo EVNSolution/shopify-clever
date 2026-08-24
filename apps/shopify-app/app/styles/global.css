@@ -74,6 +74,11 @@ s-badge {
   color: #006c48;
 }
 
+.info-pill--info {
+  background: rgba(0, 91, 211, 0.12);
+  color: #005bd3;
+}
+
 .info-pill--warning {
   background: rgba(180, 83, 9, 0.14);
   color: #8a4b00;
@@ -87,6 +92,13 @@ s-badge {
 .info-pill--pickup {
   background: rgba(0, 91, 211, 0.12);
   color: #005bd3;
+}
+
+.operational-pill-group {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 
 .route-plan-address-button {

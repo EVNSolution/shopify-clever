@@ -160,8 +160,8 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routesPageSource, /routeRows\.map\(\(route\) =>/);
   assert.match(routesPageSource, /aria-label="Select all visible routes"/);
   assert.match(routesPageSource, />Route<\/th>/);
-  assert.match(routesPageSource, />Route<\/th>[\s\S]*>Date<\/th>[\s\S]*>Status<\/th>/);
-  assert.match(routesPageSource, />Status<\/th>/);
+  assert.match(routesPageSource, />Route<\/th>[\s\S]*>Date<\/th>[\s\S]*>Operational state<\/th>/);
+  assert.match(routesPageSource, />Operational state<\/th>/);
   assert.match(routesPageSource, />Orders<\/th>/);
   assert.match(routesPageSource, />Area<\/th>/);
   assert.match(routesPageSource, />Total drive time<\/th>/);
@@ -172,16 +172,9 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.doesNotMatch(routesPageSource, />Coordinates<\/th>/);
   assert.doesNotMatch(routesPageSource, />Missing<\/th>/);
   assert.doesNotMatch(routesPageSource, />Created<\/th>/);
-  assert.match(routesPageSource, /formatRouteStatus\(route\.status\)/);
-  assert.match(routesPageSource, /const routeReadyBadgeStyle = \{/);
-  assert.match(routesPageSource, /const routeInProgressBadgeStyle = \{/);
-  assert.match(routesPageSource, /const routeCompletedBadgeStyle = \{/);
-  assert.match(routesPageSource, /const routeCancelledBadgeStyle = \{/);
-  assert.match(routesPageSource, /case "Ready":\s+return routeReadyBadgeStyle/);
-  assert.match(routesPageSource, /case "In progress":\s+return routeInProgressBadgeStyle/);
-  assert.match(routesPageSource, /case "Completed":\s+return routeCompletedBadgeStyle/);
-  assert.match(routesPageSource, /case "Cancelled":\s+return routeCancelledBadgeStyle/);
-  assert.match(routesPageSource, /return formatRouteStatus\(status\)\.toUpperCase\(\)\.replace/);
+  assert.match(routesPageSource, /mapRouteOperationalState\(\{/);
+  assert.match(routesPageSource, /operationalState: route\.operationalState/);
+  assert.match(routesPageSource, /<OperationalPillGroup/);
   assert.match(routeListRowsSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
   assert.match(routeListRowsSource, /const routeGroupRows = routeGroupEntries\.map/);
   assert.match(routeListRowsSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
@@ -464,7 +457,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator \} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
-  assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeDetailTitleOverride = null,\s+routeMetrics = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
+  assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+operationalState = null,\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeDetailTitleOverride = null,\s+routeMetrics = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
   assert.match(routeDetailSource, /const savedRouteGeometryRows = routeGeometryRows/);
   assert.match(routeDetailSource, /const savedRouteStopPoints = routeGeometryStopPoints/);
@@ -647,7 +640,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /const routeDriverSummary = routeDriverId[\s\S]*: "Unassigned"/);
   assert.match(
     routeDetailSource,
-    /<h1 className="route-detail-title"[\s\S]*<span style=\{routeStatusBadgeStyle\}>[\s\S]*aria-label="Route summary" className="route-overview-summary"/,
+    /<h1 className="route-detail-title"[\s\S]*<OperationalPillGroup[\s\S]*aria-label="Route summary" className="route-overview-summary"/,
   );
   assert.match(
     routeDetailSource,
