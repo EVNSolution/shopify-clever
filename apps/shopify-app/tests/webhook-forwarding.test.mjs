@@ -13,6 +13,7 @@ import {
 } from "../app/features/delivery/webhook-forwarding.server.js";
 import {
   DEFAULT_ORDER_WEBHOOK_MAX_BODY_BYTES,
+  MAX_ORDER_WEBHOOK_MAX_BODY_BYTES,
   createOrderWebhookAction,
   readBoundedOrderWebhookRawBody,
   resolveOrderWebhookMaxBodyBytes,
@@ -73,13 +74,18 @@ test("order webhook route is session-free and never loads session storage or off
 
 test("order webhook body limit defaults to the documented 5 MiB safety budget", () => {
   assert.equal(DEFAULT_ORDER_WEBHOOK_MAX_BODY_BYTES, 5 * 1024 * 1024);
+  assert.equal(MAX_ORDER_WEBHOOK_MAX_BODY_BYTES, 10 * 1024 * 1024);
   assert.equal(resolveOrderWebhookMaxBodyBytes(undefined), 5 * 1024 * 1024);
+  assert.equal(resolveOrderWebhookMaxBodyBytes("10485760"), 10 * 1024 * 1024);
+  assert.throws(() => resolveOrderWebhookMaxBodyBytes("10485761"), /body limit/i);
   for (const relativePath of [
     "../../infra/env/shopify-app.env.example",
     "../../infra/env/shopify-app-clever-route.env.example",
     "../../infra/env/shopify-app-kfood.env.example",
   ]) {
-    assert.match(readFileSync(join(root, relativePath), "utf8"), /SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES=5242880/);
+    const envExample = readFileSync(join(root, relativePath), "utf8");
+    assert.match(envExample, /SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES=5242880/);
+    assert.match(envExample, /default 5 MiB, maximum 10 MiB/);
   }
 });
 
@@ -306,7 +312,7 @@ test("invalid body-limit configuration fails closed without reading, validating,
   const previousError = console.error;
   console.error = () => {};
   try {
-    for (const invalid of ["0", "-1", "1.5", " 5", "104857601"]) {
+    for (const invalid of ["0", "-1", "1.5", " 5", "10485761", "104857601"]) {
       process.env.SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES = invalid;
       assert.throws(() => resolveOrderWebhookMaxBodyBytes(), /body limit|positive integer/i);
     }

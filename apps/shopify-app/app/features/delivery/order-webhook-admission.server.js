@@ -7,7 +7,7 @@ import { validateShopifyOrderWebhook } from "./shopify-webhook-validation.server
 import { createTelemetryRequestId } from "../telemetry/structured-telemetry.server.js";
 
 export const DEFAULT_ORDER_WEBHOOK_MAX_BODY_BYTES = 5 * 1024 * 1024;
-const MAX_ORDER_WEBHOOK_MAX_BODY_BYTES = 100 * 1024 * 1024;
+export const MAX_ORDER_WEBHOOK_MAX_BODY_BYTES = 10 * 1024 * 1024;
 
 export function createOrderWebhookAction({
   admissionMode = resolveOrderWebhookAdmissionMode,

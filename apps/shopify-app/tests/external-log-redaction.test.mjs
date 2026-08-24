@@ -80,8 +80,12 @@ test("Orders action failures emit only a stable code, stage, and correlation ide
 });
 
 test("Compliance webhook logs hash the authenticated shop and never interpolate the raw domain", async () => {
-  const source = await readFile(
+  const routeSource = await readFile(
     new URL("../app/routes/webhooks.compliance.jsx", import.meta.url),
+    "utf8",
+  );
+  const source = await readFile(
+    new URL("../app/features/delivery/compliance-webhook-admission.server.js", import.meta.url),
     "utf8",
   );
 
@@ -89,7 +93,7 @@ test("Compliance webhook logs hash the authenticated shop and never interpolate 
   assert.match(source, /logSafeOperationalEvent/);
   assert.match(source, /shopHash/);
   assert.doesNotMatch(source, /`[^`]*\$\{shop\}[^`]*`/);
-  assert.doesNotMatch(source, /console\.(?:log|warn|error)/);
+  assert.doesNotMatch(source + routeSource, /console\.(?:log|warn|error)/);
 });
 
 test("Shopify lifecycle webhook logs hash shops and never interpolate authenticated domains", async () => {
