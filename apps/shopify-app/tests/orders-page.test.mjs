@@ -732,7 +732,7 @@ test("Ordered pill exposes order timing and delivery-cycle sequence on hover", (
 });
 
 test("Area pill distinguishes delivery attention, valid delivery, and pickup rows", () => {
-  assert.match(infoPillSource, /const INFO_PILL_TONES = new Set\(\["neutral", "success", "warning", "critical", "pickup"\]\)/);
+  assert.match(infoPillSource, /const INFO_PILL_TONES = new Set\(\["neutral", "info", "success", "warning", "critical", "pickup"\]\)/);
   assert.match(globalCssSource, /\.info-pill--pickup \{[\s\S]*?background: rgba\(0, 91, 211, 0\.12\);[\s\S]*?color: #005bd3/);
   assert.match(ordersPageSource, /function formatAreaValue\(order\) \{\s*if \(order\?\.serviceType === "PICKUP"\) return "Pickup";\s*return textOrUndefined\(order\?\.deliveryArea\) \?\? "Null";\s*\}/);
   assert.match(ordersPageSource, /function getOrderAreaPillTone\(order\) \{\s*if \(order\?\.serviceType === "PICKUP"\) return "pickup";\s*if \(textOrUndefined\(order\?\.deliveryArea\)\) return "neutral";\s*return "warning";\s*\}/);
@@ -2487,14 +2487,13 @@ test("Orders inventory detail shows a printable product matrix without delta", (
 });
 
 test("Orders inventory detail logs API payload counts on the server", () => {
-  assert.match(inventoryDetailSource, /console\.info\("orders\.inventory\.detail\.api"/);
-  assert.match(inventoryDetailSource, /apiPath/);
+  assert.match(inventoryDetailSource, /logStructuredMetric\("orders\.inventory\.detail\.api"/);
   assert.match(inventoryDetailSource, /emptyItemReason/);
   assert.match(inventoryDetailSource, /orders_present_without_items/);
-  assert.match(inventoryDetailSource, /ordersCountField/);
-  assert.match(inventoryDetailSource, /orderItemQuantity/);
-  assert.match(inventoryDetailSource, /summaryItemQuantity/);
-  assert.match(inventoryDetailSource, /firstOrderItemKeys/);
+  assert.match(inventoryDetailSource, /orderCount: orders\.length/);
+  assert.match(inventoryDetailSource, /rowCount: orderItems\.length/);
+  assert.match(inventoryDetailSource, /totalCount: sumItemQuantity\(orderItems\)/);
+  assert.doesNotMatch(inventoryDetailSource, /inventoryId:|name: inventory\?\.name|firstOrderItemKeys/);
 });
 
 test("Orders inventory detail renders payment method and status independently", () => {

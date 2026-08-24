@@ -8,36 +8,17 @@ import { buildRouteGroupChildDetails, cleanRoutePathParam, routeDetailAction } f
 import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "../features/delivery/route-timezone.server";
 import RouteDetailPage from "./app.routes.$routeId";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
-
-function getTopLevelKeys(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return [];
-  return Object.keys(value).sort();
-}
-
-function buildApiSummary(name, result, counts = {}) {
-  const errorCount = result?.errors?.length ?? 0;
-  return {
-    name,
-    ok: errorCount === 0,
-    errorCount,
-    keys: getTopLevelKeys(result),
-    ...counts,
-  };
-}
+import { logStructuredMetric } from "../features/telemetry/structured-telemetry.server";
 
 function logRouteGroupApiSummary({ routeGroupData, departureLocationData, driverData }) {
-  console.info("route_group_detail.api.summary", [
-    buildApiSummary("delivery.routeGroupDetail", routeGroupData, {
-      assignmentCount: routeGroupData.routeGroup?.assignments?.length ?? 0,
-      childCount: routeGroupData.routeGroup?.children?.length ?? 0,
-    }),
-    buildApiSummary("shopify.departureLocation", departureLocationData, {
-      hasDepartureLocation: Boolean(departureLocationData.departureLocation),
-    }),
-    buildApiSummary("delivery.drivers", driverData, {
-      driverCount: driverData.drivers?.length ?? 0,
-    }),
-  ]);
+  logStructuredMetric("route_group_detail.api.summary", {
+    count: 3,
+    errorCount:
+      (routeGroupData.errors?.length ?? 0)
+      + (departureLocationData.errors?.length ?? 0)
+      + (driverData.errors?.length ?? 0),
+    routeGroupCount: routeGroupData.routeGroup ? 1 : 0,
+  });
 }
 
 export const loader = async ({ params, request }) => {

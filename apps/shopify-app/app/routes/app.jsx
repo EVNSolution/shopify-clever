@@ -9,7 +9,11 @@ import {
 } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
-import { syncShopifyOfflineTokenToDeliveryApi } from "../features/delivery/shopify-token-sync.server";
+import {
+  getShopifyTokenSyncHealth,
+  recordShopifyAdminTokenRefreshFailure,
+  syncShopifyOfflineTokenToDeliveryApi,
+} from "../features/delivery/shopify-token-sync.server";
 import { fetchShopifyAppPreferences } from "../features/settings/app-preferences.server";
 import { DEFAULT_LANGUAGE, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
@@ -155,16 +159,34 @@ function useAppNavigationPerformance() {
 
 export const loader = async ({ request }) => {
   let language = DEFAULT_LANGUAGE;
+  let authenticatedShop;
 
   if (hasShopifyAdminContext(request)) {
-    const { admin, session } = await authenticate.admin(request);
-    await syncShopifyOfflineTokenToDeliveryApi(request, session).catch(() => {});
+    let authenticated;
+    try {
+      authenticated = await authenticate.admin(request);
+    } catch (error) {
+      recordShopifyAdminTokenRefreshFailure({
+        // Authentication failed before a trusted shop session was available.
+        // Keep this app-scoped so it cannot contaminate another shop's health.
+        // eslint-disable-next-line no-undef
+        appId: process.env.CLEVER_APP_ID,
+      });
+      throw error;
+    }
+    const { admin, session } = authenticated;
+    authenticatedShop = session?.shop;
+    await syncShopifyOfflineTokenToDeliveryApi(request, session);
     const { appPreferences } = await fetchShopifyAppPreferences(admin);
     language = appPreferences.language;
   }
 
-  // eslint-disable-next-line no-undef
-  return { apiKey: process.env.SHOPIFY_API_KEY || "", language };
+  return {
+    // eslint-disable-next-line no-undef
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    language,
+    tokenSyncHealth: getShopifyTokenSyncHealth(authenticatedShop),
+  };
 };
 
 export function shouldRevalidate({

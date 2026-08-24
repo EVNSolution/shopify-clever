@@ -648,6 +648,20 @@ test("freshness uses server-provided thresholds", () => {
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:04:00.000Z")).key, "OFFLINE");
 });
 
+test("tracking snapshots preserve the server operational state through reconnect merges", () => {
+  const operationalState = {
+    deviceProgress: { completedStopCount: 11, totalStopCount: 11 },
+    routePlanId: "route-1",
+    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
+    syncHealth: { state: "BLOCKED" },
+  };
+  const normalized = normalizeRouteTrackingSnapshot({ operationalState, routePlanId: "route-1" });
+  assert.deepEqual(normalized.operationalState, operationalState);
+
+  const merged = mergeRouteTrackingSnapshot(normalized, { routePlanId: "route-1", status: "LIVE" });
+  assert.deepEqual(merged.operationalState, operationalState);
+});
+
 test("stream inactivity recovery waits for three missed server heartbeats", () => {
   assert.equal(getRouteTrackingStreamInactivityMs({ policy: { heartbeatMs: 15_000 } }), 45_000);
   assert.equal(getRouteTrackingStreamInactivityMs({ policy: { heartbeatMs: 20_000 } }), 60_000);

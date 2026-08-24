@@ -33,9 +33,12 @@ import {
 } from "../features/settings/settings-layout";
 import { SettingsDepartureMap } from "../features/settings/settings-departure-map";
 import { clearShopifyOrdersCache } from "../features/orders/shopify-orders.server";
+import { mapSettingsOperationalHealth } from "../features/delivery/operational-state";
+import { getShopifyTokenSyncHealth } from "../features/delivery/shopify-token-sync.server";
 import { SUPPORTED_LANGUAGES, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
 import { PageShell } from "../ui/page-shell";
+import { OperationalPillGroup } from "../ui/operational-pill-group";
 
 const DELIVERY_CYCLE_WEEKDAY_OPTIONS = [
   { label: "Sunday", value: "SUNDAY" },
@@ -58,6 +61,9 @@ export const loader = async ({ request }) => {
   return {
     departureLocation: departureResult.departureLocation,
     appPreferences: preferencesResult.appPreferences,
+    operationalHealth: {
+      shopifyToken: getShopifyTokenSyncHealth(shopifyShopCacheKey),
+    },
     errors: [
       ...(departureResult.errors ?? []),
       ...(preferencesResult.errors ?? []),
@@ -207,7 +213,7 @@ function isValidLongitude(longitude) {
 }
 
 export default function SettingsPage() {
-  const { departureLocation, appPreferences, errors } = useLoaderData();
+  const { departureLocation, appPreferences, errors, operationalHealth } = useLoaderData();
   const actionData = useActionData();
   const geocodeFetcher = useFetcher();
   const submitSettings = useSubmit();
@@ -333,6 +339,14 @@ export default function SettingsPage() {
         {activeErrors.length > 0 ? (
           <p role="alert" style={settingsErrorStyle}>{activeErrors[0]?.message ?? copy("settings.errors.unableToSave")}</p>
         ) : null}
+        <fieldset style={settingsFieldsetStyle}>
+          <legend style={settingsLegendStyle}>Operational health</legend>
+          <p style={settingsMessageStyle}>Unknown means this app has no current verified health evidence for that dependency.</p>
+          <OperationalPillGroup
+            ariaLabel="Operational dependency health"
+            pills={mapSettingsOperationalHealth(operationalHealth)}
+          />
+        </fieldset>
         <form
           method="post"
           onReset={resetSettingsForm}

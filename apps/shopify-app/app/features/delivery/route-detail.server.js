@@ -1,4 +1,5 @@
 import { redirect } from "react-router";
+import { logStructuredMetric } from "../telemetry/structured-telemetry.server.js";
 
 import { fetchDeliveryDrivers } from "./drivers.server";
 import {
@@ -75,11 +76,7 @@ function getRouteDetailPerfNow() {
 
 function logRouteDetailPerformance(name, metric = {}) {
   if (typeof window !== "undefined") return;
-
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  logStructuredMetric(name, metric);
 }
 
 function isFiniteCoordinate(value) {
@@ -271,6 +268,7 @@ export function buildRouteGroupChildDetails(routeGroup) {
       const stops = firstArray(child?.stops, child?.routeStops, child?.assignments, routePlan?.stops);
       const optimized = readRouteOptimizedSnapshot(child?.optimized ?? routePlan?.optimized);
       return {
+        operationalState: child?.operationalState ?? routePlan?.operationalState ?? null,
         routeGeometry: child?.routeGeometry ?? routePlan?.routeGeometry ?? optimized?.routeGeometry ?? null,
         routeMetrics: child?.routeMetrics ?? routePlan?.routeMetrics ?? null,
         routePlan: getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stops),
@@ -475,6 +473,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     );
     const directCurrentChildDetail = routePlanData.routePlan || routePlanData.stops?.length
       ? {
+          operationalState: routePlanData.operationalState ?? null,
           routeGeometry: routePlanData.routeGeometry,
           routeMetrics: routePlanData.routeMetrics ?? null,
           routePlan: routePlanData.routePlan,
@@ -520,6 +519,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
         routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
       }),
       routePlan: currentChildDetail?.routePlan ?? null,
+      operationalState: currentChildDetail?.operationalState ?? routePlanData.operationalState ?? null,
       routeGeometry: currentChildDetail?.routeGeometry ?? null,
       routeMetrics: currentChildDetail?.routeMetrics ?? null,
       routeStopPoints: currentChildDetail?.routeStopPoints ?? [],
@@ -562,6 +562,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     ? await fetchDeliveryRouteGroupDetail(request, routeGroupId, { cacheKey: shopifyShopCacheKey })
     : { errors: [], routeGroup: null };
   const currentRouteDetail = {
+    operationalState: routePlanData.operationalState ?? null,
     routeGeometry: routePlanData.routeGeometry,
     routeMetrics: routePlanData.routeMetrics ?? null,
     routePlan: routePlanData.routePlan,

@@ -1,5 +1,5 @@
 name: EC2 Shopify compose deploy
-description: Sync this repo to EC2 and restart one Shopify compose service.
+description: Publish one immutable Shopify release to EC2 with automatic rollback.
 inputs:
   ec2-host:
     required: true
@@ -11,6 +11,10 @@ inputs:
     required: true
   security-group-id:
     required: false
+  target:
+    required: true
+  release-sha:
+    required: true
   compose-file:
     required: true
   service:
@@ -27,10 +31,16 @@ runs:
     - name: Validate deployment configuration
       shell: bash
       run: |
+        set -euo pipefail
         test -n "${{ inputs.ec2-host }}"
         test -n "${{ inputs.ec2-user }}"
         test -n "${{ inputs.deploy-path }}"
         test -n "${{ inputs.ec2-ssh-key }}"
+        [[ "${{ inputs.ec2-host }}" =~ ^[A-Za-z0-9.-]+$ ]]
+        [[ "${{ inputs.ec2-user }}" =~ ^[A-Za-z0-9._-]+$ ]]
+        [[ "${{ inputs.deploy-path }}" == /srv/shopify-clever ]]
+        [[ "${{ inputs.target }}" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]
+        [[ "${{ inputs.release-sha }}" =~ ^[0-9a-f]{40}$ ]]
 
     - name: Check AWS CLI for temporary SSH ingress
       if: ${{ env.AWS_ACCESS_KEY_ID != '' && env.AWS_SECRET_ACCESS_KEY != '' && inputs.security-group-id != '' }}
@@ -77,12 +87,26 @@ runs:
         done
         exit 1
 
-    - name: Sync source to EC2
+    - name: Stage immutable release source on EC2
       shell: bash
       run: |
+        set -euo pipefail
+        run_id="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+        incoming_path="${{ inputs.deploy-path }}/targets/${{ inputs.target }}/incoming/${{ inputs.release-sha }}-$run_id"
+        incoming_marker="$incoming_path/.shopify-incoming"
+        printf -v prepare_command \
+          'test %q = /srv/shopify-clever && test -d /srv && available_kb=$(df -Pk /srv | awk '\''NR == 2 { print $4 }'\'') && test "$available_kb" -ge 1048576 && mkdir -p %q && printf '\''%%s\\n'\'' %q %q %q > %q' \
+          "${{ inputs.deploy-path }}" \
+          "$incoming_path" \
+          "target=${{ inputs.target }}" \
+          "sha=${{ inputs.release-sha }}" \
+          "run_id=$run_id" \
+          "$incoming_marker"
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+          "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}" "$prepare_command"
         rsync -az --delete \
           --exclude '.git/' \
-          --exclude '.github/' \
+          --exclude '.shopify-incoming' \
           --exclude 'node_modules/' \
           --exclude 'build/' \
           --exclude 'dist/' \
@@ -97,45 +121,30 @@ runs:
           --exclude 'data/' \
           --exclude '.DS_Store' \
           -e "ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes" \
-          ./ "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}:${{ inputs.deploy-path }}/"
+          ./ "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}:$incoming_path/"
 
-    - name: Build, migrate, and restart Shopify service on EC2
+    - name: Publish release transactionally on EC2
       shell: bash
       run: |
-        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}" "
-          set -euo pipefail
-          cd '${{ inputs.deploy-path }}'
-          test -f '${{ inputs.env-file }}'
-          sudo mkdir -p \"\$(dirname '${{ inputs.sqlite-path }}')\"
-          sudo touch '${{ inputs.sqlite-path }}'
-          sudo chown \"\$(id -u):\$(id -g)\" '${{ inputs.sqlite-path }}'
-          chmod 600 '${{ inputs.env-file }}' '${{ inputs.sqlite-path }}'
-          test -r '${{ inputs.sqlite-path }}'
-          test -w '${{ inputs.sqlite-path }}'
-          docker compose -f '${{ inputs.compose-file }}' config --quiet
-          docker compose -f '${{ inputs.compose-file }}' build
-          docker compose -f '${{ inputs.compose-file }}' run --rm --no-deps '${{ inputs.service }}' npm run prisma:migrate:deploy
-          docker compose -f '${{ inputs.compose-file }}' run --rm --no-deps '${{ inputs.service }}' npm run prisma:migrate:status
-          docker compose -f '${{ inputs.compose-file }}' run --rm --no-deps '${{ inputs.service }}' npm run prisma:migrate:drift
-          docker compose -f '${{ inputs.compose-file }}' up -d --remove-orphans '${{ inputs.service }}'
-          docker compose -f '${{ inputs.compose-file }}' ps
-        "
-
-    - name: Smoke test Shopify endpoint
-      shell: bash
-      run: |
-        body="$(mktemp)"
-        for attempt in {1..12}; do
-          if test "$(curl -sS -L -o "$body" -w '%{http_code}' '${{ inputs.smoke-url }}')" = "200" \
-            && grep -q 'name="shopify-api-key"' "$body" \
-            && grep -q 'Store context required' "$body" \
-            && ! grep -q 'https://cdn.shopify.com/shopifycloud/app-bridge.js' "$body"; then
-            exit 0
-          fi
-          sleep 5
-        done
-        sed -n '1,80p' "$body" || true
-        exit 1
+        set -euo pipefail
+        run_id="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
+        incoming_path="${{ inputs.deploy-path }}/targets/${{ inputs.target }}/incoming/${{ inputs.release-sha }}-$run_id"
+        script_path="$incoming_path/.github/actions/ec2-shopify-deploy/remote-deploy.sh"
+        printf -v remote_command \
+          'bash %q --deploy-path %q --target %q --release-sha %q --incoming-path %q --compose-file %q --service %q --sqlite-path %q --env-file %q --smoke-url %q --run-id %q' \
+          "$script_path" \
+          "${{ inputs.deploy-path }}" \
+          "${{ inputs.target }}" \
+          "${{ inputs.release-sha }}" \
+          "$incoming_path" \
+          "${{ inputs.compose-file }}" \
+          "${{ inputs.service }}" \
+          "${{ inputs.sqlite-path }}" \
+          "${{ inputs.env-file }}" \
+          "${{ inputs.smoke-url }}" \
+          "$run_id"
+        ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
+          "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}" "$remote_command"
 
     - name: Revoke temporary runner SSH ingress
       if: ${{ always() && steps.ssh_ingress.outputs.runner_cidr != '' && steps.ssh_ingress.outputs.authorized == 'true' }}

@@ -1,0 +1,417 @@
+import { chmod, mkdir, readFile, symlink, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+
+const fakeDocker = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$FAKE_LOG"
+
+if [[ "§{1:-}" == "build" ]]; then
+  if [[ -n "§{FAKE_ACTIVE_DIR:-}" ]]; then
+    if ! mkdir "$FAKE_ACTIVE_DIR" 2>/dev/null; then
+      : > "$FAKE_OVERLAP_FILE"
+    fi
+    sleep "§{FAKE_BUILD_SLEEP_SECONDS:-0}"
+    rmdir "$FAKE_ACTIVE_DIR" 2>/dev/null || true
+  fi
+  if [[ "§{FAIL_STAGE:-}" == "build" ]]; then
+    exit 44
+  fi
+  tag=''
+  while (($#)); do
+    if [[ "$1" == "--tag" ]]; then
+      tag="$2"
+      break
+    fi
+    shift
+  done
+  if [[ -n "$tag" ]]; then
+    state="$FAKE_IMAGE_STATE_DIR/§{tag//[:\//]/_}"
+    printf 'sha256:candidate-%s\n' "§{tag#*:}" > "$state"
+  fi
+  exit 0
+fi
+
+if [[ "§{1:-}" == "inspect" ]]; then
+  if [[ "$*" == *'Config.Labels'* ]]; then
+    reference="§{!#}"
+    target_and_sha="§{reference#shopify-clever-}"
+    printf 'true|%s|%s\n' "§{target_and_sha%%:*}" "§{target_and_sha#*:}"
+  else
+    printf '%s\n' 'sha256:legacy-image'
+  fi
+  exit 0
+fi
+
+if [[ "§{1:-}" == "image" && "§{2:-}" == "inspect" ]]; then
+  reference="§{!#}"
+  state="$FAKE_IMAGE_STATE_DIR/§{reference//[:\//]/_}"
+  if [[ "$*" == *'Config.Labels'* ]]; then
+    if [[ "$reference" == sha256:candidate-* ]]; then
+      printf 'true|%s|%s\n' "$FAKE_TARGET" "§{reference#sha256:candidate-}"
+    else
+      target_and_sha="§{reference#shopify-clever-}"
+      printf 'true|%s|%s\n' "§{target_and_sha%%:*}" "§{target_and_sha#*:}"
+    fi
+  elif [[ -f "$state" ]]; then
+    cat "$state"
+  elif [[ "$reference" == *rollback* ]]; then
+    printf '%s\n' 'sha256:legacy-image'
+  elif [[ "$reference" == shopify-clever-*:* ]]; then
+    if [[ "§{FAKE_CURRENT_TAG_MATCH:-0}" == 1 ]]; then
+      printf '%s\n' 'sha256:legacy-image'
+    else
+      printf 'sha256:candidate-%s\n' "§{reference#*:}"
+    fi
+  else
+    printf '%s\n' "$reference"
+  fi
+  exit 0
+fi
+
+if [[ "§{1:-}" == "image" && "§{2:-}" == "ls" ]]; then
+  [[ -z "§{FAKE_IMAGE_LIST:-}" ]] || printf '%s\n' "$FAKE_IMAGE_LIST"
+  exit 0
+fi
+
+if [[ "§{1:-}" == "image" && "§{2:-}" == "tag" ]]; then
+  if [[ "§{FAIL_STAGE:-}" == "tag-missing" ]]; then
+    exit 43
+  fi
+  reference="§{4:-}"
+  state="$FAKE_IMAGE_STATE_DIR/§{reference//[:\//]/_}"
+  printf '%s\n' "$3" > "$state"
+  exit 0
+fi
+
+if [[ "§{1:-}" == "image" && "§{2:-}" == "rm" ]]; then
+  reference="§{3:-}"
+  state="$FAKE_IMAGE_STATE_DIR/§{reference//[:\//]/_}"
+  rm -f "$state"
+  exit 0
+fi
+
+if [[ "§{1:-}" != "compose" ]]; then
+  exit 0
+fi
+
+override=''
+operation=''
+for ((index = 2; index <= $#; index += 1)); do
+  value="§{!index}"
+  if [[ "$value" == "-f" ]]; then
+    next=$((index + 1))
+    override="§{!next}"
+  fi
+  case "$value" in
+    config|ps|stop|run|up) operation="$value" ;;
+  esac
+done
+
+case "$operation" in
+  config) exit 0 ;;
+  ps)
+    if [[ -f "$FAKE_RUNNING_FILE" ]]; then
+      printf '%s\n' fake-container
+    fi
+    ;;
+  stop)
+    rm -f "$FAKE_RUNNING_FILE"
+    if [[ "§{FAIL_STAGE:-}" == "stop" ]]; then
+      exit 42
+    fi
+    ;;
+  run)
+    if [[ "$*" == *"prisma:migrate:deploy"* ]]; then
+      printf '%s' '|MIGRATED' >> "$FAKE_SQLITE_PATH"
+      if [[ "§{FAIL_STAGE:-}" == "signal" ]]; then
+        kill -TERM "$PPID"
+        sleep 0.2
+        exit 143
+      fi
+      if [[ "§{FAIL_STAGE:-}" == "migration" ]]; then
+        exit 40
+      fi
+    fi
+    ;;
+  up)
+    if [[ "§{FAIL_STAGE:-}" == "restart" ]] && grep -q "$FAKE_NEW_SHA" "$override"; then
+      exit 41
+    fi
+    image="$(awk '/image:/ { print $2; exit }' "$override")"
+    printf '%s\n' "$image" > "$FAKE_RUNNING_FILE"
+    ;;
+esac
+`.replaceAll("§", "$");
+
+const fakeSqlite = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+database="$1"
+command="§{2:-}"
+printf 'sqlite3 %s %s\n' "$database" "$command" >> "$FAKE_LOG"
+case "$command" in
+  *wal_checkpoint*)
+    if [[ -f "$database-wal" ]]; then
+      cat "$database-wal" >> "$database"
+      rm -f "$database-wal" "$database-shm"
+    fi
+    printf '%s\n' '0|0|0'
+    ;;
+  .backup*)
+    destination="§{command#".backup '"}"
+    destination="§{destination%\'}"
+    cp "$database" "$destination"
+    ;;
+  *quick_check*) printf '%s\n' ok ;;
+  *) : ;;
+esac
+`.replaceAll("§", "$");
+
+const fakeCurl = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$FAKE_LOG"
+running="$(cat "$FAKE_RUNNING_FILE" 2>/dev/null || true)"
+if [[ "§{FAIL_STAGE:-}" == "smoke" && "$running" == *"$FAKE_NEW_SHA"* ]]; then
+  exit 22
+fi
+body=''
+while (($#)); do
+  if [[ "$1" == "-o" ]]; then
+    body="$2"
+    shift 2
+    continue
+  fi
+  shift
+done
+printf '%s\n' '<meta name="shopify-api-key"><p>Store context required</p>' > "$body"
+printf '%s' 200
+`.replaceAll("§", "$");
+
+const fakeSudo = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+exec "$@"
+`;
+
+const fakeFlock = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+exec python3 - "$1" <<'PY'
+import fcntl
+import sys
+
+fcntl.flock(int(sys.argv[1]), fcntl.LOCK_EX)
+PY
+`;
+
+const fakeStat = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$1" == "-c" && "$2" == "%a" ]]; then
+  printf '%s\n' 600
+  exit 0
+fi
+if [[ "$1" == "-c" && "$2" == "%s" ]]; then
+  wc -c < "$3" | tr -d '[:space:]'
+  printf '\n'
+  exit 0
+fi
+exec /usr/bin/stat "$@"
+`;
+
+const fakeDf = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' 'Filesystem 1024-blocks Used Available Capacity Mounted on'
+printf 'fake 99999999 1 %s 1%% /\n' "§{FAKE_DISK_FREE_KB:-99999998}"
+`.replaceAll("§", "$");
+
+const fakeSha256sum = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+shasum -a 256 "$@"
+`;
+
+const fakeMv = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+printf 'mv %s\n' "$*" >> "$FAKE_LOG"
+destination="§{!#}"
+mv_status=0
+if [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == --version ]]; then
+  printf '%s\n' 'mv (GNU coreutils) 9.0'
+  exit 0
+elif [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -Tf ]]; then
+  if [[ "§{FAIL_STAGE:-}" == pointer-rename ]]; then
+    exit 67
+  fi
+  shift
+  python3 - "$1" "$2" <<'PY' || mv_status=$?
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
+elif [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -fh ]]; then
+  exit 64
+else
+  /bin/mv "$@" || mv_status=$?
+fi
+if ((mv_status == 0)); then
+  if [[ "$destination" == */current ]]; then
+    : > "$FAKE_CURRENT_RENAMED_MARKER"
+  fi
+  if [[ "§{FAIL_STAGE:-}" == pointer-restore-previous \
+    && "$destination" == */previous \
+    && -f "$FAKE_POSTCONDITION_FAILED_MARKER" ]]; then
+    : > "$FAKE_RESTORE_PREVIOUS_RENAMED_MARKER"
+  fi
+  if [[ "§{FAIL_STAGE:-}" == pointer-restore-current \
+    && "$destination" == */current \
+    && -f "$FAKE_POSTCONDITION_FAILED_MARKER" ]]; then
+    : > "$FAKE_RESTORE_CURRENT_RENAMED_MARKER"
+  fi
+  if [[ -n "§{FAKE_SIGNAL_AFTER_CURRENT:-}" && "$destination" == */current ]]; then
+    kill -TERM "$PPID"
+  fi
+  exit 0
+fi
+exit "$mv_status"
+`.replaceAll("§", "$");
+
+const fakeReadlink = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+path="§{1:-}"
+stage="§{FAIL_STAGE:-}"
+if [[ "$stage" =~ ^pointer-(postcondition|restore-previous|restore-current)$ \
+  && "$path" == */current \
+  && -f "$FAKE_CURRENT_RENAMED_MARKER" \
+  && ! -f "$FAKE_POSTCONDITION_FAILED_MARKER" ]]; then
+  : > "$FAKE_POSTCONDITION_FAILED_MARKER"
+  printf '%s\n' 'releases/ffffffffffffffffffffffffffffffffffffffff'
+  exit 0
+fi
+if [[ "$stage" == pointer-restore-previous \
+  && "$path" == */previous \
+  && -f "$FAKE_RESTORE_PREVIOUS_RENAMED_MARKER" \
+  && ! -f "$FAKE_RESTORE_PREVIOUS_FAILED_MARKER" ]]; then
+  : > "$FAKE_RESTORE_PREVIOUS_FAILED_MARKER"
+  printf '%s\n' 'releases/ffffffffffffffffffffffffffffffffffffffff'
+  exit 0
+fi
+if [[ "$stage" == pointer-restore-current \
+  && "$path" == */current \
+  && -f "$FAKE_RESTORE_CURRENT_RENAMED_MARKER" \
+  && ! -f "$FAKE_RESTORE_CURRENT_FAILED_MARKER" ]]; then
+  : > "$FAKE_RESTORE_CURRENT_FAILED_MARKER"
+  printf '%s\n' 'releases/ffffffffffffffffffffffffffffffffffffffff'
+  exit 0
+fi
+exec /usr/bin/readlink "$@"
+`.replaceAll("§", "$");
+
+async function executable(path, source) {
+  await writeFile(path, source);
+  await chmod(path, 0o755);
+}
+
+async function createReleaseTree(path, target, sha) {
+  await mkdir(join(path, "infra/compose"), { recursive: true });
+  await mkdir(join(path, "apps/shopify-app"), { recursive: true });
+  await writeFile(
+    join(path, "infra/compose/deploy.yml"),
+    `name: fake-${target}\nservices:\n  app:\n    image: mutable:local\n`,
+  );
+  await writeFile(join(path, "apps/shopify-app/Dockerfile"), "FROM scratch\n");
+  if (sha) {
+    await writeFile(join(path, ".shopify-release"), `target=${target}\nsha=${sha}\n`);
+  }
+}
+
+export async function createDeployFixture(root, { target = "kfood", sha }) {
+  const deployPath = join(root, "deploy");
+  const incoming = join(
+    deployPath,
+    "targets",
+    target,
+    "incoming",
+    `${sha}-test-run`,
+  );
+  const sqlitePath = join(root, `${target}.sqlite`);
+  const bin = join(root, "bin");
+  const log = join(root, "commands.log");
+  const runningFile = join(root, `${target}.running`);
+  const imageStateDir = join(root, "image-state");
+  const currentRenamedMarker = join(root, `${target}.current-renamed`);
+  const postconditionFailedMarker = join(root, `${target}.postcondition-failed`);
+  const restorePreviousFailedMarker = join(root, `${target}.restore-previous-failed`);
+  const restoreCurrentFailedMarker = join(root, `${target}.restore-current-failed`);
+  const restorePreviousRenamedMarker = join(root, `${target}.restore-previous-renamed`);
+  const restoreCurrentRenamedMarker = join(root, `${target}.restore-current-renamed`);
+  await mkdir(bin, { recursive: true });
+  await mkdir(imageStateDir, { recursive: true });
+  await mkdir(join(deployPath, "infra/env"), { recursive: true });
+  await createReleaseTree(incoming, target);
+  await writeFile(
+    join(incoming, ".shopify-incoming"),
+    `target=${target}\nsha=${sha}\nrun_id=test-run\n`,
+  );
+  await writeFile(join(deployPath, "infra/env/runtime.env"), "SECRET=preserved\n", {
+    mode: 0o600,
+  });
+  await writeFile(sqlitePath, "BASE");
+  await writeFile(`${sqlitePath}-wal`, "|WAL");
+  await writeFile(`${sqlitePath}-shm`, "shm");
+  await writeFile(runningFile, "legacy-image\n");
+  await writeFile(log, "");
+  await executable(join(bin, "docker"), fakeDocker);
+  await executable(join(bin, "sqlite3"), fakeSqlite);
+  await executable(join(bin, "curl"), fakeCurl);
+  await executable(join(bin, "sudo"), fakeSudo);
+  await executable(join(bin, "flock"), fakeFlock);
+  await executable(join(bin, "stat"), fakeStat);
+  await executable(join(bin, "df"), fakeDf);
+  await executable(join(bin, "sha256sum"), fakeSha256sum);
+  await executable(join(bin, "mv"), fakeMv);
+  await executable(join(bin, "readlink"), fakeReadlink);
+  await createReleaseTree(deployPath, target);
+
+  return {
+    deployPath,
+    incoming,
+    sqlitePath,
+    log,
+    runningFile,
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH}`,
+      FAKE_LOG: log,
+      FAKE_RUNNING_FILE: runningFile,
+      FAKE_SQLITE_PATH: sqlitePath,
+      FAKE_NEW_SHA: sha,
+      FAKE_TARGET: target,
+      FAKE_IMAGE_STATE_DIR: imageStateDir,
+      FAKE_CURRENT_RENAMED_MARKER: currentRenamedMarker,
+      FAKE_POSTCONDITION_FAILED_MARKER: postconditionFailedMarker,
+      FAKE_RESTORE_PREVIOUS_FAILED_MARKER: restorePreviousFailedMarker,
+      FAKE_RESTORE_CURRENT_FAILED_MARKER: restoreCurrentFailedMarker,
+      FAKE_RESTORE_PREVIOUS_RENAMED_MARKER: restorePreviousRenamedMarker,
+      FAKE_RESTORE_CURRENT_RENAMED_MARKER: restoreCurrentRenamedMarker,
+      SHOPIFY_DEPLOY_TEST_MODE: "1",
+      SHOPIFY_DEPLOY_TEST_ROOT: deployPath,
+      SHOPIFY_DEPLOY_SMOKE_ATTEMPTS: "1",
+      SHOPIFY_DEPLOY_SMOKE_DELAY_SECONDS: "0",
+    },
+    imageStateDir,
+  };
+}
+
+export async function addCurrentRelease(fixture, { target = "kfood", sha }) {
+  const targetRoot = join(fixture.deployPath, "targets", target);
+  const release = join(targetRoot, "releases", sha);
+  await createReleaseTree(release, target, sha);
+  await mkdir(join(targetRoot, "runtime"), { recursive: true });
+  await writeFile(
+    join(targetRoot, "runtime", `${sha}.override.yml`),
+    `services:\n  app:\n    image: shopify-clever-${target}:${sha}\n    build: null\n`,
+  );
+  await symlink(`releases/${sha}`, join(targetRoot, "current"));
+  return release;
+}
+
+export async function read(path) {
+  return readFile(path, "utf8");
+}

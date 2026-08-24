@@ -152,6 +152,9 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     stopArrivals,
     serverTime: textOrNull(snapshot?.serverTime),
     latestPosition,
+    operationalState: snapshot?.operationalState && typeof snapshot.operationalState === "object"
+      ? { ...snapshot.operationalState }
+      : null,
     recentPositions,
   };
 }
@@ -283,6 +286,7 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
   const mergedBase = normalizeRouteTrackingSnapshot({
     ...historyBase,
     policy: incomingSnapshot.policy ?? current.policy,
+    operationalState: incomingSnapshot.operationalState ?? current.operationalState,
     progress: mergeTrackingProgressSnapshot(current.progress, incomingSnapshot.progress),
     roadMatchedPath: getNewestRoadMatchedPath(current.roadMatchedPath, incomingSnapshot.roadMatchedPath),
     routePlanId: incomingSnapshot.routePlanId ?? current.routePlanId,

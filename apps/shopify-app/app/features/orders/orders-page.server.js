@@ -43,6 +43,7 @@ import {
   buildServerTimingHeader,
   createTelemetryRequestId,
   hashShopIdentifier,
+  logSafeOperationalEvent,
   logStructuredMetric,
   sanitizeRequestPath,
 } from "../telemetry/structured-telemetry.server";
@@ -119,11 +120,7 @@ function getDeliveryOnlyShopTimeZoneData() {
 
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
-
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  logStructuredMetric(name, metric);
 }
 
 function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, routeScope }) {
@@ -156,9 +153,10 @@ export const action = async ({ request }) => {
   } catch (error) {
     if (error instanceof Response) throw error;
 
-    console.error("orders_action_failed", {
-      message: error?.message,
-      stack: error?.stack,
+    logSafeOperationalEvent("error", "orders_action_failed", {
+      correlationId: createTelemetryRequestId(),
+      errorCode: "ORDERS_ACTION_FAILED",
+      stage: "action",
     });
 
     return {

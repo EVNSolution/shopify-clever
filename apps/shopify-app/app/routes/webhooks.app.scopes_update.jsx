@@ -1,10 +1,20 @@
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
+import {
+  createTelemetryRequestId,
+  hashShopIdentifier,
+  logSafeOperationalEvent,
+} from "../features/telemetry/structured-telemetry.server";
 
 export const action = async ({ request }) => {
   const { payload, session, topic, shop } = await authenticate.webhook(request);
 
-  console.log(`Received ${topic} webhook for ${shop}`);
+  logSafeOperationalEvent("info", "shopify_scopes_update_received", {
+    correlationId: createTelemetryRequestId(),
+    shopHash: hashShopIdentifier(shop),
+    stage: "authenticated",
+    topic,
+  });
   const current = payload.current;
 
   if (session) {

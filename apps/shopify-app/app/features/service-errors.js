@@ -98,12 +98,11 @@ function reportServiceErrorDiagnostics(errors, options) {
   if (!options.context || errors.length === 0) return;
 
   const diagnostics = errors.map((error) => ({
-    code: error?.code ?? "UNKNOWN",
-    message: error?.message,
-    path: error?.path,
-    status: error?.status,
+    code: stableServiceErrorCode(error?.code),
+    status: Number.isInteger(error?.status) ? error.status : null,
   }));
-  const reportKey = JSON.stringify({ context: options.context, diagnostics });
+  const context = stableServiceErrorContext(options.context);
+  const reportKey = JSON.stringify({ context, diagnostics });
 
   if (reportedServiceErrorKeys.has(reportKey)) return;
   reportedServiceErrorKeys.add(reportKey);
@@ -111,7 +110,19 @@ function reportServiceErrorDiagnostics(errors, options) {
 
   const logger = options.logger ?? console;
   logger.warn?.("clever_service_errors", {
-    context: options.context,
+    context,
     errors: diagnostics,
   });
+}
+
+function stableServiceErrorCode(value) {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,119}$/u.test(value)
+    ? value
+    : "UNKNOWN";
+}
+
+function stableServiceErrorContext(value) {
+  return typeof value === "string" && /^[a-z][a-z0-9_.:-]{0,119}$/u.test(value)
+    ? value
+    : "unknown";
 }
