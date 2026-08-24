@@ -3,6 +3,26 @@ import { getDeliveryApiBaseUrl } from "./route-plans.server.js";
 const TOKEN_SYNC_TTL_MS = 5 * 60 * 1000;
 const lastSyncedAtByShop = new Map();
 const inFlightSyncByShop = new Map();
+let tokenSyncHealth = {
+  errorCode: null,
+  lastAttemptAt: null,
+  lastSuccessAt: null,
+  status: "unknown",
+};
+
+export function getShopifyTokenSyncHealth() {
+  return { ...tokenSyncHealth };
+}
+
+export function recordShopifyAdminTokenRefreshFailure({ now = Date.now } = {}) {
+  tokenSyncHealth = {
+    ...tokenSyncHealth,
+    errorCode: "ADMIN_TOKEN_REFRESH_FAILED",
+    lastAttemptAt: new Date(now()).toISOString(),
+    status: "degraded",
+  };
+  logTokenSyncHealth("admin_auth_refresh");
+}
 
 export async function syncShopifyOfflineTokenToDeliveryApi(
   request,
@@ -40,20 +60,55 @@ async function syncShopifyOfflineToken(
   authorization,
   { fetch: fetchImpl, now },
 ) {
-  const response = await fetchImpl(`${getDeliveryApiBaseUrl()}/shopify/auth/token-exchange`, {
-    body: JSON.stringify({ shopDomain }),
-    headers: {
-      authorization,
-      "content-type": "application/json",
-    },
-    method: "POST",
-  });
+  const attemptedAt = new Date(now()).toISOString();
+  tokenSyncHealth = { ...tokenSyncHealth, lastAttemptAt: attemptedAt, status: "checking" };
+  let response;
+  try {
+    response = await fetchImpl(`${getDeliveryApiBaseUrl()}/shopify/auth/token-exchange`, {
+      body: JSON.stringify({ shopDomain }),
+      headers: {
+        authorization,
+        "content-type": "application/json",
+      },
+      method: "POST",
+    });
+  } catch {
+    tokenSyncHealth = {
+      ...tokenSyncHealth,
+      errorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
+      lastAttemptAt: attemptedAt,
+      status: "degraded",
+    };
+    logTokenSyncHealth("token_exchange");
+    return { skipped: false, ok: false };
+  }
 
   if (!response.ok) {
-    console.warn(`Unable to sync Shopify offline token to delivery API: ${response.status}`);
+    tokenSyncHealth = {
+      ...tokenSyncHealth,
+      errorCode: `TOKEN_EXCHANGE_HTTP_${response.status}`,
+      lastAttemptAt: attemptedAt,
+      status: "degraded",
+    };
+    logTokenSyncHealth("token_exchange");
     return { skipped: false, ok: false };
   }
 
   lastSyncedAtByShop.set(shopDomain, now());
+  tokenSyncHealth = {
+    errorCode: null,
+    lastAttemptAt: attemptedAt,
+    lastSuccessAt: attemptedAt,
+    status: "healthy",
+  };
   return { skipped: false, ok: true };
+}
+
+function logTokenSyncHealth(stage) {
+  console.warn(JSON.stringify({
+    event: "shopify_token_sync",
+    errorCode: tokenSyncHealth.errorCode,
+    stage,
+    status: tokenSyncHealth.status,
+  }));
 }

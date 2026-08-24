@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { syncShopifyOfflineTokenToDeliveryApi } from "../app/features/delivery/shopify-token-sync.server.js";
+import {
+  getShopifyTokenSyncHealth,
+  recordShopifyAdminTokenRefreshFailure,
+  syncShopifyOfflineTokenToDeliveryApi,
+} from "../app/features/delivery/shopify-token-sync.server.js";
 
 function restoreDeliveryApiBaseUrl(value) {
   if (value === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
@@ -120,4 +124,51 @@ test("clears failed in-flight token sync so the next call can retry", async () =
   } finally {
     restoreDeliveryApiBaseUrl(previousBaseUrl);
   }
+});
+
+test("token exchange outage and expired-session rejection become queryable sanitized health", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
+  try {
+    const previousSuccessAt = getShopifyTokenSyncHealth().lastSuccessAt;
+    const request = new Request("https://app.invalid/app", {
+      headers: { authorization: "Bearer secret-session-token" },
+    });
+
+    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop: "outage-health.myshopify.com" }, {
+      fetch: async () => { throw new TypeError("customer payload must not leak"); },
+      now: () => Date.parse("2026-08-24T10:00:00.000Z"),
+    }), { skipped: false, ok: false });
+    assert.deepEqual(getShopifyTokenSyncHealth(), {
+      errorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
+      lastAttemptAt: "2026-08-24T10:00:00.000Z",
+      lastSuccessAt: previousSuccessAt,
+      status: "degraded",
+    });
+
+    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop: "expired-health.myshopify.com" }, {
+      fetch: async () => new Response("expired offline token", { status: 401 }),
+      now: () => Date.parse("2026-08-24T10:01:00.000Z"),
+    }), { skipped: false, ok: false });
+    assert.deepEqual(getShopifyTokenSyncHealth(), {
+      errorCode: "TOKEN_EXCHANGE_HTTP_401",
+      lastAttemptAt: "2026-08-24T10:01:00.000Z",
+      lastSuccessAt: previousSuccessAt,
+      status: "degraded",
+    });
+  } finally {
+    restoreDeliveryApiBaseUrl(previousBaseUrl);
+  }
+});
+
+test("Shopify Admin token refresh failures are structured and queryable without error details", () => {
+  recordShopifyAdminTokenRefreshFailure({
+    now: () => Date.parse("2026-08-24T10:02:00.000Z"),
+  });
+  assert.deepEqual(getShopifyTokenSyncHealth(), {
+    errorCode: "ADMIN_TOKEN_REFRESH_FAILED",
+    lastAttemptAt: "2026-08-24T10:02:00.000Z",
+    lastSuccessAt: getShopifyTokenSyncHealth().lastSuccessAt,
+    status: "degraded",
+  });
 });

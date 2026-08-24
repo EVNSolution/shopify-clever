@@ -81,6 +81,10 @@ The runtime distribution is selected with `SHOPIFY_APP_DISTRIBUTION`:
 - `app_store` for the public runtime.
 - `single_merchant` for the dev/custom and KFood custom runtimes.
 
+Order webhooks use `CLEVER_ORDER_WEBHOOK_ADMISSION_MODE=session_free`. During a
+manual rollback, set it to `retry` to keep Shopify retries active while refusing
+to acknowledge any webhook that has not reached the Delivery API durable inbox.
+
 ## GitHub Actions strategy
 
 The repository is intended to stay private under the `EVNSolution` GitHub Free organization. Private GitHub-hosted workflow runs consume the org Actions quota, so the workflow is intentionally split:

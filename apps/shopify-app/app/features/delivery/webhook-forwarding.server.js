@@ -1,4 +1,5 @@
 import { getDeliveryApiBaseUrl } from "./route-plans.server.js";
+import { createTelemetryRequestId } from "../telemetry/structured-telemetry.server.js";
 
 export const ORDER_WEBHOOK_TOPICS = new Set([
   "orders/create",
@@ -36,26 +37,73 @@ const FORWARDED_SHOPIFY_WEBHOOK_HEADERS = [
   "x-shopify-webhook-id",
 ];
 
+const DURABLE_ACCEPTANCE_STATUSES = new Set(["DUPLICATE", "PROCESSED", "QUEUED", "RECEIVED"]);
+
+export function resolveOrderWebhookAdmissionMode(env = process.env) {
+  return env.CLEVER_ORDER_WEBHOOK_ADMISSION_MODE === "retry" ? "retry" : "session_free";
+}
+
 export async function forwardShopifyWebhookToDeliveryApi(
   request,
   rawBody,
-  { fetch: fetchImpl = fetch, normalizedTopic, webhookKind = "Shopify" } = {},
+  {
+    correlationId = createTelemetryRequestId(),
+    fetch: fetchImpl = fetch,
+    normalizedTopic,
+    timeoutMs = 8_000,
+    webhookKind = "Shopify",
+  } = {},
 ) {
-  const response = await fetchImpl(`${getDeliveryApiBaseUrl()}/shopify/webhooks`, {
-    body: rawBody,
-    headers: getForwardedWebhookHeaders(request.headers, { normalizedTopic }),
-    method: "POST",
-  });
+  const webhookId = request.headers.get("x-shopify-webhook-id");
+  let response;
 
-  if (!response.ok) {
-    console.error(
-      `Unable to forward ${webhookKind} webhook to delivery API: ${response.status}`,
-    );
-    throw new Response(null, { status: 502 });
+  try {
+    response = await fetchImpl(`${getDeliveryApiBaseUrl()}/shopify/webhooks`, {
+      body: rawBody,
+      headers: getForwardedWebhookHeaders(request.headers, { correlationId, normalizedTopic }),
+      method: "POST",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (error) {
+    logWebhookStage("error", {
+      correlationId,
+      errorCode: error?.name === "TimeoutError" ? "DELIVERY_TIMEOUT" : "DELIVERY_UNAVAILABLE",
+      requestId: correlationId,
+      stage: "delivery_admission",
+      webhookId,
+      webhookKind,
+    });
+    throw retryableWebhookResponse();
   }
+
+  const receipt = await readDurableReceipt(response, webhookId);
+  if (!receipt) {
+    logWebhookStage("error", {
+      correlationId,
+      errorCode: "DELIVERY_NOT_DURABLE",
+      httpStatus: response.status,
+      requestId: correlationId,
+      stage: "delivery_admission",
+      webhookId,
+      webhookKind,
+    });
+    throw retryableWebhookResponse();
+  }
+
+  logWebhookStage("info", {
+    correlationId,
+    duplicate: receipt.duplicate,
+    httpStatus: response.status,
+    requestId: correlationId,
+    stage: "durable",
+    status: receipt.status,
+    webhookId: receipt.webhookId,
+    webhookKind,
+  });
+  return receipt;
 }
 
-export function getForwardedWebhookHeaders(sourceHeaders, { normalizedTopic } = {}) {
+export function getForwardedWebhookHeaders(sourceHeaders, { correlationId, normalizedTopic } = {}) {
   const headers = new Headers();
 
   for (const name of FORWARDED_SHOPIFY_WEBHOOK_HEADERS) {
@@ -68,6 +116,55 @@ export function getForwardedWebhookHeaders(sourceHeaders, { normalizedTopic } = 
   if (normalizedTopic) {
     headers.set("x-shopify-topic", normalizedTopic);
   }
+  if (correlationId) {
+    headers.set("x-clever-client-request-id", correlationId);
+  }
 
   return headers;
+}
+
+async function readDurableReceipt(response, expectedWebhookId) {
+  if (response.status !== 200 && response.status !== 202) return null;
+  let payload;
+  try {
+    payload = await response.json();
+  } catch {
+    return null;
+  }
+
+  const receipt = payload?.data;
+  if (
+    typeof receipt?.webhookId !== "string" ||
+    receipt.webhookId.length === 0 ||
+    receipt.webhookId !== expectedWebhookId ||
+    typeof receipt?.duplicate !== "boolean" ||
+    (response.status === 200) !== receipt.duplicate ||
+    !DURABLE_ACCEPTANCE_STATUSES.has(receipt?.status)
+  ) return null;
+
+  return {
+    duplicate: receipt.duplicate,
+    status: receipt.status,
+    webhookId: receipt.webhookId,
+  };
+}
+
+function retryableWebhookResponse() {
+  return new Response(JSON.stringify({ error: "WEBHOOK_ADMISSION_RETRY" }), {
+    headers: { "content-type": "application/json" },
+    status: 503,
+  });
+}
+
+function logWebhookStage(level, fields) {
+  const safeFields = Object.fromEntries(
+    Object.entries(fields).filter(([, value]) =>
+      typeof value === "boolean" || typeof value === "number" || isSafeLogValue(value),
+    ),
+  );
+  console[level](JSON.stringify({ event: "shopify_webhook_admission", ...safeFields }));
+}
+
+function isSafeLogValue(value) {
+  return typeof value === "string" && /^[A-Za-z0-9._:-]{1,120}$/u.test(value);
 }
