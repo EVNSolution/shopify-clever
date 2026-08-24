@@ -16,6 +16,18 @@ if [[ "§{1:-}" == "build" ]]; then
   if [[ "§{FAIL_STAGE:-}" == "build" ]]; then
     exit 44
   fi
+  tag=''
+  while (($#)); do
+    if [[ "$1" == "--tag" ]]; then
+      tag="$2"
+      break
+    fi
+    shift
+  done
+  if [[ -n "$tag" ]]; then
+    state="$FAKE_IMAGE_STATE_DIR/§{tag//[:\//]/_}"
+    printf 'sha256:candidate-%s\n' "§{tag#*:}" > "$state"
+  fi
   exit 0
 fi
 
@@ -32,6 +44,7 @@ fi
 
 if [[ "§{1:-}" == "image" && "§{2:-}" == "inspect" ]]; then
   reference="§{!#}"
+  state="$FAKE_IMAGE_STATE_DIR/§{reference//[:\//]/_}"
   if [[ "$*" == *'Config.Labels'* ]]; then
     if [[ "$reference" == sha256:candidate-* ]]; then
       printf 'true|%s|%s\n' "$FAKE_TARGET" "§{reference#sha256:candidate-}"
@@ -39,6 +52,8 @@ if [[ "§{1:-}" == "image" && "§{2:-}" == "inspect" ]]; then
       target_and_sha="§{reference#shopify-clever-}"
       printf 'true|%s|%s\n' "§{target_and_sha%%:*}" "§{target_and_sha#*:}"
     fi
+  elif [[ -f "$state" ]]; then
+    cat "$state"
   elif [[ "$reference" == *rollback* ]]; then
     printf '%s\n' 'sha256:legacy-image'
   elif [[ "$reference" == shopify-clever-*:* ]]; then
@@ -62,10 +77,16 @@ if [[ "§{1:-}" == "image" && "§{2:-}" == "tag" ]]; then
   if [[ "§{FAIL_STAGE:-}" == "tag-missing" ]]; then
     exit 43
   fi
+  reference="§{4:-}"
+  state="$FAKE_IMAGE_STATE_DIR/§{reference//[:\//]/_}"
+  printf '%s\n' "$3" > "$state"
   exit 0
 fi
 
 if [[ "§{1:-}" == "image" && "§{2:-}" == "rm" ]]; then
+  reference="§{3:-}"
+  state="$FAKE_IMAGE_STATE_DIR/§{reference//[:\//]/_}"
+  rm -f "$state"
   exit 0
 fi
 
@@ -249,7 +270,9 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
   const bin = join(root, "bin");
   const log = join(root, "commands.log");
   const runningFile = join(root, `${target}.running`);
+  const imageStateDir = join(root, "image-state");
   await mkdir(bin, { recursive: true });
+  await mkdir(imageStateDir, { recursive: true });
   await mkdir(join(deployPath, "infra/env"), { recursive: true });
   await createReleaseTree(incoming, target);
   await writeFile(
@@ -289,11 +312,13 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
       FAKE_SQLITE_PATH: sqlitePath,
       FAKE_NEW_SHA: sha,
       FAKE_TARGET: target,
+      FAKE_IMAGE_STATE_DIR: imageStateDir,
       SHOPIFY_DEPLOY_TEST_MODE: "1",
       SHOPIFY_DEPLOY_TEST_ROOT: deployPath,
       SHOPIFY_DEPLOY_SMOKE_ATTEMPTS: "1",
       SHOPIFY_DEPLOY_SMOKE_DELAY_SECONDS: "0",
     },
+    imageStateDir,
   };
 }
 

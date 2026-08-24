@@ -265,6 +265,49 @@ test("a successful first legacy deploy publishes only the exact SHA after smoke"
   assert.match(await read(fixture.log), new RegExp(`build[\\s\\S]*:${newSha}`));
 });
 
+test("a missing previous SHA tag is restored before success and survives a later rollback", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const first = await runDeploy(fixture);
+
+  assert.equal(first.code, 0, first.stdout + first.stderr);
+  assert.match(first.stdout, new RegExp(`PREVIOUS_IMAGE_PINNED target=kfood release=${oldSha}`));
+  const oldTagState = join(fixture.imageStateDir, `shopify-clever-kfood:${oldSha}`);
+  assert.equal(await read(oldTagState), "sha256:legacy-image\n");
+
+  const nextSha = "3".repeat(40);
+  const nextIncoming = join(
+    fixture.deployPath,
+    "targets/kfood/incoming",
+    `${nextSha}-test-run`,
+  );
+  await mkdir(join(nextIncoming, "infra/compose"), { recursive: true });
+  await mkdir(join(nextIncoming, "apps/shopify-app"), { recursive: true });
+  await writeFile(
+    join(nextIncoming, "infra/compose/deploy.yml"),
+    "name: fake-kfood\nservices:\n  app:\n    image: mutable:local\n",
+  );
+  await writeFile(join(nextIncoming, "apps/shopify-app/Dockerfile"), "FROM scratch\n");
+  await writeFile(
+    join(nextIncoming, ".shopify-incoming"),
+    `target=kfood\nsha=${nextSha}\nrun_id=test-run\n`,
+  );
+
+  const second = await runDeploy(fixture, {
+    sha: nextSha,
+    incoming: nextIncoming,
+    env: { FAIL_STAGE: "smoke", FAKE_NEW_SHA: nextSha },
+  });
+
+  assert.notEqual(second.code, 0, second.stdout + second.stderr);
+  const targetRoot = join(fixture.deployPath, "targets/kfood");
+  assert.equal(await readlink(join(targetRoot, "current")), `releases/${newSha}`);
+  assert.equal(await readlink(join(targetRoot, "previous")), `releases/${oldSha}`);
+  assert.equal(await read(oldTagState), "sha256:legacy-image\n");
+  assert.match(second.stdout + second.stderr, /ROLLBACK_SMOKE=passed/);
+});
+
 test("same-target executions serialize while different targets use independent locks", async () => {
   const sameRoot = await mkdtemp(join(tmpdir(), "shopify-deploy-lock-"));
   const first = await createDeployFixture(sameRoot, { target: "kfood", sha: newSha });

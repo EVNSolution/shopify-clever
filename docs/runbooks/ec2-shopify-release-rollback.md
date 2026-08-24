@@ -33,8 +33,10 @@ The deployment holds `${DEPLOY_PATH}/locks/shopify-<target>.lock` while it:
 6. records `quick_check`, SHA-256, and file-mode evidence for that backup;
 7. runs migration deploy, migration status, and schema drift checks;
 8. starts only the exact-SHA image and runs the context-free login smoke;
-9. switches `previous` and `current` atomically after the smoke passes; and
-10. performs bounded cleanup of aged marked staging data, orphaned overrides,
+9. restores and verifies the prior release's exact-SHA image tag from the pinned
+   running image ID;
+10. switches `previous` and `current` atomically after the smoke passes; and
+11. performs bounded cleanup of aged marked staging data, orphaned overrides,
     and unused labeled images, never current, previous, or running images.
 
 If a live container cannot be mapped to a validated legacy or immutable-release

@@ -400,6 +400,15 @@ printf 'DATABASE_BACKUP_READY sha256=%s mode=%s path=%s\n' \
 "${compose[@]}" up -d --no-build "$service"
 smoke
 
+if [[ -n "$old_sha" && -n "$prior_image_id" ]]; then
+  previous_image="shopify-clever-$target:$old_sha"
+  docker image tag "$prior_image_id" "$previous_image"
+  [[ "$(docker image inspect --format '{{.Id}}' "$previous_image")" == "$prior_image_id" ]] \
+    || fail "previous release image tag restoration failed"
+  printf 'PREVIOUS_IMAGE_PINNED target=%s release=%s image_id=%s\n' \
+    "$target" "$old_sha" "$prior_image_id"
+fi
+
 atomic_link() {
   local link_path="$1" link_target="$2" temporary
   temporary="$link_path.tmp-$run_id"
