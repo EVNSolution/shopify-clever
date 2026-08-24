@@ -11,6 +11,11 @@ const SENSITIVE_VALUE_PATTERNS = [
 ];
 const SAFE_CORRELATION_ID_FIELDS = new Set(["correlationId", "requestId"]);
 const SAFE_CORRELATION_ID_PATTERN = /^[A-Za-z0-9._:-]{1,120}$/u;
+const SAFE_OPERATIONAL_EVENT_PATTERN = /^[a-z][a-z0-9_]{0,119}$/u;
+const SAFE_OPERATIONAL_ERROR_CODE_PATTERN = /^[A-Z][A-Z0-9_]{0,119}$/u;
+const SAFE_OPERATIONAL_STAGE_PATTERN = /^[a-z][a-z0-9_]{0,119}$/u;
+const SAFE_OPERATIONAL_TOPIC_PATTERN = /^[a-z][a-z0-9_/]{0,119}$/u;
+const SAFE_SHOP_HASH_PATTERN = /^[a-f0-9]{16}$/u;
 
 const ALLOWED_METRIC_FIELDS = new Set([
   "activeOrdersView",
@@ -155,6 +160,52 @@ export function logStructuredMetric(name, metric = {}) {
       ...metric,
     }),
   });
+}
+
+export function logSafeOperationalEvent(level, event, fields = {}) {
+  const log = level === "error" ? console.error : level === "warn" ? console.warn : console.info;
+  const safeEvent = typeof event === "string" && SAFE_OPERATIONAL_EVENT_PATTERN.test(event)
+    ? event
+    : "operational_event";
+  const safeFields = {};
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (
+      SAFE_CORRELATION_ID_FIELDS.has(key)
+      && typeof value === "string"
+      && SAFE_CORRELATION_ID_PATTERN.test(value)
+    ) {
+      safeFields[key] = value;
+    } else if (
+      key === "errorCode"
+      && typeof value === "string"
+      && SAFE_OPERATIONAL_ERROR_CODE_PATTERN.test(value)
+    ) {
+      safeFields.errorCode = value;
+    } else if (
+      key === "stage"
+      && typeof value === "string"
+      && SAFE_OPERATIONAL_STAGE_PATTERN.test(value)
+    ) {
+      safeFields.stage = value;
+    } else if (
+      key === "topic"
+      && typeof value === "string"
+      && SAFE_OPERATIONAL_TOPIC_PATTERN.test(value)
+    ) {
+      safeFields.topic = value;
+    } else if (
+      key === "shopHash"
+      && typeof value === "string"
+      && SAFE_SHOP_HASH_PATTERN.test(value)
+    ) {
+      safeFields.shopHash = value;
+    } else if (key === "httpStatus" && Number.isInteger(value) && value >= 100 && value <= 599) {
+      safeFields.httpStatus = value;
+    }
+  }
+
+  log(JSON.stringify({ event: safeEvent, ...safeFields }));
 }
 
 export function buildServerTimingHeader(timings = {}) {
