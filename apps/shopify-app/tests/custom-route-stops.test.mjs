@@ -100,6 +100,7 @@ test("custom stop draft validates names, locations, coordinates, and timing", ()
   assert.match(validateCustomStopDraft({ ...draft, address1: "" }).address1, /address/i);
   assert.match(validateCustomStopDraft({ ...draft, latitude: "91", longitude: "10" }).latitude, /latitude/i);
   assert.match(validateCustomStopDraft({ ...draft, latitude: "43.6", longitude: "" }).longitude, /longitude/i);
+  assert.match(validateCustomStopDraft({ ...draft, latitude: "0", longitude: "0" }).latitude, /zero coordinates/i);
   assert.match(validateCustomStopDraft({
     ...draft,
     timeWindowEnd: "2026-08-19T09:00",

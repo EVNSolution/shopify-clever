@@ -1,4 +1,8 @@
 import { isCustomRouteStop } from "./custom-stop-form.js";
+import {
+  getRouteStopLocationMessage,
+  normalizeRouteStopLocationDiagnostic,
+} from "./route-stop-location-diagnostic.js";
 
 const EMPTY_LABEL = "–";
 
@@ -473,6 +477,7 @@ export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ia
     const attributes = normalizeAttributes(stop?.attributes);
     const serviceType = firstText(stop?.serviceType, stop?.method);
     const deliveryStopId = firstText(stop?.deliveryStopId);
+    const locationDiagnostic = normalizeRouteStopLocationDiagnostic(stop);
 
     return {
       id: firstText(stop?.id, stop?.deliveryStopId, stop?.shopifyOrderGid, stop?.orderId) ?? `child-order-${index + 1}`,
@@ -487,6 +492,8 @@ export function buildChildRouteOrderRows(stops, { actualArrivalByStopId = {}, ia
       status: formatChildOrderStatus(getOrderStatusSource(stop)),
       orderDate: formatStoreLocalOrderDate(getOrderDateSource(stop), ianaTimezone),
       address: getStopAddress(stop),
+      locationDiagnostic,
+      locationDiagnosticMessage: getRouteStopLocationMessage(locationDiagnostic),
       currencyCode: firstText(stop?.currencyCode),
       expectedArrival: formatChildEtaLabel(firstText(stop?.estimatedArrivalAt, stop?.eta, stop?.arrivalAt), ianaTimezone),
       actualArrival: formatChildEtaLabel(actualArrivalByStopId[deliveryStopId], ianaTimezone),

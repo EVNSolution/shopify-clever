@@ -66,6 +66,10 @@ export function validateCustomStopDraft(draft) {
     if (longitudeText && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
       errors.longitude = "Longitude must be between -180 and 180.";
     }
+    if (latitude === 0 && longitude === 0) {
+      errors.latitude = "Zero coordinates cannot be used for a route stop.";
+      errors.longitude = "Zero coordinates cannot be used for a route stop.";
+    }
   }
 
   if (!Number.isInteger(serviceMinutes) || serviceMinutes < 0 || serviceMinutes > 1440) {
