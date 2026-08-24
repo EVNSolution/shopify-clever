@@ -232,7 +232,12 @@ destination="§{!#}"
 mv_status=0
 if [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -Tf ]]; then
   shift
-  /bin/mv -fh "$@" || mv_status=$?
+  python3 - "$1" "$2" <<'PY' || mv_status=$?
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
 elif [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -fh ]]; then
   exit 64
 else
