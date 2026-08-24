@@ -50,6 +50,11 @@ import {
   textOrUndefined,
 } from "../features/delivery/route-helpers";
 import { routeDetailAction, routeDetailLoader } from "../features/delivery/route-detail.server";
+import {
+  getRouteStopLocationMessage,
+  normalizeRouteStopLocationDiagnostic,
+  summarizeRouteStopLocationDiagnostics,
+} from "../features/delivery/route-stop-location-diagnostic";
 import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
@@ -2466,6 +2471,7 @@ function getRouteTimelineStopPopoverPosition(rect, popoverSize = {}) {
 function buildRouteStops(stops) {
   return resequenceRouteStops(stops.map((stop, index) => {
     const coordinates = normalizeRouteStopCoordinates(stop);
+    const locationDiagnostic = normalizeRouteStopLocationDiagnostic(stop);
     const sequence = numberOrUndefined(stop.sequence ?? stop.sortOrder ?? stop.sourceSequence);
     const stopNumber = Number.isInteger(sequence) && sequence > 0
       ? sequence
@@ -2530,7 +2536,10 @@ function buildRouteStops(stops) {
       lineItems: stop.lineItems,
       coordinatesLabel: coordinates != null ? "Yes" : "No",
       coordinates,
-      hasCoordinates: coordinates != null,
+      geocodeStatus: textOrUndefined(stop.geocodeStatus),
+      locationDiagnostic,
+      locationDiagnosticMessage: getRouteStopLocationMessage(locationDiagnostic),
+      hasCoordinates: coordinates != null && locationDiagnostic.routeable,
     };
   }).sort((firstStop, secondStop) => (
     firstStop.sortOrder - secondStop.sortOrder || firstStop.originalIndex - secondStop.originalIndex
@@ -2560,6 +2569,8 @@ function buildRouteGroupStops(routeGroup, childRouteDetails, currentRouteStops) 
         ...stop,
         coordinates: repairStop.coordinates,
         coordinatesLabel: "Yes",
+        locationDiagnostic: repairStop.locationDiagnostic,
+        locationDiagnosticMessage: repairStop.locationDiagnosticMessage,
         hasCoordinates: true,
       });
   }
@@ -2908,11 +2919,16 @@ function buildRouteGeometryRows(routeRows, childDetailsByRoutePlanId, fallbackRo
   return routeRows.map((routeRow) => {
     const childDetail = childDetailsByRoutePlanId.get(textOrUndefined(routeRow.routePlanId));
     const canUseFallback = !hasBranchRoutes && routeRow.isCurrent;
+    const hasUnrouteableStop = routeRow.stops.some((stop) => stop.locationDiagnostic?.routeable === false);
     return {
       routeColor: softenRouteColor(routeRow.color),
-      routeGeometry: routeRow.optimized?.routeGeometry ?? childDetail?.routeGeometry ?? (canUseFallback ? fallbackRouteGeometry : null),
+      routeGeometry: hasUnrouteableStop
+        ? null
+        : routeRow.optimized?.routeGeometry ?? childDetail?.routeGeometry ?? (canUseFallback ? fallbackRouteGeometry : null),
       routeId: routeRow.id,
-      routeStopPoints: routeRow.optimized?.routeStopPoints ?? childDetail?.routeStopPoints ?? (canUseFallback ? fallbackRouteStopPoints : []),
+      routeStopPoints: hasUnrouteableStop
+        ? []
+        : routeRow.optimized?.routeStopPoints ?? childDetail?.routeStopPoints ?? (canUseFallback ? fallbackRouteStopPoints : []),
     };
   });
 }
@@ -3266,6 +3282,10 @@ export default function RouteDetailPage() {
     [childRouteDetails, orderedRouteStops, routeGroup],
   );
   const routeGroupStopsSource = routeGroup ? allRouteGroupStops : orderedRouteStops;
+  const routeLocationDiagnosticSummary = useMemo(
+    () => summarizeRouteStopLocationDiagnostics(routeGroupStopsSource),
+    [routeGroupStopsSource],
+  );
   const routeGroupChildRows = useMemo(
     () => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource, ianaTimezone),
     [ianaTimezone, routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource],
@@ -6533,6 +6553,18 @@ export default function RouteDetailPage() {
           <div style={routeDetailErrorStyle}>{visibleErrors[0].message ?? "Route data could not be fully loaded."}</div>
         ) : null}
 
+        {routeLocationDiagnosticSummary.affectedCount > 0 ? (
+          <s-banner
+            heading="Location review required"
+            tone={routeLocationDiagnosticSummary.criticalCount > 0 ? "critical" : "warning"}
+          >
+            <p>
+              {routeLocationDiagnosticSummary.affectedCount} stop{routeLocationDiagnosticSummary.affectedCount === 1 ? "" : "s"} need location review.
+              Invalid stops are excluded from the map and route calculation until corrected.
+            </p>
+          </s-banner>
+        ) : null}
+
         <section style={routesDetailCardStyle}>
           {isMaterializedChildRouteDetail ? (
             <div aria-label="Child route detail sections" role="tablist" style={routeChildTabsStyle}>
@@ -6894,6 +6926,11 @@ export default function RouteDetailPage() {
                       <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
                       <td style={childRouteOrderCellStyle}>
                         <span>{row.address}</span>
+                        {row.locationDiagnostic.severity !== "NONE" ? (
+                          <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
+                            <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
+                          </span>
+                        ) : null}
                         {row.note ? (
                           <button
                             aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "note"}
@@ -7294,6 +7331,12 @@ export default function RouteDetailPage() {
                   <div style={routeTimelineStopPopoverMetaStyle}>
                     <span>Customer: {activeRouteTimelineStop.recipient}</span>
                     <span>Address: {activeRouteTimelineStop.address}</span>
+                    {activeRouteTimelineStop.locationDiagnostic?.severity !== "NONE" ? (
+                      <span>
+                        <s-badge tone={activeRouteTimelineStop.locationDiagnostic?.severity === "CRITICAL" ? "critical" : "warning"}>Location {activeRouteTimelineStop.locationDiagnostic?.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
+                        {` ${activeRouteTimelineStop.locationDiagnosticMessage}`}
+                      </span>
+                    ) : null}
                   </div>
                   <strong>Items</strong>
                   {(activeRouteTimelineStop.items ?? []).length > 0 ? (

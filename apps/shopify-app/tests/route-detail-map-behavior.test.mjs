@@ -121,6 +121,29 @@ test("route marker sync skips canvas rasterization for pre-registered marker ima
   }
 });
 
+test("unrouteable location diagnostics suppress stop and snapped-point marker fallback", () => {
+  const markerData = buildRouteDetailMarkerFeatureCollection(
+    null,
+    [{
+      coordinates: [0, 0],
+      deliveryStopId: "stop-invalid",
+      hasCoordinates: false,
+      id: "order-invalid",
+      locationDiagnostic: { routeable: false, severity: "CRITICAL" },
+      stop: 1,
+    }],
+    [{
+      deliveryStopId: "stop-invalid",
+      inputCoordinates: [0, 0],
+      snappedCoordinates: [-79.38, 43.65],
+    }],
+    "#006fbb",
+    new Map(),
+  );
+
+  assert.deepEqual(markerData.features, []);
+});
+
 test("route marker sync indexes snapped stop points once instead of linearly searching per stop", () => {
   const fake = createFakeMap({
     images: [

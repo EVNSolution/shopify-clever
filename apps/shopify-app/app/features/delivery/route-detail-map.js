@@ -630,6 +630,7 @@ function buildRouteStopPointLookup(routeStopPoints) {
 }
 
 function getRouteStopPointerCoordinates(stop, routeStopPoint) {
+  if (stop.locationDiagnostic?.routeable === false) return null;
   if (stop.hasCoordinates) return stop.coordinates;
 
   return (
@@ -639,6 +640,7 @@ function getRouteStopPointerCoordinates(stop, routeStopPoint) {
 }
 
 function buildRouteStopPointFitLocations(stop, routeStopPoint) {
+  if (stop.locationDiagnostic?.routeable === false) return [];
   const locations = stop.hasCoordinates ? [{ coordinates: stop.coordinates }] : [];
   const snappedCoordinates = normalizeLngLatPair(routeStopPoint?.snappedCoordinates);
 
@@ -653,6 +655,7 @@ function buildRouteStopPointFitLocations(stop, routeStopPoint) {
 }
 
 function buildRouteStopPointMarker(stop, routeStopPoint) {
+  if (stop.locationDiagnostic?.routeable === false) return null;
   const snappedCoordinates = normalizeLngLatPair(routeStopPoint?.snappedCoordinates);
   if (!snappedCoordinates) return null;
 
