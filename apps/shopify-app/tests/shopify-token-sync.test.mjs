@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getShopifyTokenSyncTimeoutMs,
   getShopifyTokenSyncHealth,
   recordShopifyAdminTokenRefreshFailure,
   syncShopifyOfflineTokenToDeliveryApi,
@@ -123,6 +124,65 @@ test("clears failed in-flight token sync so the next call can retry", async () =
     assert.equal(callCount, 2);
   } finally {
     restoreDeliveryApiBaseUrl(previousBaseUrl);
+  }
+});
+
+test("bounds token exchange timeout configuration to a safe default", () => {
+  assert.equal(getShopifyTokenSyncTimeoutMs({}), 5_000);
+  assert.equal(getShopifyTokenSyncTimeoutMs({ CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS: "250" }), 250);
+  assert.equal(getShopifyTokenSyncTimeoutMs({ CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS: "0" }), 5_000);
+  assert.equal(getShopifyTokenSyncTimeoutMs({ CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS: "30001" }), 5_000);
+  assert.equal(getShopifyTokenSyncTimeoutMs({ CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS: "private" }), 5_000);
+});
+
+test("times out a never-settling token exchange and clears in-flight state for retry", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  const previousTimeout = process.env.CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
+  process.env.CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS = "20";
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+
+  try {
+    const request = new Request("https://app.invalid/app", {
+      headers: { authorization: "Bearer timeout-secret-token" },
+    });
+    const shop = "timeout-retry.myshopify.com";
+    let callCount = 0;
+    let firstSignal;
+    const fetch = async (_url, options) => {
+      callCount += 1;
+      if (callCount === 1) {
+        firstSignal = options.signal;
+        return new Promise(() => {});
+      }
+      return new Response("{}", { status: 200 });
+    };
+
+    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop }, {
+      fetch,
+      now: () => Date.parse("2026-08-25T10:00:00.000Z"),
+    }), { skipped: false, ok: false });
+    assert.equal(firstSignal.aborted, true);
+    assert.equal(getShopifyTokenSyncHealth(shop, {
+      now: () => Date.parse("2026-08-25T10:00:00.100Z"),
+    }).errorCode, "TOKEN_EXCHANGE_TIMEOUT");
+
+    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop }, {
+      fetch,
+      now: () => Date.parse("2026-08-25T10:00:01.000Z"),
+    }), { skipped: false, ok: true });
+    assert.equal(callCount, 2);
+    assert.equal(getShopifyTokenSyncHealth(shop, {
+      now: () => Date.parse("2026-08-25T10:00:01.100Z"),
+    }).status, "healthy");
+    assert.doesNotMatch(warnings.join("\n"), /timeout-secret-token|Bearer|timeout-retry\.myshopify\.com/i);
+  } finally {
+    console.warn = originalWarn;
+    restoreDeliveryApiBaseUrl(previousBaseUrl);
+    if (previousTimeout === undefined) delete process.env.CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS;
+    else process.env.CLEVER_SHOPIFY_TOKEN_SYNC_TIMEOUT_MS = previousTimeout;
   }
 });
 
