@@ -36,7 +36,10 @@ test("Shopify compose files run only the app containers on the route-server netw
   assert.doesNotMatch(workflowSource, /delivery-api-migrate/);
   assert.doesNotMatch(workflowSource, /up -d postgres/);
   const deployAction = readRepoFile(".github/actions/ec2-shopify-deploy/action.yml");
-  assert.match(deployAction, /up -d --remove-orphans/);
+  const remoteDeploy = readRepoFile(
+    ".github/actions/ec2-shopify-deploy/remote-deploy.sh",
+  );
+  assert.match(remoteDeploy, /up -d --no-build/);
   assert.match(deployAction, /--exclude 'backups\/'/);
   assert.match(deployAction, /--exclude 'apps\/delivery-api\/'/);
 });
@@ -63,7 +66,9 @@ test("manual Shopify deploys reuse a successful main validation instead of runni
 });
 
 test("deploy smoke recognizes the context-free login guidance without App Bridge", () => {
-  const deployAction = readRepoFile(".github/actions/ec2-shopify-deploy/action.yml");
+  const deployAction = readRepoFile(
+    ".github/actions/ec2-shopify-deploy/remote-deploy.sh",
+  );
 
   assert.match(deployAction, /grep -q 'Store context required' "\$body"/);
   assert.match(deployAction, /grep -q 'name="shopify-api-key"' "\$body"/);
@@ -84,7 +89,7 @@ test("Prisma migrations are verified before a new Shopify container replaces the
   );
   const ciWorkflow = readRepoFile(".github/workflows/ci-cd.yml");
   const deployAction = readRepoFile(
-    ".github/actions/ec2-shopify-deploy/action.yml",
+    ".github/actions/ec2-shopify-deploy/remote-deploy.sh",
   );
 
   assert.equal(
@@ -133,7 +138,7 @@ test("Prisma migrations are verified before a new Shopify container replaces the
   const deployIndex = deployAction.indexOf("npm run prisma:migrate:deploy");
   const statusIndex = deployAction.indexOf("npm run prisma:migrate:status");
   const driftIndex = deployAction.indexOf("npm run prisma:migrate:drift");
-  const replaceIndex = deployAction.indexOf("up -d --remove-orphans");
+  const replaceIndex = deployAction.lastIndexOf("up -d --no-build");
   assert.ok(deployIndex >= 0, "deploy action must apply migrations explicitly");
   assert.ok(statusIndex > deployIndex, "migration status must follow deploy");
   assert.ok(driftIndex > statusIndex, "schema drift must be checked after status");
@@ -142,4 +147,6 @@ test("Prisma migrations are verified before a new Shopify container replaces the
     "the live service must only be replaced after migration verification",
   );
   assert.match(deployAction, /run --rm --no-deps/);
+  assert.match(deployAction, /smoke\n/);
+  assert.match(deployAction, /atomic_link "\$current_link"/);
 });

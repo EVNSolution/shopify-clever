@@ -95,6 +95,10 @@ The repository is intended to stay private under the `EVNSolution` GitHub Free o
 - The deploy workflow verifies that the exact `main` commit passed CI and does not repeat install, build, typecheck, or tests.
 - Production image builds happen on the EC2 host during deploy instead of on a GitHub-hosted runner.
 
+The EC2 release transaction, SQLite backup evidence, and automatic rollback
+contract are documented in
+[`docs/runbooks/ec2-shopify-release-rollback.md`](docs/runbooks/ec2-shopify-release-rollback.md).
+
 ## EC2 deployment
 
 Shopify app containers run on the existing route server EC2 and attach to the route-server Docker network:

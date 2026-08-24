@@ -17,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: shopify-clever-ec2-deploy
+  group: shopify-clever-ec2-deploy-${{ inputs.target }}
   cancel-in-progress: false
 
 jobs:
@@ -96,6 +96,8 @@ jobs:
           deploy-path: ${{ env.DEPLOY_PATH }}
           ec2-ssh-key: ${{ env.EC2_SSH_KEY }}
           security-group-id: ${{ env.EC2_SSH_SECURITY_GROUP_ID }}
+          target: ${{ inputs.target }}
+          release-sha: ${{ github.sha }}
           compose-file: ${{ steps.target.outputs.compose-file }}
           service: ${{ steps.target.outputs.service }}
           sqlite-path: ${{ steps.target.outputs.sqlite-path }}
