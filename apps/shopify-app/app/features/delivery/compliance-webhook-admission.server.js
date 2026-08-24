@@ -2,6 +2,7 @@ import {
   readBoundedOrderWebhookRawBody,
   resolveOrderWebhookMaxBodyBytes,
 } from "./order-webhook-admission.server.js";
+import { validateShopifyOrderWebhook } from "./shopify-webhook-validation.server.js";
 import { forwardShopifyWebhookToDeliveryApi } from "./webhook-forwarding.server.js";
 import {
   createTelemetryRequestId,
@@ -14,19 +15,24 @@ const COMPLIANCE_WEBHOOK_TOPICS = new Set([
   "customers/redact",
   "shop/redact",
 ]);
+const SHOPIFY_ADMIN_COMPLIANCE_TOPICS = new Map([
+  ["CUSTOMERS_DATA_REQUEST", "customers/data_request"],
+  ["CUSTOMERS_REDACT", "customers/redact"],
+  ["SHOP_REDACT", "shop/redact"],
+]);
 
 export function createComplianceWebhookAction({
-  authenticateWebhook,
   forward = forwardShopifyWebhookToDeliveryApi,
   maxBodyBytes = resolveOrderWebhookMaxBodyBytes,
   readRawBody = readBoundedOrderWebhookRawBody,
+  validate = validateShopifyOrderWebhook,
 } = {}) {
-  if (typeof authenticateWebhook !== "function") {
-    throw new TypeError("authenticateWebhook is required");
-  }
-
   return async ({ request }) => {
     const correlationId = createTelemetryRequestId();
+    if (request.method !== "POST") {
+      logComplianceRejection("warn", correlationId, "METHOD_NOT_ALLOWED", "validation");
+      throw new Response(null, { status: 405, statusText: "Method not allowed" });
+    }
     let resolvedMaxBodyBytes;
     try {
       resolvedMaxBodyBytes = typeof maxBodyBytes === "function" ? maxBodyBytes() : maxBodyBytes;
@@ -50,15 +56,23 @@ export function createComplianceWebhookAction({
       throw new Response(null, { status: 503, statusText: "Webhook body could not be read" });
     }
 
-    const requestForAuth = new Request(request.url, {
-      body: rawBody,
-      headers: request.headers,
-      method: request.method,
-    });
-    const { shop, topic } = await authenticateWebhook(requestForAuth);
+    let validation;
+    try {
+      validation = await validate(request, rawBody);
+    } catch (error) {
+      logComplianceRejection(
+        "warn",
+        correlationId,
+        error instanceof Response && error.status === 401 ? "HMAC_INVALID" : "VALIDATION_FAILED",
+        "validation",
+      );
+      throw error;
+    }
+    const { domain: shop } = validation;
+    const topic = normalizeComplianceWebhookTopic(validation.topic);
     const shopHash = hashShopIdentifier(shop);
 
-    if (!COMPLIANCE_WEBHOOK_TOPICS.has(topic)) {
+    if (topic === null) {
       logSafeOperationalEvent("warn", "compliance_webhook_rejected", {
         correlationId,
         errorCode: "COMPLIANCE_TOPIC_UNEXPECTED",
@@ -66,23 +80,29 @@ export function createComplianceWebhookAction({
         stage: "topic_validation",
         topic,
       });
-      return new Response(null, { status: 200 });
+      throw new Response(null, { status: 400, statusText: "Unexpected webhook topic" });
     }
 
     logSafeOperationalEvent("info", "compliance_webhook_accepted", {
       correlationId,
       shopHash,
-      stage: "authenticated",
+      stage: "validated",
       topic,
     });
 
-    await forward(request, rawBody, {
+    const receipt = await forward(request, rawBody, {
       correlationId,
+      normalizedTopic: topic,
       webhookKind: "compliance",
     });
 
-    return new Response(null, { status: 200 });
+    return Response.json(receipt, { status: receipt.duplicate ? 200 : 202 });
   };
+}
+
+function normalizeComplianceWebhookTopic(topic) {
+  if (COMPLIANCE_WEBHOOK_TOPICS.has(topic)) return topic;
+  return SHOPIFY_ADMIN_COMPLIANCE_TOPICS.get(topic) ?? null;
 }
 
 function logComplianceRejection(level, correlationId, errorCode, stage) {
