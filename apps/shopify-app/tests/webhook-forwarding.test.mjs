@@ -1,3 +1,4 @@
+/* eslint-env node */
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
@@ -10,7 +11,12 @@ import {
   normalizeOrderWebhookTopic,
   ORDER_WEBHOOK_TOPICS,
 } from "../app/features/delivery/webhook-forwarding.server.js";
-import { createOrderWebhookAction } from "../app/features/delivery/order-webhook-admission.server.js";
+import {
+  DEFAULT_ORDER_WEBHOOK_MAX_BODY_BYTES,
+  createOrderWebhookAction,
+  readBoundedOrderWebhookRawBody,
+  resolveOrderWebhookMaxBodyBytes,
+} from "../app/features/delivery/order-webhook-admission.server.js";
 import { validateShopifyOrderWebhook } from "../app/features/delivery/shopify-webhook-validation.server.js";
 
 const root = process.cwd();
@@ -58,10 +64,23 @@ test("order webhook route is session-free and never loads session storage or off
 
   const admissionSource = readFileSync(join(root, "app/features/delivery/order-webhook-admission.server.js"), "utf8");
   const validationSource = readFileSync(join(root, "app/features/delivery/shopify-webhook-validation.server.js"), "utf8");
-  assert.match(admissionSource, /await request\.text\(\)/);
+  assert.match(admissionSource, /readBoundedOrderWebhookRawBody/);
+  assert.doesNotMatch(admissionSource, /request\.text\(\)/);
   assert.match(validationSource, /@shopify\/shopify-api/);
   assert.match(validationSource, /api\.webhooks\.validate/);
   assert.doesNotMatch(admissionSource + validationSource, /PrismaSessionStorage|ensureValidOfflineSession|authenticate\.webhook/);
+});
+
+test("order webhook body limit defaults to the documented 5 MiB safety budget", () => {
+  assert.equal(DEFAULT_ORDER_WEBHOOK_MAX_BODY_BYTES, 5 * 1024 * 1024);
+  assert.equal(resolveOrderWebhookMaxBodyBytes(undefined), 5 * 1024 * 1024);
+  for (const relativePath of [
+    "../../infra/env/shopify-app.env.example",
+    "../../infra/env/shopify-app-clever-route.env.example",
+    "../../infra/env/shopify-app-kfood.env.example",
+  ]) {
+    assert.match(readFileSync(join(root, relativePath), "utf8"), /SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES=5242880/);
+  }
 });
 
 test("order webhook action validates and forwards the exact raw body before durable acknowledgement", async () => {
@@ -136,7 +155,7 @@ test("Shopify API webhook primitive receives the original request and raw body",
   assert.equal(result.valid, true);
 });
 
-test("supported Shopify HMAC validation rejects raw-body mutation without session storage", async () => {
+test("supported Shopify HMAC validation passes at and under the body limit and rejects mutation", async () => {
   const previousSecret = process.env.SHOPIFY_API_SECRET;
   const previousKey = process.env.SHOPIFY_API_KEY;
   const previousUrl = process.env.SHOPIFY_APP_URL;
@@ -164,6 +183,7 @@ test("supported Shopify HMAC validation rejects raw-body mutation without sessio
     assert.equal((await validateShopifyOrderWebhook(request, rawBody)).valid, true);
     const sessionFreeAction = createOrderWebhookAction({
       forward: async () => ({ duplicate: false, status: "QUEUED", webhookId: "webhook-hmac-test" }),
+      maxBodyBytes: Buffer.byteLength(rawBody),
     });
     const sessionFreeResponse = await sessionFreeAction({
       request: new Request(request.url, {
@@ -173,6 +193,17 @@ test("supported Shopify HMAC validation rejects raw-body mutation without sessio
       }),
     });
     assert.equal(sessionFreeResponse.status, 202);
+    const underLimitResponse = await createOrderWebhookAction({
+      forward: async () => ({ duplicate: false, status: "QUEUED", webhookId: "webhook-hmac-test" }),
+      maxBodyBytes: Buffer.byteLength(rawBody) + 1,
+    })({
+      request: new Request(request.url, {
+        body: rawBody,
+        headers: request.headers,
+        method: "POST",
+      }),
+    });
+    assert.equal(underLimitResponse.status, 202);
     await assert.rejects(
       () => validateShopifyOrderWebhook(request, `${rawBody} `),
       (error) => error instanceof Response && error.status === 401,
@@ -187,6 +218,137 @@ test("supported Shopify HMAC validation rejects raw-body mutation without sessio
     if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previousDatabaseUrl;
   }
+});
+
+test("limit plus one returns 413 before validation or forwarding for declared and streamed sizes", async () => {
+  let streamedBodyCancelled = false;
+  const streamedBody = new ReadableStream({
+    cancel() {
+      streamedBodyCancelled = true;
+    },
+    start(controller) {
+      controller.enqueue(new TextEncoder().encode("12345"));
+    },
+  });
+  const cases = [
+    new Request("https://app.invalid/webhooks/orders", {
+      body: "12345",
+      headers: { "content-length": "5" },
+      method: "POST",
+    }),
+    new Request("https://app.invalid/webhooks/orders", {
+      body: streamedBody,
+      duplex: "half",
+      method: "POST",
+    }),
+    new Request("https://app.invalid/webhooks/orders", {
+      body: "12345",
+      headers: { "content-length": "4" },
+      method: "POST",
+    }),
+  ];
+
+  for (const request of cases) {
+    const stages = [];
+    const action = createOrderWebhookAction({
+      forward: async () => stages.push("forward"),
+      maxBodyBytes: 4,
+      validate: async () => stages.push("validate"),
+    });
+    await assert.rejects(
+      () => action({ request }),
+      (error) => error instanceof Response && error.status === 413,
+    );
+    assert.deepEqual(stages, []);
+  }
+  assert.equal(streamedBodyCancelled, true);
+});
+
+test("split multibyte UTF-8 chunks preserve the exact raw body for validation and forwarding", async () => {
+  const expected = '{"city":"키치너🚚"}';
+  const bytes = new TextEncoder().encode(expected);
+  const body = new ReadableStream({
+    start(controller) {
+      controller.enqueue(bytes.slice(0, 11));
+      controller.enqueue(bytes.slice(11, 14));
+      controller.enqueue(bytes.slice(14, 18));
+      controller.enqueue(bytes.slice(18));
+      controller.close();
+    },
+  });
+  const observed = [];
+  const response = await createOrderWebhookAction({
+    admissionMode: () => "session_free",
+    forward: async (_request, rawBody) => {
+      observed.push(rawBody);
+      return { duplicate: false, status: "QUEUED", webhookId: "unicode-webhook" };
+    },
+    maxBodyBytes: bytes.byteLength,
+    validate: async (_request, rawBody) => {
+      observed.push(rawBody);
+      return { topic: "orders/create", valid: true };
+    },
+  })({
+    request: new Request("https://app.invalid/webhooks/orders", {
+      body,
+      duplex: "half",
+      method: "POST",
+    }),
+  });
+
+  assert.equal(response.status, 202);
+  assert.deepEqual(observed, [expected, expected]);
+});
+
+test("invalid body-limit configuration fails closed without reading, validating, or forwarding", async () => {
+  const previous = process.env.SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES;
+  const stages = [];
+  const previousError = console.error;
+  console.error = () => {};
+  try {
+    for (const invalid of ["0", "-1", "1.5", " 5", "104857601"]) {
+      process.env.SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES = invalid;
+      assert.throws(() => resolveOrderWebhookMaxBodyBytes(), /body limit|positive integer/i);
+    }
+    process.env.SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES = "0";
+    const action = createOrderWebhookAction({
+      forward: async () => stages.push("forward"),
+      readRawBody: async () => stages.push("read"),
+      validate: async () => stages.push("validate"),
+    });
+    await assert.rejects(
+      () => action({ request: new Request("https://app.invalid/webhooks/orders", { body: "private", method: "POST" }) }),
+      (error) => error instanceof Response && error.status === 503,
+    );
+    assert.deepEqual(stages, []);
+  } finally {
+    console.error = previousError;
+    if (previous === undefined) delete process.env.SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES;
+    else process.env.SHOPIFY_ORDER_WEBHOOK_MAX_BODY_BYTES = previous;
+  }
+});
+
+test("bounded body reader rejects oversized private content without logging it", async () => {
+  const logs = [];
+  const previousWarn = console.warn;
+  console.warn = (...args) => logs.push(args.join(" "));
+  try {
+    const action = createOrderWebhookAction({ maxBodyBytes: 4 });
+    await assert.rejects(
+      () => action({ request: new Request("https://app.invalid/webhooks/orders", { body: "secret", method: "POST" }) }),
+      (error) => error instanceof Response && error.status === 413,
+    );
+    assert.match(logs.join("\n"), /BODY_TOO_LARGE/);
+    assert.doesNotMatch(logs.join("\n"), /secret|private|customer|address/i);
+  } finally {
+    console.warn = previousWarn;
+  }
+});
+
+test("bounded raw-body reader accepts exactly the configured byte count", async () => {
+  const body = "12345";
+  const request = new Request("https://app.invalid/webhooks/orders", { body, method: "POST" });
+  assert.equal(await readBoundedOrderWebhookRawBody(request, 5), body);
 });
 
 
