@@ -185,6 +185,7 @@ compose=(docker compose -f "$release_path/$compose_file" -f "$override_path")
 "${compose[@]}" config --quiet
 
 old_current_target=''
+old_previous_target=''
 old_release_path=''
 old_override_path=''
 old_sha=''
@@ -208,6 +209,11 @@ if [[ -L "$current_link" ]]; then
 else
   rollback_compose_file="$deploy_path/$compose_file"
   [[ -f "$rollback_compose_file" ]] || rollback_compose_file=''
+fi
+if [[ -L "$previous_link" ]]; then
+  old_previous_target="$(readlink "$previous_link")"
+  [[ "$old_previous_target" =~ ^releases/[0-9a-f]{40}$ ]] \
+    || fail "previous release link is unsafe"
 fi
 
 prior_container="$("${compose[@]}" ps -q "$service" | head -n 1)"
@@ -239,6 +245,7 @@ fi
 backup_ready=0
 published=0
 recovery_required=0
+pointer_commit_uncertain=0
 candidate_image_id=''
 build_attempted=0
 backup_dir=''
@@ -335,7 +342,20 @@ rollback() {
 
 on_exit() {
   local status=$?
+  local pointer_status=0
   trap - EXIT
+  if ((status != 0 && published == 0 && pointer_commit_uncertain == 1)); then
+    restore_pointer_snapshot || pointer_status=$?
+    if ((pointer_status == 2)); then
+      printf 'POINTER_RESTORE_FAIL_STOP target=%s release=%s current=candidate\n' \
+        "$target" "$release_sha" >&2
+      exit 71
+    elif ((pointer_status != 0)); then
+      printf 'POINTER_CONSISTENCY_UNPROVEN target=%s release=%s\n' \
+        "$target" "$release_sha" >&2
+      exit 72
+    fi
+  fi
   if ((status != 0 && published == 0 && recovery_required == 1)); then
     if ! rollback; then
       printf 'ROLLBACK_FAILED original_status=%s target=%s release=%s\n' \
@@ -424,7 +444,7 @@ if [[ -n "$old_sha" && -n "$prior_image_id" ]]; then
     "$target" "$old_sha" "$prior_image_id"
 fi
 
-atomic_link() {
+rename_pointer() {
   local link_path="$1" link_target="$2" temporary
   temporary="$link_path.tmp-$run_id"
   rm -f "$temporary"
@@ -434,8 +454,62 @@ atomic_link() {
   else
     mv -fh "$temporary" "$link_path"
   fi
+}
+
+atomic_link() {
+  local link_path="$1" link_target="$2"
+  pointer_commit_uncertain=1
+  rename_pointer "$link_path" "$link_target"
   [[ -L "$link_path" && "$(readlink "$link_path")" == "$link_target" ]] \
     || fail "release pointer atomic rename postcondition failed"
+}
+
+restore_pointer_snapshot() {
+  local restore_failed=0
+  if [[ -n "$old_previous_target" ]]; then
+    if [[ ! -L "$previous_link" || "$(readlink "$previous_link")" != "$old_previous_target" ]]; then
+      rename_pointer "$previous_link" "$old_previous_target" || restore_failed=1
+    fi
+    [[ -L "$previous_link" && "$(readlink "$previous_link")" == "$old_previous_target" ]] \
+      || restore_failed=1
+  else
+    rm -f "$previous_link"
+    [[ ! -e "$previous_link" && ! -L "$previous_link" ]] || restore_failed=1
+  fi
+  if ((restore_failed == 0)); then
+    if [[ -n "$old_current_target" ]]; then
+      if [[ ! -L "$current_link" || "$(readlink "$current_link")" != "$old_current_target" ]]; then
+        rename_pointer "$current_link" "$old_current_target" || restore_failed=1
+      fi
+      [[ -L "$current_link" && "$(readlink "$current_link")" == "$old_current_target" ]] \
+        || restore_failed=1
+    else
+      rm -f "$current_link"
+      [[ ! -e "$current_link" && ! -L "$current_link" ]] || restore_failed=1
+    fi
+  fi
+  if ((restore_failed != 0)); then
+    if [[ -n "$old_current_target" ]]; then
+      if [[ ! -L "$previous_link" || "$(readlink "$previous_link")" != "$old_current_target" ]]; then
+        rename_pointer "$previous_link" "$old_current_target" || return 1
+      fi
+      [[ -L "$previous_link" && "$(readlink "$previous_link")" == "$old_current_target" ]] \
+        || return 1
+    else
+      rm -f "$previous_link"
+      [[ ! -e "$previous_link" && ! -L "$previous_link" ]] || return 1
+    fi
+    if [[ ! -L "$current_link" || "$(readlink "$current_link")" != "releases/$release_sha" ]]; then
+      rename_pointer "$current_link" "releases/$release_sha" || return 1
+    fi
+    [[ -L "$current_link" && "$(readlink "$current_link")" == "releases/$release_sha" ]] \
+      || return 1
+    pointer_commit_uncertain=0
+    printf 'POINTER_CANDIDATE_REPUBLISHED target=%s release=%s\n' "$target" "$release_sha"
+    return 2
+  fi
+  pointer_commit_uncertain=0
+  printf 'POINTER_SNAPSHOT_RESTORED target=%s release=%s\n' "$target" "$release_sha"
 }
 
 publish_signal_status=0
@@ -447,6 +521,7 @@ if [[ -n "$old_current_target" ]]; then
 fi
 atomic_link "$current_link" "releases/$release_sha"
 published=1
+pointer_commit_uncertain=0
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM

@@ -63,6 +63,11 @@ both pointers and the published state agree, avoiding a half-published rollback.
 The script selects GNU `mv -T` or BSD `mv -h` before live mutation, rejects
 non-symlink pointer paths, performs no cross-flavor fallback after a rename
 failure, and verifies the exact `readlink` value before publication.
+If a rename succeeds but pointer verification fails, the original `current` and
+`previous` snapshot is restored and verified before DB/runtime rollback. If that
+pointer restoration cannot be proven, the script republishes and verifies the
+candidate-success pointer set (`previous` = prior `current`, then `current` =
+candidate) before fail-stopping without pruning or rolling back its DB/runtime.
 
 On the first hardened deployment, the script snapshots the image used by the
 legacy container and uses the existing `${DEPLOY_PATH}` Compose file for rollback.

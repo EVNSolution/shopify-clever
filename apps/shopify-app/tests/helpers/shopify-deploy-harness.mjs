@@ -251,12 +251,56 @@ else
   /bin/mv "$@" || mv_status=$?
 fi
 if ((mv_status == 0)); then
+  if [[ "$destination" == */current ]]; then
+    : > "$FAKE_CURRENT_RENAMED_MARKER"
+  fi
+  if [[ "§{FAIL_STAGE:-}" == pointer-restore-previous \
+    && "$destination" == */previous \
+    && -f "$FAKE_POSTCONDITION_FAILED_MARKER" ]]; then
+    : > "$FAKE_RESTORE_PREVIOUS_RENAMED_MARKER"
+  fi
+  if [[ "§{FAIL_STAGE:-}" == pointer-restore-current \
+    && "$destination" == */current \
+    && -f "$FAKE_POSTCONDITION_FAILED_MARKER" ]]; then
+    : > "$FAKE_RESTORE_CURRENT_RENAMED_MARKER"
+  fi
   if [[ -n "§{FAKE_SIGNAL_AFTER_CURRENT:-}" && "$destination" == */current ]]; then
     kill -TERM "$PPID"
   fi
   exit 0
 fi
 exit "$mv_status"
+`.replaceAll("§", "$");
+
+const fakeReadlink = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+path="§{1:-}"
+stage="§{FAIL_STAGE:-}"
+if [[ "$stage" =~ ^pointer-(postcondition|restore-previous|restore-current)$ \
+  && "$path" == */current \
+  && -f "$FAKE_CURRENT_RENAMED_MARKER" \
+  && ! -f "$FAKE_POSTCONDITION_FAILED_MARKER" ]]; then
+  : > "$FAKE_POSTCONDITION_FAILED_MARKER"
+  printf '%s\n' 'releases/ffffffffffffffffffffffffffffffffffffffff'
+  exit 0
+fi
+if [[ "$stage" == pointer-restore-previous \
+  && "$path" == */previous \
+  && -f "$FAKE_RESTORE_PREVIOUS_RENAMED_MARKER" \
+  && ! -f "$FAKE_RESTORE_PREVIOUS_FAILED_MARKER" ]]; then
+  : > "$FAKE_RESTORE_PREVIOUS_FAILED_MARKER"
+  printf '%s\n' 'releases/ffffffffffffffffffffffffffffffffffffffff'
+  exit 0
+fi
+if [[ "$stage" == pointer-restore-current \
+  && "$path" == */current \
+  && -f "$FAKE_RESTORE_CURRENT_RENAMED_MARKER" \
+  && ! -f "$FAKE_RESTORE_CURRENT_FAILED_MARKER" ]]; then
+  : > "$FAKE_RESTORE_CURRENT_FAILED_MARKER"
+  printf '%s\n' 'releases/ffffffffffffffffffffffffffffffffffffffff'
+  exit 0
+fi
+exec /usr/bin/readlink "$@"
 `.replaceAll("§", "$");
 
 async function executable(path, source) {
@@ -291,6 +335,12 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
   const log = join(root, "commands.log");
   const runningFile = join(root, `${target}.running`);
   const imageStateDir = join(root, "image-state");
+  const currentRenamedMarker = join(root, `${target}.current-renamed`);
+  const postconditionFailedMarker = join(root, `${target}.postcondition-failed`);
+  const restorePreviousFailedMarker = join(root, `${target}.restore-previous-failed`);
+  const restoreCurrentFailedMarker = join(root, `${target}.restore-current-failed`);
+  const restorePreviousRenamedMarker = join(root, `${target}.restore-previous-renamed`);
+  const restoreCurrentRenamedMarker = join(root, `${target}.restore-current-renamed`);
   await mkdir(bin, { recursive: true });
   await mkdir(imageStateDir, { recursive: true });
   await mkdir(join(deployPath, "infra/env"), { recursive: true });
@@ -316,6 +366,7 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
   await executable(join(bin, "df"), fakeDf);
   await executable(join(bin, "sha256sum"), fakeSha256sum);
   await executable(join(bin, "mv"), fakeMv);
+  await executable(join(bin, "readlink"), fakeReadlink);
   await createReleaseTree(deployPath, target);
 
   return {
@@ -333,6 +384,12 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
       FAKE_NEW_SHA: sha,
       FAKE_TARGET: target,
       FAKE_IMAGE_STATE_DIR: imageStateDir,
+      FAKE_CURRENT_RENAMED_MARKER: currentRenamedMarker,
+      FAKE_POSTCONDITION_FAILED_MARKER: postconditionFailedMarker,
+      FAKE_RESTORE_PREVIOUS_FAILED_MARKER: restorePreviousFailedMarker,
+      FAKE_RESTORE_CURRENT_FAILED_MARKER: restoreCurrentFailedMarker,
+      FAKE_RESTORE_PREVIOUS_RENAMED_MARKER: restorePreviousRenamedMarker,
+      FAKE_RESTORE_CURRENT_RENAMED_MARKER: restoreCurrentRenamedMarker,
       SHOPIFY_DEPLOY_TEST_MODE: "1",
       SHOPIFY_DEPLOY_TEST_ROOT: deployPath,
       SHOPIFY_DEPLOY_SMOKE_ATTEMPTS: "1",

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { access, lstat, mkdir, mkdtemp, readlink, rm, utimes, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, readlink, rm, symlink, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -315,6 +315,75 @@ test("a GNU pointer rename failure never falls back to BSD and restores the prio
   const log = await read(fixture.log);
   assert.match(log, /mv -Tf /);
   assert.doesNotMatch(log, /mv -fh /);
+});
+
+test("a post-rename pointer verification failure restores pointers before runtime rollback", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "pointer-postcondition" } });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  const targetRoot = join(fixture.deployPath, "targets/kfood");
+  assert.equal(await readlink(join(targetRoot, "current")), `releases/${oldSha}`);
+  await assert.rejects(access(join(targetRoot, "previous")));
+  assert.equal(await read(fixture.sqlitePath), "BASE|WAL");
+  assert.match(await read(fixture.runningFile), /rollback-test-run/);
+  assert.match(result.stdout + result.stderr, /POINTER_SNAPSHOT_RESTORED/);
+  assert.match(result.stdout + result.stderr, /ROLLBACK_SMOKE=passed/);
+  const log = await read(fixture.log);
+  assert.doesNotMatch(log, new RegExp(`IMAGE_PRUNED[^\\n]*${oldSha}`));
+});
+
+test("a failed previous snapshot verification republishes the complete candidate pointer set", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+  const targetRoot = join(fixture.deployPath, "targets/kfood");
+  const olderSha = "4".repeat(40);
+  await mkdir(join(targetRoot, "releases", olderSha), { recursive: true });
+  await writeFile(
+    join(targetRoot, "releases", olderSha, ".shopify-release"),
+    `target=kfood\nsha=${olderSha}\n`,
+  );
+  await symlink(`releases/${olderSha}`, join(targetRoot, "previous"));
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "pointer-restore-previous" } });
+
+  assert.equal(result.code, 71, result.stdout + result.stderr);
+  assert.equal(await readlink(join(targetRoot, "current")), `releases/${newSha}`);
+  assert.equal(await readlink(join(targetRoot, "previous")), `releases/${oldSha}`);
+  assert.equal(await read(fixture.sqlitePath), "BASE|WAL|MIGRATED");
+  assert.match(await read(fixture.runningFile), new RegExp(newSha));
+  assert.match(result.stdout + result.stderr, /POINTER_CANDIDATE_REPUBLISHED/);
+  assert.match(result.stdout + result.stderr, /POINTER_RESTORE_FAIL_STOP/);
+  assert.doesNotMatch(result.stdout + result.stderr, /ROLLBACK_STARTED/);
+  assert.doesNotMatch(await read(fixture.log), /IMAGE_PRUNED/);
+});
+
+test("a failed current snapshot verification republishes previous before current and preserves candidate state", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "pointer-restore-current" } });
+
+  assert.equal(result.code, 71, result.stdout + result.stderr);
+  const targetRoot = join(fixture.deployPath, "targets/kfood");
+  assert.equal(await readlink(join(targetRoot, "current")), `releases/${newSha}`);
+  assert.equal(await readlink(join(targetRoot, "previous")), `releases/${oldSha}`);
+  assert.equal(await read(fixture.sqlitePath), "BASE|WAL|MIGRATED");
+  assert.match(await read(fixture.runningFile), new RegExp(newSha));
+  assert.match(result.stdout + result.stderr, /POINTER_CANDIDATE_REPUBLISHED/);
+  assert.match(result.stdout + result.stderr, /POINTER_RESTORE_FAIL_STOP/);
+  assert.doesNotMatch(result.stdout + result.stderr, /ROLLBACK_STARTED/);
+  const log = await read(fixture.log);
+  const previousPublish = log.lastIndexOf(
+    `${join(targetRoot, "previous")}.tmp-test-run ${join(targetRoot, "previous")}`,
+  );
+  const currentPublish = log.lastIndexOf(
+    `${join(targetRoot, "current")}.tmp-test-run ${join(targetRoot, "current")}`,
+  );
+  assert.ok(previousPublish >= 0 && currentPublish > previousPublish, log);
+  assert.doesNotMatch(log, /IMAGE_PRUNED/);
 });
 
 test("a missing previous SHA tag is restored before success and survives a later rollback", async () => {
