@@ -4,6 +4,7 @@ import test from "node:test";
 
 const appRoot = new URL("../app/", import.meta.url);
 const trackingContractPath = new URL("features/delivery/route-tracking.js", appRoot);
+const operationalStatePath = new URL("features/delivery/operational-state.js", appRoot);
 const trackingProxyPath = new URL("features/delivery/route-tracking.server.js", appRoot);
 const trackingResourcePath = new URL("routes/app.route-tracking.$routePlanId.jsx", appRoot);
 const routeDetailPath = new URL("routes/app.routes.$routeId.jsx", appRoot);
@@ -204,15 +205,20 @@ test("Tracking map focuses the live driver position and keeps freshness visible 
 });
 
 test("Tracking tab exposes the Current position mismatch as an accessible Pill-based warning", () => {
+  // The repository's node:test harness has no DOM or JSX transform. This is the
+  // closest rendered-surface contract available without adding a test dependency.
   const routeDetailSource = readIfPresent(routeDetailPath);
   const trackingContractSource = readIfPresent(trackingContractPath);
+  const operationalStateSource = readIfPresent(operationalStatePath);
 
-  assert.match(routeDetailSource, /getRouteTrackingOperationalAlert/);
-  assert.match(routeDetailSource, /routeTrackingOperationalAlert/);
+  assert.match(routeDetailSource, /getRouteTrackingOperationalMismatch/);
+  assert.match(routeDetailSource, /positionMismatch: routeTrackingPositionMismatch/);
+  assert.match(routeDetailSource, /routeOperationalPresentation\.currentPositionAlert/);
   assert.match(routeDetailSource, /role="alert"/);
-  assert.match(routeDetailSource, /heading=\{routeTrackingOperationalAlert\.title\}/);
+  assert.match(routeDetailSource, /heading=\{routeTrackingCurrentPositionAlert\.title\}/);
   assert.match(routeDetailSource, /ariaLabel="Current position warning evidence"/);
-  assert.match(routeDetailSource, /pills=\{routeTrackingOperationalAlert\.pills\}/);
-  assert.match(trackingContractSource, /GPS proximity does not confirm delivery/);
+  assert.match(routeDetailSource, /pills=\{routeTrackingCurrentPositionAlert\.pills\}/);
+  assert.doesNotMatch(trackingContractSource, /proximityThresholdMeters|GPS Stop.*nearby|Gap.*stops/);
+  assert.match(operationalStateSource, /GPS proximity does not confirm delivery/);
   assert.doesNotMatch(routeDetailSource, /Current position[^\n]*(?:·|•)[^\n]*Server/u);
 });

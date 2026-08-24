@@ -86,7 +86,7 @@ import {
   consumeRouteTrackingSseChunk,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingCompletionTime,
-  getRouteTrackingOperationalAlert,
+  getRouteTrackingOperationalMismatch,
   getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
@@ -3483,13 +3483,20 @@ export default function RouteDetailPage() {
   const displayedRouteTrackingSnapshot = isRouteTrackingPayloadForRoute(routeTrackingSnapshot, trackingRoutePlanId)
     ? routeTrackingSnapshot
     : null;
+  const displayedOperationalState = displayedRouteTrackingSnapshot?.operationalState ?? operationalState;
+  const routeTrackingPositionMismatch = useMemo(
+    () => getRouteTrackingOperationalMismatch(displayedOperationalState),
+    [displayedOperationalState],
+  );
   const routeOperationalPresentation = useMemo(
     () => mapRouteOperationalState({
-      operationalState: displayedRouteTrackingSnapshot?.operationalState ?? operationalState,
+      operationalState: displayedOperationalState,
+      positionMismatch: routeTrackingPositionMismatch,
       routeStatus: routeExecutionStatus,
     }),
-    [displayedRouteTrackingSnapshot?.operationalState, operationalState, routeExecutionStatus],
+    [displayedOperationalState, routeExecutionStatus, routeTrackingPositionMismatch],
   );
+  const routeTrackingCurrentPositionAlert = routeOperationalPresentation.currentPositionAlert;
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
   }, [loaderRouteExecutionStatus]);
@@ -3741,14 +3748,6 @@ export default function RouteDetailPage() {
     })
   ))), [timelineRouteRows]);
   const trackingDeliveredCount = childRouteOrderRows.filter((row) => completedTrackingStopIds.has(row.id)).length;
-  const routeTrackingOperationalAlert = useMemo(
-    () => getRouteTrackingOperationalAlert({
-      executionStatus: routeExecutionStatus,
-      snapshot: displayedRouteTrackingSnapshot,
-      stops: childRouteOrderRows,
-    }),
-    [childRouteOrderRows, displayedRouteTrackingSnapshot, routeExecutionStatus],
-  );
   const routeMapStops = useMemo(() => {
     if (timelineRouteRows.length > 0) {
       return timelineRouteRows.flatMap((routeRow) =>
@@ -7019,14 +7018,14 @@ export default function RouteDetailPage() {
             </div>
           ) : isMaterializedChildRouteDetail && childDetailTab === "tracking" ? (
             <section aria-label="Child route tracking" style={routeChildTrackingStyle}>
-              {routeTrackingOperationalAlert ? (
+              {routeTrackingCurrentPositionAlert ? (
                 <div aria-label="Current position warning" role="alert">
-                  <s-banner heading={routeTrackingOperationalAlert.title} tone="warning">
+                  <s-banner heading={routeTrackingCurrentPositionAlert.title} tone={routeTrackingCurrentPositionAlert.tone}>
                     <OperationalPillGroup
                       ariaLabel="Current position warning evidence"
-                      pills={routeTrackingOperationalAlert.pills}
+                      pills={routeTrackingCurrentPositionAlert.pills}
                     />
-                    <p>{routeTrackingOperationalAlert.message}</p>
+                    <p>{routeTrackingCurrentPositionAlert.message}</p>
                   </s-banner>
                 </div>
               ) : null}

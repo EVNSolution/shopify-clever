@@ -4,6 +4,7 @@ import fs from "node:fs";
 import test from "node:test";
 
 import { mapRouteOperationalState, mapSettingsOperationalHealth } from "../app/features/delivery/operational-state.js";
+import { getRouteTrackingOperationalMismatch } from "../app/features/delivery/route-tracking.js";
 
 const kitchenerState = {
   activeAlerts: [{ id: "alert-1", severity: "WARNING", type: "SYNC_BLOCKED" }],
@@ -27,6 +28,56 @@ test("Kitchener evidence stays separated into independently sourced pills", () =
     "Alert warning",
   ]);
   assert.ok(result.pills.every((item) => item.ariaLabel && !/[·•]/u.test(item.label)));
+});
+
+test("Kitchener Current position warning reuses canonical Pills and keeps Device-absent Gap unknown", () => {
+  const operationalState = {
+    activeAlerts: [],
+    physicalPosition: kitchenerState.physicalPosition,
+    routeStatus: "IN_PROGRESS",
+    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
+    syncHealth: { state: "UNKNOWN" },
+  };
+  const positionMismatch = getRouteTrackingOperationalMismatch(operationalState);
+  const result = mapRouteOperationalState({ operationalState, positionMismatch });
+
+  assert.equal(result.alert.label, "Alert warning");
+  assert.equal(result.device.label, "Device unknown");
+  assert.equal(result.gap.label, "Gap unknown");
+  assert.deepEqual(result.currentPositionAlert?.pills.map((item) => item.label), [
+    "Alert warning",
+    "GPS fresh",
+    "GPS Stop 11 nearby",
+    "Server 1/11",
+    "Gap unknown",
+    "Sync unknown",
+  ]);
+  assert.equal(result.currentPositionAlert?.pills[0], result.alert);
+  assert.equal(result.currentPositionAlert?.pills[1], result.gpsFreshness);
+  assert.equal(result.currentPositionAlert?.pills[2], result.gpsPosition);
+  assert.equal(result.currentPositionAlert?.pills[3], result.server);
+  assert.equal(result.currentPositionAlert?.pills[4], result.gap);
+  assert.equal(result.currentPositionAlert?.pills[5], result.sync);
+  assert.equal(result.currentPositionAlert?.title, "Current position is ahead of server results");
+  assert.equal(
+    result.currentPositionAlert?.message,
+    "GPS is near Stop 11. The server confirms 1 of 11 stop results. At least 9 earlier planned stops still have no result. GPS proximity does not confirm delivery.",
+  );
+});
+
+test("canonical mapper keeps Current position warning absent without raw mismatch evidence", () => {
+  const result = mapRouteOperationalState({ operationalState: kitchenerState, positionMismatch: null });
+  assert.equal(result.currentPositionAlert, null);
+});
+
+test("canonical mapper does not turn incomplete mismatch evidence into an alert", () => {
+  const result = mapRouteOperationalState({
+    operationalState: { ...kitchenerState, activeAlerts: [] },
+    positionMismatch: { nearestStopSequence: 11 },
+  });
+
+  assert.equal(result.alert.label, "Alert none");
+  assert.equal(result.currentPositionAlert, null);
 });
 
 test("stale low-confidence GPS never implies a nearby stop", () => {

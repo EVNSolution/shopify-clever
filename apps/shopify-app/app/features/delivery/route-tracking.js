@@ -878,105 +878,56 @@ function getRouteTrackingFreshness(snapshot, now = Date.now()) {
   return { key: "OFFLINE", label: "Offline", ageMs };
 }
 
-function getRouteTrackingOperationalAlert({ executionStatus, snapshot, stops, proximityThresholdMeters = 100 } = {}) {
-  if (normalizeRouteExecutionStatus(executionStatus) !== "IN_PROGRESS") return null;
+function getRouteTrackingOperationalMismatch(operationalState) {
+  if (!operationalState || typeof operationalState !== "object") return null;
+  if (normalizeRouteExecutionStatus(operationalState.routeStatus) !== "IN_PROGRESS") return null;
 
-  const normalizedSnapshot = normalizeRouteTrackingSnapshot(snapshot);
-  const routeStops = (Array.isArray(stops) ? stops : [])
-    .map(normalizeOperationalStop)
-    .filter(Boolean)
-    .sort((left, right) => left.sequence - right.sequence);
-  const latestPosition = normalizedSnapshot.latestPosition;
-  if (!latestPosition || routeStops.length < 2) return null;
-
-  const nearestStop = routeStops.reduce((nearest, stop) => {
-    if (!stop.coordinates) return nearest;
-    const distanceMeters = distanceBetweenCoordinatesMeters(
-      [latestPosition.longitude, latestPosition.latitude],
-      stop.coordinates,
-    );
-    return nearest === null || distanceMeters < nearest.distanceMeters
-      ? { distanceMeters, stop }
-      : nearest;
-  }, null);
-  const thresholdMeters = numberOrNull(proximityThresholdMeters);
-  if (!nearestStop || thresholdMeters == null || thresholdMeters <= 0 || nearestStop.distanceMeters > thresholdMeters) {
+  const physicalPosition = operationalState.physicalPosition;
+  const freshness = textOrNull(physicalPosition?.freshness)?.toUpperCase();
+  // Freshness, reliability, and threshold membership are server policy outputs.
+  // The client must not recalculate proximity from coordinates.
+  if (freshness !== "FRESH"
+    || physicalPosition?.reliableForProximity !== true
+    || physicalPosition?.withinProximityThreshold !== true) {
     return null;
   }
 
-  const completedStopIds = new Set(normalizedSnapshot.progress.completedStopIds);
-  const failedStopIds = new Set(normalizedSnapshot.progress.failedStopIds);
-  const isResolved = (stop) => stop.ids.some((id) => completedStopIds.has(id) || failedStopIds.has(id));
-  const earlierUnresolvedCount = routeStops.filter(
-    (stop) => stop.sequence < nearestStop.stop.sequence && !isResolved(stop),
-  ).length;
+  const nearestStopSequence = positiveIntegerOrNull(physicalPosition.nearestStopSequence);
+  const resolvedStopCount = nonNegativeIntegerOrNull(operationalState.serverProgress?.resolvedStopCount);
+  const totalStopCount = positiveIntegerOrNull(operationalState.serverProgress?.totalStopCount);
+  if (nearestStopSequence === null
+    || resolvedStopCount === null
+    || totalStopCount === null
+    || nearestStopSequence > totalStopCount
+    || resolvedStopCount > totalStopCount) {
+    return null;
+  }
+
+  // Server progress is aggregate evidence. Subtracting every resolved result from
+  // the earlier stop count gives a conservative lower bound even if a result was
+  // recorded out of order. Terminal results such as SKIPPED or CANCELLED are
+  // already included in the server-owned resolvedStopCount.
+  const earlierUnresolvedCount = Math.max(0, nearestStopSequence - 1 - resolvedStopCount);
   if (earlierUnresolvedCount === 0) return null;
 
-  const resolvedCount = routeStops.filter(isResolved).length;
-  const unresolvedCount = routeStops.length - resolvedCount;
-  const nearestStopSequence = nearestStop.stop.sequence;
   return {
     earlierUnresolvedCount,
-    message: `GPS is near Stop ${nearestStopSequence}. The server confirms ${resolvedCount} of ${routeStops.length} stop results. ${earlierUnresolvedCount} earlier planned stop${earlierUnresolvedCount === 1 ? "" : "s"} still ${earlierUnresolvedCount === 1 ? "has" : "have"} no result. GPS proximity does not confirm delivery.`,
-    nearestStopDistanceMeters: Math.round(nearestStop.distanceMeters),
     nearestStopSequence,
-    pills: [
-      {
-        ariaLabel: `GPS position: near Stop ${nearestStopSequence}`,
-        key: "gps-position-alert",
-        label: `GPS Stop ${nearestStopSequence} nearby`,
-        tone: "info",
-      },
-      {
-        ariaLabel: `Server progress: ${resolvedCount} of ${routeStops.length} stop results confirmed`,
-        key: "server-progress-alert",
-        label: `Server ${resolvedCount}/${routeStops.length}`,
-        tone: "warning",
-      },
-      {
-        ariaLabel: `Progress gap: ${unresolvedCount} stop results unresolved`,
-        key: "result-gap-alert",
-        label: `Gap ${unresolvedCount} stop${unresolvedCount === 1 ? "" : "s"}`,
-        tone: "warning",
-      },
-    ],
-    resolvedCount,
-    title: "Current position is ahead of server results",
-    totalCount: routeStops.length,
-    unresolvedCount,
+    resolvedStopCount,
+    totalStopCount,
+    unresolvedCount: totalStopCount - resolvedStopCount,
   };
 }
 
-function normalizeOperationalStop(stop, index) {
-  if (!stop || typeof stop !== "object") return null;
-
-  const rawSequence = numberOrNull(stop.stop ?? stop.sequence);
-  const sequence = Number.isInteger(rawSequence) && rawSequence > 0 ? rawSequence : index + 1;
-  const ids = [...new Set([textOrNull(stop.id), textOrNull(stop.deliveryStopId)].filter(Boolean))];
-  const latitude = optionalNumberOrNull(stop.editFields?.latitude ?? stop.latitude ?? stop.coordinates?.latitude);
-  const longitude = optionalNumberOrNull(stop.editFields?.longitude ?? stop.longitude ?? stop.coordinates?.longitude);
-  const coordinateArray = Array.isArray(stop.coordinates)
-    ? [optionalNumberOrNull(stop.coordinates[0]), optionalNumberOrNull(stop.coordinates[1])]
-    : null;
-  const coordinates = validCoordinates(longitude, latitude)
-    ? [longitude, latitude]
-    : validCoordinates(coordinateArray?.[0], coordinateArray?.[1])
-      ? coordinateArray
-      : null;
-  return { coordinates, ids, sequence };
+function nonNegativeIntegerOrNull(value) {
+  if (value == null || value === "") return null;
+  const number = Number(value);
+  return Number.isInteger(number) && number >= 0 ? number : null;
 }
 
-function optionalNumberOrNull(value) {
-  return value == null || value === "" ? null : numberOrNull(value);
-}
-
-function validCoordinates(longitude, latitude) {
-  return longitude != null
-    && latitude != null
-    && longitude >= -180
-    && longitude <= 180
-    && latitude >= -90
-    && latitude <= 90;
+function positiveIntegerOrNull(value) {
+  const number = nonNegativeIntegerOrNull(value);
+  return number !== null && number > 0 ? number : null;
 }
 
 function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
@@ -1082,7 +1033,7 @@ export {
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingCompletionTime,
   getRouteTrackingLineFeatures,
-  getRouteTrackingOperationalAlert,
+  getRouteTrackingOperationalMismatch,
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,

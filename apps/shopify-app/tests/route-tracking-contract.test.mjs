@@ -6,7 +6,7 @@ import {
   doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingLineFeatures,
-  getRouteTrackingOperationalAlert,
+  getRouteTrackingOperationalMismatch,
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
@@ -649,107 +649,85 @@ test("freshness uses server-provided thresholds", () => {
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:04:00.000Z")).key, "OFFLINE");
 });
 
-test("tracking warns when Kitchener GPS reaches Stop 11 with only one server-confirmed result", () => {
-  const stops = Array.from({ length: 11 }, (_, index) => ({
-    deliveryStopId: `stop-${index + 1}`,
-    id: `stop-${index + 1}`,
-    stop: index + 1,
-    editFields: {
-      latitude: 43 + index * 0.001,
-      longitude: -80,
+test("tracking returns raw Kitchener mismatch evidence only from server operational state", () => {
+  const operationalState = {
+    physicalPosition: {
+      freshness: "FRESH",
+      nearestStopSequence: 11,
+      reliableForProximity: true,
+      withinProximityThreshold: true,
     },
-  }));
-  const snapshot = normalizeRouteTrackingSnapshot({
-    latestPosition: {
-      latitude: 43.010533,
-      longitude: -80,
-      occurredAt: "2026-08-23T04:03:58.000Z",
-    },
-    progress: {
-      completedStopIds: ["stop-1"],
-      failedStopIds: [],
-    },
-  });
+    routeStatus: "IN_PROGRESS",
+    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
+  };
 
-  assert.deepEqual(getRouteTrackingOperationalAlert({ executionStatus: "IN_PROGRESS", snapshot, stops }), {
+  assert.deepEqual(getRouteTrackingOperationalMismatch(operationalState), {
     earlierUnresolvedCount: 9,
-    message: "GPS is near Stop 11. The server confirms 1 of 11 stop results. 9 earlier planned stops still have no result. GPS proximity does not confirm delivery.",
-    nearestStopDistanceMeters: 59,
     nearestStopSequence: 11,
-    pills: [
-      {
-        ariaLabel: "GPS position: near Stop 11",
-        key: "gps-position-alert",
-        label: "GPS Stop 11 nearby",
-        tone: "info",
-      },
-      {
-        ariaLabel: "Server progress: 1 of 11 stop results confirmed",
-        key: "server-progress-alert",
-        label: "Server 1/11",
-        tone: "warning",
-      },
-      {
-        ariaLabel: "Progress gap: 10 stop results unresolved",
-        key: "result-gap-alert",
-        label: "Gap 10 stops",
-        tone: "warning",
-      },
-    ],
-    resolvedCount: 1,
-    title: "Current position is ahead of server results",
-    totalCount: 11,
+    resolvedStopCount: 1,
+    totalStopCount: 11,
     unresolvedCount: 10,
   });
 });
 
-test("tracking does not warn when GPS is at the next unresolved stop", () => {
-  const snapshot = normalizeRouteTrackingSnapshot({
-    latestPosition: { latitude: 43.001, longitude: -80 },
-    progress: { completedStopIds: ["stop-1"] },
-  });
+test("tracking suppresses mismatch without trustworthy server proximity and progress evidence", () => {
+  const kitchenerState = {
+    physicalPosition: {
+      freshness: "FRESH",
+      nearestStopSequence: 11,
+      reliableForProximity: true,
+      withinProximityThreshold: true,
+    },
+    routeStatus: "IN_PROGRESS",
+    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
+  };
 
-  assert.equal(getRouteTrackingOperationalAlert({
-    executionStatus: "IN_PROGRESS",
-    snapshot,
-    stops: [
-      { id: "stop-1", stop: 1, editFields: { latitude: 43, longitude: -80 } },
-      { id: "stop-2", stop: 2, editFields: { latitude: 43.001, longitude: -80 } },
-    ],
+  assert.equal(getRouteTrackingOperationalMismatch(null), null);
+  assert.equal(getRouteTrackingOperationalMismatch({}), null);
+  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, serverProgress: null }), null);
+  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, serverProgress: {} }), null);
+  assert.equal(getRouteTrackingOperationalMismatch(normalizeRouteTrackingSnapshot({}).operationalState), null);
+  assert.equal(getRouteTrackingOperationalMismatch({
+    ...kitchenerState,
+    physicalPosition: { ...kitchenerState.physicalPosition, freshness: "STALE" },
+  }), null);
+  assert.equal(getRouteTrackingOperationalMismatch({
+    ...kitchenerState,
+    physicalPosition: { ...kitchenerState.physicalPosition, freshness: "AGING" },
+  }), null);
+  assert.equal(getRouteTrackingOperationalMismatch({
+    ...kitchenerState,
+    physicalPosition: { ...kitchenerState.physicalPosition, reliableForProximity: false },
+  }), null);
+  assert.equal(getRouteTrackingOperationalMismatch({
+    ...kitchenerState,
+    physicalPosition: { ...kitchenerState.physicalPosition, withinProximityThreshold: false },
+  }), null);
+  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, routeStatus: "READY" }), null);
+  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, routeStatus: "CANCELLED" }), null);
+  assert.equal(getRouteTrackingOperationalMismatch({
+    ...kitchenerState,
+    physicalPosition: { ...kitchenerState.physicalPosition, nearestStopSequence: 2 },
   }), null);
 });
 
-test("tracking warning requires GPS near a planned stop and never treats proximity as a result", () => {
-  const stops = [
-    { id: "stop-1", stop: 1, editFields: { latitude: 43, longitude: -80 } },
-    { id: "stop-2", stop: 2, editFields: { latitude: 43.001, longitude: -80 } },
-    { id: "stop-3", stop: 3, editFields: { latitude: 43.002, longitude: -80 } },
-  ];
-  const farAway = normalizeRouteTrackingSnapshot({
-    latestPosition: { latitude: 44, longitude: -80 },
-    progress: { completedStopIds: ["stop-1"] },
-  });
-  const nearStopThree = normalizeRouteTrackingSnapshot({
-    latestPosition: { latitude: 43.002, longitude: -80 },
-    progress: { completedStopIds: ["stop-1"] },
-  });
+test("server-resolved SKIPPED and CANCELLED stops do not create an earlier-results warning", () => {
+  const operationalState = {
+    physicalPosition: {
+      freshness: "FRESH",
+      nearestStopSequence: 3,
+      reliableForProximity: true,
+      withinProximityThreshold: true,
+    },
+    routeStatus: "IN_PROGRESS",
+    serverProgress: {
+      outcomeCounts: { cancelled: 1, skipped: 1 },
+      resolvedStopCount: 2,
+      totalStopCount: 3,
+    },
+  };
 
-  assert.equal(getRouteTrackingOperationalAlert({ executionStatus: "IN_PROGRESS", snapshot: farAway, stops }), null);
-  const alert = getRouteTrackingOperationalAlert({ executionStatus: "IN_PROGRESS", snapshot: nearStopThree, stops });
-  assert.equal(alert?.resolvedCount, 1);
-  assert.equal(alert?.unresolvedCount, 2);
-  assert.match(alert?.message ?? "", /GPS proximity does not confirm delivery/);
-  assert.equal(getRouteTrackingOperationalAlert({ executionStatus: "READY", snapshot: nearStopThree, stops }), null);
-
-  const failedNextStop = normalizeRouteTrackingSnapshot({
-    latestPosition: { latitude: 43.002, longitude: -80 },
-    progress: { completedStopIds: ["stop-1"], failedStopIds: ["stop-2"] },
-  });
-  assert.equal(getRouteTrackingOperationalAlert({
-    executionStatus: "IN_PROGRESS",
-    snapshot: failedNextStop,
-    stops,
-  }), null);
+  assert.equal(getRouteTrackingOperationalMismatch(operationalState), null);
 });
 
 test("tracking snapshots preserve the server operational state through reconnect merges", () => {
