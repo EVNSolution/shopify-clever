@@ -6,6 +6,8 @@ const inFlightSyncByShop = new Map();
 let tokenSyncHealth = {
   errorCode: null,
   lastAttemptAt: null,
+  lastErrorCode: null,
+  lastFailureAt: null,
   lastSuccessAt: null,
   status: "unknown",
 };
@@ -15,10 +17,13 @@ export function getShopifyTokenSyncHealth() {
 }
 
 export function recordShopifyAdminTokenRefreshFailure({ now = Date.now } = {}) {
+  const failedAt = new Date(now()).toISOString();
   tokenSyncHealth = {
     ...tokenSyncHealth,
     errorCode: "ADMIN_TOKEN_REFRESH_FAILED",
-    lastAttemptAt: new Date(now()).toISOString(),
+    lastAttemptAt: failedAt,
+    lastErrorCode: "ADMIN_TOKEN_REFRESH_FAILED",
+    lastFailureAt: failedAt,
     status: "degraded",
   };
   logTokenSyncHealth("admin_auth_refresh");
@@ -77,6 +82,8 @@ async function syncShopifyOfflineToken(
       ...tokenSyncHealth,
       errorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
       lastAttemptAt: attemptedAt,
+      lastErrorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
+      lastFailureAt: attemptedAt,
       status: "degraded",
     };
     logTokenSyncHealth("token_exchange");
@@ -88,6 +95,8 @@ async function syncShopifyOfflineToken(
       ...tokenSyncHealth,
       errorCode: `TOKEN_EXCHANGE_HTTP_${response.status}`,
       lastAttemptAt: attemptedAt,
+      lastErrorCode: `TOKEN_EXCHANGE_HTTP_${response.status}`,
+      lastFailureAt: attemptedAt,
       status: "degraded",
     };
     logTokenSyncHealth("token_exchange");
@@ -96,6 +105,7 @@ async function syncShopifyOfflineToken(
 
   lastSyncedAtByShop.set(shopDomain, now());
   tokenSyncHealth = {
+    ...tokenSyncHealth,
     errorCode: null,
     lastAttemptAt: attemptedAt,
     lastSuccessAt: attemptedAt,

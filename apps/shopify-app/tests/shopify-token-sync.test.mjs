@@ -142,6 +142,8 @@ test("token exchange outage and expired-session rejection become queryable sanit
     assert.deepEqual(getShopifyTokenSyncHealth(), {
       errorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
       lastAttemptAt: "2026-08-24T10:00:00.000Z",
+      lastErrorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
+      lastFailureAt: "2026-08-24T10:00:00.000Z",
       lastSuccessAt: previousSuccessAt,
       status: "degraded",
     });
@@ -153,8 +155,23 @@ test("token exchange outage and expired-session rejection become queryable sanit
     assert.deepEqual(getShopifyTokenSyncHealth(), {
       errorCode: "TOKEN_EXCHANGE_HTTP_401",
       lastAttemptAt: "2026-08-24T10:01:00.000Z",
+      lastErrorCode: "TOKEN_EXCHANGE_HTTP_401",
+      lastFailureAt: "2026-08-24T10:01:00.000Z",
       lastSuccessAt: previousSuccessAt,
       status: "degraded",
+    });
+
+    await syncShopifyOfflineTokenToDeliveryApi(request, { shop: "recovered-health.myshopify.com" }, {
+      fetch: async () => new Response("{}", { status: 200 }),
+      now: () => Date.parse("2026-08-24T10:01:30.000Z"),
+    });
+    assert.deepEqual(getShopifyTokenSyncHealth(), {
+      errorCode: null,
+      lastAttemptAt: "2026-08-24T10:01:30.000Z",
+      lastErrorCode: "TOKEN_EXCHANGE_HTTP_401",
+      lastFailureAt: "2026-08-24T10:01:00.000Z",
+      lastSuccessAt: "2026-08-24T10:01:30.000Z",
+      status: "healthy",
     });
   } finally {
     restoreDeliveryApiBaseUrl(previousBaseUrl);
@@ -168,6 +185,8 @@ test("Shopify Admin token refresh failures are structured and queryable without 
   assert.deepEqual(getShopifyTokenSyncHealth(), {
     errorCode: "ADMIN_TOKEN_REFRESH_FAILED",
     lastAttemptAt: "2026-08-24T10:02:00.000Z",
+    lastErrorCode: "ADMIN_TOKEN_REFRESH_FAILED",
+    lastFailureAt: "2026-08-24T10:02:00.000Z",
     lastSuccessAt: getShopifyTokenSyncHealth().lastSuccessAt,
     status: "degraded",
   });

@@ -107,6 +107,21 @@ test("retry fallback remains HMAC-first and does not acknowledge without durable
   assert.deepEqual(stages, ["validated"]);
 });
 
+test("order webhook admission rejects non-POST requests before validation", async () => {
+  let validated = false;
+  const action = createOrderWebhookAction({
+    validate: async () => {
+      validated = true;
+      return { topic: "orders/create", valid: true };
+    },
+  });
+  await assert.rejects(
+    () => action({ request: new Request("https://app.invalid/webhooks/orders", { method: "PUT" }) }),
+    (error) => error instanceof Response && error.status === 405,
+  );
+  assert.equal(validated, false);
+});
+
 test("Shopify API webhook primitive receives the original request and raw body", async () => {
   const request = new Request("https://app.invalid/webhooks/orders", { body: "{ \"id\": 1 }", method: "POST" });
   let input;

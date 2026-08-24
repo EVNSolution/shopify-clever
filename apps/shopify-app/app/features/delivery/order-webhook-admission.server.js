@@ -14,6 +14,16 @@ export function createOrderWebhookAction({
   return async ({ request }) => {
     const correlationId = createTelemetryRequestId();
     const webhookId = safeIdentifier(request.headers.get("x-shopify-webhook-id"));
+    if (request.method !== "POST") {
+      logAdmission("warn", {
+        correlationId,
+        errorCode: "METHOD_NOT_ALLOWED",
+        requestId: correlationId,
+        stage: "validation",
+        webhookId,
+      });
+      throw new Response(null, { status: 405, statusText: "Method not allowed" });
+    }
     const rawBody = await request.text();
     let validation;
     try {
