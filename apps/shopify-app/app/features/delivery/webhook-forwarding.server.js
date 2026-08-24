@@ -37,7 +37,8 @@ const FORWARDED_SHOPIFY_WEBHOOK_HEADERS = [
   "x-shopify-webhook-id",
 ];
 
-const DURABLE_ACCEPTANCE_STATUSES = new Set(["DUPLICATE", "PROCESSED", "QUEUED", "RECEIVED"]);
+const DURABLE_ACCEPTANCE_STATUSES = new Set(["DUPLICATE", "IGNORED", "PROCESSED", "QUEUED", "RECEIVED"]);
+const DURABLE_SUPPRESSED_STATUSES = new Set(["IGNORED"]);
 
 export function resolveOrderWebhookAdmissionMode(env = process.env) {
   return env.CLEVER_ORDER_WEBHOOK_ADMISSION_MODE === "retry" ? "retry" : "session_free";
@@ -97,6 +98,7 @@ export async function forwardShopifyWebhookToDeliveryApi(
     requestId: correlationId,
     stage: "durable",
     status: receipt.status,
+    suppressed: DURABLE_SUPPRESSED_STATUSES.has(receipt.status),
     webhookId: receipt.webhookId,
     webhookKind,
   });
@@ -139,7 +141,8 @@ async function readDurableReceipt(response, expectedWebhookId) {
     receipt.webhookId !== expectedWebhookId ||
     typeof receipt?.duplicate !== "boolean" ||
     (response.status === 200) !== receipt.duplicate ||
-    !DURABLE_ACCEPTANCE_STATUSES.has(receipt?.status)
+    !DURABLE_ACCEPTANCE_STATUSES.has(receipt?.status) ||
+    (DURABLE_SUPPRESSED_STATUSES.has(receipt.status) && receipt.duplicate !== true)
   ) return null;
 
   return {

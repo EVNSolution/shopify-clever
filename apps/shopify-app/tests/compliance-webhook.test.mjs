@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createComplianceWebhookAction } from "../app/features/delivery/compliance-webhook-admission.server.js";
+import { forwardShopifyWebhookToDeliveryApi } from "../app/features/delivery/webhook-forwarding.server.js";
 
 const complianceTopics = [
   "customers/data_request",
@@ -115,5 +116,43 @@ test("preserves split UTF-8 compliance bytes through authentication and forwardi
 
     assert.equal(response.status, 200);
     assert.deepEqual(observed, [rawBody, rawBody]);
+  }
+});
+
+test("late compliance webhook accepts one durable ignored receipt without retry", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
+  try {
+    let deliveryCalls = 0;
+    const action = createComplianceWebhookAction({
+      authenticateWebhook: async () => ({
+        shop: "redacted-shop.myshopify.com",
+        topic: "shop/redact",
+      }),
+      forward: (request, rawBody, options) => forwardShopifyWebhookToDeliveryApi(request, rawBody, {
+        ...options,
+        fetch: async () => {
+          deliveryCalls += 1;
+          return Response.json({
+            data: { duplicate: true, status: "IGNORED", webhookId: "late-compliance-webhook" },
+            error: null,
+          }, { status: 200 });
+        },
+      }),
+      maxBodyBytes: 100,
+    });
+    const response = await action({
+      request: new Request("https://app.invalid/webhooks/compliance", {
+        body: "{}",
+        headers: { "x-shopify-webhook-id": "late-compliance-webhook" },
+        method: "POST",
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.equal(deliveryCalls, 1);
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
+    else process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
   }
 });

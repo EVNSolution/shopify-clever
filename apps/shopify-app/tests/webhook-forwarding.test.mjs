@@ -434,6 +434,45 @@ test("delivery webhook forwarding preserves raw body and Shopify webhook headers
   }
 });
 
+test("late order webhook accepts one durable ignored receipt without retry", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
+  try {
+    let deliveryCalls = 0;
+    const action = createOrderWebhookAction({
+      admissionMode: () => "session_free",
+      forward: (request, rawBody, options) => forwardShopifyWebhookToDeliveryApi(request, rawBody, {
+        ...options,
+        fetch: async () => {
+          deliveryCalls += 1;
+          return Response.json({
+            data: { duplicate: true, status: "IGNORED", webhookId: "late-order-webhook" },
+            error: null,
+          }, { status: 200 });
+        },
+      }),
+      validate: async () => ({ topic: "orders/create", valid: true }),
+    });
+    const response = await action({
+      request: new Request("https://app.invalid/webhooks/orders", {
+        body: "{}",
+        headers: { "x-shopify-webhook-id": "late-order-webhook" },
+        method: "POST",
+      }),
+    });
+
+    assert.equal(response.status, 200);
+    assert.deepEqual(await response.json(), {
+      duplicate: true,
+      status: "IGNORED",
+      webhookId: "late-order-webhook",
+    });
+    assert.equal(deliveryCalls, 1);
+  } finally {
+    restoreDeliveryApiBaseUrl(previousBaseUrl);
+  }
+});
+
 test("delivery webhook forwarding returns retryable failure for outage, timeout, and malformed/non-durable 2xx", async () => {
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
   process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
@@ -453,6 +492,8 @@ test("delivery webhook forwarding returns retryable failure for outage, timeout,
       async () => Response.json({ data: { duplicate: false, status: "RECEIVED" } }, { status: 202 }),
       async () => Response.json({ data: { duplicate: true, status: "DUPLICATE", webhookId: "webhook-id" } }, { status: 202 }),
       async () => Response.json({ data: { duplicate: false, status: "RECEIVED", webhookId: "wrong-id" } }, { status: 202 }),
+      async () => Response.json({ data: { duplicate: false, status: "IGNORED", webhookId: "webhook-id" } }, { status: 202 }),
+      async () => Response.json({ data: { duplicate: true, status: "ARBITRARY", webhookId: "webhook-id" } }, { status: 200 }),
     ]) {
       await assert.rejects(
         () => forwardShopifyWebhookToDeliveryApi(new Request("https://app.invalid/webhooks/orders", { headers: { "x-shopify-webhook-id": "webhook-id" } }), "{}", { fetch }),
