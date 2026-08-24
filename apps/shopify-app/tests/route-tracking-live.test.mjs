@@ -202,3 +202,17 @@ test("Tracking map focuses the live driver position and keeps freshness visible 
   assert.match(routeDetailSource, /formatTrackingRange\(/);
   assert.doesNotMatch(routeDetailSource, />Recorded range</);
 });
+
+test("Tracking tab exposes the Current position mismatch as an accessible Pill-based warning", () => {
+  const routeDetailSource = readIfPresent(routeDetailPath);
+  const trackingContractSource = readIfPresent(trackingContractPath);
+
+  assert.match(routeDetailSource, /getRouteTrackingOperationalAlert/);
+  assert.match(routeDetailSource, /routeTrackingOperationalAlert/);
+  assert.match(routeDetailSource, /role="alert"/);
+  assert.match(routeDetailSource, /heading=\{routeTrackingOperationalAlert\.title\}/);
+  assert.match(routeDetailSource, /ariaLabel="Current position warning evidence"/);
+  assert.match(routeDetailSource, /pills=\{routeTrackingOperationalAlert\.pills\}/);
+  assert.match(trackingContractSource, /GPS proximity does not confirm delivery/);
+  assert.doesNotMatch(routeDetailSource, /Current position[^\n]*(?:·|•)[^\n]*Server/u);
+});

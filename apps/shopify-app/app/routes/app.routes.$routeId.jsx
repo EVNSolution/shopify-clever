@@ -86,6 +86,7 @@ import {
   consumeRouteTrackingSseChunk,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingCompletionTime,
+  getRouteTrackingOperationalAlert,
   getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
@@ -3740,6 +3741,14 @@ export default function RouteDetailPage() {
     })
   ))), [timelineRouteRows]);
   const trackingDeliveredCount = childRouteOrderRows.filter((row) => completedTrackingStopIds.has(row.id)).length;
+  const routeTrackingOperationalAlert = useMemo(
+    () => getRouteTrackingOperationalAlert({
+      executionStatus: routeExecutionStatus,
+      snapshot: displayedRouteTrackingSnapshot,
+      stops: childRouteOrderRows,
+    }),
+    [childRouteOrderRows, displayedRouteTrackingSnapshot, routeExecutionStatus],
+  );
   const routeMapStops = useMemo(() => {
     if (timelineRouteRows.length > 0) {
       return timelineRouteRows.flatMap((routeRow) =>
@@ -7010,6 +7019,17 @@ export default function RouteDetailPage() {
             </div>
           ) : isMaterializedChildRouteDetail && childDetailTab === "tracking" ? (
             <section aria-label="Child route tracking" style={routeChildTrackingStyle}>
+              {routeTrackingOperationalAlert ? (
+                <div aria-label="Current position warning" role="alert">
+                  <s-banner heading={routeTrackingOperationalAlert.title} tone="warning">
+                    <OperationalPillGroup
+                      ariaLabel="Current position warning evidence"
+                      pills={routeTrackingOperationalAlert.pills}
+                    />
+                    <p>{routeTrackingOperationalAlert.message}</p>
+                  </s-banner>
+                </div>
+              ) : null}
               <OperationalPillGroup
                 ariaLabel="Tracking evidence"
                 pills={routeOperationalPresentation.pills}
