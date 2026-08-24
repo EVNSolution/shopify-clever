@@ -97,7 +97,7 @@ function mapGap(deviceProgress, serverProgress, syncHealth) {
   return pill("gap", "Gap none", "success", "Device and server progress counts match");
 }
 
-function mapAlert(operationalState, lifecycle, serverProgress) {
+function mapAlert(operationalState, lifecycle, serverProgress, positionMismatch) {
   const hasAlertEvidence = Array.isArray(operationalState?.activeAlerts);
   const activeAlerts = hasAlertEvidence
     ? operationalState.activeAlerts.filter((alert) => !alert?.resolvedAt)
@@ -105,6 +105,14 @@ function mapAlert(operationalState, lifecycle, serverProgress) {
   const hasCritical = activeAlerts.some((alert) => String(alert?.severity).toUpperCase() === "CRITICAL");
   if (hasCritical) return pill("alert", "Alert critical", "critical", "Active operational alert: critical");
   if (activeAlerts.length > 0) return pill("alert", "Alert warning", "warning", "Active operational alert: warning");
+  if (positionMismatch) {
+    return pill(
+      "alert",
+      "Alert warning",
+      "warning",
+      `Operational alert: current position is ahead with at least ${positionMismatch.earlierUnresolvedCount} earlier stop results unresolved`,
+    );
+  }
 
   const resolved = countOrNull(serverProgress?.resolvedStopCount);
   const total = countOrNull(serverProgress?.totalStopCount);
@@ -116,7 +124,39 @@ function mapAlert(operationalState, lifecycle, serverProgress) {
     : pill("alert", "Alert unknown", "neutral", "Active operational alerts: unknown");
 }
 
-export function mapRouteOperationalState({ operationalState = null, routeStatus = null } = {}) {
+function normalizePositionMismatch(positionMismatch) {
+  if (!positionMismatch) return null;
+  const nearestStopSequence = countOrNull(positionMismatch.nearestStopSequence);
+  const resolvedStopCount = countOrNull(positionMismatch.resolvedStopCount);
+  const totalStopCount = countOrNull(positionMismatch.totalStopCount);
+  const earlierUnresolvedCount = countOrNull(positionMismatch.earlierUnresolvedCount);
+  if (nearestStopSequence === null
+    || nearestStopSequence < 1
+    || resolvedStopCount === null
+    || totalStopCount === null
+    || totalStopCount < 1
+    || earlierUnresolvedCount === null
+    || earlierUnresolvedCount < 1) {
+    return null;
+  }
+
+  return { earlierUnresolvedCount, nearestStopSequence, resolvedStopCount, totalStopCount };
+}
+
+function mapCurrentPositionAlert(positionMismatch, { alert, gap, gpsFreshness, gpsPosition, server, sync }) {
+  if (!positionMismatch) return null;
+
+  const { earlierUnresolvedCount, nearestStopSequence, resolvedStopCount, totalStopCount } = positionMismatch;
+
+  return {
+    message: `GPS is near Stop ${nearestStopSequence}. The server confirms ${resolvedStopCount} of ${totalStopCount} stop results. At least ${earlierUnresolvedCount} earlier planned stop${earlierUnresolvedCount === 1 ? "" : "s"} still ${earlierUnresolvedCount === 1 ? "has" : "have"} no result. GPS proximity does not confirm delivery.`,
+    pills: [alert, gpsFreshness, gpsPosition, server, gap, sync],
+    title: "Current position is ahead of server results",
+    tone: "warning",
+  };
+}
+
+export function mapRouteOperationalState({ operationalState = null, positionMismatch = null, routeStatus = null } = {}) {
   const lifecycle = normalizeLifecycle(operationalState?.routeStatus ?? routeStatus);
   const [gpsFreshness, gpsPosition] = mapGps(operationalState?.physicalPosition);
   const device = mapDevice(operationalState?.deviceProgress);
@@ -127,9 +167,19 @@ export function mapRouteOperationalState({ operationalState = null, routeStatus 
     operationalState?.serverProgress,
     operationalState?.syncHealth,
   );
-  const alert = mapAlert(operationalState, lifecycle, operationalState?.serverProgress);
+  const normalizedPositionMismatch = normalizePositionMismatch(positionMismatch);
+  const alert = mapAlert(operationalState, lifecycle, operationalState?.serverProgress, normalizedPositionMismatch);
+  const currentPositionAlert = mapCurrentPositionAlert(normalizedPositionMismatch, {
+    alert,
+    gap,
+    gpsFreshness,
+    gpsPosition,
+    server,
+    sync,
+  });
   return {
     alert,
+    currentPositionAlert,
     device,
     gap,
     gpsFreshness,
