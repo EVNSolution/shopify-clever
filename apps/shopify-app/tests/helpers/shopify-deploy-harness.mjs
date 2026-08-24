@@ -228,15 +228,23 @@ shasum -a 256 "$@"
 
 const fakeMv = String.raw`#!/usr/bin/env bash
 set -euo pipefail
-if [[ "§{1:-}" == "-Tf" ]]; then
+destination="§{!#}"
+mv_status=0
+if [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -Tf ]]; then
   shift
-  /bin/mv -fh "$@"
-  if [[ -n "§{FAKE_SIGNAL_AFTER_CURRENT:-}" && "§{2:-}" == */current ]]; then
+  /bin/mv -fh "$@" || mv_status=$?
+elif [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -fh ]]; then
+  exit 64
+else
+  /bin/mv "$@" || mv_status=$?
+fi
+if ((mv_status == 0)); then
+  if [[ -n "§{FAKE_SIGNAL_AFTER_CURRENT:-}" && "$destination" == */current ]]; then
     kill -TERM "$PPID"
   fi
   exit 0
 fi
-exec /bin/mv "$@"
+exit "$mv_status"
 `.replaceAll("§", "$");
 
 async function executable(path, source) {

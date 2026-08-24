@@ -41,6 +41,8 @@ test("the workflow passes an exact SHA into target-scoped immutable staging", ()
   assert.match(remote, /flock 9/);
   assert.match(remote, /image="shopify-clever-\$target:\$release_sha"/);
   assert.match(remote, /atomic_link "\$current_link" "releases\/\$release_sha"/);
+  assert.match(remote, /if mv -Tf "\$temporary" "\$link_path"/);
+  assert.match(remote, /mv -fh "\$temporary" "\$link_path"/);
   assert.match(remote, /removed < 10/);
   assert.match(remote, /removed < 5/);
 });
@@ -263,6 +265,18 @@ test("a successful first legacy deploy publishes only the exact SHA after smoke"
   assert.match(await read(fixture.runningFile), new RegExp(`:${newSha}`));
   assert.equal(await read(fixture.sqlitePath), "BASE|WAL|MIGRATED");
   assert.match(await read(fixture.log), new RegExp(`build[\\s\\S]*:${newSha}`));
+});
+
+test("pointer publication succeeds with GNU mv no-dereference semantics", async () => {
+  const fixture = await freshFixture();
+
+  const result = await runDeploy(fixture, { env: { FAKE_MV_FLAVOR: "gnu" } });
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(
+    await readlink(join(fixture.deployPath, "targets/kfood/current")),
+    `releases/${newSha}`,
+  );
 });
 
 test("a missing previous SHA tag is restored before success and survives a later rollback", async () => {

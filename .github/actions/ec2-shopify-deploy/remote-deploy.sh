@@ -414,7 +414,12 @@ atomic_link() {
   temporary="$link_path.tmp-$run_id"
   rm -f "$temporary"
   ln -s "$link_target" "$temporary"
-  mv -Tf "$temporary" "$link_path"
+  # GNU mv uses -T to replace a symlink without following it; BSD mv uses -h.
+  # Both operations are same-filesystem atomic renames of the prepared symlink.
+  if mv -Tf "$temporary" "$link_path" 2>/dev/null; then
+    return 0
+  fi
+  mv -fh "$temporary" "$link_path"
 }
 
 publish_signal_status=0
