@@ -151,11 +151,8 @@ function roundPerfDuration(duration) {
 
 function logRouteDetailPerformance(name, metric = {}) {
   if (typeof window !== "undefined") return;
-
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  void name;
+  void metric;
 }
 
 const ROUTE_DETAIL_MAP_DIAGNOSTIC_ENDPOINT = "/perf";
@@ -169,8 +166,6 @@ function logRouteDetailMapClientDiagnostic(metric = {}) {
     url: window.location.href,
     ...metric,
   };
-  console.info(payload.name, payload);
-
   window.fetch?.(ROUTE_DETAIL_MAP_DIAGNOSTIC_ENDPOINT, {
     body: JSON.stringify(payload),
     headers: { "content-type": "application/json" },
@@ -3837,7 +3832,6 @@ export default function RouteDetailPage() {
         if (!hasTrackingStream) setTrackingConnectionState("idle");
       } catch (error) {
         if (!isDisposed && !controller.signal.aborted) {
-          console.warn("Route tracking snapshot is unavailable.", error);
           if (!hasTrackingStream) setTrackingConnectionState("unavailable");
         }
       }
@@ -3974,7 +3968,6 @@ export default function RouteDetailPage() {
         }
       } catch (error) {
         if (!isDisposed && !controller.signal.aborted) {
-          console.warn("Route tracking stream disconnected.", error);
           setTrackingConnectionState([404, 501].includes(lastFailureStatus) ? "unavailable" : "disconnected");
         }
       } finally {

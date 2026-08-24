@@ -101,11 +101,6 @@ export const action = async ({ request }) => {
     const attemptId = formText(formData.get("attemptId")) || crypto.randomUUID();
     const recipientEmail = formText(formData.get("recipientEmail"));
     const signal = formText(formData.get("signal"));
-    console.info("customer_email.test.action.received", {
-      attemptId,
-      recipientDomain: emailDomain(recipientEmail),
-      signal,
-    });
     const result = await sendCustomerEmailTest(request, {
       attemptId,
       body: formText(formData.get("body")),
@@ -114,12 +109,6 @@ export const action = async ({ request }) => {
       signal,
       subject: formText(formData.get("subject")),
     }, { sessionToken: formText(formData.get("shopifySessionToken")) });
-    console.info("customer_email.test.action.completed", {
-      attemptId,
-      errorCount: result.errors.length,
-      messageId: result.test?.messageId ?? null,
-      provider: result.test?.provider ?? null,
-    });
     return result;
   }
 
@@ -231,11 +220,6 @@ function numberFromFormValue(value) {
   const number = Number(value);
 
   return Number.isFinite(number) ? number : undefined;
-}
-
-function emailDomain(value) {
-  const separator = value.lastIndexOf("@");
-  return separator >= 0 ? value.slice(separator + 1).trim().toLowerCase() || null : null;
 }
 
 export default function CustomerNotificationsSettingsPage() {
@@ -352,11 +336,6 @@ function CustomerEmailSettings({ initialSettings }) {
     formData.set("shopifySessionToken", await shopify.idToken());
     if (nextIntent === "testCustomerEmail") {
       const attemptId = crypto.randomUUID();
-      console.info("customer_email.test.button.clicked", {
-        attemptId,
-        recipientDomain: emailDomain(testRecipient),
-        signal: templateEditorSignal,
-      });
       formData.set("attemptId", attemptId);
       formData.set("body", renderTemplatePreviewValue(templateDraft.body));
       formData.set("confirmed", String(testConfirmed));

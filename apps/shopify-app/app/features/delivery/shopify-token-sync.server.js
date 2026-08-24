@@ -1,4 +1,5 @@
 import { getDeliveryApiBaseUrl } from "./route-plans.server.js";
+import { logSafeOperationalEvent } from "../telemetry/structured-telemetry.server.js";
 
 const TOKEN_SYNC_TTL_MS = 5 * 60 * 1000;
 const TOKEN_HEALTH_RETENTION_MS = 12 * TOKEN_SYNC_TTL_MS;
@@ -210,10 +211,9 @@ function publicHealth(health) {
 }
 
 function logTokenSyncHealth(health, stage) {
-  console.warn(JSON.stringify({
-    event: "shopify_token_sync",
+  logSafeOperationalEvent("warn", "shopify_token_sync", {
     errorCode: health.errorCode,
     stage,
     status: health.status,
-  }));
+  });
 }

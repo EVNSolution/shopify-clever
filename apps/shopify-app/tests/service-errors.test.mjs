@@ -74,8 +74,6 @@ test("service error notice logs internal diagnostics without changing user copy"
       context: "orders_page:test",
       errors: [{
         code: "DELIVERY_API_ERROR",
-        message: "Delivery orders API 호출에 실패했습니다.",
-        path: "/admin/orders",
         status: 404,
       }],
     },

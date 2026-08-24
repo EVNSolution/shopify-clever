@@ -475,14 +475,10 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.doesNotMatch(routesPageSource, /function createRouteDetailHref/);
   assert.match(routeGroupDetailSource, /routePlan: null/);
   assert.match(routeGroupDetailSource, /route_group_detail\.api\.summary/);
-  assert.match(routeGroupDetailSource, /"delivery\.routeGroupDetail"/);
-  assert.match(routeGroupDetailSource, /"shopify\.departureLocation"/);
-  assert.match(routeGroupDetailSource, /"delivery\.drivers"/);
-  assert.match(routeGroupDetailSource, /ok: errorCount === 0/);
-  assert.match(routeGroupDetailSource, /keys: getTopLevelKeys\(result\)/);
-  assert.match(routeGroupDetailSource, /assignmentCount: routeGroupData\.routeGroup\?\.assignments\?\.length \?\? 0/);
-  assert.match(routeGroupDetailSource, /childCount: routeGroupData\.routeGroup\?\.children\?\.length \?\? 0/);
-  assert.match(routeGroupDetailSource, /driverCount: driverData\.drivers\?\.length \?\? 0/);
+  assert.match(routeGroupDetailSource, /logStructuredMetric\("route_group_detail\.api\.summary"/);
+  assert.match(routeGroupDetailSource, /count: 3/);
+  assert.match(routeGroupDetailSource, /routeGroupCount: routeGroupData\.routeGroup \? 1 : 0/);
+  assert.doesNotMatch(routeGroupDetailSource, /keys: getTopLevelKeys|driverData\.drivers\?\.length/);
   assert.match(routeGroupDetailSource, /logRouteGroupApiSummary\(\{ routeGroupData, departureLocationData, driverData \}\)/);
   assert.match(routeGroupDetailSource, /resolveRouteTimeZone\(\{[\s\S]*departureLocation: departureLocationData\.departureLocation,[\s\S]*routePlan: null/);
   assert.match(routeGroupDetailSource, /ianaTimezone: routeTimeZoneData\.ianaTimezone/);

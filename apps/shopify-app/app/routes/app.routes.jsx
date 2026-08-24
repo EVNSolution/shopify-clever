@@ -18,6 +18,7 @@ import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { OperationalPillGroup } from "../ui/operational-pill-group";
+import { logStructuredMetric } from "../features/telemetry/structured-telemetry.server";
 
 const routesTablePageStyle = {
   padding: "8px 12px 12px",
@@ -304,10 +305,7 @@ const routesErrorStyle = {
 };
 
 function logRouteDeleteAction(name, metric = {}) {
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  logStructuredMetric(name, metric);
 }
 
 export const loader = async ({ request }) => {

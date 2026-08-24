@@ -12,6 +12,7 @@ import {
 } from "../features/orders/inventory-payment";
 import { getServiceErrorNotice } from "../features/service-errors";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
+import { logStructuredMetric } from "../features/telemetry/structured-telemetry.server";
 
 export const meta = ({ data }) => [{ title: data?.inventory?.name ?? "Inventory" }];
 
@@ -716,7 +717,7 @@ export const loader = async ({ request }) => {
   const inventoryId = new URL(request.url).searchParams.get("id");
   const result = await fetchDeliveryInventoryOrderView(request, inventoryId);
   const errors = result.errors ?? [];
-  logInventoryDetailPayload(inventoryId, result, buildInventoryDetailApiPath(inventoryId));
+  logInventoryDetailPayload(result);
   return {
     errors,
     generatedAt: new Date().toISOString(),
@@ -735,14 +736,9 @@ function hasSessionTokenRefreshError(errors) {
   );
 }
 
-function buildInventoryDetailApiPath(inventoryId) {
-  return inventoryId ? `/admin/inventories/${encodeURIComponent(inventoryId)}/order-view` : null;
-}
-
-function logInventoryDetailPayload(inventoryId, result, apiPath) {
+function logInventoryDetailPayload(result) {
   const inventory = result.inventory;
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
-  const summaryItems = Array.isArray(inventory?.itemSummary?.items) ? inventory.itemSummary.items : [];
   const orderItems = orders.flatMap((order) => (Array.isArray(order?.items) ? order.items : []));
   const emptyItemReason = getEmptyInventoryItemReason({
     errorCount: result.errors?.length ?? 0,
@@ -751,21 +747,13 @@ function logInventoryDetailPayload(inventoryId, result, apiPath) {
     summaryQuantity: Number(inventory?.itemSummary?.totalQuantity) || 0,
   });
 
-  console.info("orders.inventory.detail.api", {
-    apiPath,
-    emptyItemReason,
+  logStructuredMetric("orders.inventory.detail.api", {
+    category: "inventory",
     errorCount: result.errors?.length ?? 0,
-    firstOrderItemKeys: Object.keys(orderItems[0] ?? {}),
-    firstOrderKeys: Object.keys(orders[0] ?? {}),
-    inventoryId,
-    name: inventory?.name ?? null,
-    orderIdsCount: Array.isArray(inventory?.orderIds) ? inventory.orderIds.length : null,
-    ordersCount: orders.length,
-    ordersCountField: inventory?.ordersCount ?? null,
-    orderItemLines: orderItems.length,
-    orderItemQuantity: sumItemQuantity(orderItems),
-    summaryItemLines: summaryItems.length,
-    summaryItemQuantity: Number(inventory?.itemSummary?.totalQuantity) || 0,
+    orderCount: orders.length,
+    rowCount: orderItems.length,
+    status: emptyItemReason ?? "ok",
+    totalCount: sumItemQuantity(orderItems),
   });
 }
 

@@ -1,4 +1,5 @@
 import { redirect } from "react-router";
+import { logStructuredMetric } from "../telemetry/structured-telemetry.server.js";
 
 import { fetchDeliveryDrivers } from "./drivers.server";
 import {
@@ -75,11 +76,7 @@ function getRouteDetailPerfNow() {
 
 function logRouteDetailPerformance(name, metric = {}) {
   if (typeof window !== "undefined") return;
-
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  logStructuredMetric(name, metric);
 }
 
 function isFiniteCoordinate(value) {

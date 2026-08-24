@@ -2487,14 +2487,13 @@ test("Orders inventory detail shows a printable product matrix without delta", (
 });
 
 test("Orders inventory detail logs API payload counts on the server", () => {
-  assert.match(inventoryDetailSource, /console\.info\("orders\.inventory\.detail\.api"/);
-  assert.match(inventoryDetailSource, /apiPath/);
+  assert.match(inventoryDetailSource, /logStructuredMetric\("orders\.inventory\.detail\.api"/);
   assert.match(inventoryDetailSource, /emptyItemReason/);
   assert.match(inventoryDetailSource, /orders_present_without_items/);
-  assert.match(inventoryDetailSource, /ordersCountField/);
-  assert.match(inventoryDetailSource, /orderItemQuantity/);
-  assert.match(inventoryDetailSource, /summaryItemQuantity/);
-  assert.match(inventoryDetailSource, /firstOrderItemKeys/);
+  assert.match(inventoryDetailSource, /orderCount: orders\.length/);
+  assert.match(inventoryDetailSource, /rowCount: orderItems\.length/);
+  assert.match(inventoryDetailSource, /totalCount: sumItemQuantity\(orderItems\)/);
+  assert.doesNotMatch(inventoryDetailSource, /inventoryId:|name: inventory\?\.name|firstOrderItemKeys/);
 });
 
 test("Orders inventory detail renders payment method and status independently", () => {

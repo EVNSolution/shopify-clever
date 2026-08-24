@@ -45,12 +45,6 @@ export function AdminRouteErrorBoundary() {
     throw error;
   }
 
-  console.error("admin_route_error", {
-    kind: presentation.kind,
-    status: Number(error?.status) || null,
-    statusText: typeof error?.statusText === "string" ? error.statusText : null,
-  });
-
   return (
     <main role="alert" style={pageStyle}>
       <section style={cardStyle}>

@@ -9,6 +9,7 @@ import {
   getVisibleRouteGroupChildren,
   textOrUndefined,
 } from "./route-helpers.js";
+import { logStructuredMetric } from "../telemetry/structured-telemetry.server.js";
 
 export const DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_GROUP_ID_MISSING";
 const ROUTE_GROUP_COPY_MODES = new Set(["REFERENCE", "VIRTUAL"]);
@@ -58,10 +59,7 @@ export function buildRouteGroupAddOrdersDraft(routeGroup, addedOrderIds = [], ta
 }
 
 function logRouteGroupLifecycle(name, metric = {}) {
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  logStructuredMetric(name, metric);
 }
 
 function summarizeRouteGroupForLog(routeGroup) {

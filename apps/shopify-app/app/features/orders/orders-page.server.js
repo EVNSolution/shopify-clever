@@ -120,11 +120,7 @@ function getDeliveryOnlyShopTimeZoneData() {
 
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
-
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  logStructuredMetric(name, metric);
 }
 
 function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, routeScope }) {

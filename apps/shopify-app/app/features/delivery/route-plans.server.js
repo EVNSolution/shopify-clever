@@ -3,9 +3,9 @@ import { createHash } from "node:crypto";
 import { buildRouteScopeFromOrders } from "./route-scope.js";
 import {
   createTelemetryRequestId,
+  logSafeOperationalEvent,
   logStructuredMetric,
   sanitizeRequestPath,
-  sanitizeTelemetryValue,
 } from "../telemetry/structured-telemetry.server.js";
 
 const DEFAULT_CLEVER_APP_ID = "clever";
@@ -26,10 +26,7 @@ const customFetchCacheIds = new WeakMap();
 let nextCustomFetchCacheId = 1;
 
 function logRoutePlanLifecycle(name, metric = {}) {
-  console.info(name, {
-    measuredAt: new Date().toISOString(),
-    ...metric,
-  });
+  logStructuredMetric(name, metric);
 }
 
 export function getShopifySessionBearer(request) {
@@ -791,16 +788,19 @@ function shouldSuppressDeliveryApiError(status, suppressErrorStatuses) {
   return Array.isArray(suppressErrorStatuses) && suppressErrorStatuses.includes(status);
 }
 
-function logDeliveryApiFailure({ appId, correlationId, error, method, path, status }) {
-  console.warn("delivery_api_request_failed", {
-    appId,
+function logDeliveryApiFailure({ correlationId, error, status }) {
+  logSafeOperationalEvent("warn", "delivery_api_request_failed", {
     correlationId,
-    code: error?.code ?? DELIVERY_API_ERROR_CODE,
-    message: sanitizeTelemetryValue(error?.message),
-    method,
-    path: sanitizeRequestPath(path),
-    status,
+    errorCode: stableDeliveryApiErrorCode(error?.code),
+    httpStatus: Number.isInteger(status) && status > 0 ? status : undefined,
+    stage: "delivery_api_request",
   });
+}
+
+function stableDeliveryApiErrorCode(value) {
+  return typeof value === "string" && /^[A-Z][A-Z0-9_]{0,119}$/u.test(value)
+    ? value
+    : DELIVERY_API_ERROR_CODE;
 }
 
 function logDeliveryApiTiming({ appId, correlationId, durationMs, errorCount, method, path, status }) {
