@@ -61,7 +61,7 @@ test("grouped route rows join enriched Kitchener state by route plan id", () => 
     "Device 11/11",
     "Server 1/11",
     "Sync blocked",
-    "Gap 10 stops",
+    "Device ahead 10 stops",
     "Alert warning",
   ]);
 });

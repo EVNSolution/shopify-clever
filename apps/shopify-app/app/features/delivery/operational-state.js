@@ -79,16 +79,27 @@ function mapSync(syncHealth) {
   return pill("sync", label, tone, `Sync state: ${label.slice(5)}`);
 }
 
-function mapGap(deviceProgress, serverProgress) {
+function mapGap(deviceProgress, serverProgress, syncHealth) {
   const device = countOrNull(deviceProgress?.completedStopCount);
   const server = countOrNull(serverProgress?.resolvedStopCount);
   if (device === null || server === null) return pill("gap", "Gap unknown", "neutral", "Device to server gap: unknown");
-  const gap = Math.max(0, device - server);
-  return pill("gap", gap === 0 ? "Gap none" : `Gap ${gap} stops`, gap === 0 ? "success" : "warning", `Device to server gap: ${gap} stops`);
+  if (device > server) {
+    const gap = device - server;
+    return pill("gap", `Device ahead ${gap} stops`, "warning", `Progress gap: device ahead by ${gap} stops`);
+  }
+  if (server > device) {
+    const gap = server - device;
+    return pill("gap", `Server ahead ${gap} stops`, "warning", `Progress gap: server ahead by ${gap} stops`);
+  }
+  if (String(syncHealth?.state ?? "UNKNOWN").toUpperCase() === "BLOCKED") {
+    return pill("gap", "Gap blocked", "critical", "Progress counts match, but sync is blocked");
+  }
+  return pill("gap", "Gap none", "success", "Device and server progress counts match");
 }
 
 function mapAlert(operationalState, lifecycle, serverProgress) {
-  const activeAlerts = Array.isArray(operationalState?.activeAlerts)
+  const hasAlertEvidence = Array.isArray(operationalState?.activeAlerts);
+  const activeAlerts = hasAlertEvidence
     ? operationalState.activeAlerts.filter((alert) => !alert?.resolvedAt)
     : [];
   const hasCritical = activeAlerts.some((alert) => String(alert?.severity).toUpperCase() === "CRITICAL");
@@ -100,7 +111,7 @@ function mapAlert(operationalState, lifecycle, serverProgress) {
   if (lifecycle.label === "Route completed" && resolved !== null && total !== null && resolved < total) {
     return pill("alert", "Alert unresolved results", "critical", `Operational alert: route completed with ${total - resolved} unresolved stop results`);
   }
-  return operationalState
+  return hasAlertEvidence
     ? pill("alert", "Alert none", "success", "Active operational alerts: none")
     : pill("alert", "Alert unknown", "neutral", "Active operational alerts: unknown");
 }
@@ -111,7 +122,11 @@ export function mapRouteOperationalState({ operationalState = null, routeStatus 
   const device = mapDevice(operationalState?.deviceProgress);
   const server = mapServer(operationalState?.serverProgress);
   const sync = mapSync(operationalState?.syncHealth);
-  const gap = mapGap(operationalState?.deviceProgress, operationalState?.serverProgress);
+  const gap = mapGap(
+    operationalState?.deviceProgress,
+    operationalState?.serverProgress,
+    operationalState?.syncHealth,
+  );
   const alert = mapAlert(operationalState, lifecycle, operationalState?.serverProgress);
   return {
     alert,

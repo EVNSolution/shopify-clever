@@ -23,7 +23,7 @@ test("Kitchener evidence stays separated into independently sourced pills", () =
     "Device 11/11",
     "Server 1/11",
     "Sync blocked",
-    "Gap 10 stops",
+    "Device ahead 10 stops",
     "Alert warning",
   ]);
   assert.ok(result.pills.every((item) => item.ariaLabel && !/[·•]/u.test(item.label)));
@@ -58,6 +58,49 @@ test("null progress counts remain unknown rather than becoming zero", () => {
   assert.equal(result.device.label, "Device unknown");
   assert.equal(result.server.label, "Server unknown");
   assert.equal(result.gap.label, "Gap unknown");
+});
+
+test("server-ahead progress stays directional instead of collapsing into green no-gap", () => {
+  const result = mapRouteOperationalState({
+    operationalState: {
+      activeAlerts: [],
+      deviceProgress: { completedStopCount: 3, totalStopCount: 11 },
+      serverProgress: { resolvedStopCount: 5, totalStopCount: 11 },
+      syncHealth: { state: "HEALTHY" },
+    },
+  });
+  assert.equal(result.gap.label, "Server ahead 2 stops");
+  assert.equal(result.gap.tone, "warning");
+});
+
+test("equal progress remains visibly blocked when sync evidence is blocked", () => {
+  const result = mapRouteOperationalState({
+    operationalState: {
+      activeAlerts: [],
+      deviceProgress: { completedStopCount: 5, totalStopCount: 11 },
+      serverProgress: { resolvedStopCount: 5, totalStopCount: 11 },
+      syncHealth: { state: "BLOCKED" },
+    },
+  });
+  assert.equal(result.gap.label, "Gap blocked");
+  assert.equal(result.gap.tone, "critical");
+  assert.notEqual(result.gap.tone, "success");
+});
+
+test("missing or malformed alert evidence stays unknown while explicit empty evidence is none", () => {
+  const missing = mapRouteOperationalState({ operationalState: { routeStatus: "IN_PROGRESS" } });
+  const malformed = mapRouteOperationalState({
+    operationalState: { activeAlerts: { length: 0 }, routeStatus: "IN_PROGRESS" },
+  });
+  const explicitNone = mapRouteOperationalState({
+    operationalState: { activeAlerts: [], routeStatus: "IN_PROGRESS" },
+  });
+
+  assert.equal(missing.alert.label, "Alert unknown");
+  assert.equal(missing.alert.tone, "neutral");
+  assert.equal(malformed.alert.label, "Alert unknown");
+  assert.equal(explicitNone.alert.label, "Alert none");
+  assert.equal(explicitNone.alert.tone, "success");
 });
 
 test("completed routes with unresolved server results remain visibly critical", () => {
