@@ -16,18 +16,29 @@ The release directory contains no runtime env file. Its `infra/env` path is a
 symlink to the persistent `${DEPLOY_PATH}/infra/env` directory, which is excluded
 from source synchronization.
 
+`DEPLOY_PATH` is fail-closed to the approved `/srv/shopify-clever` root. The
+workflow validates it before remote directory creation or rsync, and the remote
+script independently derives and checks the target/SHA/run staging path.
+
 ## Transaction boundary
 
 The deployment holds `${DEPLOY_PATH}/locks/shopify-<target>.lock` while it:
 
 1. validates an immutable release staged under the exact Git commit SHA;
-2. builds `shopify-clever-<target>:<commit-sha>` and validates Compose config;
-3. stops the live target, checkpoints SQLite WAL, and creates a SQLite `.backup`;
-4. records `quick_check`, SHA-256, and file-mode evidence for that backup;
-5. runs migration deploy, migration status, and schema drift checks;
-6. starts only the exact-SHA image and runs the context-free login smoke;
-7. switches `previous` and `current` atomically after the smoke passes; and
-8. prunes only old directories carrying valid target/SHA ownership markers.
+2. pins the running container image ID to a run-unique rollback tag and validates
+   that rollback Compose snapshot before building anything;
+3. checks free disk for a bounded image budget plus three database copies;
+4. builds `shopify-clever-<target>:<commit-sha>` and validates Compose config;
+5. stops the live target, checkpoints SQLite WAL, and creates a SQLite `.backup`;
+6. records `quick_check`, SHA-256, and file-mode evidence for that backup;
+7. runs migration deploy, migration status, and schema drift checks;
+8. starts only the exact-SHA image and runs the context-free login smoke;
+9. switches `previous` and `current` atomically after the smoke passes; and
+10. performs bounded cleanup of aged marked staging data, orphaned overrides,
+    and unused labeled images, never current, previous, or running images.
+
+If a live container cannot be mapped to a validated legacy or immutable-release
+Compose snapshot, deployment stops before build, stop, or database mutation.
 
 Targets use separate locks, so K-food and production do not block each other.
 Two deployments of the same target serialize even if workflow runs overlap.

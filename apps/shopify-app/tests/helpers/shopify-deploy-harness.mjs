@@ -17,11 +17,48 @@ if [[ "§{1:-}" == "build" ]]; then
 fi
 
 if [[ "§{1:-}" == "inspect" ]]; then
-  printf '%s\n' 'sha256:legacy-image'
+  if [[ "$*" == *'Config.Labels'* ]]; then
+    reference="§{!#}"
+    target_and_sha="§{reference#shopify-clever-}"
+    printf 'true|%s|%s\n' "§{target_and_sha%%:*}" "§{target_and_sha#*:}"
+  else
+    printf '%s\n' 'sha256:legacy-image'
+  fi
+  exit 0
+fi
+
+if [[ "§{1:-}" == "image" && "§{2:-}" == "inspect" ]]; then
+  reference="§{!#}"
+  if [[ "$*" == *'Config.Labels'* ]]; then
+    if [[ "$reference" == sha256:candidate-* ]]; then
+      printf 'true|%s|%s\n' "$FAKE_TARGET" "§{reference#sha256:candidate-}"
+    else
+      target_and_sha="§{reference#shopify-clever-}"
+      printf 'true|%s|%s\n' "§{target_and_sha%%:*}" "§{target_and_sha#*:}"
+    fi
+  elif [[ "$reference" == *rollback* ]]; then
+    printf '%s\n' 'sha256:legacy-image'
+  elif [[ "$reference" == shopify-clever-*:* ]]; then
+    printf 'sha256:candidate-%s\n' "§{reference#*:}"
+  else
+    printf '%s\n' "$reference"
+  fi
+  exit 0
+fi
+
+if [[ "§{1:-}" == "image" && "§{2:-}" == "ls" ]]; then
+  [[ -z "§{FAKE_IMAGE_LIST:-}" ]] || printf '%s\n' "$FAKE_IMAGE_LIST"
   exit 0
 fi
 
 if [[ "§{1:-}" == "image" && "§{2:-}" == "tag" ]]; then
+  if [[ "§{FAIL_STAGE:-}" == "tag-missing" ]]; then
+    exit 43
+  fi
+  exit 0
+fi
+
+if [[ "§{1:-}" == "image" && "§{2:-}" == "rm" ]]; then
   exit 0
 fi
 
@@ -51,10 +88,18 @@ case "$operation" in
     ;;
   stop)
     rm -f "$FAKE_RUNNING_FILE"
+    if [[ "§{FAIL_STAGE:-}" == "stop" ]]; then
+      exit 42
+    fi
     ;;
   run)
     if [[ "$*" == *"prisma:migrate:deploy"* ]]; then
       printf '%s' '|MIGRATED' >> "$FAKE_SQLITE_PATH"
+      if [[ "§{FAIL_STAGE:-}" == "signal" ]]; then
+        kill -TERM "$PPID"
+        sleep 0.2
+        exit 143
+      fi
       if [[ "§{FAIL_STAGE:-}" == "migration" ]]; then
         exit 40
       fi
@@ -134,8 +179,19 @@ if [[ "$1" == "-c" && "$2" == "%a" ]]; then
   printf '%s\n' 600
   exit 0
 fi
+if [[ "$1" == "-c" && "$2" == "%s" ]]; then
+  wc -c < "$3" | tr -d '[:space:]'
+  printf '\n'
+  exit 0
+fi
 exec /usr/bin/stat "$@"
 `;
+
+const fakeDf = String.raw`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' 'Filesystem 1024-blocks Used Available Capacity Mounted on'
+printf 'fake 99999999 1 %s 1%% /\n' "§{FAKE_DISK_FREE_KB:-99999998}"
+`.replaceAll("§", "$");
 
 const fakeSha256sum = String.raw`#!/usr/bin/env bash
 set -euo pipefail
@@ -176,7 +232,7 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
     "targets",
     target,
     "incoming",
-    `${sha}-run`,
+    `${sha}-test-run`,
   );
   const sqlitePath = join(root, `${target}.sqlite`);
   const bin = join(root, "bin");
@@ -185,6 +241,10 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
   await mkdir(bin, { recursive: true });
   await mkdir(join(deployPath, "infra/env"), { recursive: true });
   await createReleaseTree(incoming, target);
+  await writeFile(
+    join(incoming, ".shopify-incoming"),
+    `target=${target}\nsha=${sha}\nrun_id=test-run\n`,
+  );
   await writeFile(join(deployPath, "infra/env/runtime.env"), "SECRET=preserved\n", {
     mode: 0o600,
   });
@@ -199,6 +259,7 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
   await executable(join(bin, "sudo"), fakeSudo);
   await executable(join(bin, "flock"), fakeFlock);
   await executable(join(bin, "stat"), fakeStat);
+  await executable(join(bin, "df"), fakeDf);
   await executable(join(bin, "sha256sum"), fakeSha256sum);
   await executable(join(bin, "mv"), fakeMv);
   await createReleaseTree(deployPath, target);
@@ -216,6 +277,9 @@ export async function createDeployFixture(root, { target = "kfood", sha }) {
       FAKE_RUNNING_FILE: runningFile,
       FAKE_SQLITE_PATH: sqlitePath,
       FAKE_NEW_SHA: sha,
+      FAKE_TARGET: target,
+      SHOPIFY_DEPLOY_TEST_MODE: "1",
+      SHOPIFY_DEPLOY_TEST_ROOT: deployPath,
       SHOPIFY_DEPLOY_SMOKE_ATTEMPTS: "1",
       SHOPIFY_DEPLOY_SMOKE_DELAY_SECONDS: "0",
     },

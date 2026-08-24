@@ -38,8 +38,7 @@ runs:
         test -n "${{ inputs.ec2-ssh-key }}"
         [[ "${{ inputs.ec2-host }}" =~ ^[A-Za-z0-9.-]+$ ]]
         [[ "${{ inputs.ec2-user }}" =~ ^[A-Za-z0-9._-]+$ ]]
-        [[ "${{ inputs.deploy-path }}" =~ ^/[A-Za-z0-9._/-]+$ ]]
-        [[ "${{ inputs.deploy-path }}" != *'/../'* ]]
+        [[ "${{ inputs.deploy-path }}" == /srv/shopify-clever ]]
         [[ "${{ inputs.target }}" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]]
         [[ "${{ inputs.release-sha }}" =~ ^[0-9a-f]{40}$ ]]
 
@@ -94,11 +93,20 @@ runs:
         set -euo pipefail
         run_id="${GITHUB_RUN_ID:-local}-${GITHUB_RUN_ATTEMPT:-1}"
         incoming_path="${{ inputs.deploy-path }}/targets/${{ inputs.target }}/incoming/${{ inputs.release-sha }}-$run_id"
-        printf -v prepare_command 'mkdir -p %q' "$incoming_path"
+        incoming_marker="$incoming_path/.shopify-incoming"
+        printf -v prepare_command \
+          'test %q = /srv/shopify-clever && test -d /srv && available_kb=$(df -Pk /srv | awk '\''NR == 2 { print $4 }'\'') && test "$available_kb" -ge 1048576 && mkdir -p %q && printf '\''%%s\\n'\'' %q %q %q > %q' \
+          "${{ inputs.deploy-path }}" \
+          "$incoming_path" \
+          "target=${{ inputs.target }}" \
+          "sha=${{ inputs.release-sha }}" \
+          "run_id=$run_id" \
+          "$incoming_marker"
         ssh -i ~/.ssh/deploy_key -o StrictHostKeyChecking=yes \
           "${{ inputs.ec2-user }}@${{ inputs.ec2-host }}" "$prepare_command"
         rsync -az --delete \
           --exclude '.git/' \
+          --exclude '.shopify-incoming' \
           --exclude 'node_modules/' \
           --exclude 'build/' \
           --exclude 'dist/' \

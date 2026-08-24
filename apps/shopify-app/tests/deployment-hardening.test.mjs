@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { access, lstat, mkdir, mkdtemp, readlink, rm, writeFile } from "node:fs/promises";
+import { access, lstat, mkdir, mkdtemp, readlink, rm, utimes, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -32,25 +32,41 @@ test("the workflow passes an exact SHA into target-scoped immutable staging", ()
   assert.match(workflow, /group: shopify-clever-ec2-deploy-\$\{\{ inputs\.target \}\}/);
   assert.match(workflow, /release-sha: \$\{\{ github\.sha \}\}/);
   assert.match(action, /targets\/\$\{\{ inputs\.target \}\}\/incoming/);
+  assert.match(action, /inputs\.deploy-path \}\}" == \/srv\/shopify-clever/);
+  assert.ok(
+    action.indexOf("== /srv/shopify-clever") < action.indexOf("mkdir -p %q"),
+    "approved-root validation must precede remote staging writes",
+  );
   assert.doesNotMatch(action, /:\$\{\{ inputs\.deploy-path \}\}\/"/);
   assert.match(remote, /flock 9/);
   assert.match(remote, /image="shopify-clever-\$target:\$release_sha"/);
   assert.match(remote, /atomic_link "\$current_link" "releases\/\$release_sha"/);
+  assert.match(remote, /removed < 10/);
+  assert.match(remote, /removed < 5/);
 });
 
-function runDeploy(fixture, { target = "kfood", sha = newSha, env = {} } = {}) {
+function runDeploy(
+  fixture,
+  {
+    target = "kfood",
+    sha = newSha,
+    env = {},
+    deployPath = fixture.deployPath,
+    incoming = fixture.incoming,
+  } = {},
+) {
   const child = spawn(
     "bash",
     [
       deployScript,
       "--deploy-path",
-      fixture.deployPath,
+      deployPath,
       "--target",
       target,
       "--release-sha",
       sha,
       "--incoming-path",
-      fixture.incoming,
+      incoming,
       "--compose-file",
       "infra/compose/deploy.yml",
       "--service",
@@ -98,6 +114,96 @@ for (const stage of ["migration", "restart", "smoke"]) {
   });
 }
 
+test("a same-SHA retry rolls back through the pre-build image snapshot", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: newSha });
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "smoke" } });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.match(await read(fixture.runningFile), /rollback-test-run/);
+  const log = await read(fixture.log);
+  assert.match(log, /image tag sha256:legacy-image shopify-clever-kfood:rollback-test-run/);
+  assert.match(log, new RegExp(`image tag sha256:legacy-image shopify-clever-kfood:${newSha}`));
+  assert.doesNotMatch(log, new RegExp(`image rm shopify-clever-kfood:${newSha}`));
+});
+
+test("a partially failing stop still restarts and verifies the prior runtime", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "stop" } });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await read(fixture.sqlitePath), "BASE");
+  assert.match(await read(fixture.runningFile), /rollback-test-run/);
+  assert.match(result.stdout + result.stderr, /ROLLBACK_SMOKE=passed/);
+});
+
+test("a missing rollback tag fails before build and leaves the live runtime untouched", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "tag-missing" } });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await read(fixture.runningFile), "legacy-image\n");
+  assert.equal(await read(fixture.sqlitePath), "BASE");
+  assert.doesNotMatch(await read(fixture.log), /^build /m);
+});
+
+test("disk exhaustion fails before build, stop, or database mutation", async () => {
+  const fixture = await freshFixture();
+
+  const result = await runDeploy(fixture, { env: { FAKE_DISK_FREE_KB: "1024" } });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /insufficient disk space/);
+  assert.equal(await read(fixture.runningFile), "legacy-image\n");
+  assert.equal(await read(fixture.sqlitePath), "BASE");
+  assert.doesNotMatch(await read(fixture.log), /^build /m);
+});
+
+test("deploy path traversal is rejected before any filesystem or runtime write", async () => {
+  const fixture = await freshFixture();
+  const unsafePath = `${fixture.deployPath}/../escape`;
+
+  const result = await runDeploy(fixture, {
+    deployPath: unsafePath,
+    incoming: `${unsafePath}/targets/kfood/incoming/${newSha}-test-run`,
+  });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /deploy path/);
+  assert.equal(await read(fixture.log), "");
+  assert.equal(await read(fixture.runningFile), "legacy-image\n");
+});
+
+test("termination during migration restores the database and prior runtime", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "signal" } });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await read(fixture.sqlitePath), "BASE|WAL");
+  assert.match(await read(fixture.runningFile), /rollback-test-run/);
+  assert.match(result.stdout + result.stderr, /ROLLBACK_SMOKE=passed/);
+});
+
+test("a live legacy runtime without a provable compose rollback fails closed before build or stop", async () => {
+  const fixture = await freshFixture();
+  await rm(join(fixture.deployPath, "infra/compose/deploy.yml"));
+
+  const result = await runDeploy(fixture);
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await read(fixture.sqlitePath), "BASE");
+  assert.equal(await read(fixture.runningFile), "legacy-image\n");
+  assert.doesNotMatch(await read(fixture.log), /^build /m);
+  assert.doesNotMatch(await read(fixture.log), / stop app$/m);
+});
+
 test("a failed first deployment restores the database without inventing a previous service", async () => {
   const fixture = await freshFixture();
   await rm(fixture.runningFile);
@@ -132,7 +238,7 @@ test("same-target executions serialize while different targets use independent l
   const secondIncoming = join(
     first.deployPath,
     "targets/kfood/incoming",
-    `${secondSha}-run`,
+    `${secondSha}-test-run`,
   );
   await mkdir(join(secondIncoming, "infra/compose"), { recursive: true });
   await mkdir(join(secondIncoming, "apps/shopify-app"), { recursive: true });
@@ -141,6 +247,10 @@ test("same-target executions serialize while different targets use independent l
     "name: fake-kfood\nservices:\n  app:\n    image: mutable:local\n",
   );
   await writeFile(join(secondIncoming, "apps/shopify-app/Dockerfile"), "FROM scratch\n");
+  await writeFile(
+    join(secondIncoming, ".shopify-incoming"),
+    `target=kfood\nsha=${secondSha}\nrun_id=test-run\n`,
+  );
   const second = { ...first, incoming: secondIncoming };
   const activeDir = join(sameRoot, "active");
   const overlap = join(sameRoot, "overlap");
@@ -202,4 +312,56 @@ test("pruning deletes only marked stale releases and preserves current, previous
   assert.equal((await lstat(unmarked)).isDirectory(), true);
   assert.equal((await lstat(join(targetRoot, "releases", oldSha))).isDirectory(), true);
   assert.equal((await lstat(join(targetRoot, "releases", newSha))).isDirectory(), true);
+  const log = await read(fixture.log);
+  assert.match(log, /image rm shopify-clever-kfood:/);
+  assert.doesNotMatch(log, new RegExp(`image rm shopify-clever-kfood:(?:${oldSha}|${newSha})`));
+});
+
+test("orphan cleanup removes aged overrides and unused labeled images but preserves protected SHAs", async () => {
+  const fixture = await freshFixture();
+  const targetRoot = join(fixture.deployPath, "targets/kfood");
+  await addCurrentRelease(fixture, { sha: oldSha });
+  const orphanSha = "6".repeat(40);
+  const orphanOverride = join(targetRoot, "runtime", `${orphanSha}.override.yml`);
+  await writeFile(orphanOverride, "services: {}\n");
+  const oldTime = new Date(Date.now() - 8 * 24 * 60 * 60 * 1000);
+  await utimes(orphanOverride, oldTime, oldTime);
+
+  const result = await runDeploy(fixture, {
+    env: {
+      FAKE_IMAGE_LIST: [
+        `shopify-clever-kfood:${orphanSha}`,
+        `shopify-clever-kfood:${oldSha}`,
+        `shopify-clever-kfood:${newSha}`,
+      ].join("\n"),
+    },
+  });
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  await assert.rejects(access(orphanOverride));
+  const log = await read(fixture.log);
+  assert.match(log, new RegExp(`image rm shopify-clever-kfood:${orphanSha}`));
+  assert.doesNotMatch(log, new RegExp(`image rm shopify-clever-kfood:(?:${oldSha}|${newSha})`));
+});
+
+test("stale incoming cleanup removes only old target-marked staging directories", async () => {
+  const fixture = await freshFixture();
+  const incomingRoot = join(fixture.deployPath, "targets/kfood/incoming");
+  const marked = join(incomingRoot, `${"4".repeat(40)}-stale-run`);
+  const unmarked = join(incomingRoot, "operator-staging");
+  await mkdir(marked, { recursive: true });
+  await mkdir(unmarked, { recursive: true });
+  await writeFile(
+    join(marked, ".shopify-incoming"),
+    `target=kfood\nsha=${"4".repeat(40)}\nrun_id=stale-run\n`,
+  );
+  const oldTime = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000);
+  await utimes(marked, oldTime, oldTime);
+  await utimes(unmarked, oldTime, oldTime);
+
+  const result = await runDeploy(fixture);
+
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  await assert.rejects(access(marked));
+  assert.equal((await lstat(unmarked)).isDirectory(), true);
 });

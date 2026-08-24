@@ -49,8 +49,12 @@ while (($#)); do
   shift 2
 done
 
-[[ "$deploy_path" == /* && "$deploy_path" =~ ^/[A-Za-z0-9._/-]+$ ]] || fail "unsafe deploy path"
-[[ "$deploy_path" != *'/../'* && "$deploy_path" != */.. ]] || fail "unsafe deploy path traversal"
+if [[ "${SHOPIFY_DEPLOY_TEST_MODE:-0}" == 1 && "${SHOPIFY_DEPLOY_TEST_ROOT:-}" == "$deploy_path" ]]; then
+  [[ "$deploy_path" == /* && "$deploy_path" =~ ^/[A-Za-z0-9._/-]+$ ]] || fail "unsafe test deploy path"
+  [[ "$deploy_path" != *'/../'* && "$deploy_path" != */.. && "$deploy_path" != *'//'* ]] || fail "unsafe test deploy path traversal"
+else
+  [[ "$deploy_path" == /srv/shopify-clever ]] || fail "deploy path must be the approved /srv/shopify-clever root"
+fi
 [[ "$target" =~ ^[a-z0-9][a-z0-9-]{0,39}$ ]] || fail "unsafe target"
 [[ "$release_sha" =~ ^[0-9a-f]{40}$ ]] || fail "release SHA must be 40 lowercase hex characters"
 [[ "$compose_file" =~ ^[A-Za-z0-9._/-]+$ && "$compose_file" != /* && "$compose_file" != *'..'* ]] || fail "unsafe compose file"
@@ -81,8 +85,15 @@ case "$incoming_path" in
 esac
 [[ "$incoming_path" == /* && "$incoming_path" =~ ^/[A-Za-z0-9._/-]+$ ]] || fail "unsafe incoming path"
 [[ "$incoming_path" != *'/../'* && "$incoming_path" != */.. ]] || fail "unsafe incoming path traversal"
+expected_incoming_path="$target_root/incoming/$release_sha-$run_id"
+[[ "$incoming_path" == "$expected_incoming_path" ]] || fail "incoming path does not match the derived release path"
 [[ -d "$incoming_path" ]] || fail "incoming release does not exist"
 [[ ! -L "$incoming_path" ]] || fail "incoming release must not be a symlink"
+incoming_marker="$incoming_path/.shopify-incoming"
+[[ -f "$incoming_marker" ]] || fail "incoming ownership marker is missing"
+grep -Fxq "target=$target" "$incoming_marker" || fail "incoming target marker mismatch"
+grep -Fxq "sha=$release_sha" "$incoming_marker" || fail "incoming SHA marker mismatch"
+grep -Fxq "run_id=$run_id" "$incoming_marker" || fail "incoming run marker mismatch"
 [[ -f "$incoming_path/$compose_file" ]] || fail "staged compose file is missing"
 [[ -f "$incoming_path/apps/shopify-app/Dockerfile" ]] || fail "staged Shopify Dockerfile is missing"
 [[ -f "$deploy_path/$env_file" ]] || fail "shared runtime env file is missing"
@@ -94,6 +105,39 @@ exec 9>"$lock_root/shopify-$target.lock"
 flock 9
 printf 'LOCK_ACQUIRED target=%s release=%s\n' "$target" "$release_sha"
 
+prune_stale_incoming() {
+  local candidate name removed=0
+  while IFS= read -r candidate; do
+    ((removed < 10)) || break
+    [[ "$candidate" != "$incoming_path" ]] || continue
+    name="${candidate##*/}"
+    [[ "$name" =~ ^[0-9a-f]{40}-[A-Za-z0-9._-]{1,100}$ ]] || continue
+    [[ -f "$candidate/.shopify-incoming" ]] || continue
+    grep -Fxq "target=$target" "$candidate/.shopify-incoming" || continue
+    grep -Fxq "sha=${name%%-*}" "$candidate/.shopify-incoming" || continue
+    grep -Fxq "run_id=${name#*-}" "$candidate/.shopify-incoming" || continue
+    rm -rf "$candidate"
+    removed=$((removed + 1))
+    printf 'STALE_INCOMING_PRUNED target=%s path=%s\n' "$target" "$candidate"
+  done < <(find "$target_root/incoming" -mindepth 1 -maxdepth 1 -type d -mmin +1440 -print 2>/dev/null | sort)
+}
+
+check_disk_space() {
+  local available_kb database_bytes required_kb minimum_kb
+  minimum_kb="${SHOPIFY_DEPLOY_MIN_FREE_KB:-2097152}"
+  [[ "$minimum_kb" =~ ^[1-9][0-9]{3,9}$ ]] || fail "invalid minimum free disk configuration"
+  available_kb="$(df -Pk "$deploy_path" | awk 'NR == 2 { print $4 }')"
+  [[ "$available_kb" =~ ^[0-9]+$ ]] || fail "could not read available disk space"
+  database_bytes=0
+  [[ ! -f "$sqlite_path" ]] || database_bytes="$(stat -c '%s' "$sqlite_path")"
+  required_kb=$((minimum_kb + ((database_bytes * 3 + 1023) / 1024)))
+  ((available_kb >= required_kb)) || fail "insufficient disk space for image and rollback backup"
+  printf 'DISK_PREFLIGHT available_kb=%s required_kb=%s\n' "$available_kb" "$required_kb"
+}
+
+prune_stale_incoming
+check_disk_space
+
 if [[ -e "$release_path" ]]; then
   [[ ! -L "$release_path" ]] || fail "existing release must not be a symlink"
   [[ -f "$release_marker" ]] || fail "existing release is missing its ownership marker"
@@ -101,6 +145,7 @@ if [[ -e "$release_path" ]]; then
   grep -Fxq "sha=$release_sha" "$release_marker" || fail "existing release SHA marker mismatch"
   rm -rf "$incoming_path"
 else
+  rm -f "$incoming_marker"
   printf 'target=%s\nsha=%s\n' "$target" "$release_sha" > "$incoming_path/.shopify-release"
   mv "$incoming_path" "$release_path"
 fi
@@ -123,20 +168,16 @@ EOF
 
 compose=(docker compose -f "$release_path/$compose_file" -f "$override_path")
 "${compose[@]}" config --quiet
-docker build \
-  --label "ai.cleversystem.shopify-release=true" \
-  --label "ai.cleversystem.shopify-target=$target" \
-  --label "org.opencontainers.image.revision=$release_sha" \
-  --tag "$image" \
-  "$release_path/apps/shopify-app"
 
 old_current_target=''
 old_release_path=''
 old_override_path=''
+old_sha=''
 rollback_compose_file=''
 rollback_override_path=''
 rollback_image=''
-legacy_container=''
+prior_container=''
+prior_image_id=''
 if [[ -L "$current_link" ]]; then
   old_current_target="$(readlink "$current_link")"
   [[ "$old_current_target" =~ ^releases/[0-9a-f]{40}$ ]] || fail "current release link is unsafe"
@@ -149,18 +190,22 @@ if [[ -L "$current_link" ]]; then
   [[ -f "$old_override_path" ]] || fail "current release runtime override is missing"
   rollback_compose_file="$old_release_path/$compose_file"
   [[ -f "$rollback_compose_file" ]] || fail "current release compose file is missing"
-  rollback_override_path="$old_override_path"
 else
   rollback_compose_file="$deploy_path/$compose_file"
   [[ -f "$rollback_compose_file" ]] || rollback_compose_file=''
 fi
 
-legacy_container="$("${compose[@]}" ps -q "$service" | head -n 1)"
-if [[ -n "$legacy_container" && -z "$rollback_override_path" ]]; then
+prior_container="$("${compose[@]}" ps -q "$service" | head -n 1)"
+if [[ -n "$prior_container" ]]; then
+  [[ -n "$rollback_compose_file" ]] || fail "live runtime has no provable rollback compose file"
   rollback_image="shopify-clever-$target:rollback-$run_id"
-  legacy_image_id="$(docker inspect --format '{{.Image}}' "$legacy_container")"
-  [[ -n "$legacy_image_id" ]] || fail "could not resolve legacy container image"
-  docker image tag "$legacy_image_id" "$rollback_image"
+  prior_image_id="$(docker inspect --format '{{.Image}}' "$prior_container")"
+  [[ "$prior_image_id" =~ ^sha256:[0-9A-Za-z._-]+$ ]] || fail "could not resolve prior container image"
+  docker image tag "$prior_image_id" "$rollback_image"
+  if [[ "$(docker image inspect --format '{{.Id}}' "$rollback_image")" != "$prior_image_id" ]]; then
+    docker image rm "$rollback_image" >/dev/null 2>&1 || true
+    fail "rollback image snapshot verification failed"
+  fi
   rollback_override_path="$runtime_root/rollback-$run_id.override.yml"
   cat > "$rollback_override_path" <<EOF
 services:
@@ -168,11 +213,18 @@ services:
     image: $rollback_image
     build: null
 EOF
+  rollback_compose=(docker compose -f "$rollback_compose_file" -f "$rollback_override_path")
+  if ! "${rollback_compose[@]}" config --quiet; then
+    docker image rm "$rollback_image" >/dev/null 2>&1 || true
+    rm -f "$rollback_override_path"
+    fail "rollback compose snapshot validation failed"
+  fi
 fi
 
-stopped=0
 backup_ready=0
 published=0
+recovery_required=0
+candidate_image_id=''
 backup_dir=''
 backup_database=''
 database_mode=''
@@ -209,12 +261,29 @@ restore_database() {
     "$(sha256sum "$sqlite_path" | awk '{print $1}')" "$database_mode"
 }
 
+remove_labeled_image() {
+  local reference="$1" expected_sha="$2" details image_id
+  [[ -n "$reference" ]] || return 0
+  details="$(docker image inspect --format '{{ index .Config.Labels "ai.cleversystem.shopify-release" }}|{{ index .Config.Labels "ai.cleversystem.shopify-target" }}|{{ index .Config.Labels "org.opencontainers.image.revision" }}' "$reference" 2>/dev/null || true)"
+  [[ "$details" == "true|$target|$expected_sha" ]] || return 0
+  image_id="$(docker image inspect --format '{{.Id}}' "$reference")"
+  if [[ -n "$(docker ps -q --filter "ancestor=$image_id")" ]]; then
+    printf 'IMAGE_PRUNE_SKIPPED_RUNNING target=%s image=%s\n' "$target" "$reference"
+    return 0
+  fi
+  if docker image rm "$reference" >/dev/null 2>&1; then
+    printf 'IMAGE_PRUNED target=%s image=%s\n' "$target" "$reference"
+  else
+    printf 'IMAGE_PRUNE_SKIPPED_IN_USE target=%s image=%s\n' "$target" "$reference"
+  fi
+}
+
 rollback() {
   local rollback_compose=()
   printf 'ROLLBACK_STARTED target=%s release=%s\n' "$target" "$release_sha" >&2
   "${compose[@]}" stop "$service" >/dev/null 2>&1 || true
   restore_database
-  if [[ -n "$legacy_container" && -n "$rollback_compose_file" && -n "$rollback_override_path" ]]; then
+  if [[ -n "$prior_container" && -n "$rollback_compose_file" && -n "$rollback_override_path" ]]; then
     rollback_compose=(docker compose -f "$rollback_compose_file" -f "$rollback_override_path")
     "${rollback_compose[@]}" config --quiet
     "${rollback_compose[@]}" up -d --no-build "$service"
@@ -224,11 +293,15 @@ rollback() {
       printf 'ROLLBACK_SMOKE=failed target=%s\n' "$target" >&2
       return 1
     fi
-  elif [[ -n "$legacy_container" ]]; then
-    printf 'ROLLBACK_SMOKE=failed reason=missing_legacy_runtime target=%s\n' "$target" >&2
-    return 1
+    if [[ "$old_sha" == "$release_sha" ]]; then
+      docker image tag "$prior_image_id" "$image"
+    fi
+    if [[ -n "$candidate_image_id" && "$candidate_image_id" != "$prior_image_id" ]]; then
+      remove_labeled_image "$candidate_image_id" "$release_sha"
+    fi
   else
     printf 'ROLLBACK_SMOKE=skipped_no_previous_service target=%s\n' "$target"
+    remove_labeled_image "$candidate_image_id" "$release_sha"
   fi
   printf 'ROLLBACK_COMPLETED target=%s\n' "$target"
 }
@@ -236,7 +309,7 @@ rollback() {
 on_exit() {
   local status=$?
   trap - EXIT
-  if ((status != 0 && published == 0 && (stopped == 1 || backup_ready == 1))); then
+  if ((status != 0 && published == 0 && recovery_required == 1)); then
     if ! rollback; then
       printf 'ROLLBACK_FAILED original_status=%s target=%s release=%s\n' \
         "$status" "$target" "$release_sha" >&2
@@ -247,6 +320,22 @@ on_exit() {
   exit "$status"
 }
 trap on_exit EXIT
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+if [[ -n "$prior_container" ]]; then
+  recovery_required=1
+fi
+docker build \
+  --label "ai.cleversystem.shopify-release=true" \
+  --label "ai.cleversystem.shopify-target=$target" \
+  --label "org.opencontainers.image.revision=$release_sha" \
+  --tag "$image" \
+  "$release_path/apps/shopify-app"
+candidate_image_id="$(docker image inspect --format '{{.Id}}' "$image")"
+[[ -n "$candidate_image_id" ]] || fail "candidate image ID is missing after build"
+check_disk_space
 
 sudo mkdir -p "$(dirname "$sqlite_path")"
 sudo touch "$sqlite_path"
@@ -254,9 +343,9 @@ sudo chown "$(id -u):$(id -g)" "$sqlite_path"
 chmod 600 "$sqlite_path"
 [[ -r "$sqlite_path" && -w "$sqlite_path" ]] || fail "SQLite database is not readable and writable"
 
-if [[ -n "$legacy_container" ]]; then
+if [[ -n "$prior_container" ]]; then
+  recovery_required=1
   "${compose[@]}" stop "$service"
-  stopped=1
 fi
 
 sqlite3 "$sqlite_path" 'PRAGMA wal_checkpoint(FULL);' >/dev/null
@@ -278,6 +367,7 @@ created_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 EOF
 printf 'target=%s\nsha=%s\nrun_id=%s\n' "$target" "$release_sha" "$run_id" > "$backup_dir/.shopify-backup"
 backup_ready=1
+recovery_required=1
 printf 'DATABASE_BACKUP_READY sha256=%s mode=%s path=%s\n' \
   "$backup_sha256" "$database_mode" "$backup_dir"
 
@@ -285,7 +375,6 @@ printf 'DATABASE_BACKUP_READY sha256=%s mode=%s path=%s\n' \
 "${compose[@]}" run --rm --no-deps "$service" npm run prisma:migrate:status
 "${compose[@]}" run --rm --no-deps "$service" npm run prisma:migrate:drift
 "${compose[@]}" up -d --no-build "$service"
-stopped=1
 smoke
 
 atomic_link() {
@@ -336,10 +425,46 @@ prune_marked_releases() {
     fi
     marked_count=$((marked_count + 1))
     if ((marked_count > 3)); then
+      remove_labeled_image "shopify-clever-$target:$name" "$name"
       rm -rf "$candidate"
       printf 'RELEASE_PRUNED target=%s release=%s\n' "$target" "$name"
     fi
   done
+}
+
+prune_orphaned_overrides() {
+  local candidate name sha removed=0
+  while IFS= read -r candidate; do
+    ((removed < 10)) || break
+    name="${candidate##*/}"
+    [[ "$name" =~ ^[0-9a-f]{40}\.override\.yml$ ]] || continue
+    sha="${name%.override.yml}"
+    [[ ! -d "$release_root/$sha" ]] || continue
+    if [[ -L "$current_link" && "$(readlink "$current_link")" == "releases/$sha" ]]; then
+      continue
+    fi
+    if [[ -L "$previous_link" && "$(readlink "$previous_link")" == "releases/$sha" ]]; then
+      continue
+    fi
+    rm -f "$candidate"
+    removed=$((removed + 1))
+    printf 'ORPHAN_OVERRIDE_PRUNED target=%s path=%s\n' "$target" "$candidate"
+  done < <(find "$runtime_root" -mindepth 1 -maxdepth 1 -type f -name '*.override.yml' -mmin +10080 -print 2>/dev/null | sort)
+}
+
+prune_orphaned_labeled_images() {
+  local reference sha removed=0
+  while IFS= read -r reference; do
+    ((removed < 5)) || break
+    [[ "$reference" =~ ^shopify-clever-$target:([0-9a-f]{40})$ ]] || continue
+    sha="${BASH_REMATCH[1]}"
+    [[ ! -d "$release_root/$sha" ]] || continue
+    remove_labeled_image "$reference" "$sha"
+    removed=$((removed + 1))
+  done < <(docker image ls \
+    --filter "label=ai.cleversystem.shopify-release=true" \
+    --filter "label=ai.cleversystem.shopify-target=$target" \
+    --format '{{.Repository}}:{{.Tag}}' 2>/dev/null | sort || true)
 }
 
 prune_marked_backups() {
@@ -362,5 +487,7 @@ prune_marked_backups() {
 
 prune_marked_releases
 prune_marked_backups
+prune_orphaned_overrides
+prune_orphaned_labeled_images
 printf 'DEPLOYMENT_COMPLETE target=%s release=%s backup_sha256=%s\n' \
   "$target" "$release_sha" "$backup_sha256"
