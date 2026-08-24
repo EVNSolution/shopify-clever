@@ -60,6 +60,9 @@ smoke exits with status `70` so the workflow cannot conceal the recovery failure
 The `current` pointer is never moved before the candidate smoke succeeds.
 Signals received while committing `previous` and `current` are deferred until
 both pointers and the published state agree, avoiding a half-published rollback.
+The script selects GNU `mv -T` or BSD `mv -h` before live mutation, rejects
+non-symlink pointer paths, performs no cross-flavor fallback after a rename
+failure, and verifies the exact `readlink` value before publication.
 
 On the first hardened deployment, the script snapshots the image used by the
 legacy container and uses the existing `${DEPLOY_PATH}` Compose file for rollback.

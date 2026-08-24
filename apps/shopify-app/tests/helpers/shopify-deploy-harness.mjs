@@ -228,9 +228,16 @@ shasum -a 256 "$@"
 
 const fakeMv = String.raw`#!/usr/bin/env bash
 set -euo pipefail
+printf 'mv %s\n' "$*" >> "$FAKE_LOG"
 destination="§{!#}"
 mv_status=0
-if [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -Tf ]]; then
+if [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == --version ]]; then
+  printf '%s\n' 'mv (GNU coreutils) 9.0'
+  exit 0
+elif [[ "§{FAKE_MV_FLAVOR:-host}" == gnu && "§{1:-}" == -Tf ]]; then
+  if [[ "§{FAIL_STAGE:-}" == pointer-rename ]]; then
+    exit 67
+  fi
   shift
   python3 - "$1" "$2" <<'PY' || mv_status=$?
 import os

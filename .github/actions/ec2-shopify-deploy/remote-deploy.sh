@@ -79,6 +79,16 @@ shared_env_dir="$deploy_path/infra/env"
 smoke_attempts="${SHOPIFY_DEPLOY_SMOKE_ATTEMPTS:-12}"
 smoke_delay_seconds="${SHOPIFY_DEPLOY_SMOKE_DELAY_SECONDS:-5}"
 
+mv_version="$(mv --version 2>/dev/null || true)"
+mv_help="$(mv -h 2>&1 || true)"
+if grep -qi 'GNU coreutils' <<<"$mv_version"; then
+  mv_flavor=gnu
+elif grep -qi 'usage' <<<"$mv_help"; then
+  mv_flavor=bsd
+else
+  fail "mv lacks a supported no-dereference rename mode"
+fi
+
 case "$incoming_path" in
   "$target_root"/incoming/*) ;;
   *) fail "incoming path is outside the target staging root" ;;
@@ -99,6 +109,11 @@ grep -Fxq "run_id=$run_id" "$incoming_marker" || fail "incoming run marker misma
 [[ -f "$deploy_path/$env_file" ]] || fail "shared runtime env file is missing"
 [[ "$smoke_attempts" =~ ^[1-9][0-9]?$ ]] || fail "invalid smoke attempt count"
 [[ "$smoke_delay_seconds" =~ ^[0-9]{1,2}$ ]] || fail "invalid smoke delay"
+for pointer_path in "$current_link" "$previous_link"; do
+  if [[ -e "$pointer_path" && ! -L "$pointer_path" ]]; then
+    fail "release pointer path must be a symlink"
+  fi
+done
 
 mkdir -p "$lock_root" "$release_root" "$runtime_root" "$backup_root"
 exec 9>"$lock_root/shopify-$target.lock"
@@ -414,12 +429,13 @@ atomic_link() {
   temporary="$link_path.tmp-$run_id"
   rm -f "$temporary"
   ln -s "$link_target" "$temporary"
-  # GNU mv uses -T to replace a symlink without following it; BSD mv uses -h.
-  # Both operations are same-filesystem atomic renames of the prepared symlink.
-  if mv -Tf "$temporary" "$link_path" 2>/dev/null; then
-    return 0
+  if [[ "$mv_flavor" == gnu ]]; then
+    mv -Tf "$temporary" "$link_path"
+  else
+    mv -fh "$temporary" "$link_path"
   fi
-  mv -fh "$temporary" "$link_path"
+  [[ -L "$link_path" && "$(readlink "$link_path")" == "$link_target" ]] \
+    || fail "release pointer atomic rename postcondition failed"
 }
 
 publish_signal_status=0

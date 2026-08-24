@@ -41,8 +41,10 @@ test("the workflow passes an exact SHA into target-scoped immutable staging", ()
   assert.match(remote, /flock 9/);
   assert.match(remote, /image="shopify-clever-\$target:\$release_sha"/);
   assert.match(remote, /atomic_link "\$current_link" "releases\/\$release_sha"/);
-  assert.match(remote, /if mv -Tf "\$temporary" "\$link_path"/);
+  assert.match(remote, /mv_flavor=gnu/);
+  assert.match(remote, /mv -Tf "\$temporary" "\$link_path"/);
   assert.match(remote, /mv -fh "\$temporary" "\$link_path"/);
+  assert.match(remote, /release pointer atomic rename postcondition failed/);
   assert.match(remote, /removed < 10/);
   assert.match(remote, /removed < 5/);
 });
@@ -277,6 +279,42 @@ test("pointer publication succeeds with GNU mv no-dereference semantics", async 
     await readlink(join(fixture.deployPath, "targets/kfood/current")),
     `releases/${newSha}`,
   );
+});
+
+test("a directory at a release pointer path fails closed before runtime mutation", async () => {
+  const fixture = await freshFixture();
+  const current = join(fixture.deployPath, "targets/kfood/current");
+  await mkdir(current, { recursive: true });
+
+  const result = await runDeploy(fixture);
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /release pointer path must be a symlink/);
+  assert.equal(await read(fixture.runningFile), "legacy-image\n");
+  assert.equal(await read(fixture.sqlitePath), "BASE");
+  assert.doesNotMatch(await read(fixture.log), /^compose |^build |^sqlite3 /m);
+});
+
+test("a GNU pointer rename failure never falls back to BSD and restores the prior state", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, {
+    env: { FAKE_MV_FLAVOR: "gnu", FAIL_STAGE: "pointer-rename" },
+  });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.equal(
+    await readlink(join(fixture.deployPath, "targets/kfood/current")),
+    `releases/${oldSha}`,
+  );
+  await assert.rejects(access(join(fixture.deployPath, "targets/kfood/previous")));
+  assert.equal(await read(fixture.sqlitePath), "BASE|WAL");
+  assert.match(await read(fixture.runningFile), /rollback-test-run/);
+  assert.match(result.stdout + result.stderr, /ROLLBACK_SMOKE=passed/);
+  const log = await read(fixture.log);
+  assert.match(log, /mv -Tf /);
+  assert.doesNotMatch(log, /mv -fh /);
 });
 
 test("a missing previous SHA tag is restored before success and survives a later rollback", async () => {
