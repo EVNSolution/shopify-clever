@@ -107,7 +107,7 @@ function mapAlert(operationalState, lifecycle, serverProgress) {
 
 export function mapRouteOperationalState({ operationalState = null, routeStatus = null } = {}) {
   const lifecycle = normalizeLifecycle(operationalState?.routeStatus ?? routeStatus);
-  const gps = mapGps(operationalState?.physicalPosition);
+  const [gpsFreshness, gpsPosition] = mapGps(operationalState?.physicalPosition);
   const device = mapDevice(operationalState?.deviceProgress);
   const server = mapServer(operationalState?.serverProgress);
   const sync = mapSync(operationalState?.syncHealth);
@@ -117,10 +117,10 @@ export function mapRouteOperationalState({ operationalState = null, routeStatus 
     alert,
     device,
     gap,
-    gpsFreshness: gps[0],
-    gpsPosition: gps[1],
+    gpsFreshness,
+    gpsPosition,
     lifecycle,
-    pills: [lifecycle, gps[0], gps[1], device, server, sync, gap, alert],
+    pills: [lifecycle, gpsFreshness, gpsPosition, device, server, sync, gap, alert],
     server,
     sync,
   };
@@ -138,19 +138,27 @@ const SETTINGS_HEALTH_LABELS = [
   ["shopifyToken", "Shopify token"],
 ];
 
+function classifyHealthStatus(status) {
+  if (["healthy", "ok", "active", "connected"].includes(status)) {
+    return ["healthy", "success"];
+  }
+  if (status === "checking") {
+    return ["checking", "info"];
+  }
+  if (["failed", "error", "blocked", "unavailable"].includes(status)) {
+    return [status, "critical"];
+  }
+  if (["delayed", "stale", "degraded"].includes(status)) {
+    return [status, "warning"];
+  }
+  return ["unknown", "neutral"];
+}
+
 export function mapSettingsOperationalHealth(health = {}) {
   return SETTINGS_HEALTH_LABELS.map(([key, label]) => {
     const rawStatus = key === "shopifyToken" ? health[key]?.status : health[key]?.status ?? health[key];
     const status = String(rawStatus ?? "unknown").toLowerCase();
-    const state = ["healthy", "ok", "active", "connected"].includes(status)
-      ? ["healthy", "success"]
-      : status === "checking"
-        ? ["checking", "info"]
-      : ["failed", "error", "blocked", "unavailable"].includes(status)
-        ? [status, "critical"]
-        : ["delayed", "stale", "degraded"].includes(status)
-          ? [status, "warning"]
-          : ["unknown", "neutral"];
+    const state = classifyHealthStatus(status);
     return pill(key, `${label} ${state[0]}`, state[1], `${label} health: ${state[0]}`);
   });
 }

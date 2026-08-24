@@ -295,9 +295,9 @@ export function buildRouteRows(routePlans, routeGroups = []) {
   const routeGroupIds = new Set(safeRouteGroups.map((routeGroup) => routeGroup?.id).filter(Boolean).map(String));
   const standaloneRoutePlans = safeRoutePlans
     .filter((routePlan) => {
-        const routeGroupId = getRouteGroupingChildGroupId(routePlan);
-        return !childRoutePlanIds.has(routePlan.id) && !(routeGroupId && routeGroupIds.has(routeGroupId));
-      });
+      const routeGroupId = getRouteGroupingChildGroupId(routePlan);
+      return !childRoutePlanIds.has(routePlan.id) && !(routeGroupId && routeGroupIds.has(routeGroupId));
+    });
   const routeGroupRows = routeGroupEntries.map(({ childRows, groupSummary, routeGroup, routeMetrics, totalOrders }) => {
     return {
       id: routeGroup.id,

@@ -18,15 +18,7 @@ export function getShopifyTokenSyncHealth() {
 
 export function recordShopifyAdminTokenRefreshFailure({ now = Date.now } = {}) {
   const failedAt = new Date(now()).toISOString();
-  tokenSyncHealth = {
-    ...tokenSyncHealth,
-    errorCode: "ADMIN_TOKEN_REFRESH_FAILED",
-    lastAttemptAt: failedAt,
-    lastErrorCode: "ADMIN_TOKEN_REFRESH_FAILED",
-    lastFailureAt: failedAt,
-    status: "degraded",
-  };
-  logTokenSyncHealth("admin_auth_refresh");
+  recordTokenSyncFailure("ADMIN_TOKEN_REFRESH_FAILED", failedAt, "admin_auth_refresh");
 }
 
 export async function syncShopifyOfflineTokenToDeliveryApi(
@@ -78,28 +70,12 @@ async function syncShopifyOfflineToken(
       method: "POST",
     });
   } catch {
-    tokenSyncHealth = {
-      ...tokenSyncHealth,
-      errorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
-      lastAttemptAt: attemptedAt,
-      lastErrorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
-      lastFailureAt: attemptedAt,
-      status: "degraded",
-    };
-    logTokenSyncHealth("token_exchange");
+    recordTokenSyncFailure("TOKEN_EXCHANGE_UNAVAILABLE", attemptedAt, "token_exchange");
     return { skipped: false, ok: false };
   }
 
   if (!response.ok) {
-    tokenSyncHealth = {
-      ...tokenSyncHealth,
-      errorCode: `TOKEN_EXCHANGE_HTTP_${response.status}`,
-      lastAttemptAt: attemptedAt,
-      lastErrorCode: `TOKEN_EXCHANGE_HTTP_${response.status}`,
-      lastFailureAt: attemptedAt,
-      status: "degraded",
-    };
-    logTokenSyncHealth("token_exchange");
+    recordTokenSyncFailure(`TOKEN_EXCHANGE_HTTP_${response.status}`, attemptedAt, "token_exchange");
     return { skipped: false, ok: false };
   }
 
@@ -112,6 +88,18 @@ async function syncShopifyOfflineToken(
     status: "healthy",
   };
   return { skipped: false, ok: true };
+}
+
+function recordTokenSyncFailure(errorCode, failedAt, stage) {
+  tokenSyncHealth = {
+    ...tokenSyncHealth,
+    errorCode,
+    lastAttemptAt: failedAt,
+    lastErrorCode: errorCode,
+    lastFailureAt: failedAt,
+    status: "degraded",
+  };
+  logTokenSyncHealth(stage);
 }
 
 function logTokenSyncHealth(stage) {
