@@ -39,6 +39,12 @@ The deployment holds `${DEPLOY_PATH}/locks/shopify-<target>.lock` while it:
 
 If a live container cannot be mapped to a validated legacy or immutable-release
 Compose snapshot, deployment stops before build, stop, or database mutation.
+Build, image-inspection, and post-build disk failures clean only candidate and
+rollback artifacts; live recovery is armed immediately before the stop attempt.
+
+Redispatching the SHA already referenced by `current` is a verified no-op: the
+running image ID must still match the exact-SHA tag and the live smoke must pass.
+It does not rebuild, stop, migrate, or rotate release pointers.
 
 Targets use separate locks, so K-food and production do not block each other.
 Two deployments of the same target serialize even if workflow runs overlap.
@@ -50,6 +56,8 @@ restores the verified SQLite backup (including checkpointed WAL data), restarts
 the prior exact image/release, and repeats the endpoint smoke. A failed rollback
 smoke exits with status `70` so the workflow cannot conceal the recovery failure.
 The `current` pointer is never moved before the candidate smoke succeeds.
+Signals received while committing `previous` and `current` are deferred until
+both pointers and the published state agree, avoiding a half-published rollback.
 
 On the first hardened deployment, the script snapshots the image used by the
 legacy container and uses the existing `${DEPLOY_PATH}` Compose file for rollback.
