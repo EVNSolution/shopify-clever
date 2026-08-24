@@ -62,7 +62,7 @@ export const loader = async ({ request }) => {
     departureLocation: departureResult.departureLocation,
     appPreferences: preferencesResult.appPreferences,
     operationalHealth: {
-      shopifyToken: getShopifyTokenSyncHealth(),
+      shopifyToken: getShopifyTokenSyncHealth(shopifyShopCacheKey),
     },
     errors: [
       ...(departureResult.errors ?? []),

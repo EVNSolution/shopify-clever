@@ -130,46 +130,57 @@ test("token exchange outage and expired-session rejection become queryable sanit
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
   process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
   try {
-    const previousSuccessAt = getShopifyTokenSyncHealth().lastSuccessAt;
     const request = new Request("https://app.invalid/app", {
       headers: { authorization: "Bearer secret-session-token" },
     });
+    const outageShop = "outage-health.myshopify.com";
+    const expiredShop = "expired-health.myshopify.com";
+    const recoveredShop = "recovered-health.myshopify.com";
 
-    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop: "outage-health.myshopify.com" }, {
+    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop: outageShop }, {
       fetch: async () => { throw new TypeError("customer payload must not leak"); },
       now: () => Date.parse("2026-08-24T10:00:00.000Z"),
     }), { skipped: false, ok: false });
-    assert.deepEqual(getShopifyTokenSyncHealth(), {
+    assert.deepEqual(getShopifyTokenSyncHealth(outageShop, {
+      now: () => Date.parse("2026-08-24T10:00:01.000Z"),
+    }), {
       errorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
       lastAttemptAt: "2026-08-24T10:00:00.000Z",
       lastErrorCode: "TOKEN_EXCHANGE_UNAVAILABLE",
       lastFailureAt: "2026-08-24T10:00:00.000Z",
-      lastSuccessAt: previousSuccessAt,
+      lastSuccessAt: null,
       status: "degraded",
     });
 
-    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop: "expired-health.myshopify.com" }, {
+    assert.deepEqual(await syncShopifyOfflineTokenToDeliveryApi(request, { shop: expiredShop }, {
       fetch: async () => new Response("expired offline token", { status: 401 }),
       now: () => Date.parse("2026-08-24T10:01:00.000Z"),
     }), { skipped: false, ok: false });
-    assert.deepEqual(getShopifyTokenSyncHealth(), {
+    assert.deepEqual(getShopifyTokenSyncHealth(expiredShop, {
+      now: () => Date.parse("2026-08-24T10:01:01.000Z"),
+    }), {
       errorCode: "TOKEN_EXCHANGE_HTTP_401",
       lastAttemptAt: "2026-08-24T10:01:00.000Z",
       lastErrorCode: "TOKEN_EXCHANGE_HTTP_401",
       lastFailureAt: "2026-08-24T10:01:00.000Z",
-      lastSuccessAt: previousSuccessAt,
+      lastSuccessAt: null,
       status: "degraded",
     });
+    assert.equal(getShopifyTokenSyncHealth(outageShop, {
+      now: () => Date.parse("2026-08-24T10:01:01.000Z"),
+    }).errorCode, "TOKEN_EXCHANGE_UNAVAILABLE");
 
-    await syncShopifyOfflineTokenToDeliveryApi(request, { shop: "recovered-health.myshopify.com" }, {
+    await syncShopifyOfflineTokenToDeliveryApi(request, { shop: recoveredShop }, {
       fetch: async () => new Response("{}", { status: 200 }),
       now: () => Date.parse("2026-08-24T10:01:30.000Z"),
     });
-    assert.deepEqual(getShopifyTokenSyncHealth(), {
+    assert.deepEqual(getShopifyTokenSyncHealth(recoveredShop, {
+      now: () => Date.parse("2026-08-24T10:01:31.000Z"),
+    }), {
       errorCode: null,
       lastAttemptAt: "2026-08-24T10:01:30.000Z",
-      lastErrorCode: "TOKEN_EXCHANGE_HTTP_401",
-      lastFailureAt: "2026-08-24T10:01:00.000Z",
+      lastErrorCode: null,
+      lastFailureAt: null,
       lastSuccessAt: "2026-08-24T10:01:30.000Z",
       status: "healthy",
     });
@@ -179,15 +190,143 @@ test("token exchange outage and expired-session rejection become queryable sanit
 });
 
 test("Shopify Admin token refresh failures are structured and queryable without error details", () => {
+  const shop = "refresh-failure.myshopify.com";
   recordShopifyAdminTokenRefreshFailure({
+    appId: "clever-route",
+    now: () => Date.parse("2026-08-24T10:01:59.000Z"),
+  });
+  assert.equal(getShopifyTokenSyncHealth(shop, {
+    now: () => Date.parse("2026-08-24T10:01:59.500Z"),
+  }).status, "unknown");
+
+  recordShopifyAdminTokenRefreshFailure({
+    shopDomain: shop,
     now: () => Date.parse("2026-08-24T10:02:00.000Z"),
   });
-  assert.deepEqual(getShopifyTokenSyncHealth(), {
+  assert.deepEqual(getShopifyTokenSyncHealth(shop, {
+    now: () => Date.parse("2026-08-24T10:02:01.000Z"),
+  }), {
     errorCode: "ADMIN_TOKEN_REFRESH_FAILED",
     lastAttemptAt: "2026-08-24T10:02:00.000Z",
     lastErrorCode: "ADMIN_TOKEN_REFRESH_FAILED",
     lastFailureAt: "2026-08-24T10:02:00.000Z",
-    lastSuccessAt: getShopifyTokenSyncHealth().lastSuccessAt,
+    lastSuccessAt: null,
     status: "degraded",
   });
+});
+
+test("keeps interleaved shop failures, recovery history, and concurrency isolated", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
+  const request = new Request("https://app.invalid/app", {
+    headers: { authorization: "Bearer never-log-this-token" },
+  });
+  const shopA = "  SHOP-A.MYSHOPIFY.COM ";
+  const shopB = "shop-b.myshopify.com";
+  const warnings = [];
+  const originalWarn = console.warn;
+  console.warn = (...args) => warnings.push(args.join(" "));
+
+  try {
+    let resolveShopA;
+    const shopAResponse = new Promise((resolve) => { resolveShopA = resolve; });
+    let shopACalls = 0;
+    let shopBCalls = 0;
+
+    const shopAFirst = syncShopifyOfflineTokenToDeliveryApi(request, { shop: shopA }, {
+      fetch: async () => {
+        shopACalls += 1;
+        return shopAResponse;
+      },
+      now: () => Date.parse("2026-08-24T11:00:00.000Z"),
+    });
+    const shopAConcurrent = syncShopifyOfflineTokenToDeliveryApi(request, { shop: shopA.toLowerCase().trim() }, {
+      fetch: async () => { throw new Error("normalized shop must share in-flight request"); },
+      now: () => Date.parse("2026-08-24T11:00:00.000Z"),
+    });
+    const shopBSuccess = syncShopifyOfflineTokenToDeliveryApi(request, { shop: shopB }, {
+      fetch: async () => {
+        shopBCalls += 1;
+        return new Response("{}", { status: 200 });
+      },
+      now: () => Date.parse("2026-08-24T11:00:01.000Z"),
+    });
+
+    resolveShopA(new Response("{}", { status: 503 }));
+    assert.deepEqual(await Promise.all([shopAFirst, shopAConcurrent, shopBSuccess]), [
+      { skipped: false, ok: false },
+      { skipped: false, ok: false },
+      { skipped: false, ok: true },
+    ]);
+    assert.equal(shopACalls, 1);
+    assert.equal(shopBCalls, 1);
+    const observeInterleaved = { now: () => Date.parse("2026-08-24T11:00:01.000Z") };
+    assert.equal(getShopifyTokenSyncHealth(shopA, observeInterleaved).status, "degraded");
+    assert.equal(getShopifyTokenSyncHealth(shopB, observeInterleaved).status, "healthy");
+    assert.equal(getShopifyTokenSyncHealth("unknown.myshopify.com", observeInterleaved).status, "unknown");
+
+    await syncShopifyOfflineTokenToDeliveryApi(request, { shop: shopA }, {
+      fetch: async () => new Response("{}", { status: 200 }),
+      now: () => Date.parse("2026-08-24T11:00:02.000Z"),
+    });
+    const observeRecovery = { now: () => Date.parse("2026-08-24T11:00:03.000Z") };
+    assert.deepEqual(getShopifyTokenSyncHealth(shopA, observeRecovery), {
+      errorCode: null,
+      lastAttemptAt: "2026-08-24T11:00:02.000Z",
+      lastErrorCode: "TOKEN_EXCHANGE_HTTP_503",
+      lastFailureAt: "2026-08-24T11:00:00.000Z",
+      lastSuccessAt: "2026-08-24T11:00:02.000Z",
+      status: "healthy",
+    });
+    assert.equal(
+      getShopifyTokenSyncHealth(shopB, observeRecovery).lastSuccessAt,
+      "2026-08-24T11:00:01.000Z",
+    );
+    assert.doesNotMatch(warnings.join("\n"), /never-log-this-token|Bearer|SHOP-A|shop-a\.myshopify\.com/i);
+  } finally {
+    console.warn = originalWarn;
+    restoreDeliveryApiBaseUrl(previousBaseUrl);
+  }
+});
+
+test("authenticated health surfaces scope lookup to the authenticated shop", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const healthRoute = await readFile(new URL("../app/routes/app.health.shopify-token.jsx", import.meta.url), "utf8");
+  const settingsRoute = await readFile(new URL("../app/routes/app.settings.jsx", import.meta.url), "utf8");
+
+  assert.match(healthRoute, /const\s+\{\s*session\s*\}\s*=\s*await authenticate\.admin\(request\)/);
+  assert.match(healthRoute, /getShopifyTokenSyncHealth\(session\?\.shop\)/);
+  assert.doesNotMatch(healthRoute, /searchParams|url\.search|request\.url/);
+  assert.match(settingsRoute, /getShopifyTokenSyncHealth\(shopifyShopCacheKey\)/);
+});
+
+test("prunes expired health and caps retained shop identities", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.invalid";
+  const request = new Request("https://app.invalid/app", {
+    headers: { authorization: "Bearer retention-token" },
+  });
+  const startedAt = Date.parse("2026-08-24T12:00:00.000Z");
+
+  try {
+    for (let index = 0; index < 260; index += 1) {
+      await syncShopifyOfflineTokenToDeliveryApi(
+        request,
+        { shop: `bounded-${index}.myshopify.com` },
+        {
+          fetch: async () => new Response("{}", { status: 200 }),
+          now: () => startedAt + index,
+        },
+      );
+    }
+
+    const observedAt = { now: () => startedAt + 261 };
+    assert.equal(getShopifyTokenSyncHealth("bounded-0.myshopify.com", observedAt).status, "unknown");
+    assert.equal(getShopifyTokenSyncHealth("bounded-259.myshopify.com", observedAt).status, "healthy");
+    assert.equal(getShopifyTokenSyncHealth("bounded-259.myshopify.com", {
+      now: () => startedAt + (61 * 60 * 1000),
+    }).status, "unknown");
+  } finally {
+    restoreDeliveryApiBaseUrl(previousBaseUrl);
+  }
 });

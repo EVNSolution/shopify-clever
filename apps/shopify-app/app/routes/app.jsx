@@ -159,16 +159,23 @@ function useAppNavigationPerformance() {
 
 export const loader = async ({ request }) => {
   let language = DEFAULT_LANGUAGE;
+  let authenticatedShop;
 
   if (hasShopifyAdminContext(request)) {
     let authenticated;
     try {
       authenticated = await authenticate.admin(request);
     } catch (error) {
-      recordShopifyAdminTokenRefreshFailure();
+      recordShopifyAdminTokenRefreshFailure({
+        // Authentication failed before a trusted shop session was available.
+        // Keep this app-scoped so it cannot contaminate another shop's health.
+        // eslint-disable-next-line no-undef
+        appId: process.env.CLEVER_APP_ID,
+      });
       throw error;
     }
     const { admin, session } = authenticated;
+    authenticatedShop = session?.shop;
     await syncShopifyOfflineTokenToDeliveryApi(request, session);
     const { appPreferences } = await fetchShopifyAppPreferences(admin);
     language = appPreferences.language;
@@ -178,7 +185,7 @@ export const loader = async ({ request }) => {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
     language,
-    tokenSyncHealth: getShopifyTokenSyncHealth(),
+    tokenSyncHealth: getShopifyTokenSyncHealth(authenticatedShop),
   };
 };
 
