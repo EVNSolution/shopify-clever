@@ -183,7 +183,7 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routeHelpersSource, /rightRouteIdx = numberOrUndefined\(right\.child\?\.routeIdx\)/);
   assert.match(routeListRowsSource, /isRouteGroup: true/);
   assert.match(routeListRowsSource, /isDeletable: true/);
-  assert.match(routeListRowsSource, /childRows: buildRouteChildRows\(routeGroup, children, groupAccentColor, groupSummary\)/);
+  assert.match(routeListRowsSource, /childRows: buildRouteChildRows\([\s\S]*routeGroup,[\s\S]*children,[\s\S]*groupAccentColor,[\s\S]*groupSummary,[\s\S]*operationalStateByRoutePlanId/);
   assert.match(routeListRowsSource, /formatRouteGroupDate\(routeGroup\)/);
   assert.doesNotMatch(routesPageSource, /routeIndex: routeIndex \+ 1/);
   assert.match(routeListRowsSource, /formatRouteValues\(routePlan\.deliveryAreas\)/);

@@ -1,6 +1,7 @@
 /* eslint-env node */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { mapRouteOperationalState } from "../app/features/delivery/operational-state.js";
 
 import {
   buildRouteRows,
@@ -18,6 +19,69 @@ test("route list preserves batched per-row operational state without follow-up r
   };
   const [row] = buildRouteRows([{ id: "route-kitchener", operationalState, status: "IN_PROGRESS" }]);
   assert.equal(row.operationalState, operationalState);
+});
+
+test("grouped route rows join enriched Kitchener state by route plan id", () => {
+  const operationalState = {
+    activeAlerts: [{ id: "alert-1", severity: "WARNING", type: "SYNC_BLOCKED" }],
+    deviceProgress: { completedStopCount: 11, currentStopSequence: 11, locallyFinished: true, totalStopCount: 11 },
+    physicalPosition: { freshness: "FRESH", nearestStopSequence: 11, reliableForProximity: true, withinProximityThreshold: true },
+    routePlanId: "route-kitchener",
+    routeStatus: "IN_PROGRESS",
+    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
+    syncHealth: { state: "BLOCKED" },
+  };
+  const rows = buildRouteRows(
+    [{
+      id: "route-kitchener",
+      operationalState,
+      routeGroupingChild: { groupingId: "group-1" },
+    }],
+    [{
+      id: "group-1",
+      children: [{ routePlanId: "route-kitchener", routePlan: { id: "route-kitchener" } }],
+    }],
+  );
+  const childRow = rows.find((row) => row.id === "route-kitchener");
+  const listPresentation = mapRouteOperationalState({
+    operationalState: childRow?.operationalState,
+    routeStatus: childRow?.status,
+  });
+  const detailPresentation = mapRouteOperationalState({
+    operationalState,
+    routeStatus: "IN_PROGRESS",
+  });
+
+  assert.equal(childRow?.operationalState, operationalState);
+  assert.deepEqual(listPresentation, detailPresentation);
+  assert.deepEqual(listPresentation.pills.map((item) => item.label), [
+    "Route in progress",
+    "GPS fresh",
+    "GPS Stop 11 nearby",
+    "Device 11/11",
+    "Server 1/11",
+    "Sync blocked",
+    "Gap 10 stops",
+    "Alert warning",
+  ]);
+});
+
+test("grouped legacy route rows keep missing operational evidence explicit", () => {
+  const rows = buildRouteRows(
+    [{ id: "route-legacy", routeGroupingChild: { groupingId: "group-1" } }],
+    [{ id: "group-1", children: [{ routePlanId: "route-legacy" }] }],
+  );
+  const childRow = rows.find((row) => row.id === "route-legacy");
+  const presentation = mapRouteOperationalState({
+    operationalState: childRow?.operationalState,
+    routeStatus: childRow?.status,
+  });
+
+  assert.equal(childRow?.operationalState, null);
+  assert.equal(presentation.gpsFreshness.label, "GPS unknown");
+  assert.equal(presentation.device.label, "Device unknown");
+  assert.equal(presentation.server.label, "Server unknown");
+  assert.equal(presentation.sync.label, "Sync unknown");
 });
 
 test("route list shows a created child route immediately below its group", () => {
