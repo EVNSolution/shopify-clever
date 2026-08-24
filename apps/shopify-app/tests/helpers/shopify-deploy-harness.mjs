@@ -13,6 +13,9 @@ if [[ "§{1:-}" == "build" ]]; then
     sleep "§{FAKE_BUILD_SLEEP_SECONDS:-0}"
     rmdir "$FAKE_ACTIVE_DIR" 2>/dev/null || true
   fi
+  if [[ "§{FAIL_STAGE:-}" == "build" ]]; then
+    exit 44
+  fi
   exit 0
 fi
 
@@ -39,7 +42,11 @@ if [[ "§{1:-}" == "image" && "§{2:-}" == "inspect" ]]; then
   elif [[ "$reference" == *rollback* ]]; then
     printf '%s\n' 'sha256:legacy-image'
   elif [[ "$reference" == shopify-clever-*:* ]]; then
-    printf 'sha256:candidate-%s\n' "§{reference#*:}"
+    if [[ "§{FAKE_CURRENT_TAG_MATCH:-0}" == 1 ]]; then
+      printf '%s\n' 'sha256:legacy-image'
+    else
+      printf 'sha256:candidate-%s\n' "§{reference#*:}"
+    fi
   else
     printf '%s\n' "$reference"
   fi
@@ -202,7 +209,11 @@ const fakeMv = String.raw`#!/usr/bin/env bash
 set -euo pipefail
 if [[ "§{1:-}" == "-Tf" ]]; then
   shift
-  exec /bin/mv -fh "$@"
+  /bin/mv -fh "$@"
+  if [[ -n "§{FAKE_SIGNAL_AFTER_CURRENT:-}" && "§{2:-}" == */current ]]; then
+    kill -TERM "$PPID"
+  fi
+  exit 0
 fi
 exec /bin/mv "$@"
 `.replaceAll("§", "$");

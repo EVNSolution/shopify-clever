@@ -114,18 +114,37 @@ for (const stage of ["migration", "restart", "smoke"]) {
   });
 }
 
-test("a same-SHA retry rolls back through the pre-build image snapshot", async () => {
+test("an already-current SHA is a verified no-op that keeps the running image pin", async () => {
   const fixture = await freshFixture();
   await addCurrentRelease(fixture, { sha: newSha });
 
-  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "smoke" } });
+  const result = await runDeploy(fixture, { env: { FAKE_CURRENT_TAG_MATCH: "1" } });
 
-  assert.notEqual(result.code, 0, result.stdout + result.stderr);
-  assert.match(await read(fixture.runningFile), /rollback-test-run/);
+  assert.equal(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await read(fixture.runningFile), "legacy-image\n");
   const log = await read(fixture.log);
   assert.match(log, /image tag sha256:legacy-image shopify-clever-kfood:rollback-test-run/);
-  assert.match(log, new RegExp(`image tag sha256:legacy-image shopify-clever-kfood:${newSha}`));
-  assert.doesNotMatch(log, new RegExp(`image rm shopify-clever-kfood:${newSha}`));
+  assert.doesNotMatch(log, /^build /m);
+  assert.doesNotMatch(log, / stop app$/m);
+  assert.doesNotMatch(log, / up -d /m);
+  assert.match(result.stdout, /DEPLOYMENT_ALREADY_CURRENT/);
+});
+
+test("a build failure after snapshot cleans artifacts without touching the healthy runtime", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, { env: { FAIL_STAGE: "build" } });
+
+  assert.notEqual(result.code, 0, result.stdout + result.stderr);
+  assert.equal(await read(fixture.runningFile), "legacy-image\n");
+  assert.equal(await read(fixture.sqlitePath), "BASE");
+  const log = await read(fixture.log);
+  assert.match(log, /^build /m);
+  assert.doesNotMatch(log, / stop app$/m);
+  assert.doesNotMatch(log, / up -d /m);
+  assert.doesNotMatch(log, /^-sS -L /m);
+  assert.doesNotMatch(result.stdout + result.stderr, /ROLLBACK_STARTED/);
 });
 
 test("a partially failing stop still restarts and verifies the prior runtime", async () => {
@@ -189,6 +208,21 @@ test("termination during migration restores the database and prior runtime", asy
   assert.equal(await read(fixture.sqlitePath), "BASE|WAL");
   assert.match(await read(fixture.runningFile), /rollback-test-run/);
   assert.match(result.stdout + result.stderr, /ROLLBACK_SMOKE=passed/);
+});
+
+test("termination after the current pointer rename finishes a consistent pointer commit", async () => {
+  const fixture = await freshFixture();
+  await addCurrentRelease(fixture, { sha: oldSha });
+
+  const result = await runDeploy(fixture, { env: { FAKE_SIGNAL_AFTER_CURRENT: "1" } });
+
+  assert.equal(result.code, 143, result.stdout + result.stderr);
+  const targetRoot = join(fixture.deployPath, "targets/kfood");
+  assert.equal(await readlink(join(targetRoot, "current")), `releases/${newSha}`);
+  assert.equal(await readlink(join(targetRoot, "previous")), `releases/${oldSha}`);
+  assert.equal(await read(fixture.sqlitePath), "BASE|WAL|MIGRATED");
+  assert.match(await read(fixture.runningFile), new RegExp(`:${newSha}`));
+  assert.doesNotMatch(result.stdout + result.stderr, /ROLLBACK_STARTED/);
 });
 
 test("a live legacy runtime without a provable compose rollback fails closed before build or stop", async () => {

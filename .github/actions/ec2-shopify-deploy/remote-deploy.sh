@@ -225,6 +225,7 @@ backup_ready=0
 published=0
 recovery_required=0
 candidate_image_id=''
+build_attempted=0
 backup_dir=''
 backup_database=''
 database_mode=''
@@ -278,6 +279,22 @@ remove_labeled_image() {
   fi
 }
 
+cleanup_failed_artifacts() {
+  if ((build_attempted == 1)); then
+    remove_labeled_image "$image" "$release_sha"
+  fi
+  if ((build_attempted == 1)) && [[ "$old_sha" == "$release_sha" && -n "$prior_image_id" ]]; then
+    docker image tag "$prior_image_id" "$image"
+  fi
+  if [[ -n "$candidate_image_id" && "$candidate_image_id" != "$prior_image_id" ]]; then
+    remove_labeled_image "$candidate_image_id" "$release_sha"
+  fi
+  if [[ -n "$rollback_image" ]]; then
+    docker image rm "$rollback_image" >/dev/null 2>&1 || true
+  fi
+  [[ -z "$rollback_override_path" ]] || rm -f "$rollback_override_path"
+}
+
 rollback() {
   local rollback_compose=()
   printf 'ROLLBACK_STARTED target=%s release=%s\n' "$target" "$release_sha" >&2
@@ -293,15 +310,10 @@ rollback() {
       printf 'ROLLBACK_SMOKE=failed target=%s\n' "$target" >&2
       return 1
     fi
-    if [[ "$old_sha" == "$release_sha" ]]; then
-      docker image tag "$prior_image_id" "$image"
-    fi
-    if [[ -n "$candidate_image_id" && "$candidate_image_id" != "$prior_image_id" ]]; then
-      remove_labeled_image "$candidate_image_id" "$release_sha"
-    fi
+    cleanup_failed_artifacts
   else
     printf 'ROLLBACK_SMOKE=skipped_no_previous_service target=%s\n' "$target"
-    remove_labeled_image "$candidate_image_id" "$release_sha"
+    cleanup_failed_artifacts
   fi
   printf 'ROLLBACK_COMPLETED target=%s\n' "$target"
 }
@@ -315,6 +327,8 @@ on_exit() {
         "$status" "$target" "$release_sha" >&2
       exit 70
     fi
+  elif ((status != 0 && published == 0)); then
+    cleanup_failed_artifacts
   fi
   [[ -d "$incoming_path" ]] && rm -rf "$incoming_path"
   exit "$status"
@@ -324,9 +338,17 @@ trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
 
-if [[ -n "$prior_container" ]]; then
-  recovery_required=1
+if [[ -n "$prior_container" && "$old_sha" == "$release_sha" ]]; then
+  current_image_id="$(docker image inspect --format '{{.Id}}' "$image")"
+  [[ "$current_image_id" == "$prior_image_id" ]] || fail "current SHA tag does not match the running image"
+  smoke
+  published=1
+  cleanup_failed_artifacts
+  printf 'DEPLOYMENT_ALREADY_CURRENT target=%s release=%s image_id=%s\n' \
+    "$target" "$release_sha" "$prior_image_id"
+  exit 0
 fi
+build_attempted=1
 docker build \
   --label "ai.cleversystem.shopify-release=true" \
   --label "ai.cleversystem.shopify-target=$target" \
@@ -344,6 +366,7 @@ chmod 600 "$sqlite_path"
 [[ -r "$sqlite_path" && -w "$sqlite_path" ]] || fail "SQLite database is not readable and writable"
 
 if [[ -n "$prior_container" ]]; then
+  # From this point onward a failed or partially successful stop requires live recovery.
   recovery_required=1
   "${compose[@]}" stop "$service"
 fi
@@ -385,15 +408,25 @@ atomic_link() {
   mv -Tf "$temporary" "$link_path"
 }
 
+publish_signal_status=0
+trap 'publish_signal_status=129' HUP
+trap 'publish_signal_status=130' INT
+trap 'publish_signal_status=143' TERM
 if [[ -n "$old_current_target" ]]; then
   atomic_link "$previous_link" "$old_current_target"
 fi
 atomic_link "$current_link" "releases/$release_sha"
 published=1
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 143' TERM
 printf 'RELEASE_PUBLISHED target=%s release=%s image=%s\n' "$target" "$release_sha" "$image"
 if [[ -n "$rollback_image" ]]; then
   docker image rm "$rollback_image" >/dev/null 2>&1 || true
   rm -f "$rollback_override_path"
+fi
+if ((publish_signal_status != 0)); then
+  exit "$publish_signal_status"
 fi
 
 is_protected_release() {
