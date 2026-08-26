@@ -50,7 +50,6 @@ import {
   textOrUndefined,
 } from "../features/delivery/route-helpers";
 import { routeDetailAction, routeDetailLoader } from "../features/delivery/route-detail.server";
-import { mapRouteOperationalState } from "../features/delivery/operational-state";
 import {
   getRouteStopLocationMessage,
   normalizeRouteStopLocationDiagnostic,
@@ -86,7 +85,6 @@ import {
   consumeRouteTrackingSseChunk,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingCompletionTime,
-  getRouteTrackingOperationalMismatch,
   getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
   getRouteTrackingReconnectDelayMs,
@@ -105,7 +103,6 @@ import { createMapLibreMap } from "../features/maps/maplibre-map";
 import { installMissingMapImageFallback } from "../features/maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../features/maps/pmtiles-protocol";
 import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../ui/map-panel";
-import { OperationalPillGroup } from "../ui/operational-pill-group";
 
 const OPENFREEMAP_STYLE_URL = "/vendor/openfreemap-clever-lite.json";
 const MAP_RECOVERY_DELAY_MS = 2500;
@@ -300,6 +297,17 @@ const routeDetailTitleMetricValueStyle = {
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
+};
+
+const routeStatusBadgeStyle = {
+  background: "#fff1b8",
+  borderRadius: "999px",
+  color: "#4f3f00",
+  display: "inline-flex",
+  fontSize: "12px",
+  fontWeight: 650,
+  lineHeight: 1.2,
+  padding: "4px 9px",
 };
 
 const routeDetailBackButtonStyle = {
@@ -642,6 +650,15 @@ const routeTrackingMapFreshnessStyle = {
   transform: "translateX(-50%)",
   whiteSpace: "nowrap",
   zIndex: 2,
+};
+
+const routeTrackingMapFreshnessDotStyle = {
+  background: "#d82c0d",
+  border: "2px solid #ffffff",
+  borderRadius: "50%",
+  boxShadow: "0 0 0 1px rgba(216, 44, 13, 0.22)",
+  height: "9px",
+  width: "9px",
 };
 
 const routeMetaActionsStyle = {
@@ -2134,6 +2151,12 @@ function formatTrackingTimestamp(value, ianaTimezone) {
   }
 }
 
+function formatTrackingElapsedSeconds(value, now = Date.now()) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return ROUTE_EMPTY_LABEL;
+  return `${Math.max(0, Math.floor((now - date.getTime()) / 1000))}s ago`;
+}
+
 function formatTrackingRange(firstValue, lastValue, ianaTimezone) {
   const firstDate = firstValue ? new Date(firstValue) : null;
   const lastDate = lastValue ? new Date(lastValue) : null;
@@ -3210,7 +3233,6 @@ export default function RouteDetailPage() {
     childRouteDetails = [],
     currentDepartureLocation = null,
     drivers = [],
-    operationalState = null,
     routePlan,
     routeGeometry = null,
     routeGroup = null,
@@ -3483,20 +3505,6 @@ export default function RouteDetailPage() {
   const displayedRouteTrackingSnapshot = isRouteTrackingPayloadForRoute(routeTrackingSnapshot, trackingRoutePlanId)
     ? routeTrackingSnapshot
     : null;
-  const displayedOperationalState = displayedRouteTrackingSnapshot?.operationalState ?? operationalState;
-  const routeTrackingPositionMismatch = useMemo(
-    () => getRouteTrackingOperationalMismatch(displayedOperationalState),
-    [displayedOperationalState],
-  );
-  const routeOperationalPresentation = useMemo(
-    () => mapRouteOperationalState({
-      operationalState: displayedOperationalState,
-      positionMismatch: routeTrackingPositionMismatch,
-      routeStatus: routeExecutionStatus,
-    }),
-    [displayedOperationalState, routeExecutionStatus, routeTrackingPositionMismatch],
-  );
-  const routeTrackingCurrentPositionAlert = routeOperationalPresentation.currentPositionAlert;
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
   }, [loaderRouteExecutionStatus]);
@@ -3669,6 +3677,7 @@ export default function RouteDetailPage() {
     ianaTimezone,
     now: routeTrackingClock,
   });
+  const routeTrackingFreshnessTime = routeTrackingCompletionTime ?? routeTrackingClock;
   const routeTrackingPathSummary = useMemo(
     () => getRouteTrackingPathSummary(displayedRouteTrackingSnapshot),
     [displayedRouteTrackingSnapshot],
@@ -6515,10 +6524,9 @@ export default function RouteDetailPage() {
                     {renderRouteLineEditIcon()}
                   </button>
                 ) : null}
-                <OperationalPillGroup
-                  ariaLabel={`${routeDetailTitle} operational state`}
-                  pills={routeOperationalPresentation.pills}
-                />
+                <span style={routeStatusBadgeStyle}>
+                  {isMaterializedChildRouteDetail ? formatRouteStatus(routeExecutionStatus) : routeDetail.status}
+                </span>
                 {!isMaterializedChildRouteDetail ? (
                   <div aria-label="Route summary" className="route-overview-summary">
                     {renderRouteHeaderMetric("Orders", routeDetail.orders)}
@@ -6618,10 +6626,7 @@ export default function RouteDetailPage() {
                   {renderRouteEditableChevron()}
                 </button>
               </div>
-              <OperationalPillGroup
-                ariaLabel="Tracking operational state"
-                pills={routeOperationalPresentation.pills}
-              />
+              <span style={routeStatusBadgeStyle}>{formatRouteStatus(routeExecutionStatus)}</span>
             </section>
           ) : null}
 
@@ -6727,14 +6732,14 @@ export default function RouteDetailPage() {
                     <span>Actual GPS tracking</span>
                   </span>
                 </div>
-                {showRouteTrackingFreshness ? (
+                {latestTrackingReceivedAt && showRouteTrackingFreshness ? (
                   <div
+                    aria-label="Current position freshness"
                     style={routeTrackingMapFreshnessStyle}
+                    title={`Last received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}. Double-click the red marker to focus.`}
                   >
-                    <OperationalPillGroup
-                      ariaLabel="Tracking map operational state"
-                      pills={routeOperationalPresentation.pills}
-                    />
+                    <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
+                    <span>Current position {formatTrackingElapsedSeconds(latestTrackingReceivedAt, routeTrackingFreshnessTime)}</span>
                   </div>
                 ) : null}
               </>
@@ -7018,21 +7023,6 @@ export default function RouteDetailPage() {
             </div>
           ) : isMaterializedChildRouteDetail && childDetailTab === "tracking" ? (
             <section aria-label="Child route tracking" style={routeChildTrackingStyle}>
-              {routeTrackingCurrentPositionAlert ? (
-                <div aria-label="Current position warning" role="alert">
-                  <s-banner heading={routeTrackingCurrentPositionAlert.title} tone={routeTrackingCurrentPositionAlert.tone}>
-                    <OperationalPillGroup
-                      ariaLabel="Current position warning evidence"
-                      pills={routeTrackingCurrentPositionAlert.pills}
-                    />
-                    <p>{routeTrackingCurrentPositionAlert.message}</p>
-                  </s-banner>
-                </div>
-              ) : null}
-              <OperationalPillGroup
-                ariaLabel="Tracking evidence"
-                pills={routeOperationalPresentation.pills}
-              />
               <div style={routeChildTrackingSummaryStyle}>
                 <div style={routeChildTrackingMetricStyle}>
                   <span style={routeChildTrackingMetricLabelStyle}>

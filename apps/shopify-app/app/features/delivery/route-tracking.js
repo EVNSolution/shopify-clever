@@ -152,9 +152,6 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     stopArrivals,
     serverTime: textOrNull(snapshot?.serverTime),
     latestPosition,
-    operationalState: snapshot?.operationalState && typeof snapshot.operationalState === "object"
-      ? { ...snapshot.operationalState }
-      : null,
     recentPositions,
   };
 }
@@ -286,7 +283,6 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
   const mergedBase = normalizeRouteTrackingSnapshot({
     ...historyBase,
     policy: incomingSnapshot.policy ?? current.policy,
-    operationalState: incomingSnapshot.operationalState ?? current.operationalState,
     progress: mergeTrackingProgressSnapshot(current.progress, incomingSnapshot.progress),
     roadMatchedPath: getNewestRoadMatchedPath(current.roadMatchedPath, incomingSnapshot.roadMatchedPath),
     routePlanId: incomingSnapshot.routePlanId ?? current.routePlanId,
@@ -878,58 +874,6 @@ function getRouteTrackingFreshness(snapshot, now = Date.now()) {
   return { key: "OFFLINE", label: "Offline", ageMs };
 }
 
-function getRouteTrackingOperationalMismatch(operationalState) {
-  if (!operationalState || typeof operationalState !== "object") return null;
-  if (normalizeRouteExecutionStatus(operationalState.routeStatus) !== "IN_PROGRESS") return null;
-
-  const physicalPosition = operationalState.physicalPosition;
-  const freshness = textOrNull(physicalPosition?.freshness)?.toUpperCase();
-  // Freshness, reliability, and threshold membership are server policy outputs.
-  // The client must not recalculate proximity from coordinates.
-  if (freshness !== "FRESH"
-    || physicalPosition?.reliableForProximity !== true
-    || physicalPosition?.withinProximityThreshold !== true) {
-    return null;
-  }
-
-  const nearestStopSequence = positiveIntegerOrNull(physicalPosition.nearestStopSequence);
-  const resolvedStopCount = nonNegativeIntegerOrNull(operationalState.serverProgress?.resolvedStopCount);
-  const totalStopCount = positiveIntegerOrNull(operationalState.serverProgress?.totalStopCount);
-  if (nearestStopSequence === null
-    || resolvedStopCount === null
-    || totalStopCount === null
-    || nearestStopSequence > totalStopCount
-    || resolvedStopCount > totalStopCount) {
-    return null;
-  }
-
-  // Server progress is aggregate evidence. Subtracting every resolved result from
-  // the earlier stop count gives a conservative lower bound even if a result was
-  // recorded out of order. Terminal results such as SKIPPED or CANCELLED are
-  // already included in the server-owned resolvedStopCount.
-  const earlierUnresolvedCount = Math.max(0, nearestStopSequence - 1 - resolvedStopCount);
-  if (earlierUnresolvedCount === 0) return null;
-
-  return {
-    earlierUnresolvedCount,
-    nearestStopSequence,
-    resolvedStopCount,
-    totalStopCount,
-    unresolvedCount: totalStopCount - resolvedStopCount,
-  };
-}
-
-function nonNegativeIntegerOrNull(value) {
-  if (value == null || value === "") return null;
-  const number = Number(value);
-  return Number.isInteger(number) && number >= 0 ? number : null;
-}
-
-function positiveIntegerOrNull(value) {
-  const number = nonNegativeIntegerOrNull(value);
-  return number !== null && number > 0 ? number : null;
-}
-
 function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
   const status = normalizeRouteExecutionStatus(currentStatus);
   const eventType = textOrNull(event?.eventType);
@@ -1033,7 +977,6 @@ export {
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingCompletionTime,
   getRouteTrackingLineFeatures,
-  getRouteTrackingOperationalMismatch,
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,

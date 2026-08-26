@@ -732,7 +732,7 @@ test("Ordered pill exposes order timing and delivery-cycle sequence on hover", (
 });
 
 test("Area pill distinguishes delivery attention, valid delivery, and pickup rows", () => {
-  assert.match(infoPillSource, /const INFO_PILL_TONES = new Set\(\["neutral", "info", "success", "warning", "critical", "pickup"\]\)/);
+  assert.match(infoPillSource, /const INFO_PILL_TONES = new Set\(\["neutral", "success", "warning", "critical", "pickup"\]\)/);
   assert.match(globalCssSource, /\.info-pill--pickup \{[\s\S]*?background: rgba\(0, 91, 211, 0\.12\);[\s\S]*?color: #005bd3/);
   assert.match(ordersPageSource, /function formatAreaValue\(order\) \{\s*if \(order\?\.serviceType === "PICKUP"\) return "Pickup";\s*return textOrUndefined\(order\?\.deliveryArea\) \?\? "Null";\s*\}/);
   assert.match(ordersPageSource, /function getOrderAreaPillTone\(order\) \{\s*if \(order\?\.serviceType === "PICKUP"\) return "pickup";\s*if \(textOrUndefined\(order\?\.deliveryArea\)\) return "neutral";\s*return "warning";\s*\}/);
