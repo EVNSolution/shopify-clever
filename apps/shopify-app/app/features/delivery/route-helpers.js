@@ -70,3 +70,35 @@ export function formatRouteStatus(status) {
   if (value === "CANCELLED") return "Cancelled";
   return "Ready";
 }
+
+export function shouldRevalidateRoutesRoute({
+  currentUrl,
+  defaultShouldRevalidate,
+  formMethod,
+  nextUrl,
+}) {
+  if (formMethod && formMethod.toLowerCase() !== "get") {
+    return defaultShouldRevalidate;
+  }
+
+  const isRoutesPath = (pathname) =>
+    pathname === "/app/routes" || pathname.startsWith("/app/routes/");
+  const isRoutesDetailPath = (pathname) =>
+    pathname.startsWith("/app/routes/") && pathname.length > "/app/routes/".length;
+
+  if (currentUrl && nextUrl?.pathname === "/app/routes/" && currentUrl.pathname !== nextUrl.pathname) {
+    return true;
+  }
+
+  if (
+    currentUrl &&
+    nextUrl &&
+    currentUrl.pathname !== nextUrl.pathname &&
+    isRoutesPath(currentUrl.pathname) &&
+    isRoutesDetailPath(nextUrl.pathname)
+  ) {
+    return false;
+  }
+
+  return defaultShouldRevalidate;
+}

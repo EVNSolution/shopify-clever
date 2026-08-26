@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { createMemoryRouter, redirect } from "react-router";
+import { shouldRevalidateRoutesRoute } from "../app/features/delivery/route-helpers.js";
 
 const root = process.cwd();
 const routesPageSource = readFileSync(
@@ -32,6 +34,163 @@ const routeHelpersSource = readFileSync(join(root, "app/features/delivery/route-
 const routeListRowsSource = readFileSync(join(root, "app/features/delivery/route-list-rows.js"), "utf8");
 const globalCssSource = readFileSync(join(root, "app/styles/global.css"), "utf8");
 const mapMarkersSource = readFileSync(join(root, "app/features/maps/map-markers.js"), "utf8");
+
+async function waitForRouterIdle(router) {
+  if (
+    router.state.initialized &&
+    router.state.navigation.state === "idle" &&
+    router.state.revalidation === "idle"
+  ) {
+    return;
+  }
+
+  await new Promise((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      unsubscribe();
+      reject(new Error("Timed out waiting for the memory router to become idle"));
+    }, 2_000);
+    const unsubscribe = router.subscribe((state) => {
+      if (
+        state.initialized &&
+        state.navigation.state === "idle" &&
+        state.revalidation === "idle"
+      ) {
+        clearTimeout(timeout);
+        unsubscribe();
+        resolve();
+      }
+    });
+  });
+}
+
+function createRoutesTestRouter(initialEntries, onParentLoad) {
+  return createMemoryRouter(
+    [
+      { path: "/app/orders", loader: () => null },
+      {
+        path: "/app/routes",
+        loader: ({ request }) => {
+          onParentLoad();
+          if (new URL(request.url).pathname === "/app/routes/") {
+            return redirect("/app/routes");
+          }
+          return null;
+        },
+        shouldRevalidate: shouldRevalidateRoutesRoute,
+        children: [
+          { index: true },
+          {
+            path: "groups/:routeGroupId",
+            loader: () => null,
+            action: () => null,
+          },
+        ],
+      },
+    ],
+    { initialEntries },
+  );
+}
+
+test("Routes parent loader stays cached only while entering nested GET pages", () => {
+  const routeArgs = (currentPath, nextPath, overrides = {}) => ({
+    currentUrl: new URL(`https://admin.example${currentPath}`),
+    nextUrl: new URL(`https://admin.example${nextPath}`),
+    defaultShouldRevalidate: true,
+    formMethod: undefined,
+    ...overrides,
+  });
+
+  assert.equal(
+    shouldRevalidateRoutesRoute(
+      routeArgs("/app/routes", "/app/routes/groups/route-group-id"),
+    ),
+    false,
+  );
+  assert.equal(
+    shouldRevalidateRoutesRoute(
+      routeArgs(
+        "/app/routes/groups/route-group-id",
+        "/app/routes/groups/route-group-id/routes/route-plan-id",
+      ),
+    ),
+    false,
+  );
+  assert.equal(
+    shouldRevalidateRoutesRoute(
+      routeArgs("/app/routes/groups/route-group-id", "/app/routes"),
+    ),
+    true,
+    "returning to the operational list must refresh externally changed data",
+  );
+  assert.equal(
+    shouldRevalidateRoutesRoute(
+      routeArgs("/app/routes", "/app/routes", { formMethod: "POST" }),
+    ),
+    true,
+  );
+  assert.equal(
+    shouldRevalidateRoutesRoute(routeArgs("/app/orders", "/app/routes")),
+    true,
+  );
+  assert.equal(
+    shouldRevalidateRoutesRoute(routeArgs("/app/routes", "/app/routes")),
+    true,
+    "explicit same-URL revalidation must remain available",
+  );
+  assert.equal(
+    shouldRevalidateRoutesRoute(routeArgs("/app/routes", "/app/routes/")),
+    true,
+    "the trailing-slash list is not a nested detail page",
+  );
+
+  assert.match(routesPageSource, /export function shouldRevalidate\(args\) \{/);
+  assert.match(routesPageSource, /return shouldRevalidateRoutesRoute\(args\)/);
+});
+
+test("Routes Router integration preserves mutations, refresh, entry, and Back freshness", async () => {
+  let parentLoads = 0;
+  const router = createRoutesTestRouter(["/app/routes?status=READY"], () => {
+    parentLoads += 1;
+  });
+  await waitForRouterIdle(router);
+  assert.equal(parentLoads, 1);
+
+  await router.navigate("/app/routes/groups/group-1");
+  assert.equal(parentLoads, 1, "opening a nested detail must reuse the Routes list data");
+
+  await router.navigate("/app/routes/groups/group-1", {
+    formData: new FormData(),
+    formMethod: "post",
+  });
+  assert.equal(parentLoads, 2, "a successful nested mutation must refresh the parent data");
+
+  router.revalidate();
+  await waitForRouterIdle(router);
+  assert.equal(parentLoads, 3, "an explicit refresh must reload the parent data");
+
+  await router.navigate("/app/orders");
+  await router.navigate("/app/routes/groups/group-2");
+  assert.equal(parentLoads, 4, "entering Routes from another section must load fresh parent data");
+
+  let backLoads = 0;
+  const backRouter = createRoutesTestRouter(["/app/routes?status=READY"], () => {
+    backLoads += 1;
+  });
+  await waitForRouterIdle(backRouter);
+  await backRouter.navigate("/app/routes/groups/group-1");
+  assert.equal(backLoads, 1);
+  await backRouter.navigate(-1);
+  assert.equal(backLoads, 2, "Back to the filtered list must reload externally changed data");
+
+  let canonicalLoads = 0;
+  const canonicalRouter = createRoutesTestRouter(["/app/routes"], () => {
+    canonicalLoads += 1;
+  });
+  await waitForRouterIdle(canonicalRouter);
+  await canonicalRouter.navigate("/app/routes/");
+  assert.equal(canonicalRouter.state.location.pathname, "/app/routes");
+  assert.ok(canonicalLoads >= 2, "the trailing-slash navigation must execute the canonical loader");
+});
 
 test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
   assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
