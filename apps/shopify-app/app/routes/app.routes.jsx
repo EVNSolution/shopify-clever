@@ -3,7 +3,10 @@ import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { formatRouteStatus } from "../features/delivery/route-helpers";
+import {
+  formatRouteStatus,
+  shouldRevalidateRoutesRoute,
+} from "../features/delivery/route-helpers";
 import {
   buildRouteRows,
   getExpandedRouteDeleteKeys,
@@ -360,6 +363,10 @@ export const loader = async ({ request }) => {
     routePlans: routePlanData.routePlans ?? [],
   };
 };
+
+export function shouldRevalidate(args) {
+  return shouldRevalidateRoutesRoute(args);
+}
 
 export const action = async ({ request }) => {
   await authenticate.admin(request);
