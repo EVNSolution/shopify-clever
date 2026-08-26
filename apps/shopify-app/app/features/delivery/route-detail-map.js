@@ -108,7 +108,7 @@ function normalizeLngLat(latitudeValue, longitudeValue) {
   const latitude = numberOrUndefined(latitudeValue);
   const longitude = numberOrUndefined(longitudeValue);
 
-  if (!isValidLatitude(latitude) || !isValidLongitude(longitude)) {
+  if (!isValidLatitude(latitude) || !isValidLongitude(longitude) || (latitude === 0 && longitude === 0)) {
     return null;
   }
 
@@ -121,7 +121,7 @@ function normalizeLngLatPair(coordinates) {
   const longitude = numberOrUndefined(coordinates[0]);
   const latitude = numberOrUndefined(coordinates[1]);
 
-  if (!isValidLongitude(longitude) || !isValidLatitude(latitude)) {
+  if (!isValidLongitude(longitude) || !isValidLatitude(latitude) || (latitude === 0 && longitude === 0)) {
     return null;
   }
 
@@ -160,7 +160,10 @@ function getRouteMapLocations(departureLocation, routeStops) {
   return [
     ...(departureLocation?.hasCoordinates ? [departureLocation] : []),
     ...routeStops.filter((stop) => stop.hasCoordinates),
-  ];
+  ].flatMap((location) => {
+    const coordinates = normalizeLngLatPair(location.coordinates);
+    return coordinates ? [{ ...location, coordinates }] : [];
+  });
 }
 
 function getRouteMapCenter(departureLocation, routeStops) {
@@ -168,11 +171,7 @@ function getRouteMapCenter(departureLocation, routeStops) {
 }
 
 function getValidRouteLineCoordinates(coordinates) {
-  return coordinates.filter((coordinate) => (
-    Array.isArray(coordinate) &&
-    isValidLongitude(Number(coordinate[0])) &&
-    isValidLatitude(Number(coordinate[1]))
-  ));
+  return coordinates.map(normalizeLngLatPair).filter(Boolean);
 }
 
 function buildRouteDetailRouteLineData(routeLines, fallbackRouteColor) {
@@ -563,7 +562,11 @@ function isLngLatInPolygon(point, polygon) {
 }
 
 function fitRouteDetailMap(map, maplibregl, locations, options = {}) {
-  if (locations.length === 0) return;
+  const validLocations = locations.flatMap((location) => {
+    const coordinates = normalizeLngLatPair(location?.coordinates);
+    return coordinates ? [{ ...location, coordinates }] : [];
+  });
+  if (validLocations.length === 0) return;
 
   const duration = options.duration ?? 250;
   const maxZoom = options.maxZoom ?? 13;
@@ -575,17 +578,17 @@ function fitRouteDetailMap(map, maplibregl, locations, options = {}) {
     top: 80,
   };
 
-  if (locations.length === 1) {
-    map.flyTo({ center: locations[0].coordinates, duration, essential: true, zoom: singleZoom });
+  if (validLocations.length === 1) {
+    map.flyTo({ center: validLocations[0].coordinates, duration, essential: true, zoom: singleZoom });
     return;
   }
 
   const bounds = new maplibregl.LngLatBounds(
-    locations[0].coordinates,
-    locations[0].coordinates,
+    validLocations[0].coordinates,
+    validLocations[0].coordinates,
   );
 
-  for (const location of locations.slice(1)) {
+  for (const location of validLocations.slice(1)) {
     bounds.extend(location.coordinates);
   }
 
@@ -631,7 +634,7 @@ function buildRouteStopPointLookup(routeStopPoints) {
 
 function getRouteStopPointerCoordinates(stop, routeStopPoint) {
   if (stop.locationDiagnostic?.routeable === false) return null;
-  if (stop.hasCoordinates) return stop.coordinates;
+  if (stop.hasCoordinates) return normalizeLngLatPair(stop.coordinates);
 
   return (
     normalizeLngLatPair(routeStopPoint?.inputCoordinates) ??
@@ -641,7 +644,9 @@ function getRouteStopPointerCoordinates(stop, routeStopPoint) {
 
 function buildRouteStopPointFitLocations(stop, routeStopPoint) {
   if (stop.locationDiagnostic?.routeable === false) return [];
-  const locations = stop.hasCoordinates ? [{ coordinates: stop.coordinates }] : [];
+  const stopCoordinates = stop.hasCoordinates ? normalizeLngLatPair(stop.coordinates) : null;
+  if (stop.hasCoordinates && !stopCoordinates) return [];
+  const locations = stopCoordinates ? [{ coordinates: stopCoordinates }] : [];
   const snappedCoordinates = normalizeLngLatPair(routeStopPoint?.snappedCoordinates);
 
   if (
@@ -660,7 +665,9 @@ function buildRouteStopPointMarker(stop, routeStopPoint) {
   if (!snappedCoordinates) return null;
 
   if (stop.hasCoordinates) {
-    const distanceMeters = calculateLngLatDistanceMeters(stop.coordinates, snappedCoordinates);
+    const stopCoordinates = normalizeLngLatPair(stop.coordinates);
+    if (!stopCoordinates) return null;
+    const distanceMeters = calculateLngLatDistanceMeters(stopCoordinates, snappedCoordinates);
     if (distanceMeters != null && distanceMeters < ROUTE_STOP_POINT_MIN_DISTANCE_METERS) {
       return null;
     }
@@ -757,12 +764,15 @@ function ensureRouteDetailMarkerImages(map, departureLocation, routeStops, route
 function buildRouteDetailMarkerFeatureCollection(departureLocation, routeStops, routeStopPoints, routeColor, routeStopColorById) {
   const features = [];
 
-  if (departureLocation?.hasCoordinates) {
+  const departureCoordinates = departureLocation?.hasCoordinates
+    ? normalizeLngLatPair(departureLocation.coordinates)
+    : null;
+  if (departureCoordinates) {
     features.push({
       type: "Feature",
       geometry: {
         type: "Point",
-        coordinates: departureLocation.coordinates,
+        coordinates: departureCoordinates,
       },
       properties: {
         featureType: "departure",

@@ -4,7 +4,9 @@ import test from "node:test";
 import {
   buildRouteDetailMarkerFeatureCollection,
   buildRouteStopPointLookup,
+  fitRouteDetailMap,
   getRouteDetailPopupPanOffset,
+  normalizeLngLat,
   syncRouteDetailLiveTracking,
   syncRouteDetailMapMarkerLayers,
   syncRouteDetailMapViewEmphasis,
@@ -70,6 +72,27 @@ function createFakeMap(options = {}) {
   };
   return { calls, layers, map, sources };
 }
+
+test("route detail map rejects contaminated zero coordinates before marker and fit operations", () => {
+  assert.equal(normalizeLngLat(0, 0), null);
+  assert.equal(normalizeLngLat("0", "0"), null);
+
+  const markerData = buildRouteDetailMarkerFeatureCollection(
+    null,
+    [{ coordinates: [0, 0], hasCoordinates: true, id: "contaminated", stop: 1 }],
+    [],
+    "#006fbb",
+    new Map(),
+  );
+  assert.deepEqual(markerData.features, []);
+
+  const calls = [];
+  fitRouteDetailMap({
+    fitBounds() { calls.push("fitBounds"); },
+    flyTo() { calls.push("flyTo"); },
+  }, { LngLatBounds: class {} }, [{ coordinates: [0, 0] }]);
+  assert.deepEqual(calls, []);
+});
 
 test("route marker sync skips canvas rasterization for pre-registered marker images", () => {
   const previousDocument = globalThis.document;

@@ -18,6 +18,15 @@ const CUSTOM_STOP_DEFAULTS = Object.freeze({
   timeWindowStart: "",
 });
 
+const CUSTOM_STOP_ADDRESS_FIELDS = new Set([
+  "address1",
+  "address2",
+  "city",
+  "province",
+  "postalCode",
+  "countryCode",
+]);
+
 export function createCustomStopDraft(values = {}) {
   return Object.fromEntries(
     Object.entries({ ...CUSTOM_STOP_DEFAULTS, ...values }).map(([key, value]) => [
@@ -38,10 +47,21 @@ export function buildCustomStopAddress(draft) {
   ].map(cleanText).filter(Boolean).join(", ");
 }
 
+export function updateCustomStopDraftField(draft, field, value) {
+  return isCustomStopAddressField(field)
+    ? { ...draft, [field]: value, latitude: "", longitude: "" }
+    : { ...draft, [field]: value };
+}
+
+export function isCustomStopAddressField(field) {
+  return CUSTOM_STOP_ADDRESS_FIELDS.has(field);
+}
+
 export function validateCustomStopDraft(draft) {
   const errors = {};
   const stopName = cleanText(draft?.stopName);
   const address1 = cleanText(draft?.address1);
+  const countryCode = cleanText(draft?.countryCode).toUpperCase();
   const latitudeText = cleanText(draft?.latitude);
   const longitudeText = cleanText(draft?.longitude);
   const serviceMinutes = Number(draft?.serviceMinutes);
@@ -53,8 +73,13 @@ export function validateCustomStopDraft(draft) {
   else if (stopName.length > 80) errors.stopName = "Stop name must be 80 characters or fewer.";
 
   if (!address1) errors.address1 = "Enter an address.";
+  if (!/^[A-Z]{2}$/.test(countryCode)) {
+    errors.countryCode = "Enter a two-letter country code, such as CA.";
+  }
 
-  if (latitudeText || longitudeText) {
+  if (!latitudeText && !longitudeText) {
+    errors.latitude = "Select a navigation pin on the map before saving.";
+  } else {
     if (!latitudeText) errors.latitude = "Enter latitude when longitude is provided.";
     if (!longitudeText) errors.longitude = "Enter longitude when latitude is provided.";
 
@@ -103,7 +128,7 @@ export function buildCustomStopPayload(draft, context = {}) {
     address1: cleanText(draft?.address1),
     address2: cleanText(draft?.address2),
     city: cleanText(draft?.city),
-    countryCode: cleanText(draft?.countryCode),
+    countryCode: cleanText(draft?.countryCode).toUpperCase(),
     email: cleanText(draft?.email),
     ...(cleanText(context.expectedUpdatedAt) ? { expectedUpdatedAt: cleanText(context.expectedUpdatedAt) } : {}),
     instructions: cleanText(draft?.instructions),
