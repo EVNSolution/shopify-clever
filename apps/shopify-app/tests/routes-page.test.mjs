@@ -874,7 +874,7 @@ test("Route detail places stop and departure markers through MapLibre source lay
 });
 test("Route detail falls back to route stop point coordinates before dropping stop markers", () => {
   assert.match(routeDetailMapSource, /function getRouteStopPointerCoordinates\(stop, routeStopPoint\) \{/);
-  assert.match(routeDetailMapSource, /if \(stop\.hasCoordinates\) return stop\.coordinates/);
+  assert.match(routeDetailMapSource, /if \(stop\.hasCoordinates\) return normalizeLngLatPair\(stop\.coordinates\)/);
   assert.match(routeDetailMapSource, /normalizeLngLatPair\(routeStopPoint\?\.inputCoordinates\)/);
   assert.match(routeDetailMapSource, /normalizeLngLatPair\(routeStopPoint\?\.snappedCoordinates\)/);
   assert.match(routeDetailMapSource, /for \(const stop of routeStops\) \{\s+const routeStopPoint = findRouteStopPoint\(stop, routeStopPoints\);\s+const markerCoordinates = getRouteStopPointerCoordinates\(stop, routeStopPoint\);\s+if \(!markerCoordinates\) continue;/);
@@ -921,7 +921,7 @@ test("Route detail only auto-fits the map on initial map readiness", () => {
   assert.match(routeDetailSource, /if \(hasInitialRouteMapFitRef\.current\) return/);
   assert.match(routeDetailSource, /hasInitialRouteMapFitRef\.current = true/);
   assert.match(routeDetailMapSource, /const duration = options\.duration \?\? 250/);
-  assert.match(routeDetailMapSource, /map\.flyTo\(\{ center: locations\[0\]\.coordinates, duration, essential: true, zoom: singleZoom \}\)/);
+  assert.match(routeDetailMapSource, /map\.flyTo\(\{ center: validLocations\[0\]\.coordinates, duration, essential: true, zoom: singleZoom \}\)/);
   assert.match(routeDetailMapSource, /duration,/);
 });
 
@@ -952,7 +952,7 @@ test("Route detail renders OSRM snapped stop points as route-colored circle laye
   assert.match(routeDetailMapSource, /const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points"/);
   assert.match(routeDetailMapSource, /function buildRouteStopPointMarker\(stop, routeStopPoint\) \{/);
   assert.match(routeDetailMapSource, /const snappedCoordinates = normalizeLngLatPair\(routeStopPoint\?\.snappedCoordinates\)/);
-  assert.match(routeDetailMapSource, /calculateLngLatDistanceMeters\(stop\.coordinates, snappedCoordinates\)/);
+  assert.match(routeDetailMapSource, /calculateLngLatDistanceMeters\(stopCoordinates, snappedCoordinates\)/);
   assert.match(routeDetailMapSource, /distanceMeters < ROUTE_STOP_POINT_MIN_DISTANCE_METERS/);
   assert.match(routeDetailMapSource, /function buildRouteDetailStopPointFeatureCollection\(routeStops, routeStopPoints, routeColor, routeStopColorById\) \{/);
   assert.match(routeDetailMapSource, /map\.addSource\(ROUTE_DETAIL_STOP_POINT_SOURCE_ID/);

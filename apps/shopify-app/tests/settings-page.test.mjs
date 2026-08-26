@@ -141,6 +141,9 @@ test("Settings tab lets operators preview geocoding and adjust the pin on a map"
   assert.match(settingsPageSource, /import \{ SettingsDepartureMap \} from "\.\.\/features\/settings\/settings-departure-map"/);
   assert.match(settingsPageSource, /<SettingsDepartureMap/);
   assert.match(settingsDepartureMapSource, /import \{ MapPanel, MapToolbar, renderMapFitIcon, renderMapZoomInIcon, renderMapZoomOutIcon \} from "\.\.\/\.\.\/ui\/map-panel"/);
+  assert.match(settingsDepartureMapSource, /export function LocationPreviewMap/);
+  assert.match(settingsDepartureMapSource, /\[latitude, longitude, isMapReady, readOnly\]/);
+  assert.match(settingsDepartureMapSource, /ariaLabel=\{ariaLabel\}/);
   assert.match(settingsDepartureMapSource, /ariaLabel="Departure location map"/);
   assert.match(settingsDepartureMapSource, /ariaLabel: "Fit highlighted map markers"/);
   assert.match(settingsDepartureMapSource, /renderMapZoomInIcon\(\)/);
@@ -148,9 +151,9 @@ test("Settings tab lets operators preview geocoding and adjust the pin on a map"
   assert.doesNotMatch(settingsDepartureMapSource, /NavigationControl/);
   assert.match(settingsDepartureMapSource, /const handleFitHighlightedMapMarkers = useCallback\(\(\) => \{/);
   assert.match(settingsDepartureMapSource, /await import\("maplibre-gl"\)/);
-  assert.match(settingsDepartureMapSource, /new maplibregl\.Marker\(\{\s*color: "#008060",\s*draggable: true,\s*\}\)/);
+  assert.match(settingsDepartureMapSource, /new maplibregl\.Marker\(\{\s*color: "#008060",\s*draggable: !readOnly,\s*\}\)/);
   assert.match(settingsDepartureMapSource, /markerRef\.current\.on\("dragend"/);
-  assert.match(settingsDepartureMapSource, /onCoordinateChangeRef\.current\(\{/);
+  assert.match(settingsDepartureMapSource, /onCoordinateChangeRef\.current\?\.\(\{/);
   assert.match(settingsPageSource, /setCoordinateAddress\(formText\(departureAddress\)\)/);
 });
 

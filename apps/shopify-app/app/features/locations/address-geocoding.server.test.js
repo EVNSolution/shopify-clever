@@ -74,6 +74,23 @@ test("returns null instead of saving invalid provider coordinates", async () => 
   assert.equal(result, null);
 });
 
+test("returns null instead of treating blank provider coordinates as zero", async () => {
+  const result = await geocodeAddress("Blank coordinate address", {
+    endpoint: "https://geocoder.example.test/search",
+    fetchImpl: async () => ({
+      ok: true,
+      json: async () => [
+        {
+          lat: "",
+          lon: " ",
+        },
+      ],
+    }),
+  });
+
+  assert.equal(result, null);
+});
+
 test("does not geocode when no endpoint is configured", async () => {
   const previousEndpoint = process.env.GEOCODING_SEARCH_URL;
   delete process.env.GEOCODING_SEARCH_URL;

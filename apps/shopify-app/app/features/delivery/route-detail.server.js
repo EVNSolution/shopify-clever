@@ -41,7 +41,6 @@ import {
 } from "./route-detail-enrichment.server";
 import { routeGroupChildPath } from "./route-paths";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
-import { geocodeAddress } from "../locations/address-geocoding.server";
 import { getOrderSyncSnapshots } from "../orders/canonical-orders";
 import { fetchShopifyOrdersByIds } from "../orders/shopify-orders.server";
 import { fetchShopifyAppPreferences } from "../settings/app-preferences.server";
@@ -50,7 +49,6 @@ import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "./route-timezo
 import { readRouteDraftPayload } from "./route-draft";
 import { buildRouteAddOrderCandidates } from "./route-add-order-candidates";
 import {
-  buildCustomStopAddress,
   buildCustomStopPayload,
   createCustomStopDraft,
   validateCustomStopDraft,
@@ -368,32 +366,10 @@ async function readCustomStopPayload(formData, context = {}) {
     };
   }
 
-  let latitude = numberOrUndefined(draft.latitude);
-  let longitude = numberOrUndefined(draft.longitude);
-  if (latitude == null || longitude == null) {
-    const location = await geocodeAddress(buildCustomStopAddress(draft));
-    if (!location) {
-      return {
-        draft,
-        fieldErrors: {
-          address1: "Location을 찾지 못했습니다. 주소를 확인하거나 위도와 경도를 입력해주세요.",
-        },
-        payload: null,
-        errors: [{ message: "Custom stop location을 확인하지 못했습니다." }],
-      };
-    }
-    latitude = location.latitude;
-    longitude = location.longitude;
-  }
-
   return {
     draft,
     fieldErrors: {},
-    payload: buildCustomStopPayload({
-      ...draft,
-      latitude,
-      longitude,
-    }, context),
+    payload: buildCustomStopPayload(draft, context),
     errors: [],
   };
 }

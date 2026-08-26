@@ -1,3 +1,4 @@
+/* eslint-disable react/prop-types */
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createMapLibreMap } from "../maps/maplibre-map";
 import { installMissingMapImageFallback } from "../maps/maplibre-missing-images";
@@ -18,8 +19,7 @@ function coordinateToLngLat(coordinate) {
   return [coordinate.longitude, coordinate.latitude];
 }
 
-// eslint-disable-next-line react/prop-types
-export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
+export function LocationPreviewMap({ ariaLabel = "Location map", coordinate, onCoordinateChange, readOnly = false }) {
   const initialCoordinateRef = useRef(coordinate);
   const mapContainerRef = useRef(null);
   const mapLibraryRef = useRef(null);
@@ -27,6 +27,8 @@ export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
   const markerRef = useRef(null);
   const onCoordinateChangeRef = useRef(onCoordinateChange);
   const [isMapReady, setIsMapReady] = useState(false);
+  const latitude = coordinate?.latitude;
+  const longitude = coordinate?.longitude;
 
   useEffect(() => {
     onCoordinateChangeRef.current = onCoordinateChange;
@@ -57,12 +59,14 @@ export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
       mapRef.current.on("load", () => {
         if (isMounted) setIsMapReady(true);
       });
-      mapRef.current.on("click", (event) => {
-        onCoordinateChangeRef.current({
-          latitude: event.lngLat.lat,
-          longitude: event.lngLat.lng,
+      if (!readOnly) {
+        mapRef.current.on("click", (event) => {
+          onCoordinateChangeRef.current?.({
+            latitude: event.lngLat.lat,
+            longitude: event.lngLat.lng,
+          });
         });
-      });
+      }
     };
 
     initializeMap();
@@ -75,17 +79,17 @@ export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
       mapRef.current = null;
       mapLibraryRef.current = null;
     };
-  }, []);
+  }, [readOnly]);
 
   const handleFitHighlightedMapMarkers = useCallback(() => {
-    if (!coordinate || !mapRef.current) return;
+    if (latitude == null || longitude == null || !mapRef.current) return;
 
     mapRef.current.easeTo({
-      center: coordinateToLngLat(coordinate),
+      center: [longitude, latitude],
       duration: 300,
       zoom: SETTINGS_MAP_COORDINATE_ZOOM,
     });
-  }, [coordinate]);
+  }, [latitude, longitude]);
 
   const handleZoomInMap = () => {
     mapRef.current?.zoomIn({ duration: 250 });
@@ -101,30 +105,32 @@ export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
 
     if (!maplibregl || !map || !isMapReady) return;
 
-    if (!coordinate) {
+    if (latitude == null || longitude == null) {
       markerRef.current?.remove();
       markerRef.current = null;
       return;
     }
 
-    const lngLat = coordinateToLngLat(coordinate);
+    const lngLat = [longitude, latitude];
 
     if (!markerRef.current) {
       markerRef.current = new maplibregl.Marker({
         color: "#008060",
-        draggable: true,
+        draggable: !readOnly,
       })
         .setLngLat(lngLat)
         .addTo(map);
-      markerRef.current.on("dragend", () => {
-        const markerLngLat = markerRef.current?.getLngLat();
-        if (!markerLngLat) return;
+      if (!readOnly) {
+        markerRef.current.on("dragend", () => {
+          const markerLngLat = markerRef.current?.getLngLat();
+          if (!markerLngLat) return;
 
-        onCoordinateChangeRef.current({
-          latitude: markerLngLat.lat,
-          longitude: markerLngLat.lng,
+          onCoordinateChangeRef.current?.({
+            latitude: markerLngLat.lat,
+            longitude: markerLngLat.lng,
+          });
         });
-      });
+      }
     } else {
       markerRef.current.setLngLat(lngLat);
     }
@@ -134,11 +140,11 @@ export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
       duration: 300,
       zoom: Math.max(map.getZoom(), SETTINGS_MAP_COORDINATE_ZOOM),
     });
-  }, [coordinate, isMapReady]);
+  }, [latitude, longitude, isMapReady, readOnly]);
 
   return (
     <MapPanel
-      ariaLabel="Departure location map"
+      ariaLabel={ariaLabel}
       canvasRef={mapContainerRef}
       frameStyle={settingsMapFrameStyle}
       toolbar={
@@ -156,7 +162,7 @@ export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
             },
             {
               ariaLabel: "Fit highlighted map markers",
-              disabled: !coordinate,
+              disabled: latitude == null || longitude == null,
               icon: renderMapFitIcon(),
               onClick: handleFitHighlightedMapMarkers,
             },
@@ -165,4 +171,8 @@ export function SettingsDepartureMap({ coordinate, onCoordinateChange }) {
       }
     />
   );
+}
+
+export function SettingsDepartureMap(props) {
+  return <LocationPreviewMap {...props} ariaLabel="Departure location map" />;
 }

@@ -64,8 +64,9 @@ function textOrUndefined(value) {
 }
 
 function numberOrUndefined(value) {
-  if (value == null) return undefined;
-  const number = Number(value);
+  const text = textOrUndefined(value);
+  if (!text) return undefined;
+  const number = Number(text);
 
   return Number.isFinite(number) ? number : undefined;
 }
