@@ -188,7 +188,6 @@ export async function fetchDeliveryRoutePlanDetail(request, routePlanId, options
   );
 
   return {
-    operationalState: result.data?.operationalState ?? result.data?.routePlan?.operationalState ?? null,
     routePlan: result.data?.routePlan ?? null,
     routeGeometry: result.data?.routeGeometry ?? null,
     routeMetrics: result.data?.routeMetrics ?? null,

@@ -6,7 +6,6 @@ import {
   doesTrackingEventRefreshEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingLineFeatures,
-  getRouteTrackingOperationalMismatch,
   getRouteTrackingPathPoints,
   getRouteTrackingPathSummary,
   getRouteTrackingFreshness,
@@ -647,101 +646,6 @@ test("freshness uses server-provided thresholds", () => {
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:00:30.000Z")).key, "LIVE");
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:02:00.000Z")).key, "DELAYED");
   assert.equal(getRouteTrackingFreshness(snapshot, Date.parse("2026-07-20T04:04:00.000Z")).key, "OFFLINE");
-});
-
-test("tracking returns raw Kitchener mismatch evidence only from server operational state", () => {
-  const operationalState = {
-    physicalPosition: {
-      freshness: "FRESH",
-      nearestStopSequence: 11,
-      reliableForProximity: true,
-      withinProximityThreshold: true,
-    },
-    routeStatus: "IN_PROGRESS",
-    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
-  };
-
-  assert.deepEqual(getRouteTrackingOperationalMismatch(operationalState), {
-    earlierUnresolvedCount: 9,
-    nearestStopSequence: 11,
-    resolvedStopCount: 1,
-    totalStopCount: 11,
-    unresolvedCount: 10,
-  });
-});
-
-test("tracking suppresses mismatch without trustworthy server proximity and progress evidence", () => {
-  const kitchenerState = {
-    physicalPosition: {
-      freshness: "FRESH",
-      nearestStopSequence: 11,
-      reliableForProximity: true,
-      withinProximityThreshold: true,
-    },
-    routeStatus: "IN_PROGRESS",
-    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
-  };
-
-  assert.equal(getRouteTrackingOperationalMismatch(null), null);
-  assert.equal(getRouteTrackingOperationalMismatch({}), null);
-  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, serverProgress: null }), null);
-  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, serverProgress: {} }), null);
-  assert.equal(getRouteTrackingOperationalMismatch(normalizeRouteTrackingSnapshot({}).operationalState), null);
-  assert.equal(getRouteTrackingOperationalMismatch({
-    ...kitchenerState,
-    physicalPosition: { ...kitchenerState.physicalPosition, freshness: "STALE" },
-  }), null);
-  assert.equal(getRouteTrackingOperationalMismatch({
-    ...kitchenerState,
-    physicalPosition: { ...kitchenerState.physicalPosition, freshness: "AGING" },
-  }), null);
-  assert.equal(getRouteTrackingOperationalMismatch({
-    ...kitchenerState,
-    physicalPosition: { ...kitchenerState.physicalPosition, reliableForProximity: false },
-  }), null);
-  assert.equal(getRouteTrackingOperationalMismatch({
-    ...kitchenerState,
-    physicalPosition: { ...kitchenerState.physicalPosition, withinProximityThreshold: false },
-  }), null);
-  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, routeStatus: "READY" }), null);
-  assert.equal(getRouteTrackingOperationalMismatch({ ...kitchenerState, routeStatus: "CANCELLED" }), null);
-  assert.equal(getRouteTrackingOperationalMismatch({
-    ...kitchenerState,
-    physicalPosition: { ...kitchenerState.physicalPosition, nearestStopSequence: 2 },
-  }), null);
-});
-
-test("server-resolved SKIPPED and CANCELLED stops do not create an earlier-results warning", () => {
-  const operationalState = {
-    physicalPosition: {
-      freshness: "FRESH",
-      nearestStopSequence: 3,
-      reliableForProximity: true,
-      withinProximityThreshold: true,
-    },
-    routeStatus: "IN_PROGRESS",
-    serverProgress: {
-      outcomeCounts: { cancelled: 1, skipped: 1 },
-      resolvedStopCount: 2,
-      totalStopCount: 3,
-    },
-  };
-
-  assert.equal(getRouteTrackingOperationalMismatch(operationalState), null);
-});
-
-test("tracking snapshots preserve the server operational state through reconnect merges", () => {
-  const operationalState = {
-    deviceProgress: { completedStopCount: 11, totalStopCount: 11 },
-    routePlanId: "route-1",
-    serverProgress: { resolvedStopCount: 1, totalStopCount: 11 },
-    syncHealth: { state: "BLOCKED" },
-  };
-  const normalized = normalizeRouteTrackingSnapshot({ operationalState, routePlanId: "route-1" });
-  assert.deepEqual(normalized.operationalState, operationalState);
-
-  const merged = mergeRouteTrackingSnapshot(normalized, { routePlanId: "route-1", status: "LIVE" });
-  assert.deepEqual(merged.operationalState, operationalState);
 });
 
 test("stream inactivity recovery waits for three missed server heartbeats", () => {

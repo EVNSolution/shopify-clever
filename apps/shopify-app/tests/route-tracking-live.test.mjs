@@ -4,7 +4,6 @@ import test from "node:test";
 
 const appRoot = new URL("../app/", import.meta.url);
 const trackingContractPath = new URL("features/delivery/route-tracking.js", appRoot);
-const operationalStatePath = new URL("features/delivery/operational-state.js", appRoot);
 const trackingProxyPath = new URL("features/delivery/route-tracking.server.js", appRoot);
 const trackingResourcePath = new URL("routes/app.route-tracking.$routePlanId.jsx", appRoot);
 const routeDetailPath = new URL("routes/app.routes.$routeId.jsx", appRoot);
@@ -173,7 +172,7 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.match(routeDetailSource, /routeTrackingConnectionLabel/);
   assert.match(routeDetailSource, /displayedRouteTrackingSnapshot\?\.policy/);
   assert.match(routeDetailSource, /Latest position/);
-  assert.match(routeDetailSource, /ariaLabel="Tracking evidence"/);
+  assert.match(routeDetailSource, /Last received/);
   assert.match(routeDetailSource, /formatTrackingTimestamp\([^,]+,\s*ianaTimezone\)/);
   assert.match(routeDetailSource, /timeZone:\s*ianaTimezone/);
   assert.match(routeDetailSource, /trackingConnectionState/);
@@ -194,31 +193,9 @@ test("Tracking map focuses the live driver position and keeps freshness visible 
   assert.match(routeDetailSource, /window\.setInterval\(\(\) => setRouteTrackingClock\(Date\.now\(\)\), 1_000\)/);
   assert.match(routeDetailSource, /getRouteTrackingCompletionTime\(displayedRouteTrackingSnapshot\)/);
   assert.match(routeDetailSource, /shouldShowRouteTrackingFreshness\(/);
-  assert.match(routeDetailSource, /ariaLabel="Tracking map operational state"/);
-  assert.doesNotMatch(routeDetailSource, /Vehicle GPS[^\n]*·[^\n]*Server confirmed/);
-  assert.match(routeDetailSource, /mapRouteOperationalState/);
-  assert.match(routeDetailSource, /ariaLabel="Tracking evidence"/);
-  assert.match(routeDetailSource, /routeOperationalPresentation\.pills/);
+  assert.match(routeDetailSource, /Current position/);
+  assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(/);
   assert.match(routeDetailSource, /<span style=\{routeChildTrackingMetricLabelStyle\}>Range<\/span>/);
   assert.match(routeDetailSource, /formatTrackingRange\(/);
   assert.doesNotMatch(routeDetailSource, />Recorded range</);
-});
-
-test("Tracking tab exposes the Current position mismatch as an accessible Pill-based warning", () => {
-  // The repository's node:test harness has no DOM or JSX transform. This is the
-  // closest rendered-surface contract available without adding a test dependency.
-  const routeDetailSource = readIfPresent(routeDetailPath);
-  const trackingContractSource = readIfPresent(trackingContractPath);
-  const operationalStateSource = readIfPresent(operationalStatePath);
-
-  assert.match(routeDetailSource, /getRouteTrackingOperationalMismatch/);
-  assert.match(routeDetailSource, /positionMismatch: routeTrackingPositionMismatch/);
-  assert.match(routeDetailSource, /routeOperationalPresentation\.currentPositionAlert/);
-  assert.match(routeDetailSource, /role="alert"/);
-  assert.match(routeDetailSource, /heading=\{routeTrackingCurrentPositionAlert\.title\}/);
-  assert.match(routeDetailSource, /ariaLabel="Current position warning evidence"/);
-  assert.match(routeDetailSource, /pills=\{routeTrackingCurrentPositionAlert\.pills\}/);
-  assert.doesNotMatch(trackingContractSource, /proximityThresholdMeters|GPS Stop.*nearby|Gap.*stops/);
-  assert.match(operationalStateSource, /GPS proximity does not confirm delivery/);
-  assert.doesNotMatch(routeDetailSource, /Current position[^\n]*(?:·|•)[^\n]*Server/u);
 });

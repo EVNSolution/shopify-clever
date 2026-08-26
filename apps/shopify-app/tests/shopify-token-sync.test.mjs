@@ -349,7 +349,7 @@ test("keeps interleaved shop failures, recovery history, and concurrency isolate
   }
 });
 
-test("authenticated health surfaces scope lookup to the authenticated shop", async () => {
+test("authenticated token health stays scoped to its dedicated route and out of Settings UI", async () => {
   const { readFile } = await import("node:fs/promises");
   const healthRoute = await readFile(new URL("../app/routes/app.health.shopify-token.jsx", import.meta.url), "utf8");
   const settingsRoute = await readFile(new URL("../app/routes/app.settings.jsx", import.meta.url), "utf8");
@@ -357,7 +357,7 @@ test("authenticated health surfaces scope lookup to the authenticated shop", asy
   assert.match(healthRoute, /const\s+\{\s*session\s*\}\s*=\s*await authenticate\.admin\(request\)/);
   assert.match(healthRoute, /getShopifyTokenSyncHealth\(session\?\.shop\)/);
   assert.doesNotMatch(healthRoute, /searchParams|url\.search|request\.url/);
-  assert.match(settingsRoute, /getShopifyTokenSyncHealth\(shopifyShopCacheKey\)/);
+  assert.doesNotMatch(settingsRoute, /getShopifyTokenSyncHealth|operationalHealth|Operational health/);
 });
 
 test("prunes expired health and caps retained shop identities", async () => {
