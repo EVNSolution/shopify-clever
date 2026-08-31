@@ -15,6 +15,7 @@ import {
   getDriverDownloadLink,
   normalizeInvitePhone,
 } from "../features/drivers/phone-normalization";
+import { fetchDriverAppReleaseNotice } from "../features/drivers/driver-app-release.server";
 import { countryDialCodeOptions, driverRows } from "../features/drivers/drivers-page-data";
 import { authenticate } from "../shopify.server";
 import { PageShell } from "../ui/page-shell";
@@ -52,6 +53,26 @@ const pageActionsStyle = {
   flexWrap: "wrap",
   gap: "8px",
   justifyContent: "flex-end",
+};
+
+const driverReleaseNoticeStyle = {
+  alignItems: "center",
+  background: "#f1f8e9",
+  border: "1px solid #b7d36b",
+  borderRadius: "10px",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  justifyContent: "space-between",
+  padding: "10px 12px",
+};
+
+const driverReleaseNoticeCopyStyle = {
+  color: "#303030",
+  display: "flex",
+  flexDirection: "column",
+  fontSize: "13px",
+  gap: "2px",
 };
 
 const primaryButtonStyle = {
@@ -629,9 +650,13 @@ function parseDriverIds(value) {
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
-  const result = await fetchDeliveryDrivers(request);
+  const [result, driverAppRelease] = await Promise.all([
+    fetchDeliveryDrivers(request),
+    fetchDriverAppReleaseNotice(),
+  ]);
   return {
     ...result,
+    driverAppRelease,
     driverDownloadLink: getDriverDownloadLink(),
   };
 };
@@ -700,7 +725,7 @@ export const action = async ({ request }) => {
 };
 
 export default function DriversVehiclesPage() {
-  const { driverDownloadLink = "", drivers = [], errors = [] } = useLoaderData();
+  const { driverAppRelease = null, driverDownloadLink = "", drivers = [], errors = [] } = useLoaderData();
   const driverInviteFetcher = useFetcher();
   const driverDeleteFetcher = useFetcher();
   const driverUpdateFetcher = useFetcher();
@@ -999,6 +1024,18 @@ export default function DriversVehiclesPage() {
           </button>
         </div>
       </div>
+
+      {driverAppRelease ? (
+        <div role="status" style={driverReleaseNoticeStyle}>
+          <div style={driverReleaseNoticeCopyStyle}>
+            <strong>CLEVER Routes {driverAppRelease.latestVersionName} is ready</strong>
+            <span>Version code {driverAppRelease.latestVersionCode}. Drivers can update from the existing QR and download page.</span>
+          </div>
+          <button type="button" style={secondaryButtonStyle} onClick={openDownloadModal}>
+            Open update page
+          </button>
+        </div>
+      ) : null}
 
       {visibleErrors.length > 0 ? (
         <div style={driverFeedbackStyle}>{visibleErrors[0].message ?? "Driver 작업을 완료하지 못했습니다."}</div>
