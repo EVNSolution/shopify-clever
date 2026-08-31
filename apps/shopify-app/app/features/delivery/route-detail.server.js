@@ -340,8 +340,6 @@ function readCustomStopDraft(formData) {
     countryCode: formData.get("countryCode"),
     email: formData.get("email"),
     instructions: formData.get("instructions"),
-    latitude: formData.get("latitude"),
-    longitude: formData.get("longitude"),
     phone: formData.get("phone"),
     postalCode: formData.get("postalCode"),
     priority: formData.get("priority"),

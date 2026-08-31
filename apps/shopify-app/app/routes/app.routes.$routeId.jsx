@@ -19,7 +19,6 @@ import { filterRouteAddOrderCandidatesByDate } from "../features/delivery/route-
 import { CustomStopDialog } from "../features/delivery/custom-stop-dialog";
 import {
   createCustomStopDraft,
-  isCustomStopAddressField,
   isCustomRouteStop,
   updateCustomStopDraftField,
   validateCustomStopDraft,
@@ -5241,28 +5240,9 @@ export default function RouteDetailPage() {
   const handleCustomStopDraftChange = (field, value) => {
     setCustomStopDraft((draft) => updateCustomStopDraftField(draft, field, value));
     setCustomStopFieldErrors((errors) => {
-      if (!errors[field] && !isCustomStopAddressField(field)) return errors;
+      if (!errors[field]) return errors;
       const nextErrors = { ...errors };
       delete nextErrors[field];
-      if (isCustomStopAddressField(field)) {
-        delete nextErrors.latitude;
-        delete nextErrors.longitude;
-      }
-      return nextErrors;
-    });
-  };
-
-  const handleCustomStopPinChange = (coordinate) => {
-    setCustomStopDraft((draft) => ({
-      ...draft,
-      latitude: String(coordinate.latitude),
-      longitude: String(coordinate.longitude),
-    }));
-    setCustomStopFieldErrors((errors) => {
-      const nextErrors = { ...errors };
-      delete nextErrors.address1;
-      delete nextErrors.latitude;
-      delete nextErrors.longitude;
       return nextErrors;
     });
   };
@@ -7952,7 +7932,6 @@ export default function RouteDetailPage() {
                 fieldErrors={customStopFieldErrors}
                 onCancel={() => setIsAddOrderDialogOpen(false)}
                 onChange={handleCustomStopDraftChange}
-                onCoordinateChange={handleCustomStopPinChange}
                 onSubmit={() => submitCustomStop("createCustomStop")}
                 onTargetRouteChange={setAddStopTargetRoutePlanId}
                 targetRouteOptions={addStopTargetRouteOptions}
@@ -8227,7 +8206,6 @@ export default function RouteDetailPage() {
               isEdit
               onCancel={() => setActiveCustomStopEditRow(null)}
               onChange={handleCustomStopDraftChange}
-              onCoordinateChange={handleCustomStopPinChange}
               onSubmit={() => submitCustomStop("updateCustomStop", activeCustomStopEditRow)}
               onTargetRouteChange={() => {}}
             />
