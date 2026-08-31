@@ -891,6 +891,26 @@ function getRouteTrackingCompletionTime(snapshot) {
   return Number.isFinite(completionTime) ? completionTime : null;
 }
 
+function formatRouteTrackingCompletionLabel(value, ianaTimezone) {
+  const date = Number.isFinite(value) ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime()) || !textOrNull(ianaTimezone)) return "종료 시각 확인 불가";
+  try {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      day: "2-digit",
+      hour: "2-digit",
+      hourCycle: "h23",
+      minute: "2-digit",
+      month: "2-digit",
+      timeZone: ianaTimezone,
+      year: "numeric",
+    }).formatToParts(date);
+    const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+    return `${values.year}.${values.month}.${values.day} ${values.hour}:${values.minute} 종료`;
+  } catch {
+    return "종료 시각 확인 불가";
+  }
+}
+
 function getDateKeyInTimeZone(value, ianaTimezone) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime()) || !textOrNull(ianaTimezone)) return null;
@@ -975,6 +995,7 @@ export {
   doesTrackingEventRefreshEta,
   shouldRevalidateTrackingEta,
   getRouteExecutionStatusFromTrackingEvent,
+  formatRouteTrackingCompletionLabel,
   getRouteTrackingCompletionTime,
   getRouteTrackingLineFeatures,
   getRouteTrackingPathPoints,

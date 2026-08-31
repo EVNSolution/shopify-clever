@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
+  formatRouteTrackingCompletionLabel,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingLineFeatures,
   getRouteTrackingPathPoints,
@@ -719,6 +720,14 @@ test("completed tracking freezes freshness at the completion event", () => {
     ianaTimezone: "America/Toronto",
     now: Date.parse("2026-08-06T12:00:00.000Z"),
   }), true);
+});
+
+test("completed tracking displays the store-local terminal date and never a relative age", () => {
+  const completedAt = Date.parse("2026-08-06T04:00:00.000Z");
+
+  assert.equal(formatRouteTrackingCompletionLabel(completedAt, "America/Toronto"), "2026.08.06 00:00 종료");
+  assert.equal(formatRouteTrackingCompletionLabel(completedAt, "Asia/Seoul"), "2026.08.06 13:00 종료");
+  assert.equal(formatRouteTrackingCompletionLabel(null, "America/Toronto"), "종료 시각 확인 불가");
 });
 
 test("completed tracking without a completion timestamp hides after its delivery date", () => {

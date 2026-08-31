@@ -84,6 +84,7 @@ import {
 } from "../features/delivery/route-detail-map";
 import {
   consumeRouteTrackingSseChunk,
+  formatRouteTrackingCompletionLabel,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingCompletionTime,
   getRouteTrackingPathSummary,
@@ -3170,6 +3171,7 @@ function hasCustomerEmailPriorSend(recipient) {
   return Boolean(
     (numberOrUndefined(history?.sendCount) ?? 0) > 0
     || textOrUndefined(history?.lastStatus)
+    || textOrUndefined(history?.lastProviderStatus)
     || textOrUndefined(history?.lastSentAt),
   );
 }
@@ -3178,10 +3180,14 @@ function formatCustomerEmailHistory(history) {
   if (!history) return "No send history";
   const sendCount = numberOrUndefined(history.sendCount) ?? 0;
   const lastStatus = textOrUndefined(history.lastStatus);
+  const lastProviderStatus = textOrUndefined(history.lastProviderStatus)?.replaceAll("_", " ");
+  const lastProviderEventAt = textOrUndefined(history.lastProviderEventAt)?.replace("T", " ").slice(0, 16);
   const lastSentAt = textOrUndefined(history.lastSentAt)?.replace("T", " ").slice(0, 16);
   return [
     `${sendCount} previous send${sendCount === 1 ? "" : "s"}`,
     lastStatus ? `last ${lastStatus}` : null,
+    lastProviderStatus ? `provider ${lastProviderStatus}` : null,
+    lastProviderEventAt,
     lastSentAt,
   ].filter(Boolean).join(" - ");
 }
@@ -3664,8 +3670,10 @@ export default function RouteDetailPage() {
   const routeTrackingPolicy = displayedRouteTrackingSnapshot?.policy;
   const routeTrackingProgress = displayedRouteTrackingSnapshot?.progress;
   const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
-  const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? latestTrackingPosition?.occurredAt;
+  const latestTrackingOccurredAt = latestTrackingPosition?.occurredAt ?? latestTrackingPosition?.receivedAt;
+  const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? null;
   const routeTrackingCompletionTime = getRouteTrackingCompletionTime(displayedRouteTrackingSnapshot);
+  const routeTrackingIsCompleted = routeExecutionStatus === "COMPLETED";
   const routeTrackingDeliveryDate = textOrUndefined(
     effectiveRoutePlan?.routeScope?.deliveryDate
       ?? effectiveRoutePlan?.deliveryDate
@@ -4022,11 +4030,11 @@ export default function RouteDetailPage() {
   }, [trackingStreamRoutePlanId]);
 
   useEffect(() => {
-    if (!isTrackingMapView || !latestTrackingReceivedAt || routeTrackingCompletionTime != null || !showRouteTrackingFreshness) return undefined;
+    if (!isTrackingMapView || !latestTrackingOccurredAt || routeTrackingIsCompleted || !showRouteTrackingFreshness) return undefined;
     setRouteTrackingClock(Date.now());
     const clock = window.setInterval(() => setRouteTrackingClock(Date.now()), 1_000);
     return () => window.clearInterval(clock);
-  }, [isTrackingMapView, latestTrackingReceivedAt, routeTrackingCompletionTime, showRouteTrackingFreshness]);
+  }, [isTrackingMapView, latestTrackingOccurredAt, routeTrackingIsCompleted, showRouteTrackingFreshness]);
 
   const clearMapRecoveryTimer = useCallback(() => {
     if (!mapRecoveryTimerRef.current) return;
@@ -6733,14 +6741,25 @@ export default function RouteDetailPage() {
                     <span>Actual GPS tracking</span>
                   </span>
                 </div>
-                {latestTrackingReceivedAt && showRouteTrackingFreshness ? (
+                {routeTrackingIsCompleted ? (
+                  <div
+                    aria-label="Route completion time"
+                    style={routeTrackingMapFreshnessStyle}
+                    title={routeTrackingCompletionTime == null
+                      ? "Authoritative route completion time is unavailable."
+                      : `Route completed ${formatTrackingTimestamp(routeTrackingCompletionTime, ianaTimezone)}.`}
+                  >
+                    <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
+                    <span>{formatRouteTrackingCompletionLabel(routeTrackingCompletionTime, ianaTimezone)}</span>
+                  </div>
+                ) : latestTrackingOccurredAt && showRouteTrackingFreshness ? (
                   <div
                     aria-label="Current position freshness"
                     style={routeTrackingMapFreshnessStyle}
-                    title={`Last received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}. Double-click the red marker to focus.`}
+                    title={`Position recorded ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}${latestTrackingReceivedAt ? `; received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}` : ""}. Double-click the red marker to focus.`}
                   >
                     <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
-                    <span>Current position {formatTrackingElapsedSeconds(latestTrackingReceivedAt, routeTrackingFreshnessTime)}</span>
+                    <span>Current position {formatTrackingElapsedSeconds(latestTrackingOccurredAt, routeTrackingFreshnessTime)}</span>
                   </div>
                 ) : null}
               </>

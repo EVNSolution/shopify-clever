@@ -172,7 +172,7 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.match(routeDetailSource, /routeTrackingConnectionLabel/);
   assert.match(routeDetailSource, /displayedRouteTrackingSnapshot\?\.policy/);
   assert.match(routeDetailSource, /Latest position/);
-  assert.match(routeDetailSource, /Last received/);
+  assert.match(routeDetailSource, /Position recorded/);
   assert.match(routeDetailSource, /formatTrackingTimestamp\([^,]+,\s*ianaTimezone\)/);
   assert.match(routeDetailSource, /timeZone:\s*ianaTimezone/);
   assert.match(routeDetailSource, /trackingConnectionState/);
@@ -183,7 +183,7 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.doesNotMatch(routeDetailSource, /GPS record #/);
 });
 
-test("Tracking map focuses the live driver position and keeps freshness visible without verbose range cards", () => {
+test("Tracking map uses occurredAt for live freshness and a local terminal label after completion", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
   const routeMapSource = readIfPresent(routeMapPath);
 
@@ -194,7 +194,10 @@ test("Tracking map focuses the live driver position and keeps freshness visible 
   assert.match(routeDetailSource, /getRouteTrackingCompletionTime\(displayedRouteTrackingSnapshot\)/);
   assert.match(routeDetailSource, /shouldShowRouteTrackingFreshness\(/);
   assert.match(routeDetailSource, /Current position/);
-  assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(/);
+  assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(latestTrackingOccurredAt/);
+  assert.match(routeDetailSource, /formatRouteTrackingCompletionLabel\(routeTrackingCompletionTime, ianaTimezone\)/);
+  assert.match(routeDetailSource, /Route completion time/);
+  assert.doesNotMatch(routeDetailSource, /formatTrackingElapsedSeconds\(latestTrackingReceivedAt/);
   assert.match(routeDetailSource, /<span style=\{routeChildTrackingMetricLabelStyle\}>Range<\/span>/);
   assert.match(routeDetailSource, /formatTrackingRange\(/);
   assert.doesNotMatch(routeDetailSource, />Recorded range</);

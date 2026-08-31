@@ -171,7 +171,7 @@ test("customer notification wrapper preserves actionable delivery API errors wit
   });
 
   for (const status of statuses) {
-    const result = await fetchCustomerNotificationSettings(request, {
+    const operation = fetchCustomerNotificationSettings(request, {
       fetch: async () => Response.json({
         error: {
           code: `E_${status}`,
@@ -181,6 +181,18 @@ test("customer notification wrapper preserves actionable delivery API errors wit
         },
       }, { status }),
     });
+
+    if (status === 401) {
+      await assert.rejects(operation, (error) => {
+        assert.equal(error instanceof Response, true);
+        assert.equal(error.status, 401);
+        assert.equal(error.headers.get("X-Shopify-Retry-Invalid-Session-Request"), "1");
+        return true;
+      });
+      continue;
+    }
+
+    const result = await operation;
 
     assert.equal(result.customerNotificationSettings, null);
     assert.equal(result.errors[0].code, status === 404 ? "E_404" : `E_${status}`);
