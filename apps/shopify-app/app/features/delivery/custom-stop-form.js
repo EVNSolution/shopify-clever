@@ -5,8 +5,6 @@ const CUSTOM_STOP_DEFAULTS = Object.freeze({
   countryCode: "",
   email: "",
   instructions: "",
-  latitude: "",
-  longitude: "",
   phone: "",
   postalCode: "",
   priority: "0",
@@ -18,20 +16,11 @@ const CUSTOM_STOP_DEFAULTS = Object.freeze({
   timeWindowStart: "",
 });
 
-const CUSTOM_STOP_ADDRESS_FIELDS = new Set([
-  "address1",
-  "address2",
-  "city",
-  "province",
-  "postalCode",
-  "countryCode",
-]);
-
 export function createCustomStopDraft(values = {}) {
   return Object.fromEntries(
-    Object.entries({ ...CUSTOM_STOP_DEFAULTS, ...values }).map(([key, value]) => [
+    Object.entries(CUSTOM_STOP_DEFAULTS).map(([key, defaultValue]) => [
       key,
-      value == null ? "" : String(value),
+      values[key] == null ? defaultValue : String(values[key]),
     ]),
   );
 }
@@ -48,13 +37,7 @@ export function buildCustomStopAddress(draft) {
 }
 
 export function updateCustomStopDraftField(draft, field, value) {
-  return isCustomStopAddressField(field)
-    ? { ...draft, [field]: value, latitude: "", longitude: "" }
-    : { ...draft, [field]: value };
-}
-
-export function isCustomStopAddressField(field) {
-  return CUSTOM_STOP_ADDRESS_FIELDS.has(field);
+  return { ...draft, [field]: value };
 }
 
 export function validateCustomStopDraft(draft) {
@@ -62,8 +45,6 @@ export function validateCustomStopDraft(draft) {
   const stopName = cleanText(draft?.stopName);
   const address1 = cleanText(draft?.address1);
   const countryCode = cleanText(draft?.countryCode).toUpperCase();
-  const latitudeText = cleanText(draft?.latitude);
-  const longitudeText = cleanText(draft?.longitude);
   const serviceMinutes = Number(draft?.serviceMinutes);
   const priority = Number(draft?.priority);
   const timeWindowStart = cleanText(draft?.timeWindowStart);
@@ -75,26 +56,6 @@ export function validateCustomStopDraft(draft) {
   if (!address1) errors.address1 = "Enter an address.";
   if (!/^[A-Z]{2}$/.test(countryCode)) {
     errors.countryCode = "Enter a two-letter country code, such as CA.";
-  }
-
-  if (!latitudeText && !longitudeText) {
-    errors.latitude = "Select a navigation pin on the map before saving.";
-  } else {
-    if (!latitudeText) errors.latitude = "Enter latitude when longitude is provided.";
-    if (!longitudeText) errors.longitude = "Enter longitude when latitude is provided.";
-
-    const latitude = Number(latitudeText);
-    const longitude = Number(longitudeText);
-    if (latitudeText && (!Number.isFinite(latitude) || latitude < -90 || latitude > 90)) {
-      errors.latitude = "Latitude must be between -90 and 90.";
-    }
-    if (longitudeText && (!Number.isFinite(longitude) || longitude < -180 || longitude > 180)) {
-      errors.longitude = "Longitude must be between -180 and 180.";
-    }
-    if (latitude === 0 && longitude === 0) {
-      errors.latitude = "Zero coordinates cannot be used for a route stop.";
-      errors.longitude = "Zero coordinates cannot be used for a route stop.";
-    }
   }
 
   if (!Number.isInteger(serviceMinutes) || serviceMinutes < 0 || serviceMinutes > 1440) {
@@ -132,8 +93,6 @@ export function buildCustomStopPayload(draft, context = {}) {
     email: cleanText(draft?.email),
     ...(cleanText(context.expectedUpdatedAt) ? { expectedUpdatedAt: cleanText(context.expectedUpdatedAt) } : {}),
     instructions: cleanText(draft?.instructions),
-    latitude: finiteNumberOrNull(draft?.latitude),
-    longitude: finiteNumberOrNull(draft?.longitude),
     phone: cleanText(draft?.phone),
     postalCode: cleanText(draft?.postalCode),
     priority: Number(draft?.priority),
@@ -149,13 +108,6 @@ export function buildCustomStopPayload(draft, context = {}) {
 
 export function isCustomRouteStop(stop) {
   return stop?.isCustomStop === true || cleanText(stop?.sourcePlatform)?.toUpperCase() === "CUSTOM";
-}
-
-function finiteNumberOrNull(value) {
-  const text = cleanText(value);
-  if (!text) return null;
-  const number = Number(text);
-  return Number.isFinite(number) ? number : null;
 }
 
 function cleanText(value) {

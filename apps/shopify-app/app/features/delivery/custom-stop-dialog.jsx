@@ -1,5 +1,4 @@
 /* eslint-disable react/prop-types */
-import { LocationPreviewMap } from "../settings/settings-departure-map";
 
 const dialogStyle = {
   background: "#fff",
@@ -59,16 +58,6 @@ const buttonStyle = {
   padding: "7px 13px",
 };
 const primaryButtonStyle = { ...buttonStyle, background: "#303030", borderColor: "#303030", color: "#fff" };
-const selectedLocationStyle = {
-  ...infoStyle,
-  background: "#f2f9f4",
-  borderColor: "#a8d5b5",
-  color: "#1f5b32",
-  display: "grid",
-  gap: "3px",
-  gridColumn: "1 / -1",
-};
-
 /** @type {Array<[string, string, boolean]>} */
 const TEXT_FIELDS = [
   ["stopName", "Stop name", true],
@@ -91,7 +80,6 @@ const TEXT_FIELDS = [
  *   isEdit?: boolean,
  *   onCancel: () => void,
  *   onChange: (field: string, value: string) => void,
- *   onCoordinateChange: (coordinate: {latitude: number, longitude: number}) => void,
  *   onSubmit: () => void,
  *   onTargetRouteChange: (routePlanId: string) => void,
  *   targetRouteOptions?: Array<{label: string, value: string}>,
@@ -105,7 +93,6 @@ export function CustomStopDialog({
   isEdit = false,
   onCancel,
   onChange,
-  onCoordinateChange,
   onSubmit,
   onTargetRouteChange,
   targetRouteOptions = [],
@@ -113,13 +100,6 @@ export function CustomStopDialog({
 }) {
   const title = isEdit ? "Edit custom stop" : "Add custom stop";
   const submitLabel = isEdit ? "Save changes" : "Add custom stop";
-  const latitudeText = String(draft.latitude ?? "").trim();
-  const longitudeText = String(draft.longitude ?? "").trim();
-  const hasSelectedLocation = Boolean(latitudeText && longitudeText)
-    && Number.isFinite(Number(latitudeText))
-    && Number.isFinite(Number(longitudeText))
-    && !(Number(draft.latitude) === 0 && Number(draft.longitude) === 0);
-
   return (
     <div aria-label={title} aria-busy={busy} aria-modal="true" role="dialog" style={dialogStyle}>
       <div>
@@ -164,54 +144,6 @@ export function CustomStopDialog({
             {fieldErrors[field] ? <p role="alert" style={errorStyle}>{fieldErrors[field]}</p> : null}
           </label>
         ))}
-
-        {hasSelectedLocation ? (
-          <div role="status" style={selectedLocationStyle}>
-            <strong>Dispatcher-selected navigation pin</strong>
-            <span>This pin is used for driver navigation. It does not verify the typed address.</span>
-            <span>{Number(draft.latitude).toFixed(6)}, {Number(draft.longitude).toFixed(6)}</span>
-          </div>
-        ) : null}
-
-        <div style={{ gridColumn: "1 / -1" }}>
-          <p style={{ color: "#616161", fontSize: "13px", margin: "0 0 8px" }}>
-            Click the map to place the navigation pin, then drag it to the exact entrance if needed.
-          </p>
-          <LocationPreviewMap
-            ariaLabel="Select custom stop navigation pin"
-            coordinate={hasSelectedLocation
-              ? { latitude: Number(latitudeText), longitude: Number(longitudeText) }
-              : null}
-            onCoordinateChange={onCoordinateChange}
-          />
-        </div>
-
-        <label style={fieldStyle}>
-          <span style={labelStyle}>Latitude</span>
-          <input
-            aria-invalid={Boolean(fieldErrors.latitude)}
-            disabled={busy}
-            readOnly
-            step="any"
-            style={inputStyle}
-            type="number"
-            value={draft.latitude ?? ""}
-          />
-          {fieldErrors.latitude ? <p role="alert" style={errorStyle}>{fieldErrors.latitude}</p> : null}
-        </label>
-        <label style={fieldStyle}>
-          <span style={labelStyle}>Longitude</span>
-          <input
-            aria-invalid={Boolean(fieldErrors.longitude)}
-            disabled={busy}
-            readOnly
-            step="any"
-            style={inputStyle}
-            type="number"
-            value={draft.longitude ?? ""}
-          />
-          {fieldErrors.longitude ? <p role="alert" style={errorStyle}>{fieldErrors.longitude}</p> : null}
-        </label>
 
         <label style={fieldStyle}>
           <span style={labelStyle}>Stop time (minutes)</span>

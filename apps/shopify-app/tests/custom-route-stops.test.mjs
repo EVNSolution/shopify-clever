@@ -21,6 +21,7 @@ import { numberOrUndefined } from "../app/features/delivery/route-helpers.js";
 const root = process.cwd();
 const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
 const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
+const customStopDraftReaderSource = routeDetailServerSource.match(/function readCustomStopDraft[\s\S]*?\n}/)?.[0] ?? "";
 const customStopDialogSource = readFileSync(join(root, "app/features/delivery/custom-stop-dialog.jsx"), "utf8");
 const groupDetailSource = readFileSync(join(root, "app/routes/app.routes.groups.$routeGroupId.jsx"), "utf8");
 
@@ -90,31 +91,29 @@ test("custom stop helpers call only the tenant delivery API boundary", async () 
   assert.equal(deleteFetch.calls[0].init.body, undefined);
 });
 
-test("custom stop draft validates names, locations, coordinates, and timing", () => {
+test("custom stop draft validates order-like address fields and timing", () => {
   const draft = createCustomStopDraft({
     address1: "123 Queen St W",
     city: "Toronto",
     countryCode: "CA",
     email: "dispatch@example.test",
-    latitude: "43.6532",
-    longitude: "-79.3832",
+    postalCode: "M5H 2N2",
     serviceMinutes: "5",
     stopName: "Warehouse pickup",
   });
 
   assert.deepEqual(validateCustomStopDraft(draft), {});
-  assert.equal(buildCustomStopAddress(draft), "123 Queen St W, Toronto, CA");
+  assert.equal(buildCustomStopAddress(draft), "123 Queen St W, Toronto, M5H 2N2, CA");
   assert.equal(draft.email, "dispatch@example.test");
+  assert.equal("latitude" in createCustomStopDraft({ ...draft, latitude: "43.6532" }), false);
+  assert.equal("longitude" in createCustomStopDraft({ ...draft, longitude: "-79.3832" }), false);
   assert.equal(buildCustomStopPayload(draft).email, "dispatch@example.test");
+  assert.equal(buildCustomStopPayload(draft).postalCode, "M5H 2N2");
+  assert.equal("latitude" in buildCustomStopPayload(draft), false);
+  assert.equal("longitude" in buildCustomStopPayload(draft), false);
   assert.match(validateCustomStopDraft({ ...draft, stopName: "" }).stopName, /name/i);
   assert.match(validateCustomStopDraft({ ...draft, address1: "" }).address1, /address/i);
-  assert.match(validateCustomStopDraft({ ...draft, latitude: "91", longitude: "10" }).latitude, /latitude/i);
-  assert.match(validateCustomStopDraft({ ...draft, latitude: "43.6", longitude: "" }).longitude, /longitude/i);
-  assert.match(validateCustomStopDraft({ ...draft, latitude: "0", longitude: "0" }).latitude, /zero coordinates/i);
-  assert.match(validateCustomStopDraft({ ...draft, latitude: "", longitude: "" }).latitude, /navigation pin/i);
   assert.match(validateCustomStopDraft({ ...draft, countryCode: "1" }).countryCode, /two-letter/i);
-  assert.equal(buildCustomStopPayload({ ...draft, latitude: "", longitude: "" }).latitude, null);
-  assert.equal(buildCustomStopPayload({ ...draft, latitude: "", longitude: "" }).longitude, null);
   assert.match(validateCustomStopDraft({
     ...draft,
     timeWindowEnd: "2026-08-19T09:00",
@@ -122,19 +121,16 @@ test("custom stop draft validates names, locations, coordinates, and timing", ()
   }).timeWindowEnd, /after/i);
 });
 
-test("custom stop address edits clear the navigation pin while unrelated edits preserve it", () => {
+test("custom stop field edits preserve the remaining order-like inputs", () => {
   const draft = createCustomStopDraft({
     address1: "123 Queen St W",
-    latitude: "43.6532",
-    longitude: "-79.3832",
     phone: "416-555-0100",
+    postalCode: "M5H 2N2",
   });
 
   assert.deepEqual(updateCustomStopDraftField(draft, "address1", "125 Queen St W"), {
     ...draft,
     address1: "125 Queen St W",
-    latitude: "",
-    longitude: "",
   });
   assert.deepEqual(updateCustomStopDraftField(draft, "phone", "416-555-0101"), {
     ...draft,
@@ -159,11 +155,10 @@ test("route detail branches the first add dialog and keeps custom stops DB-only"
   assert.doesNotMatch(routeDetailServerSource, /searchCustomStopAddress|searchAddresses|geocodeAddress/);
   assert.doesNotMatch(routeDetailSource, /customStopAddressFetcher|searchCustomStopAddress|selectCustomStopAddress/);
   assert.match(routeDetailSource, /updateCustomStopDraftField\(draft, field, value\)/);
-  assert.match(routeDetailSource, /handleCustomStopPinChange/);
-  assert.match(customStopDialogSource, /Dispatcher-selected navigation pin/);
-  assert.match(customStopDialogSource, /not verify the typed address/i);
-  assert.match(customStopDialogSource, /<LocationPreviewMap[\s\S]*ariaLabel="Select custom stop navigation pin"[\s\S]*onCoordinateChange=/);
+  assert.doesNotMatch(routeDetailSource, /handleCustomStopPinChange/);
+  assert.doesNotMatch(customStopDialogSource, /LocationPreviewMap|navigation pin|Latitude|Longitude|onCoordinateChange/);
   assert.doesNotMatch(customStopDialogSource, /Search address|Select this address|OpenStreetMap contributors/);
+  assert.doesNotMatch(customStopDraftReaderSource, /formData\.get\("latitude"\)|formData\.get\("longitude"\)/);
   assert.match(routeDetailServerSource, /createDeliveryRouteGroupCustomStop/);
   assert.match(routeDetailServerSource, /updateDeliveryRouteGroupCustomStop/);
   assert.doesNotMatch(routeDetailServerSource, /orderUpdate|customerUpdate/);
