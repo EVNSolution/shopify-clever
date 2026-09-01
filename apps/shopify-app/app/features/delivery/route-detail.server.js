@@ -339,16 +339,10 @@ function readCustomStopDraft(formData) {
     city: formData.get("city"),
     countryCode: formData.get("countryCode"),
     email: formData.get("email"),
-    instructions: formData.get("instructions"),
     phone: formData.get("phone"),
     postalCode: formData.get("postalCode"),
-    priority: formData.get("priority"),
     province: formData.get("province"),
     recipientName: formData.get("recipientName"),
-    serviceMinutes: formData.get("serviceMinutes"),
-    stopName: formData.get("stopName"),
-    timeWindowEnd: formData.get("timeWindowEnd"),
-    timeWindowStart: formData.get("timeWindowStart"),
   });
 }
 

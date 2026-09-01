@@ -91,34 +91,44 @@ test("custom stop helpers call only the tenant delivery API boundary", async () 
   assert.equal(deleteFetch.calls[0].init.body, undefined);
 });
 
-test("custom stop draft validates order-like address fields and timing", () => {
+test("custom stop draft contains only Shopify contact and shipping-address fields", () => {
   const draft = createCustomStopDraft({
     address1: "123 Queen St W",
     city: "Toronto",
     countryCode: "CA",
     email: "dispatch@example.test",
+    phone: "416-555-0100",
     postalCode: "M5H 2N2",
-    serviceMinutes: "5",
-    stopName: "Warehouse pickup",
+    recipientName: "Receiving desk",
+    stopName: "ignored internal name",
   });
 
   assert.deepEqual(validateCustomStopDraft(draft), {});
   assert.equal(buildCustomStopAddress(draft), "123 Queen St W, Toronto, M5H 2N2, CA");
-  assert.equal(draft.email, "dispatch@example.test");
-  assert.equal("latitude" in createCustomStopDraft({ ...draft, latitude: "43.6532" }), false);
-  assert.equal("longitude" in createCustomStopDraft({ ...draft, longitude: "-79.3832" }), false);
-  assert.equal(buildCustomStopPayload(draft).email, "dispatch@example.test");
-  assert.equal(buildCustomStopPayload(draft).postalCode, "M5H 2N2");
-  assert.equal("latitude" in buildCustomStopPayload(draft), false);
-  assert.equal("longitude" in buildCustomStopPayload(draft), false);
-  assert.match(validateCustomStopDraft({ ...draft, stopName: "" }).stopName, /name/i);
+  assert.deepEqual(Object.keys(draft).sort(), [
+    "address1",
+    "address2",
+    "city",
+    "countryCode",
+    "email",
+    "phone",
+    "postalCode",
+    "province",
+    "recipientName",
+  ]);
+  assert.deepEqual(buildCustomStopPayload(draft), {
+    address1: "123 Queen St W",
+    address2: "",
+    city: "Toronto",
+    countryCode: "CA",
+    email: "dispatch@example.test",
+    phone: "416-555-0100",
+    postalCode: "M5H 2N2",
+    province: "",
+    recipientName: "Receiving desk",
+  });
   assert.match(validateCustomStopDraft({ ...draft, address1: "" }).address1, /address/i);
   assert.match(validateCustomStopDraft({ ...draft, countryCode: "1" }).countryCode, /two-letter/i);
-  assert.match(validateCustomStopDraft({
-    ...draft,
-    timeWindowEnd: "2026-08-19T09:00",
-    timeWindowStart: "2026-08-19T10:00",
-  }).timeWindowEnd, /after/i);
 });
 
 test("custom stop field edits preserve the remaining order-like inputs", () => {
@@ -158,7 +168,8 @@ test("route detail branches the first add dialog and keeps custom stops DB-only"
   assert.doesNotMatch(routeDetailSource, /handleCustomStopPinChange/);
   assert.doesNotMatch(customStopDialogSource, /LocationPreviewMap|navigation pin|Latitude|Longitude|onCoordinateChange/);
   assert.doesNotMatch(customStopDialogSource, /Search address|Select this address|OpenStreetMap contributors/);
-  assert.doesNotMatch(customStopDraftReaderSource, /formData\.get\("latitude"\)|formData\.get\("longitude"\)/);
+  assert.doesNotMatch(customStopDialogSource, /Stop name|Stop time|Priority|Time window|Driver instructions/);
+  assert.doesNotMatch(customStopDraftReaderSource, /formData\.get\("(latitude|longitude|stopName|serviceMinutes|priority|timeWindowStart|timeWindowEnd|instructions)"\)/);
   assert.match(routeDetailServerSource, /createDeliveryRouteGroupCustomStop/);
   assert.match(routeDetailServerSource, /updateDeliveryRouteGroupCustomStop/);
   assert.doesNotMatch(routeDetailServerSource, /orderUpdate|customerUpdate/);
