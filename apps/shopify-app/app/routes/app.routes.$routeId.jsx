@@ -3074,15 +3074,9 @@ function getShopifyOrderAdminHref(row) {
   return resourceId ? `shopify://admin/orders/${encodeURIComponent(resourceId)}` : null;
 }
 
-function buildCustomStopDraftFromRow(row, ianaTimezone) {
+function buildCustomStopDraftFromRow(row) {
   const editFields = row?.editFields ?? row ?? {};
-  return createCustomStopDraft({
-    ...editFields,
-    priority: editFields.priority ?? row?.priority ?? 0,
-    stopName: editFields.stopName ?? row?.order,
-    timeWindowEnd: formatStoreLocalDateTimeInput(editFields.timeWindowEnd, ianaTimezone),
-    timeWindowStart: formatStoreLocalDateTimeInput(editFields.timeWindowStart, ianaTimezone),
-  });
+  return createCustomStopDraft(editFields);
 }
 
 function renderStopOrderLabel(row) {
@@ -4557,7 +4551,7 @@ export default function RouteDetailPage() {
   const handleOpenChildStopEditor = (row) => {
     if (!row?.deliveryStopId) return;
     if (row.isCustomStop) {
-      setCustomStopDraft(buildCustomStopDraftFromRow(row, ianaTimezone));
+      setCustomStopDraft(buildCustomStopDraftFromRow(row));
       setCustomStopFieldErrors({});
       setActiveCustomStopEditRow(row);
       setActiveChildStopActions(null);
@@ -5263,29 +5257,16 @@ export default function RouteDetailPage() {
       return;
     }
 
-    const timeWindowStart = customStopDraft.timeWindowStart
-      ? storeLocalDateTimeToIso(customStopDraft.timeWindowStart, ianaTimezone)
-      : "";
-    const timeWindowEnd = customStopDraft.timeWindowEnd
-      ? storeLocalDateTimeToIso(customStopDraft.timeWindowEnd, ianaTimezone)
-      : "";
-    if ((customStopDraft.timeWindowStart && !timeWindowStart) || (customStopDraft.timeWindowEnd && !timeWindowEnd)) {
-      setCustomStopFieldErrors({ timeWindowEnd: "Enter a valid time window in the store timezone." });
-      return;
-    }
-
     submitRouteGroupAction(intent, {
       ...customStopDraft,
       ...(row?.deliveryStopId ? { deliveryStopId: row.deliveryStopId } : {}),
       targetRoutePlanId: addStopTargetRoutePlanId,
-      timeWindowEnd,
-      timeWindowStart,
     });
   };
 
   const handleOpenCustomStopEditor = (row) => {
     if (!row?.deliveryStopId || !row.isCustomStop) return;
-    setCustomStopDraft(buildCustomStopDraftFromRow(row, ianaTimezone));
+    setCustomStopDraft(buildCustomStopDraftFromRow(row));
     setCustomStopFieldErrors({});
     setActiveCustomStopEditRow(row);
     setActiveRouteTimelineStopPopover(null);
