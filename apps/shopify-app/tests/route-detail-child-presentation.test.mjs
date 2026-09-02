@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
+  buildChildPlannedArrivalByStopId,
   buildChildRouteOrderRows,
   summarizeChildRouteMoney,
   formatChildDriveTimeLabel,
@@ -112,6 +113,36 @@ test("child route compact metrics use read-only drive and stop labels", () => {
   assert.equal(formatChildDriveTimeLabel(960, 7400), "16 min / 7.4 km");
   assert.equal(formatChildDriveTimeLabel(60, 80), "1 min / 80 m");
   assert.equal(formatChildStopTimeLabel(5), "5 min");
+});
+
+test("child route builds a planned ETA baseline from scheduled start and OSRM legs", () => {
+  assert.deepEqual(buildChildPlannedArrivalByStopId([
+    { deliveryStopId: "stop-2", durationFromPreviousSeconds: 600, sequence: 2, serviceMinutes: 5 },
+    { deliveryStopId: "stop-1", durationFromPreviousSeconds: 480, sequence: 1, serviceMinutes: 5 },
+  ], "2026-07-15T14:00:00.000Z"), {
+    "stop-1": "2026-07-15T14:08:00.000Z",
+    "stop-2": "2026-07-15T14:23:00.000Z",
+  });
+});
+
+test("executed child rows distinguish server rolling ETA from the planned baseline", () => {
+  const [row] = buildChildRouteOrderRows([{
+    deliveryStopId: "stop-1",
+    estimatedArrivalAt: "2026-07-15T14:20:00.000Z",
+    etaCalculatedAt: "2026-07-15T14:10:00.000Z",
+    etaSource: "STOP_ARRIVED",
+    etaStatus: "READY",
+    sequence: 1,
+  }], {
+    ianaTimezone: "UTC",
+    plannedArrivalByStopId: { "stop-1": "2026-07-15T14:08:00.000Z" },
+  });
+
+  assert.equal(row.expectedArrival, "14:20");
+  assert.equal(row.plannedArrival, "14:08");
+  assert.equal(row.hasPlannedEtaComparison, true);
+  assert.equal(row.etaLabel, "Rolling ETA");
+  assert.equal(row.etaSource, "STOP_ARRIVED");
 });
 
 test("child tracking keeps the earliest actual stop arrival by delivery stop", () => {
@@ -222,7 +253,7 @@ test("child order table columns include a sticky Actions column with the confirm
     "Status",
     "Order date",
     "Address",
-    "Expected arrival",
+    "ETA",
     "Drive time",
     "Stop time",
     "Customer",
@@ -236,7 +267,7 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, /aria-label="Child route order stops"/);
   assert.match(routeDetailSource, /CHILD_ROUTE_ORDER_COLUMNS\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /childRouteOrderRows\.map\(\(row\) =>/);
-  assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{row\.expectedArrival\}<\/td>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{/);

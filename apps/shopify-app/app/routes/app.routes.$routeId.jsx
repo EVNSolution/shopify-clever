@@ -8,6 +8,7 @@ import { getCustomerEmailSendReadiness } from "../features/customer-notification
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
+  buildChildPlannedArrivalByStopId,
   buildChildRouteOrderRows,
   summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
@@ -2000,7 +2001,7 @@ const childRouteOrderCellStyle = {
 
 const childRouteExpectedArrivalCellStyle = {
   ...childRouteOrderCellStyle,
-  color: "#6d7175",
+  color: "#303030",
 };
 
 const childRouteActualArrivalCellStyle = {
@@ -2517,6 +2518,9 @@ function buildRouteStops(stops) {
       attributesLabel: formatStopAttributes(stop.attributes),
       orderCreatedAt: textOrUndefined(stop.orderCreatedAt ?? stop.createdAt ?? stop.processedAt),
       estimatedArrivalAt: textOrUndefined(stop.estimatedArrivalAt ?? stop.eta ?? stop.arrivalAt),
+      etaCalculatedAt: textOrUndefined(stop.etaCalculatedAt),
+      etaSource: textOrUndefined(stop.etaSource),
+      etaStatus: textOrUndefined(stop.etaStatus),
       durationFromPreviousSeconds: numberOrUndefined(stop.durationFromPreviousSeconds),
       distanceFromPreviousMeters: numberOrUndefined(stop.distanceFromPreviousMeters),
       serviceMinutes: numberOrUndefined(stop.serviceMinutes),
@@ -3090,6 +3094,24 @@ function renderStopOrderLabel(row) {
   );
 }
 
+function renderChildRouteEta(row) {
+  return (
+    <s-stack alignItems="center" direction="block" gap="small-100">
+      <s-text accessibilityVisibility="exclusive">{row?.etaLabel ?? "ETA"}: </s-text>
+      {row?.hasPlannedEtaComparison ? (
+        <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{row.plannedArrival}</s-text></del>
+      ) : null}
+      <s-text
+        fontVariantNumeric="tabular-nums"
+        tone={row?.etaLabel === "Rolling ETA" ? "success" : undefined}
+        type={row?.etaLabel === "Rolling ETA" ? "strong" : undefined}
+      >
+        {row?.expectedArrival ?? ROUTE_EMPTY_LABEL}
+      </s-text>
+    </s-stack>
+  );
+}
+
 function getCustomerEmailRecipients(preview) {
   return Array.isArray(preview?.recipients) ? preview.recipients : [];
 }
@@ -3290,6 +3312,8 @@ export default function RouteDetailPage() {
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
   const routeStartTimeZone = textOrUndefined(effectiveRoutePlan?.scheduledStartTimeZone) ?? ianaTimezone;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan, ianaTimezone);
+  const plannedRouteStartAt = textOrUndefined(effectiveRoutePlan?.scheduledStartAt)
+    ?? storeLocalDateTimeToIso(routeStartDateTimeValue, routeStartTimeZone);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
@@ -3618,11 +3642,22 @@ export default function RouteDetailPage() {
     () => buildChildActualArrivalByStopId(displayedRouteTrackingSnapshot?.stopArrivals),
     [displayedRouteTrackingSnapshot?.stopArrivals],
   );
+  const plannedArrivalByStopId = useMemo(
+    () => buildChildPlannedArrivalByStopId(
+      currentTimelineRouteRow?.stops ?? [],
+      plannedRouteStartAt,
+    ),
+    [currentTimelineRouteRow?.stops, plannedRouteStartAt],
+  );
   const childRouteOrderRows = useMemo(
     () => (isMaterializedChildRouteDetail
-      ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], { actualArrivalByStopId, ianaTimezone })
+      ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], {
+          actualArrivalByStopId,
+          ianaTimezone,
+          plannedArrivalByStopId,
+        })
       : []),
-    [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
+    [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail, plannedArrivalByStopId],
   );
   const addStopTargetRouteOptions = useMemo(() => (isRouteGroupDetail
     ? [
@@ -6941,7 +6976,7 @@ export default function RouteDetailPage() {
                           ><s-icon type="note" /></button>
                         ) : null}
                       </td>
-                      <td style={childRouteExpectedArrivalCellStyle}>{row.expectedArrival}</td>
+                      <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
                       <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
                       <td style={childRouteOrderCellStyle}>{row.customer}</td>
@@ -7104,8 +7139,10 @@ export default function RouteDetailPage() {
                         ["Stop", "64px"],
                         ["Order / stop", "112px"],
                         ["Status", "120px"],
-                        ["Expected arrival", "120px"],
+                        ["ETA", "120px"],
                         ["Actual arrival", "120px"],
+                        ["Drive time", "120px"],
+                        ["Stop time", "100px"],
                         ["Customer", "160px"],
                         ["Address", "360px"],
                       ].map(([label, width]) => (
@@ -7130,8 +7167,10 @@ export default function RouteDetailPage() {
                         }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
                         <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
                         <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
-                        <td style={childRouteExpectedArrivalCellStyle}>{row.expectedArrival}</td>
+                        <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
                         <td style={childRouteActualArrivalCellStyle}>{row.actualArrival}</td>
+                        <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
+                        <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
                         <td style={childRouteOrderCellStyle}>{row.customer}</td>
                         <td style={childRouteOrderCellStyle}>{row.address}</td>
                       </tr>
