@@ -102,9 +102,9 @@ test("server ETA lifecycle events revalidate distinct expected and actual arriva
 
   assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, /revalidatorRef\.current\.revalidate\(\)/);
-  assert.match(routeDetailSource, /\["Expected arrival", "120px"\]/);
+  assert.match(routeDetailSource, /\["ETA", "120px"\]/);
   assert.match(routeDetailSource, /\["Actual arrival", "120px"\]/);
-  assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{row\.expectedArrival\}<\/td>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
   assert.match(routeDetailSource, /<td style=\{childRouteActualArrivalCellStyle\}>\{row\.actualArrival\}<\/td>/);
   assert.match(routeDetailSource, /const childRouteExpectedArrivalCellStyle = \{[\s\S]*color: "#6d7175"/);
   assert.match(routeDetailSource, /const childRouteActualArrivalCellStyle = \{[\s\S]*color: "#303030"/);
