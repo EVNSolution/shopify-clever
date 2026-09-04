@@ -1,16 +1,16 @@
 # Shopify app dev runbook
 
-Use this when running the embedded Shopify app locally. `infra/env/*.env` is for Docker/EC2 deploy containers and is gitignored; `shopify app dev` does not load it for local CLI runs.
+Use this when running the embedded Shopify app locally. `infra/env/*.env` is for Docker/EC2 deploy containers and is gitignored. The repository launcher supplies safe dev defaults directly; do not create `.env.local`.
 
 ## Default local dev
 
 From repo root:
 
 ```bash
-npm --prefix apps/shopify-app run dev:local -- --store clever-test-syhae28n.myshopify.com
+npm --prefix apps/shopify-app run dev -- --store clever-test-syhae28n.myshopify.com
 ```
 
-`dev:local` keeps the normal dev config (`shopify app dev -c dev`) and injects the local defaults agents kept missing:
+`dev` keeps the normal dev config (`shopify app dev -c dev`) and injects the required local defaults. `dev:local` is the same launcher kept as a compatibility alias:
 
 ```bash
 CLEVER_DELIVERY_API_URL=${CLEVER_DELIVERY_API_URL:-https://clever-route-api.cleversystem.ai}
@@ -21,7 +21,7 @@ SHOPIFY_APP_DISTRIBUTION=${SHOPIFY_APP_DISTRIBUTION:-single_merchant}
 Override only when intentionally pointing at another backend:
 
 ```bash
-CLEVER_DELIVERY_API_URL=http://localhost:3000 npm --prefix apps/shopify-app run dev:local -- --store clever-test-syhae28n.myshopify.com
+CLEVER_DELIVERY_API_URL=http://localhost:3000 npm --prefix apps/shopify-app run dev -- --store clever-test-syhae28n.myshopify.com
 ```
 
 ## Do not use for local app dev
@@ -39,4 +39,4 @@ ps -eo pid,ppid,command | grep -E 'shopify app dev|react-router dev|cloudflared'
 lsof -nP -iTCP -sTCP:LISTEN | grep -E 'node|cloudflared|:3000|:5173|:3457'
 ```
 
-If the process belongs to another worktree, stop it and restart from the intended worktree with `dev:local`.
+If the process belongs to another worktree, stop it and restart from the intended worktree with `dev`.

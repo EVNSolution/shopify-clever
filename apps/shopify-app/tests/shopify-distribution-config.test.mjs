@@ -91,13 +91,18 @@ test("public, dev/custom-store, and KFood env examples declare their intended di
 });
 
 test("local CleverRoute Dev preview uses the same synthetic Seoul order source as EC2", () => {
-  const devLocalScript = packageJson.scripts["dev:local"];
+  const devScript = packageJson.scripts.dev;
 
-  assert.match(devLocalScript, /CLEVER_ORDERS_SOURCE_MODE=.*delivery_only/);
-  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_DEPOT_ADDRESS=.*서울특별시 동작구 노량진로 10/);
-  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_DEPOT_LATITUDE=.*37\.5124328/);
-  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_DEPOT_LONGITUDE=.*126\.9269873/);
-  assert.match(devLocalScript, /CLEVER_DELIVERY_ONLY_TIME_ZONE=.*Asia\/Seoul/);
+  assert.equal(devScript, "node scripts/start-shopify-dev.mjs");
+  assert.equal(packageJson.scripts["dev:local"], devScript);
+
+  const launcher = readFileSync(join(root, "scripts/start-shopify-dev.mjs"), "utf8");
+  assert.match(launcher, /CLEVER_ORDERS_SOURCE_MODE: "delivery_only"/);
+  assert.match(launcher, /CLEVER_DELIVERY_ONLY_DEPOT_ADDRESS: "서울특별시 동작구 노량진로 10"/);
+  assert.match(launcher, /CLEVER_DELIVERY_ONLY_DEPOT_LATITUDE: "37\.5124328"/);
+  assert.match(launcher, /CLEVER_DELIVERY_ONLY_DEPOT_LONGITUDE: "126\.9269873"/);
+  assert.match(launcher, /CLEVER_DELIVERY_ONLY_TIME_ZONE: "Asia\/Seoul"/);
+  assert.doesNotMatch(launcher, /\.env\.local/);
 });
 
 test("Shopify app configs have explicit distinct production, dev, and KFood identities", () => {
@@ -154,7 +159,7 @@ test("Shopify app URLs stay domain-rooted with only auth callback redirect URLs"
 });
 
 test("Shopify CLI scripts select explicit dev and production app configs", () => {
-  assert.equal(packageJson.scripts.dev, "shopify app dev -c dev");
+  assert.equal(packageJson.scripts.dev, "node scripts/start-shopify-dev.mjs");
   assert.equal(packageJson.scripts.deploy, "npm run deploy:prod");
   assert.equal(packageJson.scripts["deploy:prod"], "shopify app deploy -c shopify.app.toml");
   assert.equal(packageJson.scripts["deploy:dev"], "shopify app deploy -c dev");
