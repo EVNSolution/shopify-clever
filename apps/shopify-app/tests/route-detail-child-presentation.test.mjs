@@ -7,7 +7,6 @@ import test from "node:test";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
-  buildChildPlannedArrivalByStopId,
   buildChildRouteOrderRows,
   summarizeChildRouteMoney,
   formatChildDriveTimeLabel,
@@ -115,17 +114,7 @@ test("child route compact metrics use read-only drive and stop labels", () => {
   assert.equal(formatChildStopTimeLabel(5), "5 min");
 });
 
-test("child route builds a planned ETA baseline from scheduled start and OSRM legs", () => {
-  assert.deepEqual(buildChildPlannedArrivalByStopId([
-    { deliveryStopId: "stop-2", durationFromPreviousSeconds: 600, sequence: 2, serviceMinutes: 5 },
-    { deliveryStopId: "stop-1", durationFromPreviousSeconds: 480, sequence: 1, serviceMinutes: 5 },
-  ], "2026-07-15T14:00:00.000Z"), {
-    "stop-1": "2026-07-15T14:08:00.000Z",
-    "stop-2": "2026-07-15T14:23:00.000Z",
-  });
-});
-
-test("executed child rows distinguish server rolling ETA from the planned baseline", () => {
+test("executed child rows pair the server rolling ETA with the actual arrival", () => {
   const [row] = buildChildRouteOrderRows([{
     deliveryStopId: "stop-1",
     estimatedArrivalAt: "2026-07-15T14:20:00.000Z",
@@ -134,15 +123,26 @@ test("executed child rows distinguish server rolling ETA from the planned baseli
     etaStatus: "READY",
     sequence: 1,
   }], {
+    actualArrivalByStopId: { "stop-1": "2026-07-15T14:23:00.000Z" },
     ianaTimezone: "UTC",
-    plannedArrivalByStopId: { "stop-1": "2026-07-15T14:08:00.000Z" },
   });
 
   assert.equal(row.expectedArrival, "14:20");
-  assert.equal(row.plannedArrival, "14:08");
-  assert.equal(row.hasPlannedEtaComparison, true);
+  assert.equal(row.actualArrival, "14:23");
+  assert.equal(row.hasActualArrival, true);
   assert.equal(row.etaLabel, "Rolling ETA");
   assert.equal(row.etaSource, "STOP_ARRIVED");
+});
+
+test("failed stop recalculation remains a Rolling ETA source", () => {
+  const [row] = buildChildRouteOrderRows([{
+    deliveryStopId: "stop-1",
+    estimatedArrivalAt: "2026-07-15T14:20:00.000Z",
+    etaSource: "STOP_FAILED",
+    sequence: 1,
+  }], { ianaTimezone: "UTC" });
+
+  assert.equal(row.etaLabel, "Rolling ETA");
 });
 
 test("child tracking keeps the earliest actual stop arrival by delivery stop", () => {

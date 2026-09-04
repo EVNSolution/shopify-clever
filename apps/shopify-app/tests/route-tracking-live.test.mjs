@@ -97,17 +97,18 @@ test("live tracking keeps the server past-path snapshot while the stream connect
   assert.match(routeDetailSource, /setTrackingConnectionState\("reconnecting"\);\s*controller\.abort\(\)/);
 });
 
-test("server ETA lifecycle events revalidate distinct expected and actual arrival columns", () => {
+test("server ETA lifecycle events render Rolling ETA and actual arrival in one column", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
 
   assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, /revalidatorRef\.current\.revalidate\(\)/);
   assert.match(routeDetailSource, /\["ETA", "120px"\]/);
-  assert.match(routeDetailSource, /\["Actual arrival", "120px"\]/);
+  assert.doesNotMatch(routeDetailSource, /\["Actual arrival", "120px"\]/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
-  assert.match(routeDetailSource, /<td style=\{childRouteActualArrivalCellStyle\}>\{row\.actualArrival\}<\/td>/);
+  assert.match(routeDetailSource, /<del><s-text color="subdued" fontVariantNumeric="tabular-nums">\{row\.expectedArrival\}<\/s-text><\/del>/);
+  assert.match(routeDetailSource, /\{row\.actualArrival\}/);
   assert.match(routeDetailSource, /const childRouteExpectedArrivalCellStyle = \{[\s\S]*color: "#6d7175"/);
-  assert.match(routeDetailSource, /const childRouteActualArrivalCellStyle = \{[\s\S]*color: "#303030"/);
+  assert.doesNotMatch(routeDetailSource, /const childRouteActualArrivalCellStyle = /);
 });
 
 test("live tracking updates MapLibre sources instead of rebuilding the child map", () => {

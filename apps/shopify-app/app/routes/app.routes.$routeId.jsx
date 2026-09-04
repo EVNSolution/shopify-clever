@@ -8,7 +8,6 @@ import { getCustomerEmailSendReadiness } from "../features/customer-notification
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
-  buildChildPlannedArrivalByStopId,
   buildChildRouteOrderRows,
   summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
@@ -2004,12 +2003,6 @@ const childRouteExpectedArrivalCellStyle = {
   color: "#303030",
 };
 
-const childRouteActualArrivalCellStyle = {
-  ...childRouteOrderCellStyle,
-  color: "#303030",
-  fontWeight: 650,
-};
-
 const childRouteActionsHeaderCellStyle = {
   ...childRouteOrderHeaderCellStyle,
   background: "#f7f7f7",
@@ -3095,19 +3088,28 @@ function renderStopOrderLabel(row) {
 }
 
 function renderChildRouteEta(row) {
+  const hasActualArrival = row?.hasActualArrival === true;
+
   return (
     <s-stack alignItems="center" direction="block" gap="small-100">
       <s-text accessibilityVisibility="exclusive">{row?.etaLabel ?? "ETA"}: </s-text>
-      {row?.hasPlannedEtaComparison ? (
-        <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{row.plannedArrival}</s-text></del>
+      {hasActualArrival && row?.expectedArrival !== ROUTE_EMPTY_LABEL ? (
+        <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{row.expectedArrival}</s-text></del>
+      ) : (
+        <s-text
+          fontVariantNumeric="tabular-nums"
+          tone={row?.etaLabel === "Rolling ETA" ? "success" : undefined}
+          type={row?.etaLabel === "Rolling ETA" ? "strong" : undefined}
+        >
+          {row?.expectedArrival ?? ROUTE_EMPTY_LABEL}
+        </s-text>
+      )}
+      {hasActualArrival ? (
+        <>
+          <s-text accessibilityVisibility="exclusive">Actual arrival: </s-text>
+          <s-text fontVariantNumeric="tabular-nums" tone="success" type="strong">{row.actualArrival}</s-text>
+        </>
       ) : null}
-      <s-text
-        fontVariantNumeric="tabular-nums"
-        tone={row?.etaLabel === "Rolling ETA" ? "success" : undefined}
-        type={row?.etaLabel === "Rolling ETA" ? "strong" : undefined}
-      >
-        {row?.expectedArrival ?? ROUTE_EMPTY_LABEL}
-      </s-text>
     </s-stack>
   );
 }
@@ -3312,8 +3314,6 @@ export default function RouteDetailPage() {
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
   const routeStartTimeZone = textOrUndefined(effectiveRoutePlan?.scheduledStartTimeZone) ?? ianaTimezone;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan, ianaTimezone);
-  const plannedRouteStartAt = textOrUndefined(effectiveRoutePlan?.scheduledStartAt)
-    ?? storeLocalDateTimeToIso(routeStartDateTimeValue, routeStartTimeZone);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
@@ -3642,22 +3642,14 @@ export default function RouteDetailPage() {
     () => buildChildActualArrivalByStopId(displayedRouteTrackingSnapshot?.stopArrivals),
     [displayedRouteTrackingSnapshot?.stopArrivals],
   );
-  const plannedArrivalByStopId = useMemo(
-    () => buildChildPlannedArrivalByStopId(
-      currentTimelineRouteRow?.stops ?? [],
-      plannedRouteStartAt,
-    ),
-    [currentTimelineRouteRow?.stops, plannedRouteStartAt],
-  );
   const childRouteOrderRows = useMemo(
     () => (isMaterializedChildRouteDetail
       ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], {
           actualArrivalByStopId,
           ianaTimezone,
-          plannedArrivalByStopId,
         })
       : []),
-    [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail, plannedArrivalByStopId],
+    [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
   );
   const addStopTargetRouteOptions = useMemo(() => (isRouteGroupDetail
     ? [
@@ -7140,7 +7132,6 @@ export default function RouteDetailPage() {
                         ["Order / stop", "112px"],
                         ["Status", "120px"],
                         ["ETA", "120px"],
-                        ["Actual arrival", "120px"],
                         ["Drive time", "120px"],
                         ["Stop time", "100px"],
                         ["Customer", "160px"],
@@ -7168,7 +7159,6 @@ export default function RouteDetailPage() {
                         <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
                         <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
                         <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
-                        <td style={childRouteActualArrivalCellStyle}>{row.actualArrival}</td>
                         <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
                         <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
                         <td style={childRouteOrderCellStyle}>{row.customer}</td>

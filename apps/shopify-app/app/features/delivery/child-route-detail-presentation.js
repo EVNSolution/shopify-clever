@@ -211,24 +211,6 @@ export function formatChildStopTimeLabel(serviceMinutes) {
   return minutes === undefined ? EMPTY_LABEL : `${Math.round(minutes)} min`;
 }
 
-export function buildChildPlannedArrivalByStopId(stops, scheduledStartAt) {
-  let cursorMs = Date.parse(scheduledStartAt ?? "");
-  if (!Number.isFinite(cursorMs)) return {};
-
-  const plannedArrivalByStopId = {};
-  for (const stop of sortChildStopsByActualSequence(Array.isArray(stops) ? stops : [])) {
-    const deliveryStopId = firstText(stop?.deliveryStopId);
-    const durationSeconds = numberOrUndefined(stop?.durationFromPreviousSeconds);
-    if (!deliveryStopId || durationSeconds === undefined || durationSeconds < 0) break;
-
-    cursorMs += durationSeconds * 1000;
-    plannedArrivalByStopId[deliveryStopId] = new Date(cursorMs).toISOString();
-    const serviceMinutes = numberOrUndefined(stop?.serviceMinutes);
-    cursorMs += (serviceMinutes === undefined || serviceMinutes < 0 ? 5 : serviceMinutes) * 60_000;
-  }
-  return plannedArrivalByStopId;
-}
-
 function getStopCanonicalSequence(stop) {
   return numberOrUndefined(stop?.sequence ?? stop?.routeStop?.sequence ?? stop?.sortOrder);
 }
@@ -492,7 +474,6 @@ export function buildChildActualArrivalByStopId(stopArrivals) {
 export function buildChildRouteOrderRows(stops, {
   actualArrivalByStopId = {},
   ianaTimezone,
-  plannedArrivalByStopId = {},
 } = {}) {
   return sortChildStopsByActualSequence(Array.isArray(stops) ? stops : []).map((stop, index) => {
     const items = normalizeItems(stop);
@@ -501,11 +482,10 @@ export function buildChildRouteOrderRows(stops, {
     const deliveryStopId = firstText(stop?.deliveryStopId);
     const locationDiagnostic = normalizeRouteStopLocationDiagnostic(stop);
     const estimatedArrivalAt = firstText(stop?.estimatedArrivalAt, stop?.eta, stop?.arrivalAt);
-    const plannedArrivalAt = firstText(plannedArrivalByStopId[deliveryStopId]);
     const etaSource = firstText(stop?.etaSource);
-    const isRollingEta = ["ROUTE_STARTED", "PICKUP_COMPLETED", "STOP_ARRIVED", "STOP_DELIVERED"].includes(etaSource);
+    const isRollingEta = ["ROUTE_STARTED", "PICKUP_COMPLETED", "STOP_ARRIVED", "STOP_DELIVERED", "STOP_FAILED"].includes(etaSource);
     const expectedArrival = formatChildEtaLabel(estimatedArrivalAt, ianaTimezone);
-    const plannedArrival = formatChildEtaLabel(plannedArrivalAt, ianaTimezone);
+    const actualArrival = formatChildEtaLabel(actualArrivalByStopId[deliveryStopId], ianaTimezone);
 
     return {
       id: firstText(stop?.id, stop?.deliveryStopId, stop?.shopifyOrderGid, stop?.orderId) ?? `child-order-${index + 1}`,
@@ -524,16 +504,12 @@ export function buildChildRouteOrderRows(stops, {
       locationDiagnosticMessage: getRouteStopLocationMessage(locationDiagnostic),
       currencyCode: firstText(stop?.currencyCode),
       expectedArrival,
-      plannedArrival,
-      hasPlannedEtaComparison: isRollingEta
-        && expectedArrival !== EMPTY_LABEL
-        && plannedArrival !== EMPTY_LABEL
-        && expectedArrival !== plannedArrival,
+      actualArrival,
+      hasActualArrival: actualArrival !== EMPTY_LABEL,
       etaCalculatedAt: firstText(stop?.etaCalculatedAt),
       etaLabel: isRollingEta ? "Rolling ETA" : "Planned ETA",
       etaSource,
       etaStatus: firstText(stop?.etaStatus),
-      actualArrival: formatChildEtaLabel(actualArrivalByStopId[deliveryStopId], ianaTimezone),
       driveTime: formatChildDriveTimeLabel(stop?.durationFromPreviousSeconds, stop?.distanceFromPreviousMeters),
       stopTime: formatChildStopTimeLabel(stop?.serviceMinutes),
       priority: numberOrUndefined(stop?.priority) ?? 0,
