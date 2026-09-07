@@ -40,7 +40,7 @@ test("server and fallback date options keep the same pending-first ordering", ()
 });
 
 test("server areas use the same alphabetical order as fallback options", () => {
-  const areas = ["Vaughan", "Hamilton", "North York", "Aurora"];
+  const areas = ["Vaughan", "Zone 10", "Hamilton", "North York", "Zone 2", "aurora"];
   assert.deepEqual(
     getServerOrderFilterOptions({ deliveryAreas: areas.map(value => ({ value, count: 1 })) }).deliveryAreas,
     getOrderFilterOptions(areas.map(deliveryArea => ({ deliveryArea }))).deliveryAreas,

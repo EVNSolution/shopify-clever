@@ -186,7 +186,9 @@ export function getServerOrderFilterOptions(facets) {
     : {};
 
   return {
-    deliveryAreas: getFacetValues(safeFacets.deliveryAreas).sort((left, right) => left.localeCompare(right)),
+    deliveryAreas: getFacetValues(safeFacets.deliveryAreas).sort((left, right) =>
+      left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }),
+    ),
     deliveryDates: getFacetCountValues(safeFacets.deliveryDates).sort((left, right) => {
       if (left.value === right.value) return 0;
       if (left.value === ORDER_DELIVERY_DATE_PENDING) return -1;
