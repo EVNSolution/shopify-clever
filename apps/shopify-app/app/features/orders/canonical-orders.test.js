@@ -76,6 +76,7 @@ test("maps server canonical orders to existing Orders row shape", () => {
       status: "UNFULFILLED",
       deliveryStatus: undefined,
       deliveryStopStatus: "ASSIGNED",
+      pickupCompleteAfter: undefined,
       paymentStatus: "PAID",
       eta: "—",
       email: "kim@example.com",
