@@ -45,6 +45,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       status: textOrUndefined(order?.fulfillmentStatus) ?? "UNKNOWN",
       deliveryStatus: textOrUndefined(order?.deliveryStatus),
       deliveryStopStatus: textOrUndefined(order?.deliveryStopStatus),
+      pickupCompleteAfter: textOrUndefined(order?.pickupCompleteAfter),
       paymentStatus: textOrUndefined(order?.financialStatus) ?? "UNKNOWN",
       eta: "—",
       email: textOrUndefined(order?.email),

@@ -63,6 +63,7 @@ import {
   getOrderDeliveryStateFilterValue,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
+  isOrderPickupComplete,
   isOrderRouteCreated,
   ORDER_DELIVERY_DATE_PENDING,
   ORDER_DELIVERY_STATE_OPTIONS,
@@ -2215,6 +2216,7 @@ function formatOrderTotal(order) {
 }
 
 function formatOrderDeliveryState(order, referenceDate) {
+  if (isOrderPickupComplete(order)) return "Complete";
   const stateValue = getOrderDeliveryStateFilterValue(order, referenceDate);
 
   if (stateValue === "past_due") return "Past due";
@@ -2320,6 +2322,7 @@ function getOrderPaymentPillDetails(order) {
 }
 
 function getOrderDeliveryStatePillTone(order, referenceDate) {
+  if (isOrderPickupComplete(order)) return "success";
   const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
 
   if (exceptionState === "overdue_assigned") return "warning";
@@ -2332,6 +2335,7 @@ function getOrderDeliveryStatePillTone(order, referenceDate) {
 }
 
 function getOrderDeliveryStateHint(order, referenceDate) {
+  if (isOrderPickupComplete(order)) return "Pickup period ended; marked complete automatically";
   const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
 
   if (exceptionState === "overdue_assigned") return "Past due: assigned route is not delivered";
@@ -2364,6 +2368,7 @@ function getOrderShopifyFulfillmentStatus(order) {
 }
 
 function isShopifyFulfilledWithoutDriverStatus(order) {
+  if (isOrderPickupComplete(order)) return false;
   const shopifyStatus = normalizePaymentStatus(getOrderShopifyFulfillmentStatus(order));
   const driverStatus = normalizePaymentStatus(order?.deliveryStopStatus ?? order?.deliveryStatus);
 

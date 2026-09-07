@@ -43,7 +43,7 @@ export const ORDER_DELIVERY_STATE_OPTIONS = [
   { label: "Planned", value: "planned" },
   { label: "Assigned", value: "assigned_undelivered" },
   { label: "Past due", value: "past_due" },
-  { label: "Delivered", value: "delivered" },
+  { label: "Complete / Delivered", value: "delivered" },
   { label: "Fulfilled", value: "fulfilled" },
   { label: "Unfulfilled", value: "unfulfilled" },
 ];
@@ -383,7 +383,17 @@ export function isOrderRouteAssigned(order) {
   ].some((value) => textOrEmpty(value).length > 0);
 }
 
+export function isOrderPickupComplete(order, now = new Date()) {
+  if (order?.serviceType !== "PICKUP" || isOrderCancelled(order)) return false;
+  const deadline = textOrEmpty(order?.pickupCompleteAfter);
+  if (!deadline) return false;
+  const deadlineTime = Date.parse(deadline);
+  const nowTime = now instanceof Date ? now.getTime() : Date.parse(now);
+  return Number.isFinite(deadlineTime) && Number.isFinite(nowTime) && nowTime >= deadlineTime;
+}
+
 export function isOrderDeliveryComplete(order) {
+  if (isOrderPickupComplete(order)) return true;
   const hasAwaitingDeliveryRoute = Array.isArray(order?.routeMemberships)
     && order.routeMemberships.some((membership) =>
       ROUTE_AWAITING_DELIVERY_STATUSES.has(
