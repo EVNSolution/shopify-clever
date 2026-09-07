@@ -2066,7 +2066,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /nextFilters\.orderedDateTo = ""/);
   assert.match(ordersPageSource, /nextFilters\[filterKey\] = ""/);
   assert.match(ordersPageSource, /onClick=\{handleOrderedDateCalendarOpen\}/);
-  assert.match(ordersPageSource, /aria-label="Filter orders by delivery day"/);
+  assert.match(ordersPageSource, /ariaLabel="Filter orders by delivery day"/);
   assert.match(ordersPageSource, /value=\{orderFilters\.deliveryWeekday\}/);
   assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?const nextSearchParams = beginOrderResourceTransition\(nextFilters\);[\s\S]*?setSearchParams\(\s*nextSearchParams/);
   assert.match(ordersPageSource, /label="Delivery day"/);
@@ -2074,7 +2074,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /options=\{ORDER_WEEKDAY_OPTIONS\}/);
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryWeekday", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear delivery day filter"/);
-  assert.match(ordersPageSource, /aria-label="Filter orders by delivery date"/);
+  assert.match(ordersPageSource, /ariaLabel="Filter orders by delivery date"/);
   assert.match(ordersPageSource, /label="Delivery date"/);
   assert.match(ordersPageSource, /orderFilterOptions\.deliveryDates\.map\(\(\{ count, value \}\) => \(\{/);
   assert.match(ordersPageSource, /formatDeliveryDateFilterLabel\(value, count\)/);
@@ -2082,17 +2082,17 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryDate", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear delivery date filter"/);
   assert.match(ordersPageSource, /aria-label="Visible order count"/);
-  assert.match(ordersPageSource, /aria-label="Filter orders by service type"/);
+  assert.match(ordersPageSource, /ariaLabel="Filter orders by service type"/);
   assert.match(ordersPageSource, /label="Type"/);
   assert.match(ordersPageSource, /\{ label: "Delivery", value: "DELIVERY" \}/);
   assert.match(ordersPageSource, /\{ label: "Pickup", value: "PICKUP" \}/);
   assert.match(ordersPageSource, /clearLabel="Clear service type filter"/);
-  assert.match(ordersPageSource, /aria-label="Filter orders by delivery area"/);
+  assert.match(ordersPageSource, /ariaLabel="Filter orders by delivery area"/);
   assert.match(ordersPageSource, /label="Area"/);
   assert.match(ordersPageSource, /orderFilterOptions\.deliveryAreas\.map\(\(deliveryArea\) => \(\{/);
   assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryArea", filterValue\)/);
   assert.match(ordersPageSource, /clearLabel="Clear delivery area filter"/);
-  assert.match(ordersPageSource, /aria-label="Filter orders by state"/);
+  assert.match(ordersPageSource, /ariaLabel="Filter orders by state"/);
   assert.match(ordersPageSource, /label="State"/);
   assert.match(ordersPageSource, /ORDER_DELIVERY_STATE_OPTIONS/);
   assert.match(ordersPageSource, /options=\{ORDER_DELIVERY_STATE_OPTIONS\}/);

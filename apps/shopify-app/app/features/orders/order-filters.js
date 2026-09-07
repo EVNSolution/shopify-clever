@@ -180,6 +180,45 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
   return true;
 }
 
+export function getServerOrderFilterOptions(facets) {
+  const safeFacets = facets && typeof facets === "object" && !Array.isArray(facets)
+    ? facets
+    : {};
+
+  return {
+    deliveryAreas: getFacetValues(safeFacets.deliveryAreas).sort((left, right) =>
+      left.localeCompare(right, undefined, { numeric: true, sensitivity: "base" }),
+    ),
+    deliveryDates: getFacetCountValues(safeFacets.deliveryDates).sort((left, right) => {
+      if (left.value === right.value) return 0;
+      if (left.value === ORDER_DELIVERY_DATE_PENDING) return -1;
+      if (right.value === ORDER_DELIVERY_DATE_PENDING) return 1;
+      return right.value.localeCompare(left.value);
+    }),
+    deliveryStates: getFacetValues(safeFacets.deliveryStates),
+    deliveryWeekdays: getFacetValues(safeFacets.deliveryWeekdays),
+    serviceTypes: getFacetValues(safeFacets.serviceTypes),
+  };
+}
+
+function getFacetValues(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    const facetValue = typeof entry === "string" ? entry : entry?.value;
+    return typeof facetValue === "string" && facetValue ? [facetValue] : [];
+  });
+}
+
+function getFacetCountValues(value) {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((entry) => {
+    if (typeof entry === "string" && entry) return [{ count: 0, value: entry }];
+    return typeof entry?.value === "string" && entry.value
+      ? [{ count: Number.isFinite(Number(entry.count)) ? Number(entry.count) : 0, value: entry.value }]
+      : [];
+  });
+}
+
 export function getOrderFilterOptions(orders) {
   const safeOrders = Array.isArray(orders) ? orders : [];
 
