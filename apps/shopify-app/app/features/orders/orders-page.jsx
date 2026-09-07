@@ -56,6 +56,7 @@ import {
   filterOrders,
   getOrderDeliveryDateFilterOptions,
   getOrderFilterOptions,
+  getServerOrderFilterOptions,
   getOrderFiltersFromSearchParams,
   getOrderDeliveryDateValue,
   getOrderDeliveryExceptionState,
@@ -5824,7 +5825,7 @@ function OrdersPageContent({ loaderData }) {
                 : null}
             </div>
             <OrderFilterMenu
-              aria-label="Filter orders by delivery date"
+              ariaLabel="Filter orders by delivery date"
               clearLabel="Clear delivery date filter"
               label="Delivery date"
               options={orderFilterOptions.deliveryDates.map(({ count, value }) => ({
@@ -5836,7 +5837,7 @@ function OrdersPageContent({ loaderData }) {
               onClear={() => handleClearOrderFilter("deliveryDate")}
             />
             <OrderFilterMenu
-              aria-label="Filter orders by delivery day"
+              ariaLabel="Filter orders by delivery day"
               clearLabel="Clear delivery day filter"
               label="Delivery day"
               options={ORDER_WEEKDAY_OPTIONS}
@@ -5845,7 +5846,7 @@ function OrdersPageContent({ loaderData }) {
               onClear={() => handleClearOrderFilter("deliveryWeekday")}
             />
             <OrderFilterMenu
-              aria-label="Filter orders by service type"
+              ariaLabel="Filter orders by service type"
               clearLabel="Clear service type filter"
               label="Type"
               options={[
@@ -5857,7 +5858,7 @@ function OrdersPageContent({ loaderData }) {
               onClear={() => handleClearOrderFilter("serviceType")}
             />
             <OrderFilterMenu
-              aria-label="Filter orders by delivery area"
+              ariaLabel="Filter orders by delivery area"
               clearLabel="Clear delivery area filter"
               label="Area"
               options={orderFilterOptions.deliveryAreas.map((deliveryArea) => ({
@@ -5869,7 +5870,7 @@ function OrdersPageContent({ loaderData }) {
               onClear={() => handleClearOrderFilter("deliveryArea")}
             />
             <OrderFilterMenu
-              aria-label="Filter orders by state"
+              ariaLabel="Filter orders by state"
               clearLabel="Clear state filter"
               label="State"
               options={ORDER_DELIVERY_STATE_OPTIONS}
@@ -6519,36 +6520,4 @@ function OrdersPageContent({ loaderData }) {
       }
     />
   );
-}
-
-function getServerOrderFilterOptions(facets) {
-  const safeFacets = facets && typeof facets === "object" && !Array.isArray(facets)
-    ? facets
-    : {};
-
-  return {
-    deliveryAreas: getFacetValues(safeFacets.deliveryAreas),
-    deliveryDates: getFacetCountValues(safeFacets.deliveryDates),
-    deliveryStates: getFacetValues(safeFacets.deliveryStates),
-    deliveryWeekdays: getFacetValues(safeFacets.deliveryWeekdays),
-    serviceTypes: getFacetValues(safeFacets.serviceTypes),
-  };
-}
-
-function getFacetValues(value) {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
-    const facetValue = typeof entry === "string" ? entry : entry?.value;
-    return typeof facetValue === "string" && facetValue ? [facetValue] : [];
-  });
-}
-
-function getFacetCountValues(value) {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((entry) => {
-    if (typeof entry === "string" && entry) return [{ count: 0, value: entry }];
-    return typeof entry?.value === "string" && entry.value
-      ? [{ count: Number.isFinite(Number(entry.count)) ? Number(entry.count) : 0, value: entry.value }]
-      : [];
-  });
 }
