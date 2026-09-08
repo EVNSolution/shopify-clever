@@ -780,6 +780,7 @@ export const routeDetailAction = async ({ params, request }) => {
       confirmed: formData.get("confirmed") === "true",
       deliveryStopIds: readDeliveryStopIds(formData),
       missingValuesConfirmed: formData.get("missingValuesConfirmed") === "true",
+      previewToken: textOrUndefined(formData.get("previewToken")),
       resendConfirmed: formData.get("resendConfirmed") === "true",
       signal: textOrUndefined(formData.get("signal")),
     }, { sessionToken: shopifySessionToken });

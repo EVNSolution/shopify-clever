@@ -5,7 +5,10 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import {
+  getCustomerEmailDefaultSignal,
+  getCustomerEmailPreviewEmptyState,
   getCustomerEmailSendReadiness,
+  hasCustomerEmailPreviewConflict,
   summarizeCustomerEmailSendResult,
 } from "../features/customer-notifications/customer-email-send-state";
 import { CustomerEmailSendResultPanel } from "../features/customer-notifications/customer-email-components";
@@ -1532,8 +1535,10 @@ const routeStartTimeDialogStyle = {
 
 const customerEmailDialogStyle = {
   ...routeLineEditorDialogStyle,
-  maxWidth: "calc(100vw - 48px)",
-  width: "920px",
+  maxHeight: "calc(100vh - 32px)",
+  maxWidth: "calc(100vw - 32px)",
+  overflowY: "auto",
+  width: "760px",
 };
 
 const routeAddOrderDialogStyle = {
@@ -1624,7 +1629,12 @@ const routeAddOrderEmptyStyle = {
 const customerEmailDialogGridStyle = {
   display: "grid",
   gap: "12px",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(300px, 100%), 1fr))",
+  gridTemplateColumns: "minmax(260px, 0.9fr) minmax(320px, 1.1fr)",
+};
+
+const customerEmailDialogEmptyGridStyle = {
+  ...customerEmailDialogGridStyle,
+  gridTemplateColumns: "minmax(0, 1fr)",
 };
 
 const customerEmailRecipientListStyle = {
@@ -1695,6 +1705,12 @@ const customerEmailPreviewPanelStyle = {
   alignSelf: "start",
   maxHeight: "360px",
   overflowY: "auto",
+};
+
+const customerEmailPreviewEmptyStyle = {
+  ...customerEmailPreviewPanelStyle,
+  minHeight: 0,
+  padding: "14px",
 };
 
 const customerEmailPreviewBodyStyle = {
@@ -3126,6 +3142,15 @@ function getCustomerEmailSkippedRecipients(preview) {
   return Array.isArray(preview?.skipped) ? preview.skipped : [];
 }
 
+function getCustomerEmailStatusExclusions(preview) {
+  return Array.isArray(preview?.exclusions) ? preview.exclusions : [];
+}
+
+function getCustomerEmailExample(preview) {
+  const example = preview?.example;
+  return example && typeof example === "object" ? example : null;
+}
+
 function getCustomerEmailRecipientDeliveryStopId(recipient) {
   return textOrUndefined(recipient?.deliveryStopId ?? recipient?.stopId ?? recipient?.routeStopId);
 }
@@ -3198,15 +3223,21 @@ function hasCustomerEmailPriorSend(recipient) {
   );
 }
 
+function hasCustomerEmailUncertainOutcome(recipient) {
+  return (numberOrUndefined(getCustomerEmailRecipientHistory(recipient)?.uncertainCount) ?? 0) > 0;
+}
+
 function formatCustomerEmailHistory(history) {
   if (!history) return "No send history";
   const sendCount = numberOrUndefined(history.sendCount) ?? 0;
+  const uncertainCount = numberOrUndefined(history.uncertainCount) ?? 0;
   const lastStatus = textOrUndefined(history.lastStatus);
   const lastProviderStatus = textOrUndefined(history.lastProviderStatus)?.replaceAll("_", " ");
   const lastProviderEventAt = textOrUndefined(history.lastProviderEventAt)?.replace("T", " ").slice(0, 16);
   const lastSentAt = textOrUndefined(history.lastSentAt)?.replace("T", " ").slice(0, 16);
   return [
     `${sendCount} previous send${sendCount === 1 ? "" : "s"}`,
+    uncertainCount > 0 ? `${uncertainCount} unresolved outcome${uncertainCount === 1 ? "" : "s"}` : null,
     lastStatus ? `last ${lastStatus}` : null,
     lastProviderStatus ? `provider ${lastProviderStatus}` : null,
     lastProviderEventAt,
@@ -3219,7 +3250,11 @@ function hasCustomerEmailMissingTemplateValues(recipient) {
 }
 
 function isCustomerEmailRecipientSelectable(recipient) {
-  return Boolean(getCustomerEmailRecipientDeliveryStopId(recipient) && getCustomerEmailRecipientEmail(recipient));
+  return Boolean(
+    getCustomerEmailRecipientDeliveryStopId(recipient)
+    && getCustomerEmailRecipientEmail(recipient)
+    && !hasCustomerEmailUncertainOutcome(recipient),
+  );
 }
 
 function getCustomerEmailSkippedLabel(skipped) {
@@ -3386,6 +3421,7 @@ export default function RouteDetailPage() {
   const routeTimelineDropCommittedRef = useRef(false);
   const routeTimelineSuppressClickRef = useRef(false);
   const routeTimelineSuppressClickTimerRef = useRef(null);
+  const customerEmailRequestRef = useRef(null);
   const lastRouteActionIntentRef = useRef(null);
   const copyRouteGroupDialogRef = useRef(null);
   const copyRouteGroupDialogStateRef = useRef(copyRouteGroupDialogState);
@@ -3447,12 +3483,13 @@ export default function RouteDetailPage() {
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
   const [isCustomerEmailDialogOpen, setIsCustomerEmailDialogOpen] = useState(false);
-  const [customerEmailSignal, setCustomerEmailSignal] = useState("DELIVERY_SCHEDULED");
+  const [customerEmailSignal, setCustomerEmailSignal] = useState(() => getCustomerEmailDefaultSignal(loaderRouteExecutionStatus));
   const [customerEmailConfirmed, setCustomerEmailConfirmed] = useState(false);
   const [customerEmailMissingValuesConfirmed, setCustomerEmailMissingValuesConfirmed] = useState(false);
   const [customerEmailResendConfirmed, setCustomerEmailResendConfirmed] = useState(false);
   const [customerEmailPreviewSignal, setCustomerEmailPreviewSignal] = useState(null);
   const [customerEmailPreviewSnapshot, setCustomerEmailPreviewSnapshot] = useState(null);
+  const [customerEmailActionResult, setCustomerEmailActionResult] = useState(null);
   const [customerEmailCommandId, setCustomerEmailCommandId] = useState(null);
   const [selectedCustomerEmailDeliveryStopIds, setSelectedCustomerEmailDeliveryStopIds] = useState([]);
   const [activeCustomerEmailRecipientKey, setActiveCustomerEmailRecipientKey] = useState(null);
@@ -3481,8 +3518,10 @@ export default function RouteDetailPage() {
   const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
   const [routeExecutionStatus, setRouteExecutionStatus] = useState(loaderRouteExecutionStatus);
+  const customerEmailPreviewBusy = customerEmailFetcher.state !== "idle"
+    && customerEmailFetcher.formData?.get("_intent") === "previewCustomerEmail";
   const customerEmailPreview = customerEmailPreviewSignal === customerEmailSignal
-    ? customerEmailFetcher.data?.preview ?? customerEmailPreviewSnapshot
+    ? customerEmailPreviewSnapshot
     : null;
   const customerEmailRecipients = useMemo(
     () => getCustomerEmailRecipients(customerEmailPreview),
@@ -3490,6 +3529,14 @@ export default function RouteDetailPage() {
   );
   const customerEmailSkippedRecipients = useMemo(
     () => getCustomerEmailSkippedRecipients(customerEmailPreview),
+    [customerEmailPreview],
+  );
+  const customerEmailStatusExclusions = useMemo(
+    () => getCustomerEmailStatusExclusions(customerEmailPreview),
+    [customerEmailPreview],
+  );
+  const customerEmailExample = useMemo(
+    () => getCustomerEmailExample(customerEmailPreview),
     [customerEmailPreview],
   );
   const customerEmailSelectableRecipients = useMemo(
@@ -3513,9 +3560,29 @@ export default function RouteDetailPage() {
     getCustomerEmailRecipientKey(recipient, index) === activeCustomerEmailRecipientKey
   )) ?? customerEmailRecipients[0] ?? null;
   const customerEmailSelectionCount = selectedCustomerEmailDeliveryStopIds.length;
-  const customerEmailEligibleCount = customerEmailSelectableRecipients.length;
+  const customerEmailSendableCount = customerEmailSelectableRecipients.length;
+  const customerEmailUncertainCount = customerEmailRecipients.filter(hasCustomerEmailUncertainOutcome).length;
   const customerEmailSkippedCount = customerEmailPreview?.counts?.skipped ?? customerEmailSkippedRecipients.length;
-  const customerEmailSendResult = customerEmailFetcher.data?.dispatch ?? null;
+  const customerEmailStatusExcludedCount = customerEmailPreview?.counts?.statusExcluded
+    ?? customerEmailStatusExclusions.reduce((total, exclusion) => total + (numberOrUndefined(exclusion?.count) ?? 0), 0);
+  const customerEmailExcludedCount = customerEmailSkippedCount
+    + customerEmailStatusExcludedCount
+    + customerEmailUncertainCount;
+  const customerEmailPreviewEmptyState = useMemo(
+    () => getCustomerEmailPreviewEmptyState({
+      preview: customerEmailPreview,
+      routeExecutionStatus,
+      signal: customerEmailSignal,
+    }),
+    [customerEmailPreview, customerEmailSignal, routeExecutionStatus],
+  );
+  const customerEmailActionErrors = customerEmailActionResult?.signal === customerEmailSignal
+    ? customerEmailActionResult.data?.errors ?? []
+    : [];
+  const customerEmailSendResult = customerEmailActionResult?.intent === "sendCustomerEmail"
+    && customerEmailActionResult.signal === customerEmailSignal
+    ? customerEmailActionResult.data?.dispatch ?? null
+    : null;
   const customerEmailSendResultSummary = useMemo(
     () => summarizeCustomerEmailSendResult(customerEmailSendResult),
     [customerEmailSendResult],
@@ -4949,6 +5016,12 @@ export default function RouteDetailPage() {
       formData.set("shopifySessionToken", await shopify.idToken());
       formData.set("signal", customerEmailSignal);
       formData.set("deliveryStopIds", JSON.stringify(selectedCustomerEmailDeliveryStopIds));
+      customerEmailRequestRef.current = {
+        intent,
+        previousData: customerEmailFetcher.data,
+        signal: customerEmailSignal,
+      };
+      setCustomerEmailActionResult(null);
       if (intent === "previewCustomerEmail") {
         setCustomerEmailConfirmed(false);
         setCustomerEmailMissingValuesConfirmed(false);
@@ -4956,7 +5029,7 @@ export default function RouteDetailPage() {
         setSelectedCustomerEmailDeliveryStopIds([]);
         setActiveCustomerEmailRecipientKey(null);
         setCustomerEmailPreviewSnapshot(null);
-        setCustomerEmailPreviewSignal(customerEmailSignal);
+        setCustomerEmailPreviewSignal(null);
         setCustomerEmailCommandId(globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${effectiveRoutePlan?.id}`);
       }
       if (intent === "sendCustomerEmail") {
@@ -4964,14 +5037,19 @@ export default function RouteDetailPage() {
         formData.set("confirmed", String(customerEmailConfirmed));
         formData.set("missingValuesConfirmed", String(customerEmailMissingValuesConfirmed));
         formData.set("resendConfirmed", String(customerEmailResendConfirmed));
+        if (customerEmailPreview?.previewToken) formData.set("previewToken", customerEmailPreview.previewToken);
       }
       customerEmailFetcher.submit(formData, { method: "post" });
     } catch {
+      customerEmailRequestRef.current = null;
       setRouteGroupClientError("Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.");
     }
   };
 
   const openCustomerEmailDialog = () => {
+    customerEmailRequestRef.current = null;
+    setCustomerEmailSignal(getCustomerEmailDefaultSignal(routeExecutionStatus));
+    setCustomerEmailActionResult(null);
     setCustomerEmailConfirmed(false);
     setCustomerEmailMissingValuesConfirmed(false);
     setCustomerEmailResendConfirmed(false);
@@ -4984,6 +5062,8 @@ export default function RouteDetailPage() {
   };
 
   const closeCustomerEmailDialog = () => {
+    customerEmailRequestRef.current = null;
+    setCustomerEmailActionResult(null);
     setCustomerEmailConfirmed(false);
     setCustomerEmailMissingValuesConfirmed(false);
     setCustomerEmailResendConfirmed(false);
@@ -4996,7 +5076,9 @@ export default function RouteDetailPage() {
   };
 
   const handleCustomerEmailSignalChange = (event) => {
+    customerEmailRequestRef.current = null;
     setCustomerEmailSignal(event.target.value);
+    setCustomerEmailActionResult(null);
     setCustomerEmailConfirmed(false);
     setCustomerEmailMissingValuesConfirmed(false);
     setCustomerEmailResendConfirmed(false);
@@ -5050,16 +5132,45 @@ export default function RouteDetailPage() {
   };
 
   useEffect(() => {
-    if (!customerEmailFetcher.data?.dispatch) return;
+    if (!customerEmailSendResult) return;
     setCustomerEmailConfirmed(false);
     setCustomerEmailMissingValuesConfirmed(false);
     setCustomerEmailResendConfirmed(false);
-  }, [customerEmailFetcher.data?.dispatch]);
+  }, [customerEmailSendResult]);
 
   useEffect(() => {
-    if (!customerEmailFetcher.data?.preview) return;
-    setCustomerEmailPreviewSnapshot(customerEmailFetcher.data.preview);
-  }, [customerEmailFetcher.data?.preview]);
+    const requestSnapshot = customerEmailRequestRef.current;
+    if (
+      customerEmailFetcher.state !== "idle"
+      || !requestSnapshot
+      || customerEmailFetcher.data === requestSnapshot.previousData
+    ) return;
+
+    customerEmailRequestRef.current = null;
+    const data = customerEmailFetcher.data ?? {};
+    setCustomerEmailActionResult({
+      data,
+      intent: requestSnapshot.intent,
+      signal: requestSnapshot.signal,
+    });
+    if (
+      requestSnapshot.intent === "sendCustomerEmail"
+      && hasCustomerEmailPreviewConflict(data.errors)
+    ) {
+      setCustomerEmailConfirmed(false);
+      setCustomerEmailMissingValuesConfirmed(false);
+      setCustomerEmailResendConfirmed(false);
+      setCustomerEmailPreviewSnapshot(null);
+      setCustomerEmailPreviewSignal(null);
+      setCustomerEmailCommandId(null);
+      setSelectedCustomerEmailDeliveryStopIds([]);
+      setActiveCustomerEmailRecipientKey(null);
+      return;
+    }
+    if (requestSnapshot.intent !== "previewCustomerEmail" || !data.preview) return;
+    setCustomerEmailPreviewSnapshot(data.preview);
+    setCustomerEmailPreviewSignal(requestSnapshot.signal);
+  }, [customerEmailFetcher.data, customerEmailFetcher.state]);
 
   useEffect(() => {
     if (!customerEmailPreview) return;
@@ -7606,6 +7717,7 @@ export default function RouteDetailPage() {
               <div style={routeLineEditorFieldStyle}>
                 <label htmlFor="customer-email-signal" style={routeLineEditorLabelStyle}>Message</label>
                 <select
+                  disabled={customerEmailFetcher.state !== "idle"}
                   id="customer-email-signal"
                   onChange={handleCustomerEmailSignalChange}
                   style={routeLineEditorInputStyle}
@@ -7627,21 +7739,30 @@ export default function RouteDetailPage() {
                 {customerEmailFetcher.state !== "idle" && customerEmailFetcher.formData?.get("_intent") === "previewCustomerEmail" ? "Previewing…" : "Preview recipients"}
               </button>
               {customerEmailPreview ? (
-                <div style={customerEmailDialogGridStyle}>
+                <div style={customerEmailRecipients.length > 0 || customerEmailExample
+                  ? customerEmailDialogGridStyle
+                  : customerEmailDialogEmptyGridStyle}>
                   <div style={routeLineEditorFieldStyle}>
                     <strong>
-                      {customerEmailSelectionCount} selected / {customerEmailEligibleCount} eligible / {customerEmailSkippedCount} skipped
+                      {customerEmailSelectionCount} selected / {customerEmailSendableCount} sendable / {customerEmailExcludedCount} excluded
                     </strong>
-                    <label style={{ alignItems: "center", display: "flex", gap: "8px" }}>
-                      <input
-                        checked={customerEmailEligibleCount > 0 && customerEmailSelectionCount === customerEmailEligibleCount}
-                        disabled={customerEmailEligibleCount === 0}
-                        onChange={(event) => toggleAllCustomerEmailRecipients(event.target.checked)}
-                        type="checkbox"
-                      />
-                      Select all eligible
-                    </label>
-                    <div aria-label="Eligible email recipients" style={customerEmailRecipientListStyle}>
+                    {customerEmailPreviewEmptyState ? (
+                      <div style={childStopEditReadonlyStyle}>
+                        <strong>{customerEmailPreviewEmptyState.title}</strong>
+                        <span>{customerEmailPreviewEmptyState.detail}</span>
+                      </div>
+                    ) : null}
+                    {customerEmailSendableCount > 0 ? (
+                      <label style={{ alignItems: "center", display: "flex", gap: "8px" }}>
+                        <input
+                          checked={customerEmailSelectionCount === customerEmailSendableCount}
+                          onChange={(event) => toggleAllCustomerEmailRecipients(event.target.checked)}
+                          type="checkbox"
+                        />
+                        Select all sendable
+                      </label>
+                    ) : null}
+                    <div aria-label="Sendable email recipients" style={customerEmailRecipientListStyle}>
                       {customerEmailRecipients.length > 0 ? customerEmailRecipients.map((recipient, index) => {
                         const recipientKey = getCustomerEmailRecipientKey(recipient, index);
                         const deliveryStopId = getCustomerEmailRecipientDeliveryStopId(recipient);
@@ -7652,6 +7773,7 @@ export default function RouteDetailPage() {
                         const hasDiagnostics = hasCustomerEmailMissingTemplateValues(recipient);
                         const missingDiagnosticsLabel = formatCustomerEmailMissingTemplateDiagnostics(recipient);
                         const hasPriorSend = hasCustomerEmailPriorSend(recipient);
+                        const hasUncertainOutcome = hasCustomerEmailUncertainOutcome(recipient);
                         const historyLabel = formatCustomerEmailHistory(getCustomerEmailRecipientHistory(recipient));
                         return (
                           <label
@@ -7684,6 +7806,9 @@ export default function RouteDetailPage() {
                               {hasPriorSend ? (
                                 <span style={customerEmailWarningTextStyle}>Resend requires explicit confirmation</span>
                               ) : null}
+                              {hasUncertainOutcome ? (
+                                <span style={customerEmailWarningTextStyle}>Pending or unknown delivery outcome; cannot resend</span>
+                              ) : null}
                               {!selectable ? (
                                 <span style={customerEmailWarningTextStyle}>Cannot select this recipient</span>
                               ) : null}
@@ -7691,12 +7816,12 @@ export default function RouteDetailPage() {
                           </label>
                         );
                       }) : (
-                        <span style={routeSelectorEmptyStyle}>No eligible recipients</span>
+                        <span style={routeSelectorEmptyStyle}>No sendable recipients</span>
                       )}
                     </div>
                     {customerEmailSkippedRecipients.length > 0 ? (
                       <div style={childStopEditReadonlyStyle}>
-                        <strong>Skipped</strong>
+                        <strong>Missing or invalid email</strong>
                         {customerEmailSkippedRecipients.map((skipped, index) => (
                           <span key={`${getCustomerEmailRecipientKey(skipped, index)}-skipped`}>
                             {getCustomerEmailSkippedLabel(skipped)}
@@ -7704,9 +7829,19 @@ export default function RouteDetailPage() {
                         ))}
                       </div>
                     ) : null}
+                    {customerEmailStatusExclusions.length > 0 ? (
+                      <div style={childStopEditReadonlyStyle}>
+                        <strong>Not matched by route status</strong>
+                        {customerEmailStatusExclusions.map((exclusion, index) => (
+                          <span key={`${exclusion?.code ?? "status"}-${exclusion?.status ?? index}`}>
+                            {exclusion?.count ? `${exclusion.count} stops - ` : ""}{exclusion?.message ?? "Not eligible for this message."}
+                          </span>
+                        ))}
+                      </div>
+                    ) : null}
                   </div>
-                  <div style={customerEmailPreviewPanelStyle}>
-                    <strong>Recipient preview</strong>
+                  <div style={activeCustomerEmailRecipient || customerEmailExample ? customerEmailPreviewPanelStyle : customerEmailPreviewEmptyStyle}>
+                    <strong>{activeCustomerEmailRecipient ? "Recipient preview" : customerEmailExample ? "Template example" : "Recipient preview"}</strong>
                     {activeCustomerEmailRecipient ? (
                       <>
                         <span>{getCustomerEmailRecipientOrder(activeCustomerEmailRecipient)} {getCustomerEmailRecipientEmail(activeCustomerEmailRecipient) ?? ""}</span>
@@ -7715,6 +7850,9 @@ export default function RouteDetailPage() {
                         </span>
                         {hasCustomerEmailPriorSend(activeCustomerEmailRecipient) ? (
                           <span style={customerEmailWarningTextStyle}>This recipient has prior send history.</span>
+                        ) : null}
+                        {hasCustomerEmailUncertainOutcome(activeCustomerEmailRecipient) ? (
+                          <span style={customerEmailWarningTextStyle}>This recipient has a pending or unknown delivery outcome and cannot be resent.</span>
                         ) : null}
                         {hasCustomerEmailMissingTemplateValues(activeCustomerEmailRecipient) ? (
                           <span style={customerEmailWarningTextStyle}>
@@ -7726,28 +7864,36 @@ export default function RouteDetailPage() {
                         ) : null}
                         <pre style={customerEmailPreviewBodyStyle}>{getCustomerEmailRenderedBody(activeCustomerEmailRecipient) ?? "No body returned for this recipient."}</pre>
                       </>
+                    ) : customerEmailExample ? (
+                      <>
+                        <span>This example is not a selected recipient and will not be sent.</span>
+                        {getCustomerEmailRenderedSubject(customerEmailExample) ? (
+                          <span><strong>Subject:</strong> {getCustomerEmailRenderedSubject(customerEmailExample)}</span>
+                        ) : null}
+                        <pre style={customerEmailPreviewBodyStyle}>{getCustomerEmailRenderedBody(customerEmailExample) ?? "No example body returned."}</pre>
+                      </>
                     ) : (
-                      <span>Preview recipients to inspect the exact subject and body.</span>
+                      <span>{customerEmailPreviewEmptyState?.detail ?? "Preview recipients to inspect the exact subject and body."}</span>
                     )}
                   </div>
                 </div>
               ) : null}
-              {(customerEmailFetcher.data?.errors ?? []).length > 0 ? (
-                <p role="alert" style={{ color: "#8e1f0b", margin: 0 }}>{customerEmailFetcher.data.errors[0]?.message ?? "Unable to prepare customer email."}</p>
+              {customerEmailActionErrors.length > 0 ? (
+                <p role="alert" style={{ color: "#8e1f0b", margin: 0 }}>{customerEmailActionErrors[0]?.message ?? "Unable to prepare customer email."}</p>
               ) : null}
               <CustomerEmailSendResultPanel
                 busy={customerEmailFetcher.state !== "idle"}
                 canRetry={Boolean(customerEmailPreview)}
                 failedRecipientCount={customerEmailFailedDeliveryStopIds.length}
                 onRetry={retryFailedCustomerEmails}
-                summary={customerEmailFetcher.data?.dispatch ? customerEmailSendResultSummary : null}
+                summary={customerEmailSendResult ? customerEmailSendResultSummary : null}
               />
               <s-checkbox
                 checked={customerEmailConfirmed}
                 details={customerEmailPreview && customerEmailSelectionCount > 0
                   ? "Required before Send."
                   : customerEmailPreview
-                    ? "Select at least one eligible recipient first."
+                    ? "Select at least one sendable recipient first."
                     : "Preview recipients first."}
                 disabled={!customerEmailPreview || customerEmailSelectionCount === 0}
                 label="Confirm this manual send to the selected recipients shown above"
@@ -7772,7 +7918,9 @@ export default function RouteDetailPage() {
                 />
               ) : null}
               <p id="customer-email-send-status" role="status" style={customerEmailGateStatusStyle}>
-                {customerEmailSendReadiness.ready
+                {customerEmailPreviewBusy
+                  ? "Finding matching recipients…"
+                  : customerEmailSendReadiness.ready
                   ? "Ready to send to the selected recipients."
                   : customerEmailSendReadiness.blockers.join(" ")}
               </p>
