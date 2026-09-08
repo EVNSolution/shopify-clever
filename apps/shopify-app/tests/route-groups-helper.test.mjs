@@ -18,6 +18,7 @@ import {
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupOrders,
 } from "../app/features/delivery/route-groups.server.js";
+import { buildCreateRouteGroupPayload } from "../app/features/orders/route-group-create.js";
 
 test("route group add-order draft assigns new orders to the requested child", () => {
   const draft = buildRouteGroupAddOrdersDraft({
@@ -96,6 +97,36 @@ test("route group helper creates route groups through the Admin delivery API", a
   assert.equal(fakeFetch.calls[0].init.headers["x-clever-app-id"], "clever-route-dev");
   assert.equal(fakeFetch.calls[0].init.headers["content-type"], "application/json");
   assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), payload);
+});
+
+test("mixed delivery dates create one route-group request spanning the selected orders", async () => {
+  const fakeFetch = makeFetch({ data: { routeGroup: { id: "group-mixed-dates" } }, error: null }, 201);
+  const payload = buildCreateRouteGroupPayload({
+    depot: { latitude: 43.65, longitude: -79.38 },
+    plannedOrders: [
+      { deliveryDate: "2026-09-12", orderId: "order-later" },
+      { deliveryDate: "2026-09-10", orderId: "order-earlier" },
+    ],
+    routeName: "Mixed date reviewer route",
+    routeScope: { deliveryDate: "2026-09-12" },
+  });
+
+  const result = await createDeliveryRouteGroup(makeRequest(), payload, {
+    fetch: fakeFetch,
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { routeGroup: { id: "group-mixed-dates" }, errors: [] });
+  assert.equal(fakeFetch.calls.length, 1);
+  assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups");
+  assert.deepEqual(JSON.parse(fakeFetch.calls[0].init.body), {
+    dateRangeEnd: "2026-09-12",
+    dateRangeStart: "2026-09-10",
+    depot: { latitude: 43.65, longitude: -79.38 },
+    name: "Mixed date reviewer route",
+    orderIds: ["order-later", "order-earlier"],
+    planDate: "2026-09-10",
+  });
 });
 
 test("route group helper copies a group through the atomic copy command", async () => {

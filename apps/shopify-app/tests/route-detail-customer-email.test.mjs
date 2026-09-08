@@ -7,6 +7,8 @@ import test from "node:test";
 const root = process.cwd();
 const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
 const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
+const customerEmailComponentsSource = readFileSync(join(root, "app/features/customer-notifications/customer-email-components.jsx"), "utf8");
+const routeDetailUiSource = `${routeDetailSource}\n${customerEmailComponentsSource}`;
 
 test("route detail customer email actions forward selected delivery stops and missing-value confirmation", () => {
   assert.match(routeDetailServerSource, /function readDeliveryStopIds\(formData\) \{/);
@@ -76,8 +78,21 @@ test("route detail customer email can retry failed dispatch recipients through t
   assert.match(routeDetailSource, /const retryFailedCustomerEmails = \(\) => \{/);
   assert.match(routeDetailSource, /setCustomerEmailCommandId\(globalThis\.crypto\?\.randomUUID\?\.\(\) \?\? `\$\{Date\.now\(\)\}-\$\{effectiveRoutePlan\?\.id\}-retry`\)/);
   assert.match(routeDetailSource, /setSelectedCustomerEmailDeliveryStopIds\(retryableStopIds\)/);
-  assert.match(routeDetailSource, />\s*Retry failed only\s*<\/button>/);
+  assert.match(routeDetailUiSource, />\s*Retry failed only\s*<\/button>/);
   assert.doesNotMatch(routeDetailSource, /retryFailedRouteCustomerNotification|retry-failed/);
+});
+
+test("route detail customer email renders accepted, failed, skipped, duplicate, and unknown outcomes", () => {
+  assert.match(routeDetailSource, /summarizeCustomerEmailSendResult\(customerEmailSendResult\)/);
+  assert.match(routeDetailUiSource, /provider accepted/);
+  assert.match(routeDetailUiSource, /failed/);
+  assert.match(routeDetailUiSource, /skipped/);
+  assert.match(routeDetailUiSource, /duplicate/);
+  assert.match(routeDetailUiSource, /outcome unknown/);
+  assert.match(routeDetailUiSource, /Provider acceptance is not final delivery confirmation\./);
+  assert.match(routeDetailUiSource, /No new send was started/);
+  assert.match(routeDetailUiSource, /The original delivery outcome is unavailable in this response\./);
+  assert.match(routeDetailUiSource, /Click Preview recipients again to refresh provider delivery or bounce status/);
 });
 
 test("route detail customer email preserves the preview locally so failed-only retry can reuse existing send", () => {

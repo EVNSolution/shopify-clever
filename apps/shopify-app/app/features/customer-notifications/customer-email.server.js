@@ -11,6 +11,8 @@ export const CUSTOMER_NOTIFICATION_SETTINGS_PAYLOAD_INVALID_ERROR_CODE =
   "CUSTOMER_NOTIFICATION_SETTINGS_PAYLOAD_INVALID";
 export const CUSTOMER_EMAIL_LOGO_FORM_DATA_REQUIRED_ERROR_CODE =
   "CUSTOMER_EMAIL_LOGO_FORM_DATA_REQUIRED";
+export const CUSTOMER_EMAIL_TEST_CONFIRMATION_REQUIRED_ERROR_CODE =
+  "CUSTOMER_EMAIL_TEST_CONFIRMATION_REQUIRED";
 
 const DEFAULT_SETTINGS_BODY_LIMIT_BYTES = 64 * 1024;
 const DEFAULT_COMMAND_BODY_LIMIT_BYTES = 32 * 1024;
@@ -258,6 +260,15 @@ export async function sendTestCustomerNotification(request, payload, options = {
 }
 
 export async function sendCustomerEmailTest(request, input, options = {}) {
+  const confirmationError = getCustomerEmailTestConfirmationError(input);
+  if (confirmationError) {
+    return {
+      attemptId: input?.attemptId,
+      errors: [confirmationError],
+      test: null,
+    };
+  }
+
   const result = await customerNotificationMutation(
     request,
     "/admin/customer-email/test",
@@ -276,6 +287,15 @@ export async function sendCustomerEmailTest(request, input, options = {}) {
   return {
     ...normalizeResult(result, "test"),
     attemptId: input?.attemptId,
+  };
+}
+
+export function getCustomerEmailTestConfirmationError(input) {
+  if (input?.confirmed === true) return null;
+  return {
+    code: CUSTOMER_EMAIL_TEST_CONFIRMATION_REQUIRED_ERROR_CODE,
+    message: "Confirm this test email before sending.",
+    status: 400,
   };
 }
 

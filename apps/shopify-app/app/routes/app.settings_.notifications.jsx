@@ -7,10 +7,15 @@ import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import {
   fetchCustomerEmailSettings,
+  getCustomerEmailTestConfirmationError,
   saveCustomerEmailGlobal,
   saveCustomerEmailTemplate,
   sendCustomerEmailTest,
 } from "../features/customer-notifications/customer-email.server";
+import {
+  CustomerEmailSenderSettings,
+  CustomerEmailTestSendPanel,
+} from "../features/customer-notifications/customer-email-components";
 import {
   TemplateTokenEditor,
 } from "../features/customer-notifications/template-token-editor";
@@ -101,14 +106,19 @@ export const action = async ({ request }) => {
     const attemptId = formText(formData.get("attemptId")) || crypto.randomUUID();
     const recipientEmail = formText(formData.get("recipientEmail"));
     const signal = formText(formData.get("signal"));
-    const result = await sendCustomerEmailTest(request, {
+    const input = {
       attemptId,
       body: formText(formData.get("body")),
       confirmed: formData.get("confirmed") === "true",
       recipientEmail,
       signal,
       subject: formText(formData.get("subject")),
-    }, { sessionToken: formText(formData.get("shopifySessionToken")) });
+    };
+    const confirmationError = getCustomerEmailTestConfirmationError(input);
+    if (confirmationError) return { attemptId, errors: [confirmationError], test: null };
+    const result = await sendCustomerEmailTest(request, input, {
+      sessionToken: formText(formData.get("shopifySessionToken")),
+    });
     return result;
   }
 
@@ -456,14 +466,12 @@ function CustomerEmailSettings({ initialSettings }) {
         <p style={settingsMessageStyle}>Messages are sent manually from a child route. Saving a template never queues or sends email.</p>
       </fieldset>
 
-      <section aria-label="Notification sender" style={settingsSectionCardStyle}>
-        <strong>Sender</strong>
-        <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>Sender name<input onChange={(event) => setSettings({ ...settings, senderName: event.target.value })} style={settingsInputStyle} value={settings.senderName} /></label>
-          <label style={settingsLabelStyle}>Sender email<input onChange={(event) => setSettings({ ...settings, senderEmail: event.target.value })} style={settingsInputStyle} type="email" value={settings.senderEmail} /></label>
-        </div>
-        <label style={settingsLabelStyle}>Reply-to email<input onChange={(event) => setSettings({ ...settings, replyTo: event.target.value })} style={settingsInputStyle} type="email" value={settings.replyTo} /></label>
-      </section>
+      <CustomerEmailSenderSettings
+        onReplyToChange={(replyTo) => setSettings({ ...settings, replyTo })}
+        onSenderNameChange={(senderName) => setSettings({ ...settings, senderName })}
+        replyTo={settings.replyTo}
+        senderName={settings.senderName}
+      />
 
       <section aria-label="Notification branding" style={settingsSectionCardStyle}>
         <div style={notificationCardHeaderStyle}>
@@ -514,8 +522,8 @@ function CustomerEmailSettings({ initialSettings }) {
       </section>
 
       <div style={settingsActionRowStyle}>
-        <span>{intent === "saveCustomerEmailGlobal" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Email sender and footer saved</span> : null}</span>
-        <button disabled={busy} onClick={() => submit("saveCustomerEmailGlobal")} style={busy ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{globalSaveBusy ? "Saving..." : "Save sender and footer"}</button>
+        <span>{intent === "saveCustomerEmailGlobal" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Customer-facing identity and footer saved</span> : null}</span>
+        <button disabled={busy} onClick={() => submit("saveCustomerEmailGlobal")} style={busy ? settingsDisabledButtonStyle : settingsButtonStyle} type="button">{globalSaveBusy ? "Saving..." : "Save identity and footer"}</button>
       </div>
 
       {errors.length > 0 ? <p role="alert" style={settingsErrorStyle}>{errors[0]?.message ?? "Unable to save email settings."}</p> : null}
@@ -624,24 +632,18 @@ function CustomerEmailSettings({ initialSettings }) {
                 <span style={notificationTemplatePreviewBadgeStyle}>Live</span>
               </div>
               <NotificationPreview activeTemplate={templateDraft} branding={branding} senderName={settings.senderName} />
-              <div style={notificationTestPanelStyle}>
-                <div>
-                  <strong>Send this preview</strong>
-                  <p style={settingsMessageStyle}>Sends one test using the current draft and example data.</p>
-                </div>
-                <label style={settingsLabelStyle}>
-                  Recipient email
-                  <input aria-label="Test recipient email" onChange={(event) => setTestRecipient(event.target.value)} placeholder="name@example.com" style={settingsInputStyle} type="email" value={testRecipient} />
-                </label>
-                <label style={notificationTestConfirmStyle}>
-                  <input checked={testConfirmed} onChange={(event) => setTestConfirmed(event.target.checked)} type="checkbox" />
-                  Confirm one test email to this address
-                </label>
-                <div style={settingsActionRowStyle}>
-                  <span>{intent === "testCustomerEmail" && !busy && errors.length === 0 && fetcher.data ? <span style={settingsSaveStatusStyle}>Test accepted{fetcher.data.attemptId ? ` · ${fetcher.data.attemptId.slice(0, 8)}` : ""}</span> : null}</span>
-                  <button disabled={busy || !testConfirmed || !testRecipient || templateDraftHasUnsupported} onClick={() => submit("testCustomerEmail")} style={busy || !testConfirmed || !testRecipient || templateDraftHasUnsupported ? settingsDisabledButtonStyle : settingsResetButtonStyle} type="button">{testBusy ? "Sending..." : "Send test"}</button>
-                </div>
-              </div>
+              <CustomerEmailTestSendPanel
+                attemptId={intent === "testCustomerEmail" && fetcher.data ? fetcher.data.attemptId : null}
+                busy={busy}
+                confirmed={testConfirmed}
+                errors={errors}
+                onConfirmedChange={setTestConfirmed}
+                onRecipientChange={setTestRecipient}
+                onSend={() => submit("testCustomerEmail")}
+                recipient={testRecipient}
+                testBusy={testBusy}
+                unsupported={templateDraftHasUnsupported}
+              />
             </aside>
           </div>
           <div style={notificationModalFooterStyle}>
@@ -1056,23 +1058,6 @@ const notificationTemplatePreviewBadgeStyle = {
   fontSize: "11px",
   fontWeight: 700,
   padding: "3px 8px",
-};
-
-const notificationTestPanelStyle = {
-  background: "#ffffff",
-  border: "1px solid #e3e3e3",
-  borderRadius: "8px",
-  display: "grid",
-  gap: "10px",
-  padding: "12px",
-};
-
-const notificationTestConfirmStyle = {
-  alignItems: "start",
-  display: "flex",
-  fontSize: "12px",
-  gap: "7px",
-  lineHeight: "18px",
 };
 
 const notificationModalFooterStyle = {

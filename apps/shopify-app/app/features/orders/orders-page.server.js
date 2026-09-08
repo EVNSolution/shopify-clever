@@ -48,7 +48,6 @@ import {
   sanitizeRequestPath,
 } from "../telemetry/structured-telemetry.server";
 import {
-  DEFAULT_ROUTE_PLAN_TITLE,
   getSafePerformanceNow,
   roundPerfDuration,
   textOrUndefined,
@@ -61,6 +60,7 @@ import {
   getShopLocalDate,
 } from "../shopify/shop-timezone.server";
 import { getOrdersLoaderDeliveryErrors } from "./orders-loader-auth";
+import { buildCreateRouteGroupPayload } from "./route-group-create";
 
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV || process.env.CLEVER_PERF_CAPTURE === "1";
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
@@ -121,24 +121,6 @@ function getDeliveryOnlyShopTimeZoneData() {
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
   logStructuredMetric(name, metric);
-}
-
-function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, routeScope }) {
-  const deliveryDates = plannedOrders
-    .map((order) => textOrUndefined(order.deliveryDate))
-    .filter(Boolean)
-    .sort();
-  const dateRangeStart = deliveryDates[0] ?? routeScope?.deliveryDate;
-  const dateRangeEnd = deliveryDates.at(-1) ?? dateRangeStart;
-
-  return {
-    ...(dateRangeStart ? { dateRangeStart } : {}),
-    ...(dateRangeEnd ? { dateRangeEnd } : {}),
-    ...(dateRangeStart ? { planDate: dateRangeStart } : {}),
-    ...(depot ? { depot } : {}),
-    name: textOrUndefined(routeName) ?? DEFAULT_ROUTE_PLAN_TITLE,
-    orderIds: plannedOrders.map((order) => order.orderId),
-  };
 }
 
 function getFirstRouteGroupRoutePlan(routeGroup) {

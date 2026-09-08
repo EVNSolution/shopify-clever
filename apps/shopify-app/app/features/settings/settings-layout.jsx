@@ -243,20 +243,24 @@ function SettingsLayoutStyles() {
         }
 
         .settings-internal-nav {
-          display: flex;
+          display: grid;
           gap: 6px;
-          overflow-x: auto;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
           padding-bottom: 2px;
           position: static;
-          scrollbar-width: thin;
+          width: 100%;
         }
 
         .settings-internal-nav__link {
+          align-items: center;
           border: 1px solid #d6d6d6;
-          border-radius: 999px;
-          flex: 0 0 auto;
-          padding: 5px 10px;
-          white-space: nowrap;
+          border-radius: 8px;
+          box-sizing: border-box;
+          display: flex;
+          justify-content: center;
+          min-width: 0;
+          padding: 6px 8px;
+          text-align: center;
         }
 
         .settings-internal-nav__link--active {
