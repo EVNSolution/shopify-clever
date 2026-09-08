@@ -1536,6 +1536,7 @@ const routeStartTimeDialogStyle = {
 const customerEmailDialogStyle = {
   ...routeLineEditorDialogStyle,
   gap: 0,
+  gridTemplateRows: "auto minmax(0, 1fr) auto",
   maxHeight: "calc(100vh - 48px)",
   maxWidth: "calc(100vw - 32px)",
   overflow: "hidden",
