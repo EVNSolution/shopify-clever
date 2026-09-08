@@ -50,18 +50,27 @@ test("keeps driver download links free of invite phone data", () => {
   );
 });
 
-test("falls back to the stable latest APK link without env churn", () => {
-  const latestApkLink = "https://clever-route.cleversystem.ai/routes-app";
+test("keeps the direct download default outside K-Food", () => {
+  const directDownloadLink = "https://clever-route.cleversystem.ai/routes-app";
 
-  assert.equal(getDriverDownloadLink(""), latestApkLink);
-  assert.equal(getDriverDownloadLink("   "), latestApkLink);
-  assert.equal(getDriverDownloadLink("https://clever.delivery/driver/download"), latestApkLink);
+  assert.equal(getDriverDownloadLink(""), directDownloadLink);
+  assert.equal(getDriverDownloadLink("https://clever.delivery/driver/download"), directDownloadLink);
+});
+
+test("uses the canonical CLEVER Routes Google Play listing for K-Food", () => {
+  const playStoreLink = "https://play.google.com/store/apps/details?id=com.evnsolution.clever.routes";
+  const options = { useGooglePlay: true };
+
+  assert.equal(getDriverDownloadLink("", options), playStoreLink);
+  assert.equal(getDriverDownloadLink("   ", options), playStoreLink);
+  assert.equal(getDriverDownloadLink("https://clever.delivery/driver/download", options), playStoreLink);
+  assert.equal(getDriverDownloadLink("https://clever-route.cleversystem.ai/routes-app", options), playStoreLink);
   assert.equal(
-    getDriverDownloadLink("https://drive.google.com/file/d/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2/view?usp=sharing"),
-    latestApkLink,
+    getDriverDownloadLink("https://drive.google.com/file/d/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2/view?usp=sharing", options),
+    playStoreLink,
   );
   assert.equal(
-    getDriverDownloadLink("https://drive.google.com/drive/folders/15Am4CFvcp2szOuuKpGnWgJEB22H96rwZ"),
-    latestApkLink,
+    getDriverDownloadLink("https://drive.google.com/drive/folders/15Am4CFvcp2szOuuKpGnWgJEB22H96rwZ", options),
+    playStoreLink,
   );
 });

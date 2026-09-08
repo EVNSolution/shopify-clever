@@ -33,18 +33,27 @@ test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
 test("Drivers download action opens a QR modal without navigating the admin page", () => {
   assert.match(source, /const \[downloadOpen, setDownloadOpen\] = useState\(false\)/);
   assert.match(source, /function openDownloadModal\(\)/);
+  assert.match(source, /const useGooglePlay = process\.env\.CLEVER_APP_ID === "clever-route-kfood"/);
+  assert.match(source, /fetchDriverAppReleaseNotice\(\{ useGooglePlay \}\)/);
+  assert.match(source, /driverDownloadLink: getDriverDownloadLink\(undefined, \{ useGooglePlay \}\)/);
   assert.match(source, /aria-label="Download driver app" style=\{downloadModalStyle\}/);
-  assert.match(source, /src="\/icons\/driver-download-qr\.svg"/);
-  assert.match(source, /alt="QR code for the driver app download page"/);
+  assert.match(source, /src=\{useGooglePlay \? "\/icons\/clever-routes-play-qr\.svg" : "\/icons\/driver-download-qr\.svg"\}/);
+  assert.match(source, /useGooglePlay \? "QR code for CLEVER Routes on Google Play" : "QR code for the driver app download page"/);
+  assert.match(source, /useGooglePlay \? "Scan to open CLEVER Routes on Google Play\." : "Scan this QR code with the phone that will run the driver app\."/);
+  assert.match(source, /Available through Google Play open testing\./);
+  assert.match(source, /href="https:\/\/play\.google\.com\/apps\/testing\/com\.evnsolution\.clever\.routes"/);
+  assert.match(source, />Join open testing<\/a>/);
   assert.match(source, />Copy download link<\/button>/);
-  assert.match(source, />Open download page<\/a>/);
+  assert.match(source, /\{useGooglePlay \? "Open Google Play" : "Open download page"\}/);
   assert.match(source, /href=\{driverAppDownloadUrl\}/);
   assert.match(source, /target="_blank"/);
   assert.match(source, /rel="noreferrer"/);
-  const qrAssetPath = join(root, "public/icons/driver-download-qr.svg");
+  const qrAssetPath = join(root, "public/icons/clever-routes-play-qr.svg");
   assert.equal(existsSync(qrAssetPath), true);
   const qrAsset = readFileSync(qrAssetPath, "utf8");
-  assert.match(qrAsset, /https:\/\/clever-route\.cleversystem\.ai\/routes-app/);
+  assert.match(qrAsset, /https:\/\/play\.google\.com\/store\/apps\/details\?id=com\.evnsolution\.clever\.routes/);
+  assert.doesNotMatch(qrAsset, /com\.evnsolution\.clever\.driver/);
+  assert.doesNotMatch(qrAsset, /clever-route\.cleversystem\.ai\/routes-app/);
   assert.doesNotMatch(qrAsset, /drive\.(?:google|usercontent)\.com/);
 });
 
@@ -107,7 +116,7 @@ test("Drivers tab keeps app access state internal and places invite actions besi
   assert.match(source, /isAppLinked: appLinked/);
   assert.match(source, /function canShowDriverInviteActions\(driver\)/);
   assert.equal(source.includes(["CLEVER_DRIVER", "DOWNLOAD_URL"].join("_")), false);
-  assert.match(source, /driverDownloadLink: getDriverDownloadLink\(\)/);
+  assert.match(source, /driverDownloadLink: getDriverDownloadLink\(undefined, \{ useGooglePlay \}\)/);
   assert.doesNotMatch(source, /https:\/\/clever\.delivery\/driver\/download/);
   assert.match(source, /driver\?\.isInvitePending === true/);
   assert.doesNotMatch(source, /normalizeSearchText\(driver\?\.authStatus\) === "invite pending"/);
