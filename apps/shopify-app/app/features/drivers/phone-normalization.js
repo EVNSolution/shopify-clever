@@ -112,15 +112,19 @@ export function formatSavedDriverPhone(phone) {
 
 const DRIVER_RELEASE_FOLDER_URL = "https://drive.google.com/drive/folders/15Am4CFvcp2szOuuKpGnWgJEB22H96rwZ";
 const DEFAULT_DRIVER_DOWNLOAD_URL = "https://clever-route.cleversystem.ai/routes-app";
+const GOOGLE_PLAY_DRIVER_DOWNLOAD_URL = "https://play.google.com/store/apps/details?id=com.evnsolution.clever.routes";
 const LEGACY_DRIVER_DOWNLOAD_URLS = new Set([
   "https://clever.delivery/driver/download",
+  "https://clever-route.cleversystem.ai/routes-app",
   "https://drive.google.com/file/d/1sqfU_D40iMenCGWQ6F3dZYb875i1jbe2/view?usp=sharing",
   DRIVER_RELEASE_FOLDER_URL,
 ]);
 
-export function getDriverDownloadLink(downloadLink) {
+export function getDriverDownloadLink(downloadLink, { useGooglePlay = false } = {}) {
   const normalizedLink = String(downloadLink ?? "").trim();
+  const fallbackLink = useGooglePlay ? GOOGLE_PLAY_DRIVER_DOWNLOAD_URL : DEFAULT_DRIVER_DOWNLOAD_URL;
+
   return !normalizedLink || LEGACY_DRIVER_DOWNLOAD_URLS.has(normalizedLink)
-    ? DEFAULT_DRIVER_DOWNLOAD_URL
+    ? fallbackLink
     : normalizedLink;
 }

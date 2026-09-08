@@ -11,6 +11,7 @@ const driversPageSource = readFileSync(join(root, "app/routes/app.drivers-vehicl
 test("reads the canonical CLEVER Routes release for the K-Food notice", async () => {
   const calls = [];
   const notice = await fetchDriverAppReleaseNotice({
+    useGooglePlay: true,
     fetchImpl: async (url, init) => {
       calls.push({ init, url });
       return {
@@ -28,7 +29,7 @@ test("reads the canonical CLEVER Routes release for the K-Food notice", async ()
   });
 
   assert.deepEqual(notice, {
-    installUrl: "https://clever-route.cleversystem.ai/routes-app",
+    installUrl: "https://play.google.com/store/apps/details?id=com.evnsolution.clever.routes",
     latestVersionCode: 24,
     latestVersionName: "1.2.6",
   });

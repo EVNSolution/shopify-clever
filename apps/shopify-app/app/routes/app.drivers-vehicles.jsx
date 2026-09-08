@@ -650,14 +650,16 @@ function parseDriverIds(value) {
 
 export const loader = async ({ request }) => {
   await authenticate.admin(request);
+  const useGooglePlay = process.env.CLEVER_APP_ID === "clever-route-kfood";
   const [result, driverAppRelease] = await Promise.all([
     fetchDeliveryDrivers(request),
-    fetchDriverAppReleaseNotice(),
+    fetchDriverAppReleaseNotice({ useGooglePlay }),
   ]);
   return {
     ...result,
     driverAppRelease,
-    driverDownloadLink: getDriverDownloadLink(),
+    driverDownloadLink: getDriverDownloadLink(undefined, { useGooglePlay }),
+    useGooglePlay,
   };
 };
 
@@ -725,7 +727,7 @@ export const action = async ({ request }) => {
 };
 
 export default function DriversVehiclesPage() {
-  const { driverAppRelease = null, driverDownloadLink = "", drivers = [], errors = [] } = useLoaderData();
+  const { driverAppRelease = null, driverDownloadLink = "", drivers = [], errors = [], useGooglePlay = false } = useLoaderData();
   const driverInviteFetcher = useFetcher();
   const driverDeleteFetcher = useFetcher();
   const driverUpdateFetcher = useFetcher();
@@ -808,15 +810,19 @@ export default function DriversVehiclesPage() {
 
   async function copyDriverDownloadLink() {
     if (!navigator.clipboard?.writeText) {
-      setDownloadCopyStatus("Copy is not available. Use Open download page instead.");
+      setDownloadCopyStatus(useGooglePlay
+        ? "Copy is not available. Use Open Google Play instead."
+        : "Copy is not available. Use Open download page instead.");
       return;
     }
 
     try {
       await navigator.clipboard.writeText(driverAppDownloadUrl);
-      setDownloadCopyStatus("Download link copied.");
+      setDownloadCopyStatus(useGooglePlay ? "Google Play link copied." : "Download link copied.");
     } catch {
-      setDownloadCopyStatus("Copy failed. Use Open download page instead.");
+      setDownloadCopyStatus(useGooglePlay
+        ? "Copy failed. Use Open Google Play instead."
+        : "Copy failed. Use Open download page instead.");
     }
   }
 
@@ -1029,7 +1035,9 @@ export default function DriversVehiclesPage() {
         <div role="status" style={driverReleaseNoticeStyle}>
           <div style={driverReleaseNoticeCopyStyle}>
             <strong>CLEVER Routes {driverAppRelease.latestVersionName} is ready</strong>
-            <span>Version code {driverAppRelease.latestVersionCode}. Drivers can update from the existing QR and download page.</span>
+            <span>
+              Version code {driverAppRelease.latestVersionCode}. Drivers can update from the existing QR or {useGooglePlay ? "Google Play" : "download page"}.
+            </span>
           </div>
           <button type="button" style={secondaryButtonStyle} onClick={openDownloadModal}>
             Open update page
@@ -1219,22 +1227,28 @@ export default function DriversVehiclesPage() {
               <button type="button" aria-label="Close driver app download" style={closeButtonStyle} onClick={() => setDownloadOpen(false)}>×</button>
             </div>
             <div style={downloadModalBodyStyle}>
-              <p style={modalHelpStyle}>Scan this QR code with the phone that will run the driver app.</p>
+              <p style={modalHelpStyle}>{useGooglePlay ? "Scan to open CLEVER Routes on Google Play." : "Scan this QR code with the phone that will run the driver app."}</p>
               <div style={downloadQrFrameStyle}>
                 <img
-                  alt="QR code for the driver app download page"
+                  alt={useGooglePlay ? "QR code for CLEVER Routes on Google Play" : "QR code for the driver app download page"}
                   height="220"
-                  src="/icons/driver-download-qr.svg"
+                  src={useGooglePlay ? "/icons/clever-routes-play-qr.svg" : "/icons/driver-download-qr.svg"}
                   style={downloadQrImageStyle}
                   width="220"
                 />
               </div>
+              {useGooglePlay ? (
+                <p style={modalHelpStyle}>
+                  Available through Google Play open testing. {" "}
+                  <a href="https://play.google.com/apps/testing/com.evnsolution.clever.routes" rel="noreferrer" target="_blank">Join open testing</a>
+                </p>
+              ) : null}
               {downloadCopyStatus ? <p style={modalHelpStyle} role="status">{downloadCopyStatus}</p> : null}
             </div>
             <div style={modalFooterStyle}>
               <button type="button" style={secondaryButtonStyle} onClick={() => setDownloadOpen(false)}>Close</button>
               <button type="button" style={secondaryButtonStyle} onClick={copyDriverDownloadLink}>Copy download link</button>
-              <a href={driverAppDownloadUrl} rel="noreferrer" style={downloadLinkButtonStyle} target="_blank">Open download page</a>
+              <a href={driverAppDownloadUrl} rel="noreferrer" style={downloadLinkButtonStyle} target="_blank">{useGooglePlay ? "Open Google Play" : "Open download page"}</a>
             </div>
           </div>
         </div>
