@@ -3,8 +3,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  getCustomerEmailDefaultSignal,
+  getCustomerEmailPreviewEmptyState,
   summarizeCustomerEmailSendResult,
   getCustomerEmailSendReadiness,
+  hasCustomerEmailPreviewConflict,
 } from "../app/features/customer-notifications/customer-email-send-state.js";
 
 const readyInput = {
@@ -16,6 +19,66 @@ const readyInput = {
   resendConfirmed: false,
   selectionCount: 1,
 };
+
+test("customer email defaults the message to the route execution state", () => {
+  assert.equal(getCustomerEmailDefaultSignal("READY"), "DELIVERY_SCHEDULED");
+  assert.equal(getCustomerEmailDefaultSignal("IN_PROGRESS"), "OUT_FOR_DELIVERY");
+  assert.equal(getCustomerEmailDefaultSignal("COMPLETED"), "DELIVERED");
+  assert.equal(getCustomerEmailDefaultSignal(undefined), "DELIVERY_SCHEDULED");
+});
+
+test("customer email empty preview distinguishes status mismatch from skipped recipients", () => {
+  assert.deepEqual(getCustomerEmailPreviewEmptyState({
+    preview: {
+      counts: { eligible: 0, skipped: 0, totalStops: 6 },
+      recipients: [],
+      skipped: [],
+    },
+    routeExecutionStatus: "COMPLETED",
+    signal: "DELIVERY_SCHEDULED",
+  }), {
+    detail: "Completed routes usually use Delivered. Change the message and preview again.",
+    title: "No stops match Delivery scheduled",
+  });
+
+  assert.deepEqual(getCustomerEmailPreviewEmptyState({
+    preview: {
+      counts: { eligible: 6, skipped: 6, statusExcluded: 0, totalStops: 6 },
+      recipients: [],
+      skipped: Array.from({ length: 6 }, () => ({ code: "CUSTOMER_EMAIL_MISSING" })),
+    },
+    routeExecutionStatus: "COMPLETED",
+    signal: "DELIVERED",
+  }), {
+    detail: "6 matching stops were skipped. Review the recipient reasons.",
+    title: "No sendable recipients",
+  });
+
+  assert.deepEqual(getCustomerEmailPreviewEmptyState({
+    preview: {
+      counts: { eligible: 0, skipped: 0, statusExcluded: 6, totalStops: 6 },
+      exclusions: [{
+        code: "ROUTE_ALREADY_COMPLETED",
+        count: 6,
+        message: "The route is already completed, so this notification cannot be sent.",
+        status: "DELIVERED",
+      }],
+      recipients: [],
+      skipped: [],
+    },
+    routeExecutionStatus: "COMPLETED",
+    signal: "DELIVERY_SCHEDULED",
+  }), {
+    detail: "The route is already completed, so this notification cannot be sent.",
+    title: "No sendable recipients",
+  });
+
+  assert.equal(getCustomerEmailPreviewEmptyState({
+    preview: { recipients: [{ deliveryStopId: "stop-1", email: "customer@example.test" }] },
+    routeExecutionStatus: "COMPLETED",
+    signal: "DELIVERED",
+  }), null);
+});
 
 test("customer email send state explains the preview and recipient selection gates", () => {
   assert.deepEqual(getCustomerEmailSendReadiness({
@@ -33,7 +96,7 @@ test("customer email send state explains the preview and recipient selection gat
     confirmed: false,
     selectionCount: 0,
   }), {
-    blockers: ["Select at least one eligible recipient."],
+    blockers: ["Select at least one sendable recipient."],
     ready: false,
   });
 });
@@ -65,6 +128,13 @@ test("customer email send state becomes ready only after every gate passes", () 
     blockers: [],
     ready: true,
   });
+});
+
+test("customer email preview conflict recognizes normalized server error codes", () => {
+  assert.equal(hasCustomerEmailPreviewConflict([{ code: "CUSTOMER_EMAIL_PREVIEW_CONFLICT" }]), true);
+  assert.equal(hasCustomerEmailPreviewConflict([{ errorCode: "CUSTOMER_EMAIL_PREVIEW_CONFLICT" }]), true);
+  assert.equal(hasCustomerEmailPreviewConflict([{ code: "CUSTOMER_EMAIL_BAD_REQUEST" }]), false);
+  assert.equal(hasCustomerEmailPreviewConflict(null), false);
 });
 
 test("customer email dispatch summary distinguishes duplicate requests from new sends", () => {
