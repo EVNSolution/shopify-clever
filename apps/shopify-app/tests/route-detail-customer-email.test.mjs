@@ -34,7 +34,7 @@ test("route detail customer email modal uses route-aware defaults and a compact 
   assert.match(routeDetailSource, /customerEmailSendableCount > 0 \? \(/);
   assert.match(routeDetailSource, /customerEmailRecipients\.length > 0 \|\| customerEmailExample/);
   assert.match(routeDetailSource, /gridTemplateColumns: "repeat\(auto-fit, minmax\(min\(320px, 100%\), 1fr\)\)"/);
-  assert.match(routeDetailSource, /const customerEmailDialogStyle = \{[\s\S]*overflow: "hidden"[\s\S]*width: "680px"/);
+  assert.match(routeDetailSource, /const customerEmailDialogStyle = \{[\s\S]*gridTemplateRows: "auto minmax\(0, 1fr\) auto"[\s\S]*overflow: "hidden"[\s\S]*width: "680px"/);
   assert.match(routeDetailSource, /const customerEmailDialogBodyStyle = \{[\s\S]*overflowY: "auto"[\s\S]*overscrollBehavior: "contain"/);
   assert.match(routeDetailSource, /const customerEmailDialogFooterStyle = \{[\s\S]*borderTop: "1px solid #e3e3e3"/);
   assert.match(routeDetailSource, /aria-modal="true"[\s\S]*customerEmailDialogHeaderStyle[\s\S]*customerEmailDialogBodyStyle[\s\S]*customerEmailDialogFooterStyle/);
