@@ -4,7 +4,11 @@ import { useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-ro
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
-import { getCustomerEmailSendReadiness } from "../features/customer-notifications/customer-email-send-state";
+import {
+  getCustomerEmailSendReadiness,
+  summarizeCustomerEmailSendResult,
+} from "../features/customer-notifications/customer-email-send-state";
+import { CustomerEmailSendResultPanel } from "../features/customer-notifications/customer-email-components";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
@@ -3512,6 +3516,10 @@ export default function RouteDetailPage() {
   const customerEmailEligibleCount = customerEmailSelectableRecipients.length;
   const customerEmailSkippedCount = customerEmailPreview?.counts?.skipped ?? customerEmailSkippedRecipients.length;
   const customerEmailSendResult = customerEmailFetcher.data?.dispatch ?? null;
+  const customerEmailSendResultSummary = useMemo(
+    () => summarizeCustomerEmailSendResult(customerEmailSendResult),
+    [customerEmailSendResult],
+  );
   const customerEmailFailedDeliveryStopIds = useMemo(
     () => getCustomerEmailFailedSendDeliveryStopIds(customerEmailSendResult),
     [customerEmailSendResult],
@@ -7727,28 +7735,13 @@ export default function RouteDetailPage() {
               {(customerEmailFetcher.data?.errors ?? []).length > 0 ? (
                 <p role="alert" style={{ color: "#8e1f0b", margin: 0 }}>{customerEmailFetcher.data.errors[0]?.message ?? "Unable to prepare customer email."}</p>
               ) : null}
-              {customerEmailFetcher.data?.dispatch ? (
-                <div role="status" style={childStopEditReadonlyStyle}>
-                  <span style={{ color: "#008060" }}>
-                    {customerEmailFetcher.data.dispatch.counts?.sent ?? 0} message(s) sent
-                  </span>
-                  {customerEmailFailedDeliveryStopIds.length > 0 ? (
-                    <>
-                      <span style={customerEmailWarningTextStyle}>
-                        {customerEmailFailedDeliveryStopIds.length} failed recipient(s) can be retried with a new command.
-                      </span>
-                      <button
-                        disabled={!customerEmailPreview || customerEmailFetcher.state !== "idle"}
-                        onClick={retryFailedCustomerEmails}
-                        style={routeActionButtonStyle}
-                        type="button"
-                      >
-                        Retry failed only
-                      </button>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
+              <CustomerEmailSendResultPanel
+                busy={customerEmailFetcher.state !== "idle"}
+                canRetry={Boolean(customerEmailPreview)}
+                failedRecipientCount={customerEmailFailedDeliveryStopIds.length}
+                onRetry={retryFailedCustomerEmails}
+                summary={customerEmailFetcher.data?.dispatch ? customerEmailSendResultSummary : null}
+              />
               <s-checkbox
                 checked={customerEmailConfirmed}
                 details={customerEmailPreview && customerEmailSelectionCount > 0

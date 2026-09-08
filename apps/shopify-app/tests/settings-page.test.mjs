@@ -13,6 +13,11 @@ const notificationsPageSource = readFileSync(
   join(root, "app/routes/app.settings_.notifications.jsx"),
   "utf8",
 );
+const customerEmailComponentsSource = readFileSync(
+  join(root, "app/features/customer-notifications/customer-email-components.jsx"),
+  "utf8",
+);
+const notificationsUiSource = `${notificationsPageSource}\n${customerEmailComponentsSource}`;
 const notificationLogoUploadRouteSource = readFileSync(
   join(root, "app/routes/app.settings_.notifications_.logo.jsx"),
   "utf8",
@@ -204,7 +209,7 @@ test("Settings shows the save success alert at the bottom in green text", () => 
   assert.doesNotMatch(settingsPageSource, /style=\{settingsMessageStyle\}>Saved\.<\/p>/);
 });
 
-test("Settings splits General and Customer Notifications into internal routes", () => {
+test("Settings splits General and Customer Notifications into responsive internal routes", () => {
   assert.match(settingsPageSource, /<SettingsLayout>/);
   assert.match(notificationsPageSource, /<SettingsLayout>/);
   assert.match(settingsLayoutSource, /href: "\/app\/settings"/);
@@ -213,7 +218,11 @@ test("Settings splits General and Customer Notifications into internal routes", 
   assert.match(settingsLayoutSource, /aria-label="Settings sections"/);
   assert.match(settingsLayoutSource, /grid-template-columns: 160px minmax\(0, 760px\)/);
   assert.match(settingsLayoutSource, /@media \(max-width: 760px\)/);
-  assert.match(settingsLayoutSource, /overflow-x: auto/);
+  assert.match(settingsLayoutSource, /grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/);
+  assert.match(settingsLayoutSource, /border-radius: 8px/);
+  assert.match(settingsLayoutSource, /justify-content: center/);
+  assert.match(settingsLayoutSource, /min-width: 0/);
+  assert.doesNotMatch(settingsLayoutSource, /overflow-x: auto|border-radius: 999px/);
   assert.doesNotMatch(settingsPageSource, /CustomerEmailSettings|saveCustomerEmailSettings|testCustomerEmail/);
 });
 
@@ -227,6 +236,9 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /senderName/);
   assert.match(notificationsPageSource, /settings\?\.senderEmail \?\? sender\.email/);
   assert.match(notificationsPageSource, /settings\?\.senderName \?\? sender\.name/);
+  assert.doesNotMatch(notificationsUiSource, />Sender email<input/);
+  assert.match(notificationsUiSource, /The sending address and delivery provider are managed by CLEVER\./);
+  assert.match(notificationsUiSource, /Saving here changes the customer-facing name, reply-to address, and branding only\./);
   assert.match(notificationsPageSource, /Logo upload/);
   assert.match(notificationsPageSource, /accept="image\/png,image\/jpeg,image\/webp"/);
   assert.match(notificationsPageSource, /CUSTOMER_EMAIL_LOGO_MAX_BYTES = 3 \* 1024 \* 1024/);
@@ -265,7 +277,11 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.doesNotMatch(notificationsPageSource, /primaryColor|poweredByEnabled|logoHref|logoAlt:/);
   assert.match(notificationsPageSource, /Live notification preview/);
   assert.match(notificationsPageSource, /Email templates/);
-  assert.match(notificationsPageSource, /Send test/);
+  assert.match(notificationsUiSource, /Send test/);
+  assert.match(notificationsUiSource, /Confirm one test email to this address/);
+  assert.match(notificationsPageSource, /confirmed: formData\.get\("confirmed"\) === "true"/);
+  assert.match(notificationsPageSource, /getCustomerEmailTestConfirmationError\(input\)/);
+  assert.match(customerEmailComponentsSource, /const disabled = busy \|\| !confirmed \|\| !recipient \|\| unsupported/);
   assert.doesNotMatch(notificationsPageSource, /HTTPS logo URL/);
   assert.doesNotMatch(notificationsPageSource, /placeholder="https:\/\/cdn\.example\.com\/logo\.png"/);
 });
@@ -345,8 +361,8 @@ test("Customer Notifications uses a fixed template table and contextual live pre
   assert.match(notificationsPageSource, />Status<\/th>/);
   assert.match(notificationsPageSource, /aria-label="Email preview and test"/);
   assert.match(notificationsPageSource, /<NotificationPreview activeTemplate=\{templateDraft\}/);
-  assert.match(notificationsPageSource, />Send this preview<\/strong>/);
-  assert.match(notificationsPageSource, /Sends one test using the current draft and example data\./);
+  assert.match(notificationsUiSource, />Send this preview<\/strong>/);
+  assert.match(notificationsUiSource, /Sends one test using the current draft and example data\./);
   assert.doesNotMatch(notificationsPageSource, /<section aria-label="Send a test notification"/);
   assert.match(notificationsPageSource, /gridTemplateColumns: "minmax\(0, 1\.05fr\) minmax\(340px, 0\.95fr\)"/);
   assert.match(notificationsPageSource, /@media \(max-width: 900px\)/);
