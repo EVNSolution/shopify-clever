@@ -33,6 +33,7 @@ test("route detail customer email modal uses route-aware defaults and a compact 
   assert.match(routeDetailSource, /customerEmailRecipients\.length > 0 \|\| customerEmailExample\s*\? customerEmailDialogGridStyle\s*:\s*customerEmailDialogEmptyGridStyle/);
   assert.match(routeDetailSource, /customerEmailSendableCount > 0 \? \(/);
   assert.match(routeDetailSource, /customerEmailRecipients\.length > 0 \|\| customerEmailExample/);
+  assert.match(routeDetailSource, /gridTemplateColumns: "repeat\(auto-fit, minmax\(min\(320px, 100%\), 1fr\)\)"/);
   assert.match(routeDetailSource, /Template example/);
   assert.match(routeDetailSource, /This example is not a selected recipient and will not be sent/);
   assert.match(routeDetailSource, /customerEmailStatusExclusions/);
