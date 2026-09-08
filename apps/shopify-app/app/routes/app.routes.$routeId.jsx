@@ -1629,7 +1629,7 @@ const routeAddOrderEmptyStyle = {
 const customerEmailDialogGridStyle = {
   display: "grid",
   gap: "12px",
-  gridTemplateColumns: "minmax(260px, 0.9fr) minmax(320px, 1.1fr)",
+  gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))",
 };
 
 const customerEmailDialogEmptyGridStyle = {
