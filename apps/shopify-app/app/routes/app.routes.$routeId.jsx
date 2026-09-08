@@ -1535,10 +1535,62 @@ const routeStartTimeDialogStyle = {
 
 const customerEmailDialogStyle = {
   ...routeLineEditorDialogStyle,
-  maxHeight: "calc(100vh - 32px)",
+  gap: 0,
+  maxHeight: "calc(100vh - 48px)",
   maxWidth: "calc(100vw - 32px)",
+  overflow: "hidden",
+  padding: 0,
+  width: "680px",
+};
+
+const customerEmailDialogHeaderStyle = {
+  alignItems: "start",
+  borderBottom: "1px solid #e3e3e3",
+  display: "flex",
+  gap: "16px",
+  justifyContent: "space-between",
+  padding: "16px 16px 12px",
+};
+
+const customerEmailDialogHeadingStyle = {
+  display: "grid",
+  gap: "4px",
+  minWidth: 0,
+};
+
+const customerEmailDialogCloseStyle = {
+  alignItems: "center",
+  background: "transparent",
+  border: 0,
+  borderRadius: "8px",
+  color: "#616161",
+  cursor: "pointer",
+  display: "inline-flex",
+  flex: "0 0 auto",
+  fontFamily: "inherit",
+  fontSize: "22px",
+  height: "30px",
+  justifyContent: "center",
+  lineHeight: 1,
+  padding: 0,
+  width: "30px",
+};
+
+const customerEmailDialogBodyStyle = {
+  display: "grid",
+  gap: "12px",
+  minHeight: 0,
   overflowY: "auto",
-  width: "760px",
+  overscrollBehavior: "contain",
+  padding: "16px",
+};
+
+const customerEmailDialogFooterStyle = {
+  background: "#f7f7f7",
+  borderTop: "1px solid #e3e3e3",
+  display: "grid",
+  gap: "10px",
+  padding: "12px 16px",
 };
 
 const routeAddOrderDialogStyle = {
@@ -1641,7 +1693,7 @@ const customerEmailRecipientListStyle = {
   border: "1px solid #e3e3e3",
   borderRadius: "8px",
   display: "grid",
-  maxHeight: "360px",
+  maxHeight: "240px",
   overflowY: "auto",
 };
 
@@ -1703,7 +1755,7 @@ const customerEmailGateStatusStyle = {
 const customerEmailPreviewPanelStyle = {
   ...childStopEditReadonlyStyle,
   alignSelf: "start",
-  maxHeight: "360px",
+  maxHeight: "280px",
   overflowY: "auto",
 };
 
@@ -7711,9 +7763,20 @@ export default function RouteDetailPage() {
               style={routeLineEditorBackdropButtonStyle}
               type="button"
             />
-            <div aria-label="Send customer email" role="dialog" style={customerEmailDialogStyle}>
-              <h2 style={routeLineEditorTitleStyle}>Send customer email</h2>
-              <p style={routeLineEditorLabelStyle}>No message is sent until you preview, confirm, and press Send.</p>
+            <div aria-label="Send customer email" aria-modal="true" role="dialog" style={customerEmailDialogStyle}>
+              <header style={customerEmailDialogHeaderStyle}>
+                <div style={customerEmailDialogHeadingStyle}>
+                  <h2 style={routeLineEditorTitleStyle}>Send customer email</h2>
+                  <p style={routeLineEditorLabelStyle}>Preview the exact recipients and message before sending.</p>
+                </div>
+                <button
+                  aria-label="Close customer email dialog"
+                  onClick={closeCustomerEmailDialog}
+                  style={customerEmailDialogCloseStyle}
+                  type="button"
+                >×</button>
+              </header>
+              <div style={customerEmailDialogBodyStyle}>
               <div style={routeLineEditorFieldStyle}>
                 <label htmlFor="customer-email-signal" style={routeLineEditorLabelStyle}>Message</label>
                 <select
@@ -7917,28 +7980,31 @@ export default function RouteDetailPage() {
                   onChange={(event) => setCustomerEmailResendConfirmed(event.currentTarget.checked)}
                 />
               ) : null}
-              <p id="customer-email-send-status" role="status" style={customerEmailGateStatusStyle}>
-                {customerEmailPreviewBusy
-                  ? "Finding matching recipients…"
-                  : customerEmailSendReadiness.ready
-                  ? "Ready to send to the selected recipients."
-                  : customerEmailSendReadiness.blockers.join(" ")}
-              </p>
-              <div style={routeLineEditorActionsStyle}>
-                <button onClick={closeCustomerEmailDialog} style={routeActionButtonStyle} type="button">Close</button>
-                <button
-                  aria-describedby="customer-email-send-status"
-                  disabled={customerEmailFetcher.state !== "idle" || !customerEmailReadyToSend}
-                  onClick={() => submitCustomerEmailAction("sendCustomerEmail")}
-                  style={{
-                    ...routeLineEditorPrimaryButtonStyle,
-                    ...(customerEmailFetcher.state !== "idle" || !customerEmailReadyToSend ? { opacity: 0.55 } : null),
-                  }}
-                  type="button"
-                >
-                  {customerEmailFetcher.state !== "idle" && customerEmailFetcher.formData?.get("_intent") === "sendCustomerEmail" ? "Sending…" : "Send"}
-                </button>
               </div>
+              <footer style={customerEmailDialogFooterStyle}>
+                <p id="customer-email-send-status" role="status" style={customerEmailGateStatusStyle}>
+                  {customerEmailPreviewBusy
+                    ? "Finding matching recipients…"
+                    : customerEmailSendReadiness.ready
+                    ? "Ready to send to the selected recipients."
+                    : customerEmailSendReadiness.blockers.join(" ")}
+                </p>
+                <div style={routeLineEditorActionsStyle}>
+                  <button onClick={closeCustomerEmailDialog} style={routeActionButtonStyle} type="button">Close</button>
+                  <button
+                    aria-describedby="customer-email-send-status"
+                    disabled={customerEmailFetcher.state !== "idle" || !customerEmailReadyToSend}
+                    onClick={() => submitCustomerEmailAction("sendCustomerEmail")}
+                    style={{
+                      ...routeLineEditorPrimaryButtonStyle,
+                      ...(customerEmailFetcher.state !== "idle" || !customerEmailReadyToSend ? { opacity: 0.55 } : null),
+                    }}
+                    type="button"
+                  >
+                    {customerEmailFetcher.state !== "idle" && customerEmailFetcher.formData?.get("_intent") === "sendCustomerEmail" ? "Sending…" : "Send"}
+                  </button>
+                </div>
+              </footer>
             </div>
           </div>
         ) : null}
