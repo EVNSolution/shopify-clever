@@ -3444,11 +3444,6 @@ export default function RouteDetailPage() {
   const copyRouteGroupRequestBusy = copyRouteGroupBusy || copyRouteGroupDialogState.isSubmitting;
   const refreshRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "refreshRouteOrders";
   const canRefreshRouteOrders = Boolean(effectiveRoutePlan?.id) || siblingRouteRows.length > 0;
-  const canDispatchRoute = Boolean(
-    effectiveRoutePlan?.id
-    && routeDriverId
-    && !["CANCELLED", "COMPLETED"].includes(routeExecutionStatus),
-  );
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const routeMapRef = mapRef;
@@ -3576,6 +3571,11 @@ export default function RouteDetailPage() {
   const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
   const [routeExecutionStatus, setRouteExecutionStatus] = useState(loaderRouteExecutionStatus);
+  const canDispatchRoute = Boolean(
+    effectiveRoutePlan?.id
+    && routeDriverId
+    && !["CANCELLED", "COMPLETED"].includes(routeExecutionStatus),
+  );
   const customerEmailPreviewBusy = customerEmailFetcher.state !== "idle"
     && customerEmailFetcher.formData?.get("_intent") === "previewCustomerEmail";
   const customerEmailPreview = customerEmailPreviewSignal === customerEmailSignal
