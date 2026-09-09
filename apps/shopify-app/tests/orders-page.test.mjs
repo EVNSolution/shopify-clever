@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import process from "node:process";
 import test from "node:test";
+import { runInNewContext } from "node:vm";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 import { mapCanonicalOrdersToOrderRows } from "../app/features/orders/canonical-orders.js";
 import {
@@ -660,18 +661,47 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.doesNotMatch(ordersPageSource, /routePlanningUnavailable/);
 });
 
-test("Orders column uses the order number itself as a neutral transparent button area", () => {
+test("Orders order number opens the matching Shopify order directly in a new tab", () => {
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{/);
   assert.match(ordersPageSource, /width:\s*"100%"/);
   assert.match(ordersPageSource, /padding:\s*0/);
   assert.match(ordersPageSource, /justifyContent:\s*"center"/);
+  assert.match(ordersPageSource, /const shopifyOrderUrl = getShopifyAdminOrderWebUrl\(order, ordersCacheKey\)/);
   assert.match(ordersPageSource, /className="order-number-button"/);
-  assert.match(ordersPageSource, /aria-label=\{`View \${order\.name}`\}/);
+  assert.match(ordersPageSource, /aria-label=\{`Open \${order\.name} in Shopify in a new tab`\}/);
+  assert.match(ordersPageSource, /href=\{shopifyOrderUrl\}/);
+  assert.match(ordersPageSource, /rel="noopener noreferrer"/);
   assert.match(ordersPageSource, /style=\{orderNumberButtonStyle\}/);
-  assert.match(ordersPageSource, /onClick=\{\(\) => handleSelectOrder\(order\.id\)\}/);
+  assert.match(ordersPageSource, /target="_blank"/);
   assert.match(ordersPageSource, /\{order\.name\}/);
+  assert.doesNotMatch(
+    ordersPageSource,
+    /className="order-number-button"[\s\S]{0,300}onClick=\{\(\) => handleSelectOrder\(order\.id\)\}/,
+  );
   assert.doesNotMatch(ordersPageSource, /#005bd3/);
   assert.doesNotMatch(ordersPageSource, />View<\/button>/);
+});
+
+test("Orders browser links resolve canonical IDs and reject invalid shop or order values", () => {
+  const helperSource = ordersPageSource.slice(
+    ordersPageSource.indexOf("function getShopifyAdminOrderWebUrl("),
+    ordersPageSource.indexOf("function getOrderDataDraft("),
+  );
+  const getUrl = runInNewContext(`${helperSource}; getShopifyAdminOrderWebUrl`, {
+    textOrUndefined: (value) => typeof value === "string" ? value.trim() || undefined : undefined,
+  });
+  const shop = "fixture-store.myshopify.com";
+  assert.equal(getUrl({ legacyResourceId: "123" }, shop), `https://${shop}/admin/orders/123`);
+  assert.equal(getUrl({ id: "gid://shopify/Order/456" }, shop), `https://${shop}/admin/orders/456`);
+  assert.equal(getUrl({ legacyResourceId: "123", id: "gid://shopify/Order/456" }, shop), `https://${shop}/admin/orders/123`);
+  assert.equal(getUrl({ id: "gid://shopify/Order/456" }, "FIXTURE-STORE.MYSHOPIFY.COM"), `https://${shop}/admin/orders/456`);
+  for (const invalidShop of [undefined, "", "evil.com", "fixture-store.myshopify.com.evil.com", "fixture-store.myshopify.com/orders"]) {
+    assert.equal(getUrl({ legacyResourceId: "123" }, invalidShop), null);
+  }
+  for (const invalidOrder of [{}, { legacyResourceId: "../customers/1" }, { id: "gid://shopify/Customer/123" }]) {
+    assert.equal(getUrl(invalidOrder, shop), null);
+  }
+  assert.match(ordersPageServerSource, /ordersCacheKey: shopifyShopCacheKey \?\? null/);
 });
 
 test("Orders order-number button shows a subtle rounded hover state", () => {
@@ -1898,7 +1928,6 @@ test("Orders map initially centers on the departure home with a wide zoom", () =
   assert.match(ordersPageSource, /if \(options\.focusMap !== false\)/);
   assert.match(ordersPageSource, /selectedOrderFocusRequest === 0/);
   assert.match(ordersPageSource, /mapRef\.current\.jumpTo\(\{\s*center: selectedOrder\.coordinates,\s*zoom: 11,\s*\}\)/);
-  assert.match(ordersPageSource, /onClick=\{\(\) => handleSelectOrder\(order\.id\)\}/);
   assert.match(ordersPageSource, /handleSelectOrder\(order\.id, \{ focusMap: false \}\)/);
 });
 
@@ -2006,7 +2035,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, perf, shopLocalDate \} = displayLoaderData/);
+  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, ordersCacheKey, perf, shopLocalDate \} = displayLoaderData/);
   assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);

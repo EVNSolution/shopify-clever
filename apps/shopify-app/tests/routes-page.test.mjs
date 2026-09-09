@@ -577,14 +577,12 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /routeActionFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(routeDetailSource, /const routeGroupActionIntent = routeActionFetcher\.formData\?\.get\("_intent"\)/);
   assert.match(routeDetailSource, /const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization"/);
-  assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx"/);
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
-  assert.match(routeDetailSource, /translate\(language, addEmptyRouteBranchBusy \? "routes\.group\.working" : "routes\.group\.addEmpty"\)/);
+  assert.match(routeDetailSource, /translate\(language, "routes\.group\.addEmpty"\)/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{[\s\S]*includeExistingOptimized: true/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{[\s\S]*includeExistingOptimized: false/);
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
   assert.match(routeDetailSource, /if \(routeGroupActionBusy\) return/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("queryNextRouteIdx", \{ tempId \}\)/);
   assert.doesNotMatch(routeDetailSource, /submitRouteGroupAction\("addEmptyRoute"/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = useMemo\([\s\S]*polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
   assert.doesNotMatch(routeDetailSource, /routeTimelineStopSelectedStyle/);
@@ -1234,9 +1232,9 @@ test("Route group detail keeps an unsplit group visible as route #1", () => {
   assert.match(routeDetailSource, /return routeGroupChildRows\.length > 0 \? routeGroupChildRows : \[buildUnsplitRouteGroupRow\(routeGroup, routeStops\)\]\.filter\(Boolean\)/);
 });
 
-test("Route group detail Add Empty Route queries server numbering without saving", () => {
+test("Route group detail Add Empty Route stays local without saving", () => {
   const start = routeDetailSource.indexOf("const handleAddEmptyRoute = () => {");
-  const end = routeDetailSource.indexOf("const handlePreviewRouteOptimization = () => {", start);
+  const end = routeDetailSource.indexOf("const handleReverseCurrentRouteStops = () => {", start);
   const addEmptyHandler = routeDetailSource.slice(start, end);
 
   assert.match(addEmptyHandler, /if \(routeGroupActionBusy\) return/);
@@ -1253,10 +1251,9 @@ test("Route group detail Add Empty Route queries server numbering without saving
   assert.match(addEmptyHandler, /isGeneratedTitle: draft\.isGeneratedTitle === true/);
   assert.match(routeDetailSource, /const maxRouteIdx = routeRows\.reduce/);
   assert.match(addEmptyHandler, /setClientRouteRows\(\(rows\) => \[\.\.\.rows, routeRow\]\)/);
-  assert.match(addEmptyHandler, /submitRouteGroupAction\("queryNextRouteIdx", \{ tempId \}\)/);
+  assert.doesNotMatch(addEmptyHandler, /submitRouteGroupAction|queryNextRouteIdx/);
   assert.doesNotMatch(addEmptyHandler, /buildRouteDraftPayload/);
   assert.doesNotMatch(addEmptyHandler, /saveRouteDraft/);
-  assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx"/);
   assert.match(routeDetailSource, /const hasMaterializedClientRoute = useMemo\([\s\S]*clientRouteRows\.some\(\(routeRow\) => routeRow\.isMaterializedDraft\)/);
   assert.match(routeDetailSource, /const groupRouteRowsSource = useMemo\([\s\S]*hasMaterializedClientRoute \? \[\] : routeGroupChildRows/);
   assert.match(routeDetailSource, /const canSaveRoutePolygon = hasEditableRouteRows && polygonCandidateOrderIds\.length > 0/);
@@ -1265,20 +1262,8 @@ test("Route group detail Add Empty Route queries server numbering without saving
   assert.match(routeDetailSource, /disabled=\{!routeRow\.routePlanId\}/);
 });
 
-test("Route group detail applies next route idx lookup to generated temp names only", () => {
-  const start = routeDetailSource.indexOf('if (lastRouteActionIntentRef.current !== "queryNextRouteIdx") return;');
-  const end = routeDetailSource.indexOf("useEffect(() => {", start + 1);
-  const nextIdxEffect = routeDetailSource.slice(start, end);
-
-  assert.match(nextIdxEffect, /const nextRouteIdx = numberOrUndefined\(routeActionFetcher\.data\?\.nextRouteIdx\)/);
-  assert.match(nextIdxEffect, /setClientRouteRows\(\(rows\) => tempId \? rows\.filter\(\(routeRow\) => routeRow\.tempId !== tempId\) : rows\)/);
-  assert.match(nextIdxEffect, /const routeIdx = Math\.max\(/);
-  assert.match(nextIdxEffect, /nextRouteIdx,[\s\S]*numberOrUndefined\(routeRow\.routeIdx\) \?\? numberOrUndefined\(routeRow\.routeIndex\) \?\? nextRouteIdx/);
-  assert.match(nextIdxEffect, /const isGeneratedTitle = Object\.hasOwn\(routeLineEdit, "title"\) \? false : routeRow\.isGeneratedTitle === true/);
-  assert.match(nextIdxEffect, /const title = isGeneratedTitle \? `#\$\{routeIdx\}` : routeRow\.title/);
-  assert.match(nextIdxEffect, /routeIdx,/);
-  assert.match(nextIdxEffect, /routeIndex: routeIdx/);
-  assert.doesNotMatch(nextIdxEffect, /revalidator\.revalidate\(\)/);
+test("draft labels are not rewritten by a background numbering response", () => {
+  assert.doesNotMatch(routeDetailSource, /queryNextRouteIdx|addEmptyRouteBranchBusy/);
 });
 
 test("Route detail draft payload is child-only and treats routeIdx as server assertion", () => {
@@ -1527,7 +1512,7 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /hasRouteAllocationDraftRef\.current = hasRouteAllocationDraft/);
   assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, />Add order<\/button>/);
-  assert.match(routeDetailSource, />\{translate\(language, addEmptyRouteBranchBusy \? "routes\.group\.working" : "routes\.group\.addEmpty"\)\}<\/button>[\s\S]*aria-label="Actions"/);
+  assert.match(routeDetailSource, />\{translate\(language, "routes\.group\.addEmpty"\)\}<\/button>[\s\S]*aria-label="Actions"/);
   assert.match(routeDetailSource, /aria-expanded=\{isRouteActionsMenuOpen\}[\s\S]*>Actions<\/button>/);
   assert.match(routeDetailSource, /aria-label="Route action menu"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Stop actions<\//);

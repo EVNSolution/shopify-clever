@@ -139,15 +139,15 @@ test("standalone and stored-singleton routes use ordinary ungrouped presentation
 test("ordinary Add Empty seeds a local allocation with the saved route and temporary route", () => {
   const handler = sourceBetween("const handleAddEmptyRoute = () => {", "const handleReverseCurrentRouteStops = () => {");
   const ordinaryBranch = handler.indexOf("if (isOrdinaryRouteDetail)");
-  const groupedQuery = handler.indexOf('submitRouteGroupAction("queryNextRouteIdx", { tempId })');
+
 
   assert.match(handler, /if \(!canDraftEditChildStopMembership\)[\s\S]*Routes can only be split before the route has started/);
   assert.match(handler, /setClientRouteRows\(\(rows\) => \[\.\.\.rows, routeRow\]\)/);
   assert.match(handler, /setIsOrdinarySplitDraft\(true\)/);
   assert.match(handler, /\[originalRouteRow\.id\]: originalRouteRow\.stops\.map\(\(stop\) => stop\.id\)/);
   assert.match(handler, /\[tempId\]: \[\]/);
-  assert.ok(ordinaryBranch >= 0 && groupedQuery > ordinaryBranch);
-  assert.match(handler.slice(ordinaryBranch, groupedQuery), /return;/);
+  assert.ok(ordinaryBranch >= 0);
+  assert.doesNotMatch(handler, /queryNextRouteIdx|submitRouteGroupAction/);
   assert.doesNotMatch(handler, /createRouteGroup|createDeliveryRouteGroup|saveRouteDraft/);
 });
 
@@ -292,4 +292,38 @@ test("ordinary Add Empty is available without inventing an ordinary Copy contrac
   assert.match(source, /\{routeGroupId \|\| isOrdinaryRouteDetail \? \([\s\S]*onClick=\{handleAddEmptyRoute\}/);
   assert.match(source, /\{isRouteGroupDetail \? \([\s\S]*onClick=\{handleCopyRouteGroup\}/);
   assert.doesNotMatch(source, /handleCopyOrdinaryRoute|copyRoutePlan/);
+});
+
+
+test("grouped Add Empty performs no server request", () => {
+  let calls = 0;
+  let rows = [];
+  loadAddEmptyHandler({
+    routeGroupId: "group-1", isOrdinaryRouteDetail: false,
+    setClientRouteRows: update => { rows = update(rows); },
+    submitRouteGroupAction: () => { calls += 1; },
+  })();
+  assert.equal(rows.length, 1);
+  assert.equal(rows[0].routePlanId, null);
+  assert.ok(rows[0].tempId);
+  assert.equal(calls, 0);
+});
+
+test("new draft routes omit final numbering while existing IDs and renamed labels survive", () => {
+  const build = loadRouteDraftPayloadBuilder();
+  const rows = [
+    { routePlanId: "existing", id: "existing", routeIdx: 123, routeIndex: 1, title: "Existing", stops: [{orderId: "one"}] },
+    { routePlanId: null, id: "temp:new", tempId: "temp:new", routeIdx: 124, routeIndex: 2, title: "#124", isGeneratedTitle: true, stops: [{orderId: "two"}] },
+    { routePlanId: null, id: "temp:renamed", tempId: "temp:renamed", routeIdx: 125, routeIndex: 3, title: "West", isGeneratedTitle: false, stops: [] },
+  ];
+  const original = structuredClone(rows);
+  const payload = build(rows, {mode: "MANUAL_ORDER", includeExistingOptimized: false});
+  assert.equal(payload.routes[0].routeIdx, 123);
+  assert.equal(Object.hasOwn(payload.routes[1], "routeIdx"), false);
+  assert.equal(Object.hasOwn(payload.routes[2], "routeIdx"), false);
+  assert.equal(payload.routes[1].label, null);
+  assert.equal(payload.routes[2].label, "West");
+  assert.equal(payload.routes[1].tempId, "temp:new");
+  assert.deepEqual(payload.routes[1].orderIds, ["two"]);
+  assert.deepEqual(rows, original);
 });

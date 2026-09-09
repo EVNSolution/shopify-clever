@@ -3073,7 +3073,9 @@ function buildRouteDraftPayload(routeRows, {
         ...(optimized === undefined ? {} : { optimized }),
         orderIds: routeRow.stops.map((stop) => stop.orderId).filter(Boolean),
         routeKey: getRouteRowDraftKey(routeRow),
-        routeIdx: numberOrUndefined(routeRow.routeIdx) ?? numberOrUndefined(routeRow.routeIndex) ?? index + 1,
+        ...(routeRow.routePlanId ? {
+          routeIdx: numberOrUndefined(routeRow.routeIdx) ?? numberOrUndefined(routeRow.routeIndex) ?? index + 1,
+        } : {}),
         routePlanId: routeRow.routePlanId ?? null,
         scheduledStartAt: routeRow.scheduledStartAt ?? null,
         scheduledStartTimeZone: routeRow.scheduledStartTimeZone ?? null,
@@ -3521,7 +3523,6 @@ export default function RouteDetailPage() {
   const routeGroupActionBusy = routeActionFetcher.state !== "idle";
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
   const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
-  const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx";
   const loadAddOrderCandidatesBusy = routeGroupActionBusy && routeGroupActionIntent === "loadAddOrderCandidates";
   const addRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "addRouteOrders";
   const createCustomStopBusy = routeGroupActionBusy && routeGroupActionIntent === "createCustomStop";
@@ -5469,7 +5470,6 @@ export default function RouteDetailPage() {
       }));
       return;
     }
-    submitRouteGroupAction("queryNextRouteIdx", { tempId });
   };
 
   const handleReverseCurrentRouteStops = () => {
@@ -5944,39 +5944,6 @@ export default function RouteDetailPage() {
     revalidator.revalidate();
     shopify.toast.show(intent === "transitionRouteStop" ? "Stop status updated" : "Stop fields updated");
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
-
-  useEffect(() => {
-    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (lastRouteActionIntentRef.current !== "queryNextRouteIdx") return;
-    lastRouteActionIntentRef.current = null;
-
-    const errors = routeActionFetcher.data?.errors ?? [];
-    const tempId = routeActionFetcher.data?.tempId;
-    const nextRouteIdx = numberOrUndefined(routeActionFetcher.data?.nextRouteIdx);
-    if (errors.length > 0 || !tempId || nextRouteIdx === undefined) {
-      setClientRouteRows((rows) => tempId ? rows.filter((routeRow) => routeRow.tempId !== tempId) : rows);
-      setRouteGroupClientError(errors[0]?.message ?? "다음 route 번호를 조회하지 못했습니다.");
-      return;
-    }
-
-    setClientRouteRows((rows) => rows.map((routeRow) => {
-      if (routeRow.tempId !== tempId) return routeRow;
-      const routeIdx = Math.max(
-        nextRouteIdx,
-        numberOrUndefined(routeRow.routeIdx) ?? numberOrUndefined(routeRow.routeIndex) ?? nextRouteIdx,
-      );
-      const routeLineEdit = routeLineEdits[routeRow.id] ?? {};
-      const isGeneratedTitle = Object.hasOwn(routeLineEdit, "title") ? false : routeRow.isGeneratedTitle === true;
-      const title = isGeneratedTitle ? `#${routeIdx}` : routeRow.title;
-      return {
-        ...routeRow,
-        isGeneratedTitle,
-        routeIdx,
-        routeIndex: routeIdx,
-        title,
-      };
-    }));
-  }, [routeActionFetcher.data, routeActionFetcher.state, routeLineEdits]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -7254,7 +7221,7 @@ export default function RouteDetailPage() {
                   onClick={handleAddEmptyRoute}
                   style={routeActionButtonStyle}
                   type="button"
-                >{translate(language, addEmptyRouteBranchBusy ? "routes.group.working" : "routes.group.addEmpty")}</button>
+                >{translate(language, "routes.group.addEmpty")}</button>
                 ) : null}
                 <div
                   aria-label="Actions"

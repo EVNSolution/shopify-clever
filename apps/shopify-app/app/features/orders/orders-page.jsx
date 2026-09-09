@@ -1360,7 +1360,6 @@ const deliveryInfoCellStyle = {
 
 const orderNumberButtonStyle = {
   alignItems: "center",
-  border: 0,
   cursor: "pointer",
   display: "flex",
   font: "inherit",
@@ -1369,6 +1368,7 @@ const orderNumberButtonStyle = {
   overflow: "hidden",
   padding: 0,
   textAlign: "center",
+  textDecoration: "none",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
   width: "100%",
@@ -2042,8 +2042,22 @@ function getCustomerNote(order) {
 function getShopifyAdminOrderUrl(order) {
   const legacyResourceId = textOrUndefined(order?.legacyResourceId);
   const gidResourceId = textOrUndefined(order?.id)?.match(/^gid:\/\/shopify\/Order\/(\d+)$/)?.[1];
-  const resourceId = legacyResourceId ?? gidResourceId;
+  const resourceId = legacyResourceId?.match(/^\d+$/)?.[0] ?? gidResourceId;
   return resourceId ? `shopify://admin/orders/${encodeURIComponent(resourceId)}` : null;
+}
+
+function getShopifyAdminOrderWebUrl(order, shopDomain) {
+  const normalizedShopDomain = textOrUndefined(shopDomain)?.toLowerCase();
+  if (!normalizedShopDomain || !/^[a-z0-9][a-z0-9-]*\.myshopify\.com$/.test(normalizedShopDomain)) {
+    return null;
+  }
+
+  const legacyResourceId = textOrUndefined(order?.legacyResourceId);
+  const gidResourceId = textOrUndefined(order?.id)?.match(/^gid:\/\/shopify\/Order\/(\d+)$/)?.[1];
+  const resourceId = legacyResourceId?.match(/^\d+$/)?.[0] ?? gidResourceId;
+  return resourceId
+    ? `https://${normalizedShopDomain}/admin/orders/${encodeURIComponent(resourceId)}`
+    : null;
 }
 
 function getOrderDataDraft(order) {
@@ -2600,7 +2614,7 @@ function OrdersPageContent({ loaderData }) {
     [loaderData],
   );
   const displayLoaderData = restoredOrdersView.loaderData;
-  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, perf, shopLocalDate } = displayLoaderData;
+  const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, ordersCacheKey, perf, shopLocalDate } = displayLoaderData;
   const { deliveryCycle, shopTimeZone } = displayLoaderData;
   const autoSyncOrdersOnLoad = featureFlags?.autoSyncOrdersOnLoad === true;
   const backgroundReconciliationEnabled = featureFlags?.backgroundReconciliation === true;
@@ -6464,6 +6478,7 @@ function OrdersPageContent({ loaderData }) {
                   const subscriptionTooltipId = subscriptionSignalLabel
                     ? getOrderSubscriptionTooltipId(order)
                     : null;
+                  const shopifyOrderUrl = getShopifyAdminOrderWebUrl(order, ordersCacheKey);
 
                   return (
                     <tr key={order.id}>
@@ -6486,15 +6501,20 @@ function OrdersPageContent({ loaderData }) {
                         />
                       </td>
                       <td style={tableCellStyle}>
-                        <button
-                          type="button"
-                          className="order-number-button"
-                          aria-label={`View ${order.name}`}
-                          style={orderNumberButtonStyle}
-                          onClick={() => handleSelectOrder(order.id)}
-                        >
-                          {order.name}
-                        </button>
+                        {shopifyOrderUrl ? (
+                          <a
+                            className="order-number-button"
+                            aria-label={`Open ${order.name} in Shopify in a new tab`}
+                            href={shopifyOrderUrl}
+                            rel="noopener noreferrer"
+                            style={orderNumberButtonStyle}
+                            target="_blank"
+                          >
+                            {order.name}
+                          </a>
+                        ) : (
+                          <span>{order.name}</span>
+                        )}
                       </td>
                       <td style={noteCellStyle}>
                         <span style={orderSignalSlotsStyle}>
