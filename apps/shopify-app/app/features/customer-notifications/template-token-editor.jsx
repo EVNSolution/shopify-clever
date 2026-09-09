@@ -1,5 +1,6 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useMemo, useRef, useState } from "react";
+import { translate } from "../../i18n/i18n.js";
 
 import {
   hasUnsupportedTemplateSegments,
@@ -13,6 +14,7 @@ export const CUSTOMER_NOTIFICATION_TOKEN_LABELS = {
   deliveryDate: "Delivery date",
   deliveryWeekday: "Delivery weekday",
   eta: "ETA",
+  etaWindow: "Estimated arrival window",
   inventoryList: "Inventory list",
   orderNumber: "Order number",
   routeName: "Route name",
@@ -27,6 +29,7 @@ export function TemplateTokenEditor({
   disabled = false,
   id,
   label,
+  language = "en",
   maxLength = 10000,
   onChange,
   onUnsupportedChange,
@@ -38,7 +41,8 @@ export function TemplateTokenEditor({
   const [variableQuery, setVariableQuery] = useState("");
   const parsedDocument = useMemo(() => parseTemplateDocument(value), [value]);
   const hasUnsupported = hasUnsupportedTemplateSegments(parsedDocument);
-  const filteredVariables = CUSTOMER_NOTIFICATION_TOKEN_OPTIONS.filter(([, tokenLabel]) => (
+  const tokenLabels = useMemo(() => ({ ...CUSTOMER_NOTIFICATION_TOKEN_LABELS, etaWindow: translate(language, "notifications.variables.etaWindow") }), [language]);
+  const filteredVariables = Object.entries(tokenLabels).filter(([, tokenLabel]) => (
     tokenLabel.toLowerCase().includes(variableQuery.trim().toLowerCase())
   ));
 
@@ -47,8 +51,8 @@ export function TemplateTokenEditor({
     if (!editor) return;
     const nextValue = serializeTemplateDocument(parsedDocument);
     if (serializeEditorDocument(editor) === nextValue || editor === editor.ownerDocument.activeElement) return;
-    renderTemplateDocument(editor, parsedDocument);
-  }, [parsedDocument]);
+    renderTemplateDocument(editor, parsedDocument, tokenLabels);
+  }, [parsedDocument, tokenLabels]);
 
   useEffect(() => {
     onUnsupportedChange?.(hasUnsupported);
@@ -78,7 +82,7 @@ export function TemplateTokenEditor({
     const range = selectionRangeInsideEditor(editor, savedRangeRef.current)
       ?? selectionRangeInsideEditor(editor, selection?.rangeCount ? selection.getRangeAt(0) : null)
       ?? rangeAtEditorEnd(editor);
-    const token = createTokenElement(editor.ownerDocument, tokenKey);
+    const token = createTokenElement(editor.ownerDocument, tokenKey, tokenLabels);
     range.deleteContents();
     range.insertNode(token);
     range.setStartAfter(token);
@@ -101,7 +105,7 @@ export function TemplateTokenEditor({
     const range = selection.getRangeAt(0);
     if (!editorRef.current.contains(range.commonAncestorContainer)) return;
 
-    const fragment = createTemplateFragment(editorRef.current.ownerDocument, parseTemplateDocument(pastedText));
+    const fragment = createTemplateFragment(editorRef.current.ownerDocument, parseTemplateDocument(pastedText), tokenLabels);
     const lastNode = fragment.lastChild;
     range.deleteContents();
     range.insertNode(fragment);
@@ -195,15 +199,15 @@ export function TemplateTokenEditor({
   );
 }
 
-function renderTemplateDocument(editor, templateDocument) {
-  editor.replaceChildren(createTemplateFragment(editor.ownerDocument, templateDocument));
+function renderTemplateDocument(editor, templateDocument, tokenLabels) {
+  editor.replaceChildren(createTemplateFragment(editor.ownerDocument, templateDocument, tokenLabels));
 }
 
-function createTemplateFragment(ownerDocument, templateDocument) {
+function createTemplateFragment(ownerDocument, templateDocument, tokenLabels) {
   const fragment = ownerDocument.createDocumentFragment();
   for (const segment of templateDocument.segments) {
     if (segment.type === "token") {
-      fragment.append(createTokenElement(ownerDocument, segment.key));
+      fragment.append(createTokenElement(ownerDocument, segment.key, tokenLabels));
     } else if (segment.type === "unsupported") {
       fragment.append(createUnsupportedElement(ownerDocument, segment.raw));
     } else {
@@ -213,13 +217,13 @@ function createTemplateFragment(ownerDocument, templateDocument) {
   return fragment;
 }
 
-function createTokenElement(ownerDocument, tokenKey) {
+function createTokenElement(ownerDocument, tokenKey, tokenLabels) {
   const token = ownerDocument.createElement("span");
   token.contentEditable = "false";
   token.dataset.templateToken = tokenKey;
-  token.setAttribute("aria-label", `Variable: ${CUSTOMER_NOTIFICATION_TOKEN_LABELS[tokenKey] ?? tokenKey}`);
+  token.setAttribute("aria-label", `Variable: ${tokenLabels[tokenKey] ?? tokenKey}`);
   token.style.cssText = TEMPLATE_TOKEN_CSS_TEXT;
-  token.textContent = CUSTOMER_NOTIFICATION_TOKEN_LABELS[tokenKey] ?? tokenKey;
+  token.textContent = tokenLabels[tokenKey] ?? tokenKey;
   return token;
 }
 

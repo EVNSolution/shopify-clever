@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { useFetcher, useLoaderData, useNavigate, useRevalidator } from "react-router";
+import { useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
+import { translate } from "../i18n/i18n";
 import {
   getCustomerEmailDefaultSignal,
   getCustomerEmailPreviewEmptyState,
@@ -2015,6 +2016,25 @@ const routeDraftBarGhostButtonStyle = {
   minHeight: "30px",
 };
 
+const routeScheduledNoticeStyle = {
+  alignItems: "center",
+  background: "#f1f8f5",
+  border: "1px solid #a7d7c5",
+  borderRadius: "12px",
+  color: "#1f4d3d",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  justifyContent: "space-between",
+  padding: "10px 12px",
+};
+
+const routeScheduledNoticeTextStyle = {
+  fontSize: "13px",
+  fontWeight: 600,
+  lineHeight: 1.4,
+};
+
 const routesDetailTableFrameStyle = {
   overflowX: "auto",
 };
@@ -3348,10 +3368,54 @@ function getCustomerEmailFailedSendDeliveryStopIds(dispatch) {
     .filter(Boolean))];
 }
 
+function resolveScheduledNoticeSaveResult({
+  errors = [],
+  excludedRoutePlanIds = [],
+  routeGroupRoutePlanIds = [],
+  routePlanId,
+}) {
+  if (errors.length > 0) return { routePlanIds: [], succeeded: false };
+  const excludedRoutePlanIdSet = new Set(excludedRoutePlanIds);
+  const routePlanIds = (routePlanId && !excludedRoutePlanIdSet.has(routePlanId)
+    ? [routePlanId]
+    : [...new Set(routeGroupRoutePlanIds.filter(Boolean))])
+    .filter((candidateRoutePlanId) => !excludedRoutePlanIdSet.has(candidateRoutePlanId));
+  return { routePlanIds, succeeded: true };
+}
+
+function createScheduledNoticeNavigationState(routePlanIds) {
+  return { scheduledNoticeRoutePlanIds: [...new Set(routePlanIds.filter(Boolean))] };
+}
+
+function getScheduledNoticeLocationRoutePlanIds(locationState, actualRoutePlanIds) {
+  const actualRoutePlanIdSet = new Set(actualRoutePlanIds);
+  const requestedRoutePlanIds = Array.isArray(locationState?.scheduledNoticeRoutePlanIds)
+    ? locationState.scheduledNoticeRoutePlanIds
+    : [];
+  return [...new Set(requestedRoutePlanIds.filter((routePlanId) => actualRoutePlanIdSet.has(routePlanId)))];
+}
+
+function createCustomerEmailDialogOpenState(signal) {
+  return {
+    actionResult: null,
+    activeRecipientKey: null,
+    commandId: null,
+    confirmed: false,
+    missingValuesConfirmed: false,
+    previewSignal: null,
+    previewSnapshot: null,
+    resendConfirmed: false,
+    selectedDeliveryStopIds: [],
+    signal,
+  };
+}
+
 export default function RouteDetailPage() {
   const navigate = useNavigate();
+  const location = useLocation();
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
+  const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const routeActionFetcher = useFetcher();
   const customerEmailFetcher = useFetcher();
   const {
@@ -3484,6 +3548,8 @@ export default function RouteDetailPage() {
   const routeTimelineSuppressClickRef = useRef(false);
   const routeTimelineSuppressClickTimerRef = useRef(null);
   const customerEmailRequestRef = useRef(null);
+  const scheduledNoticeRouteGroupRef = useRef(routeGroup);
+  scheduledNoticeRouteGroupRef.current = routeGroup;
   const lastRouteActionIntentRef = useRef(null);
   const copyRouteGroupDialogRef = useRef(null);
   const copyRouteGroupDialogStateRef = useRef(copyRouteGroupDialogState);
@@ -3545,6 +3611,17 @@ export default function RouteDetailPage() {
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
   const [isCustomerEmailDialogOpen, setIsCustomerEmailDialogOpen] = useState(false);
+  const [scheduledNoticeRoutePlanId, setScheduledNoticeRoutePlanId] = useState(() => (
+    effectiveRoutePlan?.id && location.state?.scheduledNoticeRoutePlanId === effectiveRoutePlan.id
+      ? effectiveRoutePlan.id
+      : null
+  ));
+  const [scheduledNoticeGroupRoutePlanIds, setScheduledNoticeGroupRoutePlanIds] = useState(() => (
+    getScheduledNoticeLocationRoutePlanIds(
+      location.state,
+      getVisibleRouteGroupChildren(routeGroup).map(getRouteGroupChildRoutePlanId),
+    )
+  ));
   const [customerEmailSignal, setCustomerEmailSignal] = useState(() => getCustomerEmailDefaultSignal(loaderRouteExecutionStatus));
   const [customerEmailConfirmed, setCustomerEmailConfirmed] = useState(false);
   const [customerEmailMissingValuesConfirmed, setCustomerEmailMissingValuesConfirmed] = useState(false);
@@ -5115,18 +5192,30 @@ export default function RouteDetailPage() {
 
   const handleDispatchRoute = () => submitRouteAction("dispatchRoute");
 
-  const openCustomerEmailDialog = () => {
+  const applyCustomerEmailDialogOpenState = (dialogState) => {
     customerEmailRequestRef.current = null;
+    setCustomerEmailActionResult(dialogState.actionResult);
+    setCustomerEmailConfirmed(dialogState.confirmed);
+    setCustomerEmailMissingValuesConfirmed(dialogState.missingValuesConfirmed);
+    setCustomerEmailResendConfirmed(dialogState.resendConfirmed);
+    setCustomerEmailPreviewSignal(dialogState.previewSignal);
+    setCustomerEmailPreviewSnapshot(dialogState.previewSnapshot);
+    setCustomerEmailCommandId(dialogState.commandId);
+    setSelectedCustomerEmailDeliveryStopIds(dialogState.selectedDeliveryStopIds);
+    setActiveCustomerEmailRecipientKey(dialogState.activeRecipientKey);
+  };
+
+  const openCustomerEmailDialog = () => {
+    applyCustomerEmailDialogOpenState(createCustomerEmailDialogOpenState(
+      getCustomerEmailDefaultSignal(routeExecutionStatus),
+    ));
     setCustomerEmailSignal(getCustomerEmailDefaultSignal(routeExecutionStatus));
-    setCustomerEmailActionResult(null);
-    setCustomerEmailConfirmed(false);
-    setCustomerEmailMissingValuesConfirmed(false);
-    setCustomerEmailResendConfirmed(false);
-    setCustomerEmailPreviewSignal(null);
-    setCustomerEmailPreviewSnapshot(null);
-    setCustomerEmailCommandId(null);
-    setSelectedCustomerEmailDeliveryStopIds([]);
-    setActiveCustomerEmailRecipientKey(null);
+    setIsCustomerEmailDialogOpen(true);
+  };
+
+  const openScheduledNoticeDialog = () => {
+    applyCustomerEmailDialogOpenState(createCustomerEmailDialogOpenState("DELIVERY_SCHEDULED"));
+    setCustomerEmailSignal("DELIVERY_SCHEDULED");
     setIsCustomerEmailDialogOpen(true);
   };
 
@@ -5502,6 +5591,8 @@ export default function RouteDetailPage() {
 
   const handleSaveRouteDraft = () => {
     if (!canSaveRouteDraft) return;
+    setScheduledNoticeRoutePlanId(null);
+    setScheduledNoticeGroupRoutePlanIds([]);
     submitRouteGroupAction("saveRouteDraft", {
       draft: JSON.stringify(buildRouteDraftPayload(contextTimelineRouteRows, {
         deletedRoutePlanIds,
@@ -5551,6 +5642,13 @@ export default function RouteDetailPage() {
 
   const handleViewInventory = () => {
     if (inventoryDetailHref) requestRouteNavigation(inventoryDetailHref);
+  };
+
+  const handleScheduledNoticeRouteNavigation = (routePlanId) => {
+    if (!routeGroupId || !routePlanId) return;
+    navigate(routeGroupChildPath(routeGroupId, routePlanId), {
+      state: { scheduledNoticeRoutePlanId: routePlanId },
+    });
   };
 
   const handleRefreshRouteOrders = () => {
@@ -5829,16 +5927,54 @@ export default function RouteDetailPage() {
     lastRouteActionIntentRef.current = null;
     const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
     navigateAfterRouteDraftSaveRef.current = null;
-    if ((routeActionFetcher.data?.errors ?? []).length === 0) {
+    const savedRouteGroup = routeActionFetcher.data?.routeGroup ?? routeGroup;
+    const scheduledNoticeSaveResult = resolveScheduledNoticeSaveResult({
+      errors: routeActionFetcher.data?.errors ?? [],
+      excludedRoutePlanIds: deletedRoutePlanIds,
+      routeGroupRoutePlanIds: getVisibleRouteGroupChildren(savedRouteGroup)
+        .map(getRouteGroupChildRoutePlanId),
+      routePlanId: effectiveRoutePlan?.id,
+    });
+    if (scheduledNoticeSaveResult.succeeded) {
       resetRouteDraftChanges();
       revalidator.revalidate();
       setPendingRouteDraftHref(null);
-      if (navigateAfterSave) navigate(navigateAfterSave);
-      else if (effectiveRoutePlan?.id && deletedRoutePlanIds.includes(effectiveRoutePlan.id) && routeGroupId) {
-        navigate(routeGroupPath(routeGroupId));
+      if (navigateAfterSave) {
+        setScheduledNoticeRoutePlanId(null);
+        setScheduledNoticeGroupRoutePlanIds([]);
+        navigate(navigateAfterSave, {
+          state: createScheduledNoticeNavigationState(scheduledNoticeSaveResult.routePlanIds),
+        });
+      } else if (effectiveRoutePlan?.id && deletedRoutePlanIds.includes(effectiveRoutePlan.id) && routeGroupId) {
+        setScheduledNoticeRoutePlanId(null);
+        setScheduledNoticeGroupRoutePlanIds([]);
+        navigate(routeGroupPath(routeGroupId), {
+          state: createScheduledNoticeNavigationState(scheduledNoticeSaveResult.routePlanIds),
+        });
+      } else if (effectiveRoutePlan?.id) {
+        setScheduledNoticeRoutePlanId(scheduledNoticeSaveResult.routePlanIds[0] ?? null);
+        setScheduledNoticeGroupRoutePlanIds([]);
+      } else if (routeGroup?.id) {
+        setScheduledNoticeRoutePlanId(null);
+        setScheduledNoticeGroupRoutePlanIds(scheduledNoticeSaveResult.routePlanIds);
+      } else {
+        setScheduledNoticeRoutePlanId(null);
+        setScheduledNoticeGroupRoutePlanIds([]);
       }
     }
-  }, [deletedRoutePlanIds, effectiveRoutePlan?.id, navigate, resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state, routeGroupId]);
+  }, [deletedRoutePlanIds, effectiveRoutePlan?.id, navigate, resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state, routeGroup, routeGroupId]);
+
+  useEffect(() => {
+    setScheduledNoticeRoutePlanId(
+      effectiveRoutePlan?.id && location.state?.scheduledNoticeRoutePlanId === effectiveRoutePlan.id
+        ? effectiveRoutePlan.id
+        : null,
+    );
+    setScheduledNoticeGroupRoutePlanIds(getScheduledNoticeLocationRoutePlanIds(
+      location.state,
+      getVisibleRouteGroupChildren(scheduledNoticeRouteGroupRef.current).map(getRouteGroupChildRoutePlanId),
+    ));
+  }, [effectiveRoutePlan?.id, location.state]);
 
   useEffect(() => {
     if (!hasRouteAllocationDraft) return undefined;
@@ -6544,6 +6680,42 @@ export default function RouteDetailPage() {
         </div>
       ) : null}
       <div style={routesDetailContentStyle}>
+        {(effectiveRoutePlan?.id && scheduledNoticeRoutePlanId === effectiveRoutePlan.id)
+          || scheduledNoticeGroupRoutePlanIds.length > 0 ? (
+          <div role="status" style={routeScheduledNoticeStyle}>
+            <span style={routeScheduledNoticeTextStyle}>
+              {translate(language, "routes.scheduledNotice.savedMessage")}
+            </span>
+            {scheduledNoticeGroupRoutePlanIds.length > 0 ? siblingRouteRows
+              .filter((routeRow) => scheduledNoticeGroupRoutePlanIds.includes(routeRow.routePlanId))
+              .map((routeRow) => (
+                <button
+                  disabled={hasRouteAllocationDraft || routeGroupActionBusy}
+                  key={routeRow.routePlanId}
+                  onClick={() => handleScheduledNoticeRouteNavigation(routeRow.routePlanId)}
+                  style={hasRouteAllocationDraft || routeGroupActionBusy ? routeDisabledActionButtonStyle : routeActionButtonStyle}
+                  title={hasRouteAllocationDraft
+                    ? translate(language, "routes.scheduledNotice.unsavedTitle")
+                    : undefined}
+                  type="button"
+                >
+                  {routeRow.title}: {translate(language, "routes.scheduledNotice.reviewAction")}
+                </button>
+              )) : (
+                <button
+                  disabled={hasRouteAllocationDraft || routeGroupActionBusy}
+                  onClick={openScheduledNoticeDialog}
+                  style={hasRouteAllocationDraft || routeGroupActionBusy ? routeDisabledActionButtonStyle : routeActionButtonStyle}
+                  title={hasRouteAllocationDraft
+                    ? translate(language, "routes.scheduledNotice.unsavedTitle")
+                    : undefined}
+                  type="button"
+                >
+                  {translate(language, "routes.scheduledNotice.reviewAction")}
+                </button>
+              )}
+          </div>
+        ) : null}
         <header
           className={isMaterializedChildRouteDetail ? "route-child-overview-header" : "route-overview-header"}
           style={isMaterializedChildRouteDetail ? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle}

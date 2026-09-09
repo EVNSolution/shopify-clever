@@ -2,7 +2,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router";
+import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { routeGroupChildPath, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
@@ -76,6 +76,7 @@ import {
 import { InfoPill } from "../../ui/info-pill";
 import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
 import { TabLayout } from "../../ui/tab-layout";
+import { translate } from "../../i18n/i18n";
 import {
   buildOrderTimelineDetails,
   buildOrdersViewNavigationMetric,
@@ -142,6 +143,24 @@ const ORDER_PAYMENT_CHANGE_OPTIONS = [
   { label: "Awaiting payment", value: "PENDING" },
   { label: "Unknown", value: "UNKNOWN" },
 ];
+const ORDER_FILTER_WEEKDAY_KEY_BY_VALUE = Object.freeze({
+  SUNDAY: "orders.filters.weekday.sunday",
+  MONDAY: "orders.filters.weekday.monday",
+  TUESDAY: "orders.filters.weekday.tuesday",
+  WEDNESDAY: "orders.filters.weekday.wednesday",
+  THURSDAY: "orders.filters.weekday.thursday",
+  FRIDAY: "orders.filters.weekday.friday",
+  SATURDAY: "orders.filters.weekday.saturday",
+});
+const ORDER_FILTER_STATE_KEY_BY_VALUE = Object.freeze({
+  unplanned: "orders.filters.state.unplanned",
+  planned: "orders.filters.state.planned",
+  assigned_undelivered: "orders.filters.state.assignedUndelivered",
+  past_due: "orders.filters.state.pastDue",
+  delivered: "orders.filters.state.delivered",
+  fulfilled: "orders.filters.state.fulfilled",
+  unfulfilled: "orders.filters.state.unfulfilled",
+});
 const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 const ORDERS_MAP_DEFAULT_HEIGHT = 420;
@@ -1771,8 +1790,10 @@ function formatOrderDateValue(value) {
   return value ? value.replaceAll("-", ".") : "";
 }
 
-function formatDeliveryDateFilterLabel(value, count) {
-  if (value === ORDER_DELIVERY_DATE_PENDING) return `Date pending (${count})`;
+function formatDeliveryDateFilterLabel(value, count, language) {
+  if (value === ORDER_DELIVERY_DATE_PENDING) {
+    return translate(language, "orders.filters.datePending", { count });
+  }
 
   const date = new Date(`${value}T00:00:00.000Z`);
   if (Number.isNaN(date.getTime())) return `${value} (${count})`;
@@ -1783,6 +1804,13 @@ function formatDeliveryDateFilterLabel(value, count) {
   }).format(date);
 
   return `${weekday} ${value.slice(5, 7)}/${value.slice(8, 10)} (${count})`;
+}
+
+function translateOrderFilterOptions(language, options, translationKeyByValue) {
+  return options.map((option) => {
+    const translationKey = translationKeyByValue[option.value];
+    return translationKey ? { ...option, label: translate(language, translationKey) } : option;
+  });
 }
 
 function formatOrderDateRangeLabel(startDate, endDate) {
@@ -2541,6 +2569,7 @@ export default function OrdersPage() {
 }
 
 function OrdersPageContent({ loaderData }) {
+  const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const routePlanFetcher = useFetcher();
   const inventoryDeleteFetcher = useFetcher();
   const orderBulkUpdateFetcher = useFetcher();
@@ -5787,22 +5816,22 @@ function OrdersPageContent({ loaderData }) {
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
             <s-button commandFor="orders-filter-popover">
-              Add filter {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
+              {translate(language, "orders.filters.add")} {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
             </s-button>
             <s-popover id="orders-filter-popover" inlineSize="600px">
-              <s-box accessibilityLabel="Order filters" padding="small">
-                <div aria-label="Order filters" role="group" style={orderFiltersPanelStyle}>
+              <s-box accessibilityLabel={translate(language, "orders.filters.label")} padding="small">
+                <div aria-label={translate(language, "orders.filters.label")} role="group" style={orderFiltersPanelStyle}>
                   <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
               <button
-                aria-label="Filter orders by ordered date"
+                aria-label={translate(language, "orders.filters.aria.orderedDate")}
                 style={orderedDateFilterActive ? orderFilterDateButtonStyle : orderFilterDatePlaceholderButtonStyle}
                 type="button"
                 onClick={handleOrderedDateCalendarOpen}
-              >{orderedDateFilterActive ? orderedDateLabel : "Order date"}</button>
+              >{orderedDateFilterActive ? orderedDateLabel : translate(language, "orders.filters.orderDate")}</button>
               {orderedDateFilterActive ? (
                 <button
                   type="button"
-                  aria-label="Clear ordered date filter"
+                  aria-label={translate(language, "orders.filters.clear.orderedDate")}
                   style={orderFilterClearButtonStyle}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={() => handleClearOrderFilter("orderedDate")}
@@ -5852,11 +5881,11 @@ function OrdersPageContent({ loaderData }) {
                 : null}
                   </div>
                   <OrderFilterMenu
-              ariaLabel="Filter orders by delivery date"
-              clearLabel="Clear delivery date filter"
-              label="Delivery date"
+              ariaLabel={translate(language, "orders.filters.aria.deliveryDate")}
+              clearLabel={translate(language, "orders.filters.clear.deliveryDate")}
+              label={translate(language, "orders.filters.deliveryDate")}
               options={orderFilterOptions.deliveryDates.map(({ count, value }) => ({
-                label: formatDeliveryDateFilterLabel(value, count),
+                label: formatDeliveryDateFilterLabel(value, count, language),
                 value,
               }))}
               value={orderFilters.deliveryDate}
@@ -5864,30 +5893,30 @@ function OrdersPageContent({ loaderData }) {
               onClear={() => handleClearOrderFilter("deliveryDate")}
                   />
                   <OrderFilterMenu
-              ariaLabel="Filter orders by delivery day"
-              clearLabel="Clear delivery day filter"
-              label="Delivery day"
-              options={ORDER_WEEKDAY_OPTIONS}
+              ariaLabel={translate(language, "orders.filters.aria.deliveryDay")}
+              clearLabel={translate(language, "orders.filters.clear.deliveryDay")}
+              label={translate(language, "orders.filters.deliveryDay")}
+              options={translateOrderFilterOptions(language, ORDER_WEEKDAY_OPTIONS, ORDER_FILTER_WEEKDAY_KEY_BY_VALUE)}
               value={orderFilters.deliveryWeekday}
               onChange={(filterValue) => handleOrderFilterChange("deliveryWeekday", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryWeekday")}
                   />
                   <OrderFilterMenu
-              ariaLabel="Filter orders by service type"
-              clearLabel="Clear service type filter"
-              label="Type"
+              ariaLabel={translate(language, "orders.filters.aria.serviceType")}
+              clearLabel={translate(language, "orders.filters.clear.serviceType")}
+              label={translate(language, "orders.filters.type")}
               options={[
-                { label: "Delivery", value: "DELIVERY" },
-                { label: "Pickup", value: "PICKUP" },
+                { label: translate(language, "orders.filters.serviceType.delivery"), value: "DELIVERY" },
+                { label: translate(language, "orders.filters.serviceType.pickup"), value: "PICKUP" },
               ]}
               value={orderFilters.serviceType}
               onChange={(filterValue) => handleOrderFilterChange("serviceType", filterValue)}
               onClear={() => handleClearOrderFilter("serviceType")}
                   />
                   <OrderFilterMenu
-              ariaLabel="Filter orders by delivery area"
-              clearLabel="Clear delivery area filter"
-              label="Area"
+              ariaLabel={translate(language, "orders.filters.aria.deliveryArea")}
+              clearLabel={translate(language, "orders.filters.clear.deliveryArea")}
+              label={translate(language, "orders.filters.area")}
               options={orderFilterOptions.deliveryAreas.map((deliveryArea) => ({
                 label: deliveryArea,
                 value: deliveryArea,
@@ -5897,10 +5926,10 @@ function OrdersPageContent({ loaderData }) {
               onClear={() => handleClearOrderFilter("deliveryArea")}
                   />
                   <OrderFilterMenu
-              ariaLabel="Filter orders by state"
-              clearLabel="Clear state filter"
-              label="State"
-              options={ORDER_DELIVERY_STATE_OPTIONS}
+              ariaLabel={translate(language, "orders.filters.aria.state")}
+              clearLabel={translate(language, "orders.filters.clear.state")}
+              label={translate(language, "orders.filters.state")}
+              options={translateOrderFilterOptions(language, ORDER_DELIVERY_STATE_OPTIONS, ORDER_FILTER_STATE_KEY_BY_VALUE)}
               value={orderFilters.deliveryState}
               onChange={(filterValue) => handleOrderFilterChange("deliveryState", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryState")}
@@ -6270,7 +6299,7 @@ function OrdersPageContent({ loaderData }) {
                         style={tableHeaderButtonStyle}
                         onClick={() => handleSort(column.key)}
                       >
-                        {column.label}
+                        {translate(language, column.translationKey)}
                         <span aria-hidden="true">
                           {getSortIndicator(column.key)}
                         </span>

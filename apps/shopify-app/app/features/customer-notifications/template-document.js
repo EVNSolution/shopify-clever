@@ -5,6 +5,7 @@ export const CUSTOMER_NOTIFICATION_VARIABLES = [
   "deliveryWeekday",
   "deliveryAddress",
   "eta",
+  "etaWindow",
   "routeName",
   "sequence",
   "shopName",

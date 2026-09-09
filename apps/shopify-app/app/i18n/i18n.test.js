@@ -29,3 +29,9 @@ test("translates settings copy and interpolates saved departure names", () => {
   );
   assert.equal(translate("ko", "unknown.key"), "unknown.key");
 });
+
+test("scheduled notice and ETA window labels follow admin language without changing tokens", () => {
+  assert.equal(translate("ko", "notifications.variables.etaWindow"), "예상 도착 시간대");
+  assert.equal(translate("en", "notifications.variables.etaWindow"), "Estimated arrival window");
+  assert.equal(translate("ko", "routes.scheduledNotice.reviewAction"), "배송 예정 알림 검토");
+});

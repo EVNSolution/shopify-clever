@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
@@ -117,8 +118,8 @@ test("Orders and Routes remain first-pass complete surfaces without new tab-shel
 
   assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
   assert.doesNotMatch(ordersSource, /title="Orders"/);
-  assert.match(routesSource, /<h1 style=\{routesTitleStyle\}>Routes<\/h1>/);
-  assert.match(routesSource, />Create routes<\/button>/);
+  assert.match(routesSource, /<h1 style=\{routesTitleStyle\}>\{translate\(language, "routes\.list\.title"\)\}<\/h1>/);
+  assert.match(routesSource, />\{translate\(language, "routes\.list\.create"\)\}<\/button>/);
   assert.doesNotMatch(routesSource, /Filter routes|Optimize route|Assign driver|Schedule route/);
   assert.doesNotMatch(ordersSource, /Analytics|Workflows|Drivers|Future modules/);
 });

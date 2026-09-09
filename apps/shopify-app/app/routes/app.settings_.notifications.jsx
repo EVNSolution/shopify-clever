@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useCallback, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useFetcher, useLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useRouteLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
@@ -248,6 +248,7 @@ export default function CustomerNotificationsSettingsPage() {
 }
 
 function CustomerEmailSettings({ initialSettings }) {
+  const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const shopify = useAppBridge();
   const fetcher = useFetcher();
   const [settings, setSettings] = useState(() => normalizeCustomerEmailSettings(initialSettings));
@@ -602,6 +603,7 @@ function CustomerEmailSettings({ initialSettings }) {
                 </label>
               </div>
               <TemplateTokenEditor
+                language={language}
                 compact
                 id={`template-${templateEditorSignal}-subject`}
                 label="Subject"
@@ -611,6 +613,7 @@ function CustomerEmailSettings({ initialSettings }) {
                 value={templateDraft.subject}
               />
               <TemplateTokenEditor
+                language={language}
                 id={`template-${templateEditorSignal}-body`}
                 label="Body"
                 onChange={(body) => setTemplateDraft((current) => ({ ...current, body }))}
@@ -772,7 +775,8 @@ const TEMPLATE_PREVIEW_VALUES = {
   deliveryAddress: "15 Market Street, Melbourne VIC 3000",
   deliveryDate: "Wed, 5 Aug 2026",
   deliveryWeekday: "Wednesday",
-  eta: "2:30 PM – 3:00 PM",
+  eta: "Aug 5, 2026, 2:30 PM AEST",
+  etaWindow: "Aug 5, 2026, 2:00 PM AEST - Aug 5, 2026, 3:00 PM AEST",
   inventoryList: "Fresh kimchi × 2\nKorean pear × 1",
   orderNumber: "#1048",
   routeName: "Melbourne CBD",
