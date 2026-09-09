@@ -486,3 +486,20 @@ test("route group helper returns a local error when the route group id is missin
   assert.equal(result.routeGroup, null);
   assert.equal(result.errors[0].code, DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE);
 });
+
+test("ordinary split drafts never fall through to a group write or copy without a confirmed bridge", async () => {
+  const fakeFetch = makeFetch();
+  const draft = { mode: "MANUAL_ORDER", routes: [
+    { routePlanId: "copy-actual-id", orderIds: ["order-one"] },
+    { tempId: "temp:second", orderIds: ["order-two"] },
+  ] };
+  const originalDraft = structuredClone(draft);
+  const saved = await saveDeliveryRouteGroupDraft(makeRequest(), null, draft, { fetch: fakeFetch });
+  const copied = await copyDeliveryRouteGroup(makeRequest(), null, { fetch: fakeFetch, mode: "REFERENCE" });
+  assert.equal(fakeFetch.calls.length, 0);
+  assert.equal(saved.routeGroup, null);
+  assert.equal(saved.errors[0].code, DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE);
+  assert.equal(copied.routeGroup, null);
+  assert.equal(copied.errors[0].code, DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE);
+  assert.deepEqual(draft, originalDraft);
+});

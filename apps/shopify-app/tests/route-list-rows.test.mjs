@@ -10,6 +10,26 @@ import {
   toggleRouteSelection,
 } from "../app/features/delivery/route-list-rows.js";
 
+test("a saved singleton stays uncolored without losing its existing membership", () => {
+  const group = { id: "saved", children: [{ routePlanId: "original", routePlan: { id: "original", name: "Original" } }] };
+  const before = structuredClone(group);
+  const [row] = buildRouteRows([], [group]);
+  assert.equal(row.groupAccentColor, null);
+  assert.equal(row.routeGroupId, "saved");
+  assert.equal(row.href, "/app/routes/groups/saved/routes/original");
+  assert.deepEqual(group, before);
+});
+
+test("only confirmed distinct members receive a shared group color", () => {
+  const plans = ["one", "two", "three"].map(id => ({ id, name: id, routeGroupingChild: { groupingId: "saved" } }));
+  assert.equal(buildRouteRows(plans.slice(0, 1))[0].groupAccentColor, null);
+  const rows = buildRouteRows(plans);
+  assert.equal(rows.length, 3);
+  assert.ok(rows[0].groupAccentColor);
+  assert.equal(new Set(rows.map(row => row.groupAccentColor)).size, 1);
+  assert.deepEqual(rows.map(row => row.id), ["one", "two", "three"]);
+});
+
 test("route list shows a created child once without a parent management row", () => {
   const rows = buildRouteRows(
     [

@@ -321,7 +321,8 @@ export function buildRouteRows(routePlans, routeGroups = []) {
   const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
   const routeGroupEntries = safeRouteGroups.map((routeGroup, index) => {
     const children = getVisibleRouteGroupChildren(routeGroup);
-    const groupAccentColor = getRouteGroupAccentColor(routeGroup.id);
+    const memberCount = new Set(children.map(getRouteGroupChildRoutePlanId).filter(Boolean)).size;
+    const groupAccentColor = memberCount > 1 ? getRouteGroupAccentColor(routeGroup.id) : null;
     const totalOrders = getRouteGroupTotalOrders(routeGroup);
     const groupSummary = formatRouteGroupSummary(children.length, totalOrders);
     return {
@@ -362,6 +363,13 @@ export function buildRouteRows(routePlans, routeGroups = []) {
       },
     ];
   }
+  const standaloneMembersByGroup = new Map();
+  for (const routePlan of standaloneRoutePlans) {
+    const groupId = getRouteGroupingChildGroupId(routePlan);
+    if (!groupId || !routePlan.id) continue;
+    if (!standaloneMembersByGroup.has(groupId)) standaloneMembersByGroup.set(groupId, new Set());
+    standaloneMembersByGroup.get(groupId).add(routePlan.id);
+  }
   const routePlanRows = standaloneRoutePlans.map((routePlan) => {
     const routeGroupId = getRouteGroupingChildGroupId(routePlan);
     const routeMetrics = readRouteMetrics(routePlan);
@@ -377,7 +385,7 @@ export function buildRouteRows(routePlans, routeGroups = []) {
       href: routeGroupId ? routeGroupChildPath(routeGroupId, routePlan.id) : routePlanPath(routePlan.id),
       routeGroupId,
       routeGroupDeleteKey: routeGroupId ? `routeGroup:${routeGroupId}` : null,
-      groupAccentColor: getRouteGroupAccentColor(routeGroupId),
+      groupAccentColor: standaloneMembersByGroup.get(routeGroupId)?.size > 1 ? getRouteGroupAccentColor(routeGroupId) : null,
       isClickable: true,
       isDeletable: true,
       isSummaryRoute: true,

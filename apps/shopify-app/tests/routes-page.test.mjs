@@ -1240,7 +1240,7 @@ test("Route group detail Add Empty Route queries server numbering without saving
   const addEmptyHandler = routeDetailSource.slice(start, end);
 
   assert.match(addEmptyHandler, /if \(routeGroupActionBusy\) return/);
-  assert.match(addEmptyHandler, /if \(hasIncompatibleAddEmptyDraft\) \{/);
+  assert.match(addEmptyHandler, /if \(hasIncompatibleAddEmptyDraft && !isOrdinarySplitDraft\) \{/);
   assert.match(addEmptyHandler, /setRouteGroupClientError\("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요\."\)/);
   assert.match(routeDetailSource, /const hasIncompatibleAddEmptyDraft = Object\.keys\(routeTimelineOrderByRouteId\)\.length > 0[\s\S]*\|\| removedOrderIds\.length > 0/);
   assert.doesNotMatch(routeDetailSource, /const hasIncompatibleAddEmptyDraft =[\s\S]*clientRouteRows\.length > 0/);

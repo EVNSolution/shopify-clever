@@ -119,6 +119,8 @@ const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_EMPTY_LABEL = "–";
 const EMPTY_ROUTE_ADD_ORDER_CANDIDATES = Object.freeze([]);
+const ROUTE_SPLIT_SAVE_UNAVAILABLE_MESSAGE = "Saving split routes is not available yet. Your draft has been kept.";
+const ROUTE_SPLIT_SAVE_UNCONFIRMED_MESSAGE = "The saved split routes could not be confirmed. Your draft has been kept.";
 const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
 const ROUTE_TIMELINE_STOP_POPOVER_GAP = 4;
@@ -2779,6 +2781,13 @@ function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
   };
 }
 
+function isOrdinaryRouteDetailPresentation(routePlan, routeGroup) {
+  if (!routePlan) return false;
+  return getVisibleRouteGroupChildren(routeGroup)
+    .filter((child) => getRouteGroupChildRoutePlanId(child))
+    .length <= 1;
+}
+
 function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = [], ianaTimezone) {
   const routeGroupChildRows = getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
     const routeIdx = numberOrUndefined(child?.routeIdx);
@@ -3376,6 +3385,17 @@ function resolveScheduledNoticeSaveResult({
   return { routePlanIds, succeeded: true };
 }
 
+function isCompleteSplitSaveResponse(routeGroup, expectation) {
+  if (!expectation || textOrUndefined(routeGroup?.id) !== expectation.routeGroupId) return false;
+  const returnedRoutePlanIds = getVisibleRouteGroupChildren(routeGroup)
+    .map(getRouteGroupChildRoutePlanId)
+    .filter(Boolean);
+  const distinctReturnedRoutePlanIds = new Set(returnedRoutePlanIds);
+  if (distinctReturnedRoutePlanIds.size !== returnedRoutePlanIds.length) return false;
+  if (!expectation.existingRoutePlanIds.every((routePlanId) => distinctReturnedRoutePlanIds.has(routePlanId))) return false;
+  return returnedRoutePlanIds.length >= expectation.existingRoutePlanIds.length + expectation.tempRouteCount;
+}
+
 function createScheduledNoticeNavigationState(routePlanIds) {
   return { scheduledNoticeRoutePlanIds: [...new Set(routePlanIds.filter(Boolean))] };
 }
@@ -3431,7 +3451,8 @@ export default function RouteDetailPage() {
   const effectiveRoutePlan = routePlan;
   const routesListHref = ROUTES_ROOT_PATH;
   const isRouteGroupDetail = !effectiveRoutePlan && routeGroup != null;
-  const isMaterializedChildRouteDetail = getIsMaterializedChildRouteDetail({
+  const isOrdinaryRouteDetail = isOrdinaryRouteDetailPresentation(effectiveRoutePlan, routeGroup);
+  const isMaterializedChildRouteDetail = !isOrdinaryRouteDetail && getIsMaterializedChildRouteDetail({
     routeGroup,
     routePlan: effectiveRoutePlan,
   });
@@ -3494,7 +3515,9 @@ export default function RouteDetailPage() {
   }, [effectiveRoutePlan?.id, routeGroup]);
   const linkedInventoryId = getLinkedInventoryId(effectiveRoutePlan, routeGroup, currentRouteGroupChild, isRouteGroupDetail);
   const inventoryDetailHref = linkedInventoryId ? `/app/orders/inventory?id=${encodeURIComponent(linkedInventoryId)}` : null;
-  const defaultRouteLineColor = normalizeRouteColor(currentRouteGroupChild?.color) ?? MAP_MARKER_PALETTE.plannedOrder.color;
+  const defaultRouteLineColor = isOrdinaryRouteDetail
+    ? MAP_MARKER_PALETTE.plannedOrder.color
+    : normalizeRouteColor(currentRouteGroupChild?.color) ?? MAP_MARKER_PALETTE.plannedOrder.color;
   const routeGroupActionBusy = routeActionFetcher.state !== "idle";
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
   const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
@@ -3549,6 +3572,7 @@ export default function RouteDetailPage() {
   const copyRouteGroupInitialFocusRef = useRef(null);
   copyRouteGroupDialogStateRef.current = copyRouteGroupDialogState;
   const navigateAfterRouteDraftSaveRef = useRef(null);
+  const splitSaveExpectationRef = useRef(null);
   const routePolygonCornerDragIndexRef = useRef(null);
   const routePolygonSkipNextMapClickRef = useRef(false);
   const routePolygonSkipNextMapClickTimerRef = useRef(null);
@@ -3629,6 +3653,7 @@ export default function RouteDetailPage() {
   const [isRoutePolygonEditMode, setIsRoutePolygonEditMode] = useState(false);
   const [routeTimelineOrderByRouteId, setRouteTimelineOrderByRouteId] = useState({});
   const [clientRouteRows, setClientRouteRows] = useState([]);
+  const [isOrdinarySplitDraft, setIsOrdinarySplitDraft] = useState(false);
   const [routePreviewByKey, setRoutePreviewByKey] = useState({});
   const [routeTimelineDrag, setRouteTimelineDrag] = useState(null);
   const routeTimelineOrderByRouteIdRef = useRef(routeTimelineOrderByRouteId);
@@ -3830,8 +3855,10 @@ export default function RouteDetailPage() {
   const contextRouteRowsSource = useMemo(
     () => (isRouteGroupDetail
       ? groupRouteRowsSource
-      : mergeCurrentRouteRow(groupRouteRowsSource, currentRouteRowsSource[0])),
-    [currentRouteRowsSource, groupRouteRowsSource, isRouteGroupDetail],
+      : isOrdinaryRouteDetail
+        ? currentRouteRowsSource
+        : mergeCurrentRouteRow(groupRouteRowsSource, currentRouteRowsSource[0])),
+    [currentRouteRowsSource, groupRouteRowsSource, isOrdinaryRouteDetail, isRouteGroupDetail],
   );
   const routeRows = useMemo(
     () => ensureUniqueRouteRowColors(applyRouteRowDraftState([...displayRouteRowsSource, ...clientRouteRows], routeLineEdits, routePreviewByKey)),
@@ -5367,13 +5394,18 @@ export default function RouteDetailPage() {
     setRemovedOrderIds([]);
     setRouteLineEdits({});
     setRoutePreviewByKey({});
+    setIsOrdinarySplitDraft(false);
     setRouteGroupClientError(null);
   }, []);
 
   const handleAddEmptyRoute = () => {
     if (routeGroupActionBusy) return;
     setIsRouteActionsMenuOpen(false);
-    if (hasIncompatibleAddEmptyDraft) {
+    if (!canDraftEditChildStopMembership) {
+      setRouteGroupClientError("Routes can only be split before the route has started.");
+      return;
+    }
+    if (hasIncompatibleAddEmptyDraft && !isOrdinarySplitDraft) {
       setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
       return;
     }
@@ -5424,6 +5456,19 @@ export default function RouteDetailPage() {
         };
       })();
     setClientRouteRows((rows) => [...rows, routeRow]);
+    if (isOrdinaryRouteDetail) setIsOrdinarySplitDraft(true);
+    if (isOrdinaryRouteDetail && !routeGroupId) {
+      const originalRouteRow = currentRouteRowsSource[0];
+      setRouteGroupClientError(null);
+      setRouteTimelineOrderByRouteId((currentOrderByRouteId) => ({
+        ...currentOrderByRouteId,
+        ...(Object.keys(currentOrderByRouteId).length === 0 && originalRouteRow
+          ? { [originalRouteRow.id]: originalRouteRow.stops.map((stop) => stop.id) }
+          : {}),
+        [tempId]: [],
+      }));
+      return;
+    }
     submitRouteGroupAction("queryNextRouteIdx", { tempId });
   };
 
@@ -5584,6 +5629,21 @@ export default function RouteDetailPage() {
 
   const handleSaveRouteDraft = () => {
     if (!canSaveRouteDraft) return;
+    if (isOrdinarySplitDraft && !canDraftEditChildStopMembership) {
+      setRouteGroupClientError("Split routes can only be saved before the route has started. Your draft has been kept.");
+      return;
+    }
+    if (isOrdinarySplitDraft && !routeGroupId) {
+      setRouteGroupClientError(ROUTE_SPLIT_SAVE_UNAVAILABLE_MESSAGE);
+      return;
+    }
+    splitSaveExpectationRef.current = isOrdinarySplitDraft && routeGroupId ? {
+      existingRoutePlanIds: contextTimelineRouteRows
+        .map((routeRow) => routeRow.routePlanId)
+        .filter((routePlanId) => routePlanId && !deletedRoutePlanIds.includes(routePlanId)),
+      routeGroupId,
+      tempRouteCount: contextTimelineRouteRows.filter((routeRow) => routeRow.tempId && !routeRow.routePlanId).length,
+    } : null;
     setScheduledNoticeRoutePlanId(null);
     setScheduledNoticeGroupRoutePlanIds([]);
     submitRouteGroupAction("saveRouteDraft", {
@@ -5599,6 +5659,10 @@ export default function RouteDetailPage() {
 
   const handleSaveRouteDraftAndLeave = () => {
     if (!canSaveRouteDraft) return;
+    if (isOrdinarySplitDraft && (!routeGroupId || !canDraftEditChildStopMembership)) {
+      handleSaveRouteDraft();
+      return;
+    }
     navigateAfterRouteDraftSaveRef.current = pendingRouteDraftHref ?? routesListHref;
     setIsRouteDraftExitDialogOpen(false);
     handleSaveRouteDraft();
@@ -5920,9 +5984,18 @@ export default function RouteDetailPage() {
     lastRouteActionIntentRef.current = null;
     const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
     navigateAfterRouteDraftSaveRef.current = null;
-    const savedRouteGroup = routeActionFetcher.data?.routeGroup ?? routeGroup;
+    const splitSaveExpectation = splitSaveExpectationRef.current;
+    splitSaveExpectationRef.current = null;
+    const saveErrors = routeActionFetcher.data?.errors ?? [];
+    const responseRouteGroup = routeActionFetcher.data?.routeGroup ?? null;
+    if (splitSaveExpectation && saveErrors.length === 0
+      && !isCompleteSplitSaveResponse(responseRouteGroup, splitSaveExpectation)) {
+      setRouteGroupClientError(ROUTE_SPLIT_SAVE_UNCONFIRMED_MESSAGE);
+      return;
+    }
+    const savedRouteGroup = responseRouteGroup ?? routeGroup;
     const scheduledNoticeSaveResult = resolveScheduledNoticeSaveResult({
-      errors: routeActionFetcher.data?.errors ?? [],
+      errors: saveErrors,
       excludedRoutePlanIds: deletedRoutePlanIds,
       routeGroupRoutePlanIds: getVisibleRouteGroupChildren(savedRouteGroup)
         .map(getRouteGroupChildRoutePlanId),
@@ -6868,9 +6941,9 @@ export default function RouteDetailPage() {
                   </button>
                 ) : null}
                 <button
-                  disabled={routeGroupActionBusy || (isRouteGroupDetail && hasRouteAllocationDraft) || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
+                  disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
                   onClick={handleDeleteRoute}
-                  style={routeGroupActionBusy ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
+                  style={routeGroupActionBusy || hasRouteAllocationDraft ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
                   type="button"
                 >
                   {deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
@@ -7175,7 +7248,7 @@ export default function RouteDetailPage() {
                     type="button"
                   >Add order</button>
                 ) : null}
-                {routeGroupId ? (
+                {routeGroupId || isOrdinaryRouteDetail ? (
                 <button
                   disabled={routeGroupActionBusy}
                   onClick={handleAddEmptyRoute}
