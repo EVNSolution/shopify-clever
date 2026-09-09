@@ -7,6 +7,13 @@ export const SUPPORTED_LANGUAGES = [
 
 const TRANSLATIONS = {
   en: {
+    "routes.list.actions": "Actions",
+    "routes.group.withoutRoutes": "Groups without routes ({count})",
+    "routes.group.choose": "Choose a group",
+    "routes.group.menu": "Group",
+    "routes.group.allRoutes": "All routes",
+    "routes.group.working": "Working…",
+    "routes.group.addEmpty": "Add Empty Route",
     "routes.status.ready": "Ready",
     "routes.status.in_progress": "In progress",
     "routes.status.completed": "Completed",
@@ -116,6 +123,13 @@ const TRANSLATIONS = {
     "settings.errors.unableToSave": "Unable to save settings.",
   },
   ko: {
+    "routes.list.actions": "작업",
+    "routes.group.withoutRoutes": "경로 없는 그룹 ({count})",
+    "routes.group.choose": "그룹 선택",
+    "routes.group.menu": "그룹",
+    "routes.group.allRoutes": "전체 경로",
+    "routes.group.working": "처리 중…",
+    "routes.group.addEmpty": "빈 경로 추가",
     "routes.status.ready": "준비됨",
     "routes.status.in_progress": "진행 중",
     "routes.status.completed": "완료",

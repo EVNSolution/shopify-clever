@@ -223,7 +223,7 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.doesNotMatch(routesPageSource, /searchParams\.get\("orderIds"\)/);
 });
 
-test("Routes page lists saved child routes below their parent route group", () => {
+test("Routes page lists saved child routes as real route rows", () => {
   assert.match(routesPageSource, /from "\.\.\/features\/delivery\/route-list-rows"/);
   assert.match(routeListRowsSource, /function buildRouteChildRows\([\s\S]*groupAccentColor = null,[\s\S]*groupSummary = null,[\s\S]*\) \{/);
   assert.match(routeHelpersSource, /function getRouteGroupChildren\(routeGroup\) \{/);
@@ -233,7 +233,7 @@ test("Routes page lists saved child routes below their parent route group", () =
   assert.match(routeListRowsSource, /const routePlanId = getRouteGroupChildRoutePlanId\(child\)/);
   assert.match(routeListRowsSource, /href: routeGroupChildPath\(routeGroup\.id, routePlanId\)/);
   assert.match(routeHelpersSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
-  assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
+  assert.match(routeHelpersSource, /return name \?\? fallback/);
   assert.match(routeListRowsSource, /route: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
   assert.match(routeListRowsSource, /routeGroupId: routeGroup\.id/);
   assert.match(routeHelpersSource, /leftRouteIdx = numberOrUndefined\(left\.child\?\.routeIdx\)/);
@@ -280,9 +280,9 @@ test("Routes page adds top summary cards and explicit route actions", () => {
   assert.doesNotMatch(routesPageSource, /Filter routes|Recent|Add filter|Clear all/);
 });
 
-test("Routes table distinguishes group headers and exposes delivered and amount columns", () => {
-  assert.match(routesPageSource, /route\.isRouteGroup \? \(/);
-  assert.match(routesPageSource, /aria-label=\{translate\(language, "routes\.group\.open", \{ name: route\.route \}\)\}/);
+test("Routes table exposes actual route metrics without parent group rows", () => {
+  assert.doesNotMatch(routesPageSource, /route\.isRouteGroup \? \(/);
+  assert.doesNotMatch(routesPageSource, /routes\.group\.open/);
   assert.match(routesPageSource, /translate\(language, "routes\.table\.delivered"\)/);
   assert.match(routesPageSource, /translate\(language, "routes\.table\.amount"\)/);
   assert.match(routesPageSource, /translate\(language, "routes\.table\.eta"\)/);
@@ -351,15 +351,15 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routesPageSource, /case "Cancelled":\s+return routeCancelledBadgeStyle/);
   assert.match(routesPageSource, /return formatRouteStatus\(status\)\.toUpperCase\(\)\.replace/);
   assert.match(routeListRowsSource, /standaloneRoutePlans\.map\(\(routePlan\) =>/);
-  assert.match(routeListRowsSource, /const routeGroupRows = routeGroupEntries\.map/);
+  assert.match(routeListRowsSource, /const routeGroupBundles = routeGroupEntries\.map/);
   assert.match(routeListRowsSource, /function getRouteGroupTotalOrders\(routeGroup\)/);
   assert.match(routeListRowsSource, /return Number\(routeGroup\?\.totalOrders \?\? routeGroup\?\.ordersCount \?\? routeGroup\?\.assignments\?\.length \?\? 0\) \|\| 0/);
   assert.doesNotMatch(routeHelpersSource, /return children\.length >= 2 \? children : \[\]/);
   assert.match(routeHelpersSource, /rightRouteIdx = numberOrUndefined\(right\.child\?\.routeIdx\)/);
-  assert.match(routeListRowsSource, /isRouteGroup: true/);
+  assert.doesNotMatch(routeListRowsSource, /isRouteGroup: true/);
   assert.match(routeListRowsSource, /isDeletable: true/);
   assert.match(routeListRowsSource, /childRows: buildRouteChildRows\(routeGroup, children, groupAccentColor, groupSummary\)/);
-  assert.match(routeListRowsSource, /formatRouteGroupDate\(routeGroup\)/);
+  assert.match(routeListRowsSource, /rows: childRows/);
   assert.doesNotMatch(routesPageSource, /routeIndex: routeIndex \+ 1/);
   assert.match(routeListRowsSource, /formatRouteValues\(routePlan\.deliveryAreas\)/);
   assert.match(routeListRowsSource, /formatRouteDeliveryScope\(routePlan\)/);
@@ -578,7 +578,7 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization"/);
   assert.match(routeDetailSource, /const addEmptyRouteBranchBusy = routeGroupActionBusy && routeGroupActionIntent === "queryNextRouteIdx"/);
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
-  assert.match(routeDetailSource, /\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}/);
+  assert.match(routeDetailSource, /translate\(language, addEmptyRouteBranchBusy \? "routes\.group\.working" : "routes\.group\.addEmpty"\)/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{[\s\S]*includeExistingOptimized: true/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{[\s\S]*includeExistingOptimized: false/);
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
@@ -646,7 +646,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
 });
 
 test("Route group detail keeps its own page instead of becoming a child route", () => {
-  assert.match(routeListRowsSource, /href: routeGroupPath\(routeGroup\.id\)/);
+  assert.match(routeListRowsSource, /getGroupsWithoutRoutes[\s\S]*href: routeGroupPath\(group\.id\)/);
   assert.doesNotMatch(routesPageSource, /function createRouteDetailHref/);
   assert.match(routeGroupDetailSource, /routePlan: null/);
   assert.match(routeGroupDetailSource, /route_group_detail\.api\.summary/);
@@ -765,7 +765,7 @@ test("Routes canonical group child route loads by group id", () => {
 test("Route detail separates group and child titles", () => {
   assert.match(routeDetailSource, /const routeDetailTitle = textOrUndefined\(routeDetailTitleOverride\) \?\? \(isRouteGroupDetail \? textOrUndefined\(routeGroup\?\.name\) : textOrUndefined\(routeDetail\.route\)\) \?\? "Route"/);
   assert.match(routeHelpersSource, /function getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\) \{/);
-  assert.match(routeHelpersSource, /name\.startsWith\(`\$\{groupName\} — `\)/);
+  assert.match(routeHelpersSource, /return name \?\? fallback/);
   assert.match(routeDetailServerSource, /name: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
   assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, childRoutePlan, index\)/);
   assert.match(routeDetailServerSource, /routePlan: currentChildDetail\?\.routePlan \?\? routePlanData\.routePlan/);
@@ -1379,7 +1379,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? \([\s\S]*?<RouteStartTimePicker[\s\S]*storeTimezone=\{ianaTimezone\}[\s\S]*timezoneAbbreviation=\{timezoneAbbreviation\}[\s\S]*timezoneSource=\{timezoneSource\}/);
   assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);
   assert.match(routeDetailSource, /aria-label=\{routeRow\.routePlanId \? `Open \$\{routeRow\.title\} route detail` : `\$\{routeRow\.title\} route preview`\}/);
-  assert.match(routeDetailSource, /routeRow\.routePlanId \? requestRouteNavigation\(routeGroupChildPath\(routeGroupId, routeRow\.routePlanId\)\) : undefined/);
+  assert.match(routeDetailSource, /routeRow\.routePlanId \? requestRouteNavigation\(routeGroupId \? routeGroupChildPath\(routeGroupId, routeRow\.routePlanId\) : routePlanPath\(routeRow\.routePlanId\)\) : undefined/);
   assert.match(routeDetailSource, /function renderRouteEditableChevron\(\) \{/);
   assert.match(routeDetailSource, /function renderRouteLineEditIcon\(\) \{/);
   assert.match(routeDetailSource, /src="\/icons\/route-edit\.png"/);
@@ -1500,7 +1500,7 @@ test("Route detail page provides page navigation back to the route list", () => 
 });
 
 test("Route detail can move between child routes in the same route group", () => {
-  assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath \} from "\.\.\/features\/delivery\/route-paths"/);
+  assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath \} from "\.\.\/features\/delivery\/route-paths"/);
   assert.match(routeDetailSource, /const siblingRouteRows = routeGroupChildRows\.filter\(\(routeRow\) => routeRow\.routePlanId\)/);
   assert.match(routeDetailSource, /const currentSiblingRouteIndex = siblingRouteRows\.findIndex/);
   assert.match(routeDetailSource, /const previousSiblingRoute = siblingRouteRows\[currentSiblingRouteIndex - 1\]/);
@@ -1510,14 +1510,14 @@ test("Route detail can move between child routes in the same route group", () =>
   assert.match(routeDetailSource, /aria-label="Previous route in group"/);
   assert.match(routeDetailSource, /aria-label="All routes in group"/);
   assert.match(routeDetailSource, /aria-label="Next route in group"/);
-  assert.match(routeDetailSource, />All routes</);
+  assert.match(routeDetailSource, /translate\(language, "routes\.group\.allRoutes"\)/);
   assert.match(routeDetailSource, /const siblingRouteMenuButtonStyle = \{[\s\S]*minWidth: "52px"/);
   assert.doesNotMatch(routeDetailSource, /M5 5h10M5 10h10M5 15h10/);
   assert.match(routeDetailSource, /aria-current=\{routeRow\.routePlanId === effectiveRoutePlan\?\.id \? "page" : undefined\}/);
   assert.match(routeDetailSource, /background: routeRow\.color/);
   assert.match(routeDetailSource, /disabled=\{!previousSiblingRoute\}/);
   assert.match(routeDetailSource, /disabled=\{!nextSiblingRoute\}/);
-  assert.match(routeDetailSource, /routeGroupId && currentSiblingRouteIndex >= 0 && siblingRouteRows\.length > 1/);
+  assert.match(routeDetailSource, /isMaterializedChildRouteDetail && routeGroupId && currentSiblingRouteIndex >= 0/);
   assert.match(routeDetailSource, /siblingRouteRows\.map\(\(routeRow\) => \(/);
   assert.doesNotMatch(routeDetailSource, /<select[\s\S]*aria-label="Route in group"/);
 });
@@ -1526,7 +1526,7 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /hasRouteAllocationDraftRef\.current = hasRouteAllocationDraft/);
   assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, />Add order<\/button>/);
-  assert.match(routeDetailSource, />\{addEmptyRouteBranchBusy \? "Working…" : "Add Empty Route"\}<\/button>[\s\S]*aria-label="Actions"/);
+  assert.match(routeDetailSource, />\{translate\(language, addEmptyRouteBranchBusy \? "routes\.group\.working" : "routes\.group\.addEmpty"\)\}<\/button>[\s\S]*aria-label="Actions"/);
   assert.match(routeDetailSource, /aria-expanded=\{isRouteActionsMenuOpen\}[\s\S]*>Actions<\/button>/);
   assert.match(routeDetailSource, /aria-label="Route action menu"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Stop actions<\//);

@@ -30,8 +30,7 @@ export function getDefaultRouteGroupChildName(index, child) {
 export function getRouteGroupChildRouteName(routeGroup, child, routePlan, index) {
   const fallback = getDefaultRouteGroupChildName(index, child);
   const name = textOrUndefined(routePlan?.name ?? child?.routePlan?.name ?? child?.label);
-  const groupName = textOrUndefined(routeGroup?.name);
-  if (name && groupName && name.startsWith(`${groupName} — `)) return fallback;
+  void routeGroup;
   return name ?? fallback;
 }
 

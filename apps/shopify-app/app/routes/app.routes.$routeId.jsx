@@ -64,7 +64,7 @@ import {
   normalizeRouteStopLocationDiagnostic,
   summarizeRouteStopLocationDiagnostics,
 } from "../features/delivery/route-stop-location-diagnostic";
-import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath } from "../features/delivery/route-paths";
+import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
@@ -421,13 +421,6 @@ const siblingRouteMenuStyle = {
   right: 0,
   top: "calc(100% + 6px)",
   zIndex: 30,
-};
-
-const siblingRouteMenuHeadingStyle = {
-  color: "#616161",
-  fontSize: "12px",
-  fontWeight: 700,
-  padding: "4px 8px 6px",
 };
 
 const siblingRouteMenuItemStyle = {
@@ -6743,7 +6736,7 @@ export default function RouteDetailPage() {
               </button>
             </div> : null}
             <div style={routeHeaderRightStyle}>
-              {routeGroupId && currentSiblingRouteIndex >= 0 && siblingRouteRows.length > 1 ? (
+              {isMaterializedChildRouteDetail && routeGroupId && currentSiblingRouteIndex >= 0 ? (
                 <div
                   aria-label="Routes in this group"
                   onBlur={(event) => {
@@ -6775,7 +6768,7 @@ export default function RouteDetailPage() {
                     title="All routes in this group"
                     type="button"
                   >
-                    <span>{currentSiblingRouteIndex + 1} / {siblingRouteRows.length}</span>
+                    <span>{translate(language, "routes.group.menu")} · {currentSiblingRouteIndex + 1} / {siblingRouteRows.length}</span>
                   </button>
                   <button
                     aria-label="Next route in group"
@@ -6794,7 +6787,10 @@ export default function RouteDetailPage() {
                   </button>
                   {isSiblingRouteMenuOpen ? (
                     <div aria-label="All routes" role="menu" style={siblingRouteMenuStyle}>
-                      <div style={siblingRouteMenuHeadingStyle}>All routes</div>
+                      <button role="menuitem" type="button" style={{ ...siblingRouteMenuItemStyle, fontWeight: 600 }}
+                        onClick={() => { setIsSiblingRouteMenuOpen(false); requestRouteNavigation(routeGroupPath(routeGroupId)); }}>
+                        {translate(language, "routes.group.allRoutes")}
+                      </button>
                       {siblingRouteRows.map((routeRow) => (
                         <button
                           aria-current={routeRow.routePlanId === effectiveRoutePlan?.id ? "page" : undefined}
@@ -7179,12 +7175,14 @@ export default function RouteDetailPage() {
                     type="button"
                   >Add order</button>
                 ) : null}
+                {routeGroupId ? (
                 <button
                   disabled={routeGroupActionBusy}
                   onClick={handleAddEmptyRoute}
                   style={routeActionButtonStyle}
                   type="button"
-                >{addEmptyRouteBranchBusy ? "Working…" : "Add Empty Route"}</button>
+                >{translate(language, addEmptyRouteBranchBusy ? "routes.group.working" : "routes.group.addEmpty")}</button>
+                ) : null}
                 <div
                   aria-label="Actions"
                   onBlur={(event) => {
@@ -7582,7 +7580,7 @@ export default function RouteDetailPage() {
                           <button
                             aria-label={routeRow.routePlanId ? `Open ${routeRow.title} route detail` : `${routeRow.title} route preview`}
                             disabled={!routeRow.routePlanId}
-                            onClick={() => routeRow.routePlanId ? requestRouteNavigation(routeGroupChildPath(routeGroupId, routeRow.routePlanId)) : undefined}
+                            onClick={() => routeRow.routePlanId ? requestRouteNavigation(routeGroupId ? routeGroupChildPath(routeGroupId, routeRow.routePlanId) : routePlanPath(routeRow.routePlanId)) : undefined}
                             style={{
                               ...routeLineTitleButtonStyle,
                               ...(routeRow.isPreviewOnly ? { cursor: "default" } : null),

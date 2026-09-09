@@ -136,14 +136,6 @@ function readRouteChildMetrics(child) {
   return readRouteMetrics({ ...routePlan, routeMetrics: child?.routeMetrics ?? routePlan.routeMetrics });
 }
 
-function readRouteGroupMetrics(children) {
-  const childMetrics = children.map(readRouteChildMetrics);
-  return {
-    distanceMeters: sumOptionalNumbers(childMetrics.map((routeMetrics) => routeMetrics.distanceMeters)),
-    durationSeconds: sumOptionalNumbers(childMetrics.map((routeMetrics) => routeMetrics.durationSeconds)),
-  };
-}
-
 function formatRouteTableDate(routePlan) {
   const deliveryScope = formatRouteDeliveryScope(routePlan);
   return deliveryScope !== "-" ? deliveryScope : formatRouteDate(routePlan?.planDate);
@@ -162,13 +154,6 @@ function getRouteGroupTotalOrders(routeGroup) {
 
 function formatRouteGroupSummary(routeCount, totalOrders) {
   return `${routeCount} ${routeCount === 1 ? "Route" : "Routes"} - ${totalOrders} Stop(s)`;
-}
-
-function formatRouteGroupDate(routeGroup) {
-  const start = routeGroup?.dateRangeStart ?? routeGroup?.planDate;
-  const end = routeGroup?.dateRangeEnd ?? start;
-  if (!start) return "-";
-  return start === end ? start : `${start} ~ ${end}`;
 }
 
 function getRouteDeleteKey(route) {
@@ -207,7 +192,8 @@ function getRouteChildRows(routeRows, routeGroupDeleteKey) {
 }
 
 export function getExpandedRouteDeleteKeys(routeRows, checkedDeleteKeys) {
-  const checkedDeleteKeySet = new Set(checkedDeleteKeys);
+  const allowedDeleteKeys = new Set(routeRows.filter((row) => row.isDeletable !== false).map((row) => row.deleteKey).filter(Boolean));
+  const checkedDeleteKeySet = new Set(checkedDeleteKeys.filter((key) => allowedDeleteKeys.has(key)));
 
   for (const routeRow of routeRows) {
     if (routeRow.routeGroupDeleteKey && checkedDeleteKeySet.has(routeRow.routeGroupDeleteKey)) {
@@ -221,7 +207,7 @@ export function getExpandedRouteDeleteKeys(routeRows, checkedDeleteKeys) {
 export function getPrimaryRouteSelectionKeys(routeRows) {
   const visibleDeleteKeySet = new Set(routeRows.map((routeRow) => routeRow.deleteKey).filter(Boolean));
   return routeRows
-    .filter((routeRow) => routeRow.deleteKey && !(routeRow.routeGroupDeleteKey && visibleDeleteKeySet.has(routeRow.routeGroupDeleteKey)))
+    .filter((routeRow) => routeRow.isDeletable !== false && routeRow.deleteKey && !(routeRow.routeGroupDeleteKey && visibleDeleteKeySet.has(routeRow.routeGroupDeleteKey)))
     .map((routeRow) => routeRow.deleteKey);
 }
 
@@ -236,6 +222,7 @@ export function getRouteDeletePayloadKeys(routeRows, checkedDeleteKeys) {
 
   return Array.from(checkedDeleteKeySet).filter((deleteKey) => {
     const routeRow = routeRowByDeleteKey.get(deleteKey);
+    if (!routeRow || routeRow.isDeletable === false) return false;
     return !(routeRow?.routeGroupDeleteKey && checkedGroupDeleteKeySet.has(routeRow.routeGroupDeleteKey));
   });
 }
@@ -324,6 +311,11 @@ function buildRouteChildRows(
   });
 }
 
+export function getGroupsWithoutRoutes(routeGroups = []) {
+  return routeGroups.filter((group) => group?.id && getVisibleRouteGroupChildren(group).length === 0)
+    .map((group) => ({ id: group.id, name: group.name || group.id, href: routeGroupPath(group.id) }));
+}
+
 export function buildRouteRows(routePlans, routeGroups = []) {
   const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
   const routeGroupEntries = safeRouteGroups.map((routeGroup, index) => {
@@ -338,7 +330,6 @@ export function buildRouteRows(routePlans, routeGroups = []) {
       groupSummary,
       index,
       routeGroup,
-      routeMetrics: readRouteGroupMetrics(children),
       totalOrders,
     };
   });
@@ -352,35 +343,7 @@ export function buildRouteRows(routePlans, routeGroups = []) {
         return !childRoutePlanIds.has(routePlan.id) && !(routeGroupId && routeGroupIds.has(routeGroupId));
       })
     : [];
-  const routeGroupRows = routeGroupEntries.map(({ childRows, groupSummary, routeGroup, routeMetrics, totalOrders }) => {
-    return {
-      id: routeGroup.id,
-      rowKey: `routeGroup:${routeGroup.id}`,
-      routeGroupId: routeGroup.id,
-      groupSummary,
-      href: routeGroupPath(routeGroup.id),
-      isClickable: true,
-      isDeletable: true,
-      isRouteGroup: true,
-      isSummaryRoute: childRows.length === 0,
-      deleteKey: getRouteDeleteKey({ ...routeGroup, isRouteGroup: true }),
-      route: routeGroup.name ?? routeGroup.id,
-      status: routeGroup.displayStatus ?? routeGroup.status ?? "DRAFT",
-      orders: totalOrders,
-      coordinates: "-",
-      delivered: 0,
-      attempted: 0,
-      missingCoordinates: 0,
-      date: formatRouteGroupDate(routeGroup),
-      deliveryArea: "-",
-      driver: "-",
-      driverId: null,
-      driveTimeSeconds: routeMetrics.durationSeconds ?? null,
-      distanceMeters: routeMetrics.distanceMeters ?? null,
-    };
-  });
-
-  if (standaloneRoutePlans.length === 0 && routeGroupRows.length === 0) {
+  if (standaloneRoutePlans.length === 0 && routeGroupEntries.every(({ childRows }) => childRows.length === 0)) {
     return [
       {
         id: "empty-route-plans",
@@ -398,7 +361,6 @@ export function buildRouteRows(routePlans, routeGroups = []) {
       },
     ];
   }
-
   const routePlanRows = standaloneRoutePlans.map((routePlan) => {
     const routeMetrics = readRouteMetrics(routePlan);
     const stopsCount = routePlan.stopsCount ?? 0;
@@ -436,7 +398,7 @@ export function buildRouteRows(routePlans, routeGroups = []) {
   const routeGroupBundles = routeGroupEntries.map(({ childRows, index, routeGroup }) => ({
     createdAtMs: getRouteCreatedAtMs(routeGroup),
     index,
-    rows: [routeGroupRows[index], ...childRows],
+    rows: childRows,
   }));
   const routePlanBundles = routePlanRows.map((routeRow, index) => ({
     createdAtMs: getRouteCreatedAtMs(standaloneRoutePlans[index]),

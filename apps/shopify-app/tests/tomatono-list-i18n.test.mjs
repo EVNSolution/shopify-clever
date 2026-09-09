@@ -108,6 +108,6 @@ test("affected Routes list labels use the app language without adding a Dispatch
   assert.match(routesPageSource, /const routeGroupById = new Map\(routeGroups\.map/);
   assert.match(routesPageSource, /function formatLocalizedRouteGroupSummary\(language, route, routeGroupById\)/);
   assert.match(routesPageSource, /formatLocalizedRouteGroupSummary\(language, route, routeGroupById\)/);
-  assert.match(routesPageSource, /translate\(language, "routes\.group\.open", \{ name: route\.route \}\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.group\.withoutRoutes", \{ count: groupsWithoutRoutes.length \}\)/);
   assert.doesNotMatch(routesPageSource, />Dispatch</);
 });
