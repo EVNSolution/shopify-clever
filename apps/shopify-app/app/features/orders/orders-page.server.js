@@ -14,7 +14,9 @@ import {
 } from "../delivery/orders.server";
 import { deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
 import {
+  buildCreateRoutePlanBatchPayload,
   buildCreateRoutePlanPayload,
+  createDeliveryRoutePlanBatch,
   DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
   fetchDeliveryRoutePlans,
 } from "../delivery/route-plans.server";
@@ -121,12 +123,6 @@ function getDeliveryOnlyShopTimeZoneData() {
 function logDevPerformanceMetric(name, metric) {
   if (!PERF_CAPTURE_ENABLED) return;
   logStructuredMetric(name, metric);
-}
-
-function getFirstRouteGroupRoutePlan(routeGroup) {
-  const firstChild = routeGroup?.children?.find(getRouteGroupChildRoutePlanId);
-  if (!firstChild) return null;
-  return firstChild.routePlan ?? { id: getRouteGroupChildRoutePlanId(firstChild) };
 }
 
 export const action = async ({ request }) => {
@@ -521,27 +517,41 @@ async function handleOrdersAction(request) {
     };
   }
 
-  const routePlanPayload = buildCreateRoutePlanPayload({
+  if (!["createRouteGroup", "createRoutePlan"].includes(intent)) {
+    return { errors: [{ message: "Unsupported route creation intent." }] };
+  }
+
+  const routePlanPayloadInput = {
     departureLocation: departureLocationData.departureLocation,
     plannedOrders,
     routeName,
     routeScope,
-  });
+  };
+  const routePlanPayload = intent === "createRouteGroup"
+    ? buildCreateRoutePlanPayload(routePlanPayloadInput)
+    : null;
 
   const createRoutePlanStartedAt = getSafePerformanceNow();
-  const { routeGroup, errors: routeGroupErrors } = await createDeliveryRouteGroup(
-    request,
-    buildCreateRouteGroupPayload({
-      depot: routePlanPayload.depot,
-      plannedOrders,
-      routeName: routePlanPayload.name,
-      routeScope,
-    }),
-    { sessionToken: shopifySessionToken },
-  );
+  const creationResult = intent === "createRoutePlan"
+    ? await createDeliveryRoutePlanBatch(
+        request,
+        buildCreateRoutePlanBatchPayload(routePlanPayloadInput),
+        { sessionToken: shopifySessionToken },
+      )
+    : await createDeliveryRouteGroup(
+        request,
+        buildCreateRouteGroupPayload({
+          depot: routePlanPayload.depot,
+          plannedOrders,
+          routeName: routePlanPayload.name,
+          routeScope,
+        }),
+        { sessionToken: shopifySessionToken },
+      );
 
-  const routePlan = getFirstRouteGroupRoutePlan(routeGroup);
-  const routePlanErrors = routeGroupErrors ?? [];
+  const routeGroup = creationResult.routeGroup ?? null;
+  const routePlan = creationResult.routePlan ?? null;
+  const routePlanErrors = creationResult.errors ?? [];
   createTimings.createRoutePlanMs = roundPerfDuration(getSafePerformanceNow() - createRoutePlanStartedAt);
   logDevPerformanceMetric("orders.create_route.action", {
     ...createTimings,
@@ -554,12 +564,18 @@ async function handleOrdersAction(request) {
     errorCount: routePlanErrors.length,
   });
 
-  if (routeGroup?.id) {
-    return { routePlan, routeGroup, errors: [] };
-  }
+  if (intent === "createRoutePlan" && routePlan?.id) return { routePlan, errors: [] };
+  if (intent === "createRouteGroup" && routeGroup?.id) return { routeGroup, errors: [] };
 
   return {
-    errors: routePlanErrors,
+    errors: routePlanErrors.length > 0
+      ? routePlanErrors
+      : [{
+          code: intent === "createRoutePlan" ? "CREATED_ROUTE_PLAN_MISSING" : "CREATED_ROUTE_GROUP_MISSING",
+          message: intent === "createRoutePlan"
+            ? "The route response did not include the created route."
+            : "The route group response did not include the created group.",
+        }],
   };
 }
 

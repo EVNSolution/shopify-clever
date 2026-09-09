@@ -98,6 +98,12 @@ import {
   textOrUndefined,
 } from "./orders-page.shared";
 
+export function getCreatedRouteDestination(intent, routePlan, routeGroup) {
+  if (intent === "createRoutePlan" && routePlan?.id) return routePlanPath(routePlan.id);
+  if (intent === "createRouteGroup" && routeGroup?.id) return routeGroupPath(routeGroup.id);
+  return null;
+}
+
 function submitOrdersResourceRequest(submit, resource, filterSearchParams, options) {
   const request = buildOrdersResourceRequest(resource, filterSearchParams, options);
   submit(request.payload, {
@@ -3262,7 +3268,6 @@ function OrdersPageContent({ loaderData }) {
     actionErrors,
     { errors },
   ], { context: "orders_page" });
-  const isCreatingRoute = routePlanFetcher.state !== "idle";
   const isDeletingInventory = inventoryDeleteFetcher.state !== "idle";
   const isBulkUpdatingOrders = orderBulkUpdateFetcher.state !== "idle";
   const [ordersRefreshPhase, setOrdersRefreshPhase] = useState("idle");
@@ -3293,6 +3298,8 @@ function OrdersPageContent({ loaderData }) {
   const [activeOrderDataOrderId, setActiveOrderDataOrderId] = useState(null);
   const [orderDataDraft, setOrderDataDraft] = useState(() => getOrderDataDraft(null));
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
+  const [routeCreatePending, setRouteCreatePending] = useState(false);
+  const isCreatingRoute = routeCreatePending || routePlanFetcher.state !== "idle";
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
   const [routeAddModalOpen, setRouteAddModalOpen] = useState(false);
   const [selectedRouteGroupId, setSelectedRouteGroupId] = useState(addToRouteGroupId);
@@ -3321,6 +3328,8 @@ function OrdersPageContent({ loaderData }) {
   const pendingOrdersViewNavigationRef = useRef(null);
   const initialRenderStartedAtRef = useRef(getSafePerformanceNow());
   const submittedRouteRequestRef = useRef(false);
+  const submittedRouteIntentRef = useRef(null);
+  const routeCreatePendingRef = useRef(false);
   const orderSyncSubmittedRef = useRef(false);
   const activeOrdersRefreshRequestIdRef = useRef(null);
   const activeOrdersReconciliationRef = useRef(null);
@@ -4015,7 +4024,7 @@ function OrdersPageContent({ loaderData }) {
       snapshotSelectableTableOrders.every((order) => !selectionExcludedOrderIdSet.has(order.orderId))
     : selectableTableOrders.length > 0 &&
       selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
-  const createRouteDisabled = plannedOrders.length === 0 || routePlanFetcher.state !== "idle";
+  const createRouteDisabled = plannedOrders.length === 0 || isCreatingRoute;
   const addToRouteDisabled = createRouteDisabled || safeRouteGroups.length === 0;
 
   useEffect(() => {
@@ -4850,17 +4859,24 @@ function OrdersPageContent({ loaderData }) {
     setRouteAddModalOpen(true);
   };
 
-  const handleCreateRoute = async () => {
-    if (plannedOrderIds.length === 0 || isCreatingRoute) return;
+  const submitNewRoute = async (intent) => {
+    if (
+      plannedOrderIds.length === 0
+      || routeCreatePendingRef.current
+      || routePlanFetcher.state !== "idle"
+    ) return;
 
+    routeCreatePendingRef.current = true;
+    setRouteCreatePending(true);
     try {
       setCreateRouteClientError(null);
       const sessionToken = await shopify.idToken();
       submittedRouteRequestRef.current = true;
+      submittedRouteIntentRef.current = intent;
 
       const routeDraftScope = buildRouteScopeFromOrders(plannedOrders);
       const formData = new FormData();
-      formData.set("_intent", "createRoutePlan");
+      formData.set("_intent", intent);
       formData.set("plannedOrderIds", JSON.stringify(plannedOrders.map((order) => order.id)));
       formData.set("routeScope", JSON.stringify(routeDraftScope));
       formData.set("routeName", routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE);
@@ -4869,11 +4885,18 @@ function OrdersPageContent({ loaderData }) {
       routePlanFetcher.submit(formData, { method: "post" });
     } catch {
       submittedRouteRequestRef.current = false;
+      submittedRouteIntentRef.current = null;
+      routeCreatePendingRef.current = false;
+      setRouteCreatePending(false);
       setCreateRouteClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
     }
   };
+
+  const handleCreateRoute = () => submitNewRoute("createRoutePlan");
+
+  const handleCreateRouteGroup = () => submitNewRoute("createRouteGroup");
 
   const handleAddToRoute = async () => {
     if (addToRouteDisabled || !selectedRouteGroup?.id) return;
@@ -4882,6 +4905,7 @@ function OrdersPageContent({ loaderData }) {
       setCreateRouteClientError(null);
       const sessionToken = await shopify.idToken();
       submittedRouteRequestRef.current = true;
+      submittedRouteIntentRef.current = "addOrdersToRouteGroup";
 
       const formData = new FormData();
       formData.set("_intent", "addOrdersToRouteGroup");
@@ -4896,6 +4920,7 @@ function OrdersPageContent({ loaderData }) {
       routePlanFetcher.submit(formData, { method: "post" });
     } catch {
       submittedRouteRequestRef.current = false;
+      submittedRouteIntentRef.current = null;
       setCreateRouteClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
@@ -5159,12 +5184,60 @@ function OrdersPageContent({ loaderData }) {
   useEffect(() => {
     const createdRouteGroup = routePlanFetcher.data?.routeGroup;
     const createdRoutePlan = routePlanFetcher.data?.routePlan;
+    const submittedRouteIntent = submittedRouteIntentRef.current;
 
     if (!submittedRouteRequestRef.current) return;
-    if ((routePlanFetcher.data?.errors ?? []).length > 0) return;
+    if ((routePlanFetcher.data?.errors ?? []).length > 0) {
+      submittedRouteRequestRef.current = false;
+      submittedRouteIntentRef.current = null;
+      if (["createRoutePlan", "createRouteGroup"].includes(submittedRouteIntent)) {
+        routeCreatePendingRef.current = false;
+        setRouteCreatePending(false);
+      }
+      const errorCode = routePlanFetcher.data.errors[0]?.code;
+      if (errorCode === "ROUTE_PLAN_BATCH_INVALID") {
+        setCreateRouteClientError(translate(language, "orders.routeActions.invalidRouteSelection"));
+      } else if (errorCode === "NOT_IMPLEMENTED") {
+        setCreateRouteClientError(translate(language, "orders.routeActions.routeCreationUnavailable"));
+      } else if (errorCode === "CREATED_ROUTE_PLAN_MISSING") {
+        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedRoute"));
+      } else if (errorCode === "CREATED_ROUTE_GROUP_MISSING") {
+        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedGroup"));
+      }
+      return;
+    }
+
+    if (submittedRouteIntent === "createRoutePlan") {
+      submittedRouteRequestRef.current = false;
+      submittedRouteIntentRef.current = null;
+      routeCreatePendingRef.current = false;
+      setRouteCreatePending(false);
+      const destination = getCreatedRouteDestination(submittedRouteIntent, createdRoutePlan, createdRouteGroup);
+      if (!destination) {
+        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedRoute"));
+        return;
+      }
+      navigate(destination);
+      return;
+    }
+
+    if (submittedRouteIntent === "createRouteGroup") {
+      submittedRouteRequestRef.current = false;
+      submittedRouteIntentRef.current = null;
+      routeCreatePendingRef.current = false;
+      setRouteCreatePending(false);
+      const destination = getCreatedRouteDestination(submittedRouteIntent, createdRoutePlan, createdRouteGroup);
+      if (!destination) {
+        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedGroup"));
+        return;
+      }
+      navigate(destination);
+      return;
+    }
 
     if (createdRouteGroup?.id) {
       submittedRouteRequestRef.current = false;
+      submittedRouteIntentRef.current = null;
       const destination = addToRoutePlanId && createdRouteGroup.id === addToRouteGroupId
         ? routeGroupChildPath(createdRouteGroup.id, addToRoutePlanId)
         : routeGroupPath(createdRouteGroup.id);
@@ -5175,8 +5248,9 @@ function OrdersPageContent({ loaderData }) {
     if (!createdRoutePlan?.id) return;
 
     submittedRouteRequestRef.current = false;
+    submittedRouteIntentRef.current = null;
     navigate(routePlanPath(createdRoutePlan.id));
-  }, [addToRouteGroupId, addToRoutePlanId, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
+  }, [addToRouteGroupId, addToRoutePlanId, language, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
 
   useEffect(() => {
     if (inventoryDeleteFetcher.state !== "idle" || !inventoryDeleteFetcher.data) return;
@@ -5734,7 +5808,7 @@ function OrdersPageContent({ loaderData }) {
                   aria-expanded={routeAssignActionsOpen}
                   disabled={createRouteDisabled}
                   onClick={handleToggleRouteAssignActions}
-                >Assign</button>
+                >{translate(language, "orders.routeActions.assign")}</button>
               </div>
             </div>
             <div
@@ -5754,7 +5828,7 @@ function OrdersPageContent({ loaderData }) {
                 }
                 disabled={addToRouteDisabled}
                 onClick={handleOpenAddRoutePreview}
-              >Add to route</button>
+              >{translate(language, "orders.routeActions.addToRoute")}</button>
               <button
                 type="button"
                 style={
@@ -5764,7 +5838,17 @@ function OrdersPageContent({ loaderData }) {
                 }
                 disabled={createRouteDisabled}
                 onClick={handleCreateRoute}
-              >Create route</button>
+              >{translate(language, "orders.routeActions.createRoute")}</button>
+              <button
+                type="button"
+                style={
+                  createRouteDisabled
+                    ? disabledRouteAssignActionButtonStyle
+                    : routeAssignActionButtonStyle
+                }
+                disabled={createRouteDisabled}
+                onClick={handleCreateRouteGroup}
+              >{translate(language, "orders.routeActions.createGroupRoute")}</button>
             </div>
           </div>
 

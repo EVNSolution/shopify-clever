@@ -131,6 +131,23 @@ export function buildCreateRoutePlanPayload({
   };
 }
 
+export function buildCreateRoutePlanBatchPayload({
+  departureLocation,
+  now = new Date(),
+  plannedOrders,
+  routeName,
+  routeScope,
+}) {
+  const routeDraftScope = buildRouteScopeFromOrders(plannedOrders) ?? routeScope;
+
+  return {
+    name: textOrNull(routeName) ?? "CLEVER route draft",
+    planDate: routeDraftScope?.deliveryDate ?? now.toISOString().slice(0, 10),
+    depot: mapDepartureLocationToDepot(departureLocation),
+    orderIds: plannedOrders.map((order) => order.orderId),
+  };
+}
+
 export async function createDeliveryRoutePlan(request, payload, options = {}) {
   logRoutePlanLifecycle("delivery.route_plan.create.start", {
     orderCount: Array.isArray(payload?.orders) ? payload.orders.length : 0,
@@ -152,6 +169,33 @@ export async function createDeliveryRoutePlan(request, payload, options = {}) {
     routeName: routePlan?.name ?? null,
     status: routePlan?.status ?? null,
     stopCount: routePlan?.stopsCount ?? routePlan?.stops?.length ?? null,
+  });
+
+  return {
+    routePlan,
+    errors: result.errors,
+  };
+}
+
+export async function createDeliveryRoutePlanBatch(request, payload, options = {}) {
+  logRoutePlanLifecycle("delivery.route_plan.batch_create.start", {
+    orderCount: Array.isArray(payload?.orderIds) ? payload.orderIds.length : 0,
+    planDate: payload?.planDate ?? null,
+    routeName: payload?.name ?? null,
+  });
+
+  const result = await deliveryApiRequest(request, "/admin/route-plans", {
+    body: JSON.stringify(payload),
+    fetch: options.fetch,
+    method: "POST",
+    sessionToken: options.sessionToken,
+  });
+  const routePlan = result.data?.routePlan ?? null;
+
+  logRoutePlanLifecycle("delivery.route_plan.batch_create.done", {
+    errorCount: result.errors.length,
+    routePlanId: routePlan?.id ?? null,
+    stopCount: routePlan?.stopsCount ?? null,
   });
 
   return {

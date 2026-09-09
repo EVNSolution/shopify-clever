@@ -884,10 +884,13 @@ test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop tim
 });
 
 
-test("Orders page creates a childless route group from scoped planned orders", () => {
+test("Orders page separates ordinary batch creation from group creation", () => {
   assert.match(ordersPageSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams \} from "react-router"/);
   assert.match(ordersPageSource, /import \{[\s\S]*buildCreateRoutePlanPayload[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-plans\.server"/);
+  assert.match(ordersPageServerSource, /buildCreateRoutePlanBatchPayload/);
+  assert.match(ordersPageServerSource, /createDeliveryRoutePlanBatch/);
+  assert.doesNotMatch(ordersPageServerSource, /\bcreateDeliveryRoutePlan\(/);
   assert.match(ordersPageSource, /import \{[\s\S]*createDeliveryRouteGroup[\s\S]*\} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-groups\.server"/);
   assert.doesNotMatch(ordersPageSource, /generateDeliveryRouteGroupChildRoutes/);
   assert.match(ordersPageSource, /import \{ buildRouteScopeFromOrders \} from "(?:\.\.\/features\/delivery|\.\.\/delivery)\/route-scope"/);
@@ -898,12 +901,14 @@ test("Orders page creates a childless route group from scoped planned orders", (
   assert.match(ordersPageSource, /const routeName = textOrUndefined\(formData\.get\("routeName"\)\)/);
   assert.match(ordersPageSource, /const shopifySessionToken = formData\.get\("shopifySessionToken"\)/);
   assert.match(ordersPageSource, /route_create_preflight/);
-  assert.match(ordersPageSource, /buildCreateRoutePlanPayload\(\{/);
+  assert.match(ordersPageSource, /buildCreateRoutePlanPayload\(routePlanPayloadInput\)/);
   assert.match(ordersPageSource, /routeName,/);
   assert.match(ordersPageSource, /routeScope,/);
   assert.match(ordersPageSource, /createDeliveryRouteGroup\(\s*request,\s*buildCreateRouteGroupPayload\(\{/s);
-  assert.match(ordersPageSource, /const routePlan = getFirstRouteGroupRoutePlan\(routeGroup\)/);
-  assert.match(ordersPageSource, /return \{ routePlan, routeGroup, errors: \[\] \}/);
+  assert.match(ordersPageServerSource, /const routePlanPayload = intent === "createRouteGroup"\s*\? buildCreateRoutePlanPayload\(routePlanPayloadInput\)\s*:\s*null/);
+  assert.match(ordersPageServerSource, /intent === "createRoutePlan"\s*\? await createDeliveryRoutePlanBatch/);
+  assert.match(ordersPageServerSource, /if \(intent === "createRoutePlan" && routePlan\?\.id\) return \{ routePlan, errors: \[\] \}/);
+  assert.match(ordersPageServerSource, /if \(intent === "createRouteGroup" && routeGroup\?\.id\) return \{ routeGroup, errors: \[\] \}/);
   assert.match(ordersPageSource, /const routePlanFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /const shopify = useAppBridge\(\)/);
   assert.match(ordersPageSource, /const navigate = useNavigate\(\)/);
@@ -916,20 +921,22 @@ test("Orders page creates a childless route group from scoped planned orders", (
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /const createdRouteGroup = routePlanFetcher\.data\?\.routeGroup/);
   assert.match(ordersPageSource, /navigate\(destination\)/);
-  assert.match(ordersPageSource, /navigate\(routePlanPath\(createdRoutePlan\.id\)\)/);
-  assert.match(ordersPageSource, />Assign<\/button>/);
-  assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);
+  assert.match(ordersPageSource, /getCreatedRouteDestination\(submittedRouteIntent, createdRoutePlan, createdRouteGroup\)/);
+  assert.match(ordersPageSource, /translate\(language, "orders\.routeActions\.assign"\)/);
+  assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| isCreatingRoute/);
   assert.match(ordersPageSource, /disabled=\{createRouteDisabled\}/);
   assert.doesNotMatch(ordersPageSource, /createRouteDraftSearchParams/);
   assert.doesNotMatch(ordersPageSource, /return redirect/);
 });
 
 
-test("Orders page keeps the UI label as route creation while using route groups underneath", () => {
+test("Orders page exposes explicit ordinary and group route actions", () => {
   assert.match(ordersPageSource, /createDeliveryRouteGroup/);
   assert.match(ordersPageSource, /buildCreateRouteGroupPayload/);
-  assert.doesNotMatch(ordersPageSource, />Create group<\/button>/);
-  assert.match(ordersPageSource, />Create route<\/button>/);
+  assert.match(ordersPageSource, /const handleCreateRoute = \(\) => submitNewRoute\("createRoutePlan"\)/);
+  assert.match(ordersPageSource, /const handleCreateRouteGroup = \(\) => submitNewRoute\("createRouteGroup"\)/);
+  assert.match(ordersPageSource, /translate\(language, "orders\.routeActions\.createRoute"\)/);
+  assert.match(ordersPageSource, /translate\(language, "orders\.routeActions\.createGroupRoute"\)/);
 });
 
 test("Orders page adds planned orders to the selected route child", () => {
@@ -1236,7 +1243,7 @@ test("Orders owns global Shopify order update and safe route refresh", () => {
 
 test("Orders route creation submits the planned draft without client ready-state filtering", () => {
   assert.doesNotMatch(ordersPageSource, /readyPlannedOrders/);
-  assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| routePlanFetcher\.state !== "idle"/);
+  assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| isCreatingRoute/);
   assert.match(ordersPageSource, /JSON\.stringify\(plannedOrders\.map\(\(order\) => order\.id\)\)/);
   assert.doesNotMatch(ordersPageSource, /History \/ All Orders scope는 조회 전용입니다/);
   assert.doesNotMatch(ordersPageSource, /ready 상태의 주문만/);
@@ -1260,7 +1267,7 @@ test("Orders route creation syncs only selected planned orders during preflight"
 test("Orders route creation revalidates only that selected orders still resolve after preflight sync", () => {
   assert.match(ordersPageSource, /const plannedOrders = plannedOrderIds\s*\.map\(\(orderId\) => orderById\.get\(orderId\)\)\s*\.filter\(Boolean\)/);
   assert.match(ordersPageSource, /if \(plannedOrders\.length !== plannedOrderIds\.length\)/);
-  assert.match(ordersPageSource, /buildCreateRoutePlanPayload\(\{/);
+  assert.match(ordersPageSource, /buildCreateRoutePlanBatchPayload\(routePlanPayloadInput\)/);
   assert.doesNotMatch(ordersPageSource, /alreadyPlannedOrders/);
   assert.doesNotMatch(ordersPageSource, /expiredDeliveryDateOrders/);
   assert.doesNotMatch(ordersPageSource, /nonPlanningScopeOrders/);
@@ -1599,13 +1606,13 @@ test("Orders side card shows a compact route summary instead of a route-plan ord
   assert.doesNotMatch(ordersPageSource, /plannedOrders\.map\(\(order, orderIndex\) =>/);
   assert.doesNotMatch(ordersPageSource, /aria-label=\{`Remove \${order\.name} from route plan`\}/);
   assert.doesNotMatch(ordersPageSource, />Remove<\/button>/);
-  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Route plan<\/s-heading>[\s\S]*>Assign<\/button>[\s\S]*>Add to route<\/button>[\s\S]*>Create route<\/button>[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
+  assert.match(ordersPageSource, /className="order-route-plan"[\s\S]*>Route plan<\/s-heading>[\s\S]*orders\.routeActions\.assign[\s\S]*orders\.routeActions\.addToRoute[\s\S]*orders\.routeActions\.createRoute[\s\S]*orders\.routeActions\.createGroupRoute[\s\S]*>Order summary<\/s-heading>[\s\S]*>Clear<\/button>/);
   assert.match(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}/);
-  assert.match(ordersPageSource, />Assign<\/button>[\s\S]*>Add to route<\/button>[\s\S]*>Create route<\/button>/);
+  assert.match(ordersPageSource, /orders\.routeActions\.assign[\s\S]*orders\.routeActions\.addToRoute[\s\S]*orders\.routeActions\.createRoute[\s\S]*orders\.routeActions\.createGroupRoute/);
   assert.doesNotMatch(ordersPageSource, /aria-expanded=\{routeAssignActionsOpen\}[\s\S]{0,1200}aria-label="Route to add orders"/);
   assert.match(ordersPageSource, /aria-label="Add orders to route preview"[\s\S]*aria-label="Selected route snapshot"[\s\S]*>Add<\/button>/);
   assert.match(ordersPageSource, />Route plan<\/s-heading>[\s\S]*>Order summary<\/s-heading>/);
-  assert.doesNotMatch(ordersPageSource, />Inventory<\/s-heading>[\s\S]*>Assign<\/button>/);
+  assert.doesNotMatch(ordersPageSource, />Inventory<\/s-heading>[\s\S]*orders\.routeActions\.assign/);
   assert.doesNotMatch(ordersPageSource, />Inventory plan<\/s-heading>/);
   assert.doesNotMatch(ordersPageSource, />Assign to inventory<\/button>/);
   assert.doesNotMatch(ordersPageSource, />Create<\/button>[\s\S]{0,80}disabled=\{true\}/);

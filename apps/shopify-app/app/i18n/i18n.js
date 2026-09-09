@@ -7,6 +7,8 @@ export const SUPPORTED_LANGUAGES = [
 
 const TRANSLATIONS = {
   en: {
+    "orders.routeActions.invalidRouteSelection": "The selected orders cannot be used to create this route. Refresh Orders and try again.",
+    "orders.routeActions.routeCreationUnavailable": "Route creation is not available on the connected server yet.",
     "routes.list.actions": "Actions",
     "routes.group.withoutRoutes": "Groups without routes ({count})",
     "routes.group.choose": "Choose a group",
@@ -14,6 +16,12 @@ const TRANSLATIONS = {
     "routes.group.allRoutes": "All routes",
     "routes.group.working": "Working…",
     "routes.group.addEmpty": "Add Empty Route",
+    "orders.routeActions.assign": "Assign",
+    "orders.routeActions.addToRoute": "Add to route",
+    "orders.routeActions.createRoute": "Create route",
+    "orders.routeActions.createGroupRoute": "Create group route",
+    "orders.routeActions.missingCreatedRoute": "The route response did not include the created route. Review Routes before retrying.",
+    "orders.routeActions.missingCreatedGroup": "The route group response did not include the created group. Review Routes before retrying.",
     "routes.status.ready": "Ready",
     "routes.status.in_progress": "In progress",
     "routes.status.completed": "Completed",
@@ -123,6 +131,8 @@ const TRANSLATIONS = {
     "settings.errors.unableToSave": "Unable to save settings.",
   },
   ko: {
+    "orders.routeActions.invalidRouteSelection": "선택한 주문으로 경로를 만들 수 없습니다. Orders를 새로고침한 뒤 다시 시도하세요.",
+    "orders.routeActions.routeCreationUnavailable": "연결된 서버에서 아직 일반 경로 생성을 사용할 수 없습니다.",
     "routes.list.actions": "작업",
     "routes.group.withoutRoutes": "경로 없는 그룹 ({count})",
     "routes.group.choose": "그룹 선택",
@@ -130,6 +140,12 @@ const TRANSLATIONS = {
     "routes.group.allRoutes": "전체 경로",
     "routes.group.working": "처리 중…",
     "routes.group.addEmpty": "빈 경로 추가",
+    "orders.routeActions.assign": "배정",
+    "orders.routeActions.addToRoute": "기존 경로에 추가",
+    "orders.routeActions.createRoute": "일반 경로 생성",
+    "orders.routeActions.createGroupRoute": "그룹 경로 생성",
+    "orders.routeActions.missingCreatedRoute": "응답에 생성된 경로가 없습니다. 다시 시도하기 전에 Routes에서 생성 결과를 확인하세요.",
+    "orders.routeActions.missingCreatedGroup": "응답에 생성된 그룹 경로가 없습니다. 다시 시도하기 전에 Routes에서 생성 결과를 확인하세요.",
     "routes.status.ready": "준비됨",
     "routes.status.in_progress": "진행 중",
     "routes.status.completed": "완료",
