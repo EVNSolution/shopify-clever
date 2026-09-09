@@ -1541,7 +1541,7 @@ const customerEmailDialogStyle = {
   maxWidth: "calc(100vw - 32px)",
   overflow: "hidden",
   padding: 0,
-  width: "680px",
+  width: "620px",
 };
 
 const customerEmailDialogHeaderStyle = {
@@ -1682,7 +1682,7 @@ const routeAddOrderEmptyStyle = {
 const customerEmailDialogGridStyle = {
   display: "grid",
   gap: "12px",
-  gridTemplateColumns: "repeat(auto-fit, minmax(min(320px, 100%), 1fr))",
+  gridTemplateColumns: "minmax(0, 1fr)",
 };
 
 const customerEmailDialogEmptyGridStyle = {
@@ -3444,6 +3444,11 @@ export default function RouteDetailPage() {
   const copyRouteGroupRequestBusy = copyRouteGroupBusy || copyRouteGroupDialogState.isSubmitting;
   const refreshRouteOrdersBusy = routeGroupActionBusy && routeGroupActionIntent === "refreshRouteOrders";
   const canRefreshRouteOrders = Boolean(effectiveRoutePlan?.id) || siblingRouteRows.length > 0;
+  const canDispatchRoute = Boolean(
+    effectiveRoutePlan?.id
+    && routeDriverId
+    && !["CANCELLED", "COMPLETED"].includes(routeExecutionStatus),
+  );
   const mapContainerRef = useRef(null);
   const mapRef = useRef(null);
   const routeMapRef = mapRef;
@@ -5099,6 +5104,8 @@ export default function RouteDetailPage() {
     }
   };
 
+  const handleDispatchRoute = () => submitRouteAction("dispatchRoute");
+
   const openCustomerEmailDialog = () => {
     customerEmailRequestRef.current = null;
     setCustomerEmailSignal(getCustomerEmailDefaultSignal(routeExecutionStatus));
@@ -5719,6 +5726,15 @@ export default function RouteDetailPage() {
     const skippedRoutes = routeActionFetcher.data?.skippedRoutes?.length ?? 0;
     const skippedMessage = skippedRoutes > 0 ? `; ${skippedRoutes} terminal routes skipped` : "";
     shopify.toast.show(`${updatedOrders} orders updated across ${refreshedRoutes} routes${skippedMessage}`);
+  }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "dispatchRoute") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+    revalidator.revalidate();
+    shopify.toast.show("Route dispatched to driver");
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
@@ -6619,6 +6635,17 @@ export default function RouteDetailPage() {
                 </div>
               ) : null}
               <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
+                {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
+                  <button
+                    disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
+                    onClick={handleDispatchRoute}
+                    style={canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title={routeDriverId
+                      ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
+                      : "Assign a driver before dispatching this route."}
+                    type="button"
+                  >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
+                ) : null}
                 <button
                   disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
                   onClick={handleRefreshRouteOrders}

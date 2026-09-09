@@ -22,6 +22,7 @@ import {
   clearDeliveryApiResponseCache,
   deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
+  publishDeliveryRoutePlan,
   refreshDeliveryRoutePlanOrderData,
   transitionDeliveryRoutePlanStop,
   updateDeliveryRoutePlanStop,
@@ -613,6 +614,10 @@ export const routeDetailAction = async ({ params, request }) => {
       return deleteDeliveryRouteGroup(request, routeGroupIdFromParams, { sessionToken: shopifySessionToken });
     }
     return deleteDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
+  }
+
+  if (intent === "dispatchRoute") {
+    return publishDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
   }
 
   if (intent === "copyRouteGroup") {

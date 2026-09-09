@@ -26,6 +26,15 @@ const ordersPageServerSource = readFileSync(
   join(root, "app/features/orders/orders-page.server.js"),
   "utf8",
 );
+
+test("orders keep filters behind one add-filter entry and show order amount by default", () => {
+  assert.match(ordersPageSource, /<s-button commandFor="orders-filter-popover">[\s\S]*Add filter/);
+  assert.match(ordersPageSource, /<s-popover id="orders-filter-popover" inlineSize="600px">/);
+  assert.match(ordersPageSource, /<s-box accessibilityLabel="Order filters" padding="small">/);
+  assert.match(ordersPageSource, /aria-label="Order filters"/);
+  assert.match(ordersPageSource, /\{ key: "totalPriceAmount", label: "Amount" \}/);
+  assert.match(ordersPageSource, /formatOrderTotal\(order\)/);
+});
 const rootDocumentSource = readFileSync(join(root, "app/root.jsx"), "utf8");
 const shopifyOrdersSource = readFileSync(
   join(root, "app/features/orders/shopify-orders.server.js"),

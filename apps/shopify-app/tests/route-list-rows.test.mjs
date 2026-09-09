@@ -80,6 +80,52 @@ test("route list reveals a single child after a driver is assigned", () => {
   assert.equal(rows[1].driver, "Driver One");
 });
 
+test("route child rows expose actual delivered counts and order totals", () => {
+  const rows = buildRouteRows([], [{
+    id: "group-1",
+    children: [{
+      routePlanId: "route-child-1",
+      routePlan: {
+        id: "route-child-1",
+        etaRange: { startAt: "2026-09-09T14:00:00.000Z", endAt: "2026-09-09T15:00:00.000Z" },
+        totalAmount: { amount: "40.00", currencyCode: "CAD" },
+        stopsCount: 3,
+        stops: [
+          { deliveryStopStatus: "DELIVERED", totalPriceAmount: "21.50", currencyCode: "CAD" },
+          { deliveryStopStatus: "FAILED", totalPriceAmount: "10.00", currencyCode: "CAD" },
+          { deliveryStopStatus: "DELIVERED", totalPriceAmount: "8.50", currencyCode: "CAD" },
+        ],
+      },
+    }],
+  }]);
+  const child = rows.find((row) => row.id === "route-child-1");
+
+  assert.equal(child.delivered, 2);
+  assert.equal(child.attempted, 3);
+  assert.equal(child.totalAmount, 40);
+  assert.equal(child.currencyCode, "CAD");
+  assert.deepEqual(child.etaRange, {
+    startAt: "2026-09-09T14:00:00.000Z",
+    endAt: "2026-09-09T15:00:00.000Z",
+  });
+});
+
+test("route list never sums mixed or currency-less fallback amounts", () => {
+  const mixed = buildRouteRows([{ id: "mixed", stops: [
+    { totalPriceAmount: "10.00", currencyCode: "CAD" },
+    { totalPriceAmount: "20.00", currencyCode: "USD" },
+  ] }]);
+  const missingCurrency = buildRouteRows([{ id: "missing", stops: [
+    { totalPriceAmount: "10.00", currencyCode: "CAD" },
+    { totalPriceAmount: "20.00" },
+  ] }]);
+
+  assert.equal(mixed[0].totalAmount, null);
+  assert.equal(mixed[0].currencyCode, null);
+  assert.equal(missingCurrency[0].totalAmount, null);
+  assert.equal(missingCurrency[0].currencyCode, null);
+});
+
 test("route list does not show collapsed route group children as standalone routes", () => {
   const rows = buildRouteRows(
     [

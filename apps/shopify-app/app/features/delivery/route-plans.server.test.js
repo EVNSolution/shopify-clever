@@ -14,6 +14,7 @@ import {
   fetchDeliveryRoutePlans,
   getDeliveryApiBaseUrl,
   getShopifySessionBearer,
+  publishDeliveryRoutePlan,
   transitionDeliveryRoutePlanStop,
   updateDeliveryRoutePlanStop,
   updateDeliveryRoutePlanStops,
@@ -21,6 +22,37 @@ import {
   updateDeliveryRoutePlanScheduledStart,
   assignDeliveryRoutePlanDriver,
 } from "./route-plans.server.js";
+
+test("dispatch publishes the route without starting it or sending customer email", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example";
+  const calls = [];
+  try {
+    const result = await publishDeliveryRoutePlan(
+      new Request("https://app.test/app/routes/route-1"),
+      "route-1",
+      {
+        sessionToken: "session-token",
+        fetch: async (url, options) => {
+          calls.push({ url, options });
+          return new Response(JSON.stringify({ data: { status: "PUBLISHED" }, error: null }), {
+            status: 200,
+            headers: { "content-type": "application/json" },
+          });
+        },
+      },
+    );
+
+    assert.equal(calls[0].url, "https://delivery.example/admin/ui/app/api/routes/route-1/publish");
+    assert.equal(calls[0].options.method, "POST");
+    assert.equal(calls[0].options.body, undefined);
+    assert.equal(result.dispatch.status, "PUBLISHED");
+    assert.deepEqual(result.errors, []);
+  } finally {
+    if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
+    else process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  }
+});
 
 test("refreshes route order data and geometry through the delivery Admin API", async () => {
   const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
