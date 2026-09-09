@@ -10,6 +10,7 @@ import {
 } from "../features/delivery/route-helpers";
 import {
   buildRouteRows,
+  getGroupsWithoutRoutes,
   getExpandedRouteDeleteKeys,
   getPrimaryRouteSelectionKeys,
   getRouteDeletePayloadKeys,
@@ -271,25 +272,6 @@ const routeGroupMarkerTooltipArrowStyle = {
   position: "absolute",
   transform: "translateX(-50%) rotate(45deg)",
   width: "8px",
-};
-
-const routeGroupHeaderCellStyle = {
-  ...routeTableCellStyle,
-  background: "#f7f7f7",
-  borderBottom: "1px solid #d6d6d6",
-  padding: "8px 10px",
-};
-
-const routeGroupHeaderContentStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "10px",
-};
-
-const routeGroupHeaderSummaryStyle = {
-  color: "#616161",
-  fontSize: "12px",
-  fontWeight: 500,
 };
 
 const routeActionButtonStyle = {
@@ -676,6 +658,7 @@ export default function RoutesPage() {
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
   const [routeGroupMarkerTooltip, setRouteGroupMarkerTooltip] = useState(null);
   const allRouteRows = buildRouteRows(routePlans, routeGroups);
+  const groupsWithoutRoutes = getGroupsWithoutRoutes(routeGroups);
   const savedNoticeRoutes = getSavedNoticeRouteRows(allRouteRows, location.state?.scheduledNoticeRoutePlanIds);
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
@@ -802,6 +785,21 @@ export default function RoutesPage() {
                 disabled={routeDeleteDisabled}
                 onClick={handleDeleteSelectedRoutes}
               >{translate(language, routeDeleteFetcher.state !== "idle" ? "routes.list.deleting" : "routes.list.delete")}</button>
+              {groupsWithoutRoutes.length > 0 ? (
+                <details style={{ position: "relative" }}>
+                  <summary style={routeActionButtonStyle}>{translate(language, "routes.list.actions")}</summary>
+                  <div style={{ position: "absolute", right: 0, top: "100%", zIndex: 10, background: "white", padding: "12px", border: "1px solid #ddd", minWidth: "220px" }}>
+                    <label>
+                      {translate(language, "routes.group.withoutRoutes", { count: groupsWithoutRoutes.length })}
+                      <select aria-label={translate(language, "routes.group.withoutRoutes", { count: groupsWithoutRoutes.length })}
+                        value="" onChange={(event) => { if (event.target.value) navigate(event.target.value); }}>
+                        <option value="">{translate(language, "routes.group.choose")}</option>
+                        {groupsWithoutRoutes.map((group) => <option key={group.id} value={group.href}>{group.name}</option>)}
+                      </select>
+                    </label>
+                  </div>
+                </details>
+              ) : null}
               <button type="button" style={createRoutesButtonStyle} onClick={handleCreateRoutesClick}>{translate(language, "routes.list.create")}</button>
             </div>
           </div>
@@ -866,33 +864,7 @@ export default function RoutesPage() {
                 </tr>
               </thead>
               <tbody>
-                {routeRows.map((route) => route.isRouteGroup ? (
-                  <tr
-                    key={route.rowKey ?? route.id}
-                    aria-label={translate(language, "routes.group.open", { name: route.route })}
-                    className="route-table-row"
-                    onClick={() => handleRouteRowClick(route)}
-                    onKeyDown={(event) => handleRouteRowKeyDown(event, route)}
-                    role="link"
-                    tabIndex={0}
-                  >
-                    <td colSpan={13} style={routeGroupHeaderCellStyle}>
-                      <span style={routeGroupHeaderContentStyle}>
-                        <input
-                          type="checkbox"
-                          aria-label={`Select ${route.route} for deletion`}
-                          checked={checkedRouteIdSet.has(route.deleteKey)}
-                          onClick={(event) => event.stopPropagation()}
-                          onChange={() => toggleRouteCheck(route)}
-                        />
-                        <strong>{route.route}</strong>
-                        <span style={routeGroupHeaderSummaryStyle}>
-                          {formatLocalizedRouteGroupSummary(language, route, routeGroupById)}
-                        </span>
-                      </span>
-                    </td>
-                  </tr>
-                ) : (
+                {routeRows.map((route) => (
                   <tr
                     key={route.rowKey ?? route.id}
                     aria-label={route.isClickable ? `Open ${route.route} detail` : undefined}

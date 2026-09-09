@@ -4,13 +4,14 @@ import test from "node:test";
 
 import {
   buildRouteRows,
+  getGroupsWithoutRoutes,
   getExpandedRouteDeleteKeys,
   getPrimaryRouteSelectionKeys,
   getRouteDeletePayloadKeys,
   toggleRouteSelection,
 } from "../app/features/delivery/route-list-rows.js";
 
-test("route list shows a created child route immediately below its group", () => {
+test("route list shows a created child once without a parent management row", () => {
   const rows = buildRouteRows(
     [
       { id: "route-child-3", name: "Thu 07/02–Sat 07/04 orders — #3", stopsCount: 7 },
@@ -32,16 +33,12 @@ test("route list shows a created child route immediately below its group", () =>
     ],
   );
 
-  assert.deepEqual(rows.map((row) => row.rowKey), ["routeGroup:group-1", "routePlan:route-child-3"]);
-  assert.equal(rows[0].route, "Thu 07/02–Sat 07/04 orders");
-  assert.equal(rows[0].href, "/app/routes/groups/group-1");
-  assert.equal(rows[0].deleteKey, "routeGroup:group-1");
-  assert.equal(rows[0].isSummaryRoute, false);
-  assert.equal(rows[1].route, "#3");
-  assert.equal(rows[1].href, "/app/routes/groups/group-1/routes/route-child-3");
-  assert.equal(rows[1].deleteKey, "routeGroupChild:group-1:route-child-3");
-  assert.equal(rows[1].status, "DRAFT");
-  assert.equal(rows[1].driver, "-");
+  assert.deepEqual(rows.map((row) => row.rowKey), ["routePlan:route-child-3"]);
+  assert.equal(rows[0].route, "Thu 07/02–Sat 07/04 orders — #3");
+  assert.equal(rows[0].href, "/app/routes/groups/group-1/routes/route-child-3");
+  assert.equal(rows[0].groupManagementHref, undefined);
+  assert.equal(rows[0].deleteKey, "routeGroupChild:group-1:route-child-3");
+  assert.equal(rows[0].isSummaryRoute, true);
   assert.equal(rows[0].distanceMeters, 1200);
   assert.equal(rows[0].driveTimeSeconds, 600);
 });
@@ -72,12 +69,11 @@ test("route list reveals a single child after a driver is assigned", () => {
   );
 
   assert.deepEqual(rows.map((row) => row.rowKey), [
-    "routeGroup:group-1",
     "routePlan:route-child-3",
   ]);
-  assert.equal(rows[0].isSummaryRoute, false);
-  assert.equal(rows[1].route, "#3");
-  assert.equal(rows[1].driver, "Driver One");
+  assert.equal(rows[0].isSummaryRoute, true);
+  assert.equal(rows[0].route, "Thu 07/16 orders — #3");
+  assert.equal(rows[0].driver, "Driver One");
 });
 
 test("route child rows expose actual delivered counts and order totals", () => {
@@ -148,8 +144,8 @@ test("route list does not show collapsed route group children as standalone rout
     ],
   );
 
-  assert.deepEqual(rows.map((row) => row.rowKey), ["routeGroup:group-1"]);
-  assert.equal(rows[0].orders, 41);
+  assert.equal(rows[0].id, "empty-route-plans");
+  assert.equal(rows[0].orders, 0);
   assert.equal(rows.some((row) => row.rowKey === "routePlan:route-child-1"), false);
 });
 
@@ -184,10 +180,8 @@ test("route list keeps split children attached to their group in child order", (
   );
 
   assert.deepEqual(rows.map((row) => row.rowKey), [
-    "routeGroup:early-group",
     "routePlan:child-early-1",
     "routePlan:child-early-2",
-    "routeGroup:late-group",
     "routePlan:child-late-1",
     "routePlan:child-late-2",
     "routePlan:standalone-new",
@@ -217,46 +211,44 @@ test("route list leaves the group marker blank and gives only its children one s
   );
   const repeatedRows = buildRouteRows([], routeGroups);
   const accentRows = groupedRows.filter((row) => row.routeGroupId === "group-accent");
-  const groupRow = accentRows.find((row) => row.isRouteGroup);
+  assert.equal(accentRows.some((row) => row.isRouteGroup), false);
   const childRows = accentRows.filter((row) => !row.isRouteGroup);
   const standaloneRow = groupedRows.find((row) => row.id === "standalone");
 
-  assert.equal(accentRows.length, 3);
-  assert.equal(groupRow.groupAccentColor, undefined);
-  assert.equal(groupRow.groupSummary, "2 Routes - 43 Stop(s)");
+  assert.equal(accentRows.length, 2);
   assert.ok(childRows[0].groupAccentColor);
   assert.equal(childRows[1].groupAccentColor, childRows[0].groupAccentColor);
-  assert.deepEqual(childRows.map((row) => row.groupSummary), [groupRow.groupSummary, groupRow.groupSummary]);
+  assert.deepEqual(childRows.map((row) => row.groupSummary), ["2 Routes - 43 Stop(s)", "2 Routes - 43 Stop(s)"]);
   assert.equal(repeatedRows[1].groupAccentColor, childRows[0].groupAccentColor);
   assert.equal(standaloneRow.groupAccentColor, undefined);
 });
 
-test("route selection displays group children as checked without double-deleting them", () => {
-  const rows = buildRouteRows(
-    [
-      { id: "standalone-new", name: "Standalone new", createdAt: "2026-07-04T09:00:00.000Z" },
-    ],
-    [
-      {
-        id: "early-group",
-        name: "Early group",
-        createdAt: "2026-07-01T09:00:00.000Z",
-        children: [
-          { routeIdx: 1, routePlanId: "child-early-1", routePlan: { id: "child-early-1", name: "Early — #1" } },
-          { routeIdx: 2, routePlanId: "child-early-2", routePlan: { id: "child-early-2", name: "Early — #2" } },
-        ],
-      },
-    ],
-  );
-  const groupRow = rows.find((row) => row.rowKey === "routeGroup:early-group");
-  const firstChildRow = rows.find((row) => row.rowKey === "routePlan:child-early-1");
+test("select-all targets each actual child and ordinary route, never the hidden group", () => {
+  const rows = buildRouteRows([{id:"ordinary"}], [{id:"group", children:[
+    {routePlanId:"one", routePlan:{id:"one"}},
+    {routePlanId:"two", routePlan:{id:"two"}},
+  ]}, {id:"childless", totalOrders:10, children:[]}]);
+  const selected = getPrimaryRouteSelectionKeys(rows);
+  assert.deepEqual(selected, ["routeGroupChild:group:one", "routeGroupChild:group:two", "routePlan:ordinary"]);
+  assert.deepEqual(getRouteDeletePayloadKeys(rows, selected), selected);
+  assert.deepEqual(getExpandedRouteDeleteKeys(rows, ["routeGroup:group"]), []);
+  assert.deepEqual(getRouteDeletePayloadKeys(rows, ["routeGroup:group", "routeGroup:childless", "missing"]), []);
+  assert.deepEqual(toggleRouteSelection(rows, selected, rows.find(row=>row.id==="one")), ["routeGroupChild:group:two", "routePlan:ordinary"]);
+  assert.equal(rows.some(row => row.id === "childless"), false);
+  assert.deepEqual(getGroupsWithoutRoutes([{id:"childless", name:"Saved draft",children:[]}]), [{id:"childless",name:"Saved draft",href:"/app/routes/groups/childless"}]);
+});
 
-  assert.deepEqual(getExpandedRouteDeleteKeys(rows, [groupRow.deleteKey]), [
-    "routeGroup:early-group",
-    "routeGroupChild:early-group:child-early-1",
-    "routeGroupChild:early-group:child-early-2",
-  ]);
-  assert.deepEqual(getRouteDeletePayloadKeys(rows, [groupRow.deleteKey]), ["routeGroup:early-group"]);
-  assert.deepEqual(toggleRouteSelection(rows, [groupRow.deleteKey], firstChildRow), ["routeGroupChild:early-group:child-early-2"]);
-  assert.deepEqual(getPrimaryRouteSelectionKeys(rows), ["routeGroup:early-group", "routePlan:standalone-new"]);
+test("each route retains its own totals and copied groups use the resulting group identity", () => {
+  const groups=[{id:"source", totalOrders:99, children:[
+    {routePlanId:"one",routePlan:{id:"one",stopsCount:2,totalAmount:{amount:"20",currencyCode:"CAD"}}},
+    {routePlanId:"two",routePlan:{id:"two",stopsCount:3,totalAmount:{amount:"45",currencyCode:"CAD"}}},
+  ]}, {id:"copy",children:[{routePlanId:"virtual",routePlan:{id:"virtual",stopsCount:2,totalAmount:{amount:"20",currencyCode:"CAD"}}}]}];
+  const rows=buildRouteRows([{id:"ordinary",stopsCount:1,totalAmount:{amount:"8",currencyCode:"CAD"}}],groups);
+  assert.deepEqual(rows.map(row=>row.orders),[2,3,2,1]);
+  assert.deepEqual(rows.map(row=>row.totalAmount),[20,45,20,8]);
+  assert.equal(rows[0].groupAccentColor,rows[1].groupAccentColor);
+  const independentCopy=buildRouteRows([], [groups[1]])[0];
+  assert.equal(rows[2].groupAccentColor,independentCopy.groupAccentColor);
+  assert.equal(rows[2].routeGroupId,"copy");
+  assert.equal(rows[3].href,"/app/routes/ordinary");
 });
