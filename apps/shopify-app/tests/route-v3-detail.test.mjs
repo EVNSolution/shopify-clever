@@ -71,6 +71,7 @@ test("All routes navigation runs through the actual unsaved-draft guard", () => 
   const dialogStates = [];
   const menuStates = [];
   const requestRouteNavigation = compileHandler("requestRouteNavigation", {
+    ordinaryMutationPendingRef: { current: false },
     hasRouteAllocationDraft: true,
     navigate: (href) => navigations.push(href),
     setIsRouteDraftExitDialogOpen: (open) => dialogStates.push(open),

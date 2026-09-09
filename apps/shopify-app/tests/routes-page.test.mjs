@@ -580,9 +580,10 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.match(routeDetailSource, /\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}/);
   assert.match(routeDetailSource, /translate\(language, "routes\.group\.addEmpty"\)/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("previewRouteOptimization", \{[\s\S]*includeExistingOptimized: true/);
-  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", \{[\s\S]*includeExistingOptimized: false/);
+  assert.match(routeDetailSource, /const fields = \{[\s\S]*includeExistingOptimized: false/);
+  assert.match(routeDetailSource, /submitRouteGroupAction\("saveRouteDraft", fields\)/);
   assert.match(routeDetailSource, /const handleAddEmptyRoute = \(\) => \{/);
-  assert.match(routeDetailSource, /if \(routeGroupActionBusy\) return/);
+  assert.match(routeDetailSource, /if \(routeGroupActionBusy \|\| ordinaryMutationPendingRef\.current\) return/);
   assert.doesNotMatch(routeDetailSource, /submitRouteGroupAction\("addEmptyRoute"/);
   assert.match(routeDetailSource, /const polygonCandidateOrderIds = useMemo\([\s\S]*polygonCandidateStops\.map\(\(stop\) => stop\.orderId\)/);
   assert.doesNotMatch(routeDetailSource, /routeTimelineStopSelectedStyle/);
@@ -1237,7 +1238,7 @@ test("Route group detail Add Empty Route stays local without saving", () => {
   const end = routeDetailSource.indexOf("const handleReverseCurrentRouteStops = () => {", start);
   const addEmptyHandler = routeDetailSource.slice(start, end);
 
-  assert.match(addEmptyHandler, /if \(routeGroupActionBusy\) return/);
+  assert.match(addEmptyHandler, /if \(routeGroupActionBusy \|\| ordinaryMutationPendingRef\.current\) return/);
   assert.match(addEmptyHandler, /if \(hasIncompatibleAddEmptyDraft && !isOrdinarySplitDraft\) \{/);
   assert.match(addEmptyHandler, /setRouteGroupClientError\("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요\."\)/);
   assert.match(routeDetailSource, /const hasIncompatibleAddEmptyDraft = Object\.keys\(routeTimelineOrderByRouteId\)\.length > 0[\s\S]*\|\| removedOrderIds\.length > 0/);

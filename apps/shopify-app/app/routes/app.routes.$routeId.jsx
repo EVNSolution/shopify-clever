@@ -119,7 +119,6 @@ const MAP_RECOVERY_DELAY_MS = 2500;
 const MAX_MAP_RECOVERY_ATTEMPTS = 3;
 const ROUTE_EMPTY_LABEL = "–";
 const EMPTY_ROUTE_ADD_ORDER_CANDIDATES = Object.freeze([]);
-const ROUTE_SPLIT_SAVE_UNAVAILABLE_MESSAGE = "Saving split routes is not available yet. Your draft has been kept.";
 const ROUTE_SPLIT_SAVE_UNCONFIRMED_MESSAGE = "The saved split routes could not be confirmed. Your draft has been kept.";
 const ROUTE_DEFAULT_COLORS = [MAP_MARKER_PALETTE.plannedOrder.color, "#7c3aed", "#0f766e", "#b45309", "#be123c", "#334155"];
 const ROUTE_COLOR_OPTIONS = ["#0b84d8", "#f97316", "#14b8a6", "#8b5cf6", "#ef4444"];
@@ -2154,6 +2153,13 @@ const routeInProgressWarningStyle = {
 export const loader = routeDetailLoader;
 export const action = routeDetailAction;
 
+export function shouldRevalidate({ formData, defaultShouldRevalidate }) {
+  const intent = formData?.get("_intent");
+  // Reconcile mutation responses before a loader can replace the editable draft.
+  if (intent === "copyRoutePlan" || intent === "saveRouteDraft") return false;
+  return defaultShouldRevalidate;
+}
+
 function buildRouteDetail(routePlan, routeGroup = null) {
   if (!routePlan) {
     const orderCount = numberOrUndefined(routeGroup?.totalOrders ?? routeGroup?.ordersCount)
@@ -3388,14 +3394,26 @@ function resolveScheduledNoticeSaveResult({
 }
 
 function isCompleteSplitSaveResponse(routeGroup, expectation) {
-  if (!expectation || textOrUndefined(routeGroup?.id) !== expectation.routeGroupId) return false;
+  if (!expectation || !textOrUndefined(routeGroup?.id)) return false;
+  if (expectation.routeGroupId && routeGroup.id !== expectation.routeGroupId) return false;
+  if (!Array.isArray(routeGroup.children) || routeGroup.children.some((child) => !getRouteGroupChildRoutePlanId(child))) return false;
   const returnedRoutePlanIds = getVisibleRouteGroupChildren(routeGroup)
     .map(getRouteGroupChildRoutePlanId)
     .filter(Boolean);
   const distinctReturnedRoutePlanIds = new Set(returnedRoutePlanIds);
   if (distinctReturnedRoutePlanIds.size !== returnedRoutePlanIds.length) return false;
+  if (returnedRoutePlanIds.some((id) => id.startsWith("temp:"))) return false;
+  if (!expectation.routeGroupId && returnedRoutePlanIds[0] !== expectation.existingRoutePlanIds[0]) return false;
   if (!expectation.existingRoutePlanIds.every((routePlanId) => distinctReturnedRoutePlanIds.has(routePlanId))) return false;
-  return returnedRoutePlanIds.length >= expectation.existingRoutePlanIds.length + expectation.tempRouteCount;
+  return returnedRoutePlanIds.length === expectation.existingRoutePlanIds.length + expectation.tempRouteCount;
+}
+
+function isValidOrdinaryRouteCopy(routePlan, sourceRoutePlanId) {
+  return Boolean(textOrUndefined(routePlan?.id)
+    && routePlan.id !== sourceRoutePlanId
+    && textOrUndefined(routePlan.updatedAt)
+    && routePlan.status === "READY"
+    && !routePlan.routeGroupingChild?.groupingId);
 }
 
 function createScheduledNoticeNavigationState(routePlanIds) {
@@ -3520,7 +3538,21 @@ export default function RouteDetailPage() {
   const defaultRouteLineColor = isOrdinaryRouteDetail
     ? MAP_MARKER_PALETTE.plannedOrder.color
     : normalizeRouteColor(currentRouteGroupChild?.color) ?? MAP_MARKER_PALETTE.plannedOrder.color;
-  const routeGroupActionBusy = routeActionFetcher.state !== "idle";
+  const [ordinaryMutationPending, setOrdinaryMutationPending] = useState(false);
+  const [ordinaryMutationUncertain, setOrdinaryMutationUncertain] = useState(false);
+  const ordinaryMutationPendingRef = useRef(false);
+  const ordinarySplitRevisionRef = useRef(null);
+  const copySourceRoutePlanIdRef = useRef(null);
+  const routeGroupActionBusy = routeActionFetcher.state !== "idle" || ordinaryMutationPending;
+  useEffect(() => {
+    if ((ordinaryMutationPendingRef.current && routeGroupId)
+      || (copySourceRoutePlanIdRef.current && effectiveRoutePlan?.id
+        && effectiveRoutePlan.id !== copySourceRoutePlanIdRef.current)) {
+      ordinaryMutationPendingRef.current = false;
+      setOrdinaryMutationPending(false);
+      copySourceRoutePlanIdRef.current = null;
+    }
+  }, [effectiveRoutePlan?.id, routeGroupId]);
   const routeGroupActionIntent = routeActionFetcher.formData?.get("_intent");
   const reOptimizeRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "previewRouteOptimization";
   const loadAddOrderCandidatesBusy = routeGroupActionBusy && routeGroupActionIntent === "loadAddOrderCandidates";
@@ -3529,6 +3561,10 @@ export default function RouteDetailPage() {
   const updateCustomStopBusy = routeGroupActionBusy && routeGroupActionIntent === "updateCustomStop";
   const saveRouteDraftBusy = routeGroupActionBusy && routeGroupActionIntent === "saveRouteDraft";
   const deleteRouteBusy = routeGroupActionBusy && routeGroupActionIntent === "deleteRoute";
+  const copyRoutePlanBusy = ordinaryMutationPending || (routeGroupActionBusy && routeGroupActionIntent === "copyRoutePlan");
+  const canCopyOrdinaryRoute = Boolean(effectiveRoutePlan?.id && !routeGroupId
+    && effectiveRoutePlan.status === "READY" && textOrUndefined(effectiveRoutePlan.updatedAt)
+    && !ordinaryMutationUncertain);
   const copyRouteGroupBusy = routeGroupActionBusy && routeGroupActionIntent === "copyRouteGroup";
   const [copyRouteGroupDialogState, setCopyRouteGroupDialogState] = useState(createRouteGroupCopyDialogState);
   const copyRouteGroupRequestBusy = copyRouteGroupBusy || copyRouteGroupDialogState.isSubmitting;
@@ -3991,6 +4027,8 @@ export default function RouteDetailPage() {
     && hasRouteAllocationDraft
     && !routeGroupActionBusy
     && !isRoutePolygonEditMode
+    && !ordinaryMutationPending
+    && !ordinaryMutationUncertain
     && !isRouteLineEditorOpen;
   const routePolygonSourceStops = useMemo(
     () => (timelineRouteRows.length > 0
@@ -4073,6 +4111,7 @@ export default function RouteDetailPage() {
     [routeGeometryRows],
   );
   const visibleErrors = [
+    ...(ordinaryMutationUncertain ? [{ message: "The previous Copy or Save result is unconfirmed. Check saved routes before creating more routes." }] : []),
     ...(routeGroupClientError ? [{ message: routeGroupClientError }] : []),
     ...(routeActionFetcher.data?.errors ?? []),
     ...(errors ?? []),
@@ -5156,9 +5195,13 @@ export default function RouteDetailPage() {
   };
 
   const submitRouteAction = async (intent, fields = {}) => {
+    const blockedByOrdinaryMutation = () => ordinaryMutationPendingRef.current
+      && intent !== "copyRoutePlan" && intent !== "saveRouteDraft";
+    if (blockedByOrdinaryMutation()) return false;
     try {
       setRouteGroupClientError(null);
       const sessionToken = await shopify.idToken();
+      if (blockedByOrdinaryMutation()) return false;
       const formData = new FormData();
       formData.set("_intent", intent);
       if (routeGroupId) formData.set("routeGroupId", routeGroupId);
@@ -5396,11 +5439,12 @@ export default function RouteDetailPage() {
     setRouteLineEdits({});
     setRoutePreviewByKey({});
     setIsOrdinarySplitDraft(false);
+    ordinarySplitRevisionRef.current = null;
     setRouteGroupClientError(null);
   }, []);
 
   const handleAddEmptyRoute = () => {
-    if (routeGroupActionBusy) return;
+    if (routeGroupActionBusy || ordinaryMutationPendingRef.current) return;
     setIsRouteActionsMenuOpen(false);
     if (!canDraftEditChildStopMembership) {
       setRouteGroupClientError("Routes can only be split before the route has started.");
@@ -5459,6 +5503,7 @@ export default function RouteDetailPage() {
     setClientRouteRows((rows) => [...rows, routeRow]);
     if (isOrdinaryRouteDetail) setIsOrdinarySplitDraft(true);
     if (isOrdinaryRouteDetail && !routeGroupId) {
+      if (!isOrdinarySplitDraft) ordinarySplitRevisionRef.current = effectiveRoutePlan?.updatedAt ?? null;
       const originalRouteRow = currentRouteRowsSource[0];
       setRouteGroupClientError(null);
       setRouteTimelineOrderByRouteId((currentOrderByRouteId) => ({
@@ -5633,11 +5678,14 @@ export default function RouteDetailPage() {
       setRouteGroupClientError("Split routes can only be saved before the route has started. Your draft has been kept.");
       return;
     }
-    if (isOrdinarySplitDraft && !routeGroupId) {
-      setRouteGroupClientError(ROUTE_SPLIT_SAVE_UNAVAILABLE_MESSAGE);
+    const isStandaloneSplitSave = isOrdinarySplitDraft && !routeGroupId;
+    if (isStandaloneSplitSave && (ordinaryMutationPendingRef.current || ordinaryMutationUncertain)) return;
+    if (isStandaloneSplitSave && (!ordinarySplitRevisionRef.current || effectiveRoutePlan?.status !== "READY")) {
+      navigateAfterRouteDraftSaveRef.current = null;
+      setRouteGroupClientError("A READY route with a saved revision is required. Your draft has been kept.");
       return;
     }
-    splitSaveExpectationRef.current = isOrdinarySplitDraft && routeGroupId ? {
+    splitSaveExpectationRef.current = isOrdinarySplitDraft ? {
       existingRoutePlanIds: contextTimelineRouteRows
         .map((routeRow) => routeRow.routePlanId)
         .filter((routePlanId) => routePlanId && !deletedRoutePlanIds.includes(routePlanId)),
@@ -5646,7 +5694,8 @@ export default function RouteDetailPage() {
     } : null;
     setScheduledNoticeRoutePlanId(null);
     setScheduledNoticeGroupRoutePlanIds([]);
-    submitRouteGroupAction("saveRouteDraft", {
+    const fields = {
+      ...(isStandaloneSplitSave ? { expectedRoutePlanUpdatedAt: ordinarySplitRevisionRef.current } : {}),
       draft: JSON.stringify(buildRouteDraftPayload(contextTimelineRouteRows, {
         deletedRoutePlanIds,
         expectedUpdatedAt: routeGroup?.updatedAt,
@@ -5654,12 +5703,26 @@ export default function RouteDetailPage() {
         mode: "MANUAL_ORDER",
         removedOrderIds,
       })),
-    });
+    };
+    if (isStandaloneSplitSave) {
+      ordinaryMutationPendingRef.current = true;
+      setOrdinaryMutationPending(true);
+      submitRouteAction("saveRouteDraft", fields).then((submitted) => {
+        if (!submitted) {
+          ordinaryMutationPendingRef.current = false;
+          setOrdinaryMutationPending(false);
+          splitSaveExpectationRef.current = null;
+          navigateAfterRouteDraftSaveRef.current = null;
+        }
+      });
+    } else {
+      submitRouteGroupAction("saveRouteDraft", fields);
+    }
   };
 
   const handleSaveRouteDraftAndLeave = () => {
     if (!canSaveRouteDraft) return;
-    if (isOrdinarySplitDraft && (!routeGroupId || !canDraftEditChildStopMembership)) {
+    if (isOrdinarySplitDraft && !canDraftEditChildStopMembership) {
       handleSaveRouteDraft();
       return;
     }
@@ -5678,6 +5741,7 @@ export default function RouteDetailPage() {
   };
 
   const requestRouteNavigation = (href) => {
+    if (ordinaryMutationPendingRef.current) return;
     if (hasRouteAllocationDraft) {
       setPendingRouteDraftHref(href);
       setIsRouteDraftExitDialogOpen(true);
@@ -5715,6 +5779,20 @@ export default function RouteDetailPage() {
       return;
     }
     submitRouteAction("refreshRouteOrders");
+  };
+
+  const handleCopyOrdinaryRoute = async () => {
+    if (!canCopyOrdinaryRoute || routeGroupActionBusy || hasRouteAllocationDraft || ordinaryMutationPendingRef.current) return;
+    ordinaryMutationPendingRef.current = true;
+    setOrdinaryMutationPending(true);
+    copySourceRoutePlanIdRef.current = effectiveRoutePlan.id;
+    const submitted = await submitRouteAction("copyRoutePlan", {
+      expectedRoutePlanUpdatedAt: effectiveRoutePlan.updatedAt,
+    });
+    if (!submitted) {
+      ordinaryMutationPendingRef.current = false;
+      setOrdinaryMutationPending(false);
+    }
   };
 
   const handleCopyRouteGroup = () => {
@@ -5786,6 +5864,7 @@ export default function RouteDetailPage() {
     try {
       setRouteGroupClientError(null);
       const sessionToken = await shopify.idToken();
+      if (ordinaryMutationPendingRef.current) return;
       const formData = new FormData();
       formData.set("_intent", "deleteRoute");
       formData.set("shopifySessionToken", sessionToken);
@@ -5852,6 +5931,29 @@ export default function RouteDetailPage() {
     lastRouteActionIntentRef.current = null;
     if ((routeActionFetcher.data?.errors ?? []).length === 0) navigate(ROUTES_ROOT_PATH);
   }, [navigate, routeActionFetcher.data, routeActionFetcher.state]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "copyRoutePlan") return;
+    lastRouteActionIntentRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) {
+      ordinaryMutationPendingRef.current = false;
+      setOrdinaryMutationPending(false);
+      if (routeActionFetcher.data.outcomeUnknown) setOrdinaryMutationUncertain(true);
+      return;
+    }
+    const copiedRoutePlan = routeActionFetcher.data?.routePlan;
+    if (!isValidOrdinaryRouteCopy(copiedRoutePlan, copySourceRoutePlanIdRef.current)) {
+      ordinaryMutationPendingRef.current = false;
+      setOrdinaryMutationPending(false);
+      setOrdinaryMutationUncertain(true);
+      setRouteGroupClientError("The copy result could not be confirmed. Check Routes before copying again.");
+      return;
+    }
+    resetRouteDraftChanges();
+    shopify.toast.show("Route copied");
+    navigate(routePlanPath(copiedRoutePlan.id));
+  }, [navigate, resetRouteDraftChanges, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -5953,11 +6055,31 @@ export default function RouteDetailPage() {
     navigateAfterRouteDraftSaveRef.current = null;
     const splitSaveExpectation = splitSaveExpectationRef.current;
     splitSaveExpectationRef.current = null;
+    if (!splitSaveExpectation || splitSaveExpectation.routeGroupId) {
+      ordinaryMutationPendingRef.current = false;
+      setOrdinaryMutationPending(false);
+    }
     const saveErrors = routeActionFetcher.data?.errors ?? [];
+    if (saveErrors.length > 0) {
+      ordinaryMutationPendingRef.current = false;
+      setOrdinaryMutationPending(false);
+      if (routeActionFetcher.data.outcomeUnknown) setOrdinaryMutationUncertain(true);
+      return;
+    }
     const responseRouteGroup = routeActionFetcher.data?.routeGroup ?? null;
     if (splitSaveExpectation && saveErrors.length === 0
       && !isCompleteSplitSaveResponse(responseRouteGroup, splitSaveExpectation)) {
+      ordinaryMutationPendingRef.current = false;
+      setOrdinaryMutationPending(false);
+      setOrdinaryMutationUncertain(true);
       setRouteGroupClientError(ROUTE_SPLIT_SAVE_UNCONFIRMED_MESSAGE);
+      return;
+    }
+    if (splitSaveExpectation && !splitSaveExpectation.routeGroupId) {
+      resetRouteDraftChanges();
+      setPendingRouteDraftHref(null);
+      const selectedRoutePlanId = splitSaveExpectation.existingRoutePlanIds[0];
+      navigate(navigateAfterSave ?? routeGroupChildPath(responseRouteGroup.id, selectedRoutePlanId));
       return;
     }
     const savedRouteGroup = responseRouteGroup ?? routeGroup;
@@ -6896,6 +7018,15 @@ export default function RouteDetailPage() {
                 >
                   View inventory
                 </button>
+                {effectiveRoutePlan?.id && !routeGroupId ? (
+                  <button
+                    disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
+                    onClick={handleCopyOrdinaryRoute}
+                    style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this READY route without changing the original"}
+                    type="button"
+                  >{copyRoutePlanBusy ? "Copying…" : "Copy"}</button>
+                ) : null}
                 {isRouteGroupDetail ? (
                   <button
                     disabled={routeGroupActionBusy || hasRouteAllocationDraft}

@@ -19,6 +19,14 @@ export const DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND_ERROR_CODE =
   "DELIVERY_API_DRIVER_ENDPOINT_NOT_FOUND";
 export const DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_PLAN_ID_MISSING";
 export const DELIVERY_ROUTE_STOP_ID_MISSING_ERROR_CODE = "DELIVERY_ROUTE_STOP_ID_MISSING";
+export const DELIVERY_ROUTE_PLAN_REVISION_MISSING_ERROR_CODE = "DELIVERY_ROUTE_PLAN_REVISION_MISSING";
+export const DELIVERY_ROUTE_PLAN_REVISION_CONFLICT_ERROR_CODE = "DELIVERY_ROUTE_PLAN_REVISION_CONFLICT";
+export const DELIVERY_ROUTE_PLAN_ALREADY_GROUPED_ERROR_CODE = "DELIVERY_ROUTE_PLAN_ALREADY_GROUPED";
+export const DELIVERY_ROUTE_PLAN_NOT_EDITABLE_ERROR_CODE = "DELIVERY_ROUTE_PLAN_NOT_EDITABLE";
+export const DELIVERY_ROUTE_PLAN_INVALID_ALLOCATION_ERROR_CODE = "DELIVERY_ROUTE_PLAN_INVALID_ALLOCATION";
+export const DELIVERY_ROUTE_PLAN_NOT_FOUND_ERROR_CODE = "DELIVERY_ROUTE_PLAN_NOT_FOUND";
+export const DELIVERY_ROUTE_PLAN_MUTATION_OUTCOME_UNKNOWN_ERROR_CODE =
+  "DELIVERY_ROUTE_PLAN_MUTATION_OUTCOME_UNKNOWN";
 export { buildRouteScopeFromOrders } from "./route-scope.js";
 
 const deliveryApiGetCache = new Map();
@@ -238,6 +246,194 @@ export async function fetchDeliveryRoutePlanDetail(request, routePlanId, options
     routeStopPoints: result.data?.routeStopPoints ?? [],
     stops: result.data?.stops ?? [],
     errors: result.errors,
+  };
+}
+
+export async function copyDeliveryRoutePlan(request, routePlanId, payload, options = {}) {
+  const normalizedRoutePlanId = textOrNull(routePlanId);
+  const expectedRoutePlanUpdatedAt = textOrNull(payload?.expectedRoutePlanUpdatedAt);
+  const localErrors = validateStandaloneRouteMutationInput({
+    expectedRoutePlanUpdatedAt,
+    routePlanId: normalizedRoutePlanId,
+  });
+  if (localErrors.length > 0) {
+    return { routePlan: null, errors: localErrors };
+  }
+
+  const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/copies`,
+    {
+      body: JSON.stringify({ expectedRoutePlanUpdatedAt }),
+      fetch: options.fetch,
+      method: "POST",
+      sessionToken: options.sessionToken,
+    },
+  );
+  clearDeliveryApiResponseCache();
+  const routePlan = result.data?.routePlan ?? null;
+  const errors = normalizeStandaloneRouteMutationErrors(result.errors, "copy");
+  if (errors.length > 0) {
+    return {
+      routePlan: null,
+      errors,
+      ...(hasUnknownMutationOutcome(errors) ? { outcomeUnknown: true } : {}),
+    };
+  }
+  if (!routePlan?.id) {
+    return unknownStandaloneRouteMutationResult("copy", "복사 응답에서 새 Route ID를 확인하지 못했습니다.");
+  }
+
+  return { routePlan, errors: [] };
+}
+
+export async function splitDeliveryRoutePlan(request, routePlanId, draft, options = {}) {
+  const normalizedRoutePlanId = textOrNull(routePlanId);
+  const expectedRoutePlanUpdatedAt = textOrNull(options.expectedRoutePlanUpdatedAt);
+  const localErrors = validateStandaloneRouteMutationInput({
+    expectedRoutePlanUpdatedAt,
+    routePlanId: normalizedRoutePlanId,
+  });
+  if (localErrors.length > 0) {
+    return { routeGroup: null, errors: localErrors };
+  }
+
+  const payload = buildStandaloneRouteSplitPayload(draft, expectedRoutePlanUpdatedAt);
+  const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/route-group`,
+    {
+      body: JSON.stringify(payload),
+      fetch: options.fetch,
+      method: "POST",
+      sessionToken: options.sessionToken,
+    },
+  );
+  clearDeliveryApiResponseCache();
+  const routeGroup = result.data?.routeGroup ?? null;
+  const errors = normalizeStandaloneRouteMutationErrors(result.errors, "split");
+  if (errors.length > 0) {
+    return {
+      routeGroup: null,
+      errors,
+      ...(hasUnknownMutationOutcome(errors) ? { outcomeUnknown: true } : {}),
+    };
+  }
+  if (!routeGroup?.id) {
+    return unknownStandaloneRouteMutationResult("split", "저장 응답에서 Route group ID를 확인하지 못했습니다.");
+  }
+
+  return { routeGroup, errors: [] };
+}
+
+export function buildStandaloneRouteSplitPayload(draft, expectedRoutePlanUpdatedAt) {
+  const routes = Array.isArray(draft?.routes) ? draft.routes : [];
+  return {
+    expectedRoutePlanUpdatedAt,
+    mode: "MANUAL_ORDER",
+    routes: routes.map(toStandaloneRouteSplitRow),
+  };
+}
+
+const STANDALONE_ROUTE_SPLIT_ROW_FIELDS = [
+  "branchId",
+  "color",
+  "driverId",
+  "expectedChildUpdatedAt",
+  "expectedRoutePlanUpdatedAt",
+  "label",
+  "orderIds",
+  "routeIdx",
+  "routeKey",
+  "routePlanId",
+  "scheduledStartAt",
+  "scheduledStartTimeZone",
+  "sortOrder",
+  "tempId",
+];
+
+function toStandaloneRouteSplitRow(route) {
+  const source = route && typeof route === "object" && !Array.isArray(route) ? route : {};
+  return Object.fromEntries(
+    STANDALONE_ROUTE_SPLIT_ROW_FIELDS
+      .filter((field) => Object.hasOwn(source, field) && source[field] !== undefined)
+      .map((field) => [field, source[field]]),
+  );
+}
+
+function validateStandaloneRouteMutationInput({ expectedRoutePlanUpdatedAt, routePlanId }) {
+  if (!routePlanId) {
+    return [{
+      code: DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE,
+      message: "대상 Route ID가 없어 요청을 보내지 않았습니다.",
+      status: null,
+    }];
+  }
+  if (!expectedRoutePlanUpdatedAt) {
+    return [{
+      code: DELIVERY_ROUTE_PLAN_REVISION_MISSING_ERROR_CODE,
+      message: "Route revision이 없어 요청을 보내지 않았습니다. 페이지를 새로고침해주세요.",
+      status: null,
+    }];
+  }
+  return [];
+}
+
+function normalizeStandaloneRouteMutationErrors(errors, operation) {
+  return (errors ?? []).map((error) => {
+    const status = Number.isInteger(error?.status) ? error.status : null;
+    const serverCode = textOrNull(error?.code);
+    const searchable = `${serverCode ?? ""} ${error?.message ?? ""}`.toLowerCase();
+    let code = serverCode ?? DELIVERY_API_ERROR_CODE;
+    let message = error?.message ?? getDeliveryApiFailureMessage(error?.path);
+
+    if (status === 0 || (status !== null && status >= 500)) {
+      code = DELIVERY_ROUTE_PLAN_MUTATION_OUTCOME_UNKNOWN_ERROR_CODE;
+      message = operation === "copy"
+        ? "네트워크 응답을 확인하지 못해 Route 복사 결과가 불명확합니다. 같은 요청을 다시 보내지 말고 Routes 목록에서 결과를 확인해주세요."
+        : "네트워크 응답을 확인하지 못해 split 저장 결과가 불명확합니다. 같은 Save를 다시 보내지 말고 Routes 목록에서 결과를 확인해주세요.";
+    } else if (status === 404) {
+      code = DELIVERY_ROUTE_PLAN_NOT_FOUND_ERROR_CODE;
+      message = "현재 shop에서 대상 Route를 찾지 못했습니다. 페이지를 새로고침해주세요.";
+    } else if (status === 409 && /already[^a-z0-9]+group|grouped|standalone|current child/u.test(searchable)) {
+      code = DELIVERY_ROUTE_PLAN_ALREADY_GROUPED_ERROR_CODE;
+      message = "이 Route는 이미 group에 속해 있습니다. 페이지를 새로고침해주세요.";
+    } else if (status === 409) {
+      code = DELIVERY_ROUTE_PLAN_REVISION_CONFLICT_ERROR_CODE;
+      message = "Route가 다른 작업에서 변경되었습니다. 현재 초안은 유지되며, 최신 상태를 확인해주세요.";
+    } else if (status === 400 && /started|completed|in[_ -]?progress|not ready|only ready|must (?:still )?be ready|ready standalone|status/u.test(searchable)) {
+      code = DELIVERY_ROUTE_PLAN_NOT_EDITABLE_ERROR_CODE;
+      message = "시작되었거나 완료된 Route는 복사하거나 분할 저장할 수 없습니다.";
+    } else if (status === 400) {
+      code = DELIVERY_ROUTE_PLAN_INVALID_ALLOCATION_ERROR_CODE;
+      message = "Route 주문 배분 또는 입력값이 올바르지 않아 저장하지 못했습니다. 현재 초안은 유지됩니다.";
+    }
+
+    return {
+      ...error,
+      code,
+      message,
+      ...(serverCode && serverCode !== code ? { serverCode } : {}),
+      status,
+    };
+  });
+}
+
+function hasUnknownMutationOutcome(errors) {
+  return errors.some((error) => error.code === DELIVERY_ROUTE_PLAN_MUTATION_OUTCOME_UNKNOWN_ERROR_CODE);
+}
+
+function unknownStandaloneRouteMutationResult(operation, detail) {
+  return {
+    ...(operation === "copy" ? { routePlan: null } : { routeGroup: null }),
+    errors: [{
+      code: DELIVERY_ROUTE_PLAN_MUTATION_OUTCOME_UNKNOWN_ERROR_CODE,
+      message: `${detail} 같은 요청을 다시 보내지 말고 Routes 목록에서 결과를 확인해주세요.`,
+      status: null,
+    }],
+    outcomeUnknown: true,
   };
 }
 

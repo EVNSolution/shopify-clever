@@ -20,10 +20,12 @@ import {
 } from "./route-groups.server";
 import {
   clearDeliveryApiResponseCache,
+  copyDeliveryRoutePlan,
   deleteDeliveryRoutePlan,
   fetchDeliveryRoutePlanDetail,
   publishDeliveryRoutePlan,
   refreshDeliveryRoutePlanOrderData,
+  splitDeliveryRoutePlan,
   transitionDeliveryRoutePlanStop,
   updateDeliveryRoutePlanStop,
 } from "./route-plans.server";
@@ -620,6 +622,15 @@ export const routeDetailAction = async ({ params, request }) => {
     return publishDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
   }
 
+  if (intent === "copyRoutePlan") {
+    return copyDeliveryRoutePlan(
+      request,
+      routeId,
+      { expectedRoutePlanUpdatedAt: textOrUndefined(formData.get("expectedRoutePlanUpdatedAt")) },
+      { sessionToken: shopifySessionToken },
+    );
+  }
+
   if (intent === "copyRouteGroup") {
     if (!routeGroupIdFromParams || routeId) {
       return { routeGroup: null, errors: [{ message: "복사할 route group을 찾을 수 없습니다." }] };
@@ -838,6 +849,7 @@ export const routeDetailAction = async ({ params, request }) => {
 
   if (intent === "saveRouteDraft") {
     const draft = readRouteDraftPayload(formData.get("draft"));
+    const expectedRoutePlanUpdatedAt = textOrUndefined(formData.get("expectedRoutePlanUpdatedAt"));
     logRouteDetailPerformance("routes.detail.action.saveRouteDraft.request", {
       routeGroupId,
       routeId,
@@ -849,12 +861,19 @@ export const routeDetailAction = async ({ params, request }) => {
       routeKeys: draft.routes.map((route) => route.routeKey).filter(Boolean),
       tempRouteCount: draft.routes.filter((route) => route.tempId).length,
     });
-    const result = await saveDeliveryRouteGroupDraft(
-      request,
-      routeGroupId,
-      draft,
-      { sessionToken: shopifySessionToken },
-    );
+    const result = routeGroupId
+      ? await saveDeliveryRouteGroupDraft(
+          request,
+          routeGroupId,
+          draft,
+          { sessionToken: shopifySessionToken },
+        )
+      : await splitDeliveryRoutePlan(
+          request,
+          routeId,
+          draft,
+          { expectedRoutePlanUpdatedAt, sessionToken: shopifySessionToken },
+        );
     logRouteGroupActionResult("routes.detail.action.saveRouteDraft", routeId, routeGroupId, result);
     return result;
   }
