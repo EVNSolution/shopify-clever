@@ -961,6 +961,11 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, />\{routeGroupActionIntent === "dispatchRoute" \? "Dispatching…" : "Dispatch"\}<\/button>/);
   assert.match(routeDetailSource, /This does not start the route or send customer email/);
   assert.match(routeDetailSource, /Assign a driver before dispatching this route/);
+  assert.ok(
+    routeDetailSource.indexOf("const [routeExecutionStatus")
+      < routeDetailSource.indexOf("const canDispatchRoute"),
+    "Dispatch availability must be derived after routeExecutionStatus is initialized",
+  );
 });
 
 test("Route detail maps expose the shared accessible height control", () => {
