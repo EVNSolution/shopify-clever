@@ -7,6 +7,9 @@ export const SUPPORTED_LANGUAGES = [
 
 const TRANSLATIONS = {
   en: {
+    "routes.scheduledNotice.savedMessage": "Route changes saved. Review the delivery schedule notice when you are ready.",
+    "routes.scheduledNotice.reviewAction": "Review scheduled notice",
+    "routes.scheduledNotice.unsavedTitle": "Save or revert route changes before reviewing the scheduled notice.",
     "notifications.variables.etaWindow": "Estimated arrival window",
     "nav.home": "Home",
     "nav.orders": "Orders",
@@ -35,6 +38,9 @@ const TRANSLATIONS = {
     "settings.errors.unableToSave": "Unable to save settings.",
   },
   ko: {
+    "routes.scheduledNotice.savedMessage": "경로 변경사항을 저장했습니다. 준비되면 배송 예정 알림을 검토하세요.",
+    "routes.scheduledNotice.reviewAction": "배송 예정 알림 검토",
+    "routes.scheduledNotice.unsavedTitle": "배송 예정 알림을 검토하기 전에 경로 변경사항을 저장하거나 되돌리세요.",
     "notifications.variables.etaWindow": "예상 도착 시간대",
     "nav.home": "홈",
     "nav.orders": "주문",
