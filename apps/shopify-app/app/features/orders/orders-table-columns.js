@@ -11,7 +11,6 @@ export const ORDER_TABLE_COLUMN_WIDTHS = {
   deliveryLabel: "9%",
   planningStatus: "8%",
   payment: "7.5%",
-  hasCoordinates: "6%",
 };
 export const MIN_TABLE_COLUMN_WIDTH = 44;
 const TABLE_CELL_HORIZONTAL_PADDING_PX = 16;
@@ -27,7 +26,6 @@ export const SORTABLE_ORDER_COLUMNS = [
   { key: "deliveryLabel", label: "Delivery" },
   { key: "planningStatus", label: "State" },
   { key: "payment", label: "Payment" },
-  { key: "hasCoordinates", label: "Coordinates" },
 ];
 
 export const DEFAULT_TABLE_COLUMN_WIDTHS = [

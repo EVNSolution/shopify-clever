@@ -34,6 +34,8 @@ test("orders keep filters behind one add-filter entry and show order amount by d
   assert.match(ordersPageSource, /aria-label="Order filters"/);
   assert.match(ordersPageSource, /\{ key: "totalPriceAmount", label: "Amount" \}/);
   assert.match(ordersPageSource, /formatOrderTotal\(order\)/);
+  assert.doesNotMatch(ordersPageSource, /\{ key: "hasCoordinates", label: "Coordinates" \}/);
+  assert.doesNotMatch(ordersPageSource, /\{order\.hasCoordinates \? "Yes" : "No"\}/);
 });
 const rootDocumentSource = readFileSync(join(root, "app/root.jsx"), "utf8");
 const shopifyOrdersSource = readFileSync(
@@ -622,7 +624,7 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
 
 test("Orders table uses a compact centered layout", () => {
   assert.match(ordersPageSource, /width:\s*"100%"/);
-  assert.match(ordersPageSource, /minWidth:\s*"1520px"/);
+  assert.match(ordersPageSource, /minWidth:\s*"1420px"/);
   assert.match(ordersPageSource, /tableLayout:\s*"fixed"/);
   assert.match(ordersPageSource, /const tableCellStyle = \{/);
   assert.match(ordersPageSource, /padding:\s*"6px 8px"/);

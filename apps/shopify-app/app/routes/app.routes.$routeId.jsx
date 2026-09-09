@@ -3140,6 +3140,8 @@ function getShopifyOrderResourceId(row) {
 
 function getShopifyOrderAdminHref(row) {
   if (row?.isCustomStop) return null;
+  const sourcePlatform = textOrUndefined(row?.sourcePlatform)?.toUpperCase();
+  if (sourcePlatform && sourcePlatform !== "SHOPIFY") return null;
   const resourceId = getShopifyOrderResourceId(row);
   return resourceId ? `shopify://admin/orders/${encodeURIComponent(resourceId)}` : null;
 }
@@ -3150,9 +3152,16 @@ function buildCustomStopDraftFromRow(row) {
 }
 
 function renderStopOrderLabel(row) {
+  const shopifyOrderAdminHref = getShopifyOrderAdminHref(row);
+  const orderLabel = row?.order ?? ROUTE_EMPTY_LABEL;
+
   return (
     <span style={{ alignItems: "center", display: "inline-flex", flexWrap: "wrap", gap: "6px" }}>
-      <span>{row?.order ?? ROUTE_EMPTY_LABEL}</span>
+      {shopifyOrderAdminHref ? (
+        <a href={shopifyOrderAdminHref} rel="noopener noreferrer" target="_blank">{orderLabel}</a>
+      ) : (
+        <span>{orderLabel}</span>
+      )}
       {row?.isCustomStop ? (
         <span style={{ background: "#e8f3ea", borderRadius: "999px", color: "#1f5f2c", fontSize: "11px", fontWeight: 700, padding: "2px 7px" }}>Custom</span>
       ) : null}

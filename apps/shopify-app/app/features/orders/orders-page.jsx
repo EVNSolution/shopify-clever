@@ -1166,7 +1166,7 @@ const tableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
   fontSize: "13px",
-  minWidth: "1520px",
+  minWidth: "1420px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -1705,10 +1705,6 @@ function emitOrdersResourceTiming(name, data, startedAtByRequestKey, metric = {}
 }
 
 function getOrderSortValue(order, columnKey, referenceDate) {
-  if (columnKey === "hasCoordinates") {
-    return order.hasCoordinates ? "Yes" : "No";
-  }
-
   if (columnKey === "planningStatus") {
     return formatOrderDeliveryState(order, referenceDate);
   }
@@ -6541,9 +6537,6 @@ function OrdersPageContent({ loaderData }) {
                           label: "Payment details",
                           tone: getOrderPaymentPillTone(order),
                         })}
-                      </td>
-                      <td style={tableCellStyle}>
-                        {order.hasCoordinates ? "Yes" : "No"}
                       </td>
                     </tr>
                   );

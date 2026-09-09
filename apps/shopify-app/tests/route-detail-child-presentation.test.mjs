@@ -307,6 +307,12 @@ test("custom stops stay visible but never become Shopify-linked child rows", () 
   assert.equal(row.priority, 0);
 });
 
+test("route detail links only canonical Shopify order rows in a new tab", () => {
+  assert.match(routeDetailSource, /sourcePlatform && sourcePlatform !== "SHOPIFY"/);
+  assert.match(routeDetailSource, /href=\{shopifyOrderAdminHref\} rel="noopener noreferrer" target="_blank"/);
+  assert.match(routeDetailSource, /row\?\.isCustomStop\) return null/);
+});
+
 test("child order rows preserve canonical identifiers and flat operational edit fields for actions", () => {
   const [row] = buildChildRouteOrderRows([
     {
