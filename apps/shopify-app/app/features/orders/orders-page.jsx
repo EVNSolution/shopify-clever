@@ -2,7 +2,7 @@
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useSearchParams } from "react-router";
+import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { routeGroupChildPath, routeGroupPath, routePlanPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
@@ -76,6 +76,7 @@ import {
 import { InfoPill } from "../../ui/info-pill";
 import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
 import { TabLayout } from "../../ui/tab-layout";
+import { translate } from "../../i18n/i18n";
 import {
   buildOrderTimelineDetails,
   buildOrdersViewNavigationMetric,
@@ -2541,6 +2542,7 @@ export default function OrdersPage() {
 }
 
 function OrdersPageContent({ loaderData }) {
+  const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const routePlanFetcher = useFetcher();
   const inventoryDeleteFetcher = useFetcher();
   const orderBulkUpdateFetcher = useFetcher();
@@ -5787,11 +5789,11 @@ function OrdersPageContent({ loaderData }) {
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
             <s-button commandFor="orders-filter-popover">
-              Add filter {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
+              {translate(language, "orders.filters.add")} {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
             </s-button>
             <s-popover id="orders-filter-popover" inlineSize="600px">
-              <s-box accessibilityLabel="Order filters" padding="small">
-                <div aria-label="Order filters" role="group" style={orderFiltersPanelStyle}>
+              <s-box accessibilityLabel={translate(language, "orders.filters.label")} padding="small">
+                <div aria-label={translate(language, "orders.filters.label")} role="group" style={orderFiltersPanelStyle}>
                   <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
               <button
                 aria-label="Filter orders by ordered date"
@@ -6270,7 +6272,7 @@ function OrdersPageContent({ loaderData }) {
                         style={tableHeaderButtonStyle}
                         onClick={() => handleSort(column.key)}
                       >
-                        {column.label}
+                        {translate(language, column.translationKey)}
                         <span aria-hidden="true">
                           {getSortIndicator(column.key)}
                         </span>

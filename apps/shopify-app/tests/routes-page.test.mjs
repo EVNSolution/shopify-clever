@@ -248,7 +248,7 @@ test("Routes page renders a tab-consistent title header above the route table wi
   assert.match(routesPageSource, /const routesHeaderBarStyle = \{/);
   assert.match(routesPageSource, /const routesTitleStyle = \{\s+margin: 0,\s+fontFamily: "inherit",\s+fontSize: "20px",\s+fontWeight: "600",\s+lineHeight: "28px"/);
   assert.match(routesPageSource, /<header className="tab-layout-header" style=\{routesHeaderStyle\}>/);
-  assert.match(routesPageSource, /<h1 style=\{routesTitleStyle\}>Routes<\/h1>/);
+  assert.match(routesPageSource, /<h1 style=\{routesTitleStyle\}>\{translate\(language, "routes\.list\.title"\)\}<\/h1>/);
   assert.doesNotMatch(routesPageSource, /routesDescriptionStyle/);
   assert.doesNotMatch(routesPageSource, /Route plans created from selected orders/);
   assert.doesNotMatch(routesPageSource, /routesSummaryStyle/);
@@ -265,15 +265,15 @@ test("Routes page adds top summary cards and explicit route actions", () => {
   assert.match(routesPageSource, /overflowX: "auto"/);
   assert.match(routesPageSource, /overflowY: "hidden"/);
   assert.match(routesPageSource, /function buildRoutesSummary\(routeRows\) \{/);
-  assert.match(routesPageSource, /label: "Routes"/);
-  assert.match(routesPageSource, /label: "Stops"/);
-  assert.match(routesPageSource, /label: "Delivered"/);
-  assert.match(routesPageSource, /label: "Attempted"/);
-  assert.match(routesPageSource, /label: "Drive time"/);
-  assert.match(routesPageSource, /label: "Distance"/);
+  assert.match(routesPageSource, /labelKey: "routes\.summary\.routes"/);
+  assert.match(routesPageSource, /labelKey: "routes\.summary\.stops"/);
+  assert.match(routesPageSource, /labelKey: "routes\.summary\.delivered"/);
+  assert.match(routesPageSource, /labelKey: "routes\.summary\.attempted"/);
+  assert.match(routesPageSource, /labelKey: "routes\.summary\.driveTime"/);
+  assert.match(routesPageSource, /labelKey: "routes\.summary\.distance"/);
   assert.match(routesPageSource, /function handleCreateRoutesClick\(\) \{/);
   assert.match(routesPageSource, /navigate\("\/app\/orders"\)/);
-  assert.match(routesPageSource, /<button type="button" style=\{createRoutesButtonStyle\} onClick=\{handleCreateRoutesClick\}>Create routes<\/button>/);
+  assert.match(routesPageSource, /<button type="button" style=\{createRoutesButtonStyle\} onClick=\{handleCreateRoutesClick\}>\{translate\(language, "routes\.list\.create"\)\}<\/button>/);
   assert.doesNotMatch(routesPageSource, /Update all routes/);
   assert.match(routesPageSource, /<section aria-label="Routes summary" style=\{routesSummaryCardsStyle\}>/);
   assert.match(routesPageSource, /routesSummary\.map\(\(summaryItem\) =>/);
@@ -282,10 +282,10 @@ test("Routes page adds top summary cards and explicit route actions", () => {
 
 test("Routes table distinguishes group headers and exposes delivered and amount columns", () => {
   assert.match(routesPageSource, /route\.isRouteGroup \? \(/);
-  assert.match(routesPageSource, /aria-label=\{`Open route group \$\{route\.route\}`\}/);
-  assert.match(routesPageSource, />Delivered<\/th>/);
-  assert.match(routesPageSource, />Amount<\/th>/);
-  assert.match(routesPageSource, />ETA<\/th>/);
+  assert.match(routesPageSource, /aria-label=\{translate\(language, "routes\.group\.open", \{ name: route\.route \}\)\}/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.delivered"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.amount"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.eta"\)/);
   assert.match(routesPageSource, /formatRouteAmount\(route\.totalAmount, route\.currencyCode\)/);
   assert.match(routesPageSource, /formatRouteEtaRange\(route\.etaRange\)/);
 });
@@ -328,14 +328,13 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routeListRowsSource, /export function buildRouteRows\(routePlans, routeGroups = \[\]\) \{/);
   assert.match(routesPageSource, /routeRows\.map\(\(route\) =>/);
   assert.match(routesPageSource, /aria-label="Select all visible routes"/);
-  assert.match(routesPageSource, />Route<\/th>/);
-  assert.match(routesPageSource, />Route<\/th>[\s\S]*>Date<\/th>[\s\S]*>Status<\/th>/);
-  assert.match(routesPageSource, />Status<\/th>/);
-  assert.match(routesPageSource, />Orders<\/th>/);
-  assert.match(routesPageSource, />Area<\/th>/);
-  assert.match(routesPageSource, />Total drive time<\/th>/);
-  assert.match(routesPageSource, />Total distance<\/th>/);
-  assert.match(routesPageSource, />Driver<\/th>/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.route"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.route"\)[\s\S]*translate\(language, "routes\.table\.date"\)[\s\S]*translate\(language, "routes\.table\.status"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.orders"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.area"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.totalDriveTime"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.totalDistance"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.driver"\)/);
   assert.doesNotMatch(routesPageSource, />Planned for<\/th>/);
   assert.doesNotMatch(routesPageSource, />Delivery date<\/th>/);
   assert.doesNotMatch(routesPageSource, />Coordinates<\/th>/);
@@ -396,8 +395,8 @@ test("Routes table reserves an unlabeled group marker column without indenting r
 });
 
 test("Routes table renders OSRM drive metrics instead of start and end placeholders", () => {
-  assert.match(routesPageSource, />Total drive time<\/th>/);
-  assert.match(routesPageSource, />Total distance<\/th>/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.totalDriveTime"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.totalDistance"\)/);
   assert.doesNotMatch(routesPageSource, />Start<\/th>/);
   assert.doesNotMatch(routesPageSource, />End<\/th>/);
   assert.match(routeListRowsSource, /function readRouteMetrics\(routePlan\) \{/);
@@ -453,14 +452,14 @@ test("Routes table selection column uses checkboxes and a single delete action",
   assert.match(routesPageSource, /checked=\{checkedRouteIdSet\.has\(route\.deleteKey\)\}/);
   assert.match(routesPageSource, /onChange=\{\(\) => toggleRouteCheck\(route\)\}/);
   assert.match(routesPageSource, /onClick=\{\(event\) => event\.stopPropagation\(\)\}/);
-  assert.match(routesPageSource, />Delete<\/button>/);
+  assert.match(routesPageSource, /translate\(language, routeDeleteFetcher\.state !== "idle" \? "routes\.list\.deleting" : "routes\.list\.delete"\)/);
   assert.doesNotMatch(routesPageSource, />\{route\.routeIndex\}<\/button>/);
   assert.doesNotMatch(routesPageSource, /aria-label=\{`Delete \$\{route\.route\}`\}/);
 });
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteLoaderData, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);
@@ -542,7 +541,7 @@ test("Route detail stages driver assignment for the global route draft save", ()
 
 
 test("Route detail wires route group action buttons through App Bridge", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{[^}]*\buseFetcher\b[^}]*\buseLoaderData\b[^}]*\buseNavigate\b[^}]*\buseRevalidator\b[^}]*\buseRouteLoaderData\b[^}]*\} from "react-router"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routeDetailServerSource, /previewDeliveryRouteGroupOptimization/);
   assert.doesNotMatch(routeDetailSource, /createDeliveryRouteGroupBranch/);
@@ -631,7 +630,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.equal(existsSync(routeDetailPath), true);
   assert.match(routeDetailSource, /import \{ useCallback, useEffect, useMemo, useRef, useState \} from "react"/);
   assert.match(routeDetailSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{[^}]*\buseFetcher\b[^}]*\buseLoaderData\b[^}]*\buseNavigate\b[^}]*\buseRevalidator\b[^}]*\buseRouteLoaderData\b[^}]*\} from "react-router"/);
   assert.match(routeDetailSource, /currentDepartureLocation = null/);
   assert.match(routeDetailSource, /childRouteDetails = \[],\s+currentDepartureLocation = null,\s+drivers = \[],\s+routePlan,\s+routeGeometry = null,\s+routeGroup = null,\s+routeDetailTitleOverride = null,\s+routeMetrics = null,\s+routeStopPoints = \[],\s+stops = \[],\s+errors = \[]/);
   assert.doesNotMatch(routeDetailSource, /routeStopPointDebug: buildRouteStopPointDebug/);
@@ -1471,7 +1470,7 @@ test("Route detail opens the driver selector and removes the unfinished vehicle 
 });
 
 test("Route detail page provides page navigation back to the route list", () => {
-  assert.match(routeDetailSource, /import \{ useFetcher, useLoaderData, useNavigate, useRevalidator \} from "react-router"/);
+  assert.match(routeDetailSource, /import \{[^}]*\buseFetcher\b[^}]*\buseLoaderData\b[^}]*\buseNavigate\b[^}]*\buseRevalidator\b[^}]*\buseRouteLoaderData\b[^}]*\} from "react-router"/);
   assert.match(routeDetailSource, /const navigate = useNavigate\(\)/);
   assert.match(routeDetailSource, /const routesListHref = ROUTES_ROOT_PATH/);
   assert.match(routeDetailSource, /const requestRouteNavigation = \(href\) => \{/);

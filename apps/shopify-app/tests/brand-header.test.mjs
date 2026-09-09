@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { readOrdersPageSource } from "./helpers/orders-source.mjs";
 
@@ -40,7 +41,7 @@ test("sidebar pages use tab titles instead of duplicating the app name", () => {
   assert.doesNotMatch(ordersSource, /title="Orders"/);
 
   const routesSource = readFileSync(join(root, "app/routes/app.routes.jsx"), "utf8");
-  assert.match(routesSource, /<h1 style=\{routesTitleStyle\}>Routes<\/h1>/);
+  assert.match(routesSource, /<h1 style=\{routesTitleStyle\}>\{translate\(language, "routes\.list\.title"\)\}<\/h1>/);
 
   for (const routeFile of pageShellRouteFiles) {
     const source = readFileSync(join(root, routeFile), "utf8");

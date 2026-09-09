@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useSearchParams } from "react-router";
+import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   formatRouteStatus,
+  getVisibleRouteGroupChildren,
   shouldRevalidateRoutesRoute,
 } from "../features/delivery/route-helpers";
 import {
@@ -20,6 +21,7 @@ import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { logStructuredMetric } from "../features/telemetry/structured-telemetry.server";
+import { translate } from "../i18n/i18n";
 
 const routesTablePageStyle = {
   padding: "8px 12px 12px",
@@ -561,19 +563,30 @@ function buildRoutesSummary(routeRows) {
   const summaryRouteRows = activeRouteRows.filter((route) => route.isSummaryRoute ?? !route.isRouteGroup);
 
   return [
-    { label: "Routes", value: String(summaryRouteRows.length) },
-    { label: "Stops", value: String(sumNumbers(summaryRouteRows.map((route) => route.orders))) },
-    { label: "Delivered", value: String(sumNumbers(summaryRouteRows.map((route) => route.delivered))) },
-    { label: "Attempted", value: String(sumNumbers(summaryRouteRows.map((route) => route.attempted))) },
+    { labelKey: "routes.summary.routes", value: String(summaryRouteRows.length) },
+    { labelKey: "routes.summary.stops", value: String(sumNumbers(summaryRouteRows.map((route) => route.orders))) },
+    { labelKey: "routes.summary.delivered", value: String(sumNumbers(summaryRouteRows.map((route) => route.delivered))) },
+    { labelKey: "routes.summary.attempted", value: String(sumNumbers(summaryRouteRows.map((route) => route.attempted))) },
     {
-      label: "Drive time",
+      labelKey: "routes.summary.driveTime",
       value: formatRouteDurationSeconds(sumOptionalNumbers(summaryRouteRows.map((route) => route.driveTimeSeconds))),
     },
     {
-      label: "Distance",
+      labelKey: "routes.summary.distance",
       value: formatRouteDistanceMeters(sumOptionalNumbers(summaryRouteRows.map((route) => route.distanceMeters))),
     },
   ];
+}
+
+function formatLocalizedRouteGroupSummary(language, route, routeGroupById) {
+  const routeGroup = routeGroupById.get(String(route?.routeGroupId));
+  const routeCount = getVisibleRouteGroupChildren(routeGroup).length;
+
+  return translate(
+    language,
+    routeCount === 1 ? "routes.group.summary.one" : "routes.group.summary.many",
+    { routeCount, stopCount: route?.orders ?? 0 },
+  );
 }
 
 function getRouteFilters(searchParams) {
@@ -646,10 +659,12 @@ function getStatusBadgeStyle(status) {
 }
 
 export default function RoutesPage() {
+  const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
   const [searchParams] = useSearchParams();
   const { routeGroups = [], routePlans = [], errors = [] } = useLoaderData();
+  const routeGroupById = new Map(routeGroups.map((routeGroup) => [String(routeGroup?.id), routeGroup]));
   const shopify = useAppBridge();
   const routeDeleteFetcher = useFetcher();
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
@@ -713,7 +728,7 @@ export default function RoutesPage() {
     const bounds = event.currentTarget.getBoundingClientRect();
     setRouteGroupMarkerTooltip({
       left: bounds.left + bounds.width / 2,
-      text: route.groupSummary,
+      text: formatLocalizedRouteGroupSummary(language, route, routeGroupById),
       top: bounds.top - 8,
     });
   }
@@ -769,18 +784,18 @@ export default function RoutesPage() {
       <div style={routesPageContentStyle}>
         <header className="tab-layout-header" style={routesHeaderStyle}>
           <div style={routesHeaderBarStyle}>
-            <h1 style={routesTitleStyle}>Routes</h1>
+            <h1 style={routesTitleStyle}>{translate(language, "routes.list.title")}</h1>
             <div style={routesHeaderActionsStyle}>
               <span style={routeSelectionSummaryStyle}>
-                {selectedRouteCount} selected
+                {translate(language, "routes.list.selectedCount", { count: selectedRouteCount })}
               </span>
               <button
                 type="button"
                 style={routeDeleteDisabled ? routeDisabledActionButtonStyle : routeActionButtonStyle}
                 disabled={routeDeleteDisabled}
                 onClick={handleDeleteSelectedRoutes}
-              >Delete</button>
-              <button type="button" style={createRoutesButtonStyle} onClick={handleCreateRoutesClick}>Create routes</button>
+              >{translate(language, routeDeleteFetcher.state !== "idle" ? "routes.list.deleting" : "routes.list.delete")}</button>
+              <button type="button" style={createRoutesButtonStyle} onClick={handleCreateRoutesClick}>{translate(language, "routes.list.create")}</button>
             </div>
           </div>
         </header>
@@ -791,8 +806,8 @@ export default function RoutesPage() {
 
         <section aria-label="Routes summary" style={routesSummaryCardsStyle}>
           {routesSummary.map((summaryItem) => (
-            <div key={summaryItem.label} style={routesSummaryCardStyle}>
-              <span style={routesSummaryLabelStyle}>{summaryItem.label}</span>
+            <div key={summaryItem.labelKey} style={routesSummaryCardStyle}>
+              <span style={routesSummaryLabelStyle}>{translate(language, summaryItem.labelKey)}</span>
               <strong style={routesSummaryValueStyle}>{summaryItem.value}</strong>
             </div>
           ))}
@@ -818,24 +833,24 @@ export default function RoutesPage() {
                     />
                   </th>
                   <th aria-hidden="true" style={routeGroupMarkerHeaderCellStyle}></th>
-                  <th style={routeTableHeaderCellStyle}>Route</th>
-                  <th style={routeTableHeaderCellStyle}>Date</th>
-                  <th style={routeTableHeaderCellStyle}>Status</th>
-                  <th style={routeNumberHeaderCellStyle}>Orders</th>
-                  <th style={routeNumberHeaderCellStyle}>Delivered</th>
-                  <th style={routeTableHeaderCellStyle}>Amount</th>
-                  <th style={routeTableHeaderCellStyle}>ETA</th>
-                  <th style={routeTableHeaderCellStyle}>Area</th>
-                  <th style={routeTableHeaderCellStyle}>Driver</th>
-                  <th style={routeTableHeaderCellStyle}>Total drive time</th>
-                  <th style={routeTableHeaderCellStyle}>Total distance</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.route")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.date")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.status")}</th>
+                  <th style={routeNumberHeaderCellStyle}>{translate(language, "routes.table.orders")}</th>
+                  <th style={routeNumberHeaderCellStyle}>{translate(language, "routes.table.delivered")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.amount")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.eta")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.area")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.driver")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDriveTime")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDistance")}</th>
                 </tr>
               </thead>
               <tbody>
                 {routeRows.map((route) => route.isRouteGroup ? (
                   <tr
                     key={route.rowKey ?? route.id}
-                    aria-label={`Open route group ${route.route}`}
+                    aria-label={translate(language, "routes.group.open", { name: route.route })}
                     className="route-table-row"
                     onClick={() => handleRouteRowClick(route)}
                     onKeyDown={(event) => handleRouteRowKeyDown(event, route)}
@@ -852,7 +867,9 @@ export default function RoutesPage() {
                           onChange={() => toggleRouteCheck(route)}
                         />
                         <strong>{route.route}</strong>
-                        <span style={routeGroupHeaderSummaryStyle}>{route.groupSummary}</span>
+                        <span style={routeGroupHeaderSummaryStyle}>
+                          {formatLocalizedRouteGroupSummary(language, route, routeGroupById)}
+                        </span>
                       </span>
                     </td>
                   </tr>

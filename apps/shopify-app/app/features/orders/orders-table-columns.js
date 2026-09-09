@@ -16,16 +16,16 @@ export const MIN_TABLE_COLUMN_WIDTH = 44;
 const TABLE_CELL_HORIZONTAL_PADDING_PX = 16;
 
 export const SORTABLE_ORDER_COLUMNS = [
-  { key: "name", label: "ID" },
-  { key: "orderedDate", label: "Ordered" },
-  { key: "customer", label: "Recipient" },
-  { key: "address", label: "Address" },
-  { key: "itemCount", label: "Items" },
-  { key: "totalPriceAmount", label: "Amount" },
-  { key: "deliveryArea", label: "Area" },
-  { key: "deliveryLabel", label: "Delivery" },
-  { key: "planningStatus", label: "State" },
-  { key: "payment", label: "Payment" },
+  { key: "name", label: "ID", translationKey: "orders.table.id" },
+  { key: "orderedDate", label: "Ordered", translationKey: "orders.table.ordered" },
+  { key: "customer", label: "Recipient", translationKey: "orders.table.recipient" },
+  { key: "address", label: "Address", translationKey: "orders.table.address" },
+  { key: "itemCount", label: "Items", translationKey: "orders.table.items" },
+  { key: "totalPriceAmount", label: "Amount", translationKey: "orders.table.amount" },
+  { key: "deliveryArea", label: "Area", translationKey: "orders.table.area" },
+  { key: "deliveryLabel", label: "Delivery", translationKey: "orders.table.delivery" },
+  { key: "planningStatus", label: "State", translationKey: "orders.table.state" },
+  { key: "payment", label: "Payment", translationKey: "orders.table.payment" },
 ];
 
 export const DEFAULT_TABLE_COLUMN_WIDTHS = [
