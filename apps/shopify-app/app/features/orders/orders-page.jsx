@@ -167,7 +167,32 @@ const ORDER_FILTER_STATE_KEY_BY_VALUE = Object.freeze({
   fulfilled: "orders.filters.state.fulfilled",
   unfulfilled: "orders.filters.state.unfulfilled",
 });
+const ORDER_FILTER_TYPES = [
+  { key: "orderedDate", labelKey: "orders.filters.orderDate" },
+  { key: "deliveryDate", labelKey: "orders.filters.deliveryDate" },
+  { key: "deliveryWeekday", labelKey: "orders.filters.deliveryDay" },
+  { key: "serviceType", labelKey: "orders.filters.type" },
+  { key: "deliveryArea", labelKey: "orders.filters.area" },
+  { key: "deliveryState", labelKey: "orders.filters.state" },
+];
 const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
+
+export function getActiveOrderFilterKeys(filters = {}) {
+  return [
+    filters.orderedDateFrom || filters.orderedDateTo ? "orderedDate" : null,
+    filters.deliveryDate ? "deliveryDate" : null,
+    filters.deliveryWeekday ? "deliveryWeekday" : null,
+    filters.serviceType ? "serviceType" : null,
+    filters.deliveryArea ? "deliveryArea" : null,
+    filters.deliveryState ? "deliveryState" : null,
+  ].filter(Boolean);
+}
+
+export function updateVisibleOrderFilterKeys(keys, filterKey, visible) {
+  const currentKeys = Array.isArray(keys) ? keys : [];
+  if (!visible) return currentKeys.filter((key) => key !== filterKey);
+  return currentKeys.includes(filterKey) ? currentKeys : [...currentKeys, filterKey];
+}
 
 const ORDERS_MAP_DEFAULT_HEIGHT = 420;
 const ORDERS_MAP_MIN_HEIGHT = 320;
@@ -584,6 +609,14 @@ const orderFiltersPanelStyle = {
   gap: "6px",
   padding: "8px",
   maxWidth: "calc(100vw - 32px)",
+};
+
+const orderFilterTypeListStyle = {
+  display: "grid",
+  gap: "2px",
+  gridTemplateColumns: "minmax(0, 1fr)",
+  maxHeight: "240px",
+  overflowY: "auto",
 };
 
 const tableWrapStyle = {
@@ -1892,7 +1925,6 @@ function formatDeliveryValue(value) {
 
 const DELIVERY_DATE_ATTRIBUTE_KEYS = ["Delivery Date", "Delivery date", "clever_delivery_date", "deliveryDate", "delivery_date", "tomatono_delivery_date"];
 const DELIVERY_DAY_ATTRIBUTE_KEYS = ["Delivery Day", "Delivery day", "delivery_day"];
-const DELIVERY_AREA_ATTRIBUTE_KEYS = ["Delivery Area", "Delivery area", "delivery_area"];
 const NOTE_DATE_HINT_PATTERNS = [
   /(\d{1,2}\s*월\s*\d{1,2}\s*일)/u,
   /((?:월|화|수|목|금|토|일)요일)/u,
@@ -1900,11 +1932,6 @@ const NOTE_DATE_HINT_PATTERNS = [
 ];
 const PICKUP_HINT_PATTERN = /픽업|pickup/iu;
 const LINE_ITEM_DATE_RANGE_PATTERN = /\b(\d{1,2}[./-]\d{1,2}\s*(?:-|~|–)\s*(?:\d{1,2}[./-])?\d{1,2})\b/u;
-
-function formatAreaValue(order) {
-  if (order?.serviceType === "PICKUP") return "Pickup";
-  return textOrUndefined(order?.deliveryArea) ?? "Null";
-}
 
 function getUniqueInfoDetails(values) {
   return Array.from(
@@ -1926,18 +1953,6 @@ function formatInfoPillTitle(label, values) {
 function formatInfoDetail(label, value) {
   const text = textOrUndefined(value);
   return text ? `${label}: ${text}` : undefined;
-}
-
-function getOrderAreaPillDetails(order) {
-  const tone = getOrderAreaPillTone(order);
-  if (!isAttentionPillTone(tone)) return [];
-
-  const rawArea = getOrderRawAttributeValue(order, DELIVERY_AREA_ATTRIBUTE_KEYS);
-
-  return getUniqueInfoDetails([
-    "Delivery area is missing",
-    rawArea ? formatInfoDetail("Raw Delivery Area", rawArea) : "Raw Delivery Area missing",
-  ]);
 }
 
 function getOrderAreaPillTone(order) {
@@ -2313,14 +2328,6 @@ function getOrderPaymentStatus(order) {
     .find((candidate) => validStatuses.has(normalizePaymentStatus(candidate)));
 }
 
-function getOrderPaymentGatewayNames(order) {
-  const gatewayNames =
-    [order?.rawPayload?.paymentGatewayNames, order?.shopifyOrderSnapshot?.paymentGatewayNames, order?.paymentGatewayNames]
-      .find(Array.isArray) ?? [];
-
-  return gatewayNames.map(textOrUndefined).filter(Boolean);
-}
-
 function normalizePaymentStatus(value) {
   return textOrUndefined(value)?.replace(/\s+/g, "_").toUpperCase() ?? "";
 }
@@ -2338,29 +2345,6 @@ function formatOrderPaymentState(order) {
   if (status === "EXPIRED") return "Expired";
 
   return "Unknown";
-}
-
-function getOrderPaymentPillTone(order) {
-  const paymentState = formatOrderPaymentState(order);
-  if (paymentState === "Paid") return "success";
-  if (paymentState === "Awaiting payment") return "warning";
-  return "critical";
-}
-
-function getOrderPaymentPillDetails(order) {
-  const paymentState = formatOrderPaymentState(order);
-  if (paymentState === "Paid") return [];
-
-  const gatewayNames = getOrderPaymentGatewayNames(order);
-  const reason = paymentState === "Awaiting payment"
-    ? "Payment is awaiting collection"
-    : "Payment status or gateway is unknown";
-
-  return getUniqueInfoDetails([
-    reason,
-    formatInfoDetail("Raw payment status", getOrderPaymentStatus(order)) ?? "Raw payment status missing",
-    gatewayNames.length > 0 ? `Raw payment gateway: ${gatewayNames.join(", ")}` : "Raw payment gateway missing",
-  ]);
 }
 
 function getOrderDeliveryStatePillTone(order, referenceDate) {
@@ -2742,6 +2726,12 @@ function OrdersPageContent({ loaderData }) {
     return nextSearchParams;
   }, [paginationEnabled, searchParams]);
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
+  const [visibleOrderFilterKeys, setVisibleOrderFilterKeys] = useState(() =>
+    getActiveOrderFilterKeys(urlOrderFilters),
+  );
+  const availableOrderFilterTypes = ORDER_FILTER_TYPES.filter(
+    ({ key }) => !visibleOrderFilterKeys.includes(key),
+  );
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? new Date(),
     [shopLocalDate],
@@ -2765,6 +2755,15 @@ function OrdersPageContent({ loaderData }) {
         : orderFilters,
     [activeOrderFilters, orderFilters],
   );
+
+  useEffect(() => {
+    setVisibleOrderFilterKeys((currentKeys) =>
+      getActiveOrderFilterKeys(orderFilters).reduce(
+        (nextKeys, filterKey) => updateVisibleOrderFilterKeys(nextKeys, filterKey, true),
+        currentKeys,
+      ),
+    );
+  }, [orderFilters]);
 
   useEffect(() => {
     ordersPageCacheRef.current.clear();
@@ -4219,6 +4218,12 @@ function OrdersPageContent({ loaderData }) {
     );
   };
 
+  const handleAddOrderFilter = (filterKey) => {
+    setVisibleOrderFilterKeys((currentKeys) =>
+      updateVisibleOrderFilterKeys(currentKeys, filterKey, true),
+    );
+  };
+
   const handleClearOrderFilter = (filterKey) => {
     const nextFilters = { ...orderFilters };
 
@@ -4231,6 +4236,9 @@ function OrdersPageContent({ loaderData }) {
     } else {
       nextFilters[filterKey] = "";
     }
+    setVisibleOrderFilterKeys((currentKeys) =>
+      updateVisibleOrderFilterKeys(currentKeys, filterKey, false),
+    );
 
     const nextSearchParams = beginOrderResourceTransition(nextFilters);
 
@@ -4373,6 +4381,7 @@ function OrdersPageContent({ loaderData }) {
 
     const nextSearchParams = beginOrderResourceTransition(nextFilters);
     setPendingOrderedDateStart("");
+    setVisibleOrderFilterKeys([]);
     setOrderedDateCalendarOpen(false);
     setOrderedDateCalendarPosition(null);
 
@@ -5899,12 +5908,29 @@ function OrdersPageContent({ loaderData }) {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
-            <s-button commandFor="orders-filter-popover">
+            <s-button
+              commandFor="orders-filter-popover"
+              disabled={availableOrderFilterTypes.length === 0}
+            >
               {translate(language, "orders.filters.add")} {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
             </s-button>
-            <s-popover id="orders-filter-popover" inlineSize="600px">
+            <s-popover id="orders-filter-popover" inlineSize="240px">
               <s-box accessibilityLabel={translate(language, "orders.filters.label")} padding="small">
-                <div aria-label={translate(language, "orders.filters.label")} role="group" style={orderFiltersPanelStyle}>
+                <div aria-label="Order filter types" role="menu" style={orderFilterTypeListStyle}>
+                  {availableOrderFilterTypes.map((filterType) => (
+                    <s-button
+                      key={filterType.key}
+                      commandFor="orders-filter-popover"
+                      command="--hide"
+                      onClick={() => handleAddOrderFilter(filterType.key)}
+                    >{translate(language, filterType.labelKey)}</s-button>
+                  ))}
+                </div>
+              </s-box>
+            </s-popover>
+            {visibleOrderFilterKeys.length > 0 ? (
+              <div aria-label="Active order filters" role="group" style={orderFiltersPanelStyle}>
+                {visibleOrderFilterKeys.includes("orderedDate") ? (
                   <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
               <button
                 aria-label={translate(language, "orders.filters.aria.orderedDate")}
@@ -5964,6 +5990,8 @@ function OrdersPageContent({ loaderData }) {
                   )
                 : null}
                   </div>
+                ) : null}
+                {visibleOrderFilterKeys.includes("deliveryDate") ? (
                   <OrderFilterMenu
               ariaLabel={translate(language, "orders.filters.aria.deliveryDate")}
               clearLabel={translate(language, "orders.filters.clear.deliveryDate")}
@@ -5976,6 +6004,8 @@ function OrdersPageContent({ loaderData }) {
               onChange={(filterValue) => handleOrderFilterChange("deliveryDate", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryDate")}
                   />
+                ) : null}
+                {visibleOrderFilterKeys.includes("deliveryWeekday") ? (
                   <OrderFilterMenu
               ariaLabel={translate(language, "orders.filters.aria.deliveryDay")}
               clearLabel={translate(language, "orders.filters.clear.deliveryDay")}
@@ -5985,6 +6015,8 @@ function OrdersPageContent({ loaderData }) {
               onChange={(filterValue) => handleOrderFilterChange("deliveryWeekday", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryWeekday")}
                   />
+                ) : null}
+                {visibleOrderFilterKeys.includes("serviceType") ? (
                   <OrderFilterMenu
               ariaLabel={translate(language, "orders.filters.aria.serviceType")}
               clearLabel={translate(language, "orders.filters.clear.serviceType")}
@@ -5997,6 +6029,8 @@ function OrdersPageContent({ loaderData }) {
               onChange={(filterValue) => handleOrderFilterChange("serviceType", filterValue)}
               onClear={() => handleClearOrderFilter("serviceType")}
                   />
+                ) : null}
+                {visibleOrderFilterKeys.includes("deliveryArea") ? (
                   <OrderFilterMenu
               ariaLabel={translate(language, "orders.filters.aria.deliveryArea")}
               clearLabel={translate(language, "orders.filters.clear.deliveryArea")}
@@ -6009,6 +6043,8 @@ function OrdersPageContent({ loaderData }) {
               onChange={(filterValue) => handleOrderFilterChange("deliveryArea", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryArea")}
                   />
+                ) : null}
+                {visibleOrderFilterKeys.includes("deliveryState") ? (
                   <OrderFilterMenu
               ariaLabel={translate(language, "orders.filters.aria.state")}
               clearLabel={translate(language, "orders.filters.clear.state")}
@@ -6018,9 +6054,9 @@ function OrdersPageContent({ loaderData }) {
               onChange={(filterValue) => handleOrderFilterChange("deliveryState", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryState")}
                   />
-                </div>
-              </s-box>
-            </s-popover>
+                ) : null}
+              </div>
+            ) : null}
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Visible order count" style={orderSelectionCountStyle}>
                 Orders: {ordersPageUpdating ? "Updating…" : filteredOrders.length}
@@ -6411,15 +6447,6 @@ function OrdersPageContent({ loaderData }) {
                   const checkboxChecked = snapshotSelectionActive
                     ? Boolean(order.orderId) && !selectionExcludedOrderIdSet.has(order.orderId)
                     : orderIsPlanned || checkedOrderIdSet.has(order.id);
-                  const areaPillTone = getOrderAreaPillTone(order);
-                  const areaPillDetails = getOrderAreaPillDetails(order);
-                  const areaPill = renderDetailPill({
-                    children: formatAreaValue(order),
-                    details: areaPillDetails,
-                    detailKey: `${order.id}:area`,
-                    label: "Area details",
-                    tone: areaPillTone,
-                  });
                   const deliveryPillDetails = getOrderDeliveryPillDetails(order);
                   const deliveryLabel = formatOrderDeliveryLabel(order);
                   const deliveryPill = renderDetailPill({
@@ -6431,7 +6458,6 @@ function OrdersPageContent({ loaderData }) {
                   });
                   const orderedPillDetails = buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone });
                   const statePillDetails = getOrderDeliveryStatePillDetails(order, orderFilterReferenceDate);
-                  const paymentPillDetails = getOrderPaymentPillDetails(order);
                   const orderNote = getOrderNote(order);
                   const customerNote = getCustomerNote(order);
                   const subscriptionSignalLabel = getOrderSubscriptionSignalLabel(order);
@@ -6610,18 +6636,6 @@ function OrdersPageContent({ loaderData }) {
                       </td>
                       <td style={tableCellStyle}>{formatOrderTotal(order)}</td>
                       <td style={deliveryInfoCellStyle}>
-                        {isAttentionPillTone(areaPillTone) ? (
-                          <button
-                            type="button"
-                            aria-label={`Edit delivery area for ${order.name}`}
-                            style={editablePillButtonStyle}
-                            onClick={() => handleOpenOrderDataAction(order)}
-                          >
-                            {areaPill}
-                          </button>
-                        ) : areaPill}
-                      </td>
-                      <td style={deliveryInfoCellStyle}>
                         {deliveryLabel === "Date pending" ? (
                           <button
                             type="button"
@@ -6640,15 +6654,6 @@ function OrdersPageContent({ loaderData }) {
                           detailKey: `${order.id}:state`,
                           label: "State details",
                           tone: getOrderDeliveryStatePillTone(order, orderFilterReferenceDate),
-                        })}
-                      </td>
-                      <td style={deliveryInfoCellStyle}>
-                        {renderDetailPill({
-                          children: formatOrderPaymentState(order),
-                          details: paymentPillDetails,
-                          detailKey: `${order.id}:payment`,
-                          label: "Payment details",
-                          tone: getOrderPaymentPillTone(order),
                         })}
                       </td>
                     </tr>

@@ -4,13 +4,11 @@ export const ORDER_TABLE_COLUMN_WIDTHS = {
   notes: "44px",
   orderedDate: "8%",
   customer: "9%",
-  address: "calc(37% - 88px)",
+  address: "calc(52.5% - 88px)",
   itemCount: "5%",
   totalPriceAmount: "7%",
-  deliveryArea: "8%",
   deliveryLabel: "9%",
   planningStatus: "8%",
-  payment: "7.5%",
 };
 export const MIN_TABLE_COLUMN_WIDTH = 44;
 const TABLE_CELL_HORIZONTAL_PADDING_PX = 16;
@@ -22,10 +20,8 @@ export const SORTABLE_ORDER_COLUMNS = [
   { key: "address", label: "Address", translationKey: "orders.table.address" },
   { key: "itemCount", label: "Items", translationKey: "orders.table.items" },
   { key: "totalPriceAmount", label: "Amount", translationKey: "orders.table.amount" },
-  { key: "deliveryArea", label: "Area", translationKey: "orders.table.area" },
   { key: "deliveryLabel", label: "Delivery", translationKey: "orders.table.delivery" },
   { key: "planningStatus", label: "State", translationKey: "orders.table.state" },
-  { key: "payment", label: "Payment", translationKey: "orders.table.payment" },
 ];
 
 export const DEFAULT_TABLE_COLUMN_WIDTHS = [
