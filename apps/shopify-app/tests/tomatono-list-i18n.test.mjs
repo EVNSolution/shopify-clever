@@ -92,7 +92,7 @@ test("Orders Add filter static labels and options have Korean dictionary coverag
 test("affected Routes list labels use the app language without adding a Dispatch action", () => {
   assert.equal(translate("ko", "routes.list.selectedCount", { count: 2 }), "2개 선택됨");
   assert.equal(translate("ko", "routes.summary.routes"), "경로");
-  assert.equal(translate("ko", "routes.table.amount"), "금액");
+  assert.equal(translate("ko", "routes.table.totalPrice"), "총 금액");
   assert.equal(
     translate("ko", "routes.group.summary.many", { routeCount: 2, stopCount: 43 }),
     "경로 2개 - 경유지 43개",
@@ -104,10 +104,10 @@ test("affected Routes list labels use the app language without adding a Dispatch
   assert.match(routesPageSource, /useRouteLoaderData\("routes\/app"\)\?\.language/);
   assert.match(routesPageSource, /translate\(language, "routes\.list\.selectedCount", \{ count: selectedRouteCount \}\)/);
   assert.match(routesPageSource, /translate\(language, summaryItem\.labelKey\)/);
-  assert.match(routesPageSource, /translate\(language, "routes\.table\.amount"\)/);
+  assert.match(routesPageSource, /translate\(language, "routes\.table\.totalPrice"\)/);
   assert.match(routesPageSource, /const routeGroupById = new Map\(routeGroups\.map/);
   assert.match(routesPageSource, /function formatLocalizedRouteGroupSummary\(language, route, routeGroupById\)/);
   assert.match(routesPageSource, /formatLocalizedRouteGroupSummary\(language, route, routeGroupById\)/);
-  assert.match(routesPageSource, /translate\(language, "routes\.group\.withoutRoutes", \{ count: groupsWithoutRoutes.length \}\)/);
+  assert.doesNotMatch(routesPageSource, /routes\.group\.withoutRoutes|groupsWithoutRoutes/);
   assert.doesNotMatch(routesPageSource, />Dispatch</);
 });

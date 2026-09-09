@@ -26,7 +26,7 @@ function evaluateArrow(name, bindings) {
 
 const resolveSave = evaluateFunction(
   "resolveScheduledNoticeSaveResult",
-  "\n\nfunction createScheduledNoticeNavigationState",
+  "\n\nfunction isCompleteSplitSaveResponse",
 );
 const createNavigationState = evaluateFunction(
   "createScheduledNoticeNavigationState",
@@ -88,7 +88,7 @@ test("successful save exposes entries without opening, previewing, or sending em
     'if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;',
     "useEffect(() => {\n    if (!hasRouteAllocationDraft)",
   );
-  assert.match(effect, /const savedRouteGroup = routeActionFetcher\.data\?\.routeGroup \?\? routeGroup/);
+  assert.match(effect, /const savedRouteGroup = responseRouteGroup \?\? routeGroup/);
   assert.match(effect, /getVisibleRouteGroupChildren\(savedRouteGroup\)/);
   assert.match(effect, /excludedRoutePlanIds: deletedRoutePlanIds/);
   assert.match(effect, /if \(scheduledNoticeSaveResult\.succeeded\)/);

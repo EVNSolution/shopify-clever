@@ -71,6 +71,7 @@ test("All routes navigation runs through the actual unsaved-draft guard", () => 
   const dialogStates = [];
   const menuStates = [];
   const requestRouteNavigation = compileHandler("requestRouteNavigation", {
+    ordinaryMutationPendingRef: { current: false },
     hasRouteAllocationDraft: true,
     navigate: (href) => navigations.push(href),
     setIsRouteDraftExitDialogOpen: (open) => dialogStates.push(open),
@@ -152,21 +153,23 @@ test("route table links use child paths only for grouped routes", () => {
   ]);
 });
 
-test("one-child groups retain the Group menu while standalone routes expose no split controls", () => {
+test("ordinary presentation hides sibling navigation and exposes Add Empty without requiring membership", () => {
   const showSiblingNavigator = extractSiblingNavigatorCondition();
   const oneChildGroup = { id: "group-1", children: [{ routePlanId: "route-1" }] };
   const groupedRoute = { id: "route-1", routeGroupingChild: { groupingId: "group-1" } };
   const standaloneRoute = { id: "route-standalone" };
 
   assert.equal(isMaterializedChildRouteDetail({ routeGroup: oneChildGroup, routePlan: groupedRoute }), true);
-  assert.equal(showSiblingNavigator(true, "group-1", 0), true);
+  assert.match(routeDetailSource, /const isMaterializedChildRouteDetail = !isOrdinaryRouteDetail && getIsMaterializedChildRouteDetail/);
+  assert.equal(showSiblingNavigator(false, "group-1", 0), false);
   assert.equal(isMaterializedChildRouteDetail({ routeGroup: null, routePlan: standaloneRoute }), false);
   assert.equal(showSiblingNavigator(false, null, -1), false);
 
   const routeActionsStart = routeDetailSource.indexOf('<div aria-label="Route actions"');
   const routeActionsEnd = routeDetailSource.indexOf('<div\n                  aria-label="Actions"', routeActionsStart);
   const routeActions = routeDetailSource.slice(routeActionsStart, routeActionsEnd);
-  assert.equal((routeActions.match(/\{routeGroupId \? \(/g) ?? []).length, 2);
+  assert.equal((routeActions.match(/\{routeGroupId \? \(/g) ?? []).length, 1);
+  assert.match(routeActions, /\{routeGroupId \|\| isOrdinaryRouteDetail \? \(/);
   assert.match(routeActions, /onClick=\{handleAddOrderToCurrentRoute\}/);
   assert.match(routeActions, /onClick=\{handleAddEmptyRoute\}/);
 });
