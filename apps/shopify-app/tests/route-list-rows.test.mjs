@@ -4,7 +4,6 @@ import test from "node:test";
 
 import {
   buildRouteRows,
-  getGroupsWithoutRoutes,
   getExpandedRouteDeleteKeys,
   getPrimaryRouteSelectionKeys,
   getRouteDeletePayloadKeys,
@@ -145,7 +144,7 @@ test("route list does not show collapsed route group children as standalone rout
   );
 
   assert.equal(rows[0].id, "empty-route-plans");
-  assert.equal(rows[0].orders, 0);
+  assert.equal(rows[0].orders, null);
   assert.equal(rows.some((row) => row.rowKey === "routePlan:route-child-1"), false);
 });
 
@@ -220,7 +219,7 @@ test("route list leaves the group marker blank and gives only its children one s
   assert.equal(childRows[1].groupAccentColor, childRows[0].groupAccentColor);
   assert.deepEqual(childRows.map((row) => row.groupSummary), ["2 Routes - 43 Stop(s)", "2 Routes - 43 Stop(s)"]);
   assert.equal(repeatedRows[1].groupAccentColor, childRows[0].groupAccentColor);
-  assert.equal(standaloneRow.groupAccentColor, undefined);
+  assert.equal(standaloneRow.groupAccentColor, null);
 });
 
 test("select-all targets each actual child and ordinary route, never the hidden group", () => {
@@ -235,7 +234,6 @@ test("select-all targets each actual child and ordinary route, never the hidden 
   assert.deepEqual(getRouteDeletePayloadKeys(rows, ["routeGroup:group", "routeGroup:childless", "missing"]), []);
   assert.deepEqual(toggleRouteSelection(rows, selected, rows.find(row=>row.id==="one")), ["routeGroupChild:group:two", "routePlan:ordinary"]);
   assert.equal(rows.some(row => row.id === "childless"), false);
-  assert.deepEqual(getGroupsWithoutRoutes([{id:"childless", name:"Saved draft",children:[]}]), [{id:"childless",name:"Saved draft",href:"/app/routes/groups/childless"}]);
 });
 
 test("each route retains its own totals and copied groups use the resulting group identity", () => {
@@ -251,4 +249,51 @@ test("each route retains its own totals and copied groups use the resulting grou
   assert.equal(rows[2].groupAccentColor,independentCopy.groupAccentColor);
   assert.equal(rows[2].routeGroupId,"copy");
   assert.equal(rows[3].href,"/app/routes/ordinary");
+});
+
+test("route columns use each member's own summary, never group or version timestamps", () => {
+  const rows = buildRouteRows([
+    { id: "one", name: "London", scheduledStartAt: "2026-09-10T12:00:00Z", createdAt: "2026-09-01T10:00:00Z", updatedAt: "2026-09-02T11:00:00Z", itemSummary: { totalQuantity: 7 }, stopsCount: 2 },
+  ], [{ id: "shared", name: "Not a route", totalOrders: 999, createdAt: "2000-01-01", updatedAt: "2099-01-01", children: [
+    {routePlanId: "one", routePlan: {id: "one"}, updatedAt: "2099-02-02"},
+    {routePlanId: "two", routePlan: {id: "two", name: "Kitchener", itemSummary: {totalQuantity: 0}, stopsCount: 0}},
+  ]}]);
+  assert.equal(rows.length, 2);
+  assert.equal(rows[0].route, "London");
+  assert.equal(rows[0].startTime, "2026-09-10T12:00:00Z");
+  assert.equal(rows[0].createdAt, "2026-09-01T10:00:00Z");
+  assert.equal(rows[0].updatedAt, "2026-09-02T11:00:00Z");
+  assert.equal(rows[0].totalItems, 7);
+  assert.equal(rows[0].orders, 2);
+  assert.equal(rows[1].totalItems, 0);
+  assert.equal(rows[1].createdAt, null);
+  assert.equal(rows[1].updatedAt, null);
+  assert.equal(rows[0].groupAccentColor, rows[1].groupAccentColor);
+});
+
+test("membership remains a route relationship without a group container response", () => {
+  const rows = buildRouteRows([
+    {id:"one",name:"London",routeGroupingChild:{groupingId:"same"}},
+    {id:"two",name:"Kitchener",routeGroupingChild:{groupingId:"same"}},
+    {id:"ordinary",name:"Mine"},
+  ], []);
+  assert.deepEqual(rows.map(row=>row.route), ["London","Kitchener","Mine"]);
+  assert.ok(rows[0].groupAccentColor);
+  assert.equal(rows[0].groupAccentColor,rows[1].groupAccentColor);
+  assert.equal(rows[2].groupAccentColor,null);
+  assert.equal(rows[0].href,"/app/routes/groups/same/routes/one");
+  assert.equal(rows[0].deleteKey,"routeGroupChild:same:one");
+  assert.equal(rows[2].totalItems,null);
+  assert.equal(rows[2].orders,null);
+});
+
+test("missing route column values stay unknown instead of inheriting group values", () => {
+  const [row] = buildRouteRows([], [{id:"group", name:"Group title", totalOrders:99, createdAt:"2026-01-01", children:[{routePlanId:"empty", routePlan:{id:"empty"}}]}]);
+  assert.equal(row.route, "-");
+  assert.equal(row.orders, null);
+  assert.equal(row.totalItems, null);
+  assert.equal(row.totalAmount, null);
+  assert.equal(row.startTime, null);
+  assert.equal(row.createdAt, null);
+  assert.equal(row.updatedAt, null);
 });

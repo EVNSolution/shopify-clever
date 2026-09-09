@@ -4,7 +4,7 @@ import {
   getRouteGroupChildRoutePlanId,
   getVisibleRouteGroupChildren,
 } from "./route-helpers.js";
-import { routeGroupChildPath, routeGroupPath, routePlanPath } from "./route-paths.js";
+import { routeGroupChildPath, routePlanPath } from "./route-paths.js";
 
 const ROUTE_GROUP_ACCENT_COLORS = ["#2563eb", "#7c3aed", "#0891b2", "#059669", "#d97706", "#e11d48"];
 
@@ -267,13 +267,14 @@ function buildRouteChildRows(
   children = getVisibleRouteGroupChildren(routeGroup),
   groupAccentColor = null,
   groupSummary = null,
+  routePlanById = new Map(),
 ) {
   return children.map((child, index) => {
     const routePlanId = getRouteGroupChildRoutePlanId(child);
     const routeGroupDeleteKey = `routeGroup:${routeGroup.id}`;
-    const routePlan = child.routePlan ?? {};
-    const routeMetrics = readRouteChildMetrics(child);
-    const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
+    const routePlan = { ...child.routePlan, ...routePlanById.get(routePlanId) };
+    const routeMetrics = readRouteChildMetrics({ ...child, routePlan });
+    const stopsCount = routePlan.stopsCount ?? child.stopsCount ?? null;
     const missingCoordinates = routePlan.missingCoordinates ?? 0;
     const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
     const executionCounts = readRouteExecutionCounts(routePlan, child);
@@ -290,9 +291,13 @@ function buildRouteChildRows(
       routeGroupId: routeGroup.id,
       groupAccentColor,
       groupSummary,
-      route: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
+      route: routePlan.name ? getRouteGroupChildRouteName(routeGroup, child, routePlan, index) : "-",
       status: child.displayStatus ?? routePlan.status ?? "DRAFT",
       orders: stopsCount,
+      totalItems: firstNumber(routePlan.itemSummary?.totalQuantity),
+      startTime: routePlan.scheduledStartAt ?? null,
+      createdAt: routePlan.createdAt ?? null,
+      updatedAt: routePlan.updatedAt ?? null,
       coordinates: `${locatedCount}/${stopsCount}`,
       delivered: executionCounts.delivered,
       attempted: executionCounts.attempted,
@@ -302,7 +307,7 @@ function buildRouteChildRows(
       missingCoordinates,
       date: formatRouteTableDate(routePlan),
       deliveryArea: formatRouteValues(routePlan.deliveryAreas),
-      driver: formatRouteDriver({ displayName: child.driverName }),
+      driver: formatRouteDriver(routePlan.driver ?? { displayName: child.driverName }),
       driverId: child.driverId ?? routePlan.driverId ?? null,
       driveTimeSeconds: routeMetrics.durationSeconds,
       distanceMeters: routeMetrics.distanceMeters,
@@ -311,12 +316,8 @@ function buildRouteChildRows(
   });
 }
 
-export function getGroupsWithoutRoutes(routeGroups = []) {
-  return routeGroups.filter((group) => group?.id && getVisibleRouteGroupChildren(group).length === 0)
-    .map((group) => ({ id: group.id, name: group.name || group.id, href: routeGroupPath(group.id) }));
-}
-
 export function buildRouteRows(routePlans, routeGroups = []) {
+  const routePlanById = new Map((Array.isArray(routePlans) ? routePlans : []).map((route) => [route.id, route]));
   const safeRouteGroups = Array.isArray(routeGroups) ? routeGroups : [];
   const routeGroupEntries = safeRouteGroups.map((routeGroup, index) => {
     const children = getVisibleRouteGroupChildren(routeGroup);
@@ -324,7 +325,7 @@ export function buildRouteRows(routePlans, routeGroups = []) {
     const totalOrders = getRouteGroupTotalOrders(routeGroup);
     const groupSummary = formatRouteGroupSummary(children.length, totalOrders);
     return {
-      childRows: buildRouteChildRows(routeGroup, children, groupAccentColor, groupSummary),
+      childRows: buildRouteChildRows(routeGroup, children, groupAccentColor, groupSummary, routePlanById),
       children,
       groupAccentColor,
       groupSummary,
@@ -336,11 +337,11 @@ export function buildRouteRows(routePlans, routeGroups = []) {
   const childRoutePlanIds = new Set(
     routeGroupEntries.flatMap(({ children }) => children.map(getRouteGroupChildRoutePlanId).filter(Boolean)),
   );
-  const routeGroupIds = new Set(safeRouteGroups.map((routeGroup) => routeGroup?.id).filter(Boolean).map(String));
+  const routeGroupIds = new Set(safeRouteGroups.map((routeGroup) => String(routeGroup.id)));
   const standaloneRoutePlans = Array.isArray(routePlans)
     ? routePlans.filter((routePlan) => {
-        const routeGroupId = getRouteGroupingChildGroupId(routePlan);
-        return !childRoutePlanIds.has(routePlan.id) && !(routeGroupId && routeGroupIds.has(routeGroupId));
+        const groupId = getRouteGroupingChildGroupId(routePlan);
+        return !childRoutePlanIds.has(routePlan.id) && !(groupId && routeGroupIds.has(groupId));
       })
     : [];
   if (standaloneRoutePlans.length === 0 && routeGroupEntries.every(({ childRows }) => childRows.length === 0)) {
@@ -351,7 +352,7 @@ export function buildRouteRows(routePlans, routeGroups = []) {
         isDeletable: false,
         route: "No routes",
         status: "Waiting",
-        orders: 0,
+        orders: null,
         date: "-",
         deliveryArea: "-",
         driver: "-",
@@ -362,8 +363,9 @@ export function buildRouteRows(routePlans, routeGroups = []) {
     ];
   }
   const routePlanRows = standaloneRoutePlans.map((routePlan) => {
+    const routeGroupId = getRouteGroupingChildGroupId(routePlan);
     const routeMetrics = readRouteMetrics(routePlan);
-    const stopsCount = routePlan.stopsCount ?? 0;
+    const stopsCount = routePlan.stopsCount ?? null;
     const missingCoordinates = routePlan.missingCoordinates ?? 0;
     const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
     const { attempted, delivered } = readRouteExecutionCounts(routePlan);
@@ -372,14 +374,21 @@ export function buildRouteRows(routePlans, routeGroups = []) {
     return {
       id: routePlan.id,
       rowKey: `routePlan:${routePlan.id}`,
-      href: routePlanPath(routePlan.id),
+      href: routeGroupId ? routeGroupChildPath(routeGroupId, routePlan.id) : routePlanPath(routePlan.id),
+      routeGroupId,
+      routeGroupDeleteKey: routeGroupId ? `routeGroup:${routeGroupId}` : null,
+      groupAccentColor: getRouteGroupAccentColor(routeGroupId),
       isClickable: true,
       isDeletable: true,
       isSummaryRoute: true,
-      deleteKey: getRouteDeleteKey(routePlan),
-      route: routePlan.name ?? routePlan.id,
+      deleteKey: routeGroupId ? getRouteGroupChildDeleteKey(routeGroupId, routePlan.id) : getRouteDeleteKey(routePlan),
+      route: routePlan.name || "-",
       status: routePlan.status ?? "DRAFT",
       orders: stopsCount,
+      totalItems: firstNumber(routePlan.itemSummary?.totalQuantity),
+      startTime: routePlan.scheduledStartAt ?? null,
+      createdAt: routePlan.createdAt ?? null,
+      updatedAt: routePlan.updatedAt ?? null,
       coordinates: `${locatedCount}/${stopsCount}`,
       delivered,
       attempted,

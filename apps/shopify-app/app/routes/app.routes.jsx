@@ -10,7 +10,6 @@ import {
 } from "../features/delivery/route-helpers";
 import {
   buildRouteRows,
-  getGroupsWithoutRoutes,
   getExpandedRouteDeleteKeys,
   getPrimaryRouteSelectionKeys,
   getRouteDeletePayloadKeys,
@@ -144,25 +143,24 @@ function getRouteNameColumnWidth(routeRows) {
 function getRouteColumnWidths(routeRows) {
   return [
     "44px",
-    "14px",
     getRouteNameColumnWidth(routeRows),
-    "104px",
     "84px",
-    "56px",
-    "68px",
-    "92px",
+    "112px",
     "148px",
-    "1%",
-    "1%",
+    "68px",
+    "84px",
     "128px",
     "128px",
+    "112px",
+    "148px",
+    "148px",
   ];
 }
 
 const singleRouteTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1304px",
+  minWidth: "1320px",
   tableLayout: "auto",
   width: "100%",
 };
@@ -199,6 +197,13 @@ const routeNameCellStyle = {
   fontWeight: 650,
 };
 
+const routeNameContentStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "8px",
+  minWidth: 0,
+};
+
 const routeNumberHeaderCellStyle = {
   ...routeTableHeaderCellStyle,
   textAlign: "center",
@@ -223,26 +228,10 @@ const routeCheckboxHeaderCellStyle = {
   textAlign: "center",
 };
 
-const routeGroupMarkerHeaderCellStyle = {
-  ...routeTableHeaderCellStyle,
-  padding: 0,
-};
-
-const routeGroupMarkerCellStyle = {
-  ...routeTableCellStyle,
-  overflow: "visible",
-  padding: 0,
-  position: "relative",
-  textOverflow: "clip",
-};
-
 const routeGroupMarkerStyle = {
-  bottom: 0,
   display: "block",
-  left: "50%",
-  position: "absolute",
-  top: 0,
-  transform: "translateX(-50%)",
+  flex: "0 0 6px",
+  height: "24px",
   width: "6px",
 };
 
@@ -528,16 +517,11 @@ function formatRouteAmount(totalAmount, currencyCode) {
   }
 }
 
-function formatRouteEtaRange(etaRange) {
-  if (!etaRange?.startAt || !etaRange?.endAt) return "-";
-  const formatInstant = (value) => {
-    const instant = new Date(value);
-    if (Number.isNaN(instant.getTime())) return String(value);
-    return `${instant.toISOString().slice(0, 16).replace("T", " ")} UTC`;
-  };
-  const start = formatInstant(etaRange.startAt);
-  const end = formatInstant(etaRange.endAt);
-  return start === end ? start : `${start} - ${end}`;
+function formatRouteInstant(value) {
+  if (!value) return "-";
+  const instant = new Date(value);
+  if (Number.isNaN(instant.getTime())) return "-";
+  return `${instant.toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
 function buildRoutesSummary(routeRows) {
@@ -658,7 +642,6 @@ export default function RoutesPage() {
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
   const [routeGroupMarkerTooltip, setRouteGroupMarkerTooltip] = useState(null);
   const allRouteRows = buildRouteRows(routePlans, routeGroups);
-  const groupsWithoutRoutes = getGroupsWithoutRoutes(routeGroups);
   const savedNoticeRoutes = getSavedNoticeRouteRows(allRouteRows, location.state?.scheduledNoticeRoutePlanIds);
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
@@ -785,21 +768,6 @@ export default function RoutesPage() {
                 disabled={routeDeleteDisabled}
                 onClick={handleDeleteSelectedRoutes}
               >{translate(language, routeDeleteFetcher.state !== "idle" ? "routes.list.deleting" : "routes.list.delete")}</button>
-              {groupsWithoutRoutes.length > 0 ? (
-                <details style={{ position: "relative" }}>
-                  <summary style={routeActionButtonStyle}>{translate(language, "routes.list.actions")}</summary>
-                  <div style={{ position: "absolute", right: 0, top: "100%", zIndex: 10, background: "white", padding: "12px", border: "1px solid #ddd", minWidth: "220px" }}>
-                    <label>
-                      {translate(language, "routes.group.withoutRoutes", { count: groupsWithoutRoutes.length })}
-                      <select aria-label={translate(language, "routes.group.withoutRoutes", { count: groupsWithoutRoutes.length })}
-                        value="" onChange={(event) => { if (event.target.value) navigate(event.target.value); }}>
-                        <option value="">{translate(language, "routes.group.choose")}</option>
-                        {groupsWithoutRoutes.map((group) => <option key={group.id} value={group.href}>{group.name}</option>)}
-                      </select>
-                    </label>
-                  </div>
-                </details>
-              ) : null}
               <button type="button" style={createRoutesButtonStyle} onClick={handleCreateRoutesClick}>{translate(language, "routes.list.create")}</button>
             </div>
           </div>
@@ -849,18 +817,17 @@ export default function RoutesPage() {
                       onChange={toggleAllVisibleRouteChecks}
                     />
                   </th>
-                  <th aria-hidden="true" style={routeGroupMarkerHeaderCellStyle}></th>
-                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.route")}</th>
-                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.date")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.name")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.status")}</th>
-                  <th style={routeNumberHeaderCellStyle}>{translate(language, "routes.table.orders")}</th>
-                  <th style={routeNumberHeaderCellStyle}>{translate(language, "routes.table.delivered")}</th>
-                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.amount")}</th>
-                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.eta")}</th>
-                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.area")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.driver")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.startTime")}</th>
+                  <th style={routeNumberHeaderCellStyle}>{translate(language, "routes.table.stops")}</th>
+                  <th style={routeNumberHeaderCellStyle}>{translate(language, "routes.table.totalItems")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDriveTime")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDistance")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalPrice")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.created")}</th>
+                  <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.lastModified")}</th>
                 </tr>
               </thead>
               <tbody>
@@ -885,28 +852,31 @@ export default function RoutesPage() {
                         />
                       ) : null}
                     </td>
-                    <td aria-hidden="true" style={routeGroupMarkerCellStyle}>
-                      {route.groupAccentColor ? (
-                        <span
-                          onMouseEnter={(event) => openRouteGroupMarkerTooltip(event, route)}
-                          onMouseLeave={closeRouteGroupMarkerTooltip}
-                          style={{ ...routeGroupMarkerStyle, background: route.groupAccentColor }}
-                        ></span>
-                      ) : null}
+                    <td style={routeNameCellStyle}>
+                      <span style={routeNameContentStyle}>
+                        {route.groupAccentColor ? (
+                          <span
+                            aria-hidden="true"
+                            onMouseEnter={(event) => openRouteGroupMarkerTooltip(event, route)}
+                            onMouseLeave={closeRouteGroupMarkerTooltip}
+                            style={{ ...routeGroupMarkerStyle, background: route.groupAccentColor }}
+                          ></span>
+                        ) : null}
+                        <span>{route.isClickable ? route.route : translate(language, route.id === "empty-filtered-route-plans" ? "routes.empty.filtered" : "routes.empty.all")}</span>
+                      </span>
                     </td>
-                    <td style={routeNameCellStyle}>{route.isClickable ? route.route : translate(language, route.id === "empty-filtered-route-plans" ? "routes.empty.filtered" : "routes.empty.all")}</td>
-                    <td style={routeTableCellStyle}>{route.date}</td>
                     <td style={routeTableCellStyle}>
                       <span style={getStatusBadgeStyle(route.status)}>{route.isClickable ? translate(language, `routes.status.${formatRouteStatus(route.status).toLowerCase().replaceAll(" ", "_")}`) : "-"}</span>
                     </td>
-                    <td style={routeNumberCellStyle}>{route.orders}</td>
-                    <td style={routeNumberCellStyle}>{route.delivered}</td>
-                    <td style={routeTableCellStyle}>{formatRouteAmount(route.totalAmount, route.currencyCode)}</td>
-                    <td style={routeTableCellStyle}>{formatRouteEtaRange(route.etaRange)}</td>
-                    <td style={routeTableCellStyle}>{route.deliveryArea}</td>
-                    <td style={routeTableCellStyle}>{route.driver}</td>
+                    <td style={routeTableCellStyle}>{route.driver ?? "-"}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.startTime)}</td>
+                    <td style={routeNumberCellStyle}>{route.orders ?? "-"}</td>
+                    <td style={routeNumberCellStyle}>{route.totalItems ?? "-"}</td>
                     <td style={routeTableCellStyle}>{formatRouteDurationSeconds(route.driveTimeSeconds)}</td>
                     <td style={routeTableCellStyle}>{formatRouteDistanceMeters(route.distanceMeters)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteAmount(route.totalAmount, route.currencyCode)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.createdAt)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.updatedAt)}</td>
                   </tr>
                 ))}
               </tbody>
