@@ -58,6 +58,71 @@ function sumOptionalNumbers(values) {
   return hasValue ? total : null;
 }
 
+function getRouteStops(routePlan) {
+  return Array.isArray(routePlan?.stops) ? routePlan.stops : [];
+}
+
+function getRouteStopStatus(stop) {
+  return String(stop?.deliveryStopStatus ?? stop?.deliveryStatus ?? stop?.status ?? "").trim().toUpperCase();
+}
+
+function readRouteExecutionCounts(routePlan, child = {}) {
+  const stops = getRouteStops(routePlan);
+  const delivered = firstNumber(
+    child.deliveredCount,
+    child.deliveredStopsCount,
+    routePlan?.deliveredCount,
+    routePlan?.deliveredStopsCount,
+    routePlan?.metrics?.deliveredCount,
+    routePlan?.metrics?.deliveredStopsCount,
+  ) ?? stops.filter((stop) => ["COMPLETE", "COMPLETED", "DELIVERED"].includes(getRouteStopStatus(stop))).length;
+  const attempted = firstNumber(
+    child.attemptedCount,
+    child.attemptedStopsCount,
+    routePlan?.attemptedCount,
+    routePlan?.attemptedStopsCount,
+    routePlan?.metrics?.attemptedCount,
+    routePlan?.metrics?.attemptedStopsCount,
+  ) ?? stops.filter((stop) => ["CANCELLED", "COMPLETE", "COMPLETED", "DELIVERED", "FAILED", "MISSED", "SKIPPED", "ATTEMPTED"].includes(getRouteStopStatus(stop))).length;
+
+  return { attempted, delivered };
+}
+
+function readRouteMoney(routePlan, child = {}) {
+  const stops = getRouteStops(routePlan);
+  const normalizedTotalAmount = child.totalAmount ?? routePlan?.totalAmount ?? routePlan?.metrics?.totalAmount;
+  const normalizedAmount = firstNumber(normalizedTotalAmount?.amount);
+  const normalizedCurrencyCode = String(normalizedTotalAmount?.currencyCode ?? "").trim();
+  if (normalizedAmount != null && normalizedCurrencyCode) {
+    return { currencyCode: normalizedCurrencyCode, totalAmount: normalizedAmount };
+  }
+
+  const legacyAmount = firstNumber(child.totalPriceAmount, routePlan?.totalPriceAmount);
+  const legacyCurrencyCode = String(child.currencyCode ?? routePlan?.currencyCode ?? "").trim();
+  if (legacyAmount != null && legacyCurrencyCode) {
+    return { currencyCode: legacyCurrencyCode, totalAmount: legacyAmount };
+  }
+
+  const pricedStops = stops.filter((stop) => firstNumber(stop?.totalPriceAmount) != null);
+  if (pricedStops.length === 0) return { currencyCode: null, totalAmount: null };
+  const stopCurrencyCodes = pricedStops.map((stop) => String(stop?.currencyCode ?? "").trim());
+  const uniqueCurrencyCodes = [...new Set(stopCurrencyCodes)];
+  if (stopCurrencyCodes.some((currencyCode) => !currencyCode) || uniqueCurrencyCodes.length !== 1) {
+    return { currencyCode: null, totalAmount: null };
+  }
+
+  return {
+    currencyCode: uniqueCurrencyCodes[0],
+    totalAmount: sumOptionalNumbers(pricedStops.map((stop) => stop.totalPriceAmount)),
+  };
+}
+
+function readRouteEtaRange(routePlan, child = {}) {
+  const etaRange = child.etaRange ?? routePlan?.etaRange ?? routePlan?.metrics?.etaRange;
+  if (!etaRange?.startAt || !etaRange?.endAt) return null;
+  return { startAt: etaRange.startAt, endAt: etaRange.endAt };
+}
+
 function readRouteMetrics(routePlan) {
   const routeMetrics = routePlan?.routeMetrics ?? null;
   return {
@@ -224,6 +289,8 @@ function buildRouteChildRows(
     const stopsCount = child.stopsCount ?? routePlan.stopsCount ?? 0;
     const missingCoordinates = routePlan.missingCoordinates ?? 0;
     const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
+    const executionCounts = readRouteExecutionCounts(routePlan, child);
+    const routeMoney = readRouteMoney(routePlan, child);
 
     return {
       id: routePlanId,
@@ -240,8 +307,11 @@ function buildRouteChildRows(
       status: child.displayStatus ?? routePlan.status ?? "DRAFT",
       orders: stopsCount,
       coordinates: `${locatedCount}/${stopsCount}`,
-      delivered: 0,
-      attempted: 0,
+      delivered: executionCounts.delivered,
+      attempted: executionCounts.attempted,
+      totalAmount: routeMoney.totalAmount,
+      currencyCode: routeMoney.currencyCode,
+      etaRange: readRouteEtaRange(routePlan, child),
       missingCoordinates,
       date: formatRouteTableDate(routePlan),
       deliveryArea: formatRouteValues(routePlan.deliveryAreas),
@@ -334,18 +404,8 @@ export function buildRouteRows(routePlans, routeGroups = []) {
     const stopsCount = routePlan.stopsCount ?? 0;
     const missingCoordinates = routePlan.missingCoordinates ?? 0;
     const locatedCount = Math.max(stopsCount - missingCoordinates, 0);
-    const delivered = firstNumber(
-      routePlan.deliveredCount,
-      routePlan.deliveredStopsCount,
-      routePlan.metrics?.deliveredCount,
-      routePlan.metrics?.deliveredStopsCount,
-    ) ?? 0;
-    const attempted = firstNumber(
-      routePlan.attemptedCount,
-      routePlan.attemptedStopsCount,
-      routePlan.metrics?.attemptedCount,
-      routePlan.metrics?.attemptedStopsCount,
-    ) ?? 0;
+    const { attempted, delivered } = readRouteExecutionCounts(routePlan);
+    const routeMoney = readRouteMoney(routePlan);
 
     return {
       id: routePlan.id,
@@ -361,6 +421,9 @@ export function buildRouteRows(routePlans, routeGroups = []) {
       coordinates: `${locatedCount}/${stopsCount}`,
       delivered,
       attempted,
+      totalAmount: routeMoney.totalAmount,
+      currencyCode: routeMoney.currencyCode,
+      etaRange: readRouteEtaRange(routePlan),
       missingCoordinates,
       date: formatRouteTableDate(routePlan),
       deliveryArea: formatRouteValues(routePlan.deliveryAreas),

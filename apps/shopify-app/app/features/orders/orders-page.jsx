@@ -549,6 +549,18 @@ const orderControlsStyle = {
   padding: "6px 10px 8px",
 };
 
+const orderFiltersPanelStyle = {
+  alignItems: "center",
+  background: "#ffffff",
+  border: "1px solid #d6d6d6",
+  borderRadius: "10px",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "6px",
+  padding: "8px",
+  maxWidth: "calc(100vw - 32px)",
+};
+
 const tableWrapStyle = {
   boxSizing: "border-box",
   height: "calc(100vh - 150px)",
@@ -2707,6 +2719,14 @@ function OrdersPageContent({ loaderData }) {
     () => hasActiveOrderFilters(orderFilters),
     [orderFilters],
   );
+  const activeOrderFilterCount = [
+    orderFilters.orderedDateFrom || orderFilters.orderedDateTo,
+    orderFilters.deliveryDate,
+    orderFilters.deliveryWeekday,
+    orderFilters.serviceType,
+    orderFilters.deliveryArea,
+    orderFilters.deliveryState,
+  ].filter(Boolean).length;
   const effectiveOrderFilters = useMemo(
     () =>
       activeOrderFilters
@@ -5770,7 +5790,13 @@ function OrdersPageContent({ loaderData }) {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
-            <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
+            <s-button commandFor="orders-filter-popover">
+              Add filter {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
+            </s-button>
+            <s-popover id="orders-filter-popover" inlineSize="600px">
+              <s-box accessibilityLabel="Order filters" padding="small">
+                <div aria-label="Order filters" role="group" style={orderFiltersPanelStyle}>
+                  <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
               <button
                 aria-label="Filter orders by ordered date"
                 style={orderedDateFilterActive ? orderFilterDateButtonStyle : orderFilterDatePlaceholderButtonStyle}
@@ -5828,8 +5854,8 @@ function OrdersPageContent({ loaderData }) {
                     document.body,
                   )
                 : null}
-            </div>
-            <OrderFilterMenu
+                  </div>
+                  <OrderFilterMenu
               ariaLabel="Filter orders by delivery date"
               clearLabel="Clear delivery date filter"
               label="Delivery date"
@@ -5840,8 +5866,8 @@ function OrdersPageContent({ loaderData }) {
               value={orderFilters.deliveryDate}
               onChange={(filterValue) => handleOrderFilterChange("deliveryDate", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryDate")}
-            />
-            <OrderFilterMenu
+                  />
+                  <OrderFilterMenu
               ariaLabel="Filter orders by delivery day"
               clearLabel="Clear delivery day filter"
               label="Delivery day"
@@ -5849,8 +5875,8 @@ function OrdersPageContent({ loaderData }) {
               value={orderFilters.deliveryWeekday}
               onChange={(filterValue) => handleOrderFilterChange("deliveryWeekday", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryWeekday")}
-            />
-            <OrderFilterMenu
+                  />
+                  <OrderFilterMenu
               ariaLabel="Filter orders by service type"
               clearLabel="Clear service type filter"
               label="Type"
@@ -5861,8 +5887,8 @@ function OrdersPageContent({ loaderData }) {
               value={orderFilters.serviceType}
               onChange={(filterValue) => handleOrderFilterChange("serviceType", filterValue)}
               onClear={() => handleClearOrderFilter("serviceType")}
-            />
-            <OrderFilterMenu
+                  />
+                  <OrderFilterMenu
               ariaLabel="Filter orders by delivery area"
               clearLabel="Clear delivery area filter"
               label="Area"
@@ -5873,8 +5899,8 @@ function OrdersPageContent({ loaderData }) {
               value={orderFilters.deliveryArea}
               onChange={(filterValue) => handleOrderFilterChange("deliveryArea", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryArea")}
-            />
-            <OrderFilterMenu
+                  />
+                  <OrderFilterMenu
               ariaLabel="Filter orders by state"
               clearLabel="Clear state filter"
               label="State"
@@ -5882,7 +5908,10 @@ function OrdersPageContent({ loaderData }) {
               value={orderFilters.deliveryState}
               onChange={(filterValue) => handleOrderFilterChange("deliveryState", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryState")}
-            />
+                  />
+                </div>
+              </s-box>
+            </s-popover>
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Visible order count" style={orderSelectionCountStyle}>
                 Orders: {ordersPageUpdating ? "Updating…" : filteredOrders.length}
@@ -6470,6 +6499,7 @@ function OrdersPageContent({ loaderData }) {
                           ) : null}
                         </span>
                       </td>
+                      <td style={tableCellStyle}>{formatOrderTotal(order)}</td>
                       <td style={deliveryInfoCellStyle}>
                         {isAttentionPillTone(areaPillTone) ? (
                           <button

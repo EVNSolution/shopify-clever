@@ -280,6 +280,16 @@ test("Routes page adds top summary cards and explicit route actions", () => {
   assert.doesNotMatch(routesPageSource, /Filter routes|Recent|Add filter|Clear all/);
 });
 
+test("Routes table distinguishes group headers and exposes delivered and amount columns", () => {
+  assert.match(routesPageSource, /route\.isRouteGroup \? \(/);
+  assert.match(routesPageSource, /aria-label=\{`Open route group \$\{route\.route\}`\}/);
+  assert.match(routesPageSource, />Delivered<\/th>/);
+  assert.match(routesPageSource, />Amount<\/th>/);
+  assert.match(routesPageSource, />ETA<\/th>/);
+  assert.match(routesPageSource, /formatRouteAmount\(route\.totalAmount, route\.currencyCode\)/);
+  assert.match(routesPageSource, /formatRouteEtaRange\(route\.etaRange\)/);
+});
+
 test("Routes page keeps copied controls out while using checkbox route selection actions", () => {
   assert.doesNotMatch(routesPageSource, /import \{ TabLayout \}/);
   assert.doesNotMatch(routesPageSource, /<TabLayout\b/);
@@ -304,7 +314,7 @@ test("Routes page keeps copied controls out while using checkbox route selection
   assert.doesNotMatch(routesPageSource, /const routeIndexButtonStyle = \{/);
   assert.doesNotMatch(routesPageSource, /const routeDeleteButtonStyle = \{/);
   assert.match(routesPageSource, /const singleRouteTableStyle = \{/);
-  assert.match(routesPageSource, /minWidth: "996px"/);
+  assert.match(routesPageSource, /minWidth: "1304px"/);
   assert.match(routesPageSource, /padding: "7px 8px"/);
   assert.match(routesPageSource, /const routeTableCellStyle = \{[\s\S]*padding: "6px 8px"/);
   assert.match(routesPageSource, /const routeCheckboxCellStyle = \{[\s\S]*padding: "6px 3px"/);
@@ -947,7 +957,10 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailMapSource, /source: ROUTE_DETAIL_ROUTE_SOURCE_ID/);
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
-  assert.doesNotMatch(routeDetailSource, /Dispatch|Mark all as ready|Start free trial/);
+  assert.doesNotMatch(routeDetailSource, /Mark all as ready|Start free trial/);
+  assert.match(routeDetailSource, />\{routeGroupActionIntent === "dispatchRoute" \? "Dispatching…" : "Dispatch"\}<\/button>/);
+  assert.match(routeDetailSource, /This does not start the route or send customer email/);
+  assert.match(routeDetailSource, /Assign a driver before dispatching this route/);
 });
 
 test("Route detail maps expose the shared accessible height control", () => {

@@ -146,6 +146,9 @@ function getRouteColumnWidths(routeRows) {
     "104px",
     "84px",
     "56px",
+    "68px",
+    "92px",
+    "148px",
     "1%",
     "1%",
     "128px",
@@ -156,7 +159,7 @@ function getRouteColumnWidths(routeRows) {
 const singleRouteTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "996px",
+  minWidth: "1304px",
   tableLayout: "auto",
   width: "100%",
 };
@@ -266,6 +269,25 @@ const routeGroupMarkerTooltipArrowStyle = {
   position: "absolute",
   transform: "translateX(-50%) rotate(45deg)",
   width: "8px",
+};
+
+const routeGroupHeaderCellStyle = {
+  ...routeTableCellStyle,
+  background: "#f7f7f7",
+  borderBottom: "1px solid #d6d6d6",
+  padding: "8px 10px",
+};
+
+const routeGroupHeaderContentStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "10px",
+};
+
+const routeGroupHeaderSummaryStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 500,
 };
 
 const routeActionButtonStyle = {
@@ -506,6 +528,32 @@ function formatRouteDistanceMeters(totalDistanceMeters) {
   const kilometers = distanceMeters / 1000;
   const roundedKilometers = Math.round(kilometers * 10) / 10;
   return `${Number.isInteger(roundedKilometers) ? roundedKilometers : roundedKilometers.toFixed(1)} km`;
+}
+
+function formatRouteAmount(totalAmount, currencyCode) {
+  const amount = numberOrNull(totalAmount);
+  if (amount == null || !currencyCode) return "-";
+
+  try {
+    return new Intl.NumberFormat("en-CA", {
+      currency: currencyCode,
+      style: "currency",
+    }).format(amount);
+  } catch {
+    return `${amount.toFixed(2)} ${currencyCode ?? ""}`.trim();
+  }
+}
+
+function formatRouteEtaRange(etaRange) {
+  if (!etaRange?.startAt || !etaRange?.endAt) return "-";
+  const formatInstant = (value) => {
+    const instant = new Date(value);
+    if (Number.isNaN(instant.getTime())) return String(value);
+    return `${instant.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  };
+  const start = formatInstant(etaRange.startAt);
+  const end = formatInstant(etaRange.endAt);
+  return start === end ? start : `${start} - ${end}`;
 }
 
 function buildRoutesSummary(routeRows) {
@@ -774,6 +822,9 @@ export default function RoutesPage() {
                   <th style={routeTableHeaderCellStyle}>Date</th>
                   <th style={routeTableHeaderCellStyle}>Status</th>
                   <th style={routeNumberHeaderCellStyle}>Orders</th>
+                  <th style={routeNumberHeaderCellStyle}>Delivered</th>
+                  <th style={routeTableHeaderCellStyle}>Amount</th>
+                  <th style={routeTableHeaderCellStyle}>ETA</th>
                   <th style={routeTableHeaderCellStyle}>Area</th>
                   <th style={routeTableHeaderCellStyle}>Driver</th>
                   <th style={routeTableHeaderCellStyle}>Total drive time</th>
@@ -781,7 +832,31 @@ export default function RoutesPage() {
                 </tr>
               </thead>
               <tbody>
-                {routeRows.map((route) => (
+                {routeRows.map((route) => route.isRouteGroup ? (
+                  <tr
+                    key={route.rowKey ?? route.id}
+                    aria-label={`Open route group ${route.route}`}
+                    className="route-table-row"
+                    onClick={() => handleRouteRowClick(route)}
+                    onKeyDown={(event) => handleRouteRowKeyDown(event, route)}
+                    role="link"
+                    tabIndex={0}
+                  >
+                    <td colSpan={13} style={routeGroupHeaderCellStyle}>
+                      <span style={routeGroupHeaderContentStyle}>
+                        <input
+                          type="checkbox"
+                          aria-label={`Select ${route.route} for deletion`}
+                          checked={checkedRouteIdSet.has(route.deleteKey)}
+                          onClick={(event) => event.stopPropagation()}
+                          onChange={() => toggleRouteCheck(route)}
+                        />
+                        <strong>{route.route}</strong>
+                        <span style={routeGroupHeaderSummaryStyle}>{route.groupSummary}</span>
+                      </span>
+                    </td>
+                  </tr>
+                ) : (
                   <tr
                     key={route.rowKey ?? route.id}
                     aria-label={route.isClickable ? `Open ${route.route} detail` : undefined}
@@ -817,6 +892,9 @@ export default function RoutesPage() {
                       <span style={getStatusBadgeStyle(route.status)}>{formatRouteStatus(route.status)}</span>
                     </td>
                     <td style={routeNumberCellStyle}>{route.orders}</td>
+                    <td style={routeNumberCellStyle}>{route.delivered}</td>
+                    <td style={routeTableCellStyle}>{formatRouteAmount(route.totalAmount, route.currencyCode)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteEtaRange(route.etaRange)}</td>
                     <td style={routeTableCellStyle}>{route.deliveryArea}</td>
                     <td style={routeTableCellStyle}>{route.driver}</td>
                     <td style={routeTableCellStyle}>{formatRouteDurationSeconds(route.driveTimeSeconds)}</td>

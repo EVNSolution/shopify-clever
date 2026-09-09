@@ -478,6 +478,36 @@ export async function assignDeliveryRoutePlanDriver(request, routePlanId, payloa
   };
 }
 
+export async function publishDeliveryRoutePlan(request, routePlanId, options = {}) {
+  const normalizedRoutePlanId = textOrNull(routePlanId);
+  if (!normalizedRoutePlanId) {
+    return {
+      dispatch: null,
+      errors: [{
+        code: DELIVERY_ROUTE_PLAN_ID_MISSING_ERROR_CODE,
+        message: "Dispatch할 route plan ID가 없습니다.",
+      }],
+    };
+  }
+
+  const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/ui/app/api/routes/${safeRoutePlanId}/publish`,
+    {
+      fetch: options.fetch,
+      method: "POST",
+      sessionToken: options.sessionToken,
+    },
+  );
+  if (result.errors.length === 0) clearDeliveryApiResponseCache();
+
+  return {
+    dispatch: result.data?.dispatch ?? result.data ?? null,
+    errors: result.errors,
+  };
+}
+
 export async function deleteDeliveryRoutePlan(request, routePlanId, options = {}) {
   const normalizedRoutePlanId = textOrNull(routePlanId);
 
