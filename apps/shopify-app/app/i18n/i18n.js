@@ -7,6 +7,7 @@ export const SUPPORTED_LANGUAGES = [
 
 const TRANSLATIONS = {
   en: {
+    "notifications.variables.etaWindow": "Estimated arrival window",
     "nav.home": "Home",
     "nav.orders": "Orders",
     "nav.routes": "Routes",
@@ -34,6 +35,7 @@ const TRANSLATIONS = {
     "settings.errors.unableToSave": "Unable to save settings.",
   },
   ko: {
+    "notifications.variables.etaWindow": "예상 도착 시간대",
     "nav.home": "홈",
     "nav.orders": "주문",
     "nav.routes": "경로",
