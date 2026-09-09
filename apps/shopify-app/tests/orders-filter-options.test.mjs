@@ -58,7 +58,7 @@ test("facet normalization retains legacy strings and handles absent or malformed
 
 test("filter menus receive the accessible labels their component consumes", () => {
   const source = readFileSync(new URL("../app/features/orders/orders-page.jsx", import.meta.url), "utf8");
-  for (const label of ["delivery date", "delivery day", "service type", "delivery area", "state"]) {
-    assert.ok(source.includes(`ariaLabel="Filter orders by ${label}"`));
+  for (const key of ["deliveryDate", "deliveryDay", "serviceType", "deliveryArea", "state"]) {
+    assert.ok(source.includes(`ariaLabel={translate(language, "orders.filters.aria.${key}")}`));
   }
 });
