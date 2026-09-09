@@ -24,7 +24,7 @@ Lost API responses, 5xx and malformed success responses are treated as uncertain
 
 Copy follows the user-confirmed contract: a distinct standalone READY route named `<source> Copy`, preserved schedule/time zone/depot/constraints and ordered stops, separate virtual Order/DeliveryStop identities retaining original Shopify references, no copied driver/vehicle/execution history, and immutable source data.
 
-The exact server Copy implementation SHA and its CI were not yet supplied at implementation start. Final integration must verify that SHA against these response fields, the virtual-order detail-loader shape, stable error codes/messages, and split response children. No production request is needed for this verification; use safe server fixtures and contract tests. No email behavior, operating-route mutation, merge or deployment is part of this web change.
+Server Copy PR #410 head `a934027f59db369962b3ddb448c0d5be99a3cabd` has now been read at that exact Git object, including its route registration, parser, response DTO, service guards and contract document. Copy request/response and Split schema match the web adapters. The server uses ROUTE_GROUPING_STALE_WRITE for both stale and already-grouped failures, and ROUTE_GROUPING_INVALID for both lifecycle and allocation failures; the web distinguishes their confirmed messages while retaining HTTP status and server code. Real server/database integration and deployment are not claimed by the synthetic browser checks. No email behavior, operating-route mutation, merge or deployment is part of this web change.
 
 ## Web verification (2026-09-09)
 
@@ -37,3 +37,11 @@ The exact server Copy implementation SHA and its CI were not yet supplied at imp
 - No stylesheet, table-column, layout, map or editor redesign. Visible additions are the ordinary Copy action and necessary busy/failure behavior. Email actions were not changed or invoked.
 
 Local observer evidence: `/Users/jiin/.codex/build-hygiene/logs/clever-shopify-app/20260909T18*`. Short logs: `/tmp/ordinary-final-focused.log`, `/tmp/ordinary-bridge-suite.log`, `/tmp/ordinary-bridge-eslint.log`, `/tmp/ordinary-bridge-typecheck.log`, `/tmp/ordinary-bridge-build.log`.
+
+## Confirmed server compatibility follow-up
+
+- Server source: PR #410, `a934027f59db369962b3ddb448c0d5be99a3cabd`, stacked on split PR #409. Read the commit directly without switching or editing the server worktree.
+- Added the exact successful Copy DTO to client regression tests, including `updatedAt`, null driver/vehicle and absent grouping membership.
+- Reproduced a mismatch for `route already belongs to a group; reload and retry`; fixed its 409 classification. Verified that the existing mapping already handles `only Ready standalone routes can be copied/split` as lifecycle rejection, and locked it with exact-message regression cases. Both Copy and Split clients are covered with those exact server messages.
+- Final targeted contract/UI/navigation regressions: 95 passed. This follow-up changes API error categorization and tests/documentation only; the previously verified 4/1/1 UI flow is unchanged.
+- The Copy -> copied detail -> two local Empty routes -> 4/1/1 allocation -> single Save -> preserved copied child + two real siblings -> same-color actual rows and immutable original scenario passed in the in-app synthetic fixture as recorded above. No live route/order operation or notification was sent.

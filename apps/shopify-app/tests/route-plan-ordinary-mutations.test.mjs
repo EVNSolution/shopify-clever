@@ -92,6 +92,21 @@ test("ordinary mutations do not call the server without a route ID and exact rev
   assert.equal(missingRevision.outcomeUnknown, undefined);
 });
 
+test("server a934027 Copy response preserves the fields needed for immediate detail navigation", async () => {
+  const routePlan = {
+    id: "copy-contract-id", name: "Source route Copy", status: "READY",
+    driverId: null, vehicleId: null, planDate: "2026-09-09", departureTime: "08:30",
+    scheduledStartAt: "2026-09-09T12:30:00.000Z", scheduledStartTimeZone: "America/Toronto",
+    depot: { latitude: 43.7, longitude: -79.4 }, stopsCount: 3,
+    createdAt: "2026-09-09T12:01:00.000Z", updatedAt: "2026-09-09T12:01:00.000Z",
+  };
+  const result = await copyDeliveryRoutePlan(makeRequest(), "source-1", {
+    expectedRoutePlanUpdatedAt: "2026-09-09T12:00:00.000Z",
+  }, { fetch: makeFetch({ data: { routePlan }, error: null }, 201) });
+  assert.deepEqual(result, { routePlan, errors: [] });
+  assert.equal(result.routePlan.routeGroupingChild, undefined);
+});
+
 test("ordinary split payload keeps supported draft row fields and strips group-only mutation fields", () => {
   const payload = buildStandaloneRouteSplitPayload({
     deletedRoutePlanIds: ["route-deleted"],
@@ -200,6 +215,10 @@ test("ordinary split posts one atomic MANUAL_ORDER request and returns the saved
 
 test("ordinary mutations preserve HTTP status and expose stable conflict categories", async () => {
   const cases = [
+    // Exact server a934027 messages, shared by Copy and Split.
+    [409, { code: "ROUTE_GROUPING_STALE_WRITE", message: "route already belongs to a group; reload and retry" }, DELIVERY_ROUTE_PLAN_ALREADY_GROUPED_ERROR_CODE],
+    [400, { code: "ROUTE_GROUPING_INVALID", message: "only Ready standalone routes can be copied" }, DELIVERY_ROUTE_PLAN_NOT_EDITABLE_ERROR_CODE],
+    [400, { code: "ROUTE_GROUPING_INVALID", message: "only Ready standalone routes can be split" }, DELIVERY_ROUTE_PLAN_NOT_EDITABLE_ERROR_CODE],
     [409, { code: "ROUTE_GROUPING_STALE_WRITE", message: "Route revision changed" }, DELIVERY_ROUTE_PLAN_REVISION_CONFLICT_ERROR_CODE],
     [409, { code: "ROUTE_GROUPING_STALE_WRITE", message: "Route must still be standalone" }, DELIVERY_ROUTE_PLAN_ALREADY_GROUPED_ERROR_CODE],
     [400, { code: "ROUTE_GROUPING_INVALID", message: "Route status is IN_PROGRESS" }, DELIVERY_ROUTE_PLAN_NOT_EDITABLE_ERROR_CODE],
@@ -217,6 +236,12 @@ test("ordinary mutations preserve HTTP status and expose stable conflict categor
     assert.equal(result.errors[0].serverCode, error.code);
     assert.equal(result.errors[0].status, status);
     assert.equal(result.outcomeUnknown, undefined);
+    const copyResult = await copyDeliveryRoutePlan(makeRequest(), "source-1", {
+      expectedRoutePlanUpdatedAt: "2026-09-09T12:00:00.000Z",
+    }, { fetch: makeFetch({ data: null, error }, status) });
+    assert.equal(copyResult.errors[0].code, expectedCode);
+    assert.equal(copyResult.errors[0].status, status);
+    assert.equal(copyResult.outcomeUnknown, undefined);
   }
 });
 

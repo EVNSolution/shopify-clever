@@ -397,7 +397,7 @@ function normalizeStandaloneRouteMutationErrors(errors, operation) {
     } else if (status === 404) {
       code = DELIVERY_ROUTE_PLAN_NOT_FOUND_ERROR_CODE;
       message = "현재 shop에서 대상 Route를 찾지 못했습니다. 페이지를 새로고침해주세요.";
-    } else if (status === 409 && /already[^a-z0-9]+group|grouped|standalone|current child/u.test(searchable)) {
+    } else if (status === 409 && /already[^a-z0-9]+group|already belongs to a group|grouped|standalone|current child/u.test(searchable)) {
       code = DELIVERY_ROUTE_PLAN_ALREADY_GROUPED_ERROR_CODE;
       message = "이 Route는 이미 group에 속해 있습니다. 페이지를 새로고침해주세요.";
     } else if (status === 409) {
