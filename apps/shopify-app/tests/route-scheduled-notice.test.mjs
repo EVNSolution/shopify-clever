@@ -26,6 +26,14 @@ function evaluateArrow(name, bindings) {
 
 const resolveSave = evaluateFunction(
   "resolveScheduledNoticeSaveResult",
+  "\n\nfunction createScheduledNoticeNavigationState",
+);
+const createNavigationState = evaluateFunction(
+  "createScheduledNoticeNavigationState",
+  "\n\nfunction getScheduledNoticeLocationRoutePlanIds",
+);
+const getLocationRoutePlanIds = evaluateFunction(
+  "getScheduledNoticeLocationRoutePlanIds",
   "\n\nfunction createCustomerEmailDialogOpenState",
 );
 const createDialogState = evaluateFunction(
@@ -45,6 +53,21 @@ test("save result requires success and keeps only concrete route ids", () => {
     routeGroupRoutePlanIds: ["group-member"],
     routePlanId: "current-route",
   }), { routePlanIds: ["current-route"], succeeded: true });
+  assert.deepEqual(resolveSave({
+    excludedRoutePlanIds: ["route-2"],
+    routeGroupRoutePlanIds: ["route-1", "route-2"],
+  }), { routePlanIds: ["route-1"], succeeded: true });
+  assert.deepEqual(resolveSave({
+    excludedRoutePlanIds: ["deleted-current"],
+    routeGroupRoutePlanIds: ["deleted-current", "surviving-sibling"],
+    routePlanId: "deleted-current",
+  }), { routePlanIds: ["surviving-sibling"], succeeded: true });
+  assert.deepEqual(createNavigationState(["route-1", null, "route-1", "route-2"]), {
+    scheduledNoticeRoutePlanIds: ["route-1", "route-2"],
+  });
+  assert.deepEqual(getLocationRoutePlanIds({
+    scheduledNoticeRoutePlanIds: ["route-2", "stale-route", "route-2"],
+  }, ["route-1", "route-2"]), ["route-2"]);
 });
 
 test("group-null initialization and reset cannot dereference a missing route", () => {
@@ -67,11 +90,20 @@ test("successful save exposes entries without opening, previewing, or sending em
   );
   assert.match(effect, /const savedRouteGroup = routeActionFetcher\.data\?\.routeGroup \?\? routeGroup/);
   assert.match(effect, /getVisibleRouteGroupChildren\(savedRouteGroup\)/);
+  assert.match(effect, /excludedRoutePlanIds: deletedRoutePlanIds/);
   assert.match(effect, /if \(scheduledNoticeSaveResult\.succeeded\)/);
   assert.match(effect, /setScheduledNoticeRoutePlanId\(scheduledNoticeSaveResult\.routePlanIds\[0\] \?\? null\)/);
   assert.match(effect, /setScheduledNoticeGroupRoutePlanIds\(scheduledNoticeSaveResult\.routePlanIds\)/);
   assert.doesNotMatch(effect, /openCustomerEmailDialog|submitCustomerEmailAction|previewCustomerEmail|sendCustomerEmail/);
   assert.match(source, /const handleSaveRouteDraft = \(\) => \{[\s\S]*setScheduledNoticeRoutePlanId\(null\);[\s\S]*setScheduledNoticeGroupRoutePlanIds\(\[\]\);[\s\S]*submitRouteGroupAction\("saveRouteDraft"/);
+});
+
+test("successful save navigation preserves the remaining saved route ids", () => {
+  assert.match(source, /navigate\(navigateAfterSave, \{[\s\S]*createScheduledNoticeNavigationState\(scheduledNoticeSaveResult\.routePlanIds\)/);
+  assert.match(source, /navigate\(routeGroupPath\(routeGroupId\), \{[\s\S]*createScheduledNoticeNavigationState\(scheduledNoticeSaveResult\.routePlanIds\)/);
+  assert.match(source, /getScheduledNoticeLocationRoutePlanIds\([\s\S]*getVisibleRouteGroupChildren\(routeGroup\)\.map\(getRouteGroupChildRoutePlanId\)/);
+  assert.match(source, /\|\| scheduledNoticeGroupRoutePlanIds\.length > 0/);
+  assert.doesNotMatch(source, /isRouteGroupDetail && scheduledNoticeGroupRoutePlanIds\.length > 0/);
 });
 
 test("group entry navigates only to an actual member and does not use the group as an email target", () => {

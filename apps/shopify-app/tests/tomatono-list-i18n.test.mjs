@@ -26,6 +26,69 @@ test("affected Orders list controls and columns use the app language", () => {
   assert.match(ordersPageSource, /translate\(language, column\.translationKey\)/);
 });
 
+test("Orders Add filter static labels and options have Korean dictionary coverage", () => {
+  const expectedTranslations = {
+    "orders.filters.orderDate": "주문일",
+    "orders.filters.deliveryDate": "배송일",
+    "orders.filters.deliveryDay": "배송 요일",
+    "orders.filters.type": "유형",
+    "orders.filters.area": "지역",
+    "orders.filters.state": "상태",
+    "orders.filters.serviceType.delivery": "배송",
+    "orders.filters.serviceType.pickup": "픽업",
+    "orders.filters.weekday.sunday": "일요일",
+    "orders.filters.weekday.monday": "월요일",
+    "orders.filters.weekday.tuesday": "화요일",
+    "orders.filters.weekday.wednesday": "수요일",
+    "orders.filters.weekday.thursday": "목요일",
+    "orders.filters.weekday.friday": "금요일",
+    "orders.filters.weekday.saturday": "토요일",
+    "orders.filters.state.unplanned": "미계획",
+    "orders.filters.state.planned": "계획됨",
+    "orders.filters.state.assignedUndelivered": "배정됨",
+    "orders.filters.state.pastDue": "기한 지남",
+    "orders.filters.state.delivered": "완료 / 배송 완료",
+    "orders.filters.state.fulfilled": "처리 완료",
+    "orders.filters.state.unfulfilled": "미처리",
+  };
+
+  for (const [key, expected] of Object.entries(expectedTranslations)) {
+    assert.equal(translate("ko", key), expected, key);
+  }
+  const remainingStaticKeys = [
+    "orders.filters.aria.orderedDate",
+    "orders.filters.aria.deliveryDate",
+    "orders.filters.aria.deliveryDay",
+    "orders.filters.aria.serviceType",
+    "orders.filters.aria.deliveryArea",
+    "orders.filters.aria.state",
+    "orders.filters.clear.orderedDate",
+    "orders.filters.clear.deliveryDate",
+    "orders.filters.clear.deliveryDay",
+    "orders.filters.clear.serviceType",
+    "orders.filters.clear.deliveryArea",
+    "orders.filters.clear.state",
+  ];
+  for (const key of [...Object.keys(expectedTranslations), ...remainingStaticKeys]) {
+    assert.notEqual(translate("en", key), key, `${key} English dictionary entry`);
+    assert.notEqual(translate("ko", key), translate("en", key), `${key} Korean dictionary entry`);
+  }
+  assert.equal(
+    translate("ko", "orders.filters.datePending", { count: 3 }),
+    "날짜 미정 (3)",
+  );
+  assert.equal(
+    translate("en", "orders.filters.datePending", { count: 3 }),
+    "Date pending (3)",
+  );
+  assert.match(ordersPageSource, /ORDER_FILTER_WEEKDAY_KEY_BY_VALUE/);
+  assert.match(ordersPageSource, /ORDER_FILTER_STATE_KEY_BY_VALUE/);
+  assert.match(ordersPageSource, /translateOrderFilterOptions\(language, ORDER_WEEKDAY_OPTIONS/);
+  assert.match(ordersPageSource, /translateOrderFilterOptions\(language, ORDER_DELIVERY_STATE_OPTIONS/);
+  assert.match(ordersPageSource, /translate\(language, "orders\.filters\.aria\.orderedDate"\)/);
+  assert.match(ordersPageSource, /translate\(language, "orders\.filters\.clear\.state"\)/);
+});
+
 test("affected Routes list labels use the app language without adding a Dispatch action", () => {
   assert.equal(translate("ko", "routes.list.selectedCount", { count: 2 }), "2개 선택됨");
   assert.equal(translate("ko", "routes.summary.routes"), "경로");

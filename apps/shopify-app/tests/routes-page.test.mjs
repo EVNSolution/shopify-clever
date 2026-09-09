@@ -459,7 +459,7 @@ test("Routes table selection column uses checkboxes and a single delete action",
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteLoaderData, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useLocation, useNavigate, useParams, useRouteLoaderData, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);

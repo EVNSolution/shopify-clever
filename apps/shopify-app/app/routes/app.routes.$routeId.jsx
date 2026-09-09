@@ -3368,12 +3368,31 @@ function getCustomerEmailFailedSendDeliveryStopIds(dispatch) {
     .filter(Boolean))];
 }
 
-function resolveScheduledNoticeSaveResult({ errors = [], routeGroupRoutePlanIds = [], routePlanId }) {
+function resolveScheduledNoticeSaveResult({
+  errors = [],
+  excludedRoutePlanIds = [],
+  routeGroupRoutePlanIds = [],
+  routePlanId,
+}) {
   if (errors.length > 0) return { routePlanIds: [], succeeded: false };
-  const routePlanIds = routePlanId
+  const excludedRoutePlanIdSet = new Set(excludedRoutePlanIds);
+  const routePlanIds = (routePlanId && !excludedRoutePlanIdSet.has(routePlanId)
     ? [routePlanId]
-    : [...new Set(routeGroupRoutePlanIds.filter(Boolean))];
+    : [...new Set(routeGroupRoutePlanIds.filter(Boolean))])
+    .filter((candidateRoutePlanId) => !excludedRoutePlanIdSet.has(candidateRoutePlanId));
   return { routePlanIds, succeeded: true };
+}
+
+function createScheduledNoticeNavigationState(routePlanIds) {
+  return { scheduledNoticeRoutePlanIds: [...new Set(routePlanIds.filter(Boolean))] };
+}
+
+function getScheduledNoticeLocationRoutePlanIds(locationState, actualRoutePlanIds) {
+  const actualRoutePlanIdSet = new Set(actualRoutePlanIds);
+  const requestedRoutePlanIds = Array.isArray(locationState?.scheduledNoticeRoutePlanIds)
+    ? locationState.scheduledNoticeRoutePlanIds
+    : [];
+  return [...new Set(requestedRoutePlanIds.filter((routePlanId) => actualRoutePlanIdSet.has(routePlanId)))];
 }
 
 function createCustomerEmailDialogOpenState(signal) {
@@ -3529,6 +3548,8 @@ export default function RouteDetailPage() {
   const routeTimelineSuppressClickRef = useRef(false);
   const routeTimelineSuppressClickTimerRef = useRef(null);
   const customerEmailRequestRef = useRef(null);
+  const scheduledNoticeRouteGroupRef = useRef(routeGroup);
+  scheduledNoticeRouteGroupRef.current = routeGroup;
   const lastRouteActionIntentRef = useRef(null);
   const copyRouteGroupDialogRef = useRef(null);
   const copyRouteGroupDialogStateRef = useRef(copyRouteGroupDialogState);
@@ -3595,7 +3616,12 @@ export default function RouteDetailPage() {
       ? effectiveRoutePlan.id
       : null
   ));
-  const [scheduledNoticeGroupRoutePlanIds, setScheduledNoticeGroupRoutePlanIds] = useState([]);
+  const [scheduledNoticeGroupRoutePlanIds, setScheduledNoticeGroupRoutePlanIds] = useState(() => (
+    getScheduledNoticeLocationRoutePlanIds(
+      location.state,
+      getVisibleRouteGroupChildren(routeGroup).map(getRouteGroupChildRoutePlanId),
+    )
+  ));
   const [customerEmailSignal, setCustomerEmailSignal] = useState(() => getCustomerEmailDefaultSignal(loaderRouteExecutionStatus));
   const [customerEmailConfirmed, setCustomerEmailConfirmed] = useState(false);
   const [customerEmailMissingValuesConfirmed, setCustomerEmailMissingValuesConfirmed] = useState(false);
@@ -5904,6 +5930,7 @@ export default function RouteDetailPage() {
     const savedRouteGroup = routeActionFetcher.data?.routeGroup ?? routeGroup;
     const scheduledNoticeSaveResult = resolveScheduledNoticeSaveResult({
       errors: routeActionFetcher.data?.errors ?? [],
+      excludedRoutePlanIds: deletedRoutePlanIds,
       routeGroupRoutePlanIds: getVisibleRouteGroupChildren(savedRouteGroup)
         .map(getRouteGroupChildRoutePlanId),
       routePlanId: effectiveRoutePlan?.id,
@@ -5915,11 +5942,15 @@ export default function RouteDetailPage() {
       if (navigateAfterSave) {
         setScheduledNoticeRoutePlanId(null);
         setScheduledNoticeGroupRoutePlanIds([]);
-        navigate(navigateAfterSave);
+        navigate(navigateAfterSave, {
+          state: createScheduledNoticeNavigationState(scheduledNoticeSaveResult.routePlanIds),
+        });
       } else if (effectiveRoutePlan?.id && deletedRoutePlanIds.includes(effectiveRoutePlan.id) && routeGroupId) {
         setScheduledNoticeRoutePlanId(null);
         setScheduledNoticeGroupRoutePlanIds([]);
-        navigate(routeGroupPath(routeGroupId));
+        navigate(routeGroupPath(routeGroupId), {
+          state: createScheduledNoticeNavigationState(scheduledNoticeSaveResult.routePlanIds),
+        });
       } else if (effectiveRoutePlan?.id) {
         setScheduledNoticeRoutePlanId(scheduledNoticeSaveResult.routePlanIds[0] ?? null);
         setScheduledNoticeGroupRoutePlanIds([]);
@@ -5939,8 +5970,11 @@ export default function RouteDetailPage() {
         ? effectiveRoutePlan.id
         : null,
     );
-    setScheduledNoticeGroupRoutePlanIds([]);
-  }, [effectiveRoutePlan?.id, location.state?.scheduledNoticeRoutePlanId]);
+    setScheduledNoticeGroupRoutePlanIds(getScheduledNoticeLocationRoutePlanIds(
+      location.state,
+      getVisibleRouteGroupChildren(scheduledNoticeRouteGroupRef.current).map(getRouteGroupChildRoutePlanId),
+    ));
+  }, [effectiveRoutePlan?.id, location.state]);
 
   useEffect(() => {
     if (!hasRouteAllocationDraft) return undefined;
@@ -6647,12 +6681,12 @@ export default function RouteDetailPage() {
       ) : null}
       <div style={routesDetailContentStyle}>
         {(effectiveRoutePlan?.id && scheduledNoticeRoutePlanId === effectiveRoutePlan.id)
-          || (isRouteGroupDetail && scheduledNoticeGroupRoutePlanIds.length > 0) ? (
+          || scheduledNoticeGroupRoutePlanIds.length > 0 ? (
           <div role="status" style={routeScheduledNoticeStyle}>
             <span style={routeScheduledNoticeTextStyle}>
               {translate(language, "routes.scheduledNotice.savedMessage")}
             </span>
-            {isRouteGroupDetail ? siblingRouteRows
+            {scheduledNoticeGroupRoutePlanIds.length > 0 ? siblingRouteRows
               .filter((routeRow) => scheduledNoticeGroupRoutePlanIds.includes(routeRow.routePlanId))
               .map((routeRow) => (
                 <button
