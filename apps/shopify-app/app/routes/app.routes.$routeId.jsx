@@ -34,6 +34,7 @@ import {
   validateCustomStopDraft,
 } from "../features/delivery/custom-stop-form";
 import { reverseRouteStopIds } from "../features/delivery/route-draft";
+import { getRouteDispatchNotice } from "../features/delivery/route-dispatch";
 import {
   beginRouteGroupCopySubmit,
   cancelRouteGroupCopyDialog,
@@ -5973,10 +5974,11 @@ export default function RouteDetailPage() {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "dispatchRoute") return;
     lastRouteActionIntentRef.current = null;
-    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
     revalidator.revalidate();
-    shopify.toast.show("Route dispatched to driver");
-  }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+    const notice = getRouteDispatchNotice(routeActionFetcher.data, effectiveRoutePlan?.id);
+    shopify.toast.show(notice.message, { isError: notice.isError });
+  }, [effectiveRoutePlan?.id, revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;

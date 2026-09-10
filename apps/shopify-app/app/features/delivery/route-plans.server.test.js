@@ -35,7 +35,10 @@ test("dispatch publishes the route without starting it or sending customer email
         sessionToken: "session-token",
         fetch: async (url, options) => {
           calls.push({ url, options });
-          return new Response(JSON.stringify({ data: { status: "PUBLISHED" }, error: null }), {
+          return new Response(JSON.stringify({ data: {
+            routePlan: { id: "route-1", status: "READY" },
+            dispatch: { routePlanId: "route-1", publishedAt: "2026-09-10T09:00:00.000Z", notificationStatus: "SENT" },
+          }, error: null }), {
             status: 200,
             headers: { "content-type": "application/json" },
           });
@@ -43,10 +46,10 @@ test("dispatch publishes the route without starting it or sending customer email
       },
     );
 
-    assert.equal(calls[0].url, "https://delivery.example/admin/ui/app/api/routes/route-1/publish");
+    assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route-1/publish");
     assert.equal(calls[0].options.method, "POST");
     assert.equal(calls[0].options.body, undefined);
-    assert.equal(result.dispatch.status, "PUBLISHED");
+    assert.equal(result.dispatch.notificationStatus, "SENT");
     assert.deepEqual(result.errors, []);
   } finally {
     if (previousBaseUrl === undefined) delete process.env.CLEVER_DELIVERY_API_URL;

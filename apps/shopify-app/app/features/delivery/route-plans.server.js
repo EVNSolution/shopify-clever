@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import { buildRouteScopeFromOrders } from "./route-scope.js";
+import { isRouteDispatchConfirmed } from "./route-dispatch.js";
 import {
   createTelemetryRequestId,
   logSafeOperationalEvent,
@@ -733,17 +734,29 @@ export async function publishDeliveryRoutePlan(request, routePlanId, options = {
   const safeRoutePlanId = encodeURIComponent(normalizedRoutePlanId);
   const result = await deliveryApiRequest(
     request,
-    `/admin/ui/app/api/routes/${safeRoutePlanId}/publish`,
+    `/admin/route-plans/${safeRoutePlanId}/publish`,
     {
       fetch: options.fetch,
       method: "POST",
       sessionToken: options.sessionToken,
     },
   );
-  if (result.errors.length === 0) clearDeliveryApiResponseCache();
-
+  const outcomeUnknown = result.errors.some((error) => error.status === 0 || error.status >= 500)
+    || (result.errors.length === 0 && !isRouteDispatchConfirmed(result.data, normalizedRoutePlanId));
+  if (result.errors.length === 0 || outcomeUnknown) clearDeliveryApiResponseCache();
+  if (outcomeUnknown) {
+    return {
+      dispatch: null,
+      outcomeUnknown: true,
+      errors: [{
+        code: "DELIVERY_ROUTE_DISPATCH_OUTCOME_UNKNOWN",
+        message: "Dispatch 응답을 확인하지 못했습니다. 경로 발행이나 기사 알림이 이미 처리되었을 수 있으니, 다시 누르기 전에 경로 상태와 기사 앱을 확인해주세요.",
+      }],
+    };
+  }
   return {
-    dispatch: result.data?.dispatch ?? result.data ?? null,
+    routePlan: result.errors.length === 0 ? result.data?.routePlan : null,
+    dispatch: result.errors.length === 0 ? result.data?.dispatch : null,
     errors: result.errors,
   };
 }
