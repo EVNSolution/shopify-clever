@@ -118,7 +118,7 @@ function loadSaveHandler(overrides = {}) {
 }
 
 function loadCompleteSplitSaveResponseHelper() {
-  const helperSource = sourceBetween("function isCompleteSplitSaveResponse(", "function createScheduledNoticeNavigationState(");
+  const helperSource = sourceBetween("function isCompleteSplitSaveResponse(", "function createCustomerEmailDialogOpenState(");
   return Function(
     "textOrUndefined",
     "getVisibleRouteGroupChildren",
@@ -132,7 +132,7 @@ function loadCompleteSplitSaveResponseHelper() {
 }
 
 function loadValidOrdinaryRouteCopyHelper() {
-  const helperSource = sourceBetween("function isValidOrdinaryRouteCopy(", "function createScheduledNoticeNavigationState(");
+  const helperSource = sourceBetween("function isValidOrdinaryRouteCopy(", "function createCustomerEmailDialogOpenState(");
   return Function(
     "textOrUndefined",
     `${helperSource}\nreturn isValidOrdinaryRouteCopy;`,

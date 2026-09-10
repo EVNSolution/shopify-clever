@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Outlet, redirect, useFetcher, useLoaderData, useLocation, useNavigate, useParams, useRouteLoaderData, useSearchParams } from "react-router";
+import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   formatRouteStatus,
@@ -624,13 +624,7 @@ function getStatusBadgeStyle(status) {
   }
 }
 
-function getSavedNoticeRouteRows(routeRows, routePlanIds) {
-  const savedIds = new Set(Array.isArray(routePlanIds) ? routePlanIds : []);
-  return routeRows.filter((route) => !route.isRouteGroup && route.isClickable && savedIds.has(route.id));
-}
-
 export default function RoutesPage() {
-  const location = useLocation();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
@@ -642,7 +636,6 @@ export default function RoutesPage() {
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
   const [routeGroupMarkerTooltip, setRouteGroupMarkerTooltip] = useState(null);
   const allRouteRows = buildRouteRows(routePlans, routeGroups);
-  const savedNoticeRoutes = getSavedNoticeRouteRows(allRouteRows, location.state?.scheduledNoticeRoutePlanIds);
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
   const routeRows = filterRouteRows(allRouteRows, routeFilters);
@@ -772,18 +765,6 @@ export default function RoutesPage() {
             </div>
           </div>
         </header>
-
-        {savedNoticeRoutes.length > 0 ? (
-          <div role="status" style={routesHeaderActionsStyle}>
-            <span>{translate(language, "routes.scheduledNotice.savedMessage")}</span>
-            {savedNoticeRoutes.map((route) => (
-              <button key={route.rowKey ?? route.id} type="button" style={routeActionButtonStyle}
-                onClick={() => navigate(route.href, { state: { scheduledNoticeRoutePlanId: route.id } })}>
-                {route.route}: {translate(language, "routes.scheduledNotice.reviewAction")}
-              </button>
-            ))}
-          </div>
-        ) : null}
 
         {routesNoticeMessage ? (
           <div style={routesErrorStyle}>{routesNoticeMessage}</div>

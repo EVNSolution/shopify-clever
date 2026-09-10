@@ -24,100 +24,66 @@ function evaluateArrow(name, bindings) {
   return Function(...Object.keys(bindings), `${declaration}\nreturn ${name};`)(...Object.values(bindings));
 }
 
-const resolveSave = evaluateFunction(
-  "resolveScheduledNoticeSaveResult",
-  "\n\nfunction isCompleteSplitSaveResponse",
-);
-const createNavigationState = evaluateFunction(
-  "createScheduledNoticeNavigationState",
-  "\n\nfunction getScheduledNoticeLocationRoutePlanIds",
-);
-const getLocationRoutePlanIds = evaluateFunction(
-  "getScheduledNoticeLocationRoutePlanIds",
-  "\n\nfunction createCustomerEmailDialogOpenState",
-);
 const createDialogState = evaluateFunction(
   "createCustomerEmailDialogOpenState",
   "\n\nexport default function RouteDetailPage",
 );
 
-test("save result requires success and keeps only concrete route ids", () => {
-  assert.deepEqual(resolveSave({
-    errors: [{ message: "failed" }],
-    routeGroupRoutePlanIds: ["route-1"],
-  }), { routePlanIds: [], succeeded: false });
-  assert.deepEqual(resolveSave({
-    routeGroupRoutePlanIds: ["route-1", null, "route-1", "route-2"],
-  }), { routePlanIds: ["route-1", "route-2"], succeeded: true });
-  assert.deepEqual(resolveSave({
-    routeGroupRoutePlanIds: ["group-member"],
-    routePlanId: "current-route",
-  }), { routePlanIds: ["current-route"], succeeded: true });
-  assert.deepEqual(resolveSave({
-    excludedRoutePlanIds: ["route-2"],
-    routeGroupRoutePlanIds: ["route-1", "route-2"],
-  }), { routePlanIds: ["route-1"], succeeded: true });
-  assert.deepEqual(resolveSave({
-    excludedRoutePlanIds: ["deleted-current"],
-    routeGroupRoutePlanIds: ["deleted-current", "surviving-sibling"],
-    routePlanId: "deleted-current",
-  }), { routePlanIds: ["surviving-sibling"], succeeded: true });
-  assert.deepEqual(createNavigationState(["route-1", null, "route-1", "route-2"]), {
-    scheduledNoticeRoutePlanIds: ["route-1", "route-2"],
-  });
-  assert.deepEqual(getLocationRoutePlanIds({
-    scheduledNoticeRoutePlanIds: ["route-2", "stale-route", "route-2"],
-  }, ["route-1", "route-2"]), ["route-2"]);
-});
-
-test("group-null initialization and reset cannot dereference a missing route", () => {
-  const initializer = Function("location", "effectiveRoutePlan", `return (
-    effectiveRoutePlan?.id && location.state?.scheduledNoticeRoutePlanId === effectiveRoutePlan.id
-      ? effectiveRoutePlan.id
-      : null
-  );`);
-  assert.equal(initializer({ state: {} }, null), null);
-  assert.equal(initializer({ state: { scheduledNoticeRoutePlanId: "route-1" } }, null), null);
-  assert.equal(initializer({ state: { scheduledNoticeRoutePlanId: "route-1" } }, { id: "route-1" }), "route-1");
-  assert.equal(initializer({ state: { scheduledNoticeRoutePlanId: "other" } }, { id: "route-1" }), null);
-  assert.equal((source.match(/effectiveRoutePlan\?\.id && location\.state\?\.scheduledNoticeRoutePlanId === effectiveRoutePlan\.id/g) ?? []).length, 2);
-});
-
-test("successful save exposes entries without opening, previewing, or sending email", () => {
+function runSaveEffect({ errors = [], outcomeUnknown = false, next = null, deleted = false } = {}) {
+  const calls = [];
+  const bindings = {
+    lastRouteActionIntentRef: { current: "saveRouteDraft" },
+    navigateAfterRouteDraftSaveRef: { current: next },
+    splitSaveExpectationRef: { current: null },
+    ordinaryMutationPendingRef: { current: true },
+    routeActionFetcher: { state: "idle", data: { errors, outcomeUnknown } },
+    deletedRoutePlanIds: deleted ? ["route-1"] : [],
+    effectiveRoutePlan: { id: "route-1" },
+    routeGroupId: "group-1",
+    resetRouteDraftChanges: () => calls.push(["reset"]),
+    revalidator: { revalidate: () => calls.push(["revalidate"]) },
+    setPendingRouteDraftHref: (value) => calls.push(["pending", value]),
+    setOrdinaryMutationPending: () => {},
+    setOrdinaryMutationUncertain: (value) => calls.push(["uncertain", value]),
+    navigate: (...args) => calls.push(["navigate", ...args]),
+    routeGroupPath: (id) => "/app/routes/groups/" + id,
+  };
   const effect = between(
-    'if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;',
-    "useEffect(() => {\n    if (!hasRouteAllocationDraft)",
+    '    if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;',
+    "  }, [deletedRoutePlanIds, effectiveRoutePlan?.id, navigate, resetRouteDraftChanges",
   );
-  assert.match(effect, /const savedRouteGroup = responseRouteGroup \?\? routeGroup/);
-  assert.match(effect, /getVisibleRouteGroupChildren\(savedRouteGroup\)/);
-  assert.match(effect, /excludedRoutePlanIds: deletedRoutePlanIds/);
-  assert.match(effect, /if \(scheduledNoticeSaveResult\.succeeded\)/);
-  assert.match(effect, /setScheduledNoticeRoutePlanId\(scheduledNoticeSaveResult\.routePlanIds\[0\] \?\? null\)/);
-  assert.match(effect, /setScheduledNoticeGroupRoutePlanIds\(scheduledNoticeSaveResult\.routePlanIds\)/);
-  assert.doesNotMatch(effect, /openCustomerEmailDialog|submitCustomerEmailAction|previewCustomerEmail|sendCustomerEmail/);
-  assert.match(source, /const handleSaveRouteDraft = \(\) => \{[\s\S]*setScheduledNoticeRoutePlanId\(null\);[\s\S]*setScheduledNoticeGroupRoutePlanIds\(\[\]\);[\s\S]*submitRouteGroupAction\("saveRouteDraft"/);
+  const run = Function(...Object.keys(bindings), effect);
+  run(...Object.values(bindings));
+  run(...Object.values(bindings));
+  return calls;
+}
+
+test("successful save resets the draft once without opening an email prompt", () => {
+  assert.deepEqual(runSaveEffect(), [["reset"], ["revalidate"], ["pending", null]]);
 });
 
-test("successful save navigation preserves the remaining saved route ids", () => {
-  assert.match(source, /navigate\(navigateAfterSave, \{[\s\S]*createScheduledNoticeNavigationState\(scheduledNoticeSaveResult\.routePlanIds\)/);
-  assert.match(source, /navigate\(routeGroupPath\(routeGroupId\), \{[\s\S]*createScheduledNoticeNavigationState\(scheduledNoticeSaveResult\.routePlanIds\)/);
-  assert.match(source, /getScheduledNoticeLocationRoutePlanIds\([\s\S]*getVisibleRouteGroupChildren\(routeGroup\)\.map\(getRouteGroupChildRoutePlanId\)/);
-  assert.match(source, /\|\| scheduledNoticeGroupRoutePlanIds\.length > 0/);
-  assert.doesNotMatch(source, /isRouteGroupDetail && scheduledNoticeGroupRoutePlanIds\.length > 0/);
+test("save navigation keeps the destination without injecting scheduled-notice state", () => {
+  assert.deepEqual(runSaveEffect({ next: "/app/routes" }), [
+    ["reset"], ["revalidate"], ["pending", null], ["navigate", "/app/routes"],
+  ]);
+  assert.deepEqual(runSaveEffect({ deleted: true }), [
+    ["reset"], ["revalidate"], ["pending", null], ["navigate", "/app/routes/groups/group-1"],
+  ]);
 });
 
-test("group entry navigates only to an actual member and does not use the group as an email target", () => {
-  assert.match(source, /siblingRouteRows[\s\S]*\.filter\(\(routeRow\) => scheduledNoticeGroupRoutePlanIds\.includes\(routeRow\.routePlanId\)\)/);
-  assert.match(source, /navigate\(routeGroupChildPath\(routeGroupId, routePlanId\), \{[\s\S]*scheduledNoticeRoutePlanId: routePlanId/);
-  assert.doesNotMatch(source, /openScheduledNoticeDialog\(routeGroupId\)|scheduledNoticeRoutePlanId: routeGroupId/);
+test("failed and uncertain saves preserve the editable draft", () => {
+  assert.deepEqual(runSaveEffect({ errors: [{ message: "Save failed" }] }), []);
+  assert.deepEqual(runSaveEffect({ errors: [{ message: "Connection lost" }], outcomeUnknown: true }), [["uncertain", true]]);
 });
 
-test("explicit scheduled click resets consent and opens without submitting", () => {
+test("explicit Send email click resets consent and opens without submitting", () => {
   const applied = [];
   const opened = [];
   const signals = [];
   let submissions = 0;
-  const handler = evaluateArrow("openScheduledNoticeDialog", {
+  const handler = evaluateArrow("openCustomerEmailDialog", {
+    getCustomerEmailDefaultSignal: () => "DELIVERY_SCHEDULED",
+    routeExecutionStatus: "READY",
     applyCustomerEmailDialogOpenState: (state) => applied.push(state),
     createCustomerEmailDialogOpenState: createDialogState,
     customerEmailFetcher: { submit: () => { submissions += 1; } },
@@ -141,7 +107,6 @@ test("explicit scheduled click resets consent and opens without submitting", () 
   assert.deepEqual(signals, ["DELIVERY_SCHEDULED"]);
   assert.equal(submissions, 0);
   assert.match(source, /onClick=\{openCustomerEmailDialog\}/);
-  assert.match(source, /onClick=\{openScheduledNoticeDialog\}/);
 });
 
 test("closing and preparing failed-only retry never submit email", () => {
@@ -184,12 +149,4 @@ test("closing and preparing failed-only retry never submit email", () => {
   retry();
   assert.deepEqual(selected, [["stop-1"]]);
   assert.equal(submissions, 0);
-});
-
-test("entry is translated and disabled while route changes are unsaved", () => {
-  assert.match(source, /useRouteLoaderData\("routes\/app"\)\?\.language \?\? "en"/);
-  assert.match(source, /translate\(language, "routes\.scheduledNotice\.savedMessage"\)/);
-  assert.match(source, /translate\(language, "routes\.scheduledNotice\.reviewAction"\)/);
-  assert.match(source, /disabled=\{hasRouteAllocationDraft \|\| routeGroupActionBusy\}/);
-  assert.match(source, /translate\(language, "routes\.scheduledNotice\.unsavedTitle"\)/);
 });
