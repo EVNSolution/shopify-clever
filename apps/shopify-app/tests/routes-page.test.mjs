@@ -1504,7 +1504,7 @@ test("Route detail can move between child routes in the same route group", () =>
   assert.match(routeDetailSource, /background: routeRow\.color/);
   assert.match(routeDetailSource, /disabled=\{!previousSiblingRoute\}/);
   assert.match(routeDetailSource, /disabled=\{!nextSiblingRoute\}/);
-  assert.match(routeDetailSource, /routeGroupId && \(isRouteGroupDetail \|\| currentSiblingRouteIndex >= 0\)/);
+  assert.match(routeDetailSource, /routeGroupId && \(isRouteGroupDetail \|\| \(isMaterializedChildRouteDetail && currentSiblingRouteIndex >= 0\)\)/);
   assert.match(routeDetailSource, /siblingRouteRows\.map\(\(routeRow\) => \(/);
   assert.doesNotMatch(routeDetailSource, /<select[\s\S]*aria-label="Route in group"/);
 });

@@ -6939,7 +6939,7 @@ export default function RouteDetailPage() {
               </button>
             </div> : null}
             <div style={routeHeaderRightStyle}>
-              {routeGroupId && (isRouteGroupDetail || currentSiblingRouteIndex >= 0) ? (
+              {routeGroupId && (isRouteGroupDetail || (isMaterializedChildRouteDetail && currentSiblingRouteIndex >= 0)) ? (
                 <div
                   aria-label="Routes in this group"
                   onBlur={(event) => {
