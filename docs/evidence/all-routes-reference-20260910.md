@@ -28,6 +28,17 @@ In-app sidebar with synthetic `routes-split-browser-fixture.mjs?mode=reference`:
 Focused regressions: 88 passed. Changed-file ESLint and typecheck passed.
 Local build and PR CI are reported separately in the PR.
 
+## Group navigator clipping follow-up
+
+At a 720px viewport, the child page's navigator preceded the actions and its
+right-anchored menu began at x=-83.5px. The navigator now follows the actions,
+stays right aligned on wrapped header lines, and limits menu width to the
+viewport. Action buttons wrap within the header.
+
+In-app synthetic browser checks: child menu x=446..704 at 720px and x=86..344
+at 360px; All routes menu x=446..704 at 720px. Wide 1280px layout and child-to-group
+navigation also passed. No data mutations. Presentation regressions: 102 passed.
+
 ## Remaining server contract: retain unassigned membership
 
 The reference drop zone means “remove from routes but keep in group”. The current

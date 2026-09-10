@@ -214,6 +214,8 @@ const routeChildOverviewHeaderStyle = {
 
 const routeChildOverviewTopBarStyle = {
   alignItems: "center",
+  marginLeft: "auto",
+  maxWidth: "100%",
   display: "flex",
   justifyContent: "flex-end",
   order: 2,
@@ -352,6 +354,8 @@ const routeDetailNavigationStyle = {
 
 const routeHeaderRightStyle = {
   alignItems: "center",
+  minWidth: 0,
+  maxWidth: "100%",
   display: "flex",
   flexWrap: "wrap",
   gap: "10px",
@@ -360,6 +364,8 @@ const routeHeaderRightStyle = {
 
 const siblingRouteNavigatorStyle = {
   alignItems: "stretch",
+  flexShrink: 0,
+  marginLeft: "auto",
   display: "inline-flex",
   position: "relative",
 };
@@ -417,7 +423,9 @@ const siblingRouteMenuStyle = {
   boxShadow: "0 12px 32px rgba(0, 0, 0, 0.16)",
   display: "grid",
   gap: "4px",
-  minWidth: "240px",
+  boxSizing: "border-box",
+  width: "min(258px, calc(100vw - 32px))",
+  minWidth: 0,
   padding: "8px",
   position: "absolute",
   right: 0,
@@ -456,6 +464,7 @@ const siblingRouteMenuDotStyle = {
 };
 
 const siblingRouteMenuLabelStyle = {
+  minWidth: 0,
   overflow: "hidden",
   textOverflow: "ellipsis",
   whiteSpace: "nowrap",
@@ -750,6 +759,9 @@ const routeActionsMenuStyle = {
 const routeHeaderActionsStyle = {
   alignItems: "center",
   display: "flex",
+  flexWrap: "wrap",
+  justifyContent: "flex-end",
+  minWidth: 0,
   gap: "6px",
 };
 
@@ -6939,6 +6951,80 @@ export default function RouteDetailPage() {
               </button>
             </div> : null}
             <div style={routeHeaderRightStyle}>
+              <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
+                {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
+                  <button
+                    disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
+                    onClick={handleDispatchRoute}
+                    style={canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title={routeDriverId
+                      ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
+                      : "Assign a driver before dispatching this route."}
+                    type="button"
+                  >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
+                ) : null}
+                <button
+                  disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
+                  onClick={handleRefreshRouteOrders}
+                  style={canRefreshRouteOrders && !routeGroupActionBusy && !hasRouteAllocationDraft
+                    ? routeActionButtonStyle
+                    : routeDisabledActionButtonStyle}
+                  title={hasRouteAllocationDraft
+                    ? "Save or revert Route changes before updating"
+                    : "Update this Route from the latest Shopify order data"}
+                  type="button"
+                >
+                  {refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
+                </button>
+                {isMaterializedChildRouteDetail ? (
+                  <button
+                    disabled={!effectiveRoutePlan?.id}
+                    onClick={openCustomerEmailDialog}
+                    style={effectiveRoutePlan?.id ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title="Preview and manually send a customer email"
+                    type="button"
+                  >
+                    Send email
+                  </button>
+                ) : null}
+                <button
+                  disabled={!inventoryDetailHref}
+                  onClick={handleViewInventory}
+                  style={inventoryDetailHref ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                  title={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
+                  type="button"
+                >
+                  View inventory
+                </button>
+                {effectiveRoutePlan?.id && !routeGroupId ? (
+                  <button
+                    disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
+                    onClick={handleCopyOrdinaryRoute}
+                    style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this READY route without changing the original"}
+                    type="button"
+                  >{copyRoutePlanBusy ? "Copying…" : "Copy"}</button>
+                ) : null}
+                {isRouteGroupDetail ? (
+                  <button
+                    disabled={routeGroupActionBusy || hasRouteAllocationDraft}
+                    onClick={handleCopyRouteGroup}
+                    style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this group title and orders"}
+                    type="button"
+                  >
+                    {copyRouteGroupBusy ? "Copying…" : "Copy Group Route"}
+                  </button>
+                ) : null}
+                <button
+                  disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
+                  onClick={handleDeleteRoute}
+                  style={routeGroupActionBusy || hasRouteAllocationDraft ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
+                  type="button"
+                >
+                  {deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
+                </button>
+              </div>
               {routeGroupId && (isRouteGroupDetail || (isMaterializedChildRouteDetail && currentSiblingRouteIndex >= 0)) ? (
                 <div
                   aria-label="Routes in this group"
@@ -7014,80 +7100,6 @@ export default function RouteDetailPage() {
                   ) : null}
                 </div>
               ) : null}
-              <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
-                {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
-                  <button
-                    disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleDispatchRoute}
-                    style={canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={routeDriverId
-                      ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
-                      : "Assign a driver before dispatching this route."}
-                    type="button"
-                  >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
-                ) : null}
-                <button
-                  disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
-                  onClick={handleRefreshRouteOrders}
-                  style={canRefreshRouteOrders && !routeGroupActionBusy && !hasRouteAllocationDraft
-                    ? routeActionButtonStyle
-                    : routeDisabledActionButtonStyle}
-                  title={hasRouteAllocationDraft
-                    ? "Save or revert Route changes before updating"
-                    : "Update this Route from the latest Shopify order data"}
-                  type="button"
-                >
-                  {refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
-                </button>
-                {isMaterializedChildRouteDetail ? (
-                  <button
-                    disabled={!effectiveRoutePlan?.id}
-                    onClick={openCustomerEmailDialog}
-                    style={effectiveRoutePlan?.id ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title="Preview and manually send a customer email"
-                    type="button"
-                  >
-                    Send email
-                  </button>
-                ) : null}
-                <button
-                  disabled={!inventoryDetailHref}
-                  onClick={handleViewInventory}
-                  style={inventoryDetailHref ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                  title={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
-                  type="button"
-                >
-                  View inventory
-                </button>
-                {effectiveRoutePlan?.id && !routeGroupId ? (
-                  <button
-                    disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
-                    onClick={handleCopyOrdinaryRoute}
-                    style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this READY route without changing the original"}
-                    type="button"
-                  >{copyRoutePlanBusy ? "Copying…" : "Copy"}</button>
-                ) : null}
-                {isRouteGroupDetail ? (
-                  <button
-                    disabled={routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleCopyRouteGroup}
-                    style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this group title and orders"}
-                    type="button"
-                  >
-                    {copyRouteGroupBusy ? "Copying…" : "Copy Group Route"}
-                  </button>
-                ) : null}
-                <button
-                  disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
-                  onClick={handleDeleteRoute}
-                  style={routeGroupActionBusy || hasRouteAllocationDraft ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
-                  type="button"
-                >
-                  {deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
-                </button>
-              </div>
             </div>
           </div>
 
