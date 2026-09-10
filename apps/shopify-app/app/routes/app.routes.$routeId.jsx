@@ -6953,7 +6953,10 @@ export default function RouteDetailPage() {
                   <button
                     disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
                     onClick={handleDispatchRoute}
-                    style={canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                    style={{
+                      ...(canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle),
+                      minHeight: "36px",
+                    }}
                     title={routeDriverId
                       ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
                       : "Assign a driver before dispatching this route."}
