@@ -212,6 +212,7 @@ const listLoader = () => mode === "saved"
     : mode === "bridge"
       ? { errors: [], routeGroups: [persistedGroup], routePlans: [original] }
       : { errors: [], routeGroups: persistedGroup ? [persistedGroup] : [], routePlans: persistedPlans };
+const initialPath = mode === "reference" ? "/app/routes/groups/reference-group" : mode === "unassigned" ? (params.get("child") === "1" ? "/app/routes/groups/unassigned-group/routes/route-46" : "/app/routes/groups/unassigned-group") : mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original";
 const router = createMemoryRouter([{
   id: "routes/app", path: "/", loader: () => ({ language: "en" }), children: [
     { path: "app/routes", loader: listLoader, element: React.createElement(RoutesPage) },
@@ -226,7 +227,10 @@ const router = createMemoryRouter([{
       return detailData(selectedPlan, persistedGroup);
     }, action: fixtureAction, shouldRevalidate: shouldRevalidateRouteDetail, element: React.createElement(RouteDetail) },
   ],
-}], { initialEntries: [mode === "reference" ? "/app/routes/groups/reference-group" : mode === "unassigned" ? (params.get("child") === "1" ? "/app/routes/groups/unassigned-group/routes/route-46" : "/app/routes/groups/unassigned-group") : mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original"] });
+}], { initialEntries: [params.get("notice") === "1" ? {
+  pathname: initialPath,
+  state: { scheduledNoticeRoutePlanIds: persistedPlans.map(plan => plan.id), scheduledNoticeRoutePlanId: persistedPlans[0]?.id },
+} : initialPath] });
 createRoot(document.getElementById("app")).render(React.createElement(RouterProvider, { router }));
 renderFixtureStatus();
 `;
