@@ -82,6 +82,13 @@ const detailData = (routePlan, routeGroup = null) => ({
 let persistedPlans = mode === "bridge" ? [copied] : [original];
 let persistedGroup = mode === "bridge" ? singletonGroup : null;
 if (mode === "unassigned") { persistedPlans = unassignedPlans; persistedGroup = unassignedGroup; }
+if (mode === "reference") {
+  persistedPlans = [
+    { ...makePlan("reference-north", "North route", 0), stops: fixtureStops.slice(0, 2), stopsCount: 2 },
+    { ...makePlan("reference-south", "South route", 1), stops: fixtureStops.slice(2), stopsCount: 4 },
+  ];
+  persistedGroup = { ...makeGroup(persistedPlans, "reference-group"), assignments: fixtureStops };
+}
 let totalActionSubmissions = 0;
 let copySubmissions = 0;
 let saveSubmissions = 0;
@@ -211,7 +218,7 @@ const router = createMemoryRouter([{
       return detailData(selectedPlan, persistedGroup);
     }, action: fixtureAction, shouldRevalidate: shouldRevalidateRouteDetail, element: React.createElement(RouteDetail) },
   ],
-}], { initialEntries: [mode === "unassigned" ? (params.get("child") === "1" ? "/app/routes/groups/unassigned-group/routes/route-46" : "/app/routes/groups/unassigned-group") : mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original"] });
+}], { initialEntries: [mode === "reference" ? "/app/routes/groups/reference-group" : mode === "unassigned" ? (params.get("child") === "1" ? "/app/routes/groups/unassigned-group/routes/route-46" : "/app/routes/groups/unassigned-group") : mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original"] });
 createRoot(document.getElementById("app")).render(React.createElement(RouterProvider, { router }));
 renderFixtureStatus();
 `;

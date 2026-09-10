@@ -5,6 +5,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { translate } from "../i18n/i18n";
+import { summarizeAllRoutes } from "../features/delivery/all-routes-summary";
 import {
   getCustomerEmailDefaultSignal,
   getCustomerEmailPreviewEmptyState,
@@ -1306,6 +1307,18 @@ const routeTimelineStyle = {
 const childRouteTimelineStyle = {
   ...routeTimelineStyle,
   padding: "8px 8px 16px",
+};
+
+const allRoutesTimelineLabelStyle = {
+  position: "absolute",
+  bottom: "100%",
+  left: "50%",
+  transform: "translateX(-50%)",
+  paddingBottom: "7px",
+  color: "#616161",
+  fontSize: "11px",
+  fontWeight: 400,
+  whiteSpace: "nowrap",
 };
 
 const routeTimelineRowsStyle = {
@@ -4036,6 +4049,7 @@ export default function RouteDetailPage() {
   const routeSelectorEmptyMessage = activeRouteSelector
     ? getRouteSelectorEmptyMessage(activeRouteSelector.type, routeSelectorQuery, routeSelectorBaseOptions)
     : "";
+  const allRoutesSummary = summarizeAllRoutes(timelineRouteRows);
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
   const hasEditableRouteRows = contextTimelineRouteRows.some((routeRow) => !routeRow.isPreviewOnly && !routeRow.isUnassigned);
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
@@ -6900,10 +6914,10 @@ export default function RouteDetailPage() {
         ) : null}
         <header
           className={isMaterializedChildRouteDetail ? "route-child-overview-header" : "route-overview-header"}
-          style={isMaterializedChildRouteDetail ? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle}
+          style={isMaterializedChildRouteDetail || isRouteGroupDetail ? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle}
         >
-          <div style={isMaterializedChildRouteDetail ? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle}>
-            {!isMaterializedChildRouteDetail ? <div style={routeDetailNavigationStyle}>
+          <div style={isMaterializedChildRouteDetail || isRouteGroupDetail ? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle}>
+            {!isMaterializedChildRouteDetail && !isRouteGroupDetail ? <div style={routeDetailNavigationStyle}>
               <button
                 aria-label="Back to routes list"
                 onClick={handleBackToRoutes}
@@ -6925,7 +6939,7 @@ export default function RouteDetailPage() {
               </button>
             </div> : null}
             <div style={routeHeaderRightStyle}>
-              {isMaterializedChildRouteDetail && routeGroupId && currentSiblingRouteIndex >= 0 ? (
+              {routeGroupId && (isRouteGroupDetail || currentSiblingRouteIndex >= 0) ? (
                 <div
                   aria-label="Routes in this group"
                   onBlur={(event) => {
@@ -6957,7 +6971,7 @@ export default function RouteDetailPage() {
                     title="All routes in this group"
                     type="button"
                   >
-                    <span>{translate(language, "routes.group.menu")} · {currentSiblingRouteIndex + 1} / {siblingRouteRows.length}</span>
+                    <span>{isRouteGroupDetail ? "All routes" : `${translate(language, "routes.group.menu")} · ${currentSiblingRouteIndex + 1} / ${siblingRouteRows.length}`}</span>
                   </button>
                   <button
                     aria-label="Next route in group"
@@ -6992,7 +7006,7 @@ export default function RouteDetailPage() {
                           }}
                           type="button"
                         >
-                          <span aria-hidden="true" style={{ ...siblingRouteMenuDotStyle, background: routeRow.color }} />
+                          <span aria-hidden="true" style={{ ...siblingRouteMenuDotStyle, background: contextTimelineRouteRows.find((row) => row.routePlanId === routeRow.routePlanId)?.color ?? routeRow.color }} />
                           <span style={siblingRouteMenuLabelStyle}>{routeRow.title}</span>
                         </button>
                       ))}
@@ -7079,11 +7093,11 @@ export default function RouteDetailPage() {
 
           <div
             className="route-overview-main"
-            style={isMaterializedChildRouteDetail ? routeChildOverviewMainStyle : undefined}
+            style={isMaterializedChildRouteDetail || isRouteGroupDetail ? routeChildOverviewMainStyle : undefined}
           >
             <div style={isMaterializedChildRouteDetail ? routeChildTitleBlockStyle : routeOverviewTitleBlockStyle}>
               <div style={routeOverviewTitleLineStyle}>
-                {isMaterializedChildRouteDetail ? (
+                {isMaterializedChildRouteDetail || isRouteGroupDetail ? (
                   <button
                     aria-label="Back to routes list"
                     onClick={handleBackToRoutes}
@@ -7103,7 +7117,7 @@ export default function RouteDetailPage() {
                     </span>
                   </button>
                 ) : null}
-                <h1 className="route-detail-title" style={routesDetailTitleStyle}>{routeDetailTitle}</h1>
+                <h1 className="route-detail-title" style={routesDetailTitleStyle}>{isRouteGroupDetail ? `${allRoutesSummary.routes} routes - ${allRoutesSummary.stops} stops` : routeDetailTitle}</h1>
                 {isMaterializedChildRouteDetail ? (
                   <button
                     aria-label="Edit child route name"
@@ -7115,10 +7129,10 @@ export default function RouteDetailPage() {
                     {renderRouteLineEditIcon()}
                   </button>
                 ) : null}
-                <span style={routeStatusBadgeStyle}>
+                {!isRouteGroupDetail ? <span style={routeStatusBadgeStyle}>
                   {isMaterializedChildRouteDetail ? formatRouteStatus(routeExecutionStatus) : routeDetail.status}
-                </span>
-                {!isMaterializedChildRouteDetail ? (
+                </span> : null}
+                {!isMaterializedChildRouteDetail && !isRouteGroupDetail ? (
                   <div aria-label="Route summary" className="route-overview-summary">
                     {renderRouteHeaderMetric("Orders", routeDetail.orders)}
                     {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
@@ -7150,6 +7164,13 @@ export default function RouteDetailPage() {
         ) : null}
 
         <section style={routesDetailCardStyle}>
+          {isRouteGroupDetail ? (
+            <div aria-label="All routes summary" style={{ ...routeChildSelectionBarStyle, gap: "24px" }}>
+              <strong>Routes: {allRoutesSummary.routes}</strong>
+              <strong>Stops: {allRoutesSummary.stops}</strong>
+              <strong>Items: {allRoutesSummary.items}</strong>
+            </div>
+          ) : null}
           {isMaterializedChildRouteDetail ? (
             <div aria-label="Child route detail sections" role="tablist" style={routeChildTabsStyle}>
               <button
@@ -7771,7 +7792,7 @@ export default function RouteDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {timelineRouteRows.map((routeRow) => (
+                  {timelineRouteRows.filter((routeRow) => !routeRow.isUnassigned).map((routeRow) => (
                     <tr key={routeRow.id}>
                       <td style={routeNameCellStyle}>
                         <span style={routeLineNameStyle}>
@@ -7844,6 +7865,21 @@ export default function RouteDetailPage() {
                     </tr>
                   ))}
                 </tbody>
+                {isRouteGroupDetail ? (
+                  <tfoot style={{ background: "#f6f6f7", fontWeight: 600 }}>
+                    <tr aria-label="All routes totals">
+                      <td colSpan={4} style={routesDetailCellStyle}>Total</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedStops}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.delivered}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.attempted}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedItems}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(allRoutesSummary.durationSeconds))}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDistanceMeters(allRoutesSummary.distanceMeters))}</td>
+                      <td style={routesDetailCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+                      <td style={routesDetailCellStyle} />
+                    </tr>
+                  </tfoot>
+                ) : null}
               </table>
             </div>
           )}
@@ -7860,22 +7896,26 @@ export default function RouteDetailPage() {
                       onDrop={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDrop(event, routeRow)}
                       style={{
                         ...routeTimelineLaneStyle,
+                        ...(isRouteGroupDetail ? { minHeight: "68px", paddingTop: "20px" } : null),
                         "--route-line-color": softenRouteColor(routeRow.color),
                         "--route-marker-color": routeRow.color,
                       }}
                     >
-                      <div style={routeTimelineLabelStyle}>{routeRow.title}</div>
-                      <span title="Start" style={routeTimelineStartStyle}>{renderRouteTimelineStartIcon()}</span>
+                      <div title={routeRow.title} style={{ ...routeTimelineLabelStyle, ...(isRouteGroupDetail ? { minWidth: "180px", maxWidth: "180px", borderRight: 0 } : null) }}>{routeRow.title}</div>
+                      <span title="Start" style={{ ...routeTimelineStartStyle, position: "relative" }}>
+                        {isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>Start</span> : null}
+                        {renderRouteTimelineStartIcon()}
+                      </span>
                       {routeRow.stops.map((stop) => (
                         <span
                           key={stop.id}
                           ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)}
                           onDragEnter={handleRouteTimelineStopDragEnter}
                           onDragOver={(event) => handleRouteTimelineStopDragOver(event, routeRow, stop)}
-                          style={routeTimelineSegmentStyle}
+                          style={{ ...routeTimelineSegmentStyle, ...(isRouteGroupDetail ? { flex: "1 0 74px", position: "relative", justifyContent: "flex-end" } : null) }}
                           title={stop.order}
                         >
-                          <span style={routeTimelineLineStyle}></span>
+                          <span style={{ ...routeTimelineLineStyle, ...(isRouteGroupDetail ? { flex: 1 } : null) }}></span>
                           <button
                             data-route-timeline-stop-button="true"
                             ref={(node) => setRouteTimelineStopRef(stop.id, node)}
@@ -7889,12 +7929,21 @@ export default function RouteDetailPage() {
                             aria-label={`Show ${stop.order} stop details`}
                             style={{
                               ...routeTimelineStopStyle,
+                              ...(isRouteGroupDetail ? { position: "relative", width: "24px", height: "24px" } : null),
                               ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
                             }}
                             type="button"
-                          >{stop.stop}</button>
+                          >{isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>{stop.order}</span> : null}{stop.stop}</button>
                         </span>
                       ))}
+                      {isRouteGroupDetail ? (
+                        <span style={{ display: "flex", flex: "1 0 64px", alignItems: "center" }}>
+                          <span style={{ ...routeTimelineLineStyle, flex: 1 }} />
+                          <span title="End" style={{ ...routeTimelineStartStyle, position: "relative", background: "#303030" }}>
+                            <span style={allRoutesTimelineLabelStyle}>End</span>⚑
+                          </span>
+                        </span>
+                      ) : null}
                     </div>
                   ))}
                 </div>
@@ -7903,7 +7952,7 @@ export default function RouteDetailPage() {
                   onDrop={handleRouteTimelineRemoveDrop}
                   style={routeTimelineBottomSpacerStyle}
                 >
-                  <div style={routeTimelineDropHintStyle}>Drop orders here to remove them from the route</div>
+                  <div style={routeTimelineDropHintStyle}>{isRouteGroupDetail ? "Drop orders here to remove them from this group" : "Drop orders here to remove them from the route"}</div>
                 </div>
               </>
             </section>

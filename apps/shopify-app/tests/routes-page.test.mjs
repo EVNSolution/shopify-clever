@@ -640,7 +640,7 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan, routeGroup\)/);
-  assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
+  assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{isRouteGroupDetail \? `\$\{allRoutesSummary.routes\} routes - \$\{allRoutesSummary.stops\} stops` : routeDetailTitle\}<\/h1>/);
   assert.doesNotMatch(routeDetailSource, /parseRouteDetailDraft/);
   assert.doesNotMatch(routeDetailSource, /useSearchParams/);
 });
@@ -769,7 +769,7 @@ test("Route detail separates group and child titles", () => {
   assert.match(routeDetailServerSource, /name: getRouteGroupChildRouteName\(routeGroup, child, routePlan, index\)/);
   assert.match(routeDetailSource, /title: getRouteGroupChildRouteName\(routeGroup, child, childRoutePlan, index\)/);
   assert.match(routeDetailServerSource, /routePlan: currentChildDetail\?\.routePlan \?\? routePlanData\.routePlan/);
-  assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{routeDetailTitle\}<\/h1>/);
+  assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{isRouteGroupDetail \? `\$\{allRoutesSummary.routes\} routes - \$\{allRoutesSummary.stops\} stops` : routeDetailTitle\}<\/h1>/);
 });
 
 test("Route group detail hides scrollbar chrome without disabling horizontal scrolling", () => {
@@ -1478,8 +1478,8 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /aria-label="Back to routes list"/);
   assert.match(routeDetailSource, /const routeOverviewTopBarStyle = \{/);
   assert.match(routeDetailSource, /className=\{isMaterializedChildRouteDetail \? "route-child-overview-header" : "route-overview-header"\}/);
-  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
-  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle\}/);
+  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
+  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle\}/);
   assert.match(routeDetailSource, /aria-label="Back to routes list"/);
   assert.match(routeDetailSource, /const routeDetailBackButtonStyle = \{/);
   assert.match(routeDetailSource, /const routeDetailBackIconStyle = \{/);
@@ -1504,7 +1504,7 @@ test("Route detail can move between child routes in the same route group", () =>
   assert.match(routeDetailSource, /background: routeRow\.color/);
   assert.match(routeDetailSource, /disabled=\{!previousSiblingRoute\}/);
   assert.match(routeDetailSource, /disabled=\{!nextSiblingRoute\}/);
-  assert.match(routeDetailSource, /isMaterializedChildRouteDetail && routeGroupId && currentSiblingRouteIndex >= 0/);
+  assert.match(routeDetailSource, /routeGroupId && \(isRouteGroupDetail \|\| currentSiblingRouteIndex >= 0\)/);
   assert.match(routeDetailSource, /siblingRouteRows\.map\(\(routeRow\) => \(/);
   assert.doesNotMatch(routeDetailSource, /<select[\s\S]*aria-label="Route in group"/);
 });
