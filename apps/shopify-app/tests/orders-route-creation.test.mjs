@@ -171,10 +171,9 @@ test("route creation rejects cancelled orders before client submission and at th
     translate: (_language, _key, params) => `${params.count} cancelled excluded`,
   });
 
-  await submit("createRoutePlan");
   await submit("createRouteGroup");
   assert.equal(tokenRequests, 0);
-  assert.deepEqual(clientErrors, ["1 cancelled excluded", "1 cancelled excluded"]);
+  assert.deepEqual(clientErrors, ["1 cancelled excluded"]);
   assert.match(serverSource, /if \(plannedOrders\.some\(isOrderCancelled\)\)/);
   assert.match(serverSource, /code: "CANCELLED_ORDER_NOT_PLANNABLE"/);
 });
@@ -245,14 +244,14 @@ test("frozen selection keeps known cancelled exclusions across create and replac
   ]);
 });
 
-test("ordinary route action uses only the selected canonical order batch contract", () => {
-  assert.match(pageSource, /const handleCreateRoute = \(\) => submitNewRoute\("createRoutePlan"\)/);
-  assert.match(pageSource, /const handleCreateRouteGroup = \(\) => submitNewRoute\("createRouteGroup"\)/);
+test("route creation uses a single group-backed action", () => {
+  assert.match(pageSource, /const handleCreateRoute = \(\) => submitNewRoute\("createRouteGroup"\)/);
+  assert.doesNotMatch(pageSource, /handleCreateRouteGroup|createRoutePlan/);
   assert.doesNotMatch(pageSource, /initialRoute/);
   assert.doesNotMatch(serverSource, /initialRoute/);
   assert.doesNotMatch(serverSource, /\bcreateDeliveryRoutePlan\(/);
-  assert.match(serverSource, /await createDeliveryRoutePlanBatch\(\s*request,\s*buildCreateRoutePlanBatchPayload\(routePlanPayloadInput\)/);
-  assert.match(serverSource, /const routePlanPayload = intent === "createRouteGroup"\s*\? buildCreateRoutePlanPayload\(routePlanPayloadInput\)\s*:\s*null/);
+  assert.doesNotMatch(serverSource, /createDeliveryRoutePlanBatch/);
+  assert.match(serverSource, /const routePlanPayload = buildCreateRoutePlanPayload\(routePlanPayloadInput\)/);
 });
 
 test("group creation keeps the existing scoped group endpoint path", () => {
@@ -380,16 +379,12 @@ test("created route navigation uses the returned entity for the submitted intent
   assert.ok(declaration);
   const getDestination = vm.runInNewContext(`(${declaration.replace("export ", "")})`, {
     routeGroupPath: (id) => `/app/routes/${id}`,
-    routePlanPath: (id) => `/app/routes/${id}`,
   });
 
   assert.equal(
-    getDestination("createRoutePlan", { id: "actual-route" }, { id: "unrelated-group" }),
-    "/app/routes/actual-route",
-  );
-  assert.equal(
-    getDestination("createRouteGroup", { id: "unrelated-route" }, { id: "actual-group" }),
+    getDestination("createRouteGroup", { id: "actual-group" }),
     "/app/routes/actual-group",
   );
-  assert.equal(getDestination("createRoutePlan", null, { id: "group-only" }), null);
+  assert.equal(getDestination("createRouteGroup", null), null);
+  assert.equal(getDestination("addOrdersToRouteGroup", { id: "existing-group" }), null);
 });
