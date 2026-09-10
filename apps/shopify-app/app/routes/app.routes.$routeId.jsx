@@ -3,6 +3,7 @@ import { createPortal, flushSync } from "react-dom";
 import { useFetcher, useLoaderData, useLocation, useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
+import { RouteActionIconButton } from "../ui/route-action-icon-button";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { translate } from "../i18n/i18n";
 import { summarizeAllRoutes } from "../features/delivery/all-routes-summary";
@@ -773,11 +774,7 @@ const routeDisabledActionButtonStyle = {
   cursor: "not-allowed",
 };
 
-const routeDangerActionButtonStyle = {
-  ...routeActionButtonStyle,
-  borderColor: "#d72c0d",
-  color: "#d72c0d",
-};
+
 
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
@@ -6963,39 +6960,6 @@ export default function RouteDetailPage() {
                     type="button"
                   >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
                 ) : null}
-                <button
-                  disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
-                  onClick={handleRefreshRouteOrders}
-                  style={canRefreshRouteOrders && !routeGroupActionBusy && !hasRouteAllocationDraft
-                    ? routeActionButtonStyle
-                    : routeDisabledActionButtonStyle}
-                  title={hasRouteAllocationDraft
-                    ? "Save or revert Route changes before updating"
-                    : "Update this Route from the latest Shopify order data"}
-                  type="button"
-                >
-                  {refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
-                </button>
-                {isMaterializedChildRouteDetail ? (
-                  <button
-                    disabled={!effectiveRoutePlan?.id}
-                    onClick={openCustomerEmailDialog}
-                    style={effectiveRoutePlan?.id ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title="Preview and manually send a customer email"
-                    type="button"
-                  >
-                    Send email
-                  </button>
-                ) : null}
-                <button
-                  disabled={!inventoryDetailHref}
-                  onClick={handleViewInventory}
-                  style={inventoryDetailHref ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                  title={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
-                  type="button"
-                >
-                  View inventory
-                </button>
                 {effectiveRoutePlan?.id && !routeGroupId ? (
                   <button
                     disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
@@ -7016,14 +6980,39 @@ export default function RouteDetailPage() {
                     {copyRouteGroupBusy ? "Copying…" : "Copy Group Route"}
                   </button>
                 ) : null}
-                <button
-                  disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
-                  onClick={handleDeleteRoute}
-                  style={routeGroupActionBusy || hasRouteAllocationDraft ? routeDisabledActionButtonStyle : routeDangerActionButtonStyle}
-                  type="button"
-                >
-                  {deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
-                </button>
+                <div aria-label="Route utilities" className="route-action-icon-group" role="group">
+                  <RouteActionIconButton
+                    icon="refresh"
+                    label={refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
+                    description={hasRouteAllocationDraft ? "Save or revert Route changes before updating" : undefined}
+                    busy={refreshRouteOrdersBusy}
+                    disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
+                    onClick={handleRefreshRouteOrders}
+                  />
+                  {isMaterializedChildRouteDetail ? (
+                    <RouteActionIconButton
+                      icon="email"
+                      label="Send email"
+                      disabled={!effectiveRoutePlan?.id}
+                      onClick={openCustomerEmailDialog}
+                    />
+                  ) : null}
+                  <RouteActionIconButton
+                    icon="inventory"
+                    onClick={handleViewInventory}
+                    label="View inventory"
+                    description={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
+                    disabled={!inventoryDetailHref}
+                  />
+                  <RouteActionIconButton
+                    icon="delete"
+                    label={deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
+                    danger
+                    busy={deleteRouteBusy}
+                    disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
+                    onClick={handleDeleteRoute}
+                  />
+                </div>
               </div>
               {routeGroupId && (isRouteGroupDetail || (isMaterializedChildRouteDetail && currentSiblingRouteIndex >= 0)) ? (
                 <div
@@ -7057,7 +7046,7 @@ export default function RouteDetailPage() {
                     title="All routes in this group"
                     type="button"
                   >
-                    <span>{isRouteGroupDetail ? "All routes" : `${translate(language, "routes.group.menu")} · ${currentSiblingRouteIndex + 1} / ${siblingRouteRows.length}`}</span>
+                    <span>{isRouteGroupDetail ? "All routes" : `${currentSiblingRouteIndex + 1}/${siblingRouteRows.length}`}</span>
                   </button>
                   <button
                     aria-label="Next route in group"

@@ -39,6 +39,30 @@ In-app synthetic browser checks: child menu x=446..704 at 720px and x=86..344
 at 360px; All routes menu x=446..704 at 720px. Wide 1280px layout and child-to-group
 navigation also passed. No data mutations. Presentation regressions: 102 passed.
 
+## Compact route actions
+
+Dispatch remains a standalone text button. Update, email, inventory and delete
+share an icon button group using the existing AppProvider's official Polaris
+`s-icon` runtime (`refresh`, `email`, `inventory`, `delete`). Copy actions retain
+their text controls where applicable. The child navigator label is now `2/4`.
+
+CSS tooltips show names immediately on hover/focus, without a dialog or a native
+`title` delay. Disabled inventory retains its native disabled button and exposes
+the reason via hover or keyboard focus on its wrapper. Delete uses Polaris
+critical tone; disabled icons use subdued color. All handlers and disabling
+conditions are preserved. Tooltip position is relative to the group so the
+inventory explanation stays inside a 360px viewport (x=137.55..343).
+
+Verified in the in-app sidebar at 360px, 718px and 1280px with real Polaris icons.
+Application transport is disabled in the fixture; only GET static assets from
+the official Shopify CDN are allowed. No dispatch, updates, sends, deletes or
+production writes were performed. 120 focused regressions passed.
+
+Official icon names/props were checked against Shopify's component documentation,
+installed polaris-types and rendered runtime. The skill's separate validator
+could not finish because its environment lacks preact; no dependency was added.
+Project typecheck, ESLint, build and PR CI are checked separately.
+
 ## Remaining server contract: retain unassigned membership
 
 The reference drop zone means “remove from routes but keep in group”. The current

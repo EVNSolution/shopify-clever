@@ -1146,3 +1146,63 @@ s-badge {
     grid-template-columns: minmax(0, 1fr);
   }
 }
+
+.route-action-icon-group {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  position: relative;
+}
+
+.route-action-icon {
+  display: inline-flex;
+}
+
+.route-action-icon__button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #303030;
+  cursor: pointer;
+  display: inline-flex;
+  height: 30px;
+  justify-content: center;
+  padding: 5px;
+  width: 32px;
+}
+
+.route-action-icon__button--danger { color: #c5280c; }
+.route-action-icon__button:hover:not(:disabled) { background: #f1f1f1; }
+.route-action-icon__button:disabled { color: #a3a3a3; cursor: not-allowed; }
+.route-action-icon__button:focus-visible,
+.route-action-icon:focus-visible { outline: 2px solid #005bd3; outline-offset: 2px; }
+
+.route-action-icon__tooltip {
+  background: #303030;
+  border-radius: 6px;
+  color: #fff;
+  display: grid;
+  font-size: 12px;
+  font-weight: 400;
+  gap: 3px;
+  right: 0;
+  line-height: 1.4;
+  max-width: min(240px, calc(100vw - 32px));
+  padding: 6px 8px;
+  pointer-events: none;
+  position: absolute;
+  top: calc(100% + 8px);
+  visibility: hidden;
+  width: max-content;
+  z-index: 40;
+}
+
+.route-action-icon:hover .route-action-icon__tooltip,
+.route-action-icon:focus-within .route-action-icon__tooltip { visibility: visible; }
+
+.route-action-icon-group:has(.route-action-icon:hover) .route-action-icon:not(:hover) .route-action-icon__tooltip { visibility: hidden; }

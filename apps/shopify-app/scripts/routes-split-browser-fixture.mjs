@@ -20,10 +20,18 @@ import { createMemoryRouter, RouterProvider } from "react-router";
 import RoutesPage from ${JSON.stringify(`${appDirectory}/app/routes/app.routes.jsx`)};
 import RouteDetail, { shouldRevalidate as shouldRevalidateRouteDetail } from ${JSON.stringify(`${appDirectory}/app/routes/app.routes.$routeId.jsx`)};
 
-window.fetch = async () => new Response(JSON.stringify({ errors: [{ message: "Fixture transport is disabled" }] }), {
-  status: 503,
-  headers: { "content-type": "application/json" },
-});
+const fetchFixtureAsset = window.fetch.bind(window);
+window.fetch = async (input, init) => {
+  const url = new URL(typeof input === "string" ? input : input.url, window.location.href);
+  const method = init?.method ?? (typeof input === "string" ? "GET" : input.method) ?? "GET";
+  if (url.origin === "https://cdn.shopify.com" && method.toUpperCase() === "GET") {
+    return fetchFixtureAsset(input, init);
+  }
+  return new Response(JSON.stringify({ errors: [{ message: "Fixture transport is disabled" }] }), {
+    status: 503,
+    headers: { "content-type": "application/json" },
+  });
+};
 const makeStop = (index, prefix = "source") => ({
   address: { address1: index + " Fixture Street", city: "Toronto", countryCode: "CA", postalCode: "M5V 1A1", province: "ON" },
   deliveryStopId: prefix + "-stop-" + index, itemCount: index, latitude: 43.64 + index / 1000,
@@ -253,6 +261,6 @@ const server = createServer((request, response) => {
   if (request.url === "/global.css") { response.setHeader("content-type", "text/css"); response.end(readFileSync(`${appDirectory}/app/styles/global.css`)); return; }
   if (request.url === "/fixture.js") { response.setHeader("content-type", "text/javascript"); response.end(readFileSync(bundlePath)); return; }
   response.setHeader("cache-control", "no-store"); response.setHeader("content-type", "text/html; charset=utf-8");
-  response.end(`<!doctype html><html><head><title>Routes split-on-save fixture</title><link rel="stylesheet" href="/global.css"></head><body style="font-family:Arial;margin:0"><aside style="background:#fff4cc;padding:8px;position:sticky;top:0;z-index:1000">Local synthetic fixture · network and production mutations disabled · <a href="/?mode=ordinary">ordinary complete</a> · <a href="/?mode=ordinary&copy=error">copy error</a> · <a href="/?mode=ordinary&copy=unknown">copy unknown</a> · <a href="/?mode=ordinary&copy=incomplete">copy incomplete</a> · <a href="/?mode=ordinary&save=incomplete">save incomplete</a> · <a href="/?mode=ordinary&save=error">save error</a> · <a href="/?mode=ordinary&save=unknown">save unknown</a> · <a href="/?mode=bridge&save=complete">existing group complete</a> · <a href="/?mode=singleton">saved singleton</a> · <a href="/?mode=saved">saved 3-member list</a><div id="fixture-status" style="margin-top:6px;font-weight:700">Total action submissions: 0 · Copy submissions: 0 · Save submissions: 0 · Add Empty server submissions: 0 · Original unchanged: yes (6 stops)</div></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`);
+  response.end(`<!doctype html><html><head><title>Routes split-on-save fixture</title><script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script><link rel="stylesheet" href="/global.css"></head><body style="font-family:Arial;margin:0"><aside style="background:#fff4cc;padding:8px;position:sticky;top:0;z-index:1000">Local synthetic fixture · network and production mutations disabled · <a href="/?mode=ordinary">ordinary complete</a> · <a href="/?mode=ordinary&copy=error">copy error</a> · <a href="/?mode=ordinary&copy=unknown">copy unknown</a> · <a href="/?mode=ordinary&copy=incomplete">copy incomplete</a> · <a href="/?mode=ordinary&save=incomplete">save incomplete</a> · <a href="/?mode=ordinary&save=error">save error</a> · <a href="/?mode=ordinary&save=unknown">save unknown</a> · <a href="/?mode=bridge&save=complete">existing group complete</a> · <a href="/?mode=singleton">saved singleton</a> · <a href="/?mode=saved">saved 3-member list</a><div id="fixture-status" style="margin-top:6px;font-weight:700">Total action submissions: 0 · Copy submissions: 0 · Save submissions: 0 · Add Empty server submissions: 0 · Original unchanged: yes (6 stops)</div></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`);
 });
 server.listen(port, "127.0.0.1", () => console.log(`Routes split fixture ready at http://127.0.0.1:${port}/?mode=ordinary`));
