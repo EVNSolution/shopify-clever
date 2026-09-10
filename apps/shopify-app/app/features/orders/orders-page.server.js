@@ -14,9 +14,7 @@ import {
 } from "../delivery/orders.server";
 import { deleteDeliveryInventory, fetchDeliveryInventories } from "../delivery/inventories.server";
 import {
-  buildCreateRoutePlanBatchPayload,
   buildCreateRoutePlanPayload,
-  createDeliveryRoutePlanBatch,
   DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE,
   fetchDeliveryRoutePlans,
 } from "../delivery/route-plans.server";
@@ -55,7 +53,7 @@ import {
   textOrUndefined,
   withPromiseTimeout,
 } from "./orders-page.shared";
-import { getOrderFiltersFromSearchParams, ORDER_HISTORY_SCOPE } from "./order-filters";
+import { getOrderFiltersFromSearchParams, isOrderCancelled, ORDER_HISTORY_SCOPE } from "./order-filters";
 import { resolveOrdersResourceFeatureFlags } from "./orders-resource-flags";
 import {
   fetchShopifyShopTimeZone,
@@ -156,7 +154,7 @@ async function handleOrdersAction(request) {
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
   const formData = await request.formData();
-  const intent = formData.get("_intent") ?? "createRoutePlan";
+  const intent = formData.get("_intent") ?? "createRouteGroup";
   const shopifySessionToken = formData.get("shopifySessionToken");
 
   if (intent === "syncOrders") {
@@ -427,6 +425,10 @@ async function handleOrdersAction(request) {
     };
   }
 
+  if (!["createRouteGroup", "addOrdersToRouteGroup"].includes(intent)) {
+    return { errors: [{ message: "Route creation has changed. Refresh Orders and try again." }] };
+  }
+
   const createStartedAt = getSafePerformanceNow();
   const createTimings = {};
   const plannedOrderIds = JSON.parse(formData.get("plannedOrderIds") ?? "[]");
@@ -517,40 +519,27 @@ async function handleOrdersAction(request) {
     };
   }
 
-  if (!["createRouteGroup", "createRoutePlan"].includes(intent)) {
-    return { errors: [{ message: "Unsupported route creation intent." }] };
-  }
-
   const routePlanPayloadInput = {
     departureLocation: departureLocationData.departureLocation,
     plannedOrders,
     routeName,
     routeScope,
   };
-  const routePlanPayload = intent === "createRouteGroup"
-    ? buildCreateRoutePlanPayload(routePlanPayloadInput)
-    : null;
+  const routePlanPayload = buildCreateRoutePlanPayload(routePlanPayloadInput);
 
   const createRoutePlanStartedAt = getSafePerformanceNow();
-  const creationResult = intent === "createRoutePlan"
-    ? await createDeliveryRoutePlanBatch(
-        request,
-        buildCreateRoutePlanBatchPayload(routePlanPayloadInput),
-        { sessionToken: shopifySessionToken },
-      )
-    : await createDeliveryRouteGroup(
-        request,
-        buildCreateRouteGroupPayload({
-          depot: routePlanPayload.depot,
-          plannedOrders,
-          routeName: routePlanPayload.name,
-          routeScope,
-        }),
-        { sessionToken: shopifySessionToken },
-      );
+  const creationResult = await createDeliveryRouteGroup(
+    request,
+    buildCreateRouteGroupPayload({
+      depot: routePlanPayload.depot,
+      plannedOrders,
+      routeName: routePlanPayload.name,
+      routeScope,
+    }),
+    { sessionToken: shopifySessionToken },
+  );
 
   const routeGroup = creationResult.routeGroup ?? null;
-  const routePlan = creationResult.routePlan ?? null;
   const routePlanErrors = creationResult.errors ?? [];
   createTimings.createRoutePlanMs = roundPerfDuration(getSafePerformanceNow() - createRoutePlanStartedAt);
   logDevPerformanceMetric("orders.create_route.action", {
@@ -560,21 +549,17 @@ async function handleOrdersAction(request) {
     syncedOrderCount,
     canonicalOrderCount,
     routeGroupId: routeGroup?.id ?? null,
-    routePlanId: routePlan?.id ?? null,
     errorCount: routePlanErrors.length,
   });
 
-  if (intent === "createRoutePlan" && routePlan?.id) return { routePlan, errors: [] };
-  if (intent === "createRouteGroup" && routeGroup?.id) return { routeGroup, errors: [] };
+  if (routeGroup?.id) return { routeGroup, errors: [] };
 
   return {
     errors: routePlanErrors.length > 0
       ? routePlanErrors
       : [{
-          code: intent === "createRoutePlan" ? "CREATED_ROUTE_PLAN_MISSING" : "CREATED_ROUTE_GROUP_MISSING",
-          message: intent === "createRoutePlan"
-            ? "The route response did not include the created route."
-            : "The route group response did not include the created group.",
+          code: "CREATED_ROUTE_GROUP_MISSING",
+          message: "The route response did not include the created route.",
         }],
   };
 }
@@ -693,6 +678,15 @@ async function resolvePlannedOrdersForAction({
             "서버 주문 ID가 없는 주문이 있어 경로를 만들 수 없습니다. 주문 동기화 후 다시 시도해주세요.",
         },
       ],
+    };
+  }
+
+  if (plannedOrders.some(isOrderCancelled)) {
+    return {
+      errors: [{
+        code: "CANCELLED_ORDER_NOT_PLANNABLE",
+        message: "Cancelled orders cannot be used to create a route. Remove them from the route plan and try again.",
+      }],
     };
   }
 

@@ -16,6 +16,21 @@ test("normalizes supported operator languages with English fallback", () => {
   assert.equal(normalizeLanguage(null), "en");
 });
 
+test("translates cancelled route-planning exclusions", () => {
+  assert.equal(
+    translate("en", "orders.routeActions.cancelledOrdersExcluded", { count: 1 }),
+    "Cancelled orders (1) were excluded from route planning.",
+  );
+  assert.equal(
+    translate("ko", "orders.routeActions.cancelledOrdersExcluded", { count: 2 }),
+    "취소된 주문 2건을 경로 계획에서 제외했습니다.",
+  );
+  assert.equal(
+    translate("en", "orders.routeActions.cancelledOrdersBlockCreation", { count: 1 }),
+    "This route includes 1 cancelled order(s). Remove them before creating the route.",
+  );
+});
+
 test("translates settings copy and interpolates saved departure names", () => {
   assert.equal(translate("en", "settings.title"), "Settings");
   assert.equal(translate("ko", "settings.title"), "설정");

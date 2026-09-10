@@ -4,7 +4,7 @@ import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
-import { routeGroupChildPath, routeGroupPath, routePlanPath } from "../delivery/route-paths";
+import { routeGroupChildPath, routeGroupPath } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
 import { getAppstleSubscriptionOrderKind } from "../delivery/delivery-labels";
 import { createDepartureMarkerElement } from "../maps/map-markers";
@@ -63,6 +63,7 @@ import {
   getOrderDeliveryStateFilterValue,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
+  isOrderCancelled,
   isOrderPickupComplete,
   isOrderRouteCreated,
   ORDER_DELIVERY_DATE_PENDING,
@@ -98,8 +99,7 @@ import {
   textOrUndefined,
 } from "./orders-page.shared";
 
-export function getCreatedRouteDestination(intent, routePlan, routeGroup) {
-  if (intent === "createRoutePlan" && routePlan?.id) return routePlanPath(routePlan.id);
+export function getCreatedRouteDestination(intent, routeGroup) {
   if (intent === "createRouteGroup" && routeGroup?.id) return routeGroupPath(routeGroup.id);
   return null;
 }
@@ -609,14 +609,6 @@ const orderFiltersPanelStyle = {
   gap: "6px",
   padding: "8px",
   maxWidth: "calc(100vw - 32px)",
-};
-
-const orderFilterTypeListStyle = {
-  display: "grid",
-  gap: "2px",
-  gridTemplateColumns: "minmax(0, 1fr)",
-  maxHeight: "240px",
-  overflowY: "auto",
 };
 
 const tableWrapStyle = {
@@ -1350,6 +1342,15 @@ const checkboxCellStyle = {
   ...tableCellStyle,
   padding: "6px 4px",
 };
+const cancelledOrderRowStyle = {
+  color: "#8a8a8a",
+};
+const CANCELLED_ORDER_ROW_CSS = `
+  .order-row--cancelled > td:not(:first-child),
+  .order-row--cancelled > td:not(:first-child) * {
+    text-decoration: line-through;
+  }
+`;
 
 const deliveryInfoCellStyle = {
   ...tableCellStyle,
@@ -3124,8 +3125,14 @@ function OrdersPageContent({ loaderData }) {
       }
       pendingSelectionExclusionsRef.current = null;
     } else if (ordersSelectionFetcher.data.selectionToken) {
+      const pendingExclusions = pendingSelectionExclusionsRef.current;
       setSelectionSnapshot(ordersSelectionFetcher.data);
-      setSelectionExcludedOrderIds([]);
+      setSelectionExcludedOrderIds(
+        pendingExclusions?.requestKey === ordersSelectionFetcher.data._requestKey
+          ? pendingExclusions.excludeOrderIds
+          : [],
+      );
+      pendingSelectionExclusionsRef.current = null;
     }
     setBulkUpdateClientError(null);
     emitOrdersResourceTiming(
@@ -3873,9 +3880,16 @@ function OrdersPageContent({ loaderData }) {
     [plannedOrderRows],
   );
 
+  const checkedOrders = useMemo(
+    () => selectedOrderRows
+      .map((order) => displayOrderById.get(order.id) ?? order)
+      .filter((order) => !isOrderCancelled(order)),
+    [displayOrderById, selectedOrderRows],
+  );
+
   const checkedOrderIds = useMemo(
-    () => selectedOrderRows.map((order) => order.id),
-    [selectedOrderRows],
+    () => checkedOrders.map((order) => order.id),
+    [checkedOrders],
   );
 
   const checkedOrderIdSet = useMemo(
@@ -3920,7 +3934,6 @@ function OrdersPageContent({ loaderData }) {
     [ordersCurrentPage, ordersTotalPages],
   );
   const tableWidth = lockedTableWidth ? `max(100%, ${lockedTableWidth}px)` : "100%";
-  const checkedOrders = selectedOrderRows;
   const checkedServerOrderIds = useMemo(
     () => checkedOrders.map((order) => order.orderId).filter(Boolean),
     [checkedOrders],
@@ -3985,6 +3998,9 @@ function OrdersPageContent({ loaderData }) {
   const activeOrderPopupPlannedIndex = activeOrderPopup
     ? plannedOrderIds.indexOf(activeOrderPopup.id) + 1
     : 0;
+  const activeOrderPopupCancelled = activeOrderPopup
+    ? isOrderCancelled(activeOrderPopup)
+    : false;
   const activeOrderPopupItems = activeOrderPopup ? getOrderLineItems(activeOrderPopup) : [];
   const activeOrderPopupShopifyUrl = activeOrderPopup ? getShopifyAdminOrderUrl(activeOrderPopup) : null;
   const activeOrderPopupMetaValues = activeOrderPopup
@@ -3992,11 +4008,11 @@ function OrdersPageContent({ loaderData }) {
     : [];
 
   const selectableTableOrders = useMemo(
-    () => tableOrders.filter((order) => !plannedOrderIdSet.has(order.id)),
+    () => tableOrders.filter((order) => !plannedOrderIdSet.has(order.id) && !isOrderCancelled(order)),
     [plannedOrderIdSet, tableOrders],
   );
   const snapshotSelectableTableOrders = useMemo(
-    () => tableOrders.filter((order) => Boolean(order.orderId)),
+    () => tableOrders.filter((order) => Boolean(order.orderId) && !isOrderCancelled(order)),
     [tableOrders],
   );
 
@@ -4484,9 +4500,13 @@ function OrdersPageContent({ loaderData }) {
     resourceSequenceRef.current += 1;
     latestSelectionRequestKeyRef.current = requestKey;
     resourceMetricStartedAtRef.current.set(requestKey, getSafePerformanceNow());
+    const excludeOrderIds = tableOrders
+      .filter((order) => order.orderId && isOrderCancelled(order))
+      .map((order) => order.orderId);
+    pendingSelectionExclusionsRef.current = { excludeOrderIds, requestKey };
     const formData = new FormData();
     formData.set("filters", JSON.stringify(Object.fromEntries(resourceFilterSearchParams)));
-    formData.set("excludeOrderIds", "[]");
+    formData.set("excludeOrderIds", JSON.stringify(excludeOrderIds));
     formData.set("_requestKey", requestKey);
     formData.set("shopifySessionToken", await getOrdersResourceSessionToken());
     ordersSelectionFetcher.submit(formData, {
@@ -4505,10 +4525,16 @@ function OrdersPageContent({ loaderData }) {
     resourceSequenceRef.current += 1;
     latestSelectionRequestKeyRef.current = requestKey;
     resourceMetricStartedAtRef.current.set(requestKey, getSafePerformanceNow());
-    pendingSelectionExclusionsRef.current = { excludeOrderIds, requestKey };
+    const protectedExcludeOrderIds = Array.from(new Set([
+      ...excludeOrderIds,
+      ...tableOrders
+        .filter((order) => order.orderId && isOrderCancelled(order))
+        .map((order) => order.orderId),
+    ]));
+    pendingSelectionExclusionsRef.current = { excludeOrderIds: protectedExcludeOrderIds, requestKey };
     const formData = new FormData();
     formData.set("selectionToken", selectionSnapshot.selectionToken);
-    formData.set("excludeOrderIds", JSON.stringify(excludeOrderIds));
+    formData.set("excludeOrderIds", JSON.stringify(protectedExcludeOrderIds));
     formData.set("_requestKey", requestKey);
     formData.set("shopifySessionToken", await getOrdersResourceSessionToken());
     ordersSelectionFetcher.submit(formData, {
@@ -4662,6 +4688,8 @@ function OrdersPageContent({ loaderData }) {
 
 
   const toggleOrderCheck = (order, checked) => {
+    if (isOrderCancelled(order)) return;
+
     if (snapshotSelectionActive) {
       if (!order?.orderId || snapshotSelectionUpdating) return;
       void replaceSelectionExclusions(
@@ -4710,6 +4738,14 @@ function OrdersPageContent({ loaderData }) {
   const handleAddOrderToPlan = useCallback((orderId) => {
     if (plannedOrderIdSet.has(orderId)) return;
 
+    const order = displayOrderById.get(orderId) ?? plannedOrderRowById.get(orderId);
+    if (isOrderCancelled(order)) {
+      setCreateRouteClientError(
+        translate(language, "orders.routeActions.cancelledOrdersExcluded", { count: 1 }),
+      );
+      return;
+    }
+
     const nextOrderIds = Array.from(new Set([...plannedOrderIds, orderId]));
     const nextOrders = nextOrderIds
       .map((nextOrderId) => displayOrderById.get(nextOrderId) ?? plannedOrderRowById.get(nextOrderId))
@@ -4723,18 +4759,32 @@ function OrdersPageContent({ loaderData }) {
     setCreateRouteClientError(null);
     setSelectedOrderId(orderId);
     setPlanFitRequest((requestCount) => requestCount + 1);
-  }, [displayOrderById, plannedOrderIdSet, plannedOrderIds, plannedOrderRowById]);
+  }, [displayOrderById, language, plannedOrderIdSet, plannedOrderIds, plannedOrderRowById]);
 
 
   const handleAddToPlan = () => {
     if (checkedOrderIds.length === 0) return;
 
-    const selectedOrders = selectedOrderRows.filter((order) =>
-      !plannedOrderIdSet.has(order.id),
+    const currentSelectedOrders = selectedOrderRows.map((order) =>
+      displayOrderById.get(order.id) ?? order,
+    );
+    const cancelledOrderCount = currentSelectedOrders.filter((order) =>
+      !plannedOrderIdSet.has(order.id) && isOrderCancelled(order),
+    ).length;
+    const selectedOrders = currentSelectedOrders.filter((order) =>
+      !plannedOrderIdSet.has(order.id) && !isOrderCancelled(order),
     );
     const selectedOrderIds = selectedOrders.map((order) => order.id);
 
-    if (selectedOrderIds.length === 0) return;
+    if (selectedOrderIds.length === 0) {
+      if (cancelledOrderCount > 0) {
+        setSelectedOrderRows([]);
+        setCreateRouteClientError(
+          translate(language, "orders.routeActions.cancelledOrdersExcluded", { count: cancelledOrderCount }),
+        );
+      }
+      return;
+    }
 
     const nextOrderIds = Array.from(new Set([...plannedOrderIds, ...selectedOrderIds]));
     const selectedOrderById = new Map(selectedOrders.map((order) => [order.id, order]));
@@ -4746,7 +4796,9 @@ function OrdersPageContent({ loaderData }) {
     setPlannedOrderRows(nextOrders);
     setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setSelectedOrderRows([]);
-    setCreateRouteClientError(null);
+    setCreateRouteClientError(cancelledOrderCount > 0
+      ? translate(language, "orders.routeActions.cancelledOrdersExcluded", { count: cancelledOrderCount })
+      : null);
     setPlanFitRequest((requestCount) => requestCount + 1);
   };
 
@@ -4889,6 +4941,14 @@ function OrdersPageContent({ loaderData }) {
       || routePlanFetcher.state !== "idle"
     ) return;
 
+    const cancelledOrderCount = plannedOrders.filter(isOrderCancelled).length;
+    if (cancelledOrderCount > 0) {
+      setCreateRouteClientError(
+        translate(language, "orders.routeActions.cancelledOrdersBlockCreation", { count: cancelledOrderCount }),
+      );
+      return;
+    }
+
     routeCreatePendingRef.current = true;
     setRouteCreatePending(true);
     try {
@@ -4917,9 +4977,7 @@ function OrdersPageContent({ loaderData }) {
     }
   };
 
-  const handleCreateRoute = () => submitNewRoute("createRoutePlan");
-
-  const handleCreateRouteGroup = () => submitNewRoute("createRouteGroup");
+  const handleCreateRoute = () => submitNewRoute("createRouteGroup");
 
   const handleAddToRoute = async () => {
     if (addToRouteDisabled || !selectedRouteGroup?.id) return;
@@ -5206,14 +5264,13 @@ function OrdersPageContent({ loaderData }) {
 
   useEffect(() => {
     const createdRouteGroup = routePlanFetcher.data?.routeGroup;
-    const createdRoutePlan = routePlanFetcher.data?.routePlan;
     const submittedRouteIntent = submittedRouteIntentRef.current;
 
     if (!submittedRouteRequestRef.current) return;
     if ((routePlanFetcher.data?.errors ?? []).length > 0) {
       submittedRouteRequestRef.current = false;
       submittedRouteIntentRef.current = null;
-      if (["createRoutePlan", "createRouteGroup"].includes(submittedRouteIntent)) {
+      if (submittedRouteIntent === "createRouteGroup") {
         routeCreatePendingRef.current = false;
         setRouteCreatePending(false);
       }
@@ -5222,25 +5279,9 @@ function OrdersPageContent({ loaderData }) {
         setCreateRouteClientError(translate(language, "orders.routeActions.invalidRouteSelection"));
       } else if (errorCode === "NOT_IMPLEMENTED") {
         setCreateRouteClientError(translate(language, "orders.routeActions.routeCreationUnavailable"));
-      } else if (errorCode === "CREATED_ROUTE_PLAN_MISSING") {
-        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedRoute"));
       } else if (errorCode === "CREATED_ROUTE_GROUP_MISSING") {
-        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedGroup"));
-      }
-      return;
-    }
-
-    if (submittedRouteIntent === "createRoutePlan") {
-      submittedRouteRequestRef.current = false;
-      submittedRouteIntentRef.current = null;
-      routeCreatePendingRef.current = false;
-      setRouteCreatePending(false);
-      const destination = getCreatedRouteDestination(submittedRouteIntent, createdRoutePlan, createdRouteGroup);
-      if (!destination) {
         setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedRoute"));
-        return;
       }
-      navigate(destination);
       return;
     }
 
@@ -5249,9 +5290,9 @@ function OrdersPageContent({ loaderData }) {
       submittedRouteIntentRef.current = null;
       routeCreatePendingRef.current = false;
       setRouteCreatePending(false);
-      const destination = getCreatedRouteDestination(submittedRouteIntent, createdRoutePlan, createdRouteGroup);
+      const destination = getCreatedRouteDestination(submittedRouteIntent, createdRouteGroup);
       if (!destination) {
-        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedGroup"));
+        setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedRoute"));
         return;
       }
       navigate(destination);
@@ -5267,13 +5308,7 @@ function OrdersPageContent({ loaderData }) {
       navigate(destination);
       return;
     }
-
-    if (!createdRoutePlan?.id) return;
-
-    submittedRouteRequestRef.current = false;
-    submittedRouteIntentRef.current = null;
-    navigate(routePlanPath(createdRoutePlan.id));
-  }, [addToRouteGroupId, addToRoutePlanId, language, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup, routePlanFetcher.data?.routePlan]);
+  }, [addToRouteGroupId, addToRoutePlanId, language, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup]);
 
   useEffect(() => {
     if (inventoryDeleteFetcher.state !== "idle" || !inventoryDeleteFetcher.data) return;
@@ -5772,10 +5807,13 @@ function OrdersPageContent({ loaderData }) {
                 <div className="order-marker-popup__actions">
                   <button
                     className="order-marker-popup__action"
-                    disabled={activeOrderPopupPlannedIndex > 0}
+                    disabled={activeOrderPopupCancelled || activeOrderPopupPlannedIndex > 0}
                     onClick={() => handleAddOrderToPlan(activeOrderPopup.id)}
+                    title={activeOrderPopupCancelled ? "Cancelled orders cannot be added to a route" : ""}
                     type="button"
-                  >{activeOrderPopupPlannedIndex > 0 ? "Added to map" : "Add to map"}</button>
+                  >{activeOrderPopupCancelled
+                      ? "Cancelled"
+                      : activeOrderPopupPlannedIndex > 0 ? "Added to map" : "Add to map"}</button>
                   {activeOrderPopupShopifyUrl ? (
                     <a
                       className="order-marker-popup__action order-marker-popup__action--secondary"
@@ -5807,6 +5845,7 @@ function OrdersPageContent({ loaderData }) {
             maxHeight: `${ordersMapHeight}px`,
           }}
         >
+          <style>{CANCELLED_ORDER_ROW_CSS}</style>
           <label style={routePlanTitleGroupStyle}>
             <span style={routePlanTitleLabelStyle}>Title</span>
             <input
@@ -5862,16 +5901,6 @@ function OrdersPageContent({ loaderData }) {
                 disabled={createRouteDisabled}
                 onClick={handleCreateRoute}
               >{translate(language, "orders.routeActions.createRoute")}</button>
-              <button
-                type="button"
-                style={
-                  createRouteDisabled
-                    ? disabledRouteAssignActionButtonStyle
-                    : routeAssignActionButtonStyle
-                }
-                disabled={createRouteDisabled}
-                onClick={handleCreateRouteGroup}
-              >{translate(language, "orders.routeActions.createGroupRoute")}</button>
             </div>
           </div>
 
@@ -5928,20 +5957,14 @@ function OrdersPageContent({ loaderData }) {
             >
               {translate(language, "orders.filters.add")} {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
             </s-button>
-            <s-popover id="orders-filter-popover" inlineSize="240px">
-              <s-box accessibilityLabel={translate(language, "orders.filters.label")} padding="small">
-                <div aria-label="Order filter types" role="menu" style={orderFilterTypeListStyle}>
-                  {availableOrderFilterTypes.map((filterType) => (
-                    <s-button
-                      key={filterType.key}
-                      commandFor="orders-filter-popover"
-                      command="--hide"
-                      onClick={() => handleAddOrderFilter(filterType.key)}
-                    >{translate(language, filterType.labelKey)}</s-button>
-                  ))}
-                </div>
-              </s-box>
-            </s-popover>
+            <s-menu id="orders-filter-popover" accessibilityLabel={translate(language, "orders.filters.label")}>
+              {availableOrderFilterTypes.map((filterType) => (
+                <s-button
+                  key={filterType.key}
+                  onClick={() => handleAddOrderFilter(filterType.key)}
+                >{translate(language, filterType.labelKey)}</s-button>
+              ))}
+            </s-menu>
             {visibleOrderFilterKeys.length > 0 ? (
               <div aria-label="Active order filters" role="group" style={orderFiltersPanelStyle}>
                 {visibleOrderFilterKeys.includes("orderedDate") ? (
@@ -6458,9 +6481,10 @@ function OrdersPageContent({ loaderData }) {
               <tbody>
                 {tableOrders.map((order) => {
                   const orderIsPlanned = plannedOrderIdSet.has(order.id);
-                  const checkboxChecked = snapshotSelectionActive
+                  const orderIsCancelled = isOrderCancelled(order);
+                  const checkboxChecked = !orderIsCancelled && (snapshotSelectionActive
                     ? Boolean(order.orderId) && !selectionExcludedOrderIdSet.has(order.orderId)
-                    : orderIsPlanned || checkedOrderIdSet.has(order.id);
+                    : orderIsPlanned || checkedOrderIdSet.has(order.id));
                   const deliveryPillDetails = getOrderDeliveryPillDetails(order);
                   const deliveryLabel = formatOrderDeliveryLabel(order);
                   const deliveryPill = renderDetailPill({
@@ -6481,22 +6505,30 @@ function OrdersPageContent({ loaderData }) {
                   const shopifyOrderUrl = getShopifyAdminOrderWebUrl(order, ordersCacheKey);
 
                   return (
-                    <tr key={order.id}>
+                    <tr
+                      className={orderIsCancelled ? "order-row--cancelled" : undefined}
+                      key={order.id}
+                      style={orderIsCancelled ? cancelledOrderRowStyle : undefined}
+                    >
                       <td style={checkboxCellStyle}>
                         <input
                           type="checkbox"
                           aria-label={
-                            snapshotSelectionActive
+                            orderIsCancelled
+                              ? `${order.name} is cancelled and cannot be selected`
+                              : snapshotSelectionActive
                               ? `Select ${order.name} in frozen set`
                               : orderIsPlanned
                               ? `${order.name} already added to map`
                               : `Select ${order.name} for plan`
                           }
-                          title={!snapshotSelectionActive && orderIsPlanned ? "Already added to map" : ""}
+                          title={orderIsCancelled
+                            ? "Cancelled orders cannot be added to a route"
+                            : !snapshotSelectionActive && orderIsPlanned ? "Already added to map" : ""}
                           checked={checkboxChecked}
-                          disabled={snapshotSelectionActive
+                          disabled={orderIsCancelled || (snapshotSelectionActive
                             ? !order.orderId || snapshotSelectionUpdating
-                            : orderIsPlanned}
+                            : orderIsPlanned)}
                           onChange={(event) => toggleOrderCheck(order, event.currentTarget.checked)}
                         />
                       </td>
