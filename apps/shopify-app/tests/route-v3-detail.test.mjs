@@ -33,13 +33,14 @@ function compileHandler(name, dependencies, argumentNames = []) {
 
 function extractSiblingNavigatorCondition() {
   const match = routeDetailSource.match(
-    /\{(isMaterializedChildRouteDetail && routeGroupId && currentSiblingRouteIndex >= 0) \? \(/,
+    /\{(routeGroupId && \(isRouteGroupDetail \|\| \(isMaterializedChildRouteDetail && currentSiblingRouteIndex >= 0\)\)) \? \(/,
   );
   assert.ok(match, "the sibling navigator condition must remain inspectable");
   return new Function(
     "isMaterializedChildRouteDetail",
     "routeGroupId",
     "currentSiblingRouteIndex",
+    "isRouteGroupDetail",
     `return Boolean(${match[1]});`,
   );
 }
@@ -164,6 +165,8 @@ test("ordinary presentation hides sibling navigation and exposes Add Empty witho
   assert.equal(showSiblingNavigator(false, "group-1", 0), false);
   assert.equal(isMaterializedChildRouteDetail({ routeGroup: null, routePlan: standaloneRoute }), false);
   assert.equal(showSiblingNavigator(false, null, -1), false);
+  assert.equal(showSiblingNavigator(false, "group-1", -1, true), true);
+  assert.equal(showSiblingNavigator(true, "group-1", 0, false), true);
 
   const routeActionsStart = routeDetailSource.indexOf('<div aria-label="Route actions"');
   const routeActionsEnd = routeDetailSource.indexOf('<div\n                  aria-label="Actions"', routeActionsStart);

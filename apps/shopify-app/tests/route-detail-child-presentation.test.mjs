@@ -595,7 +595,7 @@ test("child detail uses a flat reference-style title area and keeps inventory se
   assert.match(routeDetailSource, /const routeChildOverviewHeaderStyle = \{/);
   assert.match(routeDetailSource, /Updated on \{routeUpdatedLabel\}/);
   assert.match(routeDetailSource, /aria-label="Edit child route name"/);
-  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
+  assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
   assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*View inventory/);
   assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
 });
