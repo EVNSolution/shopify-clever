@@ -25,6 +25,14 @@ const customStopDraftReaderSource = routeDetailServerSource.match(/function read
 const customStopDialogSource = readFileSync(join(root, "app/features/delivery/custom-stop-dialog.jsx"), "utf8");
 const groupDetailSource = readFileSync(join(root, "app/routes/app.routes.groups.$routeGroupId.jsx"), "utf8");
 
+function loadAddStopTargetRouteOptionsBuilder() {
+  const start = routeDetailSource.indexOf("function buildAddStopTargetRouteOptions(");
+  const end = routeDetailSource.indexOf("\nfunction applyRouteRowDraftState(", start);
+  assert.notEqual(start, -1);
+  assert.notEqual(end, -1);
+  return Function(`${routeDetailSource.slice(start, end)}\nreturn buildAddStopTargetRouteOptions;`)();
+}
+
 process.env.CLEVER_DELIVERY_API_URL = "https://delivery.test/";
 process.env.CLEVER_APP_ID = "clever-route-dev";
 process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = "0";
@@ -156,6 +164,9 @@ test("route detail branches the first add dialog and keeps custom stops DB-only"
   assert.match(routeDetailSource, /isCustomStop[\s\S]*>Custom<\/span>/);
   assert.match(routeDetailSource, /row\?\.isCustomStop\) return null/);
   assert.match(routeDetailSource, /Unassigned in group/);
+  assert.match(routeDetailSource, /Select route/);
+  assert.match(routeDetailSource, /addStopTargetRouteRequired && !addStopTargetRoutePlanId/);
+  assert.match(customStopDialogSource, /targetRouteRequired && !targetRoutePlanId/);
   assert.match(routeDetailSource, /accessibilityLabel="Loading available orders"/);
   assert.doesNotMatch(groupDetailSource, /fetchDeliveryOrders/);
 
@@ -173,4 +184,20 @@ test("route detail branches the first add dialog and keeps custom stops DB-only"
   assert.match(routeDetailServerSource, /createDeliveryRouteGroupCustomStop/);
   assert.match(routeDetailServerSource, /updateDeliveryRouteGroupCustomStop/);
   assert.doesNotMatch(routeDetailServerSource, /orderUpdate|customerUpdate/);
+});
+
+test("materialized groups require a real target route while empty groups may stay unassigned", () => {
+  const buildAddStopTargetRouteOptions = loadAddStopTargetRouteOptionsBuilder();
+  assert.deepEqual(buildAddStopTargetRouteOptions([]), [
+    { label: "Unassigned in group", value: "" },
+  ]);
+  assert.deepEqual(buildAddStopTargetRouteOptions([
+    { isUnassigned: true, routePlanId: null, title: "Unassigned" },
+    { routePlanId: "route-44", title: "#44" },
+    { routePlanId: "route-46", title: "#46" },
+  ]), [
+    { disabled: true, label: "Select route", value: "" },
+    { label: "#44", value: "route-44" },
+    { label: "#46", value: "route-46" },
+  ]);
 });

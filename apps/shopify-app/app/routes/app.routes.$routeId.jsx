@@ -2869,6 +2869,16 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
   return routeGroupChildRows;
 }
 
+function buildAddStopTargetRouteOptions(routeRows = []) {
+  const routeOptions = routeRows
+    .filter((routeRow) => routeRow.routePlanId && !routeRow.isPreviewOnly && !routeRow.isUnassigned)
+    .map((routeRow) => ({ label: routeRow.title, value: routeRow.routePlanId }));
+
+  return routeOptions.length > 0
+    ? [{ disabled: true, label: "Select route", value: "" }, ...routeOptions]
+    : [{ label: "Unassigned in group", value: "" }];
+}
+
 function applyRouteRowDraftState(routeRows, routeLineEdits, routePreviewByKey) {
   return routeRows.map((routeRow) => {
     const routeLineEdit = routeLineEdits[routeRow.id] ?? {};
@@ -3947,14 +3957,11 @@ export default function RouteDetailPage() {
       : []),
     [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
   );
-  const addStopTargetRouteOptions = useMemo(() => (isRouteGroupDetail
-    ? [
-        { label: "Unassigned in group", value: "" },
-        ...routeGroupChildRows
-          .filter((routeRow) => routeRow.routePlanId && !routeRow.isPreviewOnly)
-          .map((routeRow) => ({ label: routeRow.title, value: routeRow.routePlanId })),
-      ]
-    : []), [isRouteGroupDetail, routeGroupChildRows]);
+  const addStopTargetRouteOptions = useMemo(
+    () => (isRouteGroupDetail ? buildAddStopTargetRouteOptions(routeGroupChildRows) : []),
+    [isRouteGroupDetail, routeGroupChildRows],
+  );
+  const addStopTargetRouteRequired = addStopTargetRouteOptions.some((option) => option.value);
   const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
   const selectedAddOrderIdSet = useMemo(() => new Set(selectedAddOrderIds), [selectedAddOrderIds]);
   const filteredAddOrderCandidates = useMemo(
@@ -5639,7 +5646,7 @@ export default function RouteDetailPage() {
   };
 
   const handleAddSelectedOrders = () => {
-    if (selectedAddOrderIds.length === 0 || routeGroupActionBusy) return;
+    if (selectedAddOrderIds.length === 0 || routeGroupActionBusy || (addStopTargetRouteRequired && !addStopTargetRoutePlanId)) return;
     submitRouteGroupAction("addRouteOrders", {
       orderIds: JSON.stringify(selectedAddOrderIds),
       targetRoutePlanId: addStopTargetRoutePlanId,
@@ -8617,7 +8624,7 @@ export default function RouteDetailPage() {
                         value={addStopTargetRoutePlanId}
                       >
                         {addStopTargetRouteOptions.map((option) => (
-                          <option key={option.value || "unassigned"} value={option.value}>{option.label}</option>
+                          <option disabled={option.disabled === true} key={option.value || "unassigned"} value={option.value}>{option.label}</option>
                         ))}
                       </select>
                     </label>
@@ -8760,11 +8767,11 @@ export default function RouteDetailPage() {
                   type="button"
                 >Back</button>
                 <button
-                  disabled={addRouteOrdersBusy || selectedAddOrderIds.length === 0}
+                  disabled={addRouteOrdersBusy || selectedAddOrderIds.length === 0 || (addStopTargetRouteRequired && !addStopTargetRoutePlanId)}
                   onClick={handleAddSelectedOrders}
                   style={{
                     ...routeLineEditorPrimaryButtonStyle,
-                    ...(addRouteOrdersBusy || selectedAddOrderIds.length === 0 ? { opacity: 0.55 } : null),
+                    ...(addRouteOrdersBusy || selectedAddOrderIds.length === 0 || (addStopTargetRouteRequired && !addStopTargetRoutePlanId) ? { opacity: 0.55 } : null),
                   }}
                   type="button"
                 >{addRouteOrdersBusy ? "Adding…" : `Add ${selectedAddOrderIds.length || ""}`.trim()}</button>
