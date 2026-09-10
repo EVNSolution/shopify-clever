@@ -30,8 +30,7 @@ const ordersPageServerSource = readFileSync(
 
 test("orders choose filter types before showing values and show order amount by default", () => {
   assert.match(ordersPageSource, /<s-button[\s\S]*?commandFor="orders-filter-popover"[\s\S]*translate\(language, "orders\.filters\.add"\)/);
-  assert.match(ordersPageSource, /<s-popover id="orders-filter-popover" inlineSize="240px">/);
-  assert.match(ordersPageSource, /role="menu"/);
+  assert.match(ordersPageSource, /<s-menu id="orders-filter-popover"/);
   assert.match(ordersPageSource, /aria-label="Active order filters"/);
   assert.match(ordersPageSource, /\{ key: "totalPriceAmount", label: "Amount", translationKey: "orders\.table\.amount" \}/);
   assert.match(ordersPageSource, /formatOrderTotal\(order\)/);

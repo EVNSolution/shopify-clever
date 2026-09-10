@@ -611,14 +611,6 @@ const orderFiltersPanelStyle = {
   maxWidth: "calc(100vw - 32px)",
 };
 
-const orderFilterTypeListStyle = {
-  display: "grid",
-  gap: "2px",
-  gridTemplateColumns: "minmax(0, 1fr)",
-  maxHeight: "240px",
-  overflowY: "auto",
-};
-
 const tableWrapStyle = {
   boxSizing: "border-box",
   height: "calc(100vh - 150px)",
@@ -5965,20 +5957,14 @@ function OrdersPageContent({ loaderData }) {
             >
               {translate(language, "orders.filters.add")} {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
             </s-button>
-            <s-popover id="orders-filter-popover" inlineSize="240px">
-              <s-box accessibilityLabel={translate(language, "orders.filters.label")} padding="small">
-                <div aria-label="Order filter types" role="menu" style={orderFilterTypeListStyle}>
-                  {availableOrderFilterTypes.map((filterType) => (
-                    <s-button
-                      key={filterType.key}
-                      commandFor="orders-filter-popover"
-                      command="--hide"
-                      onClick={() => handleAddOrderFilter(filterType.key)}
-                    >{translate(language, filterType.labelKey)}</s-button>
-                  ))}
-                </div>
-              </s-box>
-            </s-popover>
+            <s-menu id="orders-filter-popover" accessibilityLabel={translate(language, "orders.filters.label")}>
+              {availableOrderFilterTypes.map((filterType) => (
+                <s-button
+                  key={filterType.key}
+                  onClick={() => handleAddOrderFilter(filterType.key)}
+                >{translate(language, filterType.labelKey)}</s-button>
+              ))}
+            </s-menu>
             {visibleOrderFilterKeys.length > 0 ? (
               <div aria-label="Active order filters" role="group" style={orderFiltersPanelStyle}>
                 {visibleOrderFilterKeys.includes("orderedDate") ? (

@@ -46,19 +46,19 @@ test("active URL filters seed visible controls and picker additions persist", ()
   );
 });
 
-test("Add filter popover lists filter types while value controls render in the page row", () => {
-  assert.match(source, /<s-popover id="orders-filter-popover" inlineSize="240px">/);
-  assert.match(source, /aria-label="Order filter types" role="menu" style=\{orderFilterTypeListStyle\}/);
+test("Add filter uses native menu rows while value controls render in the page row", () => {
+  assert.match(source, /<s-menu id="orders-filter-popover" accessibilityLabel=\{translate\(language, "orders\.filters\.label"\)\}>/);
   assert.match(source, /availableOrderFilterTypes\.map\(\(filterType\) =>/);
-  assert.match(source, /commandFor="orders-filter-popover"[\s\S]*command="--hide"/);
+  assert.match(source, /commandFor="orders-filter-popover"/);
 
-  const popoverStart = source.indexOf('<s-popover id="orders-filter-popover"');
-  const popoverEnd = source.indexOf("</s-popover>", popoverStart);
+  const popoverStart = source.indexOf('<s-menu id="orders-filter-popover"');
+  const popoverEnd = source.indexOf("</s-menu>", popoverStart);
   const activeRowStart = source.indexOf('aria-label="Active order filters"', popoverEnd);
   assert.ok(popoverStart >= 0 && popoverEnd > popoverStart && activeRowStart > popoverEnd);
 
   const popoverSource = source.slice(popoverStart, popoverEnd);
-  assert.doesNotMatch(popoverSource, /<OrderFilterMenu|handleOrderedDateCalendarOpen/);
+  assert.doesNotMatch(popoverSource, /<OrderFilterMenu|<s-box|orderFilterTypeListStyle|handleOrderedDateCalendarOpen/);
+  assert.match(popoverSource, /onClick=\{\(\) => handleAddOrderFilter\(filterType\.key\)\}/);
   assert.match(source.slice(activeRowStart), /visibleOrderFilterKeys\.includes\("deliveryState"\)[\s\S]*<OrderFilterMenu/);
 });
 
