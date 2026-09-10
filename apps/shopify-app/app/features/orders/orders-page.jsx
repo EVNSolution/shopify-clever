@@ -601,14 +601,10 @@ const orderControlsStyle = {
 
 const orderFiltersPanelStyle = {
   alignItems: "center",
-  background: "#ffffff",
-  border: "1px solid #d6d6d6",
-  borderRadius: "10px",
   display: "flex",
-  flexWrap: "wrap",
+  flex: "0 0 auto",
+  flexWrap: "nowrap",
   gap: "6px",
-  padding: "8px",
-  maxWidth: "calc(100vw - 32px)",
 };
 
 const tableWrapStyle = {
