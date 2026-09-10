@@ -14,6 +14,7 @@ import {
   getOrderUnavailableReasons,
   hasActiveOrderFilters,
   isOrderDeliveryComplete,
+  isOrderCancelled,
   isOrderDeliveryDatePast,
   isOrderRouteAssigned,
   isOrderRouteCreated,
@@ -706,6 +707,34 @@ test("classifies planning tabs and route-selection unavailable reasons", () => {
     }),
     ["history_read_only"],
   );
+});
+
+test("recognizes cancellation from live status fields and canonical review fallback", () => {
+  assert.equal(isOrderCancelled({ cancelledAt: "2026-09-03T00:00:00Z" }), true);
+  assert.equal(isOrderCancelled({ financialStatus: "VOIDED" }), true);
+  assert.equal(isOrderCancelled({ paymentStatus: "VOIDED" }), true);
+  assert.equal(isOrderCancelled({ readiness: "NEEDS_REVIEW", reviewReasons: ["cancelled_order"] }), true);
+  assert.equal(isOrderCancelled({ readiness: "NEEDS_REVIEW", reviewReasons: ["missing_coordinates"] }), false);
+});
+
+test("keeps cancelled orders visible in history while excluding them from planning", () => {
+  const cancelledOrder = {
+    id: "cancelled",
+    cancelledAt: "2026-09-03T00:00:00Z",
+    deliveryDate: "2026-09-10",
+    hasCoordinates: true,
+    routeScopeKey: "2026-09-10|DELIVERY||",
+  };
+
+  assert.deepEqual(filterOrders([cancelledOrder], {
+    referenceDate: "2026-09-10",
+    scope: "history",
+    tab: "all",
+  }).map((order) => order.id), ["cancelled"]);
+  assert.deepEqual(filterOrders([cancelledOrder], {
+    referenceDate: "2026-09-10",
+    scope: "planning",
+  }), []);
 });
 
 test("bulk selection reports selected ids and unavailable reason counts", () => {

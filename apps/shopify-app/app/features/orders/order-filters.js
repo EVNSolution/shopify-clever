@@ -419,9 +419,15 @@ export function isOrderCancelled(order) {
     order?.displayFulfillmentStatus,
     order?.fulfillmentStatus,
     order?.financialStatus,
+    order?.paymentStatus,
   ].map(normalizeComparableText);
 
-  return statusValues.some((statusValue) => CANCELLED_STATUSES.has(statusValue));
+  const cancellationReviewReason = Array.isArray(order?.reviewReasons) &&
+    order.reviewReasons.some((reason) =>
+      ["cancelled_order", "canceled_order"].includes(normalizeComparableText(reason)),
+    );
+
+  return cancellationReviewReason || statusValues.some((statusValue) => CANCELLED_STATUSES.has(statusValue));
 }
 
 export function getOrderDeliveryDateValue(order) {

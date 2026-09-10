@@ -648,7 +648,7 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.match(ordersPageSource, /const DEFAULT_TABLE_COLUMN_WIDTHS = \[\s*ORDER_TABLE_COLUMN_WIDTHS\.select,[\s\S]*?SORTABLE_ORDER_COLUMNS\.flatMap/);
   assert.match(ordersPageSource, /aria-label="Select all visible orders for plan"/);
   assert.match(ordersPageSource, /const orderIsPlanned = plannedOrderIdSet\.has\(order\.id\)/);
-  assert.match(ordersPageSource, /const checkboxChecked = snapshotSelectionActive/);
+  assert.match(ordersPageSource, /const checkboxChecked = !orderIsCancelled && \(snapshotSelectionActive/);
   assert.match(ordersPageSource, /!selectionExcludedOrderIdSet\.has\(order\.orderId\)/);
   assert.match(ordersPageSource, /`Select \${order\.name} for plan`/);
   assert.match(ordersPageSource, /checked=\{checkboxChecked\}/);
@@ -1312,7 +1312,7 @@ test("Orders page keeps background sync errors out of the route creation alert",
 });
 
 test("Orders route draft lets filters guide selection without client route-scope locks", () => {
-  assert.match(ordersPageSource, /const selectedOrders = selectedOrderRows\.filter\(\(order\) =>\s*!plannedOrderIdSet\.has\(order\.id\),\s*\)/);
+  assert.match(ordersPageSource, /const selectedOrders = currentSelectedOrders\.filter\(\(order\) =>\s*!plannedOrderIdSet\.has\(order\.id\) && !isOrderCancelled\(order\),\s*\)/);
   assert.match(ordersPageSource, /const selectedOrderIds = selectedOrders\.map\(\(order\) => order\.id\)/);
   assert.match(ordersPageSource, /Array\.from\(new Set\(\[\.\.\.plannedOrderIds, \.\.\.selectedOrderIds\]\)\)/);
   assert.match(ordersPageSource, /setRoutePlanTitle\(buildRoutePlanTitleFromOrders\(nextOrders\)\)/);
@@ -1333,7 +1333,7 @@ test("Orders selection does not lock the table or filters before Add to map", ()
 
 test("Orders pending selection and route draft survive paginated table data changes", () => {
   assert.match(ordersPageSource, /const \[selectedOrderRows, setSelectedOrderRows\] = useState\(\[\]\)/);
-  assert.match(ordersPageSource, /const checkedOrders = selectedOrderRows/);
+  assert.match(ordersPageSource, /const checkedOrders = useMemo\(\s*\(\) => selectedOrderRows\s*\.map\(\(order\) => displayOrderById\.get\(order\.id\) \?\? order\)\s*\.filter\(\(order\) => !isOrderCancelled\(order\)\)/);
   assert.match(ordersPageSource, /updatePagedOrderSelection\(currentOrders, \[order\], checked\)/);
   assert.match(ordersPageSource, /const selectedOrderById = new Map\(selectedOrders\.map\(\(order\) => \[order\.id, order\]\)\)/);
   assert.match(ordersPageSource, /selectedOrderById\.get\(orderId\) \?\? displayOrderById\.get\(orderId\) \?\? plannedOrderRowById\.get\(orderId\)/);
@@ -1570,7 +1570,7 @@ test("Orders table keeps planned orders visible but removes them from selectable
   assert.match(ordersPageSource, /const plannedOrderIdSet = useMemo\(\s*\(\) => new Set\(plannedOrderIds\),\s*\[plannedOrderIds\],\s*\)/);
   assert.match(ordersPageSource, /const tableOrders = sortedOrders/);
   assert.match(ordersPageSource, /const selectableTableOrders = useMemo\(/);
-  assert.match(ordersPageSource, /tableOrders\.filter\(\(order\) => !plannedOrderIdSet\.has\(order\.id\)\)/);
+  assert.match(ordersPageSource, /tableOrders\.filter\(\(order\) => !plannedOrderIdSet\.has\(order\.id\) && !isOrderCancelled\(order\)\)/);
   assert.match(ordersPageSource, /selectableTableOrders\.length > 0 &&\s*selectableTableOrders\.every\(\(order\) => checkedOrderIdSet\.has\(order\.id\)\)/);
   assert.match(ordersPageSource, /updatePagedOrderSelection\(currentOrders, selectableTableOrders, false\)/);
   assert.match(ordersPageSource, /updatePagedOrderSelection\(currentOrders, selectableTableOrders, true\)/);
@@ -1713,7 +1713,7 @@ test("Orders map popup uses a left-center overlay and can add the order to the r
   assert.match(ordersPageSource, /className="order-marker-popup__close"/);
   assert.match(ordersPageSource, /activeOrderPopupItems\.map\(\(item, itemIndex\) =>/);
   assert.match(ordersPageSource, /×\{item\.quantity\}/);
-  assert.match(ordersPageSource, /disabled=\{activeOrderPopupPlannedIndex > 0\}/);
+  assert.match(ordersPageSource, /disabled=\{activeOrderPopupCancelled \|\| activeOrderPopupPlannedIndex > 0\}/);
   assert.match(ordersPageSource, /handleAddOrderToPlan\(activeOrderPopup\.id\)/);
   assert.match(ordersPageSource, /const activeOrderPopupShopifyUrl = activeOrderPopup \? getShopifyAdminOrderUrl\(activeOrderPopup\) : null/);
   assert.match(ordersPageSource, /href=\{activeOrderPopupShopifyUrl\}/);

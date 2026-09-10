@@ -41,6 +41,7 @@ test("route creation intent is guarded before the asynchronous Shopify token res
     DEFAULT_ROUTE_PLAN_TITLE: "CLEVER route draft",
     FormData,
     buildRouteScopeFromOrders: () => ({ deliveryDate: "2026-09-11" }),
+    isOrderCancelled: () => false,
     orderFilters: { scope: "unfulfilled" },
     plannedOrderIds: ["gid://shopify/Order/1"],
     plannedOrders: [{ id: "gid://shopify/Order/1", orderId: "delivery-order-1" }],
@@ -89,6 +90,159 @@ test("route creation intent is guarded before the asynchronous Shopify token res
   assert.equal(submitted[0].sessionToken, "session-token");
   assert.equal(submittedRouteIntentRef.current, "createRouteGroup");
   assert.equal(submittedRouteRequestRef.current, true);
+});
+
+test("Add to map excludes cancelled orders from table and map-popup paths", () => {
+  const readyOrder = { id: "ready", name: "#ready" };
+  const cancelledOrder = { id: "cancelled", name: "#cancelled", cancelledAt: "2026-09-03T00:00:00Z" };
+  const plannedOrderRows = [];
+  const clientErrors = [];
+
+  const addSelected = vm.runInNewContext(`(${extractArrow("handleAddToPlan", "selectOrderDataOrder")})`, {
+    buildRoutePlanTitleFromOrders: (orders) => orders.map((order) => order.name).join(", "),
+    checkedOrderIds: [readyOrder.id, cancelledOrder.id],
+    displayOrderById: new Map([[readyOrder.id, readyOrder], [cancelledOrder.id, cancelledOrder]]),
+    isOrderCancelled: (order) => Boolean(order.cancelledAt),
+    language: "en",
+    plannedOrderIdSet: new Set(),
+    plannedOrderIds: [],
+    plannedOrderRowById: new Map(),
+    selectedOrderRows: [readyOrder, cancelledOrder],
+    setCreateRouteClientError: (message) => clientErrors.push(message),
+    setPlanFitRequest: (updater) => updater(0),
+    setPlannedOrderIds: (orderIds) => plannedOrderRows.push(orderIds),
+    setPlannedOrderRows() {},
+    setRoutePlanTitle() {},
+    setSelectedOrderRows() {},
+    translate: (_language, _key, params) => `${params.count} cancelled excluded`,
+  });
+
+  addSelected();
+  assert.deepEqual(plannedOrderRows.map((orderIds) => Array.from(orderIds)), [[readyOrder.id]]);
+  assert.deepEqual(clientErrors, ["1 cancelled excluded"]);
+
+  const popupErrors = [];
+  const addFromPopup = vm.runInNewContext(`(${extractArrow("handleAddOrderToPlan", "handleAddToPlan")})`, {
+    buildRoutePlanTitleFromOrders: () => "",
+    displayOrderById: new Map([[cancelledOrder.id, cancelledOrder]]),
+    isOrderCancelled: (order) => Boolean(order.cancelledAt),
+    language: "en",
+    plannedOrderIdSet: new Set(),
+    plannedOrderIds: [],
+    plannedOrderRowById: new Map(),
+    setCreateRouteClientError: (message) => popupErrors.push(message),
+    setPlanFitRequest() {},
+    setPlannedOrderIds() {
+      assert.fail("cancelled popup order must not be added");
+    },
+    setPlannedOrderRows() {},
+    setRoutePlanTitle() {},
+    setSelectedOrderId() {},
+    setSelectedOrderRows() {},
+    translate: (_language, _key, params) => `${params.count} cancelled excluded`,
+    updatePagedOrderSelection: (orders) => orders,
+    useCallback: (callback) => callback,
+  });
+
+  addFromPopup(cancelledOrder.id);
+  assert.deepEqual(popupErrors, ["1 cancelled excluded"]);
+});
+
+test("route creation rejects cancelled orders before client submission and at the BFF boundary", async () => {
+  const clientErrors = [];
+  let tokenRequests = 0;
+  const submit = vm.runInNewContext(`(${extractArrow("submitNewRoute", "handleCreateRoute")})`, {
+    DEFAULT_ROUTE_PLAN_TITLE: "CLEVER route draft",
+    FormData,
+    buildRouteScopeFromOrders: () => ({ deliveryDate: "2026-09-10" }),
+    isOrderCancelled: (order) => Boolean(order.cancelledAt),
+    language: "en",
+    orderFilters: { scope: "planning" },
+    plannedOrderIds: ["gid://shopify/Order/1908"],
+    plannedOrders: [{ id: "gid://shopify/Order/1908", cancelledAt: "2026-09-03T00:00:00Z" }],
+    routeCreatePendingRef: { current: false },
+    routePlanFetcher: { state: "idle", submit() { assert.fail("cancelled order must not be submitted"); } },
+    routePlanTitle: "Thursday route",
+    setCreateRouteClientError: (message) => clientErrors.push(message),
+    setRouteCreatePending() {},
+    shopify: { idToken() { tokenRequests += 1; } },
+    submittedRouteIntentRef: { current: null },
+    submittedRouteRequestRef: { current: false },
+    translate: (_language, _key, params) => `${params.count} cancelled excluded`,
+  });
+
+  await submit("createRoutePlan");
+  await submit("createRouteGroup");
+  assert.equal(tokenRequests, 0);
+  assert.deepEqual(clientErrors, ["1 cancelled excluded", "1 cancelled excluded"]);
+  assert.match(serverSource, /if \(plannedOrders\.some\(isOrderCancelled\)\)/);
+  assert.match(serverSource, /code: "CANCELLED_ORDER_NOT_PLANNABLE"/);
+});
+
+test("frozen selection keeps known cancelled exclusions across create and replace", async () => {
+  const tableOrders = [
+    { id: "cancelled", orderId: "delivery-cancelled", cancelledAt: "2026-09-03T00:00:00Z" },
+    { id: "ready", orderId: "delivery-ready" },
+  ];
+  const pendingSelectionExclusionsRef = { current: null };
+  const createSubmissions = [];
+  const createSnapshot = vm.runInNewContext(`(${extractArrow("handleSelectAllFilteredOrders", "replaceSelectionExclusions")})`, {
+    FormData,
+    getOrdersResourceSessionToken: async () => "session-token",
+    getSafePerformanceNow: () => 0,
+    isOrderCancelled: (order) => Boolean(order.cancelledAt),
+    latestSelectionRequestKeyRef: { current: null },
+    ordersSelectionFetcher: {
+      state: "idle",
+      submit(formData) {
+        createSubmissions.push(JSON.parse(formData.get("excludeOrderIds")));
+      },
+    },
+    pendingSelectionExclusionsRef,
+    resourceFilterSearchParams: new URLSearchParams("deliveryDate=2026-09-10"),
+    resourceMetricStartedAtRef: { current: new Map() },
+    resourceSequenceRef: { current: 0 },
+    selectionSnapshotsEnabled: true,
+    snapshotSelectionActive: false,
+    tableOrders,
+  });
+
+  await createSnapshot();
+  assert.deepEqual(createSubmissions.map((ids) => Array.from(ids)), [["delivery-cancelled"]]);
+  assert.deepEqual(
+    Array.from(pendingSelectionExclusionsRef.current.excludeOrderIds),
+    ["delivery-cancelled"],
+  );
+  assert.match(pageSource, /pendingExclusions\?\.requestKey === ordersSelectionFetcher\.data\._requestKey\s*\? pendingExclusions\.excludeOrderIds\s*: \[\]/);
+
+  const replaceSubmissions = [];
+  const replaceSnapshotExclusions = vm.runInNewContext(`(${extractArrow("replaceSelectionExclusions", "handleClearOrderSelection")})`, {
+    Array,
+    FormData,
+    Set,
+    getOrdersResourceSessionToken: async () => "session-token",
+    getSafePerformanceNow: () => 0,
+    isOrderCancelled: (order) => Boolean(order.cancelledAt),
+    latestSelectionRequestKeyRef: { current: null },
+    ordersSelectionFetcher: {
+      state: "idle",
+      submit(formData) {
+        replaceSubmissions.push(JSON.parse(formData.get("excludeOrderIds")));
+      },
+    },
+    pendingSelectionExclusionsRef,
+    resourceMetricStartedAtRef: { current: new Map() },
+    resourceSequenceRef: { current: 1 },
+    selectionSnapshot: { selectionToken: "opaque" },
+    tableOrders,
+  });
+
+  await replaceSnapshotExclusions(["delivery-ready"]);
+  await replaceSnapshotExclusions([]);
+  assert.deepEqual(replaceSubmissions.map((ids) => Array.from(ids)), [
+    ["delivery-ready", "delivery-cancelled"],
+    ["delivery-cancelled"],
+  ]);
 });
 
 test("ordinary route action uses only the selected canonical order batch contract", () => {

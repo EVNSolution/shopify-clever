@@ -55,7 +55,7 @@ import {
   textOrUndefined,
   withPromiseTimeout,
 } from "./orders-page.shared";
-import { getOrderFiltersFromSearchParams, ORDER_HISTORY_SCOPE } from "./order-filters";
+import { getOrderFiltersFromSearchParams, isOrderCancelled, ORDER_HISTORY_SCOPE } from "./order-filters";
 import { resolveOrdersResourceFeatureFlags } from "./orders-resource-flags";
 import {
   fetchShopifyShopTimeZone,
@@ -693,6 +693,15 @@ async function resolvePlannedOrdersForAction({
             "서버 주문 ID가 없는 주문이 있어 경로를 만들 수 없습니다. 주문 동기화 후 다시 시도해주세요.",
         },
       ],
+    };
+  }
+
+  if (plannedOrders.some(isOrderCancelled)) {
+    return {
+      errors: [{
+        code: "CANCELLED_ORDER_NOT_PLANNABLE",
+        message: "Cancelled orders cannot be used to create a route. Remove them from the route plan and try again.",
+      }],
     };
   }
 

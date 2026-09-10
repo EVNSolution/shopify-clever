@@ -8,6 +8,8 @@ export const SUPPORTED_LANGUAGES = [
 const TRANSLATIONS = {
   en: {
     "orders.routeActions.invalidRouteSelection": "The selected orders cannot be used to create this route. Refresh Orders and try again.",
+    "orders.routeActions.cancelledOrdersExcluded": "Cancelled orders ({count}) were excluded from route planning.",
+    "orders.routeActions.cancelledOrdersBlockCreation": "This route includes {count} cancelled order(s). Remove them before creating the route.",
     "orders.routeActions.routeCreationUnavailable": "Route creation is not available on the connected server yet.",
     "routes.group.menu": "Group",
     "routes.group.allRoutes": "All routes",
@@ -136,6 +138,8 @@ const TRANSLATIONS = {
   },
   ko: {
     "orders.routeActions.invalidRouteSelection": "선택한 주문으로 경로를 만들 수 없습니다. Orders를 새로고침한 뒤 다시 시도하세요.",
+    "orders.routeActions.cancelledOrdersExcluded": "취소된 주문 {count}건을 경로 계획에서 제외했습니다.",
+    "orders.routeActions.cancelledOrdersBlockCreation": "경로에 취소된 주문 {count}건이 있습니다. 취소 주문을 제거한 뒤 경로를 생성하세요.",
     "orders.routeActions.routeCreationUnavailable": "연결된 서버에서 아직 일반 경로 생성을 사용할 수 없습니다.",
     "routes.group.menu": "그룹",
     "routes.group.allRoutes": "전체 경로",
