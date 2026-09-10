@@ -2849,7 +2849,24 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     (numberOrUndefined(first.routeIdx) ?? numberOrUndefined(first.routeIndex) ?? 0)
     - (numberOrUndefined(second.routeIdx) ?? numberOrUndefined(second.routeIndex) ?? 0)
   ));
-  return routeGroupChildRows.length > 0 ? routeGroupChildRows : [buildUnsplitRouteGroupRow(routeGroup, routeStops)].filter(Boolean);
+  if (routeGroupChildRows.length === 0) return [buildUnsplitRouteGroupRow(routeGroup, routeStops)].filter(Boolean);
+
+  const assignedOrderIds = new Set(routeGroupChildRows.flatMap((row) => row.orderIds));
+  const unassignedStops = routeStops.filter((stop) => !assignedOrderIds.has(stop.orderId));
+  if (unassignedStops.length > 0) {
+    routeGroupChildRows.push({
+      ...buildUnsplitRouteGroupRow(routeGroup, unassignedStops),
+      id: `routeGroup:${routeGroup.id}:unassigned`,
+      routeKey: `routeGroup:${routeGroup.id}:unassigned`,
+      isGeneratedTitle: false,
+      isPreviewOnly: false,
+      isUnassigned: true,
+      routeIdx: null,
+      routeIndex: null,
+      title: "Unassigned",
+    });
+  }
+  return routeGroupChildRows;
 }
 
 function applyRouteRowDraftState(routeRows, routeLineEdits, routePreviewByKey) {
@@ -3042,7 +3059,7 @@ function getRouteDraftOptimized(routeRow, includeExistingOptimized) {
 }
 
 function shouldIncludeRouteDraftRow(routeRow, includeEmptyTempRoutes) {
-  if (routeRow.isPreviewOnly) return false;
+  if (routeRow.isPreviewOnly || routeRow.isUnassigned) return false;
   if (includeEmptyTempRoutes) return true;
   return !(routeRow.tempId && !routeRow.routePlanId && routeRow.stops.length === 0);
 }
@@ -3886,14 +3903,17 @@ export default function RouteDetailPage() {
     [hasMaterializedClientRoute, routeGroupChildRows],
   );
   const displayRouteRowsSource = useMemo(
-    () => (isRouteGroupDetail ? groupRouteRowsSource : currentRouteRowsSource),
+    () => (isRouteGroupDetail ? groupRouteRowsSource : [
+      ...currentRouteRowsSource,
+      ...groupRouteRowsSource.filter((routeRow) => routeRow.isUnassigned),
+    ]),
     [currentRouteRowsSource, groupRouteRowsSource, isRouteGroupDetail],
   );
   const contextRouteRowsSource = useMemo(
     () => (isRouteGroupDetail
       ? groupRouteRowsSource
       : isOrdinaryRouteDetail
-        ? currentRouteRowsSource
+        ? [...currentRouteRowsSource, ...groupRouteRowsSource.filter((routeRow) => routeRow.isUnassigned)]
         : mergeCurrentRouteRow(groupRouteRowsSource, currentRouteRowsSource[0])),
     [currentRouteRowsSource, groupRouteRowsSource, isOrdinaryRouteDetail, isRouteGroupDetail],
   );
@@ -3999,7 +4019,7 @@ export default function RouteDetailPage() {
     ? timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === activeChildStopActionsRow.id))?.id
     : null;
   const childStopSendTargetRows = activeChildStopActionsRow
-    ? timelineRouteRows.filter((routeRow) => !routeRow.isPreviewOnly && routeRow.id !== activeChildStopSourceRouteId)
+    ? timelineRouteRows.filter((routeRow) => !routeRow.isPreviewOnly && !routeRow.isUnassigned && routeRow.id !== activeChildStopSourceRouteId)
     : [];
   const activeRouteTimelineStop = activeRouteTimelineStopPopover
     ? timelineRouteRows.flatMap((routeRow) => routeRow.stops).find((stop) => stop.id === activeRouteTimelineStopPopover.stopId)
@@ -4010,7 +4030,7 @@ export default function RouteDetailPage() {
     ? getRouteSelectorEmptyMessage(activeRouteSelector.type, routeSelectorQuery, routeSelectorBaseOptions)
     : "";
   const routeTimelineRowsMinHeight = `${Math.max(1, timelineRouteRows.length) * 24}px`;
-  const hasEditableRouteRows = contextTimelineRouteRows.some((routeRow) => !routeRow.isPreviewOnly);
+  const hasEditableRouteRows = contextTimelineRouteRows.some((routeRow) => !routeRow.isPreviewOnly && !routeRow.isUnassigned);
   const hasRouteAllocationDraft = Object.keys(routeTimelineOrderByRouteId).length > 0
     || clientRouteRows.length > 0
     || deletedRoutePlanIds.length > 0
@@ -7223,7 +7243,7 @@ export default function RouteDetailPage() {
                         <div style={routePolygonTargetTitleStyle}>
                           {polygonSelectedOrderIds.length} orders → route
                         </div>
-                        {timelineRouteRows.filter((routeRow) => !routeRow.isPreviewOnly).map((routeRow) => (
+                        {timelineRouteRows.filter((routeRow) => !routeRow.isPreviewOnly && !routeRow.isUnassigned).map((routeRow) => (
                           <button
                             key={routeRow.id}
                             onClick={() => handleAssignPolygonToRoute(routeRow)}
@@ -7405,6 +7425,7 @@ export default function RouteDetailPage() {
                 {timelineRouteRows.map((routeRow) => (
                   <div
                     key={routeRow.id}
+                    aria-label={routeRow.isUnassigned ? "Unassigned orders" : undefined}
                     onDragEnter={(event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
                     onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
                     onDrop={(event) => handleRouteTimelineRouteDrop(event, routeRow)}
@@ -7415,7 +7436,7 @@ export default function RouteDetailPage() {
                     }}
                   >
                     <span style={childRouteTimelineEndpointStyle}>
-                      <span>Start</span>
+                      <span>{routeRow.isUnassigned ? "Unassigned" : "Start"}</span>
                       <span aria-hidden="true" style={childRouteTimelineConnectorStyle} />
                       {renderChildRouteTimelineStartMarker()}
                     </span>
@@ -7762,11 +7783,11 @@ export default function RouteDetailPage() {
                           </button>
                           <button
                             aria-label={`Edit ${routeRow.title} name`}
-                            disabled={routeRow.isPreviewOnly}
+                            disabled={routeRow.isPreviewOnly || routeRow.isUnassigned}
                             onClick={() => handleOpenRouteLineEditor(routeRow)}
                             style={{
                               ...routeLineEditButtonStyle,
-                              ...(routeRow.isPreviewOnly ? { cursor: "default", opacity: 0.4 } : null),
+                              ...(routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "default", opacity: 0.4 } : null),
                             }}
                             type="button"
                           >
@@ -7778,11 +7799,11 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>
                         <button
                           aria-label="Change route driver"
-                          disabled={routeRow.isPreviewOnly}
+                          disabled={routeRow.isPreviewOnly || routeRow.isUnassigned}
                           onClick={() => handleOpenRouteSelector("driver", routeRow)}
                           style={{
                             ...routeEditableValueStyle,
-                            ...(routeRow.isPreviewOnly ? { cursor: "default", opacity: 0.65 } : null),
+                            ...(routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "default", opacity: 0.65 } : null),
                           }}
                           type="button"
                         >
@@ -7793,11 +7814,11 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>
                         <button
                           aria-label="Change route start time"
-                          disabled={routeGroupActionBusy || routeRow.isPreviewOnly}
+                          disabled={routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned}
                           onClick={() => handleOpenRouteSelector("startTime", routeRow)}
                           style={{
                             ...routeEditableValueStyle,
-                            ...(routeGroupActionBusy || routeRow.isPreviewOnly ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                            ...(routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "not-allowed", opacity: 0.55 } : null),
                           }}
                           type="button"
                         >

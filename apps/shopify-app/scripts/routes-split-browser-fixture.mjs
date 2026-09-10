@@ -64,6 +64,13 @@ const makeGroup = (plans, id = "saved-group") => ({
 const singletonGroup = makeGroup([copied], "singleton-group");
 const params = new URLSearchParams(location.search);
 const mode = params.get("mode") || "ordinary";
+const unassignedStops = Array.from({ length: 42 }, (_, index) => makeStop(index + 1, "group"));
+const unassignedPlans = [44, 46, 47, 48].map((routeIdx, index) => ({
+  ...makePlan("route-" + routeIdx, "#" + routeIdx, index),
+  stops: index === 0 ? unassignedStops.slice(0, 41) : [],
+  stopsCount: index === 0 ? 41 : 0,
+}));
+const unassignedGroup = { ...makeGroup(unassignedPlans, "unassigned-group"), assignments: unassignedStops, totalOrders: 42 };
 const copyResult = params.get("copy") || "complete";
 const saveResult = params.get("save") || "complete";
 if (mode === "bridge") copied.routeGroupingChild = { groupingId: singletonGroup.id, routePlanId: copied.id };
@@ -74,6 +81,7 @@ const detailData = (routePlan, routeGroup = null) => ({
 });
 let persistedPlans = mode === "bridge" ? [copied] : [original];
 let persistedGroup = mode === "bridge" ? singletonGroup : null;
+if (mode === "unassigned") { persistedPlans = unassignedPlans; persistedGroup = unassignedGroup; }
 let totalActionSubmissions = 0;
 let copySubmissions = 0;
 let saveSubmissions = 0;
@@ -117,6 +125,20 @@ const fixtureAction = async ({ request }) => {
   if (intent !== "saveRouteDraft") return { errors: [{ message: "Fixture accepts ordinary copy and draft save only" }] };
   saveSubmissions += 1;
   renderFixtureStatus();
+  if (mode === "unassigned") {
+    const draft = JSON.parse(String(formData.get("draft") || "{}"));
+    const ids = (draft.routes || []).flatMap(route => route.orderIds);
+    if (ids.length !== 42 || new Set(ids).size !== 42 || ids.some(id => !unassignedStops.some(stop => stop.orderId === id))) {
+      return { errors: [{ message: "All 42 group orders must be assigned exactly once" }] };
+    }
+    if (draft.routes.length !== 4 || draft.routes.some(route => !unassignedPlans.some(plan => plan.id === route.routePlanId))) {
+      return { errors: [{ message: "Unassigned must not be saved as a route" }] };
+    }
+    persistedPlans = draft.routes.map(route => ({ ...unassignedPlans.find(plan => plan.id === route.routePlanId),
+      stops: route.orderIds.map(id => unassignedStops.find(stop => stop.orderId === id)), stopsCount: route.orderIds.length }));
+    persistedGroup = { ...makeGroup(persistedPlans, "unassigned-group"), assignments: unassignedStops, totalOrders: 42 };
+    return { errors: [], routeGroup: persistedGroup };
+  }
   if (mode !== "bridge" && String(formData.get("expectedRoutePlanUpdatedAt")) !== copied.updatedAt) {
     return { errors: [{ message: "Synthetic stale split revision" }] };
   }
@@ -178,6 +200,8 @@ const listLoader = () => mode === "saved"
 const router = createMemoryRouter([{
   id: "routes/app", path: "/", loader: () => ({ language: "en" }), children: [
     { path: "app/routes", loader: listLoader, element: React.createElement(RoutesPage) },
+    { path: "app/routes/groups/:routeGroupId", loader: () => detailData(null, persistedGroup),
+      action: fixtureAction, shouldRevalidate: shouldRevalidateRouteDetail, element: React.createElement(RouteDetail) },
     { path: "app/routes/:routeId", loader: ({ params: routeParams }) => {
       const selectedPlan = persistedPlans.find((routePlan) => routePlan.id === routeParams.routeId) || original;
       return detailData(selectedPlan, mode === "bridge" ? persistedGroup : null);
@@ -187,7 +211,7 @@ const router = createMemoryRouter([{
       return detailData(selectedPlan, persistedGroup);
     }, action: fixtureAction, shouldRevalidate: shouldRevalidateRouteDetail, element: React.createElement(RouteDetail) },
   ],
-}], { initialEntries: [mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original"] });
+}], { initialEntries: [mode === "unassigned" ? (params.get("child") === "1" ? "/app/routes/groups/unassigned-group/routes/route-46" : "/app/routes/groups/unassigned-group") : mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original"] });
 createRoot(document.getElementById("app")).render(React.createElement(RouterProvider, { router }));
 renderFixtureStatus();
 `;
