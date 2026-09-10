@@ -81,7 +81,7 @@ const TEXT_FIELDS = [
  *   onChange: (field: string, value: string) => void,
  *   onSubmit: () => void,
  *   onTargetRouteChange: (routePlanId: string) => void,
- *   targetRouteOptions?: Array<{label: string, value: string}>,
+ *   targetRouteOptions?: Array<{disabled?: boolean, label: string, value: string}>,
  *   targetRoutePlanId?: string,
  * }} props
  */
@@ -99,6 +99,7 @@ export function CustomStopDialog({
 }) {
   const title = isEdit ? "Edit custom stop" : "Add custom stop";
   const submitLabel = isEdit ? "Save changes" : "Add custom stop";
+  const targetRouteRequired = targetRouteOptions.some((option) => option.value);
   return (
     <div aria-label={title} aria-busy={busy} aria-modal="true" role="dialog" style={dialogStyle}>
       <div>
@@ -122,7 +123,7 @@ export function CustomStopDialog({
             value={targetRoutePlanId}
           >
             {targetRouteOptions.map((option) => (
-              <option key={option.value || "unassigned"} value={option.value}>{option.label}</option>
+              <option disabled={option.disabled === true} key={option.value || "unassigned"} value={option.value}>{option.label}</option>
             ))}
           </select>
         </label>
@@ -148,9 +149,9 @@ export function CustomStopDialog({
       <div style={actionsStyle}>
         <button disabled={busy} onClick={onCancel} style={buttonStyle} type="button">Cancel</button>
         <button
-          disabled={busy}
+          disabled={busy || (targetRouteRequired && !targetRoutePlanId)}
           onClick={onSubmit}
-          style={{ ...primaryButtonStyle, ...(busy ? { cursor: "wait", opacity: 0.7 } : null) }}
+          style={{ ...primaryButtonStyle, ...(busy || (targetRouteRequired && !targetRoutePlanId) ? { cursor: "wait", opacity: 0.7 } : null) }}
           type="button"
         >
           {busy ? (
