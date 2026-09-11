@@ -121,13 +121,8 @@ test("Orders route renders its shell while slow loader data is still pending", (
 });
 
 test("Orders keeps streamed data behind a hydration-stable shell", () => {
-  assert.match(ordersPageSource, /useSyncExternalStore/);
-  assert.match(
-    ordersPageSource,
-    /useSyncExternalStore\(\s*subscribeToHydration,\s*getHydratedSnapshot,\s*getServerHydrationSnapshot,?\s*\)/,
-  );
-  assert.match(ordersPageSource, /function getHydratedSnapshot\(\) \{\s*return true;\s*\}/);
-  assert.match(ordersPageSource, /function getServerHydrationSnapshot\(\) \{\s*return false;\s*\}/);
+  assert.match(ordersPageSource, /const \[hydrated, setHydrated\] = useState\(false\)/);
+  assert.match(ordersPageSource, /useEffect\(\(\) => \{\s*startTransition\(\(\) => setHydrated\(true\)\);\s*\}, \[\]\)/);
   assert.match(
     ordersPageSource,
     /hydrated \? <OrdersPageContent loaderData=\{loaderData\} \/> : <OrdersPageLoading \/>/,
