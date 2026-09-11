@@ -91,7 +91,7 @@ function createRoutesTestRouter(initialEntries, onParentLoad) {
   );
 }
 
-test("Routes parent loader stays cached only while entering nested GET pages", () => {
+test("Routes parent loader stays cached throughout nested GET navigation", () => {
   const routeArgs = (currentPath, nextPath, overrides = {}) => ({
     currentUrl: new URL(`https://admin.example${currentPath}`),
     nextUrl: new URL(`https://admin.example${nextPath}`),
@@ -119,8 +119,8 @@ test("Routes parent loader stays cached only while entering nested GET pages", (
     shouldRevalidateRoutesRoute(
       routeArgs("/app/routes/groups/route-group-id", "/app/routes"),
     ),
-    true,
-    "returning to the operational list must refresh externally changed data",
+    false,
+    "returning to the already-loaded list must not repeat the two delivery API reads",
   );
   assert.equal(
     shouldRevalidateRoutesRoute(
@@ -147,7 +147,7 @@ test("Routes parent loader stays cached only while entering nested GET pages", (
   assert.match(routesPageSource, /return shouldRevalidateRoutesRoute\(args\)/);
 });
 
-test("Routes Router integration preserves mutations, refresh, entry, and Back freshness", async () => {
+test("Routes Router integration preserves mutations, refresh, entry, and cached Back navigation", async () => {
   let parentLoads = 0;
   const router = createRoutesTestRouter(["/app/routes?status=READY"], () => {
     parentLoads += 1;
@@ -180,7 +180,7 @@ test("Routes Router integration preserves mutations, refresh, entry, and Back fr
   await backRouter.navigate("/app/routes/groups/group-1");
   assert.equal(backLoads, 1);
   await backRouter.navigate(-1);
-  assert.equal(backLoads, 2, "Back to the filtered list must reload externally changed data");
+  assert.equal(backLoads, 1, "Back to the filtered list must reuse the loaded route rows");
 
   let canonicalLoads = 0;
   const canonicalRouter = createRoutesTestRouter(["/app/routes"], () => {
@@ -214,8 +214,15 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.match(routesPageSource, /deleteDeliveryRouteGroup\(request, target\.id, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(routesPageSource, /deleteDeliveryRouteGroupChildRoutes\(request, routeGroupId, routePlanIds, \{ sessionToken: shopifySessionToken \}\)/);
   assert.match(routesPageSource, /deleteDeliveryRoutePlan\(request, target\.id, \{ sessionToken: shopifySessionToken \}\)/);
-  assert.match(routesPageSource, /const \{ routeGroups = \[\], routePlans = \[\], errors = \[\] \} = useLoaderData\(\)/);
+  assert.match(routesPageSource, /routeGroups = \[\],[\s\S]*routePlans = \[\],[\s\S]*errors = \[\],[\s\S]*routesPerformance: serverRoutesPerformance,[\s\S]*\} = useLoaderData\(\)/);
   assert.match(routesPageSource, /buildRouteRows\(routePlans, routeGroups\)/);
+  assert.match(routesPageSource, /data-routes-performance/);
+  assert.match(routesPageSource, /routePlansMs/);
+  assert.match(routesPageSource, /routeGroupsMs/);
+  assert.match(routesPageSource, /renderMs/);
+  assert.match(routesPageSource, /responseBytes/);
+  assert.match(routesPageSource, /isRetainedNavigation/);
+  assert.match(routeDetailSource, /window\.__cleverRoutesEntryStartedAt = performance\.now\(\)/);
   assert.match(routesPageSource, /useSearchParams/);
   assert.match(routesPageSource, /const \[searchParams\] = useSearchParams\(\)/);
   assert.match(routesPageSource, /getRouteFilters\(searchParams\)/);
@@ -495,7 +502,8 @@ test("Routes placeholder row is not clickable when there are no persisted route 
 
 test("Routes parent renders the nested route detail page", () => {
   assert.match(routesPageSource, /const \{ routeId, routeGroupId \} = useParams\(\)/);
-  assert.match(routesPageSource, /if \(routeId \|\| routeGroupId\) return <Outlet \/>/);
+  assert.match(routesPageSource, /const isRoutesIndex = !routeId && !routeGroupId/);
+  assert.match(routesPageSource, /if \(!isRoutesIndex\) return <Outlet \/>/);
 });
 
 

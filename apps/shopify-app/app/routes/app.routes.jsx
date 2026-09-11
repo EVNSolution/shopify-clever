@@ -339,24 +339,61 @@ function logRouteDeleteAction(name, metric = {}) {
   logStructuredMetric(name, metric);
 }
 
+async function measureRouteLoaderStep(load) {
+  const startedAt = Date.now();
+  const data = await load();
+  return { data, durationMs: Date.now() - startedAt };
+}
+
+function roundRoutePerformance(duration) {
+  return Number(Math.max(0, duration).toFixed(2));
+}
+
 export const loader = async ({ request }) => {
+  const loaderStartedAt = Date.now();
   const url = new URL(request.url);
   if (url.pathname === "/app/routes/") {
     url.pathname = "/app/routes";
     return redirect(`${url.pathname}${url.search}${url.hash}`);
   }
 
+  const authenticationStartedAt = Date.now();
   const { session } = await authenticate.admin(request);
+  const authenticationMs = Date.now() - authenticationStartedAt;
   const shopifyShopCacheKey = session?.shop;
-  const [routePlanData, routeGroupData] = await Promise.all([
-    fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey }),
-    fetchDeliveryRouteGroups(request, {}, { cacheKey: shopifyShopCacheKey }),
+  const [routePlanResult, routeGroupResult] = await Promise.all([
+    measureRouteLoaderStep(() =>
+      fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey }),
+    ),
+    measureRouteLoaderStep(() =>
+      fetchDeliveryRouteGroups(request, {}, { cacheKey: shopifyShopCacheKey }),
+    ),
   ]);
-
-  return {
+  const routePlanData = routePlanResult.data;
+  const routeGroupData = routeGroupResult.data;
+  const loaderData = {
     errors: [...(routePlanData.errors ?? []), ...(routeGroupData.errors ?? [])],
     routeGroups: routeGroupData.routeGroups ?? [],
     routePlans: routePlanData.routePlans ?? [],
+  };
+  const routesPerformance = {
+    apiReadCount: 2,
+    authenticationMs,
+    responseBytes: new TextEncoder().encode(JSON.stringify(loaderData)).byteLength,
+    routeGroupsMs: routeGroupResult.durationMs,
+    routePlansMs: routePlanResult.durationMs,
+    totalMs: Date.now() - loaderStartedAt,
+  };
+
+  logStructuredMetric("routes.list.loader", {
+    ...routesPerformance,
+    routeGroupCount: loaderData.routeGroups.length,
+    routePlanCount: loaderData.routePlans.length,
+  });
+
+  return {
+    ...loaderData,
+    routesPerformance,
   };
 };
 
@@ -630,12 +667,18 @@ export default function RoutesPage() {
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
   const [searchParams] = useSearchParams();
-  const { routeGroups = [], routePlans = [], errors = [] } = useLoaderData();
+  const {
+    routeGroups = [],
+    routePlans = [],
+    errors = [],
+    routesPerformance: serverRoutesPerformance,
+  } = useLoaderData();
   const routeGroupById = new Map(routeGroups.map((routeGroup) => [String(routeGroup?.id), routeGroup]));
   const shopify = useAppBridge();
   const routeDeleteFetcher = useFetcher();
   const [checkedRouteIds, setCheckedRouteIds] = useState([]);
   const [routeGroupMarkerTooltip, setRouteGroupMarkerTooltip] = useState(null);
+  const [routesPerformance, setRoutesPerformance] = useState(null);
   const allRouteRows = buildRouteRows(routePlans, routeGroups);
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
@@ -658,6 +701,59 @@ export default function RoutesPage() {
     [{ errors: visibleErrors }],
     { context: "routes_page" },
   );
+  const isRoutesIndex = !routeId && !routeGroupId;
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof performance === "undefined") return undefined;
+
+    const markRoutesHistoryNavigation = () => {
+      window.__cleverRoutesEntryStartedAt = performance.now();
+    };
+    window.addEventListener("popstate", markRoutesHistoryNavigation);
+    return () => window.removeEventListener("popstate", markRoutesHistoryNavigation);
+  }, []);
+
+  useEffect(() => {
+    if (!isRoutesIndex || typeof performance === "undefined") return undefined;
+
+    const frame = requestAnimationFrame(() => {
+      const usableAt = performance.now();
+      const navigationEntry = performance.getEntriesByType("navigation")[0];
+      const resourceEntries = performance.getEntriesByType("resource");
+      const routeEntryStartedAt = window.__cleverRoutesEntryStartedAt;
+      const routesDataEntry = resourceEntries
+        .filter(
+          (entry) =>
+            entry.name.includes("/app/routes.data") &&
+            (routeEntryStartedAt == null || entry.startTime >= routeEntryStartedAt),
+        )
+        .at(-1);
+      const isRetainedNavigation = routeEntryStartedAt != null && !routesDataEntry;
+      const startAt = routeEntryStartedAt ?? routesDataEntry?.startTime ?? navigationEntry?.startTime ?? 0;
+      const responseEnd = routesDataEntry?.responseEnd ?? (isRetainedNavigation ? startAt : navigationEntry?.responseEnd) ?? usableAt;
+      const measuredResources = resourceEntries.filter(
+        (entry) => entry.startTime >= startAt && entry.startTime <= usableAt,
+      );
+
+      setRoutesPerformance(JSON.stringify({
+        browser: {
+          decodedResponseBytes: Math.round(
+            routesDataEntry?.decodedBodySize ?? navigationEntry?.decodedBodySize ?? 0,
+          ),
+          renderMs: roundRoutePerformance(usableAt - responseEnd),
+          requestCount: measuredResources.length + (routeEntryStartedAt == null && !routesDataEntry ? 1 : 0),
+          responseBytes: Math.round(
+            routesDataEntry?.transferSize ?? (isRetainedNavigation ? 0 : navigationEntry?.transferSize) ?? 0,
+          ),
+          tableUsableMs: roundRoutePerformance(usableAt - startAt),
+        },
+        server: isRetainedNavigation ? null : serverRoutesPerformance ?? null,
+      }));
+      delete window.__cleverRoutesEntryStartedAt;
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [isRoutesIndex, serverRoutesPerformance]);
 
   useEffect(() => {
     if (routeDeleteFetcher.state !== "idle" || !routeDeleteFetcher.data) return;
@@ -744,10 +840,10 @@ export default function RoutesPage() {
     routeDeleteFetcher.submit(formData, { method: "post" });
   }
 
-  if (routeId || routeGroupId) return <Outlet />;
+  if (!isRoutesIndex) return <Outlet />;
 
   return (
-    <main style={routesTablePageStyle}>
+    <main data-routes-performance={routesPerformance ?? undefined} style={routesTablePageStyle}>
       <div style={routesPageContentStyle}>
         <header className="tab-layout-header" style={routesHeaderStyle}>
           <div style={routesHeaderBarStyle}>

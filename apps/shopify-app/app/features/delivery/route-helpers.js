@@ -82,9 +82,6 @@ export function shouldRevalidateRoutesRoute({
 
   const isRoutesPath = (pathname) =>
     pathname === "/app/routes" || pathname.startsWith("/app/routes/");
-  const isRoutesDetailPath = (pathname) =>
-    pathname.startsWith("/app/routes/") && pathname.length > "/app/routes/".length;
-
   if (currentUrl && nextUrl?.pathname === "/app/routes/" && currentUrl.pathname !== nextUrl.pathname) {
     return true;
   }
@@ -94,7 +91,7 @@ export function shouldRevalidateRoutesRoute({
     nextUrl &&
     currentUrl.pathname !== nextUrl.pathname &&
     isRoutesPath(currentUrl.pathname) &&
-    isRoutesDetailPath(nextUrl.pathname)
+    isRoutesPath(nextUrl.pathname)
   ) {
     return false;
   }

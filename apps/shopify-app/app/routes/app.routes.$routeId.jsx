@@ -3451,7 +3451,16 @@ export default function RouteDetailPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const navigateWithEmbeddedContext = useCallback(
-    (destination) => navigate(withEmbeddedShopifyContext(destination, searchParams)),
+    (destination) => {
+      if (
+        destination === ROUTES_ROOT_PATH &&
+        typeof window !== "undefined" &&
+        typeof performance !== "undefined"
+      ) {
+        window.__cleverRoutesEntryStartedAt = performance.now();
+      }
+      navigate(withEmbeddedShopifyContext(destination, searchParams));
+    },
     [navigate, searchParams],
   );
   const revalidator = useRevalidator();
