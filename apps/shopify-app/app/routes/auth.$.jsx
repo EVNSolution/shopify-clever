@@ -1,6 +1,7 @@
 import { redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
+import { getTrustedBounceRecoveryTarget } from "../features/shopify/admin-bounce-recovery";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 
 function getSafeShopifyReloadRedirect(request) {
@@ -18,6 +19,13 @@ function getSafeShopifyReloadRedirect(request) {
 }
 
 export const loader = async ({ request }) => {
+  const recoveryTarget = getTrustedBounceRecoveryTarget(request.url);
+  if (recoveryTarget) {
+    return redirect(recoveryTarget, {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   await authenticate.admin(request);
 
   return redirect(getSafeShopifyReloadRedirect(request));
