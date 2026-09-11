@@ -366,7 +366,11 @@ export const loader = async ({ request }) => {
       fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey }),
     ),
     measureRouteLoaderStep(() =>
-      fetchDeliveryRouteGroups(request, {}, { cacheKey: shopifyShopCacheKey }),
+      fetchDeliveryRouteGroups(
+        request,
+        { view: "routes-list" },
+        { cacheKey: shopifyShopCacheKey },
+      ),
     ),
   ]);
   const routePlanData = routePlanResult.data;

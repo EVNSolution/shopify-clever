@@ -18,6 +18,7 @@ import {
   saveDeliveryRouteGroupDraft,
   updateDeliveryRouteGroupOrders,
 } from "../app/features/delivery/route-groups.server.js";
+import { clearDeliveryApiResponseCache } from "../app/features/delivery/route-plans.server.js";
 import { buildCreateRouteGroupPayload } from "../app/features/orders/route-group-create.js";
 
 test("route group add-order draft assigns new orders to the requested child", () => {
@@ -218,6 +219,48 @@ test("route group helper lists groups with range query params only when present"
   assert.deepEqual(result.routeGroups, [{ id: "group-1" }]);
   assert.equal(fakeFetch.calls[0].url, "https://delivery.test/admin/route-groups?dateRangeStart=2026-06-25&dateRangeEnd=2026-06-27");
   assert.equal(fakeFetch.calls[0].init.method, "GET");
+});
+
+test("route group helper keeps compact and default list cache entries distinct and invalidates both", async () => {
+  const previousTtl = process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS;
+  process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = "5000";
+  clearDeliveryApiResponseCache();
+  let getCalls = 0;
+  const fakeFetch = async (url, init = {}) => {
+    if (init.method === "GET") {
+      getCalls += 1;
+      return jsonResponse({
+        data: { routeGroups: [{ id: url.includes("view=routes-list") ? "compact" : "default" }] },
+        error: null,
+      });
+    }
+    if (init.method === "DELETE") {
+      return jsonResponse({ data: { routeGroupId: "group-1" }, error: null });
+    }
+    throw new Error(`Unexpected request ${init.method} ${url}`);
+  };
+  const options = { cacheKey: "shop.myshopify.com", fetch: fakeFetch, sessionToken: "session-token" };
+
+  try {
+    const defaultFirst = await fetchDeliveryRouteGroups(makeRequest(), {}, options);
+    const compactFirst = await fetchDeliveryRouteGroups(makeRequest(), { view: "routes-list" }, options);
+    const defaultCached = await fetchDeliveryRouteGroups(makeRequest(), {}, options);
+    const compactCached = await fetchDeliveryRouteGroups(makeRequest(), { view: "routes-list" }, options);
+
+    assert.equal(getCalls, 2);
+    assert.equal(defaultFirst.routeGroups[0].id, "default");
+    assert.equal(defaultCached.routeGroups[0].id, "default");
+    assert.equal(compactFirst.routeGroups[0].id, "compact");
+    assert.equal(compactCached.routeGroups[0].id, "compact");
+
+    await deleteDeliveryRouteGroup(makeRequest(), "group-1", options);
+    await fetchDeliveryRouteGroups(makeRequest(), {}, options);
+    await fetchDeliveryRouteGroups(makeRequest(), { view: "routes-list" }, options);
+    assert.equal(getCalls, 4);
+  } finally {
+    process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = previousTtl ?? "0";
+    clearDeliveryApiResponseCache();
+  }
 });
 
 test("route group helper normalizes nested child route plan ids", async () => {

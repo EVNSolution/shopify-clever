@@ -204,7 +204,11 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.match(routesPageSource, /const \{ session \} = await authenticate\.admin\(request\)/);
   assert.match(routesPageSource, /const shopifyShopCacheKey = session\?\.shop/);
   assert.match(routesPageSource, /fetchDeliveryRoutePlans\(request,\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\}\)/);
-  assert.match(routesPageSource, /fetchDeliveryRouteGroups\(request, \{\}, \{ cacheKey: shopifyShopCacheKey \}\)/);
+  assert.match(
+    routesPageSource,
+    /fetchDeliveryRouteGroups\(\s*request,\s*\{ view: "routes-list" \},\s*\{ cacheKey: shopifyShopCacheKey \},?\s*\)/,
+  );
+  assert.doesNotMatch(routeDetailServerSource, /view:\s*["']routes-list["']/);
   assert.match(routesPageSource, /export const action = async \(\{ request \}\) => \{/);
   assert.match(routesPageSource, /await authenticate\.admin\(request\)/);
   assert.match(routesPageSource, /await request\.formData\(\)/);
