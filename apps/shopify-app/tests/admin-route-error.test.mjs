@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { getAdminRouteErrorPresentation } from "../app/features/shopify/admin-route-error.js";
 
-test("Shopify bounce responses remain delegated to the Shopify boundary", () => {
+test("Shopify bounce responses remain delegated outside the recovery endpoint", () => {
   const presentation = getAdminRouteErrorPresentation({
     data: '<script data-api-key="key_123" src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>',
     status: 200,
@@ -11,6 +11,20 @@ test("Shopify bounce responses remain delegated to the Shopify boundary", () => 
   });
 
   assert.equal(presentation.kind, "shopify-response");
+});
+
+test("failed Shopify session-token bounces render recovery instead of another dead-end", () => {
+  const presentation = getAdminRouteErrorPresentation(
+    {
+      data: '<script data-api-key="key_123" src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>',
+      status: 200,
+      statusText: "",
+    },
+    { allowShopifyResponse: false, hasEmbeddedContext: true },
+  );
+
+  assert.equal(presentation.kind, "route-error");
+  assert.match(presentation.title, /Shopify Admin/);
 });
 
 test("context-free Shopify bounce responses render static recovery guidance", () => {

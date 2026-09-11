@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import process from "node:process";
 import test from "node:test";
 import { isEmbeddedShopifyContext, shouldLoadShopifyAppBridge } from "../app/features/shopify/app-bridge-bootstrap.js";
 
@@ -54,6 +55,11 @@ test("auth fallback does not ask merchants to manually log in", () => {
 test("auth catch-all redirects session-token reloads instead of rendering an empty leaf", () => {
   assert.match(authCatchAllRouteSource, /export default function AuthRedirect\(\)/);
   assert.match(authCatchAllRouteSource, /return null/);
+  assert.match(authCatchAllRouteSource, /getTrustedBounceRecoveryTarget\(request\.url\)/);
+  assert.ok(
+    authCatchAllRouteSource.indexOf("getTrustedBounceRecoveryTarget(request.url)") <
+      authCatchAllRouteSource.indexOf("await authenticate.admin(request)"),
+  );
   assert.match(authCatchAllRouteSource, /getSafeShopifyReloadRedirect\(request\)/);
   assert.match(authCatchAllRouteSource, /url\.searchParams\.get\("shopify-reload"\)/);
   assert.match(authCatchAllRouteSource, /target\.origin !== url\.origin/);

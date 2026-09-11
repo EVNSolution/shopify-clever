@@ -1,6 +1,7 @@
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useLocation, useRouteError } from "react-router";
+import { useLocation, useRouteError, useRouteLoaderData } from "react-router";
 
+import { buildShopifyAdminReopenUrl } from "../features/shopify/admin-bounce-recovery";
 import { getAdminRouteErrorPresentation } from "../features/shopify/admin-route-error";
 import { hasEmbeddedShopifySearchParams } from "../features/shopify/app-bridge-bootstrap";
 
@@ -37,11 +38,16 @@ const buttonStyle = {
 export function AdminRouteErrorBoundary() {
   const error = useRouteError();
   const location = useLocation();
+  const rootData = useRouteLoaderData("root");
   const searchParams = new URLSearchParams(location.search);
   const presentation = getAdminRouteErrorPresentation(error, {
+    allowShopifyResponse: location.pathname !== "/auth/session-token",
     hasEmbeddedContext: hasEmbeddedShopifySearchParams(searchParams),
   });
-  const reloadHref = `${location.pathname}${location.search}${location.hash}`;
+  const reopenHref = buildShopifyAdminReopenUrl(
+    new URL(`${location.pathname}${location.search}${location.hash}`, "https://app.invalid"),
+    rootData?.shopifyApiKey,
+  );
 
   if (presentation.kind === "shopify-response") {
     return <div data-shopify-document-error>{boundary.error(error)}</div>;
@@ -56,8 +62,13 @@ export function AdminRouteErrorBoundary() {
       <section style={cardStyle}>
         <h1>{presentation.title}</h1>
         <p>{presentation.message}</p>
-        <a href={reloadHref} style={{ ...buttonStyle, textDecoration: "none" }}>
-          Reload
+        <a
+          href={reopenHref}
+          rel="noreferrer"
+          style={{ ...buttonStyle, textDecoration: "none" }}
+          target="_top"
+        >
+          Shopify Admin에서 다시 열기 / Reopen in Shopify Admin
         </a>
       </section>
     </main>
