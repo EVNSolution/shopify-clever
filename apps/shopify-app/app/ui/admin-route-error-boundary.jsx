@@ -47,6 +47,7 @@ export function AdminRouteErrorBoundary() {
   const reopenHref = buildShopifyAdminReopenUrl(
     new URL(`${location.pathname}${location.search}${location.hash}`, "https://app.invalid"),
     rootData?.shopifyApiKey,
+    { appOrigin: rootData?.shopifyAppUrl },
   );
 
   if (presentation.kind === "shopify-response") {

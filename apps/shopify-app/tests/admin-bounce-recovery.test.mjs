@@ -39,6 +39,18 @@ test("trusted Shopify bounce recovers the exact route once with a fresh token", 
   assert.equal(target.searchParams.has("shopify-reload"), false);
 });
 
+test("trusted Shopify bounce uses the configured public origin behind a reverse proxy", () => {
+  const publicBounce = bounceUrl();
+  const proxiedBounce = new URL(`${publicBounce.pathname}${publicBounce.search}`, "http://localhost:3000");
+
+  assert.equal(getTrustedBounceRecoveryTarget(proxiedBounce), null);
+  const target = new URL(getTrustedBounceRecoveryTarget(proxiedBounce, {
+    appOrigin,
+  }), appOrigin);
+  assert.equal(target.pathname, childPath);
+  assert.equal(target.searchParams.get("shopify-recovery"), "1");
+});
+
 test("bounce recovery rejects loops and untrusted destinations", () => {
   assert.equal(
     getTrustedBounceRecoveryTarget(bounceUrl({
@@ -102,4 +114,16 @@ test("loop fallback reopens the intended child route through Shopify Admin", () 
   assert.equal(reopen.pathname, `/store/7hrud1-xq/apps/api-key-123${childPath}`);
   assert.equal(reopen.searchParams.has("shopify-recovery"), false);
   assert.equal(reopen.searchParams.has("id_token"), false);
+});
+
+test("recovery page preserves the intended route behind a reverse proxy", () => {
+  const publicBounce = bounceUrl();
+  const proxiedBounce = new URL(`${publicBounce.pathname}${publicBounce.search}`, "https://app.invalid");
+  const reopen = new URL(buildShopifyAdminReopenUrl(
+    proxiedBounce,
+    "api-key-123",
+    { appOrigin },
+  ));
+
+  assert.equal(reopen.pathname, `/store/7hrud1-xq/apps/api-key-123${childPath}`);
 });

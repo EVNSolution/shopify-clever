@@ -1,3 +1,4 @@
+import process from "node:process";
 import { redirect } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
@@ -19,7 +20,9 @@ function getSafeShopifyReloadRedirect(request) {
 }
 
 export const loader = async ({ request }) => {
-  const recoveryTarget = getTrustedBounceRecoveryTarget(request.url);
+  const recoveryTarget = getTrustedBounceRecoveryTarget(request.url, {
+    appOrigin: process.env.SHOPIFY_APP_URL,
+  });
   if (recoveryTarget) {
     return redirect(recoveryTarget, {
       headers: { "Cache-Control": "no-store" },

@@ -55,9 +55,10 @@ test("auth fallback does not ask merchants to manually log in", () => {
 test("auth catch-all redirects session-token reloads instead of rendering an empty leaf", () => {
   assert.match(authCatchAllRouteSource, /export default function AuthRedirect\(\)/);
   assert.match(authCatchAllRouteSource, /return null/);
-  assert.match(authCatchAllRouteSource, /getTrustedBounceRecoveryTarget\(request\.url\)/);
+  assert.match(authCatchAllRouteSource, /getTrustedBounceRecoveryTarget\(request\.url, \{/);
+  assert.match(authCatchAllRouteSource, /appOrigin: process\.env\.SHOPIFY_APP_URL/);
   assert.ok(
-    authCatchAllRouteSource.indexOf("getTrustedBounceRecoveryTarget(request.url)") <
+    authCatchAllRouteSource.indexOf("getTrustedBounceRecoveryTarget(request.url") <
       authCatchAllRouteSource.indexOf("await authenticate.admin(request)"),
   );
   assert.match(authCatchAllRouteSource, /getSafeShopifyReloadRedirect\(request\)/);
