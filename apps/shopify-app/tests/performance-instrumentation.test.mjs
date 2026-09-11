@@ -120,6 +120,20 @@ test("Orders route renders its shell while slow loader data is still pending", (
   assert.match(ordersPageSource, /aria-label="Orders are loading"/);
 });
 
+test("Orders keeps streamed data behind a hydration-stable shell", () => {
+  assert.match(ordersPageSource, /useSyncExternalStore/);
+  assert.match(
+    ordersPageSource,
+    /useSyncExternalStore\(\s*subscribeToHydration,\s*getHydratedSnapshot,\s*getServerHydrationSnapshot,?\s*\)/,
+  );
+  assert.match(ordersPageSource, /function getHydratedSnapshot\(\) \{\s*return true;\s*\}/);
+  assert.match(ordersPageSource, /function getServerHydrationSnapshot\(\) \{\s*return false;\s*\}/);
+  assert.match(
+    ordersPageSource,
+    /hydrated \? <OrdersPageContent loaderData=\{loaderData\} \/> : <OrdersPageLoading \/>/,
+  );
+});
+
 test("Orders loading leaves the skeleton for a retryable error when data stalls", async () => {
   await assert.rejects(
     withPromiseTimeout(new Promise(() => {}), 5, "Orders data loading timed out."),

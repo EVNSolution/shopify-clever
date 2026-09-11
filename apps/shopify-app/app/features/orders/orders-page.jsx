@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
@@ -2557,13 +2557,32 @@ function OrdersViewDataLoading() {
   );
 }
 
+function subscribeToHydration() {
+  return () => {};
+}
+
+function getHydratedSnapshot() {
+  return true;
+}
+
+function getServerHydrationSnapshot() {
+  return false;
+}
+
 export default function OrdersPage() {
   const { ordersPageData } = useLoaderData();
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    getHydratedSnapshot,
+    getServerHydrationSnapshot,
+  );
 
   return (
     <Suspense fallback={<OrdersPageLoading />}>
       <Await resolve={ordersPageData} errorElement={<OrdersPageLoadError />}>
-        {(loaderData) => <OrdersPageContent loaderData={loaderData} />}
+        {(loaderData) => (
+          hydrated ? <OrdersPageContent loaderData={loaderData} /> : <OrdersPageLoading />
+        )}
       </Await>
     </Suspense>
   );
