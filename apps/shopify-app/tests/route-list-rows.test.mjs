@@ -317,3 +317,190 @@ test("missing route column values stay unknown instead of inheriting group value
   assert.equal(row.createdAt, null);
   assert.equal(row.updatedAt, null);
 });
+
+test("compact Routes-list groups preserve row identity, summaries, colors, totals, and nulls", () => {
+  const routePlans = [
+    {
+      attemptedCount: 1,
+      deliveredCount: 3,
+      id: "grouped-completed",
+      name: "Completed child",
+      status: "COMPLETED",
+      stopsCount: 4,
+    },
+    {
+      attemptedCount: 0,
+      deliveredCount: 2,
+      id: "ordinary",
+      itemSummary: { totalQuantity: 5 },
+      name: "Ordinary route",
+      routeMetrics: { distanceMeters: 7000, durationSeconds: 900 },
+      status: "READY",
+      stopsCount: 2,
+      totalAmount: { amount: "18.25", currencyCode: "CAD" },
+    },
+  ];
+  const compactGroups = [
+    {
+      children: [
+        {
+          color: "#2563eb",
+          displayStatus: "COMPLETED",
+          driverId: "driver-1",
+          driverName: "Driver One",
+          routeIdx: 1,
+          routePlanId: "grouped-completed",
+          sortOrder: 1,
+          stopsCount: 4,
+          routeMetrics: { distanceMeters: 12000, durationSeconds: 1800 },
+          routePlan: {
+            createdAt: "2026-09-01T10:00:00.000Z",
+            deliveredCount: 3,
+            driverId: "driver-1",
+            etaRange: { startAt: "2026-09-04T13:30:00.000Z", endAt: "2026-09-04T15:00:00.000Z" },
+            id: "grouped-completed",
+            itemSummary: { totalQuantity: 9 },
+            missingCoordinates: 0,
+            name: "Completed child",
+            planDate: "2026-09-04",
+            routeMetrics: { distanceMeters: 12000, durationSeconds: 1800 },
+            scheduledStartAt: "2026-09-04T13:30:00.000Z",
+            status: "COMPLETED",
+            stopsCount: 4,
+            totalAmount: { amount: "40.50", currencyCode: "CAD" },
+            updatedAt: "2026-09-04T16:00:00.000Z",
+          },
+        },
+        {
+          color: "#2563eb",
+          displayStatus: "READY",
+          driverId: null,
+          driverName: null,
+          routeIdx: 2,
+          routePlanId: "grouped-ready",
+          sortOrder: 2,
+          stopsCount: 1,
+          routeMetrics: null,
+          routePlan: {
+            createdAt: "2026-09-01T10:05:00.000Z",
+            deliveredCount: 0,
+            driverId: null,
+            etaRange: null,
+            id: "grouped-ready",
+            itemSummary: { totalQuantity: 0 },
+            missingCoordinates: 0,
+            name: "Ready child",
+            planDate: "2026-09-04",
+            routeMetrics: null,
+            scheduledStartAt: null,
+            status: "READY",
+            stopsCount: 1,
+            totalAmount: null,
+            updatedAt: "2026-09-04T16:05:00.000Z",
+          },
+        },
+      ],
+      currentVersion: 3,
+      displayStatus: "COMPLETED",
+      id: "group-multi",
+      name: "Multi group",
+      status: "READY",
+      totalOrders: 5,
+      unresolvedOrders: 0,
+      updatedAt: "2026-09-04T16:05:00.000Z",
+    },
+    {
+      children: [{
+        color: "#059669",
+        displayStatus: "READY",
+        driverId: null,
+        driverName: null,
+        routeIdx: 3,
+        routePlanId: "single-child",
+        sortOrder: 1,
+        stopsCount: 0,
+        routeMetrics: null,
+        routePlan: {
+          createdAt: "2026-09-02T10:00:00.000Z",
+          deliveredCount: 0,
+          driverId: null,
+          etaRange: null,
+          id: "single-child",
+          itemSummary: { totalQuantity: 0 },
+          missingCoordinates: 0,
+          name: "Single child",
+          planDate: "2026-09-05",
+          routeMetrics: null,
+          scheduledStartAt: null,
+          status: "READY",
+          stopsCount: 0,
+          totalAmount: null,
+          updatedAt: "2026-09-05T10:00:00.000Z",
+        },
+      }],
+      currentVersion: 1,
+      displayStatus: "READY",
+      id: "group-single",
+      name: "Single group",
+      status: "READY",
+      totalOrders: 0,
+      unresolvedOrders: 0,
+      updatedAt: "2026-09-05T10:00:00.000Z",
+    },
+    {
+      children: [],
+      currentVersion: 1,
+      displayStatus: "READY",
+      id: "group-empty",
+      name: "Empty group",
+      status: "READY",
+      totalOrders: 0,
+      unresolvedOrders: 0,
+      updatedAt: "2026-09-05T11:00:00.000Z",
+    },
+  ];
+
+  const rows = buildRouteRows(routePlans, compactGroups);
+  const completed = rows.find((row) => row.id === "grouped-completed");
+  const ready = rows.find((row) => row.id === "grouped-ready");
+  const single = rows.find((row) => row.id === "single-child");
+  const ordinary = rows.find((row) => row.id === "ordinary");
+
+  assert.deepEqual(rows.map((row) => row.id), [
+    "grouped-completed",
+    "grouped-ready",
+    "single-child",
+    "ordinary",
+  ]);
+  assert.equal(completed.href, "/app/routes/groups/group-multi/routes/grouped-completed");
+  assert.equal(completed.deleteKey, "routeGroupChild:group-multi:grouped-completed");
+  assert.equal(completed.route, "Completed child");
+  assert.equal(completed.status, "COMPLETED");
+  assert.equal(completed.orders, 4);
+  assert.equal(completed.totalItems, 9);
+  assert.equal(completed.delivered, 3);
+  assert.equal(completed.attempted, 1);
+  assert.equal(completed.totalAmount, 40.5);
+  assert.equal(completed.currencyCode, "CAD");
+  assert.equal(completed.distanceMeters, 12000);
+  assert.equal(completed.driveTimeSeconds, 1800);
+  assert.ok(completed.groupAccentColor);
+  assert.equal(ready.groupAccentColor, completed.groupAccentColor);
+  assert.equal(ready.totalAmount, null);
+  assert.equal(ready.currencyCode, null);
+  assert.equal(ready.distanceMeters, null);
+  assert.equal(ready.driver, "-");
+  assert.equal(single.groupAccentColor, null);
+  assert.equal(single.orders, 0);
+  assert.equal(single.totalAmount, null);
+  assert.equal(ordinary.groupAccentColor, null);
+  assert.equal(ordinary.href, "/app/routes/ordinary");
+  assert.equal(ordinary.totalAmount, 18.25);
+  assert.equal(rows.some((row) => row.id === "group-empty"), false);
+  assert.deepEqual(getPrimaryRouteSelectionKeys(rows), [
+    "routeGroupChild:group-multi:grouped-completed",
+    "routeGroupChild:group-multi:grouped-ready",
+    "routeGroupChild:group-single:single-child",
+    "routePlan:ordinary",
+  ]);
+});
