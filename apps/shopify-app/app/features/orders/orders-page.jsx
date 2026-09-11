@@ -4,7 +4,7 @@ import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
-import { routeGroupChildPath, routeGroupPath } from "../delivery/route-paths";
+import { routeGroupChildPath, routeGroupPath, withEmbeddedShopifyContext } from "../delivery/route-paths";
 import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
 import { getAppstleSubscriptionOrderKind } from "../delivery/delivery-labels";
 import { createDepartureMarkerElement } from "../maps/map-markers";
@@ -2598,6 +2598,10 @@ function OrdersPageContent({ loaderData }) {
   const revalidator = useRevalidator();
 
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigateWithEmbeddedContext = useCallback(
+    (destination) => navigate(withEmbeddedShopifyContext(destination, searchParams)),
+    [navigate, searchParams],
+  );
   const addToRouteGroupId = searchParams.get("addToRouteGroupId") ?? "";
   const addToRoutePlanId = searchParams.get("addToRoutePlanId") ?? "";
   const currentOrdersView = searchParams.get("view") === "inventory" ? "inventory" : "orders";
@@ -3635,8 +3639,8 @@ function OrdersPageContent({ loaderData }) {
   }, [activeOrdersView, navigation.state, revalidator, sourceOrdersLoaded]);
   const openInventoryDetail = useCallback((inventoryId) => {
     if (!inventoryId) return;
-    navigate(`/app/orders/inventory?id=${encodeURIComponent(inventoryId)}`);
-  }, [navigate]);
+    navigateWithEmbeddedContext(`/app/orders/inventory?id=${encodeURIComponent(inventoryId)}`);
+  }, [navigateWithEmbeddedContext]);
   const handleInventoryRowKeyDown = useCallback((event, inventory) => {
     if (event.key !== "Enter" && event.key !== " ") return;
     event.preventDefault();
@@ -5291,7 +5295,7 @@ function OrdersPageContent({ loaderData }) {
         setCreateRouteClientError(translate(language, "orders.routeActions.missingCreatedRoute"));
         return;
       }
-      navigate(destination);
+      navigateWithEmbeddedContext(destination);
       return;
     }
 
@@ -5301,10 +5305,10 @@ function OrdersPageContent({ loaderData }) {
       const destination = addToRoutePlanId && createdRouteGroup.id === addToRouteGroupId
         ? routeGroupChildPath(createdRouteGroup.id, addToRoutePlanId)
         : routeGroupPath(createdRouteGroup.id);
-      navigate(destination);
+      navigateWithEmbeddedContext(destination);
       return;
     }
-  }, [addToRouteGroupId, addToRoutePlanId, language, navigate, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup]);
+  }, [addToRouteGroupId, addToRoutePlanId, language, navigateWithEmbeddedContext, routePlanFetcher.data?.errors, routePlanFetcher.data?.routeGroup]);
 
   useEffect(() => {
     if (inventoryDeleteFetcher.state !== "idle" || !inventoryDeleteFetcher.data) return;

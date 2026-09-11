@@ -272,7 +272,7 @@ test("Routes page adds top summary cards and explicit route actions", () => {
   assert.match(routesPageSource, /labelKey: "routes\.summary\.driveTime"/);
   assert.match(routesPageSource, /labelKey: "routes\.summary\.distance"/);
   assert.match(routesPageSource, /function handleCreateRoutesClick\(\) \{/);
-  assert.match(routesPageSource, /navigate\("\/app\/orders"\)/);
+  assert.match(routesPageSource, /navigate\(withEmbeddedShopifyContext\("\/app\/orders", searchParams\)\)/);
   assert.match(routesPageSource, /<button type="button" style=\{createRoutesButtonStyle\} onClick=\{handleCreateRoutesClick\}>\{translate\(language, "routes\.list\.create"\)\}<\/button>/);
   assert.doesNotMatch(routesPageSource, /Update all routes/);
   assert.match(routesPageSource, /<section aria-label="Routes summary" style=\{routesSummaryCardsStyle\}>/);
@@ -465,7 +465,7 @@ test("Routes table rows are clickable links into route detail", () => {
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);
   assert.match(routesPageSource, /navigateRouteDetail\(route\)/);
-  assert.match(routesPageSource, /function navigateRouteDetail\(route\) \{\s*navigate\(route\.href\);\s*\}/);
+  assert.match(routesPageSource, /function navigateRouteDetail\(route\) \{\s*navigate\(withEmbeddedShopifyContext\(route\.href, searchParams\)\);\s*\}/);
   assert.doesNotMatch(routesPageSource, /fallbackIdToken|searchParams\.get\("id_token"\)/);
   assert.match(routesPageSource, /onClick=\{\(\) => handleRouteRowClick\(route\)\}/);
   assert.match(routesPageSource, /onKeyDown=\{\(event\) => handleRouteRowKeyDown\(event, route\)\}/);
@@ -604,7 +604,7 @@ test("Route detail exposes inventory and delete header actions", () => {
   assert.match(routeDetailSource, /Delete \$\{routeDetailTitle\} on the next global Save\?/);
   assert.match(routeDetailSource, /formData\.set\("_intent", "deleteRoute"\)/);
   assert.match(routeDetailSource, /lastRouteActionIntentRef\.current !== "deleteRoute"/);
-  assert.match(routeDetailSource, /navigate\(ROUTES_ROOT_PATH\)/);
+  assert.match(routeDetailSource, /navigateWithEmbeddedContext\(ROUTES_ROOT_PATH\)/);
   assert.match(routeDetailSource, /Delete route/);
 });
 
@@ -642,7 +642,8 @@ test("Route detail route exists for clicked persisted route rows", () => {
   assert.match(routeDetailSource, /buildRouteDetail\(effectiveRoutePlan, routeGroup\)/);
   assert.match(routeDetailSource, /<h1 className="route-detail-title" style=\{routesDetailTitleStyle\}>\{isRouteGroupDetail \? `\$\{allRoutesSummary.routes\} routes - \$\{allRoutesSummary.stops\} stops` : routeDetailTitle\}<\/h1>/);
   assert.doesNotMatch(routeDetailSource, /parseRouteDetailDraft/);
-  assert.doesNotMatch(routeDetailSource, /useSearchParams/);
+  assert.match(routeDetailSource, /useSearchParams/);
+  assert.match(routeDetailSource, /navigateWithEmbeddedContext/);
 });
 
 test("Route group detail keeps its own page instead of becoming a child route", () => {
@@ -689,7 +690,7 @@ test("Route group detail requires an explicit atomic copy mode and preserves suc
   assert.match(routeDetailSource, /copyMode: submission\.state\.mode/);
   assert.match(routeDetailSource, /expectedUpdatedAt: routeGroup\.updatedAt/);
   assert.match(routeDetailSource, /lastRouteActionIntentRef\.current !== "copyRouteGroup"/);
-  assert.match(routeDetailSource, /navigate\(routeGroupPath\(copiedRouteGroup\.id\)\)/);
+  assert.match(routeDetailSource, /navigateWithEmbeddedContext\(routeGroupPath\(copiedRouteGroup\.id\)\)/);
   assert.match(routeDetailSource, />실제 주문으로 복사</);
   assert.match(routeDetailSource, /원본 주문을 공유하며 진행\/잠금 상태의 영향을 받음/);
   assert.match(routeDetailSource, />가상 주문으로 독립 복사</);
@@ -1487,7 +1488,7 @@ test("Route detail page provides page navigation back to the route list", () => 
 });
 
 test("Route detail can move between child routes in the same route group", () => {
-  assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath \} from "\.\.\/features\/delivery\/route-paths"/);
+  assert.match(routeDetailSource, /import \{ ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath, withEmbeddedShopifyContext \} from "\.\.\/features\/delivery\/route-paths"/);
   assert.match(routeDetailSource, /const siblingRouteRows = routeGroupChildRows\.filter\(\(routeRow\) => routeRow\.routePlanId\)/);
   assert.match(routeDetailSource, /const currentSiblingRouteIndex = siblingRouteRows\.findIndex/);
   assert.match(routeDetailSource, /const previousSiblingRoute = siblingRouteRows\[currentSiblingRouteIndex - 1\]/);

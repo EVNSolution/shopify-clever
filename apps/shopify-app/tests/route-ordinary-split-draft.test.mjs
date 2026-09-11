@@ -349,7 +349,7 @@ test("new split save accepts only an exact complete group that preserves the cop
   assert.ok(saveEffect.indexOf("isCompleteSplitSaveResponse") < saveEffect.indexOf("resetRouteDraftChanges()"));
   assert.match(saveEffect, /setRouteGroupClientError\(ROUTE_SPLIT_SAVE_UNCONFIRMED_MESSAGE\);\s+return;/);
   assert.match(saveEffect, /const selectedRoutePlanId = splitSaveExpectation\.existingRoutePlanIds\[0\]/);
-  assert.match(saveEffect, /navigate\(navigateAfterSave \?\? routeGroupChildPath\(responseRouteGroup\.id, selectedRoutePlanId\)\)/);
+  assert.match(saveEffect, /navigateWithEmbeddedContext\(navigateAfterSave \?\? routeGroupChildPath\(responseRouteGroup\.id, selectedRoutePlanId\)\)/);
 });
 
 test("ordinary split Save submits one atomic request while Revert and discard remain local", async () => {
@@ -365,7 +365,7 @@ test("ordinary split Save submits one atomic request while Revert and discard re
   assert.doesNotMatch(saveAndLeaveHandler, /!routeGroupId/);
   assert.match(saveAndLeaveHandler, /navigateAfterRouteDraftSaveRef\.current = pendingRouteDraftHref \?\? routesListHref/);
   assert.match(resetHandler, /setIsOrdinarySplitDraft\(false\)/);
-  assert.match(discardHandler, /resetRouteDraftChanges\(\)[\s\S]*navigate\(destination\)/);
+  assert.match(discardHandler, /resetRouteDraftChanges\(\)[\s\S]*navigateWithEmbeddedContext\(destination\)/);
   assert.match(saveHandler, /if \(isOrdinarySplitDraft && !canDraftEditChildStopMembership\)[\s\S]*Your draft has been kept/);
 
   let submission = null;
@@ -421,8 +421,8 @@ test("ordinary Copy navigates only after a confirmed standalone READY route resp
 
   assert.match(copyEffect, /routeActionFetcher\.data\?\.routePlan/);
   assert.match(copyEffect, /isValidOrdinaryRouteCopy\(copiedRoutePlan, copySourceRoutePlanIdRef\.current\)/);
-  assert.match(copyEffect, /navigate\(routePlanPath\(copiedRoutePlan\.id\)\)/);
-  assert.ok(copyEffect.indexOf("isValidOrdinaryRouteCopy") < copyEffect.indexOf("navigate(routePlanPath(copiedRoutePlan.id))"));
+  assert.match(copyEffect, /navigateWithEmbeddedContext\(routePlanPath\(copiedRoutePlan\.id\)\)/);
+  assert.ok(copyEffect.indexOf("isValidOrdinaryRouteCopy") < copyEffect.indexOf("navigateWithEmbeddedContext(routePlanPath(copiedRoutePlan.id))"));
 });
 
 test("copy and split save responses reconcile before route loader revalidation", () => {

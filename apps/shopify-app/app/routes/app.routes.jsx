@@ -22,6 +22,7 @@ import { authenticate } from "../shopify.server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { logStructuredMetric } from "../features/telemetry/structured-telemetry.server";
 import { translate } from "../i18n/i18n";
+import { withEmbeddedShopifyContext } from "../features/delivery/route-paths";
 
 const routesTablePageStyle = {
   padding: "8px 12px 12px",
@@ -666,7 +667,7 @@ export default function RoutesPage() {
   }, [routeDeleteFetcher.data, routeDeleteFetcher.state]);
 
   function navigateRouteDetail(route) {
-    navigate(route.href);
+    navigate(withEmbeddedShopifyContext(route.href, searchParams));
   }
 
   function handleRouteRowClick(route) {
@@ -685,7 +686,7 @@ export default function RoutesPage() {
   }
 
   function handleCreateRoutesClick() {
-    navigate("/app/orders");
+    navigate(withEmbeddedShopifyContext("/app/orders", searchParams));
   }
 
   function openRouteGroupMarkerTooltip(event, route) {

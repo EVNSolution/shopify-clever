@@ -1,7 +1,8 @@
 import { boundary } from "@shopify/shopify-app-react-router/server";
-import { useRouteError } from "react-router";
+import { useLocation, useRouteError } from "react-router";
 
 import { getAdminRouteErrorPresentation } from "../features/shopify/admin-route-error";
+import { hasEmbeddedShopifySearchParams } from "../features/shopify/app-bridge-bootstrap";
 
 const pageStyle = {
   alignItems: "center",
@@ -35,10 +36,15 @@ const buttonStyle = {
 
 export function AdminRouteErrorBoundary() {
   const error = useRouteError();
-  const presentation = getAdminRouteErrorPresentation(error);
+  const location = useLocation();
+  const searchParams = new URLSearchParams(location.search);
+  const presentation = getAdminRouteErrorPresentation(error, {
+    hasEmbeddedContext: hasEmbeddedShopifySearchParams(searchParams),
+  });
+  const reloadHref = `${location.pathname}${location.search}${location.hash}`;
 
   if (presentation.kind === "shopify-response") {
-    return boundary.error(error);
+    return <div data-shopify-document-error>{boundary.error(error)}</div>;
   }
 
   if (presentation.kind === "unexpected-error") {
@@ -46,13 +52,13 @@ export function AdminRouteErrorBoundary() {
   }
 
   return (
-    <main role="alert" style={pageStyle}>
+    <main data-shopify-document-error role="alert" style={pageStyle}>
       <section style={cardStyle}>
         <h1>{presentation.title}</h1>
         <p>{presentation.message}</p>
-        <button type="button" onClick={() => window.location.reload()} style={buttonStyle}>
+        <a href={reloadHref} style={{ ...buttonStyle, textDecoration: "none" }}>
           Reload
-        </button>
+        </a>
       </section>
     </main>
   );

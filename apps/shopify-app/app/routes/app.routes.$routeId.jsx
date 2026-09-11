@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteLoaderData } from "react-router";
+import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { RouteActionIconButton } from "../ui/route-action-icon-button";
@@ -67,7 +67,7 @@ import {
   normalizeRouteStopLocationDiagnostic,
   summarizeRouteStopLocationDiagnostics,
 } from "../features/delivery/route-stop-location-diagnostic";
-import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath } from "../features/delivery/route-paths";
+import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath, withEmbeddedShopifyContext } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
@@ -3449,6 +3449,11 @@ function createCustomerEmailDialogOpenState(signal) {
 
 export default function RouteDetailPage() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const navigateWithEmbeddedContext = useCallback(
+    (destination) => navigate(withEmbeddedShopifyContext(destination, searchParams)),
+    [navigate, searchParams],
+  );
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
@@ -5720,7 +5725,7 @@ export default function RouteDetailPage() {
     resetRouteDraftChanges();
     setIsRouteDraftExitDialogOpen(false);
     setPendingRouteDraftHref(null);
-    navigate(destination);
+    navigateWithEmbeddedContext(destination);
   };
 
   const requestRouteNavigation = (href) => {
@@ -5730,7 +5735,7 @@ export default function RouteDetailPage() {
       setIsRouteDraftExitDialogOpen(true);
       return;
     }
-    navigate(href);
+    navigateWithEmbeddedContext(href);
   };
 
   const handleBackToRoutes = () => {
@@ -5905,8 +5910,8 @@ export default function RouteDetailPage() {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "deleteRoute") return;
     lastRouteActionIntentRef.current = null;
-    if ((routeActionFetcher.data?.errors ?? []).length === 0) navigate(ROUTES_ROOT_PATH);
-  }, [navigate, routeActionFetcher.data, routeActionFetcher.state]);
+    if ((routeActionFetcher.data?.errors ?? []).length === 0) navigateWithEmbeddedContext(ROUTES_ROOT_PATH);
+  }, [navigateWithEmbeddedContext, routeActionFetcher.data, routeActionFetcher.state]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -5928,8 +5933,8 @@ export default function RouteDetailPage() {
     }
     resetRouteDraftChanges();
     shopify.toast.show("Route copied");
-    navigate(routePlanPath(copiedRoutePlan.id));
-  }, [navigate, resetRouteDraftChanges, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+    navigateWithEmbeddedContext(routePlanPath(copiedRoutePlan.id));
+  }, [navigateWithEmbeddedContext, resetRouteDraftChanges, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -5953,8 +5958,8 @@ export default function RouteDetailPage() {
     }
     commitRouteGroupCopyDialogState(succeedRouteGroupCopySubmit());
     shopify.toast.show("Route group copied");
-    navigate(routeGroupPath(copiedRouteGroup.id));
-  }, [commitRouteGroupCopyDialogState, navigate, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+    navigateWithEmbeddedContext(routeGroupPath(copiedRouteGroup.id));
+  }, [commitRouteGroupCopyDialogState, navigateWithEmbeddedContext, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -6056,18 +6061,18 @@ export default function RouteDetailPage() {
       resetRouteDraftChanges();
       setPendingRouteDraftHref(null);
       const selectedRoutePlanId = splitSaveExpectation.existingRoutePlanIds[0];
-      navigate(navigateAfterSave ?? routeGroupChildPath(responseRouteGroup.id, selectedRoutePlanId));
+      navigateWithEmbeddedContext(navigateAfterSave ?? routeGroupChildPath(responseRouteGroup.id, selectedRoutePlanId));
       return;
     }
     resetRouteDraftChanges();
     revalidator.revalidate();
     setPendingRouteDraftHref(null);
     if (navigateAfterSave) {
-      navigate(navigateAfterSave);
+      navigateWithEmbeddedContext(navigateAfterSave);
     } else if (effectiveRoutePlan?.id && deletedRoutePlanIds.includes(effectiveRoutePlan.id) && routeGroupId) {
-      navigate(routeGroupPath(routeGroupId));
+      navigateWithEmbeddedContext(routeGroupPath(routeGroupId));
     }
-  }, [deletedRoutePlanIds, effectiveRoutePlan?.id, navigate, resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state, routeGroupId]);
+  }, [deletedRoutePlanIds, effectiveRoutePlan?.id, navigateWithEmbeddedContext, resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state, routeGroupId]);
 
   useEffect(() => {
     if (!hasRouteAllocationDraft) return undefined;

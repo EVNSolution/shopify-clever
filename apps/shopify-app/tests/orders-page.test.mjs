@@ -942,7 +942,7 @@ test("Orders page creates routes through the group endpoint", () => {
   assert.match(ordersPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);
   assert.match(ordersPageSource, /const createdRouteGroup = routePlanFetcher\.data\?\.routeGroup/);
-  assert.match(ordersPageSource, /navigate\(destination\)/);
+  assert.match(ordersPageSource, /navigateWithEmbeddedContext\(destination\)/);
   assert.match(ordersPageSource, /getCreatedRouteDestination\(submittedRouteIntent, createdRouteGroup\)/);
   assert.match(ordersPageSource, /translate\(language, "orders\.routeActions\.assign"\)/);
   assert.match(ordersPageSource, /const createRouteDisabled = plannedOrders\.length === 0 \|\| isCreatingRoute/);

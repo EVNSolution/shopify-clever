@@ -15,6 +15,8 @@ import {
   syncShopifyOfflineTokenToDeliveryApi,
 } from "../features/delivery/shopify-token-sync.server";
 import { fetchShopifyAppPreferences } from "../features/settings/app-preferences.server";
+import { withEmbeddedShopifyContext } from "../features/delivery/route-paths";
+import { isEmbeddedShopifyContext } from "../features/shopify/app-bridge-bootstrap";
 import { DEFAULT_LANGUAGE, translate } from "../i18n/i18n";
 import { authenticate } from "../shopify.server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
@@ -184,6 +186,7 @@ export const loader = async ({ request }) => {
   return {
     // eslint-disable-next-line no-undef
     apiKey: process.env.SHOPIFY_API_KEY || "",
+    embedded: isEmbeddedShopifyContext(request.url),
     language,
     tokenSyncHealth: getShopifyTokenSyncHealth(authenticatedShop),
   };
@@ -212,7 +215,8 @@ export function shouldRevalidate({
 }
 
 export default function App() {
-  const { apiKey, language } = useLoaderData();
+  const { apiKey, embedded, language } = useLoaderData();
+  const location = useLocation();
   const navigate = useNavigate();
   const markNavigationStart = useAppNavigationPerformance();
   const [intentPrefetchPage, setIntentPrefetchPage] = useState(null);
@@ -226,11 +230,14 @@ export default function App() {
     if (typeof event.button === "number" && event.button !== 0) return;
     if (event.metaKey || event.altKey || event.ctrlKey || event.shiftKey) return;
 
+    const destination = withEmbeddedShopifyContext(href, location.search);
     event.preventDefault();
-    prefetchNavPage(href);
+    prefetchNavPage(destination);
     markNavigationStart(href, "sidebar-click");
-    navigate(href);
+    navigate(destination);
   }
+
+  if (!embedded) return <Outlet />;
 
   return (
     <AppProvider embedded apiKey={apiKey}>
@@ -239,21 +246,21 @@ export default function App() {
       ) : null}
       <s-app-nav>
         <s-link
-          href="/app/orders"
+          href={withEmbeddedShopifyContext("/app/orders", location.search)}
           rel="home"
           onClick={(event) => handleNavClick(event, "/app/orders")}
-          onMouseEnter={() => prefetchNavPage("/app/orders")}
-          onFocus={() => prefetchNavPage("/app/orders")}
+          onMouseEnter={() => prefetchNavPage(withEmbeddedShopifyContext("/app/orders", location.search))}
+          onFocus={() => prefetchNavPage(withEmbeddedShopifyContext("/app/orders", location.search))}
         >
           {translate(language, "nav.home")}
         </s-link>
         {APP_NAV_ITEMS.map((item) => (
           <s-link
             key={item.href}
-            href={item.href}
+            href={withEmbeddedShopifyContext(item.href, location.search)}
             onClick={(event) => handleNavClick(event, item.href)}
-            onMouseEnter={() => prefetchNavPage(item.href)}
-            onFocus={() => prefetchNavPage(item.href)}
+            onMouseEnter={() => prefetchNavPage(withEmbeddedShopifyContext(item.href, location.search))}
+            onFocus={() => prefetchNavPage(withEmbeddedShopifyContext(item.href, location.search))}
           >
             {translate(language, item.labelKey)}
           </s-link>

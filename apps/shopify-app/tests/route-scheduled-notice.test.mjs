@@ -45,12 +45,12 @@ function runSaveEffect({ errors = [], outcomeUnknown = false, next = null, delet
     setPendingRouteDraftHref: (value) => calls.push(["pending", value]),
     setOrdinaryMutationPending: () => {},
     setOrdinaryMutationUncertain: (value) => calls.push(["uncertain", value]),
-    navigate: (...args) => calls.push(["navigate", ...args]),
+    navigateWithEmbeddedContext: (...args) => calls.push(["navigate", ...args]),
     routeGroupPath: (id) => "/app/routes/groups/" + id,
   };
   const effect = between(
     '    if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;',
-    "  }, [deletedRoutePlanIds, effectiveRoutePlan?.id, navigate, resetRouteDraftChanges",
+    "  }, [deletedRoutePlanIds, effectiveRoutePlan?.id, navigateWithEmbeddedContext, resetRouteDraftChanges",
   );
   const run = Function(...Object.keys(bindings), effect);
   run(...Object.values(bindings));
