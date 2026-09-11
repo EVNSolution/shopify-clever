@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { shouldLoadShopifyAppBridge } from "../app/features/shopify/app-bridge-bootstrap.js";
+import { isEmbeddedShopifyContext, shouldLoadShopifyAppBridge } from "../app/features/shopify/app-bridge-bootstrap.js";
 
 const rootRouteSource = readFileSync(
   join(process.cwd(), "app/routes/_index/route.jsx"),
@@ -139,7 +139,31 @@ test("direct login guidance skips App Bridge until Shopify supplies store contex
   );
   assert.equal(
     shouldLoadShopifyAppBridge("https://clever-kfood-app.cleversystem.ai/app/orders"),
+    false,
+  );
+  assert.equal(
+    shouldLoadShopifyAppBridge(
+      "https://clever-kfood-app.cleversystem.ai/app/routes/groups/group-1/routes/route-1?shop=k-food-company.myshopify.com&host=encoded-host&embedded=1",
+    ),
     true,
+  );
+  assert.equal(
+    shouldLoadShopifyAppBridge(
+      "https://clever-kfood-app.cleversystem.ai/app/routes?shop=&host=&embedded=1",
+    ),
+    false,
+  );
+  assert.equal(
+    isEmbeddedShopifyContext(
+      "https://clever-kfood-app.cleversystem.ai/app/routes?shop=k-food-company.myshopify.com&host=encoded-host&embedded=1",
+    ),
+    true,
+  );
+  assert.equal(
+    isEmbeddedShopifyContext(
+      "https://clever-kfood-app.cleversystem.ai/app/routes?shop=k-food-company.myshopify.com&host=encoded-host&embedded=0",
+    ),
+    false,
   );
 });
 

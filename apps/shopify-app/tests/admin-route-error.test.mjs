@@ -13,6 +13,20 @@ test("Shopify bounce responses remain delegated to the Shopify boundary", () => 
   assert.equal(presentation.kind, "shopify-response");
 });
 
+test("context-free Shopify bounce responses render static recovery guidance", () => {
+  const presentation = getAdminRouteErrorPresentation(
+    {
+      data: '<script data-api-key="key_123" src="https://cdn.shopify.com/shopifycloud/app-bridge.js"></script>',
+      status: 200,
+      statusText: "",
+    },
+    { hasEmbeddedContext: false },
+  );
+
+  assert.equal(presentation.kind, "route-error");
+  assert.match(presentation.message, /Shopify Admin/);
+});
+
 test("Session failures render recovery guidance", () => {
   const presentation = getAdminRouteErrorPresentation({
     data: "Shopify session expired",

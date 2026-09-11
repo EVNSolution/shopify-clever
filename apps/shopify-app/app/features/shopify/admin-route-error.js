@@ -6,9 +6,15 @@ function errorDataText(error) {
   return "";
 }
 
-export function getAdminRouteErrorPresentation(error) {
+export function getAdminRouteErrorPresentation(error, { hasEmbeddedContext = true } = {}) {
   if (SHOPIFY_RESPONSE_PATTERN.test(errorDataText(error))) {
-    return { kind: "shopify-response" };
+    return hasEmbeddedContext
+      ? { kind: "shopify-response" }
+      : {
+        kind: "route-error",
+        title: "This page could not be loaded",
+        message: "Reopen CLEVER from Shopify Admin.",
+      };
   }
 
   if (Number(error?.status) === 401) {

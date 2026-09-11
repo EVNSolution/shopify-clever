@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import test from "node:test";
+import { shouldHydrateDocument } from "../app/features/runtime/document-hydration.js";
 
 const routesDir = path.resolve("app/routes");
 
@@ -41,13 +42,35 @@ test("document routes that authenticate admin requests export Shopify boundary h
 });
 
 
-test("custom client entry leaves Shopify boundary responses to App Bridge", () => {
+test("custom client entry leaves server-rendered error boundaries unhydrated", () => {
   const source = fs.readFileSync(path.resolve("app/entry.client.jsx"), "utf8");
+  const boundarySource = fs.readFileSync(
+    path.resolve("app/ui/admin-route-error-boundary.jsx"),
+    "utf8",
+  );
+  const hydrationSource = fs.readFileSync(
+    path.resolve("app/features/runtime/document-hydration.js"),
+    "utf8",
+  );
 
-  assert.match(source, /document\.body\.firstElementChild\?\.textContent === "Handling response"/);
-  assert.match(source, /if \(!isShopifyBoundaryResponse\(\)\)/);
+  assert.match(hydrationSource, /document\.body\.firstElementChild\?\.textContent === "Handling response"/);
+  assert.match(source, /shouldHydrateDocument\(document\)/);
+  assert.match(source, /hydrateApp\(\)/);
+  assert.match(boundarySource, /data-shopify-document-error/);
+  assert.match(boundarySource, /<div data-shopify-document-error>\{boundary\.error\(error\)\}<\/div>/);
+  assert.match(boundarySource, /hasEmbeddedShopifySearchParams\(searchParams\)/);
   assert.match(source, /installStaleBundleRecovery\(\)/);
   assert.match(source, /<HydratedRouter \/>/);
+
+  const createDocument = ({ boundaryText, marked = false } = {}) => ({
+    body: { firstElementChild: boundaryText ? { textContent: boundaryText } : null },
+    querySelector: () => marked ? {} : null,
+  });
+
+  assert.equal(shouldHydrateDocument(createDocument()), true);
+  assert.equal(shouldHydrateDocument(createDocument({ boundaryText: "Handling response" })), false);
+  assert.equal(shouldHydrateDocument(createDocument({ boundaryText: "Route: Handling response" })), true);
+  assert.equal(shouldHydrateDocument(createDocument({ marked: true })), false);
 });
 
 test("customer notification Shopify lane stays behind delivery API boundaries", () => {

@@ -17,7 +17,7 @@ const expectedVisibleNavItems = [
 test("Shopify app nav keeps app home separate from visible sidebar sections", () => {
   assert.match(
     appRouteSource,
-    /<s-link\s+href="\/app\/orders"\s+rel="home"[\s\S]*?>\s*\{translate\(language, "nav\.home"\)\}\s*<\/s-link>/,
+    /<s-link\s+href=\{withEmbeddedShopifyContext\("\/app\/orders", location\.search\)\}\s+rel="home"[\s\S]*?>\s*\{translate\(language, "nav\.home"\)\}\s*<\/s-link>/,
     "expected the app-name home row to land directly on Orders instead of the root redirect path",
   );
   assert.doesNotMatch(appRouteSource, /<s-link\s+href="\/"\s+rel="home"/);
@@ -34,7 +34,7 @@ test("Shopify app nav renders the requested sidebar sections in order", () => {
 
   assert.deepEqual(visibleLinks, expectedVisibleNavItems);
   assert.match(appRouteSource, /fetchShopifyAppPreferences\(admin\)/);
-  assert.match(appRouteSource, /const \{ apiKey, language \} = useLoaderData\(\)/);
+  assert.match(appRouteSource, /const \{ apiKey, embedded, language \} = useLoaderData\(\)/);
   assert.match(appRouteSource, /translate\(language, item\.labelKey\)/);
 });
 
@@ -87,8 +87,8 @@ test("app nav prefetches loader tabs only after navigation intent", () => {
   assert.match(appRouteSource, /function prefetchNavPage\(page\) \{/);
   assert.match(appRouteSource, /setIntentPrefetchPage\(page\)/);
   assert.match(appRouteSource, /<PrefetchPageLinks page=\{intentPrefetchPage\} \/>/);
-  assert.match(appRouteSource, /onMouseEnter=\{\(\) => prefetchNavPage\(item\.href\)\}/);
-  assert.match(appRouteSource, /onFocus=\{\(\) => prefetchNavPage\(item\.href\)\}/);
+  assert.match(appRouteSource, /onMouseEnter=\{\(\) => prefetchNavPage\(withEmbeddedShopifyContext\(item\.href, location\.search\)\)\}/);
+  assert.match(appRouteSource, /onFocus=\{\(\) => prefetchNavPage\(withEmbeddedShopifyContext\(item\.href, location\.search\)\)\}/);
 });
 
 
@@ -97,7 +97,7 @@ test("app nav intercepts sidebar clicks for client-side tab navigation", () => {
   assert.match(appRouteSource, /const navigate = useNavigate\(\)/);
   assert.match(appRouteSource, /function handleNavClick\(event, href\) \{/);
   assert.match(appRouteSource, /event\.preventDefault\(\)/);
-  assert.match(appRouteSource, /navigate\(href\)/);
+  assert.match(appRouteSource, /navigate\(destination\)/);
   assert.match(appRouteSource, /onClick=\{\(event\) => handleNavClick\(event, item\.href\)\}/);
 });
 
