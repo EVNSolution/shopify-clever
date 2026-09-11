@@ -630,7 +630,7 @@ test("filters by service type and exposes stable service labels", () => {
       serviceType: "DELIVERY",
       tab: "all",
     }).map((order) => order.id),
-    ["day", "evening"],
+    ["day"],
   );
 
   assert.deepEqual(

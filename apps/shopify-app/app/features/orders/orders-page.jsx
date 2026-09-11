@@ -305,19 +305,6 @@ const routePlanScrollAreaStyle = {
   paddingRight: 0,
 };
 
-const ordersViewTabsRowStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "8px",
-  justifyContent: "space-between",
-};
-
-const ordersViewTabBarStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "6px",
-};
-
 const ordersUpdateActionStyle = {
   alignItems: "center",
   display: "flex",
@@ -341,28 +328,6 @@ const ordersRefreshStatusStyle = {
   fontSize: "12px",
   lineHeight: "18px",
   whiteSpace: "nowrap",
-};
-
-const ordersViewTabButtonStyle = {
-  background: "#ffffff",
-  borderColor: "#d4d4d4",
-  borderRadius: "8px",
-  borderStyle: "solid",
-  borderWidth: "1px",
-  color: "#303030",
-  cursor: "pointer",
-  font: "inherit",
-  fontSize: "12px",
-  fontWeight: 600,
-  lineHeight: "18px",
-  padding: "4px 10px",
-};
-
-const activeOrdersViewTabButtonStyle = {
-  ...ordersViewTabButtonStyle,
-  background: "#303030",
-  borderColor: "#303030",
-  color: "#ffffff",
 };
 
 const inventoryListStyle = {
@@ -3592,24 +3557,6 @@ function OrdersPageContent({ loaderData }) {
     visibleInventoryIds.length > 0 &&
     visibleInventoryIds.every((inventoryId) => checkedInventoryIdSet.has(inventoryId));
   const inventoryDeleteDisabled = checkedInventoryIds.length === 0 || isDeletingInventory;
-  const handleOrdersViewChange = useCallback((nextView) => {
-    if (nextView === activeOrdersView) return;
-
-    pendingOrdersViewNavigationRef.current = {
-      fromView: activeOrdersView,
-      startedAt: getSafePerformanceNow(),
-      toView: nextView,
-    };
-    const nextSearchParams = new URLSearchParams(searchParams);
-    if (nextView === "inventory") {
-      nextSearchParams.set("view", "inventory");
-    } else {
-      nextSearchParams.delete("view");
-    }
-
-    setSearchParams(nextSearchParams, { preventScrollReset: true, replace: true });
-  }, [activeOrdersView, searchParams, setSearchParams]);
-
   useEffect(() => {
     const pendingNavigation = pendingOrdersViewNavigationRef.current;
     const navigationMetric = buildOrdersViewNavigationMetric({
@@ -3737,21 +3684,7 @@ function OrdersPageContent({ loaderData }) {
         ? ordersReconciliationError
         : getOrdersReconciliationStatusMessage(ordersReconciliationJob, null);
 
-  const ordersViewTabs = (
-    <div style={ordersViewTabsRowStyle}>
-      <div aria-label="Orders view tabs" style={ordersViewTabBarStyle}>
-        <button
-          type="button"
-          style={activeOrdersView === "orders" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
-          onClick={() => handleOrdersViewChange("orders")}
-        >Orders</button>
-        <button
-          type="button"
-          style={activeOrdersView === "inventory" ? activeOrdersViewTabButtonStyle : ordersViewTabButtonStyle}
-          onClick={() => handleOrdersViewChange("inventory")}
-        >Inventory</button>
-      </div>
-      {activeOrdersView === "inventory" ? (
+  const ordersViewActions = activeOrdersView === "inventory" ? (
         <button
           type="button"
           style={inventoryDeleteDisabled ? disabledPlanButtonStyle : inventoryDeleteButtonStyle}
@@ -3777,9 +3710,7 @@ function OrdersPageContent({ loaderData }) {
             onClick={handleRefreshAllRoutes}
           >{ordersRefreshButtonLabel}</button>
         </div>
-      )}
-    </div>
-  );
+      );
 
   const ordersLayoutNotice = (
     <div style={{ display: "grid", gap: "8px" }}>
@@ -3788,7 +3719,7 @@ function OrdersPageContent({ loaderData }) {
           {orderPageNoticeMessage}
         </div>
       ) : null}
-      {ordersViewTabs}
+      {ordersViewActions}
     </div>
   );
 
@@ -5865,7 +5796,10 @@ function OrdersPageContent({ loaderData }) {
           </label>
           <div style={routePlanDetailStyle}>
             <div style={routePlanHeaderStyle}>
-              <s-heading>Route plan</s-heading>
+              <div style={{ display: "grid", gap: "2px" }}>
+                <s-heading>Route plan</s-heading>
+                <span style={routeAddSnapshotHintStyle}>{translate(language, "orders.routeActions.flowHelp")}</span>
+              </div>
               <div style={routePlanHeaderActionsStyle}>
                 <button
                   type="button"
@@ -6067,6 +6001,7 @@ function OrdersPageContent({ loaderData }) {
               label={translate(language, "orders.filters.type")}
               options={[
                 { label: translate(language, "orders.filters.serviceType.delivery"), value: "DELIVERY" },
+                { label: translate(language, "orders.filters.serviceType.eveningDelivery"), value: "EVENING_DELIVERY" },
                 { label: translate(language, "orders.filters.serviceType.pickup"), value: "PICKUP" },
               ]}
               value={orderFilters.serviceType}

@@ -91,6 +91,13 @@ export function isRouteStartDraftSavable(draft, currentValue, currentTimezone = 
   return value !== currentValue || (value !== "" && draft?.timezone !== currentTimezone);
 }
 
+export function getRouteStartPlanDateError(draft, planDate) {
+  const expectedPlanDate = String(planDate ?? "").slice(0, 10);
+  const selectedDate = String(draft?.date ?? "");
+  if (!isValidDateText(expectedPlanDate) || !selectedDate) return null;
+  return selectedDate === expectedPlanDate ? null : "plan_date_mismatch";
+}
+
 export function getRouteStartPickerSummary(draft) {
   const value = buildRouteStartDateTimeValue(draft);
   if (value === "") return "No start time selected";

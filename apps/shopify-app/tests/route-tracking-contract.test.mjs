@@ -91,6 +91,49 @@ test("tracking snapshot chooses the newest position across latest and recent pay
   assert.equal(snapshot.latestPosition.eventId, "newest-recent");
 });
 
+test("tracking snapshots preserve authoritative route execution evidence without inventing duration semantics", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    routePlanId: "route-1",
+    executionEvidence: {
+      schemaVersion: "route_execution_evidence.v1",
+      timeSemantics: "EVENT_TIMESTAMPS_ONLY",
+      routeEndMode: "RETURN_TO_DEPOT",
+      start: { eventId: "start-1", occurredAt: "2026-09-11T12:00:00.000Z", receivedAt: "2026-09-11T12:00:01.000Z" },
+      completion: { eventId: "complete-1", occurredAt: "2026-09-11T16:00:00.000Z", receivedAt: "2026-09-11T16:00:01.000Z", latitude: 43.7, longitude: -79.4 },
+      returnToDepot: {
+        status: "UNCONFIRMED",
+        source: "ROUTE_COMPLETED",
+        observedAt: "2026-09-11T16:00:00.000Z",
+        evidenceEventId: "complete-1",
+        distanceToDepotMeters: 420,
+        thresholdMeters: 150,
+      },
+    },
+  });
+
+  assert.equal(snapshot.executionEvidence.schemaVersion, "route_execution_evidence.v1");
+  assert.equal(snapshot.executionEvidence.timeSemantics, "EVENT_TIMESTAMPS_ONLY");
+  assert.equal(snapshot.executionEvidence.start.occurredAt, "2026-09-11T12:00:00.000Z");
+  assert.equal(snapshot.executionEvidence.completion.occurredAt, "2026-09-11T16:00:00.000Z");
+  assert.deepEqual(snapshot.executionEvidence.returnToDepot, {
+    distanceToDepotMeters: 420,
+    evidenceEventId: "complete-1",
+    observedAt: "2026-09-11T16:00:00.000Z",
+    source: "ROUTE_COMPLETED",
+    status: "UNCONFIRMED",
+    thresholdMeters: 150,
+  });
+  assert.equal(Object.hasOwn(snapshot.executionEvidence, "actualDrivingTime"), false);
+  assert.equal(Object.hasOwn(snapshot.executionEvidence, "workingTime"), false);
+
+  const reconnectSnapshot = mergeRouteTrackingSnapshot(snapshot, {
+    routePlanId: "route-1",
+    recentPositions: [],
+    status: "NO_DATA",
+  });
+  assert.equal(reconnectSnapshot.executionEvidence.returnToDepot.status, "UNCONFIRMED");
+});
+
 test("tracking merges reject position and progress payloads from another route", () => {
   const snapshot = normalizeRouteTrackingSnapshot({
     routePlanId: "route-b",

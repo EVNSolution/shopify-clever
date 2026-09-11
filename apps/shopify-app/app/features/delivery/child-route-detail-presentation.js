@@ -382,14 +382,26 @@ export function summarizeChildRouteMoney(rows) {
   const routeRows = Array.isArray(rows) ? rows : [];
   const currencies = [...new Set(routeRows.map((row) => textOrUndefined(row?.currencyCode)).filter(Boolean))];
   const currencyCode = currencies.length === 1 ? currencies[0] : undefined;
-  const shippingPrices = routeRows.map((row) => numberOrUndefined(row?.shippingPriceAmount)).filter((amount) => amount !== undefined);
+  const originalShippingEntries = routeRows.map((row) => ({
+    amount: numberOrUndefined(row?.totalShippingPriceAmount),
+    currencyCode: textOrUndefined(row?.totalShippingPriceCurrencyCode),
+  }));
+  const shippingPriceMissingCount = originalShippingEntries.filter((entry) => entry.amount === undefined || !entry.currencyCode).length;
+  const shippingCurrencies = [...new Set(originalShippingEntries.map((entry) => entry.currencyCode).filter(Boolean))];
+  const shippingPriceState = shippingPriceMissingCount > 0 || routeRows.length === 0
+    ? "missing"
+    : shippingCurrencies.length === 1 ? "complete" : "mixed_currency";
+  const shippingPrice = shippingPriceState === "complete"
+    ? originalShippingEntries.reduce((total, entry) => total + entry.amount, 0)
+    : undefined;
   const totalPrices = routeRows.map((row) => numberOrUndefined(row?.totalPriceAmount)).filter((amount) => amount !== undefined);
-  const shippingPrice = shippingPrices.length > 0 ? shippingPrices.reduce((total, amount) => total + amount, 0) : undefined;
   const totalPrice = totalPrices.length > 0 ? totalPrices.reduce((total, amount) => total + amount, 0) : undefined;
 
   return {
     currencyCode: currencyCode ?? null,
-    shippingPriceLabel: formatCurrencyAmount(shippingPrice, currencyCode),
+    shippingPriceLabel: formatCurrencyAmount(shippingPrice, shippingCurrencies[0]),
+    shippingPriceMissingCount,
+    shippingPriceState,
     totalPriceLabel: formatCurrencyAmount(totalPrice, currencyCode),
   };
 }
@@ -522,6 +534,8 @@ export function buildChildRouteOrderRows(stops, {
       note: getStopNote(stop),
       payment: formatPaymentStatus(stop),
       shippingPriceAmount: numberOrUndefined(stop?.shippingPriceAmount),
+      totalShippingPriceAmount: numberOrUndefined(stop?.totalShippingPriceAmount),
+      totalShippingPriceCurrencyCode: firstText(stop?.totalShippingPriceCurrencyCode),
       totalPriceAmount: numberOrUndefined(stop?.totalPriceAmount),
       attributes,
       attributesSummary: formatAttributesSummary(attributes),

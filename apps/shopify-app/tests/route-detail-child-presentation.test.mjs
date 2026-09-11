@@ -25,22 +25,61 @@ test("child route rows expose notes and summarize shipping and order totals", ()
     customerNoteContext: { customerNote: "Leave at side door" },
     orderId: "order-1",
     shippingPriceAmount: "10.00",
+    totalShippingPriceAmount: "5.00",
+    totalShippingPriceCurrencyCode: "CAD",
     totalPriceAmount: "1539.57",
   }], { ianaTimezone: "America/Toronto" });
 
   assert.equal(rows[0].note, "Leave at side door");
   assert.equal(rows[0].shippingPriceAmount, 10);
+  assert.equal(rows[0].totalShippingPriceAmount, 5);
+  assert.equal(rows[0].totalShippingPriceCurrencyCode, "CAD");
   assert.equal(rows[0].totalPriceAmount, 1539.57);
   assert.deepEqual(summarizeChildRouteMoney(rows), {
     currencyCode: "CAD",
-    shippingPriceLabel: "CA$10.00",
+    shippingPriceLabel: "CA$5.00",
+    shippingPriceMissingCount: 0,
+    shippingPriceState: "complete",
     totalPriceLabel: "CA$1,539.57",
   });
   assert.deepEqual(summarizeChildRouteMoney([{ currencyCode: "CAD" }]), {
     currencyCode: "CAD",
     shippingPriceLabel: "–",
+    shippingPriceMissingCount: 1,
+    shippingPriceState: "missing",
     totalPriceLabel: "–",
   });
+});
+
+test("original shipping totals distinguish confirmed zero, missing snapshots, and mixed currencies", () => {
+  assert.deepEqual(summarizeChildRouteMoney([{
+    currencyCode: "CAD",
+    totalShippingPriceAmount: 0,
+    totalShippingPriceCurrencyCode: "CAD",
+    totalPriceAmount: 25,
+  }]), {
+    currencyCode: "CAD",
+    shippingPriceLabel: "CA$0.00",
+    shippingPriceMissingCount: 0,
+    shippingPriceState: "complete",
+    totalPriceLabel: "CA$25.00",
+  });
+
+  const incomplete = summarizeChildRouteMoney([
+    { currencyCode: "CAD", totalShippingPriceAmount: 5, totalShippingPriceCurrencyCode: "CAD" },
+    { currencyCode: "CAD", totalShippingPriceAmount: null, totalShippingPriceCurrencyCode: null },
+  ]);
+  assert.equal(incomplete.shippingPriceLabel, "–");
+  assert.equal(incomplete.shippingPriceMissingCount, 1);
+  assert.equal(incomplete.shippingPriceState, "missing");
+
+  const mixed = summarizeChildRouteMoney([
+    { currencyCode: "CAD", totalShippingPriceAmount: 5, totalShippingPriceCurrencyCode: "CAD" },
+    { currencyCode: "USD", totalShippingPriceAmount: 3, totalShippingPriceCurrencyCode: "USD" },
+  ]);
+  assert.equal(mixed.shippingPriceLabel, "–");
+  assert.equal(mixed.shippingPriceMissingCount, 0);
+  assert.equal(mixed.shippingPriceState, "mixed_currency");
 });
 
 const root = process.cwd();
@@ -615,11 +654,15 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.match(routeDetailSource, /const hasRouteTrackingDetail = Boolean\(trackingRoutePlanId\)/);
   assert.match(routeDetailSource, /const isTrackingMapView = hasRouteTrackingDetail && childDetailTab === "tracking"/);
   assert.doesNotMatch(routeDetailSource, /const routeMapViewKey =/);
-  assert.match(routeDetailSource, /role="tablist"/);
+  assert.match(routeDetailSource, /role="toolbar"/);
   assert.match(routeDetailSource, /handleChildDetailTabChange\("stops"\)/);
   assert.match(routeDetailSource, /handleChildDetailTabChange\("tracking"\)/);
-  assert.match(routeDetailSource, />Stops<\/span>/);
-  assert.match(routeDetailSource, />Tracking<\/span>/);
+  assert.match(routeDetailSource, /routes\.detail\.sections\.stops/);
+  assert.match(routeDetailSource, /routes\.detail\.sections\.inventory/);
+  assert.match(routeDetailSource, /routes\.detail\.sections\.tracking/);
+  assert.match(routeDetailSource, /routes\.detail\.sections\.addOrders/);
+  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}/);
+  assert.match(routeDetailSource, /onClick=\{handleAddOrderToCurrentRoute\}/);
   assert.match(routeDetailSource, /childDetailTab === "stops"/);
   assert.match(routeDetailSource, /childDetailTab === "tracking"/);
   assert.match(routeDetailSource, /ariaLabel=\{isTrackingMapView \? "Recorded GPS tracking map" : "Route stop location map"\}/);
@@ -641,4 +684,18 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div aria-label="Route detail sections"/);
   assert.match(routeDetailSource, /\) : isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
   assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isTrackingMapView \? \(/);
+});
+
+test("child detail keeps dispatch, original shipping, schedule validation, and execution evidence semantically separate", () => {
+  assert.match(routeDetailSource, /aria-label="Authoritative dispatch state"/);
+  assert.match(routeDetailSource, /routes\.detail\.dispatched/);
+  assert.match(routeDetailSource, /getRouteStartPlanDateError\(routeStartTimeDraft, routePlanDate\)/);
+  assert.match(routeDetailSource, /routes\.detail\.schedule\.planDateMismatch/);
+  assert.match(routeDetailSource, /totalShippingPriceAmount: numberOrUndefined\(stop\.totalShippingPriceAmount\)/);
+  assert.match(routeDetailSource, /routes\.detail\.originalShippingMissing/);
+  assert.match(routeDetailSource, /routes\.detail\.originalShippingMixed/);
+  assert.match(routeDetailSource, /routeExecutionEvidence\?\.start/);
+  assert.match(routeDetailSource, /routeExecutionEvidence\?\.completion/);
+  assert.match(routeDetailSource, /returnToDepotEvidence\?\.status/);
+  assert.doesNotMatch(routeDetailSource, /Actual driving time|Total working time|Payroll/);
 });

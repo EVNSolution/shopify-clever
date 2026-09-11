@@ -50,3 +50,12 @@ test("scheduled notice and ETA window labels follow admin language without chang
   assert.equal(translate("en", "notifications.variables.etaWindow"), "Estimated arrival window");
   assert.equal(translate("ko", "routes.scheduledNotice.reviewAction"), "배송 예정 알림 검토");
 });
+
+test("September route-detail contract copy is available in English and Korean", () => {
+  assert.equal(translate("en", "routes.detail.dispatched"), "Dispatched");
+  assert.equal(translate("ko", "routes.detail.dispatched"), "배차됨");
+  assert.match(translate("en", "routes.detail.originalShippingMissing", { count: 2 }), /2 order/);
+  assert.match(translate("ko", "routes.detail.schedule.planDateMismatch", { planDate: "2026-09-11", timeZone: "America/Toronto" }), /2026-09-11/);
+  assert.equal(translate("en", "routes.detail.tracking.return.UNCONFIRMED"), "Unconfirmed");
+  assert.equal(translate("ko", "orders.filters.serviceType.eveningDelivery"), "저녁 배송");
+});

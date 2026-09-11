@@ -112,14 +112,14 @@ test("Analytics is a table-first current-batch dashboard", () => {
   );
 });
 
-test("Orders and Routes remain first-pass complete surfaces without new tab-shell feature work", () => {
+test("Orders and Routes remain first-pass complete surfaces without redundant creation actions", () => {
   const ordersSource = readAppFile("app/routes/app.orders.jsx");
   const routesSource = readAppFile("app/routes/app.routes.jsx");
 
   assert.match(ordersSource, /<TabLayout\s+primaryExpanded=\{isMapWide\}/);
   assert.doesNotMatch(ordersSource, /title="Orders"/);
   assert.match(routesSource, /<h1 style=\{routesTitleStyle\}>\{translate\(language, "routes\.list\.title"\)\}<\/h1>/);
-  assert.match(routesSource, />\{translate\(language, "routes\.list\.create"\)\}<\/button>/);
+  assert.doesNotMatch(routesSource, />\{translate\(language, "routes\.list\.create"\)\}<\/button>/);
   assert.doesNotMatch(routesSource, /Filter routes|Optimize route|Assign driver|Schedule route/);
   assert.doesNotMatch(ordersSource, /Analytics|Workflows|Drivers|Future modules/);
 });

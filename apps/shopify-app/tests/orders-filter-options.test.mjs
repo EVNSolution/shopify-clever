@@ -62,3 +62,10 @@ test("filter menus receive the accessible labels their component consumes", () =
     assert.ok(source.includes(`ariaLabel={translate(language, "orders.filters.aria.${key}")}`));
   }
 });
+
+test("service type filter exposes regular and evening delivery as distinct choices", () => {
+  const source = readFileSync(new URL("../app/features/orders/orders-page.jsx", import.meta.url), "utf8");
+  assert.match(source, /orders\.filters\.serviceType\.delivery/);
+  assert.match(source, /orders\.filters\.serviceType\.eveningDelivery/);
+  assert.match(source, /value: "EVENING_DELIVERY"/);
+});

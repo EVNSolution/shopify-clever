@@ -154,7 +154,7 @@ test("route table links use child paths only for grouped routes", () => {
   ]);
 });
 
-test("ordinary presentation hides sibling navigation and exposes Add Empty without requiring membership", () => {
+test("ordinary presentation hides sibling navigation and keeps route actions separate from child sections", () => {
   const showSiblingNavigator = extractSiblingNavigatorCondition();
   const oneChildGroup = { id: "group-1", children: [{ routePlanId: "route-1" }] };
   const groupedRoute = { id: "route-1", routeGroupingChild: { groupingId: "group-1" } };
@@ -171,8 +171,11 @@ test("ordinary presentation hides sibling navigation and exposes Add Empty witho
   const routeActionsStart = routeDetailSource.indexOf('<div aria-label="Route actions"');
   const routeActionsEnd = routeDetailSource.indexOf('<div\n                  aria-label="Actions"', routeActionsStart);
   const routeActions = routeDetailSource.slice(routeActionsStart, routeActionsEnd);
-  assert.equal((routeActions.match(/\{routeGroupId \? \(/g) ?? []).length, 1);
+  assert.match(routeDetailSource, /aria-label="Child route detail sections" role="toolbar"/);
+  assert.match(routeDetailSource, /translate\(language, "routes\.detail\.sections\.addOrders"\)/);
+  assert.match(routeDetailSource, /aria-label="Child route detail sections"[\s\S]*onClick=\{handleAddOrderToCurrentRoute\}[\s\S]*routes\.detail\.sections\.addOrders/);
+  assert.doesNotMatch(routeActions, /\{routeGroupId \? \(/);
   assert.match(routeActions, /\{routeGroupId \|\| isOrdinaryRouteDetail \? \(/);
-  assert.match(routeActions, /onClick=\{handleAddOrderToCurrentRoute\}/);
+  assert.match(routeActions, /\{routeGroupId && !isMaterializedChildRouteDetail \? \(/);
   assert.match(routeActions, /onClick=\{handleAddEmptyRoute\}/);
 });
