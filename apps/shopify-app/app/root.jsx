@@ -19,6 +19,8 @@ export const links = () => [
 export const loader = ({ request }) => ({
   // eslint-disable-next-line no-undef
   shopifyApiKey: process.env.SHOPIFY_API_KEY || "",
+  // eslint-disable-next-line no-undef
+  shopifyAppUrl: process.env.SHOPIFY_APP_URL || "",
   loadAppBridge: shouldLoadShopifyAppBridge(request.url),
 });
 

@@ -28,7 +28,15 @@ function isAppRoute(pathname) {
   return pathname === "/app" || pathname.startsWith("/app/");
 }
 
-function getTrustedReloadUrl(url, context) {
+function getConfiguredAppOrigin(appOrigin, fallbackOrigin) {
+  try {
+    return new URL(appOrigin || fallbackOrigin).origin;
+  } catch {
+    return fallbackOrigin;
+  }
+}
+
+function getTrustedReloadUrl(url, context, appOrigin) {
   const reload = url.searchParams.get("shopify-reload");
   if (!reload) return null;
 
@@ -41,7 +49,7 @@ function getTrustedReloadUrl(url, context) {
 
   const targetContext = getStableEmbeddedContext(target);
   if (
-    target.origin !== url.origin ||
+    target.origin !== getConfiguredAppOrigin(appOrigin, url.origin) ||
     !isAppRoute(target.pathname) ||
     !targetContext ||
     targetContext.shop !== context.shop ||
@@ -53,7 +61,7 @@ function getTrustedReloadUrl(url, context) {
   return target;
 }
 
-export function getTrustedBounceRecoveryTarget(requestUrl) {
+export function getTrustedBounceRecoveryTarget(requestUrl, { appOrigin } = {}) {
   const url = requestUrl instanceof URL ? requestUrl : new URL(requestUrl);
   const context = getStableEmbeddedContext(url);
   const idToken = url.searchParams.get("id_token")?.trim();
@@ -62,7 +70,7 @@ export function getTrustedBounceRecoveryTarget(requestUrl) {
     return null;
   }
 
-  const target = getTrustedReloadUrl(url, context);
+  const target = getTrustedReloadUrl(url, context, appOrigin);
   if (
     !target ||
     target.searchParams.get("shopify-recovery") === "1"
@@ -80,7 +88,7 @@ export function getTrustedBounceRecoveryTarget(requestUrl) {
   return `${target.pathname}${target.search}${target.hash}`;
 }
 
-export function buildShopifyAdminReopenUrl(requestUrl, apiKey) {
+export function buildShopifyAdminReopenUrl(requestUrl, apiKey, { appOrigin } = {}) {
   const url = requestUrl instanceof URL ? requestUrl : new URL(requestUrl);
   const context = getStableEmbeddedContext(url);
   const normalizedApiKey = String(apiKey || "").trim();
@@ -89,7 +97,7 @@ export function buildShopifyAdminReopenUrl(requestUrl, apiKey) {
   const store = context.shop.slice(0, -".myshopify.com".length);
   const target = isAppRoute(url.pathname)
     ? new URL(url)
-    : getTrustedReloadUrl(url, context) || new URL("/app/orders", url.origin);
+    : getTrustedReloadUrl(url, context, appOrigin) || new URL("/app/orders", url.origin);
   for (const key of TRANSIENT_QUERY_KEYS) target.searchParams.delete(key);
   target.searchParams.delete("shopify-recovery");
   const reopen = new URL(
