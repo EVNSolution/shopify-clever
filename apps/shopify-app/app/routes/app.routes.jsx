@@ -53,25 +53,6 @@ const routesTitleStyle = {
   lineHeight: "28px",
 };
 
-const createRoutesButtonStyle = {
-  alignItems: "center",
-  background: "#303030",
-  border: "1px solid #303030",
-  borderRadius: "8px",
-  color: "#ffffff",
-  cursor: "pointer",
-  display: "inline-flex",
-  flex: "0 0 auto",
-  fontFamily: "inherit",
-  fontSize: "13px",
-  fontWeight: 650,
-  justifyContent: "center",
-  lineHeight: 1.2,
-  minHeight: "30px",
-  padding: "4px 12px",
-  whiteSpace: "nowrap",
-};
-
 const routesSummaryCardsStyle = {
   background: "#ffffff",
   border: "1px solid #d6d6d6",
@@ -785,10 +766,6 @@ export default function RoutesPage() {
     navigateRouteDetail(route);
   }
 
-  function handleCreateRoutesClick() {
-    navigate(withEmbeddedShopifyContext("/app/orders", searchParams));
-  }
-
   function openRouteGroupMarkerTooltip(event, route) {
     if (!route.groupAccentColor || !route.groupSummary) return;
 
@@ -862,7 +839,6 @@ export default function RoutesPage() {
                 disabled={routeDeleteDisabled}
                 onClick={handleDeleteSelectedRoutes}
               >{translate(language, routeDeleteFetcher.state !== "idle" ? "routes.list.deleting" : "routes.list.delete")}</button>
-              <button type="button" style={createRoutesButtonStyle} onClick={handleCreateRoutesClick}>{translate(language, "routes.list.create")}</button>
             </div>
           </div>
         </header>

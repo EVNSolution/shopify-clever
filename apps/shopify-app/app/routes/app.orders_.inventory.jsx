@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Link, PrefetchPageLinks, useLoaderData, useRevalidator } from "react-router";
+import { Link, PrefetchPageLinks, useLoaderData, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryOrderView } from "../features/delivery/inventories.server";
 import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
@@ -13,6 +13,8 @@ import {
 import { getServiceErrorNotice } from "../features/service-errors";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { logStructuredMetric } from "../features/telemetry/structured-telemetry.server";
+import { routePlanPath, withEmbeddedShopifyContext } from "../features/delivery/route-paths";
+import { translate } from "../i18n/i18n";
 
 export const meta = ({ data }) => [{ title: data?.inventory?.name ?? "Inventory" }];
 
@@ -714,8 +716,10 @@ function applyInventoryOrderPrintBreaks(root) {
 }
 
 export const loader = async ({ request }) => {
-  const inventoryId = new URL(request.url).searchParams.get("id");
-  const result = await fetchDeliveryInventoryOrderView(request, inventoryId);
+  const url = new URL(request.url);
+  const inventoryId = url.searchParams.get("id");
+  const routePlanId = url.searchParams.get("routePlanId");
+  const result = await fetchDeliveryInventoryOrderView(request, inventoryId, { routePlanId });
   const errors = result.errors ?? [];
   logInventoryDetailPayload(result);
   return {
@@ -723,6 +727,7 @@ export const loader = async ({ request }) => {
     generatedAt: new Date().toISOString(),
     inventory: result.inventory,
     needsSessionTokenRefresh: hasSessionTokenRefreshError(errors),
+    routePlanId,
   };
 };
 
@@ -982,7 +987,9 @@ function DateCellLabel({ label }) {
 }
 
 export default function InventoryDetailPage() {
-  const { errors, generatedAt, inventory, needsSessionTokenRefresh } = useLoaderData();
+  const { errors, generatedAt, inventory, needsSessionTokenRefresh, routePlanId } = useLoaderData();
+  const language = useRouteLoaderData("routes/app")?.language ?? "en";
+  const [searchParams] = useSearchParams();
   const shopify = useAppBridge();
   const revalidator = useRevalidator();
   const sessionTokenRefreshSubmittedRef = useRef(false);
@@ -999,6 +1006,14 @@ export default function InventoryDetailPage() {
   const historyItems = buildInventoryHistoryItems(inventory);
   const orderRouteMeta = buildInventoryOrderRouteMeta(inventory, matrix, orders);
   const orderViewRows = buildInventoryOrderViewRows(orders);
+  const backHref = withEmbeddedShopifyContext(
+    routePlanId ? routePlanPath(routePlanId) : "/app/orders?view=inventory",
+    searchParams,
+  );
+  const backLabel = translate(
+    language,
+    routePlanId ? "inventory.detail.backToRoute" : "inventory.detail.backToInventory",
+  );
   useEffect(() => {
     if (!needsSessionTokenRefresh) {
       sessionTokenRefreshSubmittedRef.current = false;
@@ -1060,8 +1075,8 @@ export default function InventoryDetailPage() {
           {notice ? <div role="alert" style={noticeStyle}>{notice}</div> : null}
           <div style={sectionStyle}>
             <div style={headerTopBarStyle}>
-              <Link className="inventory-detail-no-print" style={backLinkStyle} to="/app/orders?view=inventory">
-                ← Back to Inventory
+              <Link className="inventory-detail-no-print" style={backLinkStyle} to={backHref}>
+                ← {backLabel}
               </Link>
               <div style={headerActionStyle}>
                 <div className="inventory-detail-no-print" role="group" aria-label="Inventory detail view" style={viewToggleStyle}>

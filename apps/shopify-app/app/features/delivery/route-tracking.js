@@ -112,6 +112,49 @@ function normalizeTrackingProgress(progress) {
   };
 }
 
+function normalizeExecutionEvidenceEvent(event) {
+  if (!event || typeof event !== "object") return null;
+  return {
+    eventId: textOrNull(event.eventId),
+    latitude: event.latitude == null ? null : numberOrNull(event.latitude),
+    longitude: event.longitude == null ? null : numberOrNull(event.longitude),
+    occurredAt: textOrNull(event.occurredAt),
+    receivedAt: textOrNull(event.receivedAt),
+  };
+}
+
+function normalizeRouteExecutionEvidence(evidence) {
+  if (!evidence || typeof evidence !== "object") return null;
+  const returnStatus = textOrNull(evidence.returnToDepot?.status)?.toUpperCase();
+  const returnSource = textOrNull(evidence.returnToDepot?.source)?.toUpperCase();
+  const returnToDepot = evidence.returnToDepot && typeof evidence.returnToDepot === "object"
+    ? {
+        distanceToDepotMeters: evidence.returnToDepot.distanceToDepotMeters == null
+          ? null
+          : numberOrNull(evidence.returnToDepot.distanceToDepotMeters),
+        evidenceEventId: textOrNull(evidence.returnToDepot.evidenceEventId),
+        observedAt: textOrNull(evidence.returnToDepot.observedAt),
+        source: ["LOCATION_UPDATED", "ROUTE_COMPLETED", "NONE"].includes(returnSource) ? returnSource : "NONE",
+        status: ["CONFIRMED", "UNCONFIRMED", "UNAVAILABLE", "NOT_REQUIRED"].includes(returnStatus)
+          ? returnStatus
+          : "UNAVAILABLE",
+        thresholdMeters: evidence.returnToDepot.thresholdMeters == null
+          ? null
+          : numberOrNull(evidence.returnToDepot.thresholdMeters),
+      }
+    : null;
+  return {
+    completion: normalizeExecutionEvidenceEvent(evidence.completion),
+    firstPosition: normalizeTrackingPosition(evidence.firstPosition),
+    lastPosition: normalizeTrackingPosition(evidence.lastPosition),
+    returnToDepot,
+    routeEndMode: textOrNull(evidence.routeEndMode),
+    schemaVersion: textOrNull(evidence.schemaVersion),
+    start: normalizeExecutionEvidenceEvent(evidence.start),
+    timeSemantics: textOrNull(evidence.timeSemantics),
+  };
+}
+
 function getPositionTimestamp(position) {
   const timestamp = Date.parse(position?.occurredAt ?? position?.receivedAt ?? "");
   return Number.isFinite(timestamp) ? timestamp : 0;
@@ -142,6 +185,7 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
 
   return {
+    executionEvidence: normalizeRouteExecutionEvidence(snapshot?.executionEvidence),
     schemaVersion: textOrNull(snapshot?.schemaVersion) ?? "route_tracking.v1",
     routePlanId: textOrNull(snapshot?.routePlanId),
     policy: snapshot?.policy && typeof snapshot.policy === "object" ? { ...snapshot.policy } : null,
@@ -282,6 +326,7 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
     : incomingHistorySize > currentHistorySize ? incomingSnapshot : current;
   const mergedBase = normalizeRouteTrackingSnapshot({
     ...historyBase,
+    executionEvidence: incomingSnapshot.executionEvidence ?? current.executionEvidence,
     policy: incomingSnapshot.policy ?? current.policy,
     progress: mergeTrackingProgressSnapshot(current.progress, incomingSnapshot.progress),
     roadMatchedPath: getNewestRoadMatchedPath(current.roadMatchedPath, incomingSnapshot.roadMatchedPath),
@@ -884,6 +929,9 @@ function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
 }
 
 function getRouteTrackingCompletionTime(snapshot) {
+  const evidenceCompletion = snapshot?.executionEvidence?.completion;
+  const evidenceCompletionTime = Date.parse(evidenceCompletion?.occurredAt ?? evidenceCompletion?.receivedAt ?? "");
+  if (Number.isFinite(evidenceCompletionTime)) return evidenceCompletionTime;
   const latestEvent = snapshot?.progress?.latestEvent;
   if (textOrNull(latestEvent?.eventType)?.toUpperCase() !== "ROUTE_COMPLETED") return null;
 

@@ -6,6 +6,7 @@ import {
   buildRouteStartCalendarMonth,
   buildRouteStartDateTimeValue,
   buildRouteStartDraft,
+  getRouteStartPlanDateError,
   getRouteStartPickerSummary,
   getRouteStartTimezoneOptions,
   getRouteStartTimezoneSourceLabel,
@@ -85,4 +86,11 @@ test("route start save state requires both date and time unless clearing", () =>
   assert.equal(isRouteStartDraftSavable(buildRouteStartDraft("2026-07-16T12:30", "Asia/Seoul"), "2026-07-16T12:30", "Asia/Seoul"), false);
   assert.equal(isRouteStartDraftSavable(buildRouteStartDraft("2026-07-16T12:35", "Asia/Seoul"), "2026-07-16T12:30", "Asia/Seoul"), true);
   assert.equal(isRouteStartDraftSavable(buildRouteStartDraft("2026-07-16T12:30", "America/Toronto"), "2026-07-16T12:30", "Asia/Seoul"), true);
+});
+
+test("route start validation preserves the selected local date and reports plan-date mismatches", () => {
+  assert.equal(getRouteStartPlanDateError(buildRouteStartDraft("2026-09-11T17:30", "America/Toronto"), "2026-09-11"), null);
+  assert.equal(getRouteStartPlanDateError(buildRouteStartDraft("2026-09-12T00:30", "America/Toronto"), "2026-09-11"), "plan_date_mismatch");
+  assert.equal(getRouteStartPlanDateError(buildRouteStartDraft("2026-09-11T17:30", "America/Toronto"), null), null);
+  assert.equal(getRouteStartPlanDateError(buildRouteStartDraft("", "America/Toronto"), "2026-09-11"), null);
 });

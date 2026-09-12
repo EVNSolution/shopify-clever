@@ -6,6 +6,11 @@ import {
   isOrderRouteCreated,
 } from "../orders/order-filters.js";
 
+const DISPLAY_ORDER_COLLATOR = new Intl.Collator("en", {
+  numeric: true,
+  sensitivity: "base",
+});
+
 export function buildRouteAddOrderCandidates(orders) {
   return (Array.isArray(orders) ? orders : [])
     .filter((order) => {
@@ -48,6 +53,34 @@ export function filterRouteAddOrderCandidatesByDate(candidates, filter = {}) {
     if (lowerDate && orderDate < lowerDate) return false;
     return !upperDate || orderDate <= upperDate;
   });
+}
+
+export function filterAndSortRouteAddOrderCandidates(candidates, filter = {}) {
+  const query = normalizeOrderSearchQuery(filter.query);
+  return filterRouteAddOrderCandidatesByDate(candidates, filter)
+    .map((order, index) => ({ index, order }))
+    .filter(({ order }) => !query || normalizeOrderSearchQuery(order?.name).includes(query))
+    .sort((left, right) => (
+      DISPLAY_ORDER_COLLATOR.compare(text(right.order?.name) ?? "", text(left.order?.name) ?? "")
+      || left.index - right.index
+    ))
+    .map(({ order }) => order);
+}
+
+export function updateRouteAddOrderSelection(selectedOrderIds, visibleCandidates, checked) {
+  const selectedIds = Array.isArray(selectedOrderIds) ? selectedOrderIds : [];
+  const visibleOrderIds = new Set(
+    (Array.isArray(visibleCandidates) ? visibleCandidates : [])
+      .map((order) => text(order?.orderId))
+      .filter(Boolean),
+  );
+  return checked
+    ? [...new Set([...selectedIds, ...visibleOrderIds])]
+    : selectedIds.filter((orderId) => !visibleOrderIds.has(orderId));
+}
+
+function normalizeOrderSearchQuery(value) {
+  return (text(value) ?? "").toLocaleLowerCase("en").replace(/^#/, "");
 }
 
 function getOrderAddress(order) {

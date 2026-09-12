@@ -93,6 +93,43 @@ test("inventory helper fetches the dedicated order-view projection", async () =>
   assert.equal(fakeFetch.calls[0].init.method, "GET");
 });
 
+test("inventory helper scopes the order-view projection to a route when supplied", async () => {
+  const fakeFetch = makeFetch({ data: { inventory: { id: "inventory/1", linkedRoutes: [] } }, error: null });
+
+  const result = await fetchDeliveryInventoryOrderView(makeRequest(), "inventory/1", {
+    fetch: fakeFetch,
+    routePlanId: "route/1",
+    sessionToken: "session-token",
+  });
+
+  assert.deepEqual(result, { inventory: { id: "inventory/1", linkedRoutes: [] }, errors: [] });
+  assert.equal(
+    fakeFetch.calls[0].url,
+    "https://delivery.test/admin/inventories/inventory%2F1/order-view?routePlanId=route%2F1",
+  );
+});
+
+test("inventory helper surfaces INVENTORY_INVALID without falling back to group inventory", async () => {
+  const fakeFetch = makeFetch({
+    data: { inventory: { id: "inventory-1", orders: [{ id: "whole-group-order" }] } },
+    error: {
+      code: "INVENTORY_INVALID",
+      message: "The route does not belong to this inventory's route group.",
+    },
+  }, 400);
+
+  const result = await fetchDeliveryInventoryOrderView(makeRequest(), "inventory-1", {
+    fetch: fakeFetch,
+    routePlanId: "route-other-group",
+    sessionToken: "session-token",
+  });
+
+  assert.equal(result.inventory, null);
+  assert.equal(result.errors[0].code, "INVENTORY_INVALID");
+  assert.equal(result.errors[0].message, "The route does not belong to this inventory's route group.");
+  assert.equal(fakeFetch.calls.length, 1);
+});
+
 test("inventory helper deletes an encoded inventory", async () => {
   const fakeFetch = makeFetch({ data: { inventoryId: "inventory/1" }, error: null });
 

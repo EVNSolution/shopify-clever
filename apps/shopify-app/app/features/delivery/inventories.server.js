@@ -55,7 +55,8 @@ export async function fetchDeliveryInventoryOrderView(request, inventoryId, opti
     return { inventory: null, errors: [{ code: DELIVERY_INVENTORY_ID_MISSING_ERROR_CODE, message: "조회할 inventory ID가 없습니다." }] };
   }
 
-  const result = await deliveryApiRequest(request, `/admin/inventories/${safeInventoryId}/order-view`, {
+  const path = `/admin/inventories/${safeInventoryId}/order-view${buildQueryString({ routePlanId: options.routePlanId })}`;
+  const result = await deliveryApiRequest(request, path, {
     cacheKey: options.cacheKey,
     fetch: options.fetch,
     method: "GET",
@@ -63,7 +64,7 @@ export async function fetchDeliveryInventoryOrderView(request, inventoryId, opti
   });
 
   return {
-    inventory: result.data?.inventory ?? null,
+    inventory: result.errors.length === 0 ? result.data?.inventory ?? null : null,
     errors: result.errors,
   };
 }

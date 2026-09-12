@@ -740,7 +740,7 @@ function orderMatchesServiceType(order, serviceTypeFilter) {
   const orderServiceType = normalizeServiceType(order?.serviceType);
 
   if (normalizedFilter === "PICKUP") return orderServiceType === "PICKUP";
-  if (normalizedFilter === "DELIVERY") return orderServiceType !== "" && orderServiceType !== "PICKUP";
+  if (normalizedFilter === "DELIVERY") return orderServiceType === "DELIVERY";
 
   return orderServiceType === normalizedFilter;
 }

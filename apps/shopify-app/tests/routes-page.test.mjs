@@ -267,7 +267,7 @@ test("Routes page renders a tab-consistent title header above the route table wi
 });
 
 test("Routes page adds top summary cards and explicit route actions", () => {
-  assert.match(routesPageSource, /const createRoutesButtonStyle = \{/);
+  assert.doesNotMatch(routesPageSource, /createRoutesButtonStyle|handleCreateRoutesClick|routes\.list\.create/);
   assert.match(routesPageSource, /const routesSummaryCardsStyle = \{/);
   assert.match(routesPageSource, /const routesSummaryCardStyle = \{/);
   assert.match(routesPageSource, /const routesSummaryLabelStyle = \{/);
@@ -282,9 +282,6 @@ test("Routes page adds top summary cards and explicit route actions", () => {
   assert.match(routesPageSource, /labelKey: "routes\.summary\.attempted"/);
   assert.match(routesPageSource, /labelKey: "routes\.summary\.driveTime"/);
   assert.match(routesPageSource, /labelKey: "routes\.summary\.distance"/);
-  assert.match(routesPageSource, /function handleCreateRoutesClick\(\) \{/);
-  assert.match(routesPageSource, /navigate\(withEmbeddedShopifyContext\("\/app\/orders", searchParams\)\)/);
-  assert.match(routesPageSource, /<button type="button" style=\{createRoutesButtonStyle\} onClick=\{handleCreateRoutesClick\}>\{translate\(language, "routes\.list\.create"\)\}<\/button>/);
   assert.doesNotMatch(routesPageSource, /Update all routes/);
   assert.match(routesPageSource, /<section aria-label="Routes summary" style=\{routesSummaryCardsStyle\}>/);
   assert.match(routesPageSource, /routesSummary\.map\(\(summaryItem\) =>/);
@@ -609,9 +606,10 @@ test("Route detail exposes inventory and delete header actions", () => {
   assert.doesNotMatch(routeDetailSource, /if \(childInventoryId \|\| !isRouteGroupDetail\) return childInventoryId/);
   assert.match(routeDetailSource, /childInventoryId \?\? textOrUndefined\(routeGroup\?\.linkedInventoryId \?\? routeGroup\?\.inventoryId\)/);
   assert.match(routeDetailSource, /routeGroup\?\.linkedInventoryId \?\? routeGroup\?\.inventoryId/);
-  assert.match(routeDetailSource, /const inventoryDetailHref = linkedInventoryId \? `\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(linkedInventoryId\)\}` : null/);
+  assert.match(routeDetailSource, /`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(linkedInventoryId\)\}\$\{effectiveRoutePlan\?\.id \? `&routePlanId=\$\{encodeURIComponent\(effectiveRoutePlan\.id\)\}` : ""\}`/);
   assert.match(routeDetailSource, /disabled=\{!inventoryDetailHref\}/);
-  assert.match(routeDetailSource, /View inventory/);
+  assert.match(routeDetailSource, /routes\.detail\.inventory\.view/);
+  assert.match(routeDetailSource, /routes\.detail\.inventory\.unavailable/);
   assert.match(routeDetailSource, /if \(inventoryDetailHref\) requestRouteNavigation\(inventoryDetailHref\)/);
   assert.match(routeDetailSource, /Delete \$\{routeDetailTitle\} on the next global Save\?/);
   assert.match(routeDetailSource, /formData\.set\("_intent", "deleteRoute"\)/);
@@ -1530,7 +1528,11 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /aria-expanded=\{isRouteActionsMenuOpen\}[\s\S]*>Actions<\/button>/);
   assert.match(routeDetailSource, /aria-label="Route action menu"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Stop actions<\//);
-  assert.match(routeDetailSource, /filterRouteAddOrderCandidatesByDate\(availableAddOrderCandidates, \{/);
+  assert.match(routeDetailSource, /filterAndSortRouteAddOrderCandidates\(availableAddOrderCandidates, \{[\s\S]*query: addOrderSearchQuery/);
+  assert.match(routeDetailSource, /type="search"[\s\S]*value=\{addOrderSearchQuery\}/);
+  assert.match(routeDetailSource, /routes\.addOrder\.search\.placeholder/);
+  assert.match(routeDetailSource, /routes\.addOrder\.search\.clear/);
+  assert.match(routeDetailSource, /updateRouteAddOrderSelection\([\s\S]*filteredAddOrderCandidates/);
   assert.match(routeDetailSource, /aria-label="Date field"[\s\S]*value="deliveryDate"[\s\S]*Delivery date[\s\S]*value="orderDate"[\s\S]*Order date/);
   assert.match(routeDetailSource, /aria-label="Date selection"[\s\S]*value="all"[\s\S]*All[\s\S]*value="single"[\s\S]*Specific date[\s\S]*value="range"[\s\S]*Date range/);
   assert.match(routeDetailSource, /aria-label="Selected date"[\s\S]*type="date"/);
@@ -1539,7 +1541,8 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /filteredAddOrderCandidates\.map\(\(order\) =>/);
   assert.match(routeDetailSource, /submitRouteGroupAction\("loadAddOrderCandidates"\)/);
   assert.match(routeDetailSource, /accessibilityLabel="Loading available orders"[\s\S]*size="base"/);
-  assert.match(routeDetailSource, /No orders match the selected date filter\./);
+  assert.match(routeDetailSource, /routes\.addOrder\.search\.empty/);
+  assert.match(routeDetailSource, /routes\.addOrder\.date\.empty/);
   assert.match(routeDetailSource, /routeActionNotice \? \([\s\S]*aria-label=\{routeActionNotice\.heading\}[\s\S]*aria-modal="true"[\s\S]*role="dialog"/);
   assert.doesNotMatch(routeDetailSource, /shopify\.modal\.show\("no-add-orders-modal"\)/);
   assert.doesNotMatch(routeDetailSource, /<s-modal id="no-add-orders-modal"/);
@@ -1557,7 +1560,7 @@ test("child detail supports adding and reversing stops without refreshing over a
 test("child detail renders note disclosure and route totals", () => {
   assert.match(routeDetailSource, /type === "note"/);
   assert.match(routeDetailSource, /Total drive time:/);
-  assert.match(routeDetailSource, /Total shipping price:/);
+  assert.match(routeDetailSource, /routes\.detail\.originalShipping/);
   assert.match(routeDetailSource, /Total price:/);
 });
 

@@ -25,7 +25,10 @@ import {
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
-import { filterRouteAddOrderCandidatesByDate } from "../features/delivery/route-add-order-candidates";
+import {
+  filterAndSortRouteAddOrderCandidates,
+  updateRouteAddOrderSelection,
+} from "../features/delivery/route-add-order-candidates";
 import { CustomStopDialog } from "../features/delivery/custom-stop-dialog";
 import {
   createCustomStopDraft,
@@ -48,6 +51,7 @@ import {
   RouteStartTimePicker,
   buildRouteStartDateTimeValue,
   buildRouteStartDraft,
+  getRouteStartPlanDateError,
   isRouteStartDraftSavable,
 } from "../features/delivery/route-start-time-picker";
 import {
@@ -324,6 +328,12 @@ const routeStatusBadgeStyle = {
   fontWeight: 650,
   lineHeight: 1.2,
   padding: "4px 9px",
+};
+
+const routeDispatchedBadgeStyle = {
+  ...routeStatusBadgeStyle,
+  background: "#e0f0ff",
+  color: "#084b83",
 };
 
 const routeDetailBackButtonStyle = {
@@ -2245,6 +2255,71 @@ function formatTrackingTimestamp(value, ianaTimezone) {
   }
 }
 
+function isRouteDispatched(routePlan, dispatchResult) {
+  const status = textOrUndefined(routePlan?.status)?.toUpperCase().replace(/[\s-]+/g, "_");
+  const dispatchMatchesRoute = textOrUndefined(dispatchResult?.routePlanId) === textOrUndefined(routePlan?.id);
+  return status === "PUBLISHED"
+    || Boolean(textOrUndefined(
+      routePlan?.publishedAt
+        ?? routePlan?.dispatchedAt
+        ?? routePlan?.publication?.publishedAt
+        ?? routePlan?.routeGroupingChild?.publishedAt,
+    ))
+    || (dispatchMatchesRoute && Boolean(textOrUndefined(dispatchResult?.publishedAt)));
+}
+
+function getOriginalShippingTotalLabel(moneySummary, language) {
+  if (moneySummary.shippingPriceState === "complete") return moneySummary.shippingPriceLabel;
+  if (moneySummary.shippingPriceState === "mixed_currency") {
+    return translate(language, "routes.detail.originalShippingMixed");
+  }
+  return translate(language, "routes.detail.originalShippingMissing", {
+    count: moneySummary.shippingPriceMissingCount,
+  });
+}
+
+function getLocalizedRouteErrorMessage(error, language, context = {}) {
+  const message = textOrUndefined(error?.message) ?? translate(language, "routes.detail.errors.unavailable");
+  if (error?.code !== "ROUTE_GROUPING_INVALID") return message;
+  if (message.includes("scheduledStartTimeZone must be a valid IANA timezone")) {
+    return translate(language, "routes.detail.schedule.invalidTimezone");
+  }
+  if (
+    message.includes("scheduledStartAt must include date, time, and timezone")
+    || message.includes("scheduledStartAt must be a valid instant")
+  ) {
+    return translate(language, "routes.detail.schedule.incomplete");
+  }
+  if (message.includes("scheduledStartAt must use the route group plan date")) {
+    return translate(language, "routes.detail.schedule.planDateMismatch", {
+      planDate: context.planDate ?? translate(language, "routes.detail.schedule.planDateFallback"),
+      timeZone: context.timeZone ?? translate(language, "routes.detail.schedule.timeZoneFallback"),
+    });
+  }
+  return message;
+}
+
+function getExecutionEvidenceEventLabel(event, ianaTimezone, language) {
+  const timestamp = event?.occurredAt ?? event?.receivedAt;
+  return timestamp
+    ? formatTrackingTimestamp(timestamp, ianaTimezone)
+    : translate(language, "routes.detail.tracking.evidenceUnavailable");
+}
+
+function getReturnToDepotEvidenceTitle(evidence, ianaTimezone, language) {
+  if (!evidence) return undefined;
+  return [
+    textOrUndefined(evidence.source),
+    evidence.observedAt ? formatTrackingTimestamp(evidence.observedAt, ianaTimezone) : null,
+    numberOrUndefined(evidence.distanceToDepotMeters) != null
+      ? translate(language, "routes.detail.tracking.distanceFromDepot", {
+          distance: Math.round(Number(evidence.distanceToDepotMeters)),
+          threshold: Math.round(Number(evidence.thresholdMeters ?? 0)),
+        })
+      : null,
+  ].filter(Boolean).join(" · ") || undefined;
+}
+
 function formatTrackingElapsedSeconds(value, now = Date.now()) {
   const date = value ? new Date(value) : null;
   if (!date || Number.isNaN(date.getTime())) return ROUTE_EMPTY_LABEL;
@@ -2618,6 +2693,8 @@ function buildRouteStops(stops) {
       priority: numberOrUndefined(stop.priority) ?? 0,
       serviceType: textOrUndefined(stop.serviceType ?? stop.method),
       shippingPriceAmount: numberOrUndefined(stop.shippingPriceAmount),
+      totalShippingPriceAmount: numberOrUndefined(stop.totalShippingPriceAmount),
+      totalShippingPriceCurrencyCode: textOrUndefined(stop.totalShippingPriceCurrencyCode),
       timeWindowEnd: textOrUndefined(stop.timeWindowEnd),
       timeWindowStart: textOrUndefined(stop.timeWindowStart),
       totalPriceAmount: numberOrUndefined(stop.totalPriceAmount),
@@ -3550,7 +3627,16 @@ export default function RouteDetailPage() {
     return (routeGroup?.children ?? []).find((child) => getRouteGroupChildRoutePlanId(child) === routePlanId) ?? null;
   }, [effectiveRoutePlan?.id, routeGroup]);
   const linkedInventoryId = getLinkedInventoryId(effectiveRoutePlan, routeGroup, currentRouteGroupChild, isRouteGroupDetail);
-  const inventoryDetailHref = linkedInventoryId ? `/app/orders/inventory?id=${encodeURIComponent(linkedInventoryId)}` : null;
+  const inventoryDetailHref = linkedInventoryId
+    ? `/app/orders/inventory?id=${encodeURIComponent(linkedInventoryId)}${effectiveRoutePlan?.id ? `&routePlanId=${encodeURIComponent(effectiveRoutePlan.id)}` : ""}`
+    : null;
+  const routePlanDate = textOrUndefined(
+    routeGroup?.planDate
+      ?? effectiveRoutePlan?.routeScope?.deliveryDate
+      ?? effectiveRoutePlan?.deliveryDate
+      ?? effectiveRoutePlan?.planDate,
+  );
+  const routeDispatched = isRouteDispatched(effectiveRoutePlan, routeActionFetcher.data?.dispatch);
   const defaultRouteLineColor = isOrdinaryRouteDetail
     ? MAP_MARKER_PALETTE.plannedOrder.color
     : normalizeRouteColor(currentRouteGroupChild?.color) ?? MAP_MARKER_PALETTE.plannedOrder.color;
@@ -3676,6 +3762,7 @@ export default function RouteDetailPage() {
   const [addOrderDateMode, setAddOrderDateMode] = useState("all");
   const [addOrderDateStart, setAddOrderDateStart] = useState("");
   const [addOrderDateEnd, setAddOrderDateEnd] = useState("");
+  const [addOrderSearchQuery, setAddOrderSearchQuery] = useState("");
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
   const [isCustomerEmailDialogOpen, setIsCustomerEmailDialogOpen] = useState(false);
@@ -3941,13 +4028,14 @@ export default function RouteDetailPage() {
   const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
   const selectedAddOrderIdSet = useMemo(() => new Set(selectedAddOrderIds), [selectedAddOrderIds]);
   const filteredAddOrderCandidates = useMemo(
-    () => filterRouteAddOrderCandidatesByDate(availableAddOrderCandidates, {
+    () => filterAndSortRouteAddOrderCandidates(availableAddOrderCandidates, {
       endDate: addOrderDateEnd,
       field: addOrderDateField,
       mode: addOrderDateMode,
+      query: addOrderSearchQuery,
       startDate: addOrderDateStart,
     }),
-    [availableAddOrderCandidates, addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart],
+    [addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart, addOrderSearchQuery, availableAddOrderCandidates],
   );
   const allAddOrderCandidatesSelected = filteredAddOrderCandidates.length > 0
     && filteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
@@ -3969,6 +4057,8 @@ export default function RouteDetailPage() {
       : routeTrackingPresentation.connectionLabel;
   const routeTrackingPolicy = displayedRouteTrackingSnapshot?.policy;
   const routeTrackingProgress = displayedRouteTrackingSnapshot?.progress;
+  const routeExecutionEvidence = displayedRouteTrackingSnapshot?.executionEvidence;
+  const returnToDepotEvidence = routeExecutionEvidence?.returnToDepot;
   const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
   const latestTrackingOccurredAt = latestTrackingPosition?.occurredAt ?? latestTrackingPosition?.receivedAt;
   const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? null;
@@ -4120,6 +4210,12 @@ export default function RouteDetailPage() {
     ...(routeActionFetcher.data?.errors ?? []),
     ...(errors ?? []),
   ];
+  const visibleErrorMessage = visibleErrors[0]
+    ? getLocalizedRouteErrorMessage(visibleErrors[0], language, {
+        planDate: routePlanDate,
+        timeZone: routeStartTimeDraft.timezone || routeStartTimeZone,
+      })
+    : null;
   const routePathColor = softenRouteColor(routeLineColor);
   const savedRouteGeometryRows = routeGeometryRows;
   const savedRouteStopPoints = routeGeometryStopPoints;
@@ -4539,7 +4635,14 @@ export default function RouteDetailPage() {
       ? null
       : storeLocalDateTimeToIso(routeStartDateTimeDraftValue, routeStartTimeDraft.timezone || ianaTimezone);
     if (routeStartDateTimeDraftValue !== "" && scheduledStartAt === null) {
-      setRouteGroupClientError("출발 날짜와 시간을 모두 선택해주세요.");
+      setRouteGroupClientError(translate(language, "routes.detail.schedule.incomplete"));
+      return;
+    }
+    if (getRouteStartPlanDateError(routeStartTimeDraft, routePlanDate)) {
+      setRouteGroupClientError(translate(language, "routes.detail.schedule.planDateMismatch", {
+        planDate: routePlanDate,
+        timeZone: routeStartTimeDraft.timezone || ianaTimezone,
+      }));
       return;
     }
 
@@ -5553,6 +5656,7 @@ export default function RouteDetailPage() {
     setAddOrderDateMode("all");
     setAddOrderDateStart("");
     setAddOrderDateEnd("");
+    setAddOrderSearchQuery("");
     setAddStopMode(null);
     setAddStopTargetRoutePlanId(isRouteGroupDetail ? "" : effectiveRoutePlan?.id ?? "");
     setCustomStopDraft(createCustomStopDraft());
@@ -5610,10 +5714,11 @@ export default function RouteDetailPage() {
   };
 
   const handleToggleAllAddOrders = (checked) => {
-    const visibleOrderIds = new Set(filteredAddOrderCandidates.map((order) => order.orderId));
-    setSelectedAddOrderIds((orderIds) => checked
-      ? [...new Set([...orderIds, ...visibleOrderIds])]
-      : orderIds.filter((orderId) => !visibleOrderIds.has(orderId)));
+    setSelectedAddOrderIds((orderIds) => updateRouteAddOrderSelection(
+      orderIds,
+      filteredAddOrderCandidates,
+      checked,
+    ));
   };
 
   const handleAddSelectedOrders = () => {
@@ -6865,13 +6970,15 @@ export default function RouteDetailPage() {
                       onClick={openCustomerEmailDialog}
                     />
                   ) : null}
-                  <RouteActionIconButton
-                    icon="inventory"
-                    onClick={handleViewInventory}
-                    label="View inventory"
-                    description={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
-                    disabled={!inventoryDetailHref}
-                  />
+                  {!isMaterializedChildRouteDetail ? (
+                    <RouteActionIconButton
+                      icon="inventory"
+                      onClick={handleViewInventory}
+                      label={translate(language, "routes.detail.inventory.view")}
+                      description={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
+                      disabled={!inventoryDetailHref}
+                    />
+                  ) : null}
                   <RouteActionIconButton
                     icon="delete"
                     label={deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
@@ -7001,6 +7108,11 @@ export default function RouteDetailPage() {
                 {!isRouteGroupDetail ? <span style={routeStatusBadgeStyle}>
                   {isMaterializedChildRouteDetail ? formatRouteStatus(routeExecutionStatus) : routeDetail.status}
                 </span> : null}
+                {!isRouteGroupDetail && routeDispatched ? (
+                  <span aria-label={translate(language, "routes.detail.dispatchedAccessibilityLabel")} style={routeDispatchedBadgeStyle}>
+                    {translate(language, "routes.detail.dispatched")}
+                  </span>
+                ) : null}
                 {!isMaterializedChildRouteDetail && !isRouteGroupDetail ? (
                   <div aria-label="Route summary" className="route-overview-summary">
                     {renderRouteHeaderMetric("Orders", routeDetail.orders)}
@@ -7016,8 +7128,8 @@ export default function RouteDetailPage() {
           </div>
         </header>
 
-        {visibleErrors.length > 0 ? (
-          <div style={routeDetailErrorStyle}>{visibleErrors[0].message ?? "Route data could not be fully loaded."}</div>
+        {visibleErrorMessage ? (
+          <div style={routeDetailErrorStyle}>{visibleErrorMessage}</div>
         ) : null}
 
         {routeLocationDiagnosticSummary.affectedCount > 0 ? (
@@ -7034,31 +7146,52 @@ export default function RouteDetailPage() {
 
         <section style={routesDetailCardStyle}>
           {hasRouteTrackingDetail ? (
-            <div aria-label="Route detail sections" role="tablist" style={routeChildTabsStyle}>
+            <div aria-label={translate(language, "routes.detail.sections.accessibilityLabel")} role="toolbar" style={routeChildTabsStyle}>
               <button
-                aria-selected={childDetailTab === "stops"}
+                aria-pressed={childDetailTab === "stops"}
                 onClick={() => handleChildDetailTabChange("stops")}
-                role="tab"
                 style={{
                   ...routeChildTabStyle,
                   ...(childDetailTab === "stops" ? routeChildTabActiveStyle : null),
                 }}
                 type="button"
               >
-                <span>Stops</span>
+                <span>{translate(language, "routes.detail.sections.stops")}</span>
                 <span style={routeChildTabCountStyle}>{childRouteOrderRows.length}</span>
               </button>
               <button
-                aria-selected={childDetailTab === "tracking"}
+                disabled={!inventoryDetailHref}
+                onClick={handleViewInventory}
+                style={{
+                  ...routeChildTabStyle,
+                  ...(!inventoryDetailHref ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                }}
+                title={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
+                type="button"
+              >
+                <span>{translate(language, "routes.detail.sections.inventory")}</span>
+              </button>
+              <button
+                aria-pressed={childDetailTab === "tracking"}
                 onClick={() => handleChildDetailTabChange("tracking")}
-                role="tab"
                 style={{
                   ...routeChildTabStyle,
                   ...(childDetailTab === "tracking" ? routeChildTabActiveStyle : null),
                 }}
                 type="button"
               >
-                <span>Tracking</span>
+                <span>{translate(language, "routes.detail.sections.tracking")}</span>
+              </button>
+              <button
+                disabled={routeGroupActionBusy}
+                onClick={handleAddOrderToCurrentRoute}
+                style={{
+                  ...routeChildTabStyle,
+                  ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                }}
+                type="button"
+              >
+                <span>{translate(language, "routes.detail.sections.addOrders")}</span>
               </button>
             </div>
           ) : null}
@@ -7248,7 +7381,7 @@ export default function RouteDetailPage() {
                 <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
               </section>
               <div aria-label="Route actions" style={routeActionColumnStyle}>
-                {routeGroupId ? (
+                {routeGroupId && !isMaterializedChildRouteDetail ? (
                   <button
                     disabled={routeGroupActionBusy}
                     onClick={handleAddOrderToCurrentRoute}
@@ -7505,7 +7638,9 @@ export default function RouteDetailPage() {
                 }}
               >
                 <span>Total drive time: {routeTotalDriveTime} ({routeTotalDistance})</span>
-                <span>Total shipping price: {childRouteMoney.shippingPriceLabel}</span>
+                <span>
+                  {translate(language, "routes.detail.originalShipping")}: {getOriginalShippingTotalLabel(childRouteMoney, language)}
+                </span>
                 <span>Total price: {childRouteMoney.totalPriceLabel}</span>
               </div>
             </div>
@@ -7552,6 +7687,27 @@ export default function RouteDetailPage() {
                   <strong style={routeChildTrackingMetricValueStyle}>{
                     `${trackingDeliveredCount} / ${childRouteOrderRows.length} delivered`
                   }</strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.startEvent")}</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>
+                    {getExecutionEvidenceEventLabel(routeExecutionEvidence?.start, ianaTimezone, language)}
+                  </strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.completionEvent")}</span>
+                  <strong style={routeChildTrackingMetricValueStyle}>
+                    {getExecutionEvidenceEventLabel(routeExecutionEvidence?.completion, ianaTimezone, language)}
+                  </strong>
+                </div>
+                <div style={routeChildTrackingMetricStyle}>
+                  <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.returnToDepot")}</span>
+                  <strong
+                    style={routeChildTrackingMetricValueStyle}
+                    title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
+                  >
+                    {translate(language, `routes.detail.tracking.return.${returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}
+                  </strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
                   <span style={routeChildTrackingMetricLabelStyle}>GPS records</span>
@@ -8541,6 +8697,27 @@ export default function RouteDetailPage() {
                     </label>
                   ) : null}
                   <div style={routeAddOrderFiltersStyle}>
+                    <label style={{ ...routeAddOrderFilterFieldStyle, minWidth: "220px" }}>
+                      <span style={routeAddOrderFilterLabelStyle}>{translate(language, "routes.addOrder.search.label")}</span>
+                      <span style={{ alignItems: "center", display: "flex", gap: "6px" }}>
+                        <input
+                          aria-label={translate(language, "routes.addOrder.search.label")}
+                          onChange={(event) => setAddOrderSearchQuery(event.currentTarget.value)}
+                          placeholder={translate(language, "routes.addOrder.search.placeholder")}
+                          style={{ ...routeLineEditorInputStyle, flex: 1, minWidth: 0 }}
+                          type="search"
+                          value={addOrderSearchQuery}
+                        />
+                        {addOrderSearchQuery.trim() ? (
+                          <button
+                            aria-label={translate(language, "routes.addOrder.search.clear")}
+                            onClick={() => setAddOrderSearchQuery("")}
+                            style={routeActionButtonStyle}
+                            type="button"
+                          >{translate(language, "routes.addOrder.search.clear")}</button>
+                        ) : null}
+                      </span>
+                    </label>
                     <label style={routeAddOrderFilterFieldStyle}>
                       <span style={routeAddOrderFilterLabelStyle}>Date field</span>
                       <select
@@ -8667,7 +8844,14 @@ export default function RouteDetailPage() {
                     </tbody>
                   </table>
                 ) : (
-                  <div style={routeAddOrderEmptyStyle}>No orders match the selected date filter.</div>
+                  <div style={routeAddOrderEmptyStyle}>
+                    {translate(
+                      language,
+                      addOrderSearchQuery.trim()
+                        ? "routes.addOrder.search.empty"
+                        : "routes.addOrder.date.empty",
+                    )}
+                  </div>
                 )}
               </div>
               <div style={routeLineEditorActionsStyle}>

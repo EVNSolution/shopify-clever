@@ -2276,9 +2276,9 @@ test("Shopify order mapping reads only the Customer note and keeps coordinate me
 });
 
 
-test("Orders page keeps inventory browsing and deletion as an Orders subview", () => {
+test("Orders page keeps inventory browsing and deletion without a redundant local tab strip", () => {
   assert.match(ordersPageSource, /fetchDeliveryInventories/);
-  assert.match(ordersPageSource, />Inventory<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /aria-label="Orders view tabs"|>Orders<\/button>|>Inventory<\/button>/);
   assert.match(ordersPageSource, /ordersLoaded: shouldLoadOrders/);
   assert.match(ordersPageSource, /if \(activeOrdersView === "orders" && !ordersLoaded\)/);
   assert.match(ordersPageSource, /aria-label="Inventory list"/);
@@ -2297,7 +2297,6 @@ test("Orders page keeps inventory browsing and deletion as an Orders subview", (
   assert.match(ordersPageSource, /const inventoryDeleteFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /formData\.set\("_intent", "deleteInventory"\)/);
   assert.match(ordersPageSource, /formData\.set\("inventoryIds", JSON\.stringify\(checkedInventoryIds\)\)/);
-  assert.match(ordersPageSource, /const ordersViewTabsRowStyle = \{[\s\S]*justifyContent:\s*"space-between"/);
   assert.match(ordersPageSource, /activeOrdersView === "inventory" \? \([\s\S]*>Delete<\/button>/);
   assert.doesNotMatch(ordersPageSource, /inventoryToolbarStyle/);
   assert.match(ordersPageSource, /className="route-table-row"[\s\S]*onClick=\{\(\) => openInventoryDetail\(inventory\.id\)\}/);
@@ -2308,15 +2307,8 @@ test("Orders page keeps inventory browsing and deletion as an Orders subview", (
   assert.doesNotMatch(ordersPageSource, /Inventory plan|Inventory dashboard|KPI|summary-card/i);
 });
 
-test("Orders inventory tabs avoid border shorthand style collisions", () => {
-  assert.match(
-    ordersPageSource,
-    /const ordersViewTabButtonStyle = \{[\s\S]*borderColor:\s*"#d4d4d4"[\s\S]*borderStyle:\s*"solid"[\s\S]*borderWidth:\s*"1px"/,
-  );
-  assert.doesNotMatch(
-    ordersPageSource,
-    /const ordersViewTabButtonStyle = \{[\s\S]*border:\s*"1px solid #d4d4d4"/,
-  );
+test("Orders removes the local view-tab styles with the redundant strip", () => {
+  assert.doesNotMatch(ordersPageSource, /ordersViewTabsRowStyle|ordersViewTabBarStyle|ordersViewTabButtonStyle|activeOrdersViewTabButtonStyle/);
 });
 
 test("Orders removes standalone inventory creation while keeping inventory browsing and deletion", () => {
@@ -2332,6 +2324,9 @@ test("Orders removes standalone inventory creation while keeping inventory brows
 
 test("Orders inventory detail shows a printable product matrix without delta", () => {
   assert.match(inventoryDetailSource, /fetchDeliveryInventoryOrderView/);
+  assert.match(inventoryDetailSource, /const routePlanId = url\.searchParams\.get\("routePlanId"\)/);
+  assert.match(inventoryDetailSource, /fetchDeliveryInventoryOrderView\(request, inventoryId, \{ routePlanId \}\)/);
+  assert.match(inventoryDetailSource, /routePlanId \? routePlanPath\(routePlanId\) : "\/app\/orders\?view=inventory"/);
   assert.match(inventoryDetailSource, /<PrefetchPageLinks page="\/app\/orders" \/>/);
   assert.match(inventoryDetailSource, /export const meta = \(\{ data \}\) => \[\{ title: data\?\.inventory\?\.name \?\? "Inventory" \}\]/);
   assert.match(inventoryDetailSource, /buildInventoryProductMatrix/);
@@ -2493,6 +2488,10 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.doesNotMatch(inventoryDetailSource, /borderTop: "2px solid #d4d4d4"/);
   assert.match(inventoryDetailSource, /const backLinkStyle = \{/);
   assert.match(inventoryDetailSource, /<Link[\s\S]*className="inventory-detail-no-print"[\s\S]*style=\{backLinkStyle\}/);
+  assert.match(inventoryDetailSource, /useRouteLoaderData\("routes\/app"\)\?\.language/);
+  assert.match(inventoryDetailSource, /inventory\.detail\.backToRoute/);
+  assert.match(inventoryDetailSource, /inventory\.detail\.backToInventory/);
+  assert.doesNotMatch(inventoryDetailSource, /const backLabel = routePlanId \? "Back to Route" : "Back to Inventory"/);
   assert.doesNotMatch(inventoryDetailSource, /width:\s*"max-content"/);
   assert.match(inventoryDetailSource, /window\.print\(\)/);
   assert.match(inventoryDetailSource, /@media print/);
