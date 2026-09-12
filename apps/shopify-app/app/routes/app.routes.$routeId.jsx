@@ -25,7 +25,10 @@ import {
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
-import { filterRouteAddOrderCandidatesByDate } from "../features/delivery/route-add-order-candidates";
+import {
+  filterAndSortRouteAddOrderCandidates,
+  updateRouteAddOrderSelection,
+} from "../features/delivery/route-add-order-candidates";
 import { CustomStopDialog } from "../features/delivery/custom-stop-dialog";
 import {
   createCustomStopDraft,
@@ -3759,6 +3762,7 @@ export default function RouteDetailPage() {
   const [addOrderDateMode, setAddOrderDateMode] = useState("all");
   const [addOrderDateStart, setAddOrderDateStart] = useState("");
   const [addOrderDateEnd, setAddOrderDateEnd] = useState("");
+  const [addOrderSearchQuery, setAddOrderSearchQuery] = useState("");
   const [isRouteDraftExitDialogOpen, setIsRouteDraftExitDialogOpen] = useState(false);
   const [isSiblingRouteMenuOpen, setIsSiblingRouteMenuOpen] = useState(false);
   const [isCustomerEmailDialogOpen, setIsCustomerEmailDialogOpen] = useState(false);
@@ -4024,13 +4028,14 @@ export default function RouteDetailPage() {
   const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
   const selectedAddOrderIdSet = useMemo(() => new Set(selectedAddOrderIds), [selectedAddOrderIds]);
   const filteredAddOrderCandidates = useMemo(
-    () => filterRouteAddOrderCandidatesByDate(availableAddOrderCandidates, {
+    () => filterAndSortRouteAddOrderCandidates(availableAddOrderCandidates, {
       endDate: addOrderDateEnd,
       field: addOrderDateField,
       mode: addOrderDateMode,
+      query: addOrderSearchQuery,
       startDate: addOrderDateStart,
     }),
-    [availableAddOrderCandidates, addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart],
+    [addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart, addOrderSearchQuery, availableAddOrderCandidates],
   );
   const allAddOrderCandidatesSelected = filteredAddOrderCandidates.length > 0
     && filteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
@@ -5651,6 +5656,7 @@ export default function RouteDetailPage() {
     setAddOrderDateMode("all");
     setAddOrderDateStart("");
     setAddOrderDateEnd("");
+    setAddOrderSearchQuery("");
     setAddStopMode(null);
     setAddStopTargetRoutePlanId(isRouteGroupDetail ? "" : effectiveRoutePlan?.id ?? "");
     setCustomStopDraft(createCustomStopDraft());
@@ -5708,10 +5714,11 @@ export default function RouteDetailPage() {
   };
 
   const handleToggleAllAddOrders = (checked) => {
-    const visibleOrderIds = new Set(filteredAddOrderCandidates.map((order) => order.orderId));
-    setSelectedAddOrderIds((orderIds) => checked
-      ? [...new Set([...orderIds, ...visibleOrderIds])]
-      : orderIds.filter((orderId) => !visibleOrderIds.has(orderId)));
+    setSelectedAddOrderIds((orderIds) => updateRouteAddOrderSelection(
+      orderIds,
+      filteredAddOrderCandidates,
+      checked,
+    ));
   };
 
   const handleAddSelectedOrders = () => {
@@ -8690,6 +8697,27 @@ export default function RouteDetailPage() {
                     </label>
                   ) : null}
                   <div style={routeAddOrderFiltersStyle}>
+                    <label style={{ ...routeAddOrderFilterFieldStyle, minWidth: "220px" }}>
+                      <span style={routeAddOrderFilterLabelStyle}>{translate(language, "routes.addOrder.search.label")}</span>
+                      <span style={{ alignItems: "center", display: "flex", gap: "6px" }}>
+                        <input
+                          aria-label={translate(language, "routes.addOrder.search.label")}
+                          onChange={(event) => setAddOrderSearchQuery(event.currentTarget.value)}
+                          placeholder={translate(language, "routes.addOrder.search.placeholder")}
+                          style={{ ...routeLineEditorInputStyle, flex: 1, minWidth: 0 }}
+                          type="search"
+                          value={addOrderSearchQuery}
+                        />
+                        {addOrderSearchQuery.trim() ? (
+                          <button
+                            aria-label={translate(language, "routes.addOrder.search.clear")}
+                            onClick={() => setAddOrderSearchQuery("")}
+                            style={routeActionButtonStyle}
+                            type="button"
+                          >{translate(language, "routes.addOrder.search.clear")}</button>
+                        ) : null}
+                      </span>
+                    </label>
                     <label style={routeAddOrderFilterFieldStyle}>
                       <span style={routeAddOrderFilterLabelStyle}>Date field</span>
                       <select
@@ -8816,7 +8844,14 @@ export default function RouteDetailPage() {
                     </tbody>
                   </table>
                 ) : (
-                  <div style={routeAddOrderEmptyStyle}>No orders match the selected date filter.</div>
+                  <div style={routeAddOrderEmptyStyle}>
+                    {translate(
+                      language,
+                      addOrderSearchQuery.trim()
+                        ? "routes.addOrder.search.empty"
+                        : "routes.addOrder.date.empty",
+                    )}
+                  </div>
                 )}
               </div>
               <div style={routeLineEditorActionsStyle}>

@@ -2,9 +2,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import { translate } from "../app/i18n/i18n.js";
+
 import {
   buildRouteAddOrderCandidates,
+  filterAndSortRouteAddOrderCandidates,
   filterRouteAddOrderCandidatesByDate,
+  updateRouteAddOrderSelection,
 } from "../app/features/delivery/route-add-order-candidates.js";
 
 function candidate(overrides = {}) {
@@ -70,4 +74,75 @@ test("route add-order date filters stay unfiltered until their required date is 
 
   assert.deepEqual(filterRouteAddOrderCandidatesByDate(candidates, { mode: "single" }), candidates);
   assert.deepEqual(filterRouteAddOrderCandidatesByDate(candidates, { mode: "range" }), candidates);
+});
+
+test("route add-order search accepts number variants, whitespace, and partial prefixed names", () => {
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ name: "KFOOD-1496-CA", orderId: "opaque-a" }),
+    candidate({ name: "#1495", orderId: "opaque-b" }),
+    candidate({ name: "Special-order", orderId: "opaque-c" }),
+  ]);
+
+  assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: " 1496 " }).map((order) => order.orderId), ["opaque-a"]);
+  assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: "#1495" }).map((order) => order.orderId), ["opaque-b"]);
+  assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: "food-14" }).map((order) => order.orderId), ["opaque-a"]);
+  assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: "opaque-a" }), []);
+  assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: "missing" }), []);
+});
+
+test("route add-order candidates use stable natural descending display-name order", () => {
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ name: "#9", orderId: "order-9" }),
+    candidate({ name: "#100", orderId: "order-100" }),
+    candidate({ name: "#99", orderId: "order-99" }),
+    candidate({ name: "KFOOD-100", orderId: "prefixed-first" }),
+    candidate({ name: "KFOOD-100", orderId: "prefixed-second" }),
+  ]);
+
+  assert.deepEqual(
+    filterAndSortRouteAddOrderCandidates(candidates).map((order) => order.orderId),
+    ["prefixed-first", "prefixed-second", "order-100", "order-99", "order-9"],
+  );
+});
+
+test("route add-order query intersects date filters and empty query restores all eligible orders", () => {
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ name: "#1496", orderId: "matching-date", deliveryDate: "2026-08-06" }),
+    candidate({ name: "#14960", orderId: "other-date", deliveryDate: "2026-08-13" }),
+    candidate({ name: "#1497", orderId: "other-number", deliveryDate: "2026-08-06" }),
+  ]);
+
+  assert.deepEqual(
+    filterAndSortRouteAddOrderCandidates(candidates, {
+      field: "deliveryDate",
+      mode: "single",
+      query: "1496",
+      startDate: "2026-08-06",
+    }).map((order) => order.orderId),
+    ["matching-date"],
+  );
+  assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: "   " }).map((order) => order.orderId), [
+    "other-date",
+    "other-number",
+    "matching-date",
+  ]);
+});
+
+test("visible-only Select all retains selections outside the current filters", () => {
+  const visible = [{ orderId: "visible-1" }, { orderId: "visible-2" }];
+
+  assert.deepEqual(updateRouteAddOrderSelection(["hidden-1"], visible, true), ["hidden-1", "visible-1", "visible-2"]);
+  assert.deepEqual(
+    updateRouteAddOrderSelection(["hidden-1", "visible-1", "visible-2"], visible, false),
+    ["hidden-1"],
+  );
+});
+
+test("route add-order search labels and empty states are localized", () => {
+  assert.equal(translate("en", "routes.addOrder.search.label"), "Order number");
+  assert.equal(translate("ko", "routes.addOrder.search.label"), "주문번호");
+  assert.match(translate("en", "routes.addOrder.search.placeholder"), /#1496/);
+  assert.match(translate("ko", "routes.addOrder.search.placeholder"), /1496/);
+  assert.match(translate("en", "routes.addOrder.search.empty"), /No eligible orders/);
+  assert.match(translate("ko", "routes.addOrder.search.empty"), /추가 가능한 주문/);
 });
