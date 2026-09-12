@@ -1550,7 +1550,11 @@ const routeLineEditorDialogStyle = {
   boxSizing: "border-box",
   display: "grid",
   gap: "12px",
+  gridAutoRows: "max-content",
+  maxHeight: "calc(100dvh - 48px)",
   maxWidth: "calc(100vw - 48px)",
+  overflowY: "auto",
+  overscrollBehavior: "contain",
   padding: "16px",
   position: "relative",
   width: "320px",
@@ -1559,6 +1563,20 @@ const routeLineEditorDialogStyle = {
 
 const routeStartTimeDialogStyle = {
   width: "600px",
+};
+
+const routeStopEditorDialogStyle = {
+  ...routeLineEditorDialogStyle,
+  gridTemplateRows: "auto minmax(0, 1fr) auto",
+  overflow: "hidden",
+};
+
+const routeStopEditorBodyStyle = {
+  display: "grid",
+  gap: "12px",
+  minHeight: 0,
+  overflowY: "auto",
+  overscrollBehavior: "contain",
 };
 
 const customerEmailDialogStyle = {
@@ -8959,26 +8977,29 @@ export default function RouteDetailPage() {
             />
             <div
               aria-label="Edit stop"
+              aria-modal="true"
               role="dialog"
-              style={routeLineEditorDialogStyle}
+              style={routeStopEditorDialogStyle}
             >
               <h2 style={routeLineEditorTitleStyle}>Edit stop</h2>
-              <div style={childStopEditReadonlyStyle}>
-                <strong>{activeChildStopEditRow.order}</strong>
-                <span>Shopify order details are read-only. Edit only CLEVER delivery fields here.</span>
-              </div>
-              {CHILD_STOP_EDIT_FIELDS.map(([field, label]) => (
-                <div key={field} style={routeLineEditorFieldStyle}>
-                  <label htmlFor={`child-stop-${field}`} style={routeLineEditorLabelStyle}>{label}</label>
-                  <input
-                    id={`child-stop-${field}`}
-                    onChange={(event) => setChildStopEditDraft((draft) => ({ ...draft, [field]: event.target.value }))}
-                    style={routeLineEditorInputStyle}
-                    type={["latitude", "longitude", "serviceMinutes"].includes(field) ? "number" : "text"}
-                    value={childStopEditDraft[field] ?? ""}
-                  />
+              <div style={routeStopEditorBodyStyle}>
+                <div style={childStopEditReadonlyStyle}>
+                  <strong>{activeChildStopEditRow.order}</strong>
+                  <span>Shopify order details are read-only. Edit only CLEVER delivery fields here.</span>
                 </div>
-              ))}
+                {CHILD_STOP_EDIT_FIELDS.map(([field, label]) => (
+                  <div key={field} style={routeLineEditorFieldStyle}>
+                    <label htmlFor={`child-stop-${field}`} style={routeLineEditorLabelStyle}>{label}</label>
+                    <input
+                      id={`child-stop-${field}`}
+                      onChange={(event) => setChildStopEditDraft((draft) => ({ ...draft, [field]: event.target.value }))}
+                      style={routeLineEditorInputStyle}
+                      type={["latitude", "longitude", "serviceMinutes"].includes(field) ? "number" : "text"}
+                      value={childStopEditDraft[field] ?? ""}
+                    />
+                  </div>
+                ))}
+              </div>
               <div style={routeLineEditorActionsStyle}>
                 <button onClick={() => setActiveChildStopEditRow(null)} style={routeActionButtonStyle} type="button">Cancel</button>
                 <button

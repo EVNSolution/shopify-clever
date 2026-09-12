@@ -8,13 +8,22 @@ const dialogStyle = {
   boxSizing: "border-box",
   display: "grid",
   gap: "14px",
-  maxHeight: "calc(100vh - 48px)",
+  gridTemplateRows: "auto minmax(0, 1fr) auto",
+  maxHeight: "calc(100dvh - 48px)",
   maxWidth: "calc(100vw - 48px)",
-  overflow: "auto",
+  overflow: "hidden",
   padding: "18px",
   position: "relative",
   width: "760px",
   zIndex: 1,
+};
+
+const bodyStyle = {
+  display: "grid",
+  gap: "14px",
+  minHeight: 0,
+  overflowY: "auto",
+  overscrollBehavior: "contain",
 };
 
 const fieldGridStyle = {
@@ -109,43 +118,44 @@ export function CustomStopDialog({
         </p>
       </div>
 
-      <div role="note" style={infoStyle}>
-        Saved only in CLEVER for this store. No Shopify order is created or changed.
-      </div>
+      <div style={bodyStyle}>
+        <div role="note" style={infoStyle}>
+          Saved only in CLEVER for this store. No Shopify order is created or changed.
+        </div>
 
-      {targetRouteOptions.length > 0 ? (
-        <label style={fieldStyle}>
-          <span style={labelStyle}>Add to</span>
-          <select
-            disabled={busy || isEdit}
-            onChange={(event) => onTargetRouteChange(event.currentTarget.value)}
-            style={inputStyle}
-            value={targetRoutePlanId}
-          >
-            {targetRouteOptions.map((option) => (
-              <option disabled={option.disabled === true} key={option.value || "unassigned"} value={option.value}>{option.label}</option>
-            ))}
-          </select>
-        </label>
-      ) : null}
-
-      <div style={fieldGridStyle}>
-        {TEXT_FIELDS.map(([field, label, required]) => (
-          <label key={field} style={["address1", "address2"].includes(field) ? fullWidthFieldStyle : fieldStyle}>
-            <span style={labelStyle}>{label}{required ? " *" : ""}</span>
-            <input
-              aria-invalid={Boolean(fieldErrors[field])}
-              disabled={busy}
-              onChange={(event) => onChange(field, event.currentTarget.value)}
+        {targetRouteOptions.length > 0 ? (
+          <label style={fieldStyle}>
+            <span style={labelStyle}>Add to</span>
+            <select
+              disabled={busy || isEdit}
+              onChange={(event) => onTargetRouteChange(event.currentTarget.value)}
               style={inputStyle}
-              type={field === "email" ? "email" : "text"}
-              value={draft[field] ?? ""}
-            />
-            {fieldErrors[field] ? <p role="alert" style={errorStyle}>{fieldErrors[field]}</p> : null}
+              value={targetRoutePlanId}
+            >
+              {targetRouteOptions.map((option) => (
+                <option disabled={option.disabled === true} key={option.value || "unassigned"} value={option.value}>{option.label}</option>
+              ))}
+            </select>
           </label>
-        ))}
-      </div>
+        ) : null}
 
+        <div style={fieldGridStyle}>
+          {TEXT_FIELDS.map(([field, label, required]) => (
+            <label key={field} style={["address1", "address2"].includes(field) ? fullWidthFieldStyle : fieldStyle}>
+              <span style={labelStyle}>{label}{required ? " *" : ""}</span>
+              <input
+                aria-invalid={Boolean(fieldErrors[field])}
+                disabled={busy}
+                onChange={(event) => onChange(field, event.currentTarget.value)}
+                style={inputStyle}
+                type={field === "email" ? "email" : "text"}
+                value={draft[field] ?? ""}
+              />
+              {fieldErrors[field] ? <p role="alert" style={errorStyle}>{fieldErrors[field]}</p> : null}
+            </label>
+          ))}
+        </div>
+      </div>
       <div style={actionsStyle}>
         <button disabled={busy} onClick={onCancel} style={buttonStyle} type="button">Cancel</button>
         <button
