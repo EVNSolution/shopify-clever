@@ -3493,9 +3493,8 @@ export default function RouteDetailPage() {
     routeGroup,
     routePlan: effectiveRoutePlan,
   });
-  const trackingRoutePlanId = isMaterializedChildRouteDetail
-    ? textOrUndefined(effectiveRoutePlan?.id)
-    : null;
+  const trackingRoutePlanId = textOrUndefined(effectiveRoutePlan?.id);
+  const hasRouteTrackingDetail = Boolean(trackingRoutePlanId);
   const loaderRouteExecutionStatus = normalizeRouteExecutionStatus(effectiveRoutePlan?.status);
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan, routeGroup), [effectiveRoutePlan, routeGroup]);
   const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? (isRouteGroupDetail ? textOrUndefined(routeGroup?.name) : textOrUndefined(routeDetail.route)) ?? "Route";
@@ -3650,7 +3649,7 @@ export default function RouteDetailPage() {
   const [removedOrderIds, setRemovedOrderIds] = useState([]);
   const [pendingRouteDraftHref, setPendingRouteDraftHref] = useState(null);
   const [childDetailTab, setChildDetailTab] = useState("stops");
-  const isTrackingMapView = isMaterializedChildRouteDetail && childDetailTab === "tracking";
+  const isTrackingMapView = hasRouteTrackingDetail && childDetailTab === "tracking";
   const [routeStopsMapHeight, setRouteStopsMapHeight] = useState(ROUTE_STOPS_MAP_DEFAULT_HEIGHT);
   const [routeTrackingMapHeight, setRouteTrackingMapHeight] = useState(ROUTE_TRACKING_MAP_DEFAULT_HEIGHT);
   const activeRouteMapHeight = isTrackingMapView ? routeTrackingMapHeight : routeStopsMapHeight;
@@ -3926,13 +3925,13 @@ export default function RouteDetailPage() {
     [displayedRouteTrackingSnapshot?.stopArrivals],
   );
   const childRouteOrderRows = useMemo(
-    () => (isMaterializedChildRouteDetail
+    () => (hasRouteTrackingDetail
       ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], {
           actualArrivalByStopId,
           ianaTimezone,
         })
       : []),
-    [actualArrivalByStopId, currentTimelineRouteRow?.stops, ianaTimezone, isMaterializedChildRouteDetail],
+    [actualArrivalByStopId, currentTimelineRouteRow?.stops, hasRouteTrackingDetail, ianaTimezone],
   );
   const addStopTargetRouteOptions = useMemo(
     () => (isRouteGroupDetail ? buildAddStopTargetRouteOptions(routeGroupChildRows) : []),
@@ -7034,8 +7033,8 @@ export default function RouteDetailPage() {
         ) : null}
 
         <section style={routesDetailCardStyle}>
-          {isMaterializedChildRouteDetail ? (
-            <div aria-label="Child route detail sections" role="tablist" style={routeChildTabsStyle}>
+          {hasRouteTrackingDetail ? (
+            <div aria-label="Route detail sections" role="tablist" style={routeChildTabsStyle}>
               <button
                 aria-selected={childDetailTab === "stops"}
                 onClick={() => handleChildDetailTabChange("stops")}
@@ -7510,8 +7509,8 @@ export default function RouteDetailPage() {
                 <span>Total price: {childRouteMoney.totalPriceLabel}</span>
               </div>
             </div>
-          ) : isMaterializedChildRouteDetail && childDetailTab === "tracking" ? (
-            <section aria-label="Child route tracking" style={routeChildTrackingStyle}>
+          ) : isTrackingMapView ? (
+            <section aria-label="Route tracking" style={routeChildTrackingStyle}>
               <div style={routeChildTrackingSummaryStyle}>
                 <div style={routeChildTrackingMetricStyle}>
                   <span style={routeChildTrackingMetricLabelStyle}>
@@ -7747,7 +7746,7 @@ export default function RouteDetailPage() {
             </div>
           )}
 
-          {!isMaterializedChildRouteDetail ? (
+          {!isMaterializedChildRouteDetail && !isTrackingMapView ? (
             <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
               <>
                 <div className="route-group-detail-scroll" style={{ ...routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight }}>

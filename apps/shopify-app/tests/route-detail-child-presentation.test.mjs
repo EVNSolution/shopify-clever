@@ -600,10 +600,10 @@ test("child detail uses a flat reference-style title area and keeps inventory se
   assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
 });
 
-test("child detail tabs reuse one map while swapping Stops and Tracking layers", () => {
-  const tabsIndex = routeDetailSource.indexOf('aria-label="Child route detail sections"');
+test("route detail tabs keep tracking available for ordinary and grouped child routes", () => {
+  const tabsIndex = routeDetailSource.indexOf('aria-label="Route detail sections"');
   const timelineIndex = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
-  const trackingIndex = routeDetailSource.indexOf('aria-label="Child route tracking"');
+  const trackingIndex = routeDetailSource.indexOf('aria-label="Route tracking"');
   const tabHandlerStart = routeDetailSource.indexOf("const handleChildDetailTabChange = (nextTab) => {");
   const tabHandlerEnd = routeDetailSource.indexOf("const handleToggleRoutePolygonEditMode", tabHandlerStart);
   const tabHandlerSource = routeDetailSource.slice(tabHandlerStart, tabHandlerEnd);
@@ -611,7 +611,9 @@ test("child detail tabs reuse one map while swapping Stops and Tracking layers",
   assert.ok(tabsIndex >= 0 && tabsIndex < timelineIndex);
   assert.ok(tabsIndex < trackingIndex);
   assert.match(routeDetailSource, /const \[childDetailTab, setChildDetailTab\] = useState\("stops"\)/);
-  assert.match(routeDetailSource, /const isTrackingMapView = isMaterializedChildRouteDetail && childDetailTab === "tracking"/);
+  assert.match(routeDetailSource, /const trackingRoutePlanId = textOrUndefined\(effectiveRoutePlan\?\.id\)/);
+  assert.match(routeDetailSource, /const hasRouteTrackingDetail = Boolean\(trackingRoutePlanId\)/);
+  assert.match(routeDetailSource, /const isTrackingMapView = hasRouteTrackingDetail && childDetailTab === "tracking"/);
   assert.doesNotMatch(routeDetailSource, /const routeMapViewKey =/);
   assert.match(routeDetailSource, /role="tablist"/);
   assert.match(routeDetailSource, /handleChildDetailTabChange\("stops"\)/);
@@ -636,5 +638,7 @@ test("child detail tabs reuse one map while swapping Stops and Tracking layers",
   assert.doesNotMatch(tabHandlerSource, /clearMapRecoveryTimer|mapLoadedRef|setIsMapReady|setMapStatus/);
   assert.match(routeDetailSource, /syncRouteDetailTrackingVisibility\(map, isTrackingMapView\);\s*bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /if \(mapCanvas\?\.style\.cursor === "pointer"\) mapCanvas\.style\.cursor = "";/);
-  assert.match(routeDetailSource, /aria-label="Child route tracking"/);
+  assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div aria-label="Route detail sections"/);
+  assert.match(routeDetailSource, /\) : isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
+  assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isTrackingMapView \? \(/);
 });
