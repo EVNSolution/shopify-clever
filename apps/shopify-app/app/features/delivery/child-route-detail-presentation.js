@@ -89,7 +89,7 @@ function formatDateParts(value, ianaTimezone, options) {
 
   try {
     const parts = new Intl.DateTimeFormat("en-US", {
-      hour12: false,
+      // hour12 overrides h23 and renders midnight as 24:00 in Node 20.
       timeZone,
       ...options,
     }).formatToParts(date);
