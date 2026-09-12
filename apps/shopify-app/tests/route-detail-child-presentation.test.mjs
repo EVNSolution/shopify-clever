@@ -147,6 +147,18 @@ test("route start date-time input round-trips through the store timezone without
   assert.equal(storeLocalDateTimeToIso("2026-07-16T12:30", null), null);
 });
 
+test("Toronto midnight keeps the same date and 00-hour across server and browser runtimes", () => {
+  for (const [instant, localDate] of [
+    ["2026-09-03T04:00:00.000Z", "2026-09-03"],
+    ["2026-01-15T05:00:00.000Z", "2026-01-15"],
+  ]) {
+    assert.equal(formatStoreLocalOrderDate(instant, "America/Toronto"), `${localDate.slice(5).replace("-", ".")} 00:00`);
+    assert.equal(formatChildEtaLabel(instant, "America/Toronto"), "00:00");
+    assert.equal(formatStoreLocalDateTimeInput(instant, "America/Toronto"), `${localDate}T00:00`);
+    assert.equal(storeLocalDateTimeToIso(`${localDate}T00:00`, "America/Toronto"), instant);
+  }
+});
+
 test("child route compact metrics use read-only drive and stop labels", () => {
   assert.equal(formatChildDriveTimeLabel(960, 7400), "16 min / 7.4 km");
   assert.equal(formatChildDriveTimeLabel(60, 80), "1 min / 80 m");
