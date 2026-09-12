@@ -2488,6 +2488,10 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.doesNotMatch(inventoryDetailSource, /borderTop: "2px solid #d4d4d4"/);
   assert.match(inventoryDetailSource, /const backLinkStyle = \{/);
   assert.match(inventoryDetailSource, /<Link[\s\S]*className="inventory-detail-no-print"[\s\S]*style=\{backLinkStyle\}/);
+  assert.match(inventoryDetailSource, /useRouteLoaderData\("routes\/app"\)\?\.language/);
+  assert.match(inventoryDetailSource, /inventory\.detail\.backToRoute/);
+  assert.match(inventoryDetailSource, /inventory\.detail\.backToInventory/);
+  assert.doesNotMatch(inventoryDetailSource, /const backLabel = routePlanId \? "Back to Route" : "Back to Inventory"/);
   assert.doesNotMatch(inventoryDetailSource, /width:\s*"max-content"/);
   assert.match(inventoryDetailSource, /window\.print\(\)/);
   assert.match(inventoryDetailSource, /@media print/);

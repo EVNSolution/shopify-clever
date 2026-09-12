@@ -58,4 +58,16 @@ test("September route-detail contract copy is available in English and Korean", 
   assert.match(translate("ko", "routes.detail.schedule.planDateMismatch", { planDate: "2026-09-11", timeZone: "America/Toronto" }), /2026-09-11/);
   assert.equal(translate("en", "routes.detail.tracking.return.UNCONFIRMED"), "Unconfirmed");
   assert.equal(translate("ko", "orders.filters.serviceType.eveningDelivery"), "저녁 배송");
+  assert.equal(translate("ko", "inventory.detail.backToRoute"), "경로로 돌아가기");
+  assert.equal(translate("en", "inventory.detail.backToInventory"), "Back to Inventory");
+  assert.equal(translate("ko", "routes.detail.inventory.unavailable"), "연결된 인벤토리를 아직 사용할 수 없습니다");
+  assert.equal(translate("ko", "routes.detail.errors.unavailable"), "경로 데이터를 모두 불러오지 못했습니다.");
+  assert.equal(
+    translate("en", "routes.detail.tracking.distanceFromDepot", { distance: 420, threshold: 150 }),
+    "420 m from depot (threshold 150 m)",
+  );
+  assert.equal(
+    translate("ko", "routes.detail.tracking.distanceFromDepot", { distance: 420, threshold: 150 }),
+    "회사에서 420m 거리(기준 150m)",
+  );
 });

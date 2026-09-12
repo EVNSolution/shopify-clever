@@ -171,9 +171,9 @@ test("ordinary presentation hides sibling navigation and keeps route actions sep
   const routeActionsStart = routeDetailSource.indexOf('<div aria-label="Route actions"');
   const routeActionsEnd = routeDetailSource.indexOf('<div\n                  aria-label="Actions"', routeActionsStart);
   const routeActions = routeDetailSource.slice(routeActionsStart, routeActionsEnd);
-  assert.match(routeDetailSource, /aria-label="Child route detail sections" role="toolbar"/);
+  assert.match(routeDetailSource, /aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\} role="toolbar"/);
   assert.match(routeDetailSource, /translate\(language, "routes\.detail\.sections\.addOrders"\)/);
-  assert.match(routeDetailSource, /aria-label="Child route detail sections"[\s\S]*onClick=\{handleAddOrderToCurrentRoute\}[\s\S]*routes\.detail\.sections\.addOrders/);
+  assert.match(routeDetailSource, /routes\.detail\.sections\.accessibilityLabel[\s\S]*onClick=\{handleAddOrderToCurrentRoute\}[\s\S]*routes\.detail\.sections\.addOrders/);
   assert.doesNotMatch(routeActions, /\{routeGroupId \? \(/);
   assert.match(routeActions, /\{routeGroupId \|\| isOrdinaryRouteDetail \? \(/);
   assert.match(routeActions, /\{routeGroupId && !isMaterializedChildRouteDetail \? \(/);

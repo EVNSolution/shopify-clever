@@ -2276,7 +2276,7 @@ function getOriginalShippingTotalLabel(moneySummary, language) {
 }
 
 function getLocalizedRouteErrorMessage(error, language, context = {}) {
-  const message = textOrUndefined(error?.message) ?? "Route data could not be fully loaded.";
+  const message = textOrUndefined(error?.message) ?? translate(language, "routes.detail.errors.unavailable");
   if (error?.code !== "ROUTE_GROUPING_INVALID") return message;
   if (message.includes("scheduledStartTimeZone must be a valid IANA timezone")) {
     return translate(language, "routes.detail.schedule.invalidTimezone");
@@ -2289,8 +2289,8 @@ function getLocalizedRouteErrorMessage(error, language, context = {}) {
   }
   if (message.includes("scheduledStartAt must use the route group plan date")) {
     return translate(language, "routes.detail.schedule.planDateMismatch", {
-      planDate: context.planDate ?? "the route plan date",
-      timeZone: context.timeZone ?? "the selected timezone",
+      planDate: context.planDate ?? translate(language, "routes.detail.schedule.planDateFallback"),
+      timeZone: context.timeZone ?? translate(language, "routes.detail.schedule.timeZoneFallback"),
     });
   }
   return message;
@@ -2303,13 +2303,16 @@ function getExecutionEvidenceEventLabel(event, ianaTimezone, language) {
     : translate(language, "routes.detail.tracking.evidenceUnavailable");
 }
 
-function getReturnToDepotEvidenceTitle(evidence, ianaTimezone) {
+function getReturnToDepotEvidenceTitle(evidence, ianaTimezone, language) {
   if (!evidence) return undefined;
   return [
     textOrUndefined(evidence.source),
     evidence.observedAt ? formatTrackingTimestamp(evidence.observedAt, ianaTimezone) : null,
     numberOrUndefined(evidence.distanceToDepotMeters) != null
-      ? `${Math.round(Number(evidence.distanceToDepotMeters))} m from depot (threshold ${Math.round(Number(evidence.thresholdMeters ?? 0))} m)`
+      ? translate(language, "routes.detail.tracking.distanceFromDepot", {
+          distance: Math.round(Number(evidence.distanceToDepotMeters)),
+          threshold: Math.round(Number(evidence.thresholdMeters ?? 0)),
+        })
       : null,
   ].filter(Boolean).join(" · ") || undefined;
 }
@@ -6964,8 +6967,8 @@ export default function RouteDetailPage() {
                     <RouteActionIconButton
                       icon="inventory"
                       onClick={handleViewInventory}
-                      label="View inventory"
-                      description={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
+                      label={translate(language, "routes.detail.inventory.view")}
+                      description={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
                       disabled={!inventoryDetailHref}
                     />
                   ) : null}
@@ -7099,7 +7102,7 @@ export default function RouteDetailPage() {
                   {isMaterializedChildRouteDetail ? formatRouteStatus(routeExecutionStatus) : routeDetail.status}
                 </span> : null}
                 {!isRouteGroupDetail && routeDispatched ? (
-                  <span aria-label="Authoritative dispatch state" style={routeDispatchedBadgeStyle}>
+                  <span aria-label={translate(language, "routes.detail.dispatchedAccessibilityLabel")} style={routeDispatchedBadgeStyle}>
                     {translate(language, "routes.detail.dispatched")}
                   </span>
                 ) : null}
@@ -7136,7 +7139,7 @@ export default function RouteDetailPage() {
 
         <section style={routesDetailCardStyle}>
           {hasRouteTrackingDetail ? (
-            <div aria-label="Route detail sections" role="toolbar" style={routeChildTabsStyle}>
+            <div aria-label={translate(language, "routes.detail.sections.accessibilityLabel")} role="toolbar" style={routeChildTabsStyle}>
               <button
                 aria-pressed={childDetailTab === "stops"}
                 onClick={() => handleChildDetailTabChange("stops")}
@@ -7156,7 +7159,7 @@ export default function RouteDetailPage() {
                   ...routeChildTabStyle,
                   ...(!inventoryDetailHref ? { cursor: "not-allowed", opacity: 0.55 } : null),
                 }}
-                title={inventoryDetailHref ? undefined : "Linked inventory is not available yet"}
+                title={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
                 type="button"
               >
                 <span>{translate(language, "routes.detail.sections.inventory")}</span>
@@ -7694,7 +7697,7 @@ export default function RouteDetailPage() {
                   <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.returnToDepot")}</span>
                   <strong
                     style={routeChildTrackingMetricValueStyle}
-                    title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone)}
+                    title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
                   >
                     {translate(language, `routes.detail.tracking.return.${returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}
                   </strong>

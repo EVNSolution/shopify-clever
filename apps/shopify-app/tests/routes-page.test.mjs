@@ -608,7 +608,8 @@ test("Route detail exposes inventory and delete header actions", () => {
   assert.match(routeDetailSource, /routeGroup\?\.linkedInventoryId \?\? routeGroup\?\.inventoryId/);
   assert.match(routeDetailSource, /`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(linkedInventoryId\)\}\$\{effectiveRoutePlan\?\.id \? `&routePlanId=\$\{encodeURIComponent\(effectiveRoutePlan\.id\)\}` : ""\}`/);
   assert.match(routeDetailSource, /disabled=\{!inventoryDetailHref\}/);
-  assert.match(routeDetailSource, /View inventory/);
+  assert.match(routeDetailSource, /routes\.detail\.inventory\.view/);
+  assert.match(routeDetailSource, /routes\.detail\.inventory\.unavailable/);
   assert.match(routeDetailSource, /if \(inventoryDetailHref\) requestRouteNavigation\(inventoryDetailHref\)/);
   assert.match(routeDetailSource, /Delete \$\{routeDetailTitle\} on the next global Save\?/);
   assert.match(routeDetailSource, /formData\.set\("_intent", "deleteRoute"\)/);

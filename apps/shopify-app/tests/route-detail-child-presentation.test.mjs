@@ -635,12 +635,12 @@ test("child detail uses a flat reference-style title area and keeps inventory se
   assert.match(routeDetailSource, /Updated on \{routeUpdatedLabel\}/);
   assert.match(routeDetailSource, /aria-label="Edit child route name"/);
   assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
-  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*View inventory/);
+  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*routes\.detail\.inventory\.view/);
   assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
 });
 
 test("route detail tabs keep tracking available for ordinary and grouped child routes", () => {
-  const tabsIndex = routeDetailSource.indexOf('aria-label="Route detail sections"');
+  const tabsIndex = routeDetailSource.indexOf('routes.detail.sections.accessibilityLabel');
   const timelineIndex = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
   const trackingIndex = routeDetailSource.indexOf('aria-label="Route tracking"');
   const tabHandlerStart = routeDetailSource.indexOf("const handleChildDetailTabChange = (nextTab) => {");
@@ -687,7 +687,7 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
 });
 
 test("child detail keeps dispatch, original shipping, schedule validation, and execution evidence semantically separate", () => {
-  assert.match(routeDetailSource, /aria-label="Authoritative dispatch state"/);
+  assert.match(routeDetailSource, /routes\.detail\.dispatchedAccessibilityLabel/);
   assert.match(routeDetailSource, /routes\.detail\.dispatched/);
   assert.match(routeDetailSource, /getRouteStartPlanDateError\(routeStartTimeDraft, routePlanDate\)/);
   assert.match(routeDetailSource, /routes\.detail\.schedule\.planDateMismatch/);
@@ -697,5 +697,10 @@ test("child detail keeps dispatch, original shipping, schedule validation, and e
   assert.match(routeDetailSource, /routeExecutionEvidence\?\.start/);
   assert.match(routeDetailSource, /routeExecutionEvidence\?\.completion/);
   assert.match(routeDetailSource, /returnToDepotEvidence\?\.status/);
+  assert.match(routeDetailSource, /routes\.detail\.tracking\.distanceFromDepot/);
+  assert.match(routeDetailSource, /getReturnToDepotEvidenceTitle\(returnToDepotEvidence, ianaTimezone, language\)/);
+  assert.doesNotMatch(routeDetailSource, /m from depot \(threshold/);
+  assert.doesNotMatch(routeDetailSource, /Linked inventory is not available yet/);
+  assert.doesNotMatch(routeDetailSource, /\?\? "Route data could not be fully loaded\."/);
   assert.doesNotMatch(routeDetailSource, /Actual driving time|Total working time|Payroll/);
 });

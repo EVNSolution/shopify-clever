@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Link, PrefetchPageLinks, useLoaderData, useRevalidator, useSearchParams } from "react-router";
+import { Link, PrefetchPageLinks, useLoaderData, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { fetchDeliveryInventoryOrderView } from "../features/delivery/inventories.server";
 import { buildInventoryHistoryItems, buildInventoryProductMatrix } from "../features/delivery/inventory-matrix";
@@ -14,6 +14,7 @@ import { getServiceErrorNotice } from "../features/service-errors";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { logStructuredMetric } from "../features/telemetry/structured-telemetry.server";
 import { routePlanPath, withEmbeddedShopifyContext } from "../features/delivery/route-paths";
+import { translate } from "../i18n/i18n";
 
 export const meta = ({ data }) => [{ title: data?.inventory?.name ?? "Inventory" }];
 
@@ -987,6 +988,7 @@ function DateCellLabel({ label }) {
 
 export default function InventoryDetailPage() {
   const { errors, generatedAt, inventory, needsSessionTokenRefresh, routePlanId } = useLoaderData();
+  const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const [searchParams] = useSearchParams();
   const shopify = useAppBridge();
   const revalidator = useRevalidator();
@@ -1008,7 +1010,10 @@ export default function InventoryDetailPage() {
     routePlanId ? routePlanPath(routePlanId) : "/app/orders?view=inventory",
     searchParams,
   );
-  const backLabel = routePlanId ? "Back to Route" : "Back to Inventory";
+  const backLabel = translate(
+    language,
+    routePlanId ? "inventory.detail.backToRoute" : "inventory.detail.backToInventory",
+  );
   useEffect(() => {
     if (!needsSessionTokenRefresh) {
       sessionTokenRefreshSubmittedRef.current = false;
