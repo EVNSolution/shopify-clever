@@ -3,6 +3,8 @@ import { getDriverDownloadLink } from "./phone-normalization.js";
 const DRIVER_APP_RELEASE_URL = "https://clever-route.cleversystem.ai/routes-app/release/android";
 
 export async function fetchDriverAppReleaseNotice({ fetchImpl = fetch, useGooglePlay = false } = {}) {
+  if (useGooglePlay) return null;
+
   try {
     const response = await fetchImpl(DRIVER_APP_RELEASE_URL, {
       headers: {
