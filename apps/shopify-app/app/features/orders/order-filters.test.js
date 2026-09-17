@@ -21,6 +21,7 @@ import {
   isOrderRoutePlanningLocked,
   isOrderSelectableForCurrentWorkset,
   ORDER_DELIVERY_DATE_PENDING,
+  updateOrderFiltersForChange,
   updateOrderFilterSearchParams,
 } from "./order-filters.js";
 
@@ -327,6 +328,7 @@ test("parses and applies search while removing legacy q query parameters", () =>
     planned: "",
     scope: "planning",
     search: "claire",
+    serviceCategory: "",
     serviceType: "",
     tab: "unplanned",
   });
@@ -346,6 +348,7 @@ test("defaults the query-backed Orders view to Unplanned planning scope while Al
     planned: "",
     scope: "planning",
     search: "",
+    serviceCategory: "",
     serviceType: "",
     tab: "unplanned",
   });
@@ -576,6 +579,7 @@ test("reads and updates Orders filter query parameters without dropping embedded
     planned: "",
     scope: "planning",
     search: "claire",
+    serviceCategory: "",
     serviceType: "",
     tab: "all",
   });
@@ -612,6 +616,7 @@ test("reads and updates Orders filter query parameters without dropping embedded
   assert.equal(nextParams.has("planned"), false);
   assert.equal(nextParams.get("scope"), "planning");
   assert.equal(nextParams.get("search"), "Ryan");
+  assert.equal(nextParams.get("serviceCategory"), "DELIVERY");
   assert.equal(nextParams.get("serviceType"), "DELIVERY");
   assert.equal(nextParams.get("tab"), "unplanned");
   assert.equal(nextParams.has("q"), false);
@@ -649,6 +654,109 @@ test("filters by service type and exposes stable service labels", () => {
     "EVENING_DELIVERY",
     "PICKUP",
   ]);
+});
+
+test("combines delivery or pickup category with weekday and excludes unknown types", () => {
+  const thursdayOrders = [
+    { id: "day", deliveryWeekday: "THURSDAY", serviceType: "DELIVERY" },
+    { id: "evening", deliveryWeekday: "THURSDAY", serviceType: "EVENING_DELIVERY" },
+    { id: "pickup", deliveryWeekday: "THURSDAY", serviceType: "PICKUP" },
+    { id: "unknown", deliveryWeekday: "THURSDAY", serviceType: "COURIER" },
+    { id: "friday-evening", deliveryWeekday: "FRIDAY", serviceType: "EVENING_DELIVERY" },
+  ];
+
+  assert.deepEqual(
+    filterOrders(thursdayOrders, {
+      deliveryWeekday: "THURSDAY",
+      scope: "history",
+      serviceCategory: "DELIVERY",
+    }).map((order) => order.id),
+    ["day", "evening"],
+  );
+  assert.deepEqual(
+    filterOrders(thursdayOrders, {
+      deliveryWeekday: "THURSDAY",
+      scope: "history",
+      serviceCategory: "PICKUP",
+    }).map((order) => order.id),
+    ["pickup"],
+  );
+});
+
+test("keeps category and exact service type consistent across changes and old URLs", () => {
+  assert.deepEqual(
+    updateOrderFiltersForChange(
+      { scope: "history", serviceCategory: "PICKUP", serviceType: "PICKUP" },
+      "serviceCategory",
+      "DELIVERY",
+    ),
+    {
+      deliveryArea: "",
+      deliveryDate: "",
+      deliveryState: "",
+      deliveryWeekday: "",
+      orderedDate: "",
+      orderedDateFrom: "",
+      orderedDateTo: "",
+      planned: "",
+      scope: "history",
+      search: "",
+      serviceCategory: "DELIVERY",
+      serviceType: "",
+      tab: "unplanned",
+    },
+  );
+  assert.equal(
+    updateOrderFiltersForChange(
+      { scope: "history", serviceCategory: "DELIVERY", serviceType: "EVENING_DELIVERY" },
+      "serviceCategory",
+      "",
+    ).serviceType,
+    "",
+  );
+  assert.deepEqual(
+    getOrderFiltersFromSearchParams(new URLSearchParams("scope=history&serviceType=EVENING_DELIVERY")),
+    {
+      deliveryArea: "",
+      deliveryDate: "",
+      deliveryState: "",
+      deliveryWeekday: "",
+      orderedDate: "",
+      orderedDateFrom: "",
+      orderedDateTo: "",
+      planned: "",
+      scope: "history",
+      search: "",
+      serviceCategory: "DELIVERY",
+      serviceType: "EVENING_DELIVERY",
+      tab: "unplanned",
+    },
+  );
+  assert.equal(
+    getOrderFiltersFromSearchParams(
+      new URLSearchParams("scope=history&serviceCategory=PICKUP&serviceType=EVENING_DELIVERY"),
+    ).serviceType,
+    "",
+  );
+
+  const deliveryUrl = new URLSearchParams(
+    "deliveryWeekday=THURSDAY&scope=history&serviceCategory=DELIVERY",
+  );
+  const pickupFilters = updateOrderFiltersForChange(
+    getOrderFiltersFromSearchParams(deliveryUrl),
+    "serviceCategory",
+    "PICKUP",
+  );
+  const pickupUrl = updateOrderFilterSearchParams(deliveryUrl, pickupFilters);
+  assert.equal(pickupUrl.get("serviceCategory"), "PICKUP");
+  assert.equal(getOrderFiltersFromSearchParams(deliveryUrl).serviceCategory, "DELIVERY");
+
+  const clearedUrl = updateOrderFilterSearchParams(
+    pickupUrl,
+    updateOrderFiltersForChange(pickupFilters, "serviceCategory", ""),
+  );
+  assert.equal(clearedUrl.has("serviceCategory"), false);
+  assert.equal(clearedUrl.has("serviceType"), false);
 });
 
 test("classifies planning tabs and route-selection unavailable reasons", () => {
