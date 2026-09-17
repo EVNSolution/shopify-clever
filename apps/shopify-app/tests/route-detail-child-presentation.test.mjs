@@ -415,14 +415,14 @@ test("child order rows preserve canonical identifiers and flat operational edit 
   });
 });
 
-test("child stop actions call server intents only for status and CLEVER field edits", () => {
+test("child stop actions keep active route membership locked", () => {
   assert.match(routeDetailSource, /submitRouteAction\("transitionRouteStop"/);
   assert.match(routeDetailSource, /submitRouteAction\("updateRouteStop"/);
   assert.doesNotMatch(routeDetailSource, /\["deliveryArea", "Delivery area"\]/);
   assert.doesNotMatch(routeDetailSource, /\["deliveryNote", "Delivery note"\]/);
   assert.doesNotMatch(routeDetailSource, /\["serviceType", "Service type"\]/);
   assert.match(routeDetailSource, /const routeMembershipChangeIsInProgress = isRouteExecutionInProgressForStopMembership\(routeExecutionStatus\)/);
-  assert.match(routeDetailSource, /const canAddOrRemoveChildStops = canDraftEditChildStopMembership \|\| routeMembershipChangeIsInProgress/);
+  assert.match(routeDetailSource, /const canAddOrRemoveChildStops = canDraftEditChildStopMembership/);
   assert.match(routeDetailSource, /disabled=\{!canAddOrRemoveChildStops\}/);
   assert.match(routeDetailSource, /disabled=\{!canDraftEditChildStopMembership \|\| childStopSendTargetRows\.length === 0\}/);
   assert.match(routeDetailSource, /heading: "Change in-progress route\?"/);
@@ -474,7 +474,7 @@ test("child timeline renders distinct circular Start and End markers", () => {
   assert.match(routeDetailSource, /childRouteTimelineOrderLabelStyle/);
   assert.match(routeDetailSource, /<span style=\{childRouteTimelineOrderLabelStyle\}>\{stop\.order\}<\/span>/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{[\s\S]*position: "sticky"/);
-  assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
+  assert.match(routeDetailSource, /onDragStart=\{!canReorderRouteStops \|\| routeRow\.isPreviewOnly \? undefined : \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraft\}/);
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
 });
