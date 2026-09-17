@@ -29,6 +29,7 @@ import {
   transitionDeliveryRoutePlanStop,
   updateDeliveryRoutePlanStop,
 } from "./route-plans.server";
+import { saveRouteStopOrder } from "./route-stop-order.server";
 import {
   firstArray,
   getRouteGroupChildRoutePlanId,
@@ -831,6 +832,15 @@ export const routeDetailAction = async ({ params, request }) => {
       routeId,
       deliveryStopId,
       readRouteStopOverridePayload(formData),
+      { sessionToken: shopifySessionToken },
+    );
+  }
+
+  if (intent === "saveRouteStops") {
+    return saveRouteStopOrder(
+      request,
+      routeId,
+      formData.get("stops"),
       { sessionToken: shopifySessionToken },
     );
   }

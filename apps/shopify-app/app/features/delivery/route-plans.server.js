@@ -491,6 +491,7 @@ export async function updateDeliveryRoutePlanStops(request, routePlanId, payload
       sessionToken: options.sessionToken,
     },
   );
+  if (result.errors.length === 0) clearDeliveryApiResponseCache();
 
   return {
     routePlan: result.data?.routePlan ?? null,

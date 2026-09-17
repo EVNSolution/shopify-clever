@@ -712,7 +712,7 @@ test("Route group detail requires an explicit atomic copy mode and preserves suc
 test("Route detail loader reads the selected persisted route plan", () => {
   assert.match(routeDetailServerSource, /import \{ fetchDeliveryOrders, syncDeliveryOrders \} from "\.\/orders\.server"/);
   assert.match(routeDetailServerSource, /deleteDeliveryRoutePlan,[\s\S]*fetchDeliveryRoutePlanDetail,[\s\S]*from "\.\/route-plans\.server"/);
-  assert.doesNotMatch(routeDetailServerSource, /updateDeliveryRoutePlanStops/);
+  assert.match(routeDetailServerSource, /saveRouteStopOrder/);
   assert.match(routeDetailServerSource, /import \{ fetchShopifyDepartureLocation \} from "\.\.\/locations\/shopify-locations\.server"/);
   assert.match(routeDetailServerSource, /import \{ authenticate \} from "\.\.\/\.\.\/shopify\.server"/);
   assert.match(routeDetailSource, /import \{ routeDetailAction, routeDetailLoader \} from "\.\.\/features\/delivery\/route-detail\.server"/);
@@ -869,7 +869,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*removeTimelineStop\(/);
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
-  assert.match(routeDetailSource, /onDragStart=\{\(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
+  assert.match(routeDetailSource, /onDragStart=\{canReorderRouteStops \? \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\) : undefined\}/);
   assert.match(routeDetailSource, /function getLineItemList\(lineItems\) \{/);
   assert.match(routeDetailSource, /function getRouteStopLineItems\(stop\) \{/);
   assert.match(routeDetailSource, /stop\?\.rawPayload\?\.lineItems/);
@@ -905,7 +905,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.doesNotMatch(routeDetailSource, /routeTimelineStopPopoverBackdropStyle/);
   assert.match(routeDetailSource, /Customer: \{activeRouteTimelineStop\.recipient\}/);
   assert.match(routeDetailSource, /\(activeRouteTimelineStop\.items \?\? \[\]\)\.map/);
-  assert.match(routeDetailSource, /onDrop=\{handleRouteTimelineRemoveDrop\}/);
+  assert.match(routeDetailSource, /onDrop=\{canDraftEditChildStopMembership \? handleRouteTimelineRemoveDrop : undefined\}/);
   assert.match(routeDetailSource, /routeRow\.stops\.map\(\(stop\) =>/);
   assert.doesNotMatch(routeDetailSource, /activeRouteDriverStops/);
   assert.match(routeDetailSource, /ROUTE_STOPS_MAP_DEFAULT_HEIGHT = 440/);
@@ -1268,8 +1268,8 @@ test("Route group detail Add Empty Route stays local without saving", () => {
   assert.doesNotMatch(addEmptyHandler, /saveRouteDraft/);
   assert.match(routeDetailSource, /const hasMaterializedClientRoute = useMemo\([\s\S]*clientRouteRows\.some\(\(routeRow\) => routeRow\.isMaterializedDraft\)/);
   assert.match(routeDetailSource, /const groupRouteRowsSource = useMemo\([\s\S]*hasMaterializedClientRoute \? \[\] : routeGroupChildRows/);
-  assert.match(routeDetailSource, /const canSaveRoutePolygon = hasEditableRouteRows && polygonCandidateOrderIds\.length > 0/);
-  assert.match(routeDetailSource, /if \(targetRouteRow\.isPreviewOnly \|\| polygonSelectedOrderIds\.length === 0\) return/);
+  assert.match(routeDetailSource, /const canSaveRoutePolygon = canDraftEditChildStopMembership && hasEditableRouteRows && polygonCandidateOrderIds\.length > 0/);
+  assert.match(routeDetailSource, /if \(!canDraftEditChildStopMembership \|\| targetRouteRow\.isPreviewOnly \|\| polygonSelectedOrderIds\.length === 0\) return/);
   assert.match(routeDetailSource, /timelineRouteRows\.filter\(\(routeRow\) => !routeRow\.isPreviewOnly && !routeRow\.isUnassigned\)\.map/);
   assert.match(routeDetailSource, /disabled=\{!routeRow\.routePlanId\}/);
 });

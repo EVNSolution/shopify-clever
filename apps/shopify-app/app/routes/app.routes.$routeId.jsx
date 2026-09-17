@@ -2406,13 +2406,19 @@ function getLiveTrackingStopStatus(row, progress) {
 
 function isRouteExecutionLockedForStopMembership(status) {
   return ["IN_PROGRESS", "EN_ROUTE", "ARRIVED", "COMPLETED", "DELIVERED", "FAILED", "SKIPPED", "CANCELLED"].includes(
-    String(status ?? "").trim().replace(/-/g, "_").toUpperCase(),
+    String(status ?? "").trim().replace(/[\s-]+/g, "_").toUpperCase(),
   );
 }
 
 function isRouteExecutionInProgressForStopMembership(status) {
   return ["IN_PROGRESS", "EN_ROUTE", "ARRIVED"].includes(
-    String(status ?? "").trim().replace(/-/g, "_").toUpperCase(),
+    String(status ?? "").trim().replace(/[\s-]+/g, "_").toUpperCase(),
+  );
+}
+
+function isRouteStopReorderAllowed(status) {
+  return !["COMPLETED", "DELIVERED", "FAILED", "SKIPPED", "CANCELLED"].includes(
+    String(status ?? "").trim().replace(/[\s-]+/g, "_").toUpperCase(),
   );
 }
 
@@ -3216,6 +3222,29 @@ function buildRouteDraftPayload(routeRows, {
       };
     }),
   };
+}
+
+function buildRouteStopReorderPayload(reorderedStops, savedStops) {
+  const stopKey = (stop) => {
+    const value = stop?.deliveryStopId ?? stop?.shopifyOrderGid ?? stop?.id;
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+  };
+  const reorderedKeys = reorderedStops.map(stopKey);
+  const savedKeys = savedStops.map(stopKey);
+  const sortedSavedKeys = [...savedKeys].sort();
+  if (
+    reorderedKeys.some((key) => !key)
+    || savedKeys.some((key) => !key)
+    || reorderedKeys.length !== savedKeys.length
+    || new Set(reorderedKeys).size !== reorderedKeys.length
+    || [...reorderedKeys].sort().some((key, index) => key !== sortedSavedKeys[index])
+  ) return null;
+
+  return reorderedStops.map((stop, index) => ({
+    deliveryStopId: stop.deliveryStopId ?? null,
+    shopifyOrderGid: stop.shopifyOrderGid ?? null,
+    sequence: index + 1,
+  }));
 }
 
 function renderRouteHeaderMetric(label, value) {
@@ -4064,7 +4093,8 @@ export default function RouteDetailPage() {
   );
   const canDraftEditChildStopMembership = !isRouteExecutionLockedForStopMembership(routeExecutionStatus);
   const routeMembershipChangeIsInProgress = isRouteExecutionInProgressForStopMembership(routeExecutionStatus);
-  const canAddOrRemoveChildStops = canDraftEditChildStopMembership || routeMembershipChangeIsInProgress;
+  const canAddOrRemoveChildStops = canDraftEditChildStopMembership;
+  const canReorderRouteStops = isRouteStopReorderAllowed(routeExecutionStatus);
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
     ? trackingRoutePlanId
     : null;
@@ -4158,7 +4188,7 @@ export default function RouteDetailPage() {
     () => polygonCandidateStops.map((stop) => stop.orderId),
     [polygonCandidateStops],
   );
-  const canSaveRoutePolygon = hasEditableRouteRows && polygonCandidateOrderIds.length > 0;
+  const canSaveRoutePolygon = canDraftEditChildStopMembership && hasEditableRouteRows && polygonCandidateOrderIds.length > 0;
   const polygonHighlightedOrderIds = useMemo(
     () => new Set(isPolygonTargetPickerOpen ? polygonSelectedOrderIds : polygonCandidateOrderIds),
     [isPolygonTargetPickerOpen, polygonCandidateOrderIds, polygonSelectedOrderIds],
@@ -4560,7 +4590,7 @@ export default function RouteDetailPage() {
   };
 
   const handleToggleRoutePolygonEditMode = () => {
-    if (!hasEditableRouteRows) return;
+    if (!hasEditableRouteRows || !canDraftEditChildStopMembership) return;
     setIsRoutePolygonEditMode((currentMode) => {
       if (currentMode) resetRoutePolygonDraft();
       return !currentMode;
@@ -4582,7 +4612,7 @@ export default function RouteDetailPage() {
   };
 
   const handleAssignPolygonToRoute = (targetRouteRow) => {
-    if (targetRouteRow.isPreviewOnly || polygonSelectedOrderIds.length === 0) return;
+    if (!canDraftEditChildStopMembership || targetRouteRow.isPreviewOnly || polygonSelectedOrderIds.length === 0) return;
 
     const selectedOrderIdSet = new Set(polygonSelectedOrderIds);
     const selectedStopIds = timelineRouteRows
@@ -4610,6 +4640,10 @@ export default function RouteDetailPage() {
 
   const handleOpenRouteSelector = (selectorType, routeRow) => {
     if (routeRow.isPreviewOnly) return;
+    if (selectorType === "driver" && isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus)) {
+      setRouteGroupClientError("The driver cannot be changed after the route has started.");
+      return;
+    }
     setActiveRouteSelector({
       routeRowId: routeRow.id,
       startDateTime: routeRow.startDateTime ?? "",
@@ -4787,6 +4821,7 @@ export default function RouteDetailPage() {
   const moveDraggedTimelineStop = useCallback((targetRouteId, afterStopId = null) => {
     const drag = routeTimelineDragRef.current;
     if (!drag) return;
+    if (routeMembershipChangeIsInProgress && targetRouteId !== drag.routeId) return;
 
     const currentOrderByRouteId = routeTimelineOrderByRouteIdRef.current;
     const snapshot = routeTimelineDragSnapshotRef.current;
@@ -4816,10 +4851,10 @@ export default function RouteDetailPage() {
           : {},
       );
     });
-  }, [animateRouteTimelineChange, routeRows]);
+  }, [animateRouteTimelineChange, routeMembershipChangeIsInProgress, routeRows]);
 
   const handleRouteTimelineDragStart = (event, routeRow, stop) => {
-    if (routeRow.isPreviewOnly) return;
+    if (!canReorderRouteStops || routeRow.isPreviewOnly) return;
     const drag = { routeId: routeRow.id, stopId: stop.id };
     routeTimelineDragRef.current = drag;
     routeTimelineDragPointerXRef.current = event.clientX;
@@ -5300,6 +5335,7 @@ export default function RouteDetailPage() {
 
   const handleRouteTimelineRemoveDrop = (event) => {
     event.preventDefault();
+    if (!canDraftEditChildStopMembership) return;
     const drag = routeTimelineDragRef.current;
     if (!drag) return;
 
@@ -5639,10 +5675,10 @@ export default function RouteDetailPage() {
   const handleReverseCurrentRouteStops = () => {
     setIsRouteActionsMenuOpen(false);
     if (routeGroupActionBusy) return;
-    if (!canDraftEditChildStopMembership) {
+    if (!canReorderRouteStops) {
       setRouteActionNotice({
         heading: "Cannot reverse stops",
-        message: "Stops can only be reversed before the route has started.",
+        message: "Stops cannot be reversed after the route has finished.",
       });
       return;
     }
@@ -5800,6 +5836,7 @@ export default function RouteDetailPage() {
       return;
     }
     const isStandaloneSplitSave = isOrdinarySplitDraft && !routeGroupId;
+    const isStandaloneRouteReorder = !routeGroupId && !isOrdinarySplitDraft && routeMembershipChangeIsInProgress;
     if (isStandaloneSplitSave && (ordinaryMutationPendingRef.current || ordinaryMutationUncertain)) return;
     if (isStandaloneSplitSave && (!ordinarySplitRevisionRef.current || effectiveRoutePlan?.status !== "READY")) {
       navigateAfterRouteDraftSaveRef.current = null;
@@ -5823,6 +5860,13 @@ export default function RouteDetailPage() {
         removedOrderIds,
       })),
     };
+    const standaloneReorderStops = isStandaloneRouteReorder
+      ? buildRouteStopReorderPayload(currentTimelineRouteRow?.stops ?? [], orderedRouteStops)
+      : null;
+    if (isStandaloneRouteReorder && !standaloneReorderStops) {
+      setRouteGroupClientError("Only the stop order can be changed after dispatch. Your draft has been kept.");
+      return;
+    }
     if (isStandaloneSplitSave) {
       ordinaryMutationPendingRef.current = true;
       setOrdinaryMutationPending(true);
@@ -5833,6 +5877,10 @@ export default function RouteDetailPage() {
           splitSaveExpectationRef.current = null;
           navigateAfterRouteDraftSaveRef.current = null;
         }
+      });
+    } else if (isStandaloneRouteReorder) {
+      submitRouteAction("saveRouteStops", {
+        stops: JSON.stringify(standaloneReorderStops),
       });
     } else {
       submitRouteGroupAction("saveRouteDraft", fields);
@@ -6159,6 +6207,21 @@ export default function RouteDetailPage() {
     revalidator.revalidate();
     shopify.toast.show(intent === "transitionRouteStop" ? "Stop status updated" : "Stop fields updated");
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
+
+  useEffect(() => {
+    if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
+    if (lastRouteActionIntentRef.current !== "saveRouteStops") return;
+    lastRouteActionIntentRef.current = null;
+    const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
+    navigateAfterRouteDraftSaveRef.current = null;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+
+    resetRouteDraftChanges();
+    revalidator.revalidate();
+    setPendingRouteDraftHref(null);
+    shopify.toast.show("Route order saved");
+    if (navigateAfterSave) navigateWithEmbeddedContext(navigateAfterSave);
+  }, [navigateWithEmbeddedContext, resetRouteDraftChanges, revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -7240,11 +7303,15 @@ export default function RouteDetailPage() {
                 </button>
                 <button
                   aria-label="Change route driver"
+                  disabled={isRouteExecutionLockedForStopMembership(routeExecutionStatus)}
                   onClick={() => handleOpenRouteSelector("driver", currentTimelineRouteRow ?? {
                     routePlanId: effectiveRoutePlan?.id,
                     title: routeDetailTitle,
                   })}
-                  style={routeChildSelectionButtonStyle}
+                  style={{
+                    ...routeChildSelectionButtonStyle,
+                    ...(isRouteExecutionLockedForStopMembership(routeExecutionStatus) ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                  }}
                   type="button"
                 >
                   <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
@@ -7495,9 +7562,9 @@ export default function RouteDetailPage() {
                         <button
                           data-route-timeline-stop-button="true"
                           ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                          draggable
+                          draggable={canReorderRouteStops}
                           onDragEnd={handleRouteTimelineDragEnd}
-                          onDragStart={(event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                          onDragStart={canReorderRouteStops ? (event) => handleRouteTimelineDragStart(event, routeRow, stop) : undefined}
                           onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                           onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                           onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
@@ -7863,11 +7930,11 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>
                         <button
                           aria-label="Change route driver"
-                          disabled={routeRow.isPreviewOnly || routeRow.isUnassigned}
+                          disabled={routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus)}
                           onClick={() => handleOpenRouteSelector("driver", routeRow)}
                           style={{
                             ...routeEditableValueStyle,
-                            ...(routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "default", opacity: 0.65 } : null),
+                            ...(routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus) ? { cursor: "default", opacity: 0.65 } : null),
                           }}
                           type="button"
                         >
@@ -7955,9 +8022,9 @@ export default function RouteDetailPage() {
                           <button
                             data-route-timeline-stop-button="true"
                             ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                            draggable={!routeRow.isPreviewOnly}
+                            draggable={canReorderRouteStops && !routeRow.isPreviewOnly}
                             onDragEnd={handleRouteTimelineDragEnd}
-                            onDragStart={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                            onDragStart={!canReorderRouteStops || routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
                             onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                             onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                             onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
@@ -7985,7 +8052,7 @@ export default function RouteDetailPage() {
                 </div>
                 <div
                   onDragOver={handleRouteTimelineDragOver}
-                  onDrop={handleRouteTimelineRemoveDrop}
+                  onDrop={canDraftEditChildStopMembership ? handleRouteTimelineRemoveDrop : undefined}
                   style={routeTimelineBottomSpacerStyle}
                 >
                   <div style={routeTimelineDropHintStyle}>{isRouteGroupDetail ? "Drop orders here to remove them from this group" : "Drop orders here to remove them from the route"}</div>
