@@ -2054,7 +2054,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const orderFilterDateButtonStyle = \{[\s\S]*?fontWeight:\s*650[\s\S]*?minWidth:\s*0/);
   assert.match(ordersPageSource, /const orderFilterDatePlaceholderButtonStyle = \{[\s\S]*?\.\.\.orderFilterDateButtonStyle[\s\S]*?fontWeight:\s*500/);
   assert.match(ordersPageSource, /const orderFilterSelectFieldStyle = \{/);
-  assert.match(ordersPageSource, /function OrderFilterMenu\(\{ ariaLabel, clearLabel, label, onChange, onClear, options, value \}\)/);
+  assert.match(ordersPageSource, /function OrderFilterMenu\(\{ ariaLabel, clearLabel, label, onChange, onClear, options, value, active = Boolean\(value\), showLabel = false \}\)/);
   assert.match(ordersPageSource, /const \[menuPosition, setMenuPosition\] = useState\(null\)/);
   assert.match(ordersPageSource, /\{open && menuPosition\s*\? createPortal/);
   assert.match(ordersPageSource, /aria-haspopup="listbox"/);
@@ -2084,7 +2084,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const handleClearOrderFilter = \(filterKey\) => \{/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateFrom = ""/);
   assert.match(ordersPageSource, /nextFilters\.orderedDateTo = ""/);
-  assert.match(ordersPageSource, /nextFilters\[filterKey\] = ""/);
+  assert.match(ordersPageSource, /const nextFilters = updateOrderFiltersForChange\(orderFilters, filterKey, ""\)/);
   assert.match(ordersPageSource, /onClick=\{handleOrderedDateCalendarOpen\}/);
   assert.match(ordersPageSource, /ariaLabel=\{translate\(language, "orders\.filters\.aria\.deliveryDay"\)\}/);
   assert.match(ordersPageSource, /value=\{orderFilters\.deliveryWeekday\}/);
