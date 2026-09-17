@@ -1358,7 +1358,7 @@ test("Orders table treats no active filters as literally unfiltered", () => {
 });
 
 test("Orders filter changes apply directly without automatic delivery-date lock rewrites", () => {
-  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?\[filterKey\]: filterValue/);
+  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?updateOrderFiltersForChange\(orderFilters, filterKey, filterValue\)/);
   assert.doesNotMatch(ordersPageSource, /autoAppliedDeliveryDateFilter/);
   assert.doesNotMatch(ordersPageSource, /setAutoAppliedDeliveryDateFilter/);
 });

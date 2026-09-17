@@ -70,8 +70,10 @@ import {
   ORDER_DELIVERY_STATE_OPTIONS,
   ORDER_HISTORY_SCOPE,
   ORDER_PLANNING_SCOPE,
+  ORDER_SERVICE_CATEGORY_OPTIONS,
   ORDER_WEEKDAY_OPTIONS,
   sortOrdersByDeliveryDatePriority,
+  updateOrderFiltersForChange,
   updateOrderFilterSearchParams,
 } from "./order-filters";
 import { InfoPill } from "../../ui/info-pill";
@@ -570,6 +572,35 @@ const orderFiltersPanelStyle = {
   flex: "0 0 auto",
   flexWrap: "nowrap",
   gap: "6px",
+};
+
+const orderServiceCategoryStyle = {
+  alignItems: "center",
+  display: "flex",
+  flex: "0 0 auto",
+  gap: "2px",
+};
+
+const orderServiceCategoryLabelStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 650,
+  marginRight: "4px",
+  whiteSpace: "nowrap",
+};
+
+const orderServiceCategoryButtonStyle = {
+  ...orderFilterButtonStyle,
+  borderRadius: "6px",
+  minHeight: "28px",
+  padding: "3px 9px",
+};
+
+const selectedOrderServiceCategoryButtonStyle = {
+  ...orderServiceCategoryButtonStyle,
+  background: "#303030",
+  borderColor: "#303030",
+  color: "#ffffff",
 };
 
 const tableWrapStyle = {
@@ -2731,6 +2762,7 @@ function OrdersPageContent({ loaderData }) {
     orderFilters.orderedDateFrom || orderFilters.orderedDateTo,
     orderFilters.deliveryDate,
     orderFilters.deliveryWeekday,
+    orderFilters.serviceCategory,
     orderFilters.serviceType,
     orderFilters.deliveryArea,
     orderFilters.deliveryState,
@@ -4170,10 +4202,7 @@ function OrdersPageContent({ loaderData }) {
   }, [tableOrders]);
 
   const handleOrderFilterChange = (filterKey, filterValue) => {
-    const nextFilters = {
-      ...orderFilters,
-      [filterKey]: filterValue,
-    };
+    const nextFilters = updateOrderFiltersForChange(orderFilters, filterKey, filterValue);
 
     const nextSearchParams = beginOrderResourceTransition(nextFilters);
 
@@ -4343,6 +4372,7 @@ function OrdersPageContent({ loaderData }) {
       orderedDateTo: "",
       scope: ORDER_PLANNING_SCOPE,
       search: "",
+      serviceCategory: "",
       serviceType: "",
       tab: "unplanned",
     };
@@ -5892,6 +5922,26 @@ function OrdersPageContent({ loaderData }) {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
+            <div
+              aria-label={translate(language, "orders.filters.serviceCategory.aria")}
+              role="group"
+              style={orderServiceCategoryStyle}
+            >
+              <span style={orderServiceCategoryLabelStyle}>
+                {translate(language, "orders.filters.serviceCategory.label")}
+              </span>
+              {ORDER_SERVICE_CATEGORY_OPTIONS.map((option) => (
+                <button
+                  aria-pressed={orderFilters.serviceCategory === option.value}
+                  key={option.value || "all"}
+                  onClick={() => handleOrderFilterChange("serviceCategory", option.value)}
+                  style={orderFilters.serviceCategory === option.value
+                    ? selectedOrderServiceCategoryButtonStyle
+                    : orderServiceCategoryButtonStyle}
+                  type="button"
+                >{translate(language, option.labelKey)}</button>
+              ))}
+            </div>
             <s-button
               commandFor="orders-filter-popover"
               disabled={availableOrderFilterTypes.length === 0}

@@ -175,6 +175,7 @@ test("fetches a bounded numeric order page and normalizes its envelope", async (
         page: 2,
         readWatermark: "2026-08-04T00:00:00.000Z",
         search: "kim",
+        serviceCategory: "DELIVERY",
       },
       {
         fetch: async (url, options) => {
@@ -217,6 +218,7 @@ test("fetches a bounded numeric order page and normalizes its envelope", async (
     assert.equal(url.searchParams.has("after"), false);
     assert.equal(url.searchParams.has("before"), false);
     assert.equal(url.searchParams.get("search"), "kim");
+    assert.equal(url.searchParams.get("serviceCategory"), "DELIVERY");
     assert.deepEqual(result.pageInfo, {
       currentPage: 2,
       endCursor: "end",
@@ -256,9 +258,9 @@ test("uses independent facet, map, and selection snapshot contracts", async () =
 
   try {
     const options = { fetch, sessionToken: "client-session-token" };
-    assert.equal((await fetchDeliveryOrderFacets(new Request("https://app.example/app/orders"), { search: "kim" }, options)).totalCount, 2);
-    assert.equal((await fetchDeliveryOrderMapPoints(new Request("https://app.example/app/orders"), { search: "kim", limit: 1000 }, options)).points.length, 1);
-    assert.equal((await createDeliveryOrdersSelectionSnapshot(new Request("https://app.example/app/orders"), { filters: { search: "kim" }, excludeOrderIds: ["1"] }, options)).selectionToken, "opaque");
+    assert.equal((await fetchDeliveryOrderFacets(new Request("https://app.example/app/orders"), { search: "kim", serviceCategory: "PICKUP" }, options)).totalCount, 2);
+    assert.equal((await fetchDeliveryOrderMapPoints(new Request("https://app.example/app/orders"), { search: "kim", serviceCategory: "PICKUP", limit: 1000 }, options)).points.length, 1);
+    assert.equal((await createDeliveryOrdersSelectionSnapshot(new Request("https://app.example/app/orders"), { filters: { search: "kim", serviceCategory: "PICKUP" }, excludeOrderIds: ["1"] }, options)).selectionToken, "opaque");
     await replaceDeliveryOrdersSelectionExclusions(new Request("https://app.example/app/orders"), { selectionToken: "opaque", excludeOrderIds: ["1"] }, options);
 
     assert.deepEqual(calls.map(({ url, options }) => [new URL(url).pathname, options.method]), [
@@ -269,9 +271,11 @@ test("uses independent facet, map, and selection snapshot contracts", async () =
     ]);
     assert.deepEqual(JSON.parse(calls[2].options.body), {
       excludeOrderIds: ["1"],
-      filters: { search: "kim" },
+      filters: { search: "kim", serviceCategory: "PICKUP" },
       sort: "id_desc",
     });
+    assert.equal(new URL(calls[0].url).searchParams.get("serviceCategory"), "PICKUP");
+    assert.equal(new URL(calls[1].url).searchParams.get("serviceCategory"), "PICKUP");
     assert.deepEqual(JSON.parse(calls[3].options.body), {
       excludeOrderIds: ["1"],
       selectionToken: "opaque",
