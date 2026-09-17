@@ -111,7 +111,7 @@ test("filters orders by ordered date range", () => {
 
 test("filters orders by delivery weekday", () => {
   assert.deepEqual(
-    filterOrders(orders, {
+    filterOrders(orders.map(order => ({ ...order, serviceType: "DELIVERY" })), {
       deliveryWeekday: "FRIDAY",
       scope: "history",
     }).map((order) => order.id),
@@ -120,8 +120,8 @@ test("filters orders by delivery weekday", () => {
 
   assert.deepEqual(
     filterOrders([
-      { id: "day-label", deliveryDay: "Friday" },
-      { id: "other-day", deliveryDay: "Saturday" },
+      { id: "day-label", deliveryDay: "Friday", serviceType: "DELIVERY" },
+      { id: "other-day", deliveryDay: "Saturday", serviceType: "DELIVERY" },
     ], {
       deliveryWeekday: "FRIDAY",
       scope: "history",
@@ -579,7 +579,7 @@ test("reads and updates Orders filter query parameters without dropping embedded
     planned: "",
     scope: "planning",
     search: "claire",
-    serviceCategory: "",
+    serviceCategory: "DELIVERY",
     serviceType: "",
     tab: "all",
   });
@@ -753,7 +753,7 @@ test("keeps category and exact service type consistent across changes and old UR
 
   const clearedUrl = updateOrderFilterSearchParams(
     pickupUrl,
-    updateOrderFiltersForChange(pickupFilters, "serviceCategory", ""),
+    updateOrderFiltersForChange(pickupFilters, "pickupWeekday", ""),
   );
   assert.equal(clearedUrl.has("serviceCategory"), false);
   assert.equal(clearedUrl.has("serviceType"), false);
@@ -875,4 +875,41 @@ test("bulk selection reports selected ids and unavailable reason counts", () => 
   assert.equal(state.unavailableCount, 2);
   assert.equal(state.unavailableReasonCounts.missing_delivery_date, 1);
   assert.equal(state.unavailableReasonCounts.route_scope_mismatch, 1);
+});
+
+test("Delivery day and Pickup day select their own service category and survive URL restore", () => {
+  const rows = [
+    { id: "day", deliveryWeekday: "THURSDAY", serviceType: "DELIVERY" },
+    { id: "evening", deliveryWeekday: "THURSDAY", serviceType: "EVENING_DELIVERY" },
+    { id: "pickup", deliveryWeekday: "THURSDAY", serviceType: "PICKUP" },
+    { id: "other-day", deliveryWeekday: "FRIDAY", serviceType: "PICKUP" },
+    { id: "unknown", deliveryWeekday: "THURSDAY", serviceType: null },
+  ];
+  const delivery = updateOrderFiltersForChange({ scope: "history", serviceType: "PICKUP" }, "deliveryWeekday", "THURSDAY");
+  assert.deepEqual(filterOrders(rows, delivery).map(row => row.id), ["day", "evening"]);
+  assert.equal(delivery.serviceType, "");
+  const pickup = updateOrderFiltersForChange(delivery, "pickupWeekday", "THURSDAY");
+  assert.deepEqual(filterOrders(rows, pickup).map(row => row.id), ["pickup"]);
+  const restored = getOrderFiltersFromSearchParams(updateOrderFilterSearchParams("host=embedded", pickup));
+  assert.equal(restored.deliveryWeekday, "THURSDAY");
+  assert.equal(restored.serviceCategory, "PICKUP");
+  assert.deepEqual(filterOrders(rows, restored).map(row => row.id), ["pickup"]);
+  const cleared = updateOrderFiltersForChange(restored, "pickupWeekday", "");
+  assert.equal(cleared.deliveryWeekday, "");
+  assert.equal(cleared.serviceCategory, "");
+  assert.equal(hasActiveOrderFilters({ ...cleared, scope: "planning" }), false);
+});
+
+test("old Delivery day URLs default to delivery and explicit pickup URLs retain pickup", () => {
+  assert.equal(getOrderFiltersFromSearchParams("deliveryWeekday=THURSDAY").serviceCategory, "DELIVERY");
+  assert.equal(getOrderFiltersFromSearchParams("deliveryWeekday=THURSDAY&serviceType=PICKUP").serviceCategory, "PICKUP");
+});
+
+test("clearing Type preserves the active day category and clearing a day preserves explicit Type", () => {
+  const pickup = updateOrderFiltersForChange({ scope: "history", serviceType: "PICKUP" }, "pickupWeekday", "THURSDAY");
+  const noType = updateOrderFiltersForChange(pickup, "serviceType", "");
+  assert.equal(noType.serviceCategory, "PICKUP");
+  const noDay = updateOrderFiltersForChange(pickup, "pickupWeekday", "");
+  assert.equal(noDay.deliveryWeekday, "");
+  assert.equal(noDay.serviceType, "PICKUP");
 });

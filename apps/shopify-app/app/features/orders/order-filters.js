@@ -30,11 +30,6 @@ export const ORDER_SERVICE_TYPE_OPTIONS = [
   { label: "Evening Delivery", value: "EVENING_DELIVERY" },
   { label: "Pickup", value: "PICKUP" },
 ];
-export const ORDER_SERVICE_CATEGORY_OPTIONS = [
-  { labelKey: "orders.filters.serviceCategory.all", value: "" },
-  { labelKey: "orders.filters.serviceCategory.delivery", value: "DELIVERY" },
-  { labelKey: "orders.filters.serviceCategory.pickup", value: "PICKUP" },
-];
 export const ORDER_WEEKDAY_OPTIONS = [
   { label: "Sunday", value: "SUNDAY" },
   { label: "Monday", value: "MONDAY" },
@@ -332,7 +327,8 @@ export function normalizeOrderFilters(filters = {}) {
   const normalizedServiceType = normalizeServiceType(filters.serviceType);
   const requestedServiceCategory = normalizeServiceCategory(filters.serviceCategory);
   const serviceTypeCategory = getServiceCategoryForServiceType(normalizedServiceType);
-  const serviceCategory = requestedServiceCategory || serviceTypeCategory;
+  const deliveryWeekday = normalizeDeliveryWeekday(filters.deliveryWeekday);
+  const serviceCategory = requestedServiceCategory || serviceTypeCategory || (deliveryWeekday ? "DELIVERY" : "");
   const serviceType = requestedServiceCategory && serviceTypeCategory !== requestedServiceCategory
     ? ""
     : normalizedServiceType;
@@ -341,7 +337,7 @@ export function normalizeOrderFilters(filters = {}) {
     deliveryArea: textOrEmpty(filters.deliveryArea),
     deliveryDate: normalizeDeliveryDateFilter(filters.deliveryDate),
     deliveryState: normalizeDeliveryState(filters.deliveryState),
-    deliveryWeekday: normalizeDeliveryWeekday(filters.deliveryWeekday),
+    deliveryWeekday,
     orderedDate: "",
     orderedDateFrom: orderedDateFrom && orderedDateTo && orderedDateFrom > orderedDateTo ? orderedDateTo : orderedDateFrom,
     orderedDateTo: orderedDateFrom && orderedDateTo && orderedDateFrom > orderedDateTo ? orderedDateFrom : orderedDateTo,
@@ -355,7 +351,14 @@ export function normalizeOrderFilters(filters = {}) {
 }
 
 export function updateOrderFiltersForChange(filters, filterKey, filterValue) {
-  const nextFilters = { ...filters, [filterKey]: filterValue };
+  const isWeekday = filterKey === "deliveryWeekday" || filterKey === "pickupWeekday";
+  const nextFilters = { ...filters, [isWeekday ? "deliveryWeekday" : filterKey]: filterValue };
+
+  if (isWeekday) {
+    nextFilters.serviceCategory = filterValue
+      ? (filterKey === "pickupWeekday" ? "PICKUP" : "DELIVERY")
+      : "";
+  }
 
   if (filterKey === "serviceCategory") {
     const serviceCategory = normalizeServiceCategory(filterValue);
@@ -366,7 +369,8 @@ export function updateOrderFiltersForChange(filters, filterKey, filterValue) {
   }
 
   if (filterKey === "serviceType") {
-    nextFilters.serviceCategory = getServiceCategoryForServiceType(filterValue);
+    nextFilters.serviceCategory = getServiceCategoryForServiceType(filterValue)
+      || (nextFilters.deliveryWeekday ? nextFilters.serviceCategory : "");
   }
 
   return normalizeOrderFilters(nextFilters);

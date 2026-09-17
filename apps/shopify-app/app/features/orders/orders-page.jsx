@@ -70,7 +70,6 @@ import {
   ORDER_DELIVERY_STATE_OPTIONS,
   ORDER_HISTORY_SCOPE,
   ORDER_PLANNING_SCOPE,
-  ORDER_SERVICE_CATEGORY_OPTIONS,
   ORDER_WEEKDAY_OPTIONS,
   sortOrdersByDeliveryDatePriority,
   updateOrderFiltersForChange,
@@ -173,6 +172,7 @@ const ORDER_FILTER_TYPES = [
   { key: "orderedDate", labelKey: "orders.filters.orderDate" },
   { key: "deliveryDate", labelKey: "orders.filters.deliveryDate" },
   { key: "deliveryWeekday", labelKey: "orders.filters.deliveryDay" },
+  { key: "pickupWeekday", labelKey: "orders.filters.pickupDay" },
   { key: "serviceType", labelKey: "orders.filters.type" },
   { key: "deliveryArea", labelKey: "orders.filters.area" },
   { key: "deliveryState", labelKey: "orders.filters.state" },
@@ -183,7 +183,9 @@ export function getActiveOrderFilterKeys(filters = {}) {
   return [
     filters.orderedDateFrom || filters.orderedDateTo ? "orderedDate" : null,
     filters.deliveryDate ? "deliveryDate" : null,
-    filters.deliveryWeekday ? "deliveryWeekday" : null,
+    filters.deliveryWeekday || (filters.serviceCategory && !filters.serviceType)
+      ? (filters.serviceCategory === "PICKUP" ? "pickupWeekday" : "deliveryWeekday")
+      : null,
     filters.serviceType ? "serviceType" : null,
     filters.deliveryArea ? "deliveryArea" : null,
     filters.deliveryState ? "deliveryState" : null,
@@ -191,8 +193,11 @@ export function getActiveOrderFilterKeys(filters = {}) {
 }
 
 export function updateVisibleOrderFilterKeys(keys, filterKey, visible) {
-  const currentKeys = Array.isArray(keys) ? keys : [];
+  let currentKeys = Array.isArray(keys) ? keys : [];
   if (!visible) return currentKeys.filter((key) => key !== filterKey);
+  if (filterKey === "deliveryWeekday" || filterKey === "pickupWeekday") {
+    currentKeys = currentKeys.filter((key) => key !== "deliveryWeekday" && key !== "pickupWeekday");
+  }
   return currentKeys.includes(filterKey) ? currentKeys : [...currentKeys, filterKey];
 }
 
@@ -574,35 +579,6 @@ const orderFiltersPanelStyle = {
   gap: "6px",
 };
 
-const orderServiceCategoryStyle = {
-  alignItems: "center",
-  display: "flex",
-  flex: "0 0 auto",
-  gap: "2px",
-};
-
-const orderServiceCategoryLabelStyle = {
-  color: "#616161",
-  fontSize: "12px",
-  fontWeight: 650,
-  marginRight: "4px",
-  whiteSpace: "nowrap",
-};
-
-const orderServiceCategoryButtonStyle = {
-  ...orderFilterButtonStyle,
-  borderRadius: "6px",
-  minHeight: "28px",
-  padding: "3px 9px",
-};
-
-const selectedOrderServiceCategoryButtonStyle = {
-  ...orderServiceCategoryButtonStyle,
-  background: "#303030",
-  borderColor: "#303030",
-  color: "#ffffff",
-};
-
 const tableWrapStyle = {
   boxSizing: "border-box",
   height: "calc(100vh - 150px)",
@@ -826,13 +802,15 @@ function renderOrderFilterChevron() {
   );
 }
 
-function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, options, value }) {
+function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, options, value, active = Boolean(value), showLabel = false }) {
   const fieldRef = useRef(null);
   const menuRef = useRef(null);
   const [open, setOpen] = useState(false);
   const [menuPosition, setMenuPosition] = useState(null);
   const selectedOption = options.find((option) => option.value === value);
-  const displayLabel = selectedOption?.label ?? label;
+  const displayLabel = selectedOption
+    ? (showLabel ? `${label}: ${selectedOption.label}` : selectedOption.label)
+    : label;
 
   const positionMenu = useCallback(() => {
     const rect = fieldRef.current?.getBoundingClientRect();
@@ -879,14 +857,14 @@ function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, opti
         aria-expanded={open}
         aria-haspopup="listbox"
         aria-label={ariaLabel}
-        style={value ? orderFilterMenuButtonStyle : orderFilterMenuPlaceholderStyle}
+        style={active ? orderFilterMenuButtonStyle : orderFilterMenuPlaceholderStyle}
         type="button"
         onClick={() => {
           if (!open) positionMenu();
           setOpen((isOpen) => !isOpen);
         }}
       >{displayLabel}</button>
-      {value ? (
+      {active ? (
         <button
           type="button"
           aria-label={clearLabel}
@@ -2761,8 +2739,7 @@ function OrdersPageContent({ loaderData }) {
   const activeOrderFilterCount = [
     orderFilters.orderedDateFrom || orderFilters.orderedDateTo,
     orderFilters.deliveryDate,
-    orderFilters.deliveryWeekday,
-    orderFilters.serviceCategory,
+    orderFilters.deliveryWeekday || (orderFilters.serviceCategory && !orderFilters.serviceType),
     orderFilters.serviceType,
     orderFilters.deliveryArea,
     orderFilters.deliveryState,
@@ -4219,10 +4196,13 @@ function OrdersPageContent({ loaderData }) {
     setVisibleOrderFilterKeys((currentKeys) =>
       updateVisibleOrderFilterKeys(currentKeys, filterKey, true),
     );
+    if (filterKey === "deliveryWeekday" || filterKey === "pickupWeekday") {
+      handleOrderFilterChange(filterKey, orderFilters.deliveryWeekday);
+    }
   };
 
   const handleClearOrderFilter = (filterKey) => {
-    const nextFilters = { ...orderFilters };
+    const nextFilters = updateOrderFiltersForChange(orderFilters, filterKey, "");
 
     if (filterKey === "orderedDate") {
       nextFilters.orderedDateFrom = "";
@@ -4230,8 +4210,6 @@ function OrdersPageContent({ loaderData }) {
       setPendingOrderedDateStart("");
       setOrderedDateCalendarOpen(false);
       setOrderedDateCalendarPosition(null);
-    } else {
-      nextFilters[filterKey] = "";
     }
     setVisibleOrderFilterKeys((currentKeys) =>
       updateVisibleOrderFilterKeys(currentKeys, filterKey, false),
@@ -5922,26 +5900,6 @@ function OrdersPageContent({ loaderData }) {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
-            <div
-              aria-label={translate(language, "orders.filters.serviceCategory.aria")}
-              role="group"
-              style={orderServiceCategoryStyle}
-            >
-              <span style={orderServiceCategoryLabelStyle}>
-                {translate(language, "orders.filters.serviceCategory.label")}
-              </span>
-              {ORDER_SERVICE_CATEGORY_OPTIONS.map((option) => (
-                <button
-                  aria-pressed={orderFilters.serviceCategory === option.value}
-                  key={option.value || "all"}
-                  onClick={() => handleOrderFilterChange("serviceCategory", option.value)}
-                  style={orderFilters.serviceCategory === option.value
-                    ? selectedOrderServiceCategoryButtonStyle
-                    : orderServiceCategoryButtonStyle}
-                  type="button"
-                >{translate(language, option.labelKey)}</button>
-              ))}
-            </div>
             <s-button
               commandFor="orders-filter-popover"
               disabled={availableOrderFilterTypes.length === 0}
@@ -6040,8 +5998,23 @@ function OrdersPageContent({ loaderData }) {
               label={translate(language, "orders.filters.deliveryDay")}
               options={translateOrderFilterOptions(language, ORDER_WEEKDAY_OPTIONS, ORDER_FILTER_WEEKDAY_KEY_BY_VALUE)}
               value={orderFilters.deliveryWeekday}
+              active={Boolean(orderFilters.deliveryWeekday || (orderFilters.serviceCategory && !orderFilters.serviceType))}
+              showLabel
               onChange={(filterValue) => handleOrderFilterChange("deliveryWeekday", filterValue)}
               onClear={() => handleClearOrderFilter("deliveryWeekday")}
+                  />
+                ) : null}
+                {visibleOrderFilterKeys.includes("pickupWeekday") ? (
+                  <OrderFilterMenu
+              ariaLabel={translate(language, "orders.filters.aria.pickupDay")}
+              clearLabel={translate(language, "orders.filters.clear.pickupDay")}
+              label={translate(language, "orders.filters.pickupDay")}
+              options={translateOrderFilterOptions(language, ORDER_WEEKDAY_OPTIONS, ORDER_FILTER_WEEKDAY_KEY_BY_VALUE)}
+              value={orderFilters.deliveryWeekday}
+              active={Boolean(orderFilters.deliveryWeekday || (orderFilters.serviceCategory && !orderFilters.serviceType))}
+              showLabel
+              onChange={(filterValue) => handleOrderFilterChange("pickupWeekday", filterValue)}
+              onClear={() => handleClearOrderFilter("pickupWeekday")}
                   />
                 ) : null}
                 {visibleOrderFilterKeys.includes("serviceType") ? (

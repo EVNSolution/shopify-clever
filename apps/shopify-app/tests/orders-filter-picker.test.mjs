@@ -71,3 +71,23 @@ test("Orders rows no longer render Area or Payment cells", () => {
   assert.doesNotMatch(rowsSource, /areaPill|Area details|Edit delivery area/);
   assert.doesNotMatch(rowsSource, /paymentPillDetails|Payment details|formatOrderPaymentState/);
 });
+
+
+test("day filter controls restore their service category and replace the opposite day control", () => {
+  const getActiveKeys = evaluateFunction("getActiveOrderFilterKeys");
+  const updateVisibleKeys = evaluateFunction("updateVisibleOrderFilterKeys");
+  assert.deepEqual(Array.from(getActiveKeys({ deliveryWeekday: "THURSDAY", serviceCategory: "DELIVERY" })), ["deliveryWeekday"]);
+  assert.deepEqual(Array.from(getActiveKeys({ deliveryWeekday: "THURSDAY", serviceCategory: "PICKUP" })), ["pickupWeekday"]);
+  assert.deepEqual(Array.from(getActiveKeys({ serviceCategory: "PICKUP" })), ["pickupWeekday"]);
+  assert.deepEqual(Array.from(updateVisibleKeys(["deliveryDate", "deliveryWeekday"], "pickupWeekday", true)), ["deliveryDate", "pickupWeekday"]);
+  assert.deepEqual(Array.from(updateVisibleKeys(["deliveryDate", "pickupWeekday"], "deliveryWeekday", true)), ["deliveryDate", "deliveryWeekday"]);
+  assert.deepEqual(Array.from(updateVisibleKeys(["deliveryDate", "pickupWeekday"], "pickupWeekday", false)), ["deliveryDate"]);
+});
+
+test("service-specific day filters live in Add filter without a standalone category toggle", () => {
+  assert.match(source, /key: "deliveryWeekday", labelKey: "orders.filters.deliveryDay"/);
+  assert.match(source, /key: "pickupWeekday", labelKey: "orders.filters.pickupDay"/);
+  assert.doesNotMatch(source, /ORDER_SERVICE_CATEGORY_OPTIONS|orderServiceCategoryStyle/);
+  assert.match(source, /onChange=\{\(filterValue\) => handleOrderFilterChange\("pickupWeekday", filterValue\)\}/);
+  assert.match(source, /onClear=\{\(\) => handleClearOrderFilter\("pickupWeekday"\)\}/);
+});
