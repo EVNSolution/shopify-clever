@@ -9,6 +9,7 @@ export const ORDER_FILTER_QUERY_KEYS = {
   planned: "planned",
   scope: "scope",
   search: "search",
+  serviceCategory: "serviceCategory",
   serviceType: "serviceType",
   tab: "tab",
 };
@@ -171,6 +172,13 @@ export function orderMatchesFilters(order, filters = {}, options = {}) {
   }
 
   if (
+    normalizedFilters.serviceCategory &&
+    !orderMatchesServiceCategory(order, normalizedFilters.serviceCategory)
+  ) {
+    return false;
+  }
+
+  if (
     normalizedFilters.search &&
     !orderMatchesSearch(order, normalizedFilters.search)
   ) {
@@ -286,6 +294,7 @@ export function getOrderFiltersFromSearchParams(searchParams) {
     search:
       params.get(ORDER_FILTER_QUERY_KEYS.search) ??
       params.get(LEGACY_ORDER_FILTER_QUERY_KEYS[0]),
+    serviceCategory: params.get(ORDER_FILTER_QUERY_KEYS.serviceCategory),
     serviceType: params.get(ORDER_FILTER_QUERY_KEYS.serviceType),
     tab: params.get(ORDER_FILTER_QUERY_KEYS.tab),
   });
@@ -315,21 +324,56 @@ export function normalizeOrderFilters(filters = {}) {
   const legacyOrderedDate = normalizeDateOnlyValue(filters.orderedDate);
   const orderedDateFrom = normalizeDateOnlyValue(filters.orderedDateFrom) || legacyOrderedDate;
   const orderedDateTo = normalizeDateOnlyValue(filters.orderedDateTo) || legacyOrderedDate;
+  const normalizedServiceType = normalizeServiceType(filters.serviceType);
+  const requestedServiceCategory = normalizeServiceCategory(filters.serviceCategory);
+  const serviceTypeCategory = getServiceCategoryForServiceType(normalizedServiceType);
+  const deliveryWeekday = normalizeDeliveryWeekday(filters.deliveryWeekday);
+  const serviceCategory = requestedServiceCategory || serviceTypeCategory || (deliveryWeekday ? "DELIVERY" : "");
+  const serviceType = requestedServiceCategory && serviceTypeCategory !== requestedServiceCategory
+    ? ""
+    : normalizedServiceType;
 
   return {
     deliveryArea: textOrEmpty(filters.deliveryArea),
     deliveryDate: normalizeDeliveryDateFilter(filters.deliveryDate),
     deliveryState: normalizeDeliveryState(filters.deliveryState),
-    deliveryWeekday: normalizeDeliveryWeekday(filters.deliveryWeekday),
+    deliveryWeekday,
     orderedDate: "",
     orderedDateFrom: orderedDateFrom && orderedDateTo && orderedDateFrom > orderedDateTo ? orderedDateTo : orderedDateFrom,
     orderedDateTo: orderedDateFrom && orderedDateTo && orderedDateFrom > orderedDateTo ? orderedDateFrom : orderedDateTo,
     planned: "",
     scope: normalizeScope(filters.scope),
     search: textOrEmpty(filters.search),
-    serviceType: normalizeServiceType(filters.serviceType),
+    serviceCategory,
+    serviceType,
     tab: normalizeTab(filters.tab, filters.planned),
   };
+}
+
+export function updateOrderFiltersForChange(filters, filterKey, filterValue) {
+  const isWeekday = filterKey === "deliveryWeekday" || filterKey === "pickupWeekday";
+  const nextFilters = { ...filters, [isWeekday ? "deliveryWeekday" : filterKey]: filterValue };
+
+  if (isWeekday) {
+    nextFilters.serviceCategory = filterValue
+      ? (filterKey === "pickupWeekday" ? "PICKUP" : "DELIVERY")
+      : "";
+  }
+
+  if (filterKey === "serviceCategory") {
+    const serviceCategory = normalizeServiceCategory(filterValue);
+    const serviceTypeCategory = getServiceCategoryForServiceType(nextFilters.serviceType);
+    if (!serviceCategory || (serviceTypeCategory && serviceTypeCategory !== serviceCategory)) {
+      nextFilters.serviceType = "";
+    }
+  }
+
+  if (filterKey === "serviceType") {
+    nextFilters.serviceCategory = getServiceCategoryForServiceType(filterValue)
+      || (nextFilters.deliveryWeekday ? nextFilters.serviceCategory : "");
+  }
+
+  return normalizeOrderFilters(nextFilters);
 }
 
 export function hasActiveOrderFilters(filters = {}) {
@@ -703,6 +747,18 @@ function normalizeServiceType(value) {
     : "";
 }
 
+function normalizeServiceCategory(value) {
+  const normalizedValue = textOrEmpty(value).toUpperCase().replace(/[\s-]+/g, "_");
+  return ["DELIVERY", "PICKUP"].includes(normalizedValue) ? normalizedValue : "";
+}
+
+function getServiceCategoryForServiceType(value) {
+  const serviceType = normalizeServiceType(value);
+  if (serviceType === "PICKUP") return "PICKUP";
+  if (["DELIVERY", "EVENING_DELIVERY"].includes(serviceType)) return "DELIVERY";
+  return "";
+}
+
 function normalizeDeliveryWeekday(value) {
   const normalizedValue = textOrEmpty(value).toUpperCase().replace(/[\s-]+/g, "_");
   return ORDER_WEEKDAY_OPTIONS.some((option) => option.value === normalizedValue)
@@ -743,6 +799,11 @@ function orderMatchesServiceType(order, serviceTypeFilter) {
   if (normalizedFilter === "DELIVERY") return orderServiceType === "DELIVERY";
 
   return orderServiceType === normalizedFilter;
+}
+
+function orderMatchesServiceCategory(order, serviceCategoryFilter) {
+  const normalizedCategory = normalizeServiceCategory(serviceCategoryFilter);
+  return Boolean(normalizedCategory) && getServiceCategoryForServiceType(order?.serviceType) === normalizedCategory;
 }
 
 function isOrderNeedsReview(order, referenceDate) {
