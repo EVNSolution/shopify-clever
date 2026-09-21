@@ -335,7 +335,7 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       filter: ["==", ["get", "trackingType"], "trackingTrail"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#0b84d8",
+        "line-color": "#d32f2f",
         "line-dasharray": [1.5, 1.25],
         "line-opacity": 0.9,
         "line-width": 3.5,
@@ -350,7 +350,7 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       filter: ["==", ["get", "trackingType"], "trackingConnector"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#0b84d8",
+        "line-color": "#d32f2f",
         "line-dasharray": [1.5, 1.25],
         "line-opacity": 0.9,
         "line-width": 3.5,
