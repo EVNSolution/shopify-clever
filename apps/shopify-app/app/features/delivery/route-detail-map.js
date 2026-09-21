@@ -231,16 +231,25 @@ function softenRouteColor(routeColor) {
   return `rgb(${mix(color.slice(0, 2))}, ${mix(color.slice(2, 4))}, ${mix(color.slice(4, 6))})`;
 }
 
-function moveRouteDetailRouteLineBelowMarkers(map) {
-  if (!map.getLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID)) return;
-
+function syncRouteDetailLineOrder(map) {
   const firstMarkerLayerId = [
     ROUTE_DETAIL_STOP_POINT_LAYER_ID,
     ROUTE_DETAIL_DEPARTURE_LAYER_ID,
     ROUTE_DETAIL_STOP_LAYER_ID,
     ROUTE_DETAIL_STOP_COMPLETION_LAYER_ID,
+    ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
   ].find((layerId) => map.getLayer?.(layerId));
-  if (firstMarkerLayerId) map.moveLayer?.(ROUTE_DETAIL_ROUTE_LAYER_ID, firstMarkerLayerId);
+  // Reassert the full stack after either source refreshes, regardless of load order.
+  for (const layerId of [
+    ROUTE_DETAIL_ROUTE_LAYER_ID,
+    ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
+    ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID,
+  ]) {
+    if (map.getLayer?.(layerId)) map.moveLayer?.(layerId, firstMarkerLayerId);
+  }
+  if (map.getLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID)) {
+    map.moveLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID);
+  }
 }
 
 function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", options = {}) {
@@ -284,7 +293,7 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
     map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-opacity", routeLineOpacity);
     map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-width", routeLineWidth);
   }
-  moveRouteDetailRouteLineBelowMarkers(map);
+  syncRouteDetailLineOrder(map);
   return true;
 }
 
@@ -374,6 +383,7 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
     });
   }
 
+  syncRouteDetailLineOrder(map);
   syncRouteDetailTrackingVisibility(map, true);
   return true;
 }
@@ -944,7 +954,7 @@ function syncRouteDetailMapMarkerLayers(map, departureLocation, routeStops, rout
       });
     }
     map.moveLayer?.(ROUTE_DETAIL_STOP_POINT_LAYER_ID, ROUTE_DETAIL_DEPARTURE_LAYER_ID);
-    moveRouteDetailRouteLineBelowMarkers(map);
+    syncRouteDetailLineOrder(map);
 
     emitRouteDetailMarkerDiagnostics(onDiagnostics, {
       ...getRouteDetailMarkerLayerState(map),

@@ -517,6 +517,150 @@ test("gps quality v3 preserves inferred coverage and renders it once as GPS trac
   assert.deepEqual(features[1].geometry.coordinates, coordinates.slice(2, 5));
 });
 
+test("gps quality v4 renders accepted matches and bounded inference while rejecting uncertain raw fallback", () => {
+  const coordinates = Array.from({ length: 6 }, (_, index) => [-79.4 + index * 0.001, 43.7 + index * 0.001]);
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: 5,
+    driverId: "driver-1",
+    eventId: `quality-v4-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex, interpolationLevel, reason = null) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    interpolationLevel,
+    reason,
+  });
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    latestPosition: {
+      ...samples.at(-1),
+      latitude: coordinates.at(-1)[1],
+      longitude: coordinates.at(-1)[0],
+    },
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      matchedGeometry: { coordinates: [coordinates.slice(0, 3)], type: "MultiLineString" },
+      matchedRanges: [range(0, 2, 0)],
+      inferredGeometry: { coordinates: [coordinates.slice(2, 5)], type: "MultiLineString" },
+      inferredRanges: [range(2, 4, 1, "ROAD_GAP_INFERENCE")],
+      uncertainGeometry: { coordinates: [coordinates.slice(4, 6)], type: "MultiLineString" },
+      uncertainRanges: [range(4, 5, 2, "LOW_CONFIDENCE")],
+      unmatchedRanges: [range(4, 5, 2, "LOW_ACCURACY")],
+    },
+  });
+
+  assert.equal(snapshot.roadMatchedPath.matchedRanges[0].interpolationLevel, 0);
+  assert.equal(snapshot.roadMatchedPath.inferredRanges[0].interpolationLevel, 1);
+  assert.equal(snapshot.roadMatchedPath.uncertainRanges[0].interpolationLevel, 2);
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => feature.geometry.coordinates), [
+    coordinates.slice(0, 3),
+    coordinates.slice(2, 5),
+  ]);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingSource ?? null), [null, "inferred"]);
+  assert.equal(snapshot.latestPosition.eventId, samples.at(-1).eventId);
+});
+
+test("gps quality v4 rejected ranges stay disconnected while the current position remains available", () => {
+  const coordinates = [[-79.4, 43.7], [-79.399, 43.701], [-79.398, 43.702]];
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: 5,
+    driverId: "driver-1",
+    eventId: `rejected-v4-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const rejectedRange = {
+    startEventId: samples[0].eventId,
+    endEventId: samples[2].eventId,
+    startOccurredAt: samples[0].occurredAt,
+    endOccurredAt: samples[2].occurredAt,
+    startSourceIndex: 0,
+    endSourceIndex: 2,
+    interpolationLevel: 2,
+    reason: "LOW_CONFIDENCE",
+  };
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    latestPosition: {
+      ...samples[2],
+      latitude: coordinates[2][1],
+      longitude: coordinates[2][0],
+    },
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      uncertainGeometry: { coordinates: [coordinates], type: "MultiLineString" },
+      uncertainRanges: [rejectedRange],
+      unmatchedRanges: [
+        { ...rejectedRange, interpolationLevel: null, reason: "NO_MATCH" },
+        { ...rejectedRange, interpolationLevel: "1", reason: "NO_MATCH" },
+      ],
+    },
+  });
+
+  assert.deepEqual(getRouteTrackingLineFeatures(snapshot), []);
+  assert.deepEqual(snapshot.roadMatchedPath.unmatchedRanges.map((range) => (
+    Object.hasOwn(range, "interpolationLevel")
+  )), [false, false]);
+  assert.equal(snapshot.latestPosition.eventId, samples[2].eventId);
+});
+
+test("gps quality v4 date clipping never reconnects a rejected window boundary with raw GPS", () => {
+  const coordinates = [[-79.4, 43.7], [-79.399, 43.701], [-79.398, 43.702]];
+  const occurredTimes = [
+    "2026-09-18T03:58:00.000Z",
+    "2026-09-18T03:59:00.000Z",
+    "2026-09-18T04:01:00.000Z",
+  ];
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: 5,
+    driverId: "driver-1",
+    eventId: `window-v4-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: occurredTimes[sourceIndex],
+    receivedAt: occurredTimes[sourceIndex],
+    sourceIndex,
+  }));
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      matchedGeometry: { coordinates: [[coordinates[0], coordinates[2]]], type: "MultiLineString" },
+      matchedRanges: [{
+        startEventId: samples[0].eventId,
+        endEventId: samples[2].eventId,
+        startOccurredAt: samples[0].occurredAt,
+        endOccurredAt: samples[2].occurredAt,
+        startSourceIndex: 0,
+        endSourceIndex: 2,
+        interpolationLevel: 0,
+      }],
+    },
+  });
+
+  const serviceDay = selectRouteTrackingWindow(snapshot, {
+    date: "2026-09-17",
+    timeZone: "America/Toronto",
+  });
+  assert.equal(serviceDay.roadMatchedPath.matchedGeometry, null);
+  assert.equal(serviceDay.roadMatchedPath.unmatchedRanges[0].reason, "WINDOW_BOUNDARY");
+  assert.equal(serviceDay.roadMatchedPath.unmatchedRanges[0].interpolationLevel, 0);
+  assert.deepEqual(getRouteTrackingLineFeatures(serviceDay), []);
+});
+
 test("gps quality v2 cached paths remain valid without inference fields", () => {
   const snapshot = normalizeRouteTrackingSnapshot({
     roadMatchedPath: {
