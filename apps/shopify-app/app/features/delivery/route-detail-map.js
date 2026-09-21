@@ -174,7 +174,7 @@ function getValidRouteLineCoordinates(coordinates) {
   return coordinates.map(normalizeLngLatPair).filter(Boolean);
 }
 
-function buildRouteDetailRouteLineData(routeLines, fallbackRouteColor, forceRouteColor = null) {
+function buildRouteDetailRouteLineData(routeLines, fallbackRouteColor) {
   const lines = Array.isArray(routeLines)
     ? routeLines
     : [{ routeColor: fallbackRouteColor, routeGeometry: routeLines }];
@@ -190,7 +190,7 @@ function buildRouteDetailRouteLineData(routeLines, fallbackRouteColor, forceRout
     return [{
       type: "Feature",
       geometry: { type: "LineString", coordinates },
-      properties: { routeColor: forceRouteColor ?? routeLine.routeColor ?? fallbackRouteColor },
+      properties: { routeColor: routeLine.routeColor ?? fallbackRouteColor },
     }];
   });
 
@@ -246,20 +246,15 @@ function moveRouteDetailRouteLineBelowMarkers(map) {
 function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", options = {}) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
-  const displayRouteColor = options.isTrackingReference ? "#a7adb4" : routeColor;
-  const routeLineData = buildRouteDetailRouteLineData(
-    routeLines,
-    displayRouteColor,
-    options.isTrackingReference ? displayRouteColor : null,
-  );
+  const routeLineData = buildRouteDetailRouteLineData(routeLines, routeColor);
   if (!routeLineData) {
     removeRouteDetailRouteLine(map);
     return true;
   }
 
   const existingSource = map.getSource?.(ROUTE_DETAIL_ROUTE_SOURCE_ID);
-  const routeLineOpacity = options.isTrackingReference ? 0.42 : 0.78;
-  const routeLineWidth = options.isTrackingReference ? 3.5 : 2.5;
+  const routeLineOpacity = 0.78;
+  const routeLineWidth = options.isTrackingReference ? 5.5 : 2.5;
   if (existingSource?.setData) {
     existingSource.setData(routeLineData);
   } else {
@@ -279,13 +274,13 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
         "line-join": "round",
       },
       paint: {
-        "line-color": ["coalesce", ["get", "routeColor"], displayRouteColor],
+        "line-color": ["coalesce", ["get", "routeColor"], routeColor],
         "line-opacity": routeLineOpacity,
         "line-width": routeLineWidth,
       },
     });
   } else {
-    map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", ["coalesce", ["get", "routeColor"], displayRouteColor]);
+    map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-color", ["coalesce", ["get", "routeColor"], routeColor]);
     map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-opacity", routeLineOpacity);
     map.setPaintProperty?.(ROUTE_DETAIL_ROUTE_LAYER_ID, "line-width", routeLineWidth);
   }
@@ -341,7 +336,8 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": "#0b84d8",
-        "line-opacity": 0.92,
+        "line-dasharray": [1.5, 1.25],
+        "line-opacity": 0.9,
         "line-width": 3.5,
       },
     }, beforeMarkerLayerId);
@@ -354,10 +350,10 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       filter: ["==", ["get", "trackingType"], "trackingConnector"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
-        "line-color": "#79828c",
-        "line-dasharray": [1.25, 1.5],
-        "line-opacity": 0.78,
-        "line-width": 3,
+        "line-color": "#0b84d8",
+        "line-dasharray": [1.5, 1.25],
+        "line-opacity": 0.9,
+        "line-width": 3.5,
       },
     }, beforeMarkerLayerId);
   }

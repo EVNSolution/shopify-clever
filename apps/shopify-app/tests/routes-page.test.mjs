@@ -1391,8 +1391,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
       routeDetailMapSource.indexOf("if (!isRouteDetailMapStyleReady(map))", routeDetailMapSource.indexOf("function syncRouteEditPolygon")),
     "route polygon source updates before transient style readiness can block double-click close",
   );
-  assert.match(routeDetailMapSource, /function buildRouteDetailRouteLineData\(routeLines, fallbackRouteColor, forceRouteColor = null\) \{/);
-  assert.match(routeDetailMapSource, /\["coalesce", \["get", "routeColor"\], displayRouteColor\]/);
+  assert.match(routeDetailMapSource, /function buildRouteDetailRouteLineData\(routeLines, fallbackRouteColor\) \{/);
+  assert.match(routeDetailMapSource, /\["coalesce", \["get", "routeColor"\], routeColor\]/);
   assert.match(routeDetailMapSource, /ROUTE_DETAIL_STOP_POINT_LAYER_ID/);
   assert.match(routeDetailSource, /map\.on\("styledata", syncPolygon\)/);
   assert.match(routeDetailMapSource, /function isLngLatInPolygon\(point, polygon\) \{/);

@@ -516,6 +516,7 @@ function normalizeMultiLineGeometry(geometry) {
 function normalizeRoadMatchedPath(roadMatchedPath) {
   if (!roadMatchedPath || typeof roadMatchedPath !== "object") return null;
 
+  const inferredGeometry = normalizeMultiLineGeometry(roadMatchedPath.inferredGeometry);
   const matchedGeometry = normalizeMultiLineGeometry(roadMatchedPath.matchedGeometry);
   const uncertainGeometry = normalizeMultiLineGeometry(roadMatchedPath.uncertainGeometry);
   const lastMatchedLatitude = numberOrNull(roadMatchedPath.lastMatchedPosition?.latitude);
@@ -532,10 +533,12 @@ function normalizeRoadMatchedPath(roadMatchedPath) {
         occurredAt: textOrNull(roadMatchedPath.lastMatchedPosition?.occurredAt),
       }
     : null;
-  if (!matchedGeometry && !uncertainGeometry && !lastMatchedPosition) return null;
+  if (!inferredGeometry && !matchedGeometry && !uncertainGeometry && !lastMatchedPosition) return null;
 
   return {
     coverage: textOrNull(roadMatchedPath.coverage),
+    inferredGeometry,
+    inferredRanges: normalizeRoadMatchRanges(roadMatchedPath.inferredRanges),
     inputPointCount: Math.max(0, numberOrNull(roadMatchedPath.inputPointCount) ?? 0),
     lastInputOccurredAt: textOrNull(roadMatchedPath.lastInputOccurredAt),
     lastMatchedPosition,
@@ -717,10 +720,19 @@ function getRouteTrackingLineFeatures(snapshot) {
       features.push(createTrackingLineFeature(coordinates, "trackingConnector"));
     }
   }
-  if (roadMatchedPath.unmatchedRanges.length > 0) {
+  if (roadMatchedPath.inferredGeometry) {
+    for (const coordinates of roadMatchedPath.inferredGeometry.coordinates) {
+      features.push(createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "inferred" }));
+    }
+  }
+  const uncoveredRanges = subtractCoveredRoadMatchRanges(
+    roadMatchedPath.unmatchedRanges,
+    roadMatchedPath.inferredRanges,
+  );
+  if (uncoveredRanges.length > 0) {
     features.push(...getRecordedTrackingCoverageFeatures(
       normalized,
-      roadMatchedPath.unmatchedRanges.filter(isRenderableUnmatchedRange),
+      uncoveredRanges.filter(isRenderableUnmatchedRange),
     ));
   } else if (!roadMatchedPath.qualityVersion) {
     features.push(...getRecordedTrackingCoverageFeatures(normalized, getLegacyUncoveredPointRanges(normalized, roadMatchedPath)));
@@ -729,25 +741,34 @@ function getRouteTrackingLineFeatures(snapshot) {
   if (!roadMatchedPath.matchedGeometry) return features.length > 0 ? features : recordedCoverage;
   if (!roadMatchedPath.qualityVersion) return features;
 
+  const latestInferredLine = (roadMatchedPath.inferredGeometry?.coordinates ?? []).flatMap((coordinates, index) => {
+    const timestamp = Date.parse(roadMatchedPath.inferredRanges[index]?.endOccurredAt ?? "");
+    return Number.isFinite(timestamp) ? [{ coordinates: coordinates.at(-1), timestamp }] : [];
+  }).sort((left, right) => left.timestamp - right.timestamp).at(-1);
   const lastMatchedTimestamp = Date.parse(roadMatchedPath.lastMatchedPosition?.occurredAt ?? "");
   const lastInputTimestamp = Date.parse(roadMatchedPath.lastInputOccurredAt ?? "");
-  const tailStartTimestamp = Number.isFinite(lastMatchedTimestamp)
+  const inferredTailSeed = latestInferredLine
+    && Number.isFinite(lastMatchedTimestamp)
+    && latestInferredLine.timestamp > lastMatchedTimestamp
+    ? latestInferredLine
+    : null;
+  const tailStartTimestamp = inferredTailSeed?.timestamp ?? (Number.isFinite(lastMatchedTimestamp)
     ? lastMatchedTimestamp
-    : lastInputTimestamp;
+    : lastInputTimestamp);
   const gapThresholdMs = numberOrNull(normalized.policy?.delayedThresholdMs) ?? 180_000;
   const maxAccuracyMeters = nonNegativeNumberOrNull(normalized.policy?.maxMatchAccuracyMeters)
     ?? RAW_FALLBACK_MAX_ACCURACY_METERS;
   const tailPoints = getRouteTrackingPathPoints(normalized)
     .map((point) => ({ ...point, timestamp: getPositionTimestamp(point) }))
     .filter((point) => point.timestamp > (Number.isFinite(tailStartTimestamp) ? tailStartTimestamp : Number.POSITIVE_INFINITY));
-  const seed = roadMatchedPath.lastMatchedPosition
+  const seed = inferredTailSeed ?? (roadMatchedPath.lastMatchedPosition
     ? {
         coordinates: [roadMatchedPath.lastMatchedPosition.longitude, roadMatchedPath.lastMatchedPosition.latitude],
         timestamp: Number.isFinite(tailStartTimestamp)
           ? tailStartTimestamp
           : getPositionTimestamp(roadMatchedPath.lastMatchedPosition),
       }
-    : null;
+    : null);
   const tailSegments = [];
   let currentSegment = seed ? [seed] : [];
   for (const point of tailPoints) {
@@ -907,12 +928,28 @@ function buildRecordedTrackingSegments(points, snapshot) {
     .map((coordinates) => createTrackingLineFeature(coordinates, "trackingConnector"));
 }
 
-function createTrackingLineFeature(coordinates, trackingType) {
+function createTrackingLineFeature(coordinates, trackingType, properties = {}) {
   return {
     type: "Feature",
     geometry: { coordinates, type: "LineString" },
-    properties: { trackingType },
+    properties: { trackingType, ...properties },
   };
+}
+
+function subtractCoveredRoadMatchRanges(ranges, coveredRanges) {
+  return ranges.flatMap((range) => coveredRanges.reduce((pieces, coveredRange) => pieces.flatMap((piece) => {
+    if (coveredRange.endSourceIndex < piece.startSourceIndex || coveredRange.startSourceIndex > piece.endSourceIndex) {
+      return [piece];
+    }
+    const remaining = [];
+    if (coveredRange.startSourceIndex > piece.startSourceIndex) {
+      remaining.push({ ...piece, endSourceIndex: coveredRange.startSourceIndex - 1 });
+    }
+    if (coveredRange.endSourceIndex < piece.endSourceIndex) {
+      remaining.push({ ...piece, startSourceIndex: coveredRange.endSourceIndex + 1 });
+    }
+    return remaining;
+  }), [range]));
 }
 
 function areCoordinatesEqual(left, right) {
@@ -1022,6 +1059,7 @@ function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourc
     const coordinates = geometry.coordinates.filter((_, index) => isRoadMatchRangeInsideDate(ranges[index], date, timeZone));
     return coordinates.length > 0 ? { coordinates, type: "MultiLineString" } : null;
   };
+  const inferredRanges = roadMatchedPath.inferredRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
   const matchedRanges = roadMatchedPath.matchedRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
   const uncertainRanges = roadMatchedPath.uncertainRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
   const clipRangeToSelectedSources = (range, reason = range.reason) => ({
@@ -1030,7 +1068,10 @@ function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourc
     startSourceIndex: firstSourceIndex == null ? range.startSourceIndex : Math.max(range.startSourceIndex, firstSourceIndex),
     endSourceIndex: lastSourceIndex == null ? range.endSourceIndex : Math.min(range.endSourceIndex, lastSourceIndex),
   });
-  const unmatchedRanges = roadMatchedPath.unmatchedRanges.flatMap((range) => {
+  const unmatchedRanges = subtractCoveredRoadMatchRanges(
+    roadMatchedPath.unmatchedRanges,
+    roadMatchedPath.inferredRanges,
+  ).flatMap((range) => {
     if (!doesRoadMatchRangeIncludeDate(range, date, timeZone)) return [];
     return [clipRangeToSelectedSources(range)];
   }).concat(
@@ -1038,10 +1079,12 @@ function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourc
       .filter((range) => doesRoadMatchRangeCrossDate(range, date, timeZone))
       .map((range) => clipRangeToSelectedSources(range, "WINDOW_BOUNDARY")),
   ).filter((range) => range.endSourceIndex >= range.startSourceIndex);
-  const selectedRanges = [...matchedRanges, ...uncertainRanges, ...unmatchedRanges];
+  const selectedRanges = [...matchedRanges, ...uncertainRanges, ...inferredRanges, ...unmatchedRanges];
   const lastSelectedRange = selectedRanges.sort((left, right) => left.endSourceIndex - right.endSourceIndex).at(-1);
   return {
     ...roadMatchedPath,
+    inferredGeometry: selectGeometry(roadMatchedPath.inferredGeometry, roadMatchedPath.inferredRanges),
+    inferredRanges,
     lastInputOccurredAt: lastSelectedRange?.endOccurredAt ?? null,
     lastMatchedPosition: getDateKeyInTimeZone(roadMatchedPath.lastMatchedPosition?.occurredAt, timeZone) === date
       ? roadMatchedPath.lastMatchedPosition
