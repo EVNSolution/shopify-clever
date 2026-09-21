@@ -317,6 +317,8 @@ test("Tracking planned route remains a solid, visible reference under dashed GPS
 
   assert.equal(syncRouteDetailRouteLine(fake.map, routeGeometry, "#006fbb", { isTrackingReference: true }), true);
   const routeLayer = fake.layers.get("route-detail-osrm-route-line");
+  assert.deepEqual(routeLayer.paint["line-color"], ["coalesce", ["get", "routeColor"], "#a7adb4"]);
+  assert.equal(fake.sources.get("route-detail-osrm-route").data.features[0].properties.routeColor, "#a7adb4");
   assert.equal(routeLayer.paint["line-opacity"], 0.42);
   assert.equal(routeLayer.paint["line-width"], 3.5);
   assert.equal(routeLayer.paint["line-dasharray"], undefined);
