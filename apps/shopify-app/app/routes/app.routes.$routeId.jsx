@@ -645,7 +645,7 @@ const routeTrackingMapLegendItemStyle = {
 };
 
 const routeTrackingMapGpsKeyStyle = {
-  borderTop: "3.5px dashed #0b84d8",
+  borderTop: "3.5px dashed #d32f2f",
   height: 0,
   width: "22px",
 };
