@@ -477,6 +477,136 @@ test("quality coverage renders matched, uncertain, and unmatched spans once each
   assert.deepEqual(features[2].geometry.coordinates, coordinates.slice(5, 7));
 });
 
+test("gps quality v3 preserves inferred coverage and renders it once as GPS tracking", () => {
+  const coordinates = Array.from({ length: 5 }, (_, index) => [-79.4 + index * 0.001, 43.7 + index * 0.001]);
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: sourceIndex < 2 ? 5 : 250,
+    eventId: `inferred-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex, reason = null) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    reason,
+  });
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v3",
+      matchedGeometry: { coordinates: [coordinates.slice(0, 2)], type: "MultiLineString" },
+      matchedRanges: [range(0, 1)],
+      inferredGeometry: { coordinates: [coordinates.slice(2, 5)], type: "MultiLineString" },
+      inferredRanges: [range(2, 4, "ROAD_GAP_INFERENCE")],
+      unmatchedRanges: [range(2, 4, "LOW_ACCURACY")],
+    },
+  });
+
+  assert.equal(snapshot.roadMatchedPath.qualityVersion, "gps_quality.v3");
+  assert.deepEqual(snapshot.roadMatchedPath.inferredRanges, [range(2, 4, "ROAD_GAP_INFERENCE")]);
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingTrail", "trackingConnector"]);
+  assert.equal(features[1].properties.trackingSource, "inferred");
+  assert.deepEqual(features[1].geometry.coordinates, coordinates.slice(2, 5));
+});
+
+test("gps quality v2 cached paths remain valid without inference fields", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v2",
+      matchedGeometry: { coordinates: [[[-79.4, 43.7], [-79.399, 43.701]]], type: "MultiLineString" },
+      matchedRanges: [{
+        startEventId: "cached-0",
+        endEventId: "cached-1",
+        startOccurredAt: "2026-09-17T13:00:00.000Z",
+        endOccurredAt: "2026-09-17T13:01:00.000Z",
+        startSourceIndex: 0,
+        endSourceIndex: 1,
+      }],
+    },
+  });
+
+  assert.equal(snapshot.roadMatchedPath.inferredGeometry, null);
+  assert.deepEqual(snapshot.roadMatchedPath.inferredRanges, []);
+  assert.deepEqual(getRouteTrackingLineFeatures(snapshot).map((feature) => feature.properties.trackingType), ["trackingTrail"]);
+});
+
+test("service-day filtering keeps reliable anchor paths while omitting cross-midnight inference", () => {
+  const occurredTimes = [
+    "2026-09-17T13:00:00.000Z",
+    "2026-09-17T13:01:00.000Z",
+    "2026-09-17T14:00:00.000Z",
+    "2026-09-17T14:01:00.000Z",
+    "2026-09-18T03:58:00.000Z",
+    "2026-09-18T03:59:00.000Z",
+    "2026-09-18T03:59:30.000Z",
+    "2026-09-18T04:00:30.000Z",
+    "2026-09-18T04:01:00.000Z",
+    "2026-09-18T04:02:00.000Z",
+  ];
+  const coordinates = occurredTimes.map((_, index) => [-79.4 + index * 0.001, 43.7 + index * 0.001]);
+  const samples = occurredTimes.map((occurredAt, sourceIndex) => ({
+    accuracyMeters: [2, 3, 6, 7].includes(sourceIndex) ? 250 : 5,
+    eventId: `inferred-day-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt,
+    receivedAt: occurredAt,
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex, reason = null) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    reason,
+  });
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v3",
+      matchedGeometry: {
+        coordinates: [coordinates.slice(0, 2), coordinates.slice(4, 6), coordinates.slice(8, 10)],
+        type: "MultiLineString",
+      },
+      matchedRanges: [range(0, 1), range(4, 5), range(8, 9)],
+      inferredGeometry: {
+        coordinates: [coordinates.slice(2, 4), [coordinates[5], coordinates[8]]],
+        type: "MultiLineString",
+      },
+      inferredRanges: [range(2, 3, "ROAD_GAP_INFERENCE"), range(5, 8, "ROAD_GAP_INFERENCE")],
+      unmatchedRanges: [range(2, 3, "LOW_ACCURACY"), range(6, 7, "LOW_ACCURACY")],
+    },
+  });
+
+  const serviceDay = selectRouteTrackingWindow(snapshot, {
+    date: "2026-09-17",
+    timeZone: "America/Toronto",
+  });
+  assert.equal(serviceDay.roadMatchedPath.inferredGeometry.coordinates.length, 1);
+  assert.deepEqual(serviceDay.roadMatchedPath.inferredRanges, [range(2, 3, "ROAD_GAP_INFERENCE")]);
+  const features = getRouteTrackingLineFeatures(serviceDay);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingTrail",
+    "trackingTrail",
+    "trackingConnector",
+  ]);
+  assert.deepEqual(features[0].geometry.coordinates, coordinates.slice(0, 2));
+  assert.deepEqual(features[1].geometry.coordinates, coordinates.slice(4, 6));
+  assert.deepEqual(features[2].geometry.coordinates, coordinates.slice(2, 4));
+  assert.equal(features.some((feature) => feature.geometry.coordinates.includes(coordinates[6])), false);
+  assert.equal(features.some((feature) => feature.geometry.coordinates.includes(coordinates[8])), false);
+});
+
 test("low-accuracy unmatched GPS cannot draw a route line or expand map fit", () => {
   const reliableCoordinates = [[-79.4, 43.7], [-79.399, 43.701]];
   const inaccurateCoordinates = Array.from({ length: 8 }, (_, index) => [

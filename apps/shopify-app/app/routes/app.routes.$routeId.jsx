@@ -645,21 +645,15 @@ const routeTrackingMapLegendItemStyle = {
 };
 
 const routeTrackingMapGpsKeyStyle = {
-  borderTop: "3px solid #0b84d8",
-  height: 0,
-  width: "22px",
-};
-
-const routeTrackingMapUncertainKeyStyle = {
-  borderTop: "3px dashed #79828c",
+  borderTop: "3.5px dashed #0b84d8",
   height: 0,
   width: "22px",
 };
 
 const routeTrackingMapReferenceKeyStyle = {
   borderRadius: "999px",
-  height: "3px",
-  opacity: 0.42,
+  height: "5.5px",
+  opacity: 0.78,
   width: "22px",
 };
 
@@ -7438,11 +7432,7 @@ export default function RouteDetailPage() {
                   </span>
                   <span style={routeTrackingMapLegendItemStyle}>
                     <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
-                    <span>Road-matched GPS</span>
-                  </span>
-                  <span style={routeTrackingMapLegendItemStyle}>
-                    <span aria-hidden="true" style={routeTrackingMapUncertainKeyStyle} />
-                    <span>Unmatched GPS</span>
+                    <span>GPS tracking</span>
                   </span>
                   <label style={{ ...routeTrackingMapLegendItemStyle, cursor: "pointer" }}>
                     <input

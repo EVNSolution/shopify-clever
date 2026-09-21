@@ -317,10 +317,10 @@ test("Tracking planned route remains a solid, visible reference under dashed GPS
 
   assert.equal(syncRouteDetailRouteLine(fake.map, routeGeometry, "#006fbb", { isTrackingReference: true }), true);
   const routeLayer = fake.layers.get("route-detail-osrm-route-line");
-  assert.deepEqual(routeLayer.paint["line-color"], ["coalesce", ["get", "routeColor"], "#a7adb4"]);
-  assert.equal(fake.sources.get("route-detail-osrm-route").data.features[0].properties.routeColor, "#a7adb4");
-  assert.equal(routeLayer.paint["line-opacity"], 0.42);
-  assert.equal(routeLayer.paint["line-width"], 3.5);
+  assert.deepEqual(routeLayer.paint["line-color"], ["coalesce", ["get", "routeColor"], "#006fbb"]);
+  assert.equal(fake.sources.get("route-detail-osrm-route").data.features[0].properties.routeColor, "#006fbb");
+  assert.equal(routeLayer.paint["line-opacity"], 0.78);
+  assert.equal(routeLayer.paint["line-width"], 5.5);
   assert.equal(routeLayer.paint["line-dasharray"], undefined);
 });
 
@@ -337,6 +337,9 @@ test("planned route line stays below stop markers", () => {
   };
 
   assert.equal(syncRouteDetailRouteLine(fake.map, routeGeometry, "#006fbb"), true);
+  const routeLayer = fake.layers.get("route-detail-osrm-route-line");
+  assert.equal(routeLayer.paint["line-opacity"], 0.78);
+  assert.equal(routeLayer.paint["line-width"], 2.5);
   assert.equal(syncRouteDetailMapMarkerLayers(
     fake.map,
     { coordinates: [126.92, 37.51], hasCoordinates: true },

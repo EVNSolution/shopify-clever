@@ -20,7 +20,14 @@ remain authoritative and unchanged.
 - Suppress stationary jitter and implausible outliers without connecting real gaps.
 - Match cleaned time-ordered segments to roads using per-sample accuracy.
 - Retain matched source coverage; replace only covered raw segments on the map.
-- Separate planned, matched, and uncertain paths visually.
+- Keep two familiar map paths: the planned route keeps its Stops color and opacity
+  with a wider Tracking stroke; all GPS segments share the existing GPS style.
+  Preserve quality classification internally without adding visual categories.
+- Supplement short low-accuracy gaps with a road route only when both adjacent
+  anchors have good measured accuracy and confident road matches. Reject actual
+  collection gaps, long spans, implausible travel, excessive road detours, distant
+  snaps, and close competing alternatives. Preserve inferred geometry and source
+  ranges separately from observed and matched GPS in the data contract.
 - Make the historical viewing window explicit and keep later-day/live positions
   from distorting the selected journey; retain an all-records view.
 - Keep additions backward compatible; avoid database schema migration if the
@@ -38,6 +45,8 @@ remain authoritative and unchanged.
    host-only derived-row backup, uses lock/concurrency guards, and is repeatable.
 7. Raw-event and route/stop-state invariants remain intact after rebuild.
 8. Production runtime revision/health and authenticated South map are verified.
+9. Road supplements never change raw observations or delivery evidence, and remain
+   distinguishable as inferred data through cache serialization and date filtering.
 
 ## Release and rollback
 

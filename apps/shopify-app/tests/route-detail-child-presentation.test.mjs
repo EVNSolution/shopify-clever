@@ -681,8 +681,8 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
   assert.doesNotMatch(routeDetailSource, /key=\{routeMapViewKey\}/);
   assert.match(routeDetailSource, />Planned route</);
-  assert.match(routeDetailSource, />Road-matched GPS</);
-  assert.match(routeDetailSource, />Unmatched GPS</);
+  assert.match(routeDetailSource, />GPS tracking</);
+  assert.doesNotMatch(routeDetailSource, />Road-matched GPS|>Unmatched GPS/);
   assert.match(routeDetailSource, /<span>All recorded dates<\/span>/);
   assert.match(routeDetailSource, /!showAllRouteTrackingRecords \? \(\s*<span aria-label="Selected tracking date"/);
   assert.match(routeDetailSource, /\{routeTrackingDeliveryDate \?\? "Service date"\} only/);
