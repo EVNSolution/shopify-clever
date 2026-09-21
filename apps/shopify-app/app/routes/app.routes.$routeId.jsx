@@ -7450,8 +7450,13 @@ export default function RouteDetailPage() {
                       onChange={(event) => setShowAllRouteTrackingRecords(event.target.checked)}
                       type="checkbox"
                     />
-                    <span>{showAllRouteTrackingRecords ? "All recorded dates" : `${routeTrackingDeliveryDate ?? "Service date"} only`}</span>
+                    <span>All recorded dates</span>
                   </label>
+                  {!showAllRouteTrackingRecords ? (
+                    <span aria-label="Selected tracking date" style={routeTrackingMapLegendItemStyle}>
+                      {routeTrackingDeliveryDate ?? "Service date"} only
+                    </span>
+                  ) : null}
                 </div>
                 {routeTrackingIsCompleted ? (
                   <div
