@@ -125,7 +125,8 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /getRouteTrackingLineFeatures/);
   assert.match(routeMapSource, /const routeLineOpacity = options\.isTrackingReference \? 0\.42 : 0\.78/);
   assert.match(routeMapSource, /const routeLineWidth = options\.isTrackingReference \? 3\.5 : 2\.5/);
-  assert.equal((routeMapSource.match(/"line-dasharray": \[1\.5, 1\.25\]/g) ?? []).length, 2);
+  assert.match(routeMapSource, /"line-color": "#0b84d8",\s*"line-opacity": 0\.92/);
+  assert.match(routeMapSource, /"line-color": "#79828c",\s*"line-dasharray": \[1\.25, 1\.5\]/);
   assert.doesNotMatch(routeMapSource, /"line-width": 4\.5/);
   assert.match(routeMapSource, /isTrackingReference/);
   assert.match(routeMapSource, /trackingType: "currentPosition"/);
@@ -195,11 +196,12 @@ test("Tracking map uses occurredAt for live freshness and a local terminal label
   assert.match(routeDetailSource, /getRouteTrackingCompletionTime\(displayedRouteTrackingSnapshot\)/);
   assert.match(routeDetailSource, /shouldShowRouteTrackingFreshness\(/);
   assert.match(routeDetailSource, /Current position/);
+  assert.match(routeDetailSource, /Last recorded position/);
   assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(latestTrackingOccurredAt/);
   assert.match(routeDetailSource, /formatRouteTrackingCompletionLabel\(routeTrackingCompletionTime, ianaTimezone\)/);
   assert.match(routeDetailSource, /Route completion time/);
   assert.doesNotMatch(routeDetailSource, /formatTrackingElapsedSeconds\(latestTrackingReceivedAt/);
-  assert.match(routeDetailSource, /<span style=\{routeChildTrackingMetricLabelStyle\}>Range<\/span>/);
+  assert.match(routeDetailSource, /showAllRouteTrackingRecords \? "All-record range" : "Service-day range"/);
   assert.match(routeDetailSource, /formatTrackingRange\(/);
   assert.doesNotMatch(routeDetailSource, />Recorded range</);
 });

@@ -3,6 +3,7 @@ const FALLBACK_STREAM_INACTIVITY_MS = 45_000;
 const EARTH_RADIUS_METERS = 6_371_000;
 const RAW_FALLBACK_MIN_MOVEMENT_METERS = 12;
 const RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND = 55;
+const RAW_FALLBACK_MAX_ACCURACY_METERS = 100;
 
 function numberOrNull(value) {
   const number = Number(value);
@@ -12,6 +13,12 @@ function numberOrNull(value) {
 function textOrNull(value) {
   const text = typeof value === "string" ? value.trim() : "";
   return text || null;
+}
+
+function nonNegativeNumberOrNull(value) {
+  if (value == null) return null;
+  const number = numberOrNull(value);
+  return number != null && number >= 0 ? number : null;
 }
 
 function normalizeRouteExecutionStatus(status) {
@@ -28,6 +35,7 @@ function normalizeTrackingPosition(position) {
   }
 
   return {
+    accuracyMeters: nonNegativeNumberOrNull(position?.accuracyMeters),
     schemaVersion: textOrNull(position?.schemaVersion) ?? "route_tracking.v1",
     routePlanId: textOrNull(position?.routePlanId),
     eventId: textOrNull(position?.eventId),
@@ -471,10 +479,17 @@ function normalizeRecordedPathSample(sample) {
   const receivedAt = textOrNull(sample?.receivedAt);
   if (!eventId || !occurredAt || !receivedAt) return null;
   return {
+    accuracyMeters: nonNegativeNumberOrNull(sample?.accuracyMeters),
     driverId: textOrNull(sample?.driverId),
     eventId,
+    gapBefore: typeof sample?.gapBefore === "boolean" ? sample.gapBefore : null,
     occurredAt,
     receivedAt,
+    sourceIndex: sample?.sourceIndex != null
+      && Number.isInteger(numberOrNull(sample.sourceIndex))
+      && numberOrNull(sample.sourceIndex) >= 0
+      ? numberOrNull(sample.sourceIndex)
+      : null,
   };
 }
 
@@ -526,10 +541,33 @@ function normalizeRoadMatchedPath(roadMatchedPath) {
     lastMatchedPosition,
     matchedGeometry,
     matchedPointCount: Math.max(0, numberOrNull(roadMatchedPath.matchedPointCount) ?? 0),
+    matchedRanges: normalizeRoadMatchRanges(roadMatchedPath.matchedRanges),
+    qualityVersion: textOrNull(roadMatchedPath.qualityVersion),
     schemaVersion: textOrNull(roadMatchedPath.schemaVersion) ?? "route_tracking_road_match.v1",
+    uncertainRanges: normalizeRoadMatchRanges(roadMatchedPath.uncertainRanges),
     uncertainGeometry,
+    unmatchedRanges: normalizeRoadMatchRanges(roadMatchedPath.unmatchedRanges),
     watermark: textOrNull(roadMatchedPath.watermark),
   };
+}
+
+function normalizeRoadMatchRanges(ranges) {
+  return (Array.isArray(ranges) ? ranges : []).flatMap((range) => {
+    const startSourceIndex = range?.startSourceIndex == null ? null : numberOrNull(range.startSourceIndex);
+    const endSourceIndex = range?.endSourceIndex == null ? null : numberOrNull(range.endSourceIndex);
+    if (!Number.isInteger(startSourceIndex) || !Number.isInteger(endSourceIndex) || startSourceIndex < 0 || endSourceIndex < startSourceIndex) {
+      return [];
+    }
+    return [{
+      endEventId: textOrNull(range?.endEventId),
+      endOccurredAt: textOrNull(range?.endOccurredAt),
+      endSourceIndex,
+      reason: textOrNull(range?.reason),
+      startEventId: textOrNull(range?.startEventId),
+      startOccurredAt: textOrNull(range?.startOccurredAt),
+      startSourceIndex,
+    }];
+  });
 }
 
 function getNewestRoadMatchedPath(currentPath, incomingPath) {
@@ -557,10 +595,13 @@ function mergeRecordedPathPosition(recordedPath, position, policy) {
   if (current.samples.some((sample) => sample.eventId === position.eventId)) return current;
   const coordinate = [position.longitude, position.latitude];
   const sample = {
+    accuracyMeters: position.accuracyMeters,
     driverId: position.driverId,
     eventId: position.eventId,
+    gapBefore: false,
     occurredAt: position.occurredAt ?? position.receivedAt,
     receivedAt: position.receivedAt ?? position.occurredAt,
+    sourceIndex: current.sourcePointCount,
   };
   const latestSample = current.samples.at(-1);
   if (latestSample && getPositionTimestamp(sample) < getPositionTimestamp(latestSample)) {
@@ -594,8 +635,16 @@ function appendCompressedTrackingPoint(coordinates, samples, coordinate, sample,
   const simplificationToleranceMeters = numberOrNull(policy?.geometrySimplificationToleranceMeters) ?? 5;
   const hasGap = previousSample
     && getPositionTimestamp(sample) - getPositionTimestamp(previousSample) > gapThresholdMs;
+  sample.gapBefore = Boolean(hasGap || sample.gapBefore);
+  const previousCoordinate = coordinates.at(-1);
+  const anchorCoordinate = coordinates.at(-2);
+  const turnAngleDegrees = anchorCoordinate && previousCoordinate
+    ? getTurnAngleDegrees(anchorCoordinate, previousCoordinate, coordinate)
+    : 0;
   const canReplaceTail = !hasGap
+    && previousSample?.gapBefore !== true
     && coordinates.length >= 2
+    && turnAngleDegrees <= 15
     && distancePointToSegmentMeters(coordinates.at(-1), coordinates.at(-2), coordinate) <= simplificationToleranceMeters;
 
   if (canReplaceTail) {
@@ -629,43 +678,56 @@ function getRouteTrackingPathPoints(snapshot) {
       const sample = normalized.recordedPath.samples[index];
       return {
         coordinates: coordinate,
+        accuracyMeters: sample?.accuracyMeters ?? null,
         driverId: sample?.driverId ?? null,
         eventId: sample?.eventId ?? null,
+        gapBefore: sample?.gapBefore ?? null,
         occurredAt: sample?.occurredAt ?? null,
         receivedAt: sample?.receivedAt ?? null,
+        sourceIndex: sample?.sourceIndex ?? null,
       };
     });
   }
   return normalized.recentPositions.map((position) => ({
     coordinates: [position.longitude, position.latitude],
+    accuracyMeters: position.accuracyMeters,
     driverId: position.driverId,
     eventId: position.eventId,
+    gapBefore: false,
     occurredAt: position.occurredAt,
     receivedAt: position.receivedAt,
+    sourceIndex: null,
   }));
 }
 
 function getRouteTrackingLineFeatures(snapshot) {
   const normalized = normalizeRouteTrackingSnapshot(snapshot);
   const roadMatchedPath = normalized.roadMatchedPath;
-  const recordedCoverage = getRecordedTrackingCoverageFeature(normalized);
-  if (!roadMatchedPath) return recordedCoverage ? [recordedCoverage] : [];
+  const recordedCoverage = getRecordedTrackingCoverageFeatures(normalized);
+  if (!roadMatchedPath) return recordedCoverage;
 
-  const features = recordedCoverage ? [recordedCoverage] : [];
+  const features = [];
   if (roadMatchedPath.matchedGeometry) {
-    features.push({
-      type: "Feature",
-      geometry: roadMatchedPath.matchedGeometry,
-      properties: { trackingType: "trackingTrail" },
-    });
+    for (const coordinates of roadMatchedPath.matchedGeometry.coordinates) {
+      features.push(createTrackingLineFeature(coordinates, "trackingTrail"));
+    }
   }
   if (roadMatchedPath.uncertainGeometry) {
-    features.push({
-      type: "Feature",
-      geometry: roadMatchedPath.uncertainGeometry,
-      properties: { trackingType: "trackingConnector" },
-    });
+    for (const coordinates of roadMatchedPath.uncertainGeometry.coordinates) {
+      features.push(createTrackingLineFeature(coordinates, "trackingConnector"));
+    }
   }
+  if (roadMatchedPath.unmatchedRanges.length > 0) {
+    features.push(...getRecordedTrackingCoverageFeatures(
+      normalized,
+      roadMatchedPath.unmatchedRanges.filter(isRenderableUnmatchedRange),
+    ));
+  } else if (!roadMatchedPath.qualityVersion) {
+    features.push(...getRecordedTrackingCoverageFeatures(normalized, getLegacyUncoveredPointRanges(normalized, roadMatchedPath)));
+  }
+
+  if (!roadMatchedPath.matchedGeometry) return features.length > 0 ? features : recordedCoverage;
+  if (!roadMatchedPath.qualityVersion) return features;
 
   const lastMatchedTimestamp = Date.parse(roadMatchedPath.lastMatchedPosition?.occurredAt ?? "");
   const lastInputTimestamp = Date.parse(roadMatchedPath.lastInputOccurredAt ?? "");
@@ -673,6 +735,8 @@ function getRouteTrackingLineFeatures(snapshot) {
     ? lastMatchedTimestamp
     : lastInputTimestamp;
   const gapThresholdMs = numberOrNull(normalized.policy?.delayedThresholdMs) ?? 180_000;
+  const maxAccuracyMeters = nonNegativeNumberOrNull(normalized.policy?.maxMatchAccuracyMeters)
+    ?? RAW_FALLBACK_MAX_ACCURACY_METERS;
   const tailPoints = getRouteTrackingPathPoints(normalized)
     .map((point) => ({ ...point, timestamp: getPositionTimestamp(point) }))
     .filter((point) => point.timestamp > (Number.isFinite(tailStartTimestamp) ? tailStartTimestamp : Number.POSITIVE_INFINITY));
@@ -687,6 +751,11 @@ function getRouteTrackingLineFeatures(snapshot) {
   const tailSegments = [];
   let currentSegment = seed ? [seed] : [];
   for (const point of tailPoints) {
+    if (point.accuracyMeters != null && point.accuracyMeters > maxAccuracyMeters) {
+      if (currentSegment.length >= 2) tailSegments.push(currentSegment);
+      currentSegment = [];
+      continue;
+    }
     const previousPoint = currentSegment.at(-1);
     const elapsedMs = previousPoint ? point.timestamp - previousPoint.timestamp : null;
     const distanceMeters = previousPoint
@@ -695,7 +764,7 @@ function getRouteTrackingLineFeatures(snapshot) {
     const isImplausibleJump = elapsedMs != null
       && elapsedMs > 0
       && distanceMeters / (elapsedMs / 1000) > RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND;
-    if (previousPoint && (elapsedMs > gapThresholdMs || isImplausibleJump)) {
+    if (previousPoint && (point.gapBefore === true || elapsedMs > gapThresholdMs || isImplausibleJump)) {
       if (currentSegment.length >= 2) tailSegments.push(currentSegment);
       currentSegment = [point];
       continue;
@@ -716,6 +785,10 @@ function getRouteTrackingLineFeatures(snapshot) {
     });
   }
   return features;
+}
+
+function isRenderableUnmatchedRange(range) {
+  return range.reason == null || ["NO_MATCH", "OUT_OF_COVERAGE", "WINDOW_BOUNDARY"].includes(range.reason);
 }
 
 function getRouteTrackingFitCoordinates(snapshot) {
@@ -739,43 +812,106 @@ function getRouteTrackingFitCoordinates(snapshot) {
     : [];
 }
 
-function getRecordedTrackingCoverageFeature(snapshot) {
-  const points = getRouteTrackingPathPoints(snapshot)
+function getRecordedTrackingCoverageFeatures(snapshot, ranges = null) {
+  const allPoints = getRouteTrackingPathPoints(snapshot)
     .map((point) => ({ ...point, timestamp: getPositionTimestamp(point) }));
+  const pointGroups = Array.isArray(ranges)
+    ? ranges.map((range) => allPoints.filter((point, pointIndex) => (
+        range.startPointIndex != null
+          ? pointIndex >= range.startPointIndex && pointIndex <= range.endPointIndex
+          : point.sourceIndex != null
+            && point.sourceIndex >= range.startSourceIndex
+            && point.sourceIndex <= range.endSourceIndex
+      )))
+    : [allPoints];
+  return pointGroups.flatMap((points) => buildRecordedTrackingSegments(points, snapshot));
+}
+
+function getLegacyUncoveredPointRanges(snapshot, roadMatchedPath) {
+  const points = getRouteTrackingPathPoints(snapshot);
+  if (points.length < 2) return [];
+  const lines = [
+    ...(roadMatchedPath.matchedGeometry?.coordinates ?? []),
+    ...(roadMatchedPath.uncertainGeometry?.coordinates ?? []),
+  ];
+  if (lines.length === 0) return [{ startPointIndex: 0, endPointIndex: points.length - 1 }];
+  const coveredRanges = lines.map((line) => {
+    const startPointIndex = findNearestTrackingPointIndex(points, line[0]);
+    const endPointIndex = findNearestTrackingPointIndex(points, line.at(-1));
+    return {
+      startPointIndex: Math.min(startPointIndex, endPointIndex),
+      endPointIndex: Math.max(startPointIndex, endPointIndex),
+    };
+  }).sort((left, right) => left.startPointIndex - right.startPointIndex);
+  const uncoveredRanges = [];
+  let nextPointIndex = 0;
+  for (const range of coveredRanges) {
+    if (range.startPointIndex > nextPointIndex) {
+      uncoveredRanges.push({ startPointIndex: nextPointIndex, endPointIndex: range.startPointIndex });
+    }
+    nextPointIndex = Math.max(nextPointIndex, range.endPointIndex);
+  }
+  if (nextPointIndex < points.length - 1) {
+    uncoveredRanges.push({ startPointIndex: nextPointIndex, endPointIndex: points.length - 1 });
+  }
+  return uncoveredRanges;
+}
+
+function findNearestTrackingPointIndex(points, coordinate) {
+  return points.reduce((nearest, point, index) => {
+    const distanceMeters = distanceBetweenCoordinatesMeters(point.coordinates, coordinate);
+    return distanceMeters < nearest.distanceMeters ? { distanceMeters, index } : nearest;
+  }, { distanceMeters: Number.POSITIVE_INFINITY, index: 0 }).index;
+}
+
+function buildRecordedTrackingSegments(points, snapshot) {
   const segments = [];
   let currentSegment = [];
+  let previousObservedPoint = null;
+  const gapThresholdMs = numberOrNull(snapshot?.policy?.delayedThresholdMs) ?? 180_000;
+  const maxAccuracyMeters = nonNegativeNumberOrNull(snapshot?.policy?.maxMatchAccuracyMeters)
+    ?? RAW_FALLBACK_MAX_ACCURACY_METERS;
   for (const point of points) {
-    const previousPoint = currentSegment.at(-1);
-    if (!previousPoint) {
+    if (point.accuracyMeters != null && point.accuracyMeters > maxAccuracyMeters) {
+      if (currentSegment.length >= 2) segments.push(currentSegment);
+      currentSegment = [];
+      previousObservedPoint = null;
+      continue;
+    }
+    const previousRenderedPoint = currentSegment.at(-1);
+    if (!previousObservedPoint) {
       currentSegment = [point];
+      previousObservedPoint = point;
       continue;
     }
 
-    const elapsedMs = point.timestamp - previousPoint.timestamp;
-    const distanceMeters = distanceBetweenCoordinatesMeters(previousPoint.coordinates, point.coordinates);
+    const elapsedMs = point.timestamp - previousObservedPoint.timestamp;
+    const distanceMeters = distanceBetweenCoordinatesMeters(previousObservedPoint.coordinates, point.coordinates);
     const isImplausibleJump = elapsedMs > 0
       && distanceMeters / (elapsedMs / 1000) > RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND;
-    if (isImplausibleJump) {
+    if (point.gapBefore === true || elapsedMs > gapThresholdMs || isImplausibleJump) {
       if (currentSegment.length >= 2) segments.push(currentSegment);
       currentSegment = [point];
+      previousObservedPoint = point;
       continue;
     }
-    if (distanceMeters < RAW_FALLBACK_MIN_MOVEMENT_METERS) continue;
+    previousObservedPoint = point;
+    if (previousRenderedPoint && distanceBetweenCoordinatesMeters(previousRenderedPoint.coordinates, point.coordinates) < RAW_FALLBACK_MIN_MOVEMENT_METERS) continue;
     currentSegment.push(point);
   }
   if (currentSegment.length >= 2) segments.push(currentSegment);
 
-  const coordinates = segments
+  return segments
     .map((segment) => segment.map((point) => point.coordinates))
-    .filter((line) => line.length >= 2 && !areCoordinatesEqual(line[0], line.at(-1)));
-  if (coordinates.length === 0) return null;
+    .filter((coordinates) => coordinates.length >= 2 && !areCoordinatesEqual(coordinates[0], coordinates.at(-1)))
+    .map((coordinates) => createTrackingLineFeature(coordinates, "trackingConnector"));
+}
 
+function createTrackingLineFeature(coordinates, trackingType) {
   return {
     type: "Feature",
-    geometry: coordinates.length === 1
-      ? { coordinates: coordinates[0], type: "LineString" }
-      : { coordinates, type: "MultiLineString" },
-    properties: { trackingType: "trackingConnector" },
+    geometry: { coordinates, type: "LineString" },
+    properties: { trackingType },
   };
 }
 
@@ -804,6 +940,8 @@ function getRouteTrackingPathSummary(snapshot) {
   const gapCount = points.reduce((count, point, index) => {
     const previous = points[index - 1];
     if (!previous) return count;
+    if (point.gapBefore === true) return count + 1;
+    if (point.gapBefore === false) return count;
     return getPositionTimestamp(point) - getPositionTimestamp(previous) > gapThresholdMs ? count + 1 : count;
   }, 0);
   return {
@@ -813,6 +951,140 @@ function getRouteTrackingPathSummary(snapshot) {
     lastOccurredAt: normalized.recordedPath?.lastOccurredAt ?? points.at(-1)?.occurredAt ?? null,
     sourcePointCount: normalized.recordedPath?.sourcePointCount ?? points.length,
   };
+}
+
+function selectRouteTrackingWindow(snapshot, options = {}) {
+  if (!snapshot || options.allRecords === true) return snapshot;
+  const date = textOrNull(options.date);
+  const timeZone = textOrNull(options.timeZone);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "") || !timeZone) return snapshot;
+
+  const normalized = normalizeRouteTrackingSnapshot(snapshot);
+  const points = getRouteTrackingPathPoints(normalized);
+  const selectedIndexes = points.flatMap((point, index) => (
+    getDateKeyInTimeZone(getPositionTimestamp(point), timeZone) === date ? [index] : []
+  ));
+  const selectedPoints = selectedIndexes.map((index) => points[index]);
+  const selectedSamples = selectedIndexes.map((index) => normalized.recordedPath?.samples[index]).filter(Boolean);
+  const selectedCoordinates = selectedPoints.map((point) => point.coordinates);
+  const firstSourceIndex = selectedSamples.find((sample) => sample.sourceIndex != null)?.sourceIndex;
+  const lastSourceIndex = selectedSamples.findLast((sample) => sample.sourceIndex != null)?.sourceIndex;
+  const selectedSourcePointCount = firstSourceIndex != null && lastSourceIndex != null
+    ? Math.max(selectedSamples.length, lastSourceIndex - firstSourceIndex + 1)
+    : selectedSamples.length;
+  const selectedLatestPoint = selectedPoints.at(-1) ?? null;
+  const latestPosition = selectedLatestPoint
+    ? normalizeTrackingPosition({
+        ...selectedLatestPoint,
+        latitude: selectedLatestPoint.coordinates[1],
+        longitude: selectedLatestPoint.coordinates[0],
+        routePlanId: normalized.routePlanId,
+      })
+    : null;
+  const recordedPath = selectedCoordinates.length > 0
+    ? {
+        ...normalized.recordedPath,
+        firstOccurredAt: selectedSamples[0]?.occurredAt ?? null,
+        geometry: { coordinates: selectedCoordinates, type: "LineString" },
+        geometryPointCount: selectedCoordinates.length,
+        lastOccurredAt: selectedSamples.at(-1)?.occurredAt ?? null,
+        lastReceivedAt: selectedSamples.at(-1)?.receivedAt ?? null,
+        samples: selectedSamples,
+        sourcePointCount: selectedSourcePointCount,
+      }
+    : null;
+
+  return {
+    ...normalized,
+    latestPosition,
+    recentPositions: normalized.recentPositions.filter((position) => (
+      getDateKeyInTimeZone(getPositionTimestamp(position), timeZone) === date
+    )),
+    recordedPath,
+    roadMatchedPath: selectRoadMatchedPathWindow(
+      normalized.roadMatchedPath,
+      date,
+      timeZone,
+      firstSourceIndex,
+      lastSourceIndex,
+    ),
+    stopArrivals: normalized.stopArrivals.filter((arrival) => (
+      getDateKeyInTimeZone(getPositionTimestamp(arrival), timeZone) === date
+    )),
+  };
+}
+
+function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourceIndex, lastSourceIndex) {
+  if (!roadMatchedPath?.qualityVersion) return null;
+  const safelyRenderedRanges = [...roadMatchedPath.matchedRanges, ...roadMatchedPath.uncertainRanges];
+  const selectGeometry = (geometry, ranges) => {
+    if (!geometry || ranges.length !== geometry.coordinates.length) return null;
+    const coordinates = geometry.coordinates.filter((_, index) => isRoadMatchRangeInsideDate(ranges[index], date, timeZone));
+    return coordinates.length > 0 ? { coordinates, type: "MultiLineString" } : null;
+  };
+  const matchedRanges = roadMatchedPath.matchedRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
+  const uncertainRanges = roadMatchedPath.uncertainRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
+  const clipRangeToSelectedSources = (range, reason = range.reason) => ({
+    ...range,
+    reason,
+    startSourceIndex: firstSourceIndex == null ? range.startSourceIndex : Math.max(range.startSourceIndex, firstSourceIndex),
+    endSourceIndex: lastSourceIndex == null ? range.endSourceIndex : Math.min(range.endSourceIndex, lastSourceIndex),
+  });
+  const unmatchedRanges = roadMatchedPath.unmatchedRanges.flatMap((range) => {
+    if (!doesRoadMatchRangeIncludeDate(range, date, timeZone)) return [];
+    return [clipRangeToSelectedSources(range)];
+  }).concat(
+    safelyRenderedRanges
+      .filter((range) => doesRoadMatchRangeCrossDate(range, date, timeZone))
+      .map((range) => clipRangeToSelectedSources(range, "WINDOW_BOUNDARY")),
+  ).filter((range) => range.endSourceIndex >= range.startSourceIndex);
+  const selectedRanges = [...matchedRanges, ...uncertainRanges, ...unmatchedRanges];
+  const lastSelectedRange = selectedRanges.sort((left, right) => left.endSourceIndex - right.endSourceIndex).at(-1);
+  return {
+    ...roadMatchedPath,
+    lastInputOccurredAt: lastSelectedRange?.endOccurredAt ?? null,
+    lastMatchedPosition: getDateKeyInTimeZone(roadMatchedPath.lastMatchedPosition?.occurredAt, timeZone) === date
+      ? roadMatchedPath.lastMatchedPosition
+      : null,
+    matchedGeometry: selectGeometry(roadMatchedPath.matchedGeometry, roadMatchedPath.matchedRanges),
+    matchedRanges,
+    uncertainGeometry: selectGeometry(roadMatchedPath.uncertainGeometry, roadMatchedPath.uncertainRanges),
+    uncertainRanges,
+    unmatchedRanges,
+  };
+}
+
+function isRoadMatchRangeInsideDate(range, date, timeZone) {
+  return getDateKeyInTimeZone(Date.parse(range?.startOccurredAt ?? ""), timeZone) === date
+    && getDateKeyInTimeZone(Date.parse(range?.endOccurredAt ?? ""), timeZone) === date;
+}
+
+function doesRoadMatchRangeIncludeDate(range, date, timeZone) {
+  const startDate = getDateKeyInTimeZone(range?.startOccurredAt, timeZone);
+  const endDate = getDateKeyInTimeZone(range?.endOccurredAt, timeZone);
+  return Boolean(startDate && endDate && startDate <= date && endDate >= date);
+}
+
+function doesRoadMatchRangeCrossDate(range, date, timeZone) {
+  return doesRoadMatchRangeIncludeDate(range, date, timeZone)
+    && !isRoadMatchRangeInsideDate(range, date, timeZone);
+}
+
+function getTurnAngleDegrees(anchor, vertex, next) {
+  const referenceLatitude = toRadians(vertex[1]);
+  const projectDelta = (from, to) => [
+    (to[0] - from[0]) * Math.cos(referenceLatitude),
+    to[1] - from[1],
+  ];
+  const incoming = projectDelta(anchor, vertex);
+  const outgoing = projectDelta(vertex, next);
+  const incomingLength = Math.hypot(...incoming);
+  const outgoingLength = Math.hypot(...outgoing);
+  if (incomingLength === 0 || outgoingLength === 0) return 0;
+  const cosine = Math.max(-1, Math.min(1, (
+    incoming[0] * outgoing[0] + incoming[1] * outgoing[1]
+  ) / (incomingLength * outgoingLength)));
+  return Math.acos(cosine) * 180 / Math.PI;
 }
 
 function distancePointToSegmentMeters(point, segmentStart, segmentEnd) {
@@ -1059,5 +1331,6 @@ export {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  selectRouteTrackingWindow,
   shouldShowRouteTrackingFreshness,
 };

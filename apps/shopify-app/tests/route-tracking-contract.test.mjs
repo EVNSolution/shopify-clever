@@ -20,6 +20,7 @@ import {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  selectRouteTrackingWindow,
   shouldShowRouteTrackingFreshness,
   shouldRevalidateTrackingEta,
 } from "../app/features/delivery/route-tracking.js";
@@ -208,6 +209,374 @@ test("recorded route geometry preserves more than 1000 compressed GPS points wit
   });
 });
 
+test("regular six-second GPS samples do not become a false collection gap after compression", () => {
+  let snapshot = normalizeRouteTrackingSnapshot({ policy, recentPositions: [] });
+  const startedAt = Date.parse("2026-09-17T13:00:00.000Z");
+  for (let index = 0; index < 101; index += 1) {
+    snapshot = mergeRouteTrackingPosition(snapshot, {
+      accuracyMeters: 4 + (index % 3),
+      eventId: `regular-${index}`,
+      latitude: 43.70,
+      longitude: -79.40 + index * 0.00001,
+      occurredAt: new Date(startedAt + index * 6_000).toISOString(),
+      receivedAt: new Date(startedAt + index * 6_000 + 500).toISOString(),
+    });
+  }
+
+  assert.equal(getRouteTrackingPathSummary(snapshot).gapCount, 0);
+  assert.equal(snapshot.recordedPath.sourcePointCount, 101);
+  assert.equal(snapshot.recordedPath.samples.at(-1).accuracyMeters, 5);
+});
+
+test("a confirmed acquisition gap survives the next compressible live sample", () => {
+  let snapshot = normalizeRouteTrackingSnapshot({ policy, recentPositions: [] });
+  const positions = [
+    ["before-a", -79.4000, "2026-09-17T13:00:00.000Z"],
+    ["before-b", -79.3998, "2026-09-17T13:01:00.000Z"],
+    ["after-gap-a", -79.3988, "2026-09-17T13:10:00.000Z"],
+    ["after-gap-b", -79.3986, "2026-09-17T13:10:06.000Z"],
+  ];
+  for (const [eventId, longitude, occurredAt] of positions) {
+    snapshot = mergeRouteTrackingPosition(snapshot, {
+      accuracyMeters: 5,
+      eventId,
+      latitude: 43.7,
+      longitude,
+      occurredAt,
+      receivedAt: occurredAt,
+    });
+  }
+
+  assert.equal(getRouteTrackingPathSummary(snapshot).gapCount, 1);
+  assert.deepEqual(
+    getRouteTrackingLineFeatures(snapshot).map((feature) => feature.geometry.coordinates),
+    [
+      [[-79.4, 43.7], [-79.3998, 43.7]],
+      [[-79.3988, 43.7], [-79.3986, 43.7]],
+    ],
+  );
+});
+
+test("low-speed right-angle GPS movement keeps its turns during live compression", () => {
+  let snapshot = normalizeRouteTrackingSnapshot({
+    policy: { ...policy, geometrySimplificationToleranceMeters: 5 },
+    recentPositions: [],
+  });
+  const startedAt = Date.parse("2026-09-17T13:00:00.000Z");
+  const coordinates = [];
+  let longitude = -79.40;
+  let latitude = 43.70;
+  for (let index = 0; index < 121; index += 1) {
+    if (index > 0) {
+      const phase = Math.floor((index - 1) / 10) % 4;
+      if (phase === 0) longitude += 0.000032;
+      if (phase === 1) latitude += 0.0000225;
+      if (phase === 2) longitude -= 0.000032;
+      if (phase === 3) latitude -= 0.0000225;
+    }
+    coordinates.push([longitude, latitude]);
+    snapshot = mergeRouteTrackingPosition(snapshot, {
+      accuracyMeters: 5,
+      eventId: `turn-${index}`,
+      latitude,
+      longitude,
+      occurredAt: new Date(startedAt + index * 6_000).toISOString(),
+      receivedAt: new Date(startedAt + index * 6_000 + 500).toISOString(),
+    });
+  }
+
+  const retained = getRouteTrackingPathPoints(snapshot).map((point) => point.coordinates);
+  assert.ok(retained.length >= 10, `expected turns to remain, got ${retained.length} points`);
+  for (const cornerIndex of [10, 20, 30, 40]) {
+    assert.ok(
+      retained.some(([x, y]) => Math.abs(x - coordinates[cornerIndex][0]) < 0.000001 && Math.abs(y - coordinates[cornerIndex][1]) < 0.000001),
+      `missing corner ${cornerIndex}`,
+    );
+  }
+});
+
+test("tracking window defaults to the route service date and excludes later stale positions", () => {
+  const samples = [
+    ["south-start", "2026-09-17T13:00:00.000Z"],
+    ["south-return", "2026-09-17T17:45:00.000Z"],
+    ["later-position", "2026-09-18T13:00:00.000Z"],
+  ].map(([eventId, occurredAt], sourceIndex) => ({
+    accuracyMeters: 5,
+    driverId: "driver-1",
+    eventId,
+    gapBefore: false,
+    occurredAt,
+    receivedAt: occurredAt,
+    sourceIndex,
+  }));
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    latestPosition: {
+      eventId: "latest-later-position",
+      latitude: 43.8,
+      longitude: -79.3,
+      occurredAt: samples[2].occurredAt,
+      receivedAt: samples[2].receivedAt,
+    },
+    recordedPath: {
+      geometry: {
+        coordinates: [[-79.4, 43.7], [-79.41, 43.71], [-79.3, 43.8]],
+        type: "LineString",
+      },
+      samples,
+      sourcePointCount: 3,
+    },
+  });
+
+  const serviceDay = selectRouteTrackingWindow(snapshot, {
+    date: "2026-09-17",
+    timeZone: "America/Toronto",
+  });
+  assert.deepEqual(getRouteTrackingPathPoints(serviceDay).map((point) => point.eventId), ["south-start", "south-return"]);
+  assert.equal(serviceDay.latestPosition.eventId, "south-return");
+  assert.equal(selectRouteTrackingWindow(snapshot, { allRecords: true }), snapshot);
+});
+
+test("service-day filtering falls back to raw GPS only for a matched range that crosses midnight", () => {
+  const samples = [
+    ["before-midnight", "2026-09-18T03:58:00.000Z"],
+    ["at-midnight", "2026-09-18T03:59:00.000Z"],
+    ["after-midnight", "2026-09-18T04:01:00.000Z"],
+  ].map(([eventId, occurredAt], sourceIndex) => ({
+    accuracyMeters: 5,
+    eventId,
+    gapBefore: false,
+    occurredAt,
+    receivedAt: occurredAt,
+    sourceIndex,
+  }));
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: {
+      geometry: { coordinates: [[-79.4, 43.7], [-79.401, 43.701], [-79.402, 43.702]], type: "LineString" },
+      samples,
+      sourcePointCount: 3,
+    },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v2",
+      matchedGeometry: {
+        coordinates: [[[-79.4, 43.7], [-79.402, 43.702]]],
+        type: "MultiLineString",
+      },
+      matchedRanges: [{
+        startEventId: "before-midnight",
+        endEventId: "after-midnight",
+        startOccurredAt: samples[0].occurredAt,
+        endOccurredAt: samples[2].occurredAt,
+        startSourceIndex: 0,
+        endSourceIndex: 2,
+      }],
+    },
+  });
+
+  const serviceDay = selectRouteTrackingWindow(snapshot, {
+    date: "2026-09-17",
+    timeZone: "America/Toronto",
+  });
+  assert.equal(serviceDay.roadMatchedPath.matchedGeometry, null);
+  assert.equal(serviceDay.roadMatchedPath.unmatchedRanges[0].reason, "WINDOW_BOUNDARY");
+  assert.deepEqual(getRouteTrackingLineFeatures(serviceDay).map((feature) => feature.properties.trackingType), ["trackingConnector"]);
+  assert.deepEqual(getRouteTrackingPathPoints(serviceDay).map((point) => point.eventId), ["before-midnight", "at-midnight"]);
+});
+
+test("service-day filtering preserves confident lines when another matched range crosses midnight", () => {
+  const occurredTimes = [
+    "2026-09-17T13:00:00.000Z",
+    "2026-09-17T13:01:00.000Z",
+    "2026-09-17T13:02:00.000Z",
+    "2026-09-18T03:58:00.000Z",
+    "2026-09-18T03:59:00.000Z",
+    "2026-09-18T04:01:00.000Z",
+  ];
+  const coordinates = occurredTimes.map((_, index) => [-79.4 + index * 0.001, 43.7 + index * 0.001]);
+  const samples = occurredTimes.map((occurredAt, sourceIndex) => ({
+    accuracyMeters: 5,
+    eventId: `mixed-day-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt,
+    receivedAt: occurredAt,
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+  });
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: 6 },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v2",
+      matchedGeometry: {
+        coordinates: [coordinates.slice(0, 3), coordinates.slice(3, 6)],
+        type: "MultiLineString",
+      },
+      matchedRanges: [range(0, 2), range(3, 5)],
+    },
+  });
+
+  const serviceDay = selectRouteTrackingWindow(snapshot, {
+    date: "2026-09-17",
+    timeZone: "America/Toronto",
+  });
+  const features = getRouteTrackingLineFeatures(serviceDay);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingTrail",
+    "trackingConnector",
+  ]);
+  assert.deepEqual(features[0].geometry.coordinates, coordinates.slice(0, 3));
+  assert.deepEqual(features[1].geometry.coordinates, coordinates.slice(3, 5));
+});
+
+test("quality coverage renders matched, uncertain, and unmatched spans once each", () => {
+  const samples = Array.from({ length: 7 }, (_, sourceIndex) => ({
+    accuracyMeters: 5,
+    eventId: `quality-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const coordinates = samples.map((_, index) => [-79.4 + index * 0.001, 43.7 + index * 0.001]);
+  const range = (startSourceIndex, endSourceIndex, reason) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    ...(reason ? { reason } : {}),
+  });
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: 7 },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v2",
+      matchedGeometry: { coordinates: [coordinates.slice(0, 3)], type: "MultiLineString" },
+      matchedRanges: [range(0, 2)],
+      uncertainGeometry: { coordinates: [coordinates.slice(3, 5)], type: "MultiLineString" },
+      uncertainRanges: [range(3, 4, "LOW_CONFIDENCE")],
+      unmatchedRanges: [range(5, 6, "NO_MATCH")],
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingTrail",
+    "trackingConnector",
+    "trackingConnector",
+  ]);
+  assert.deepEqual(features[2].geometry.coordinates, coordinates.slice(5, 7));
+});
+
+test("low-accuracy unmatched GPS cannot draw a route line or expand map fit", () => {
+  const reliableCoordinates = [[-79.4, 43.7], [-79.399, 43.701]];
+  const inaccurateCoordinates = Array.from({ length: 8 }, (_, index) => [
+    -79.30 + (index % 2 === 0 ? 0.07 : -0.07),
+    43.80 + (index % 2 === 0 ? -0.07 : 0.07),
+  ]);
+  const coordinates = [...reliableCoordinates, ...inaccurateCoordinates];
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: sourceIndex < 2 ? 5 : 250,
+    eventId: `accuracy-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex, reason) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    reason,
+  });
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v2",
+      matchedGeometry: { coordinates: [reliableCoordinates], type: "MultiLineString" },
+      matchedRanges: [range(0, 1, null)],
+      unmatchedRanges: [range(2, 9, "LOW_ACCURACY")],
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingTrail"]);
+  assert.deepEqual(getRouteTrackingFitCoordinates(snapshot), reliableCoordinates);
+});
+
+test("low-accuracy raw fallback cannot draw a route line when road matching is unavailable", () => {
+  const coordinates = Array.from({ length: 8 }, (_, index) => [
+    -79.30 + (index % 2 === 0 ? 0.07 : -0.07),
+    43.80 + (index % 2 === 0 ? -0.07 : 0.07),
+  ]);
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: {
+      geometry: { coordinates, type: "LineString" },
+      samples: coordinates.map((_, sourceIndex) => ({
+        accuracyMeters: 250,
+        eventId: `raw-low-${sourceIndex}`,
+        gapBefore: false,
+        occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+        receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+        sourceIndex,
+      })),
+      sourcePointCount: coordinates.length,
+    },
+  });
+
+  assert.deepEqual(getRouteTrackingLineFeatures(snapshot), []);
+  assert.deepEqual(getRouteTrackingFitCoordinates(snapshot), []);
+});
+
+test("low-accuracy live tail cannot extend a matched route", () => {
+  const coordinates = [[-79.4, 43.7], [-79.30, 43.80], [-79.37, 43.87]];
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: sourceIndex === 0 ? 5 : 250,
+    eventId: `tail-low-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v2",
+      inputPointCount: 1,
+      lastInputOccurredAt: samples[0].occurredAt,
+      lastMatchedPosition: { latitude: 43.7, longitude: -79.4, occurredAt: samples[0].occurredAt },
+      matchedGeometry: { coordinates: [[[-79.4, 43.7], [-79.3999, 43.7001]]], type: "MultiLineString" },
+      matchedRanges: [{
+        startEventId: samples[0].eventId,
+        endEventId: samples[0].eventId,
+        startOccurredAt: samples[0].occurredAt,
+        endOccurredAt: samples[0].occurredAt,
+        startSourceIndex: 0,
+        endSourceIndex: 0,
+      }],
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingTrail"]);
+  assert.deepEqual(getRouteTrackingFitCoordinates(snapshot), [[-79.4, 43.7], [-79.3999, 43.7001]]);
+});
+
 test("road-matched tracking renders only open GPS line segments", () => {
   const snapshot = normalizeRouteTrackingSnapshot({
     policy,
@@ -253,7 +622,6 @@ test("road-matched tracking renders only open GPS line segments", () => {
 
   const features = getRouteTrackingLineFeatures(snapshot);
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
-    "trackingConnector",
     "trackingTrail",
     "trackingConnector",
     "trackingConnector",
@@ -311,11 +679,10 @@ test("road-matched tracking preserves uncertain geometry while rejecting an impo
   const features = getRouteTrackingLineFeatures(snapshot);
 
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
-    "trackingConnector",
     "trackingTrail",
     "trackingConnector",
   ]);
-  assert.deepEqual(features[2].geometry.coordinates, snapshot.roadMatchedPath.uncertainGeometry.coordinates);
+  assert.deepEqual(features[1].geometry.coordinates, snapshot.roadMatchedPath.uncertainGeometry.coordinates[0]);
   assert.equal(
     getRouteTrackingFitCoordinates(snapshot).some((coordinate) => (
       coordinate[0] === 128 && coordinate[1] === 38
@@ -366,7 +733,7 @@ test("road-match metadata without usable geometry falls back to the recorded GPS
   ]);
 });
 
-test("recorded GPS keeps road-match fragments connected across collection gaps", () => {
+test("recorded GPS does not connect road-match fragments across collection gaps", () => {
   const coordinates = [
     [127, 37.5],
     [127.001, 37.501],
@@ -413,12 +780,10 @@ test("recorded GPS keeps road-match fragments connected across collection gaps",
   });
 
   const features = getRouteTrackingLineFeatures(snapshot);
-  const connector = features.find((feature) => (
-    feature.properties.trackingType === "trackingConnector"
-    && feature.geometry.type === "LineString"
-  ));
-
-  assert.deepEqual(connector?.geometry.coordinates, coordinates);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingTrail",
+    "trackingTrail",
+  ]);
   assert.equal(getRouteTrackingPathSummary(snapshot).gapCount, 1);
 });
 

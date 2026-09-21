@@ -112,6 +112,7 @@ import {
   mergeRouteTrackingSnapshot,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
+  selectRouteTrackingWindow,
   shouldShowRouteTrackingFreshness,
   shouldRevalidateTrackingEta,
 } from "../features/delivery/route-tracking";
@@ -644,7 +645,13 @@ const routeTrackingMapLegendItemStyle = {
 };
 
 const routeTrackingMapGpsKeyStyle = {
-  borderTop: "3px dashed #0b84d8",
+  borderTop: "3px solid #0b84d8",
+  height: 0,
+  width: "22px",
+};
+
+const routeTrackingMapUncertainKeyStyle = {
+  borderTop: "3px dashed #79828c",
   height: 0,
   width: "22px",
 };
@@ -3846,6 +3853,7 @@ export default function RouteDetailPage() {
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
   const [routeTrackingSnapshot, setRouteTrackingSnapshot] = useState(null);
+  const [showAllRouteTrackingRecords, setShowAllRouteTrackingRecords] = useState(false);
   const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
   const [routeExecutionStatus, setRouteExecutionStatus] = useState(loaderRouteExecutionStatus);
@@ -3938,15 +3946,29 @@ export default function RouteDetailPage() {
   });
   const customerEmailReadyToSend = customerEmailSendReadiness.ready;
   routeTrackingSnapshotRef.current = routeTrackingSnapshot;
-  const displayedRouteTrackingSnapshot = isRouteTrackingPayloadForRoute(routeTrackingSnapshot, trackingRoutePlanId)
+  const routeTrackingDeliveryDate = textOrUndefined(
+    effectiveRoutePlan?.routeScope?.deliveryDate
+      ?? effectiveRoutePlan?.deliveryDate
+      ?? effectiveRoutePlan?.planDate,
+  );
+  const routeScopedTrackingSnapshot = isRouteTrackingPayloadForRoute(routeTrackingSnapshot, trackingRoutePlanId)
     ? routeTrackingSnapshot
     : null;
+  const displayedRouteTrackingSnapshot = useMemo(
+    () => selectRouteTrackingWindow(routeScopedTrackingSnapshot, {
+      allRecords: showAllRouteTrackingRecords,
+      date: routeTrackingDeliveryDate,
+      timeZone: ianaTimezone,
+    }),
+    [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingDeliveryDate, showAllRouteTrackingRecords],
+  );
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
   }, [loaderRouteExecutionStatus]);
   useEffect(() => {
     routeTrackingSnapshotRef.current = null;
     setRouteTrackingSnapshot(null);
+    setShowAllRouteTrackingRecords(false);
     setTrackingConnectionState("idle");
   }, [effectiveRoutePlan?.id]);
   useEffect(() => {
@@ -4112,11 +4134,6 @@ export default function RouteDetailPage() {
   const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? null;
   const routeTrackingCompletionTime = getRouteTrackingCompletionTime(displayedRouteTrackingSnapshot);
   const routeTrackingIsCompleted = routeExecutionStatus === "COMPLETED";
-  const routeTrackingDeliveryDate = textOrUndefined(
-    effectiveRoutePlan?.routeScope?.deliveryDate
-      ?? effectiveRoutePlan?.deliveryDate
-      ?? effectiveRoutePlan?.planDate,
-  );
   const showRouteTrackingFreshness = shouldShowRouteTrackingFreshness({
     completionTime: routeTrackingCompletionTime,
     deliveryDate: routeTrackingDeliveryDate,
@@ -7421,8 +7438,20 @@ export default function RouteDetailPage() {
                   </span>
                   <span style={routeTrackingMapLegendItemStyle}>
                     <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
-                    <span>Actual GPS tracking</span>
+                    <span>Road-matched GPS</span>
                   </span>
+                  <span style={routeTrackingMapLegendItemStyle}>
+                    <span aria-hidden="true" style={routeTrackingMapUncertainKeyStyle} />
+                    <span>Unmatched GPS</span>
+                  </span>
+                  <label style={{ ...routeTrackingMapLegendItemStyle, cursor: "pointer" }}>
+                    <input
+                      checked={showAllRouteTrackingRecords}
+                      onChange={(event) => setShowAllRouteTrackingRecords(event.target.checked)}
+                      type="checkbox"
+                    />
+                    <span>{showAllRouteTrackingRecords ? "All recorded dates" : `${routeTrackingDeliveryDate ?? "Service date"} only`}</span>
+                  </label>
                 </div>
                 {routeTrackingIsCompleted ? (
                   <div
@@ -7442,7 +7471,9 @@ export default function RouteDetailPage() {
                     title={`Position recorded ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}${latestTrackingReceivedAt ? `; received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}` : ""}. Double-click the red marker to focus.`}
                   >
                     <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
-                    <span>Current position {formatTrackingElapsedSeconds(latestTrackingOccurredAt, routeTrackingFreshnessTime)}</span>
+                    <span>{showAllRouteTrackingRecords
+                      ? `Current position ${formatTrackingElapsedSeconds(latestTrackingOccurredAt, routeTrackingFreshnessTime)}`
+                      : `Last recorded position ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}`}</span>
                   </div>
                 ) : null}
               </>
@@ -7803,7 +7834,7 @@ export default function RouteDetailPage() {
                   <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
                 </div>
                 <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Range</span>
+                  <span style={routeChildTrackingMetricLabelStyle}>{showAllRouteTrackingRecords ? "All-record range" : "Service-day range"}</span>
                   <strong
                     style={{ ...routeChildTrackingMetricValueStyle, whiteSpace: "nowrap" }}
                     title={routeTrackingPathSummary.firstOccurredAt
