@@ -519,6 +519,7 @@ function normalizeRoadMatchedPath(roadMatchedPath) {
   const inferredGeometry = normalizeMultiLineGeometry(roadMatchedPath.inferredGeometry);
   const matchedGeometry = normalizeMultiLineGeometry(roadMatchedPath.matchedGeometry);
   const uncertainGeometry = normalizeMultiLineGeometry(roadMatchedPath.uncertainGeometry);
+  const qualityVersion = textOrNull(roadMatchedPath.qualityVersion);
   const lastMatchedLatitude = numberOrNull(roadMatchedPath.lastMatchedPosition?.latitude);
   const lastMatchedLongitude = numberOrNull(roadMatchedPath.lastMatchedPosition?.longitude);
   const lastMatchedPosition = lastMatchedLatitude != null
@@ -533,7 +534,11 @@ function normalizeRoadMatchedPath(roadMatchedPath) {
         occurredAt: textOrNull(roadMatchedPath.lastMatchedPosition?.occurredAt),
       }
     : null;
-  if (!inferredGeometry && !matchedGeometry && !uncertainGeometry && !lastMatchedPosition) return null;
+  if (!inferredGeometry
+    && !matchedGeometry
+    && !uncertainGeometry
+    && !lastMatchedPosition
+    && qualityVersion !== "gps_quality.v4") return null;
 
   return {
     coverage: textOrNull(roadMatchedPath.coverage),
@@ -545,7 +550,7 @@ function normalizeRoadMatchedPath(roadMatchedPath) {
     matchedGeometry,
     matchedPointCount: Math.max(0, numberOrNull(roadMatchedPath.matchedPointCount) ?? 0),
     matchedRanges: normalizeRoadMatchRanges(roadMatchedPath.matchedRanges),
-    qualityVersion: textOrNull(roadMatchedPath.qualityVersion),
+    qualityVersion,
     schemaVersion: textOrNull(roadMatchedPath.schemaVersion) ?? "route_tracking_road_match.v1",
     uncertainRanges: normalizeRoadMatchRanges(roadMatchedPath.uncertainRanges),
     uncertainGeometry,
@@ -558,6 +563,12 @@ function normalizeRoadMatchRanges(ranges) {
   return (Array.isArray(ranges) ? ranges : []).flatMap((range) => {
     const startSourceIndex = range?.startSourceIndex == null ? null : numberOrNull(range.startSourceIndex);
     const endSourceIndex = range?.endSourceIndex == null ? null : numberOrNull(range.endSourceIndex);
+    const interpolationLevel = typeof range?.interpolationLevel === "number"
+      && Number.isInteger(range.interpolationLevel)
+      && range.interpolationLevel >= 0
+      && range.interpolationLevel <= 2
+      ? range.interpolationLevel
+      : null;
     if (!Number.isInteger(startSourceIndex) || !Number.isInteger(endSourceIndex) || startSourceIndex < 0 || endSourceIndex < startSourceIndex) {
       return [];
     }
@@ -565,6 +576,7 @@ function normalizeRoadMatchRanges(ranges) {
       endEventId: textOrNull(range?.endEventId),
       endOccurredAt: textOrNull(range?.endOccurredAt),
       endSourceIndex,
+      ...(interpolationLevel != null ? { interpolationLevel } : {}),
       reason: textOrNull(range?.reason),
       startEventId: textOrNull(range?.startEventId),
       startOccurredAt: textOrNull(range?.startOccurredAt),
@@ -708,6 +720,7 @@ function getRouteTrackingLineFeatures(snapshot) {
   const roadMatchedPath = normalized.roadMatchedPath;
   const recordedCoverage = getRecordedTrackingCoverageFeatures(normalized);
   if (!roadMatchedPath) return recordedCoverage;
+  const usesInterpolationLevels = roadMatchedPath.qualityVersion === "gps_quality.v4";
 
   const features = [];
   if (roadMatchedPath.matchedGeometry) {
@@ -715,7 +728,7 @@ function getRouteTrackingLineFeatures(snapshot) {
       features.push(createTrackingLineFeature(coordinates, "trackingTrail"));
     }
   }
-  if (roadMatchedPath.uncertainGeometry) {
+  if (!usesInterpolationLevels && roadMatchedPath.uncertainGeometry) {
     for (const coordinates of roadMatchedPath.uncertainGeometry.coordinates) {
       features.push(createTrackingLineFeature(coordinates, "trackingConnector"));
     }
@@ -725,6 +738,7 @@ function getRouteTrackingLineFeatures(snapshot) {
       features.push(createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "inferred" }));
     }
   }
+  if (usesInterpolationLevels) return features;
   const uncoveredRanges = subtractCoveredRoadMatchRanges(
     roadMatchedPath.unmatchedRanges,
     roadMatchedPath.inferredRanges,

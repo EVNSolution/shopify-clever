@@ -24,6 +24,7 @@ const DRIVER_POSITION_LAYER_ID = "route-detail-live-driver-position";
 function createFakeMap(options = {}) {
   const sources = new Map();
   const layers = new Map();
+  const layerOrder = [];
   const images = new Set(options.images ?? []);
   const calls = { addImage: [], addLayer: [], addSource: [], moveLayer: [], setLayoutProperty: [], setPaintProperty: [] };
   const map = {
@@ -31,9 +32,11 @@ function createFakeMap(options = {}) {
       calls.addImage.push(id);
       images.add(id);
     },
-    addLayer(layer) {
+    addLayer(layer, beforeId) {
       calls.addLayer.push(layer.id);
       layers.set(layer.id, structuredClone(layer));
+      const beforeIndex = layerOrder.indexOf(beforeId);
+      layerOrder.splice(beforeIndex < 0 ? layerOrder.length : beforeIndex, 0, layer.id);
     },
     addSource(id, source) {
       calls.addSource.push(id);
@@ -58,6 +61,11 @@ function createFakeMap(options = {}) {
     },
     moveLayer(id, beforeId) {
       calls.moveLayer.push([id, beforeId]);
+      const index = layerOrder.indexOf(id);
+      assert.notEqual(index, -1, `Layer ${id} must exist before moving it`);
+      layerOrder.splice(index, 1);
+      const beforeIndex = layerOrder.indexOf(beforeId);
+      layerOrder.splice(beforeIndex < 0 ? layerOrder.length : beforeIndex, 0, id);
     },
     setLayoutProperty(id, property, value) {
       calls.setLayoutProperty.push([id, property, value]);
@@ -70,7 +78,7 @@ function createFakeMap(options = {}) {
       if (layer) layer.paint = { ...layer.paint, [property]: value };
     },
   };
-  return { calls, layers, map, sources };
+  return { calls, layers, layerOrder, map, sources };
 }
 
 test("route detail map rejects contaminated zero coordinates before marker and fit operations", () => {
@@ -359,6 +367,38 @@ test("planned route line stays below stop markers", () => {
     "route-detail-osrm-route-line",
     "route-detail-snapped-stop-points",
   ]);
+});
+
+test("actual GPS lines stay above the plan through every load order and subsequent refresh", () => {
+  const orders = [
+    ["plan", "gps", "markers"], ["plan", "markers", "gps"],
+    ["gps", "plan", "markers"], ["gps", "markers", "plan"],
+    ["markers", "plan", "gps"], ["markers", "gps", "plan"],
+  ];
+  for (const order of orders) {
+    const fake = createFakeMap();
+    const sync = {
+      plan: () => syncRouteDetailRouteLine(fake.map, {
+        coordinates: [[126.92, 37.51], [126.93, 37.52]], type: "LineString",
+      }, "#006fbb", { isTrackingReference: true }),
+      gps: () => syncRouteDetailLiveTracking(fake.map, null),
+      markers: () => syncRouteDetailMapMarkerLayers(fake.map, null, [], [], "#006fbb"),
+    };
+    const assertStack = () => {
+      const index = (id) => fake.layerOrder.indexOf(id);
+      for (const gpsId of TRACKING_LAYER_IDS.slice(0, 2)) {
+        assert.ok(index("route-detail-osrm-route-line") < index(gpsId), `${order}: GPS above plan`);
+        assert.ok(index(gpsId) < index("route-detail-snapped-stop-points"), `${order}: markers above GPS`);
+        assert.ok(index(gpsId) < index(DRIVER_POSITION_LAYER_ID), `${order}: latest position above GPS`);
+      }
+    };
+    for (const name of order) assert.equal(sync[name](), true);
+    assertStack();
+    for (const name of ["plan", "markers", "gps", "plan"]) {
+      assert.equal(sync[name](), true);
+      assertStack();
+    }
+  }
 });
 
 test("completed stops use one check image layer above numbered pins", () => {
