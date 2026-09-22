@@ -755,6 +755,12 @@ s-badge {
   }
 }
 
+.route-tracking-primary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  min-width: 0;
+}
+
 .route-overview-header,
 .route-overview-main,
 .route-overview-summary,
@@ -1126,6 +1132,17 @@ s-badge {
 @media (max-width: 900px) {
   .route-overview-main {
     grid-template-columns: 1fr;
+  }
+
+  .route-tracking-primary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 14px;
+  }
+}
+
+@media (max-width: 760px) {
+  .route-tracking-primary-grid {
+    grid-template-columns: minmax(0, 1fr);
   }
 }
 

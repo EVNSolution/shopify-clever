@@ -494,19 +494,20 @@ const routesDetailCardStyle = {
 
 const routeChildTabsStyle = {
   alignItems: "center",
+  background: "#fafafa",
   borderBottom: "1px solid #e3e3e3",
   display: "flex",
-  gap: "2px",
-  minHeight: "44px",
-  padding: "0 12px",
+  gap: "4px",
+  minHeight: "48px",
+  overflowX: "auto",
+  padding: "6px 10px",
 };
 
 const routeChildTabStyle = {
   alignItems: "center",
-  alignSelf: "stretch",
   background: "transparent",
   border: 0,
-  borderBottom: "2px solid transparent",
+  borderRadius: "8px",
   color: "#616161",
   cursor: "pointer",
   display: "inline-flex",
@@ -514,11 +515,14 @@ const routeChildTabStyle = {
   fontSize: "13px",
   fontWeight: 650,
   gap: "7px",
-  padding: "0 12px",
+  minHeight: "36px",
+  padding: "0 13px",
+  whiteSpace: "nowrap",
 };
 
 const routeChildTabActiveStyle = {
-  borderBottomColor: "#303030",
+  background: "#e8f1fb",
+  boxShadow: "inset 0 0 0 1px #c7dbef",
   color: "#202223",
   fontWeight: 750,
 };
@@ -575,22 +579,74 @@ const routeChildTrackingStyle = {
   display: "grid",
 };
 
-const routeChildTrackingSummaryStyle = {
+const routeTrackingStatusBandStyle = {
+  alignItems: "center",
+  background: "#f7f9fb",
+  borderBottom: "1px solid #e3e3e3",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px 20px",
+  justifyContent: "space-between",
+  padding: "11px 14px",
+};
+
+const routeTrackingStatusLeadStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "10px",
+  minWidth: 0,
+};
+
+const routeTrackingStatusDotStyle = {
+  background: "#0b7a53",
+  border: "3px solid #dff3e9",
+  borderRadius: "999px",
+  boxSizing: "content-box",
+  flex: "0 0 auto",
+  height: "8px",
+  width: "8px",
+};
+
+const routeTrackingStatusTextStyle = {
   display: "grid",
-  gap: "8px",
-  gridAutoColumns: "minmax(132px, 1fr)",
-  gridAutoFlow: "column",
-  overflowX: "auto",
-  padding: "12px",
+  gap: "2px",
+  minWidth: 0,
+};
+
+const routeTrackingStatusTitleStyle = {
+  color: "#202223",
+  fontSize: "14px",
+  fontWeight: 750,
+};
+
+const routeTrackingStatusMetaStyle = {
+  color: "#616161",
+  fontSize: "12px",
+};
+
+const routeTrackingStatusFactsStyle = {
+  alignItems: "center",
+  color: "#4a4a4a",
+  display: "flex",
+  flexWrap: "wrap",
+  fontSize: "12px",
+  gap: "7px 16px",
+};
+
+const routeChildTrackingSummaryStyle = {
+  background: "#ffffff",
+  borderBottom: "1px solid #e3e3e3",
+  display: "grid",
+  gap: "12px",
+  padding: "14px",
 };
 
 const routeChildTrackingMetricStyle = {
-  background: "#f7f7f7",
-  borderRadius: "8px",
+  borderLeft: "1px solid #e3e3e3",
   display: "grid",
-  gap: "3px",
+  gap: "4px",
   minWidth: "120px",
-  padding: "9px 10px",
+  padding: "2px 12px",
 };
 
 const routeChildTrackingMetricLabelStyle = {
@@ -601,8 +657,45 @@ const routeChildTrackingMetricLabelStyle = {
 
 const routeChildTrackingMetricValueStyle = {
   color: "#303030",
+  fontSize: "14px",
+  fontWeight: 750,
+};
+
+const routeTrackingSummaryHeaderStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "10px",
+  justifyContent: "space-between",
+};
+
+const routeTrackingSummaryTitleStyle = {
+  color: "#303030",
   fontSize: "13px",
   fontWeight: 750,
+};
+
+const routeTrackingSummaryHintStyle = {
+  color: "#6d7175",
+  fontSize: "11px",
+};
+
+const routeTrackingEvidenceStyle = {
+  borderTop: "1px solid #ececec",
+  paddingTop: "10px",
+};
+
+const routeTrackingEvidenceSummaryStyle = {
+  color: "#303030",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 700,
+};
+
+const routeTrackingEvidenceGridStyle = {
+  display: "grid",
+  gap: "12px 0",
+  gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
+  paddingTop: "12px",
 };
 
 const ROUTE_STOPS_MAP_DEFAULT_HEIGHT = 440;
@@ -7333,6 +7426,35 @@ export default function RouteDetailPage() {
             </section>
           ) : null}
 
+          {isTrackingMapView ? (
+            <section aria-label="Tracking status overview" style={routeTrackingStatusBandStyle}>
+              <div style={routeTrackingStatusLeadStyle}>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    ...routeTrackingStatusDotStyle,
+                    ...(routeTrackingPresentation.mode === "live"
+                      ? null
+                      : { background: "#6d7175", borderColor: "#ececec" }),
+                  }}
+                />
+                <span style={routeTrackingStatusTextStyle}>
+                  <strong style={routeTrackingStatusTitleStyle}>
+                    {routeTrackingPresentation.mode === "live" ? "Live route signal" : "Recorded route tracking"}
+                  </strong>
+                  <span style={routeTrackingStatusMetaStyle}>{routeTrackingPresentation.trackingLabel}</span>
+                </span>
+              </div>
+              <div style={routeTrackingStatusFactsStyle}>
+                <span>{latestTrackingOccurredAt
+                  ? `Last position ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}`
+                  : "No GPS position received"}</span>
+                <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
+                <strong>{trackingDeliveredCount} of {childRouteOrderRows.length} delivered</strong>
+              </div>
+            </section>
+          ) : null}
+
           <MapPanel
             ariaLabel={isTrackingMapView ? "Recorded GPS tracking map" : "Route stop location map"}
             canvasKey={mapRenderKey}
@@ -7757,99 +7879,92 @@ export default function RouteDetailPage() {
             </div>
           ) : isTrackingMapView ? (
             <section aria-label="Route tracking" style={routeChildTrackingStyle}>
-              <div style={routeChildTrackingSummaryStyle}>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>
-                    {routeTrackingPresentation.mode === "live" ? "Live tracking" : "Tracking"}
-                  </span>
-                  <strong
-                    style={routeChildTrackingMetricValueStyle}
-                    title={routeTrackingPresentation.mode === "live" && routeTrackingPolicy
-                      ? `Server policy: live ${routeTrackingPolicy.liveThresholdMs ?? ROUTE_EMPTY_LABEL}ms, delayed ${routeTrackingPolicy.delayedThresholdMs ?? ROUTE_EMPTY_LABEL}ms`
-                      : routeTrackingPresentation.mode === "live"
-                        ? "Waiting for server tracking policy"
-                        : "Live tracking is available only while the route is in progress"}
-                  >{routeTrackingPresentation.trackingLabel}</strong>
+              <section aria-label="Route tracking summary" style={routeChildTrackingSummaryStyle}>
+                <div style={routeTrackingSummaryHeaderStyle}>
+                  <strong style={routeTrackingSummaryTitleStyle}>Route overview</strong>
+                  <span style={routeTrackingSummaryHintStyle}>Operational status from recorded driver events</span>
                 </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Connection</span>
-                  <strong style={{ ...routeChildTrackingMetricValueStyle, textTransform: "capitalize" }}>
-                    {routeTrackingConnectionLabel}
-                  </strong>
+                <div className="route-tracking-primary-grid">
+                  <div style={{ ...routeChildTrackingMetricStyle, borderLeft: 0, paddingLeft: 0 }}>
+                    <span style={routeChildTrackingMetricLabelStyle}>Driver</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</strong>
+                  </div>
+                  <div style={routeChildTrackingMetricStyle}>
+                    <span style={routeChildTrackingMetricLabelStyle}>Delivery progress</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{trackingDeliveredCount} / {childRouteOrderRows.length} delivered</strong>
+                  </div>
+                  <div style={routeChildTrackingMetricStyle}>
+                    <span style={routeChildTrackingMetricLabelStyle}>Latest position</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{formatTrackingPosition(latestTrackingPosition)}</strong>
+                  </div>
+                  <div style={routeChildTrackingMetricStyle}>
+                    <span style={routeChildTrackingMetricLabelStyle}>GPS gaps</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.gapCount}</strong>
+                  </div>
                 </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Driver stage</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>
-                    {formatTrackingDriverStage(routeTrackingPresentation.driverStage)}
-                  </strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Latest position</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>
-                    {formatTrackingPosition(latestTrackingPosition)}
-                  </strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Driver</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Progress</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>{
-                    `${trackingDeliveredCount} / ${childRouteOrderRows.length} delivered`
-                  }</strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.startEvent")}</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>
-                    {getExecutionEvidenceEventLabel(routeExecutionEvidence?.start, ianaTimezone, language)}
-                  </strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.completionEvent")}</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>
-                    {getExecutionEvidenceEventLabel(routeExecutionEvidence?.completion, ianaTimezone, language)}
-                  </strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.returnToDepot")}</span>
-                  <strong
-                    style={routeChildTrackingMetricValueStyle}
-                    title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
-                  >
-                    {translate(language, `routes.detail.tracking.return.${returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}
-                  </strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>GPS records</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.sourcePointCount}</strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>Displayed points</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>{showAllRouteTrackingRecords ? "All-record range" : "Service-day range"}</span>
-                  <strong
-                    style={{ ...routeChildTrackingMetricValueStyle, whiteSpace: "nowrap" }}
-                    title={routeTrackingPathSummary.firstOccurredAt
-                      ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt, ianaTimezone)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt, ianaTimezone)}`
-                      : undefined}
-                  >{
-                    routeTrackingPathSummary.firstOccurredAt
-                      ? formatTrackingRange(
-                        routeTrackingPathSummary.firstOccurredAt,
-                        routeTrackingPathSummary.lastOccurredAt,
-                        ianaTimezone,
-                      )
-                      : ROUTE_EMPTY_LABEL
-                  }</strong>
-                </div>
-                <div style={routeChildTrackingMetricStyle}>
-                  <span style={routeChildTrackingMetricLabelStyle}>GPS gaps</span>
-                  <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.gapCount}</strong>
-                </div>
-              </div>
+                <details style={routeTrackingEvidenceStyle}>
+                  <summary style={routeTrackingEvidenceSummaryStyle}>Tracking evidence</summary>
+                  <div style={routeTrackingEvidenceGridStyle}>
+                    <div style={{ ...routeChildTrackingMetricStyle, borderLeft: 0, paddingLeft: 0 }}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{routeTrackingPresentation.mode === "live" ? "Live tracking" : "Tracking"}</span>
+                      <strong
+                        style={routeChildTrackingMetricValueStyle}
+                        title={routeTrackingPresentation.mode === "live" && routeTrackingPolicy
+                          ? `Server policy: live ${routeTrackingPolicy.liveThresholdMs ?? ROUTE_EMPTY_LABEL}ms, delayed ${routeTrackingPolicy.delayedThresholdMs ?? ROUTE_EMPTY_LABEL}ms`
+                          : routeTrackingPresentation.mode === "live"
+                            ? "Waiting for server tracking policy"
+                            : "Live tracking is available only while the route is in progress"}
+                      >{routeTrackingPresentation.trackingLabel}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>Connection</span>
+                      <strong style={{ ...routeChildTrackingMetricValueStyle, textTransform: "capitalize" }}>{routeTrackingConnectionLabel}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>Driver stage</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{formatTrackingDriverStage(routeTrackingPresentation.driverStage)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.startEvent")}</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{getExecutionEvidenceEventLabel(routeExecutionEvidence?.start, ianaTimezone, language)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.completionEvent")}</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{getExecutionEvidenceEventLabel(routeExecutionEvidence?.completion, ianaTimezone, language)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.returnToDepot")}</span>
+                      <strong
+                        style={routeChildTrackingMetricValueStyle}
+                        title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
+                      >{translate(language, `routes.detail.tracking.return.${returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>GPS records</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.sourcePointCount}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>Displayed points</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{showAllRouteTrackingRecords ? "All-record range" : "Service-day range"}</span>
+                      <strong
+                        style={{ ...routeChildTrackingMetricValueStyle, whiteSpace: "nowrap" }}
+                        title={routeTrackingPathSummary.firstOccurredAt
+                          ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt, ianaTimezone)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt, ianaTimezone)}`
+                          : undefined}
+                      >{routeTrackingPathSummary.firstOccurredAt
+                        ? formatTrackingRange(
+                          routeTrackingPathSummary.firstOccurredAt,
+                          routeTrackingPathSummary.lastOccurredAt,
+                          ianaTimezone,
+                        )
+                        : ROUTE_EMPTY_LABEL}</strong>
+                    </div>
+                  </div>
+                </details>
+              </section>
               <div style={routesDetailTableFrameStyle}>
                 <table aria-label="Child route tracking stops" style={childRouteOrderTableStyle}>
                   <thead>
