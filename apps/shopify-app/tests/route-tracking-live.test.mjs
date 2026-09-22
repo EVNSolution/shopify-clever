@@ -188,6 +188,18 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.doesNotMatch(routeDetailSource, /GPS record #/);
 });
 
+test("Tracking shell prioritizes route status and keeps technical evidence secondary to the map", () => {
+  const routeDetailSource = readIfPresent(routeDetailPath);
+  const globalCssSource = readIfPresent(globalCssPath);
+
+  assert.match(routeDetailSource, /aria-label="Tracking status overview"/);
+  assert.match(routeDetailSource, /aria-label="Route tracking summary"/);
+  assert.match(routeDetailSource, /<summary[^>]*>Tracking evidence<\/summary>/);
+  assert.match(routeDetailSource, /className="route-tracking-primary-grid"/);
+  assert.match(globalCssSource, /\.route-tracking-primary-grid/);
+  assert.match(globalCssSource, /@media \(max-width: 760px\)[\s\S]*\.route-tracking-primary-grid/);
+});
+
 test("Tracking map uses occurredAt for live freshness and a local terminal label after completion", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
   const routeMapSource = readIfPresent(routeMapPath);
