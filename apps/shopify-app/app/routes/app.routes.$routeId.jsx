@@ -55,6 +55,7 @@ import {
   isRouteStartDraftSavable,
 } from "../features/delivery/route-start-time-picker";
 import {
+  countRouteStopsByStatus,
   firstArray,
   formatRouteDeliveryScope,
   formatRouteStatus,
@@ -2516,12 +2517,6 @@ function isRouteStopReorderAllowed(status) {
   );
 }
 
-function countRouteStopsByStatus(routeStops, statuses) {
-  const statusSet = new Set(statuses);
-
-  return routeStops.filter((stop) => statusSet.has(String(stop.status).toUpperCase())).length;
-}
-
 function getRouteTotalItems(routePlan, routeStops) {
   const explicitTotal = numberOrUndefined(routePlan?.itemSummary?.totalQuantity ?? routePlan?.totalItems ?? routePlan?.itemsCount ?? routePlan?.itemCount);
   const stopTotal = routeStops.reduce((total, stop) => total + (numberOrUndefined(stop.itemCount) ?? 0), 0);
@@ -2959,7 +2954,7 @@ function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
     color: MAP_MARKER_PALETTE.plannedOrder.color,
     createdLabel: getRouteCreatedLabel(routeGroup),
     startDateTime: "",
-    deliveredCount: countRouteStopsByStatus(routeStops, ["DELIVERED", "FULFILLED"]),
+    deliveredCount: countRouteStopsByStatus(routeStops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]),
     driverId: null,
     driverLabel: "Unassigned",
     driveTimeLabel: ROUTE_EMPTY_LABEL,
@@ -3018,7 +3013,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[index % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
       createdLabel: getRouteCreatedLabel(childRoutePlan),
       startDateTime: getRouteStartDateTimeValue(childRoutePlan, ianaTimezone),
-      deliveredCount: countRouteStopsByStatus(stops, ["DELIVERED", "FULFILLED"]),
+      deliveredCount: countRouteStopsByStatus(stops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]),
       driverId: textOrUndefined(child?.driverId ?? childRoutePlan?.driverId) ?? null,
       driverLabel: textOrUndefined(child?.driverName ?? childRoutePlan?.driver?.displayName) ?? "Unassigned",
       driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(childRouteMetrics?.durationSeconds)),
@@ -3224,7 +3219,7 @@ function buildTimelineRows(routeRows, orderByRouteId) {
     return {
       ...routeRow,
       attemptedCount: countRouteStopsByStatus(displayedStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
-      deliveredCount: countRouteStopsByStatus(displayedStops, ["DELIVERED", "FULFILLED"]),
+      deliveredCount: countRouteStopsByStatus(displayedStops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]),
       stops: displayedStops,
       stopsCount: displayedStops.length,
       driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(optimized?.metrics?.durationSeconds), routeRow.driveTimeLabel),
@@ -3748,7 +3743,7 @@ export default function RouteDetailPage() {
   const routeStartTimeZone = textOrUndefined(effectiveRoutePlan?.scheduledStartTimeZone) ?? ianaTimezone;
   const routeStartDateTimeValue = getRouteStartDateTimeValue(effectiveRoutePlan, ianaTimezone);
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
-  const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["DELIVERED", "FULFILLED"]);
+  const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
   const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds));

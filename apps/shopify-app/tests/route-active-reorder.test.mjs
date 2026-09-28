@@ -22,7 +22,7 @@ function sourceBetween(start, end) {
 function loadStatusHelpers() {
   const helperSource = sourceBetween(
     "function isRouteExecutionLockedForStopMembership(",
-    "function countRouteStopsByStatus(",
+    "function getRouteTotalItems(",
   );
   return Function(`${helperSource}\nreturn { isRouteExecutionLockedForStopMembership, isRouteExecutionInProgressForStopMembership, isRouteStopReorderAllowed };`)();
 }

@@ -40,6 +40,7 @@ import {
   textOrUndefined,
 } from "./route-helpers";
 import {
+  attachDeliveryOrderFieldsToRouteDetails,
   attachDeliveryOrderFieldsToStops,
   mergeCurrentChildDirectDetail,
 } from "./route-detail-enrichment.server";
@@ -438,8 +439,8 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
       routePlan: routePlanData.routePlan,
     });
     const primaryDataMs = roundPerfDuration(getRouteDetailPerfNow() - primaryDataStartedAt);
-    const thinRouteChildDetails = attachDeliveryOrderItemsToRouteDetails(
-      buildRouteGroupChildDetails(routeGroupData.routeGroup),
+    const thinRouteChildDetails = attachDeliveryOrderFieldsToRouteDetails(
+      attachDeliveryOrderItemsToRouteDetails(buildRouteGroupChildDetails(routeGroupData.routeGroup), orderData.orders),
       orderData.orders,
     );
     const directCurrentChildDetail = routePlanData.routePlan || routePlanData.stops?.length
@@ -543,7 +544,10 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
   };
   const routeChildDetails = routeGroupData.routeGroup
     ? mergeRouteGroupChildDetail(
-        attachDeliveryOrderItemsToRouteDetails(buildRouteGroupChildDetails(routeGroupData.routeGroup), orderData.orders),
+        attachDeliveryOrderFieldsToRouteDetails(
+          attachDeliveryOrderItemsToRouteDetails(buildRouteGroupChildDetails(routeGroupData.routeGroup), orderData.orders),
+          orderData.orders,
+        ),
         currentRouteDetail,
       )
     : [currentRouteDetail];
