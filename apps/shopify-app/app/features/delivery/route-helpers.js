@@ -17,6 +17,18 @@ export function firstArray(...values) {
   return values.find((value) => Array.isArray(value)) ?? [];
 }
 
+export function getRouteStopStatus(stop) {
+  return (textOrUndefined(stop?.deliveryStopStatus)
+    ?? textOrUndefined(stop?.deliveryStatus)
+    ?? textOrUndefined(stop?.status)
+    ?? "").toUpperCase();
+}
+
+export function countRouteStopsByStatus(routeStops, statuses) {
+  const statusSet = new Set(statuses);
+  return routeStops.filter((stop) => statusSet.has(getRouteStopStatus(stop))).length;
+}
+
 export function readRouteOptimizedSnapshot(value) {
   return value && typeof value === "object" && !Array.isArray(value) ? value : null;
 }

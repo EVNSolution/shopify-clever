@@ -2,6 +2,7 @@ import {
   formatRouteDeliveryScope,
   getRouteGroupChildRouteName,
   getRouteGroupChildRoutePlanId,
+  getRouteStopStatus,
   getVisibleRouteGroupChildren,
 } from "./route-helpers.js";
 import { routeGroupChildPath, routePlanPath } from "./route-paths.js";
@@ -60,10 +61,6 @@ function sumOptionalNumbers(values) {
 
 function getRouteStops(routePlan) {
   return Array.isArray(routePlan?.stops) ? routePlan.stops : [];
-}
-
-function getRouteStopStatus(stop) {
-  return String(stop?.deliveryStopStatus ?? stop?.deliveryStatus ?? stop?.status ?? "").trim().toUpperCase();
 }
 
 function readRouteExecutionCounts(routePlan, child = {}) {

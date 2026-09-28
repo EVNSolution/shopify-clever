@@ -88,15 +88,20 @@ test("enriches route details with canonical order fields through a shared lookup
   const routeDetails = [
     {
       routePlanId: "child-1",
-      stops: [{ orderName: "#1001" }],
+      stops: [{ orderName: "#1001", status: "ASSIGNED" }],
     },
+    { routePlanId: "child-2", stops: [{ orderName: "#1002", status: "ASSIGNED" }] },
   ];
-  const orders = [{ name: "#1001", serviceType: "PICKUP", orderCreatedAt: "2026-07-01T01:00:00.000Z" }];
+  const orders = [
+    { name: "#1001", serviceType: "PICKUP", orderCreatedAt: "2026-07-01T01:00:00.000Z", deliveryStopStatus: "DELIVERED" },
+    { name: "#1002", deliveryStopStatus: "FAILED" },
+  ];
+  const enriched = attachDeliveryOrderFieldsToRouteDetails(routeDetails, orders);
 
-  assert.equal(
-    attachDeliveryOrderFieldsToRouteDetails(routeDetails, orders)[0].stops[0].serviceType,
-    "PICKUP",
-  );
+  assert.equal(enriched[0].stops[0].serviceType, "PICKUP");
+  assert.equal(enriched[0].stops[0].deliveryStopStatus, "DELIVERED");
+  assert.equal(enriched[1].stops[0].deliveryStopStatus, "FAILED");
+  assert.deepEqual(routeDetails.map((detail) => detail.stops[0].status), ["ASSIGNED", "ASSIGNED"]);
 });
 
 test("derives timezone abbreviation from the ETA instant, including DST changes", () => {

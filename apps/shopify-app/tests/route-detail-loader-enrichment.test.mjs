@@ -26,6 +26,17 @@ test("group-child route detail loader fetches direct child detail in the paralle
   assert.match(routeDetailServerSource, /mergeCurrentChildDirectDetail\(thinRouteChildDetails, directCurrentChildDetail\)/);
 });
 
+test("all group children receive canonical delivery outcomes before All routes renders", () => {
+  assert.match(
+    routeDetailServerSource,
+    /const thinRouteChildDetails = attachDeliveryOrderFieldsToRouteDetails\(\s*attachDeliveryOrderItemsToRouteDetails\(/,
+  );
+  assert.match(
+    routeDetailServerSource,
+    /mergeRouteGroupChildDetail\(\s*attachDeliveryOrderFieldsToRouteDetails\(\s*attachDeliveryOrderItemsToRouteDetails\(/,
+  );
+});
+
 test("route detail uses the configured delivery-only store timezone without a Shopify timezone request", () => {
   assert.match(routeTimeZoneSource, /process\.env\.CLEVER_ORDERS_SOURCE_MODE !== "delivery_only"/);
   assert.match(routeTimeZoneSource, /process\.env\.CLEVER_DELIVERY_ONLY_TIME_ZONE \|\| "Asia\/Seoul"/);
