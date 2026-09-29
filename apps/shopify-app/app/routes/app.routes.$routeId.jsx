@@ -105,6 +105,7 @@ import {
   getRouteTrackingCompletionTime,
   getRouteTrackingPathSummary,
   getRouteTrackingPresentation,
+  getRouteTrackingServiceDate,
   getRouteTrackingReconnectDelayMs,
   getRouteTrackingStreamInactivityMs,
   isRouteTrackingPayloadForRoute,
@@ -4036,13 +4037,19 @@ export default function RouteDetailPage() {
   const routeScopedTrackingSnapshot = isRouteTrackingPayloadForRoute(routeTrackingSnapshot, trackingRoutePlanId)
     ? routeTrackingSnapshot
     : null;
+  const routeTrackingWindowDate = getRouteTrackingServiceDate(
+    routeScopedTrackingSnapshot,
+    routeTrackingDeliveryDate,
+    ianaTimezone,
+  );
   const displayedRouteTrackingSnapshot = useMemo(
     () => selectRouteTrackingWindow(routeScopedTrackingSnapshot, {
       allRecords: showAllRouteTrackingRecords,
-      date: routeTrackingDeliveryDate,
+      date: routeTrackingWindowDate,
+      includeNextDay: true,
       timeZone: ianaTimezone,
     }),
-    [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingDeliveryDate, showAllRouteTrackingRecords],
+    [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingWindowDate, showAllRouteTrackingRecords],
   );
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
@@ -7561,7 +7568,7 @@ export default function RouteDetailPage() {
                   </label>
                   {!showAllRouteTrackingRecords ? (
                     <span aria-label="Selected tracking date" style={routeTrackingMapLegendItemStyle}>
-                      {routeTrackingDeliveryDate ?? "Service date"} only
+                      {routeTrackingWindowDate ? `${routeTrackingWindowDate} and next day` : "Available tracking dates"}
                     </span>
                   ) : null}
                 </div>
