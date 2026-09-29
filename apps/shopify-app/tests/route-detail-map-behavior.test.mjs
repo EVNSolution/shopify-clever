@@ -18,6 +18,7 @@ import { selectRouteTrackingWindow } from "../app/features/delivery/route-tracki
 const TRACKING_LAYER_IDS = [
   "route-detail-live-tracking-trail",
   "route-detail-live-tracking-connector",
+  "route-detail-live-tracking-inferred",
   "route-detail-live-driver-position",
 ];
 const DRIVER_POSITION_LAYER_ID = "route-detail-live-driver-position";
@@ -497,7 +498,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   );
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["visible", "visible", "visible"],
+    ["visible", "visible", "visible", "visible"],
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.paint?.["circle-color"], "#d82c0d");
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "visible");
@@ -508,7 +509,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   assert.equal(syncRouteDetailTrackingVisibility(fake.map, false), true);
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["none", "none", "none"],
+    ["none", "none", "none", "none"],
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "none");
 
@@ -546,7 +547,21 @@ test("a recovered next-day road segment reaches the visible tracking map source"
   assert.deepEqual(fake.sources.get("route-detail-live-tracking").data.features.map((feature) => (
     feature.properties.trackingType
   )), ["trackingConnector"]);
-  assert.equal(fake.layers.get("route-detail-live-tracking-connector")?.layout?.visibility, "visible");
+  assert.equal(fake.layers.get("route-detail-live-tracking-inferred")?.layout?.visibility, "visible");
+  assert.deepEqual(fake.layers.get("route-detail-live-tracking-inferred")?.filter, [
+    "all",
+    ["==", ["get", "trackingType"], "trackingConnector"],
+    ["==", ["get", "trackingSource"], "inferred"],
+  ]);
+  assert.deepEqual(fake.layers.get("route-detail-live-tracking-connector")?.filter, [
+    "all",
+    ["==", ["get", "trackingType"], "trackingConnector"],
+    ["!=", ["get", "trackingSource"], "inferred"],
+  ]);
+  assert.notDeepEqual(
+    fake.layers.get("route-detail-live-tracking-inferred")?.paint,
+    fake.layers.get("route-detail-live-tracking-connector")?.paint,
+  );
 });
 
 test("planned route sync recreates a missing layer when its source still exists", () => {
