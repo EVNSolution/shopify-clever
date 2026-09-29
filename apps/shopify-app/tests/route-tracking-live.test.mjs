@@ -127,8 +127,10 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.match(routeMapSource, /const routeLineWidth = options\.isTrackingReference \? 5\.5 : 2\.5/);
   assert.equal(
     routeMapSource.match(/"line-color": "#d32f2f",\s*"line-dasharray": \[1\.5, 1\.25\],\s*"line-opacity": 0\.9,\s*"line-width": 3\.5/g)?.length,
-    2,
+    1,
   );
+  assert.match(routeMapSource, /"line-color": "#a95a00"/);
+  assert.match(routeMapSource, /"line-color": "#68727d"/);
   assert.doesNotMatch(routeMapSource, /#79828c|#a7adb4/);
   assert.doesNotMatch(routeMapSource, /"line-width": 4\.5/);
   assert.match(routeMapSource, /isTrackingReference/);

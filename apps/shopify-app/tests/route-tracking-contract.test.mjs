@@ -620,8 +620,32 @@ test("gps quality v3 preserves inferred coverage and renders it once as GPS trac
   assert.deepEqual(snapshot.roadMatchedPath.inferredRanges, [range(2, 4, "ROAD_GAP_INFERENCE")]);
   const features = getRouteTrackingLineFeatures(snapshot);
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingTrail", "trackingConnector"]);
-  assert.equal(features[1].properties.trackingSource, "inferred");
+  assert.deepEqual(features.map((feature) => feature.properties.trackingSource), ["matched", "inferred"]);
   assert.deepEqual(features[1].geometry.coordinates, coordinates.slice(2, 5));
+});
+
+test("a same-watermark snapshot cannot discard a previously received inferred road", () => {
+  const inferredGeometry = {
+    coordinates: [[[-79.4, 43.7], [-79.399, 43.701]]],
+    type: "MultiLineString",
+  };
+  const base = {
+    routePlanId: "route-1",
+    roadMatchedPath: {
+      inputPointCount: 2,
+      lastInputOccurredAt: "2026-09-17T13:01:00.000Z",
+      qualityVersion: "gps_quality.v4",
+      watermark: "same-cache",
+    },
+  };
+  const current = normalizeRouteTrackingSnapshot({
+    ...base,
+    roadMatchedPath: { ...base.roadMatchedPath, inferredGeometry },
+  });
+  const merged = mergeRouteTrackingSnapshot(current, base);
+
+  assert.deepEqual(merged.roadMatchedPath.inferredGeometry, inferredGeometry);
+  assert.equal(getRouteTrackingLineFeatures(merged)[0].properties.trackingSource, "inferred");
 });
 
 test("gps quality v4 renders accepted matches and bounded inference while rejecting uncertain raw fallback", () => {
@@ -673,7 +697,7 @@ test("gps quality v4 renders accepted matches and bounded inference while reject
     coordinates.slice(0, 3),
     coordinates.slice(2, 5),
   ]);
-  assert.deepEqual(features.map((feature) => feature.properties.trackingSource ?? null), [null, "inferred"]);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingSource), ["matched", "inferred"]);
   assert.equal(snapshot.latestPosition.eventId, samples.at(-1).eventId);
 });
 
@@ -1188,6 +1212,7 @@ test("raw GPS remains visible only as a filtered dashed path while road matching
   });
 
   assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingConnector"]);
+  assert.equal(features[0].properties.trackingSource, "raw");
   assert.equal(features.some((feature) => feature.geometry.type === "Point"), false);
   assert.deepEqual(features[0].geometry.coordinates, [
     [127, 37.5],

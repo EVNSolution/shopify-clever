@@ -20,9 +20,11 @@ remain authoritative and unchanged.
 - Suppress stationary jitter and implausible outliers without connecting real gaps.
 - Match cleaned time-ordered segments to roads using per-sample accuracy.
 - Retain matched source coverage; replace only covered raw segments on the map.
-- Keep two familiar map paths: the planned route keeps its Stops color and opacity
-  with a wider Tracking stroke; all GPS segments share the existing GPS style.
-  Preserve quality classification internally without adding visual categories.
+- Keep the planned route in its Stops color and the existing legend unchanged.
+  Distinguish inferred roads from raw GPS sample links by color and stroke on
+  the map. Inferred roads are estimates, not measured drives; raw links join
+  observations, not verified road geometry. Leave unverified gaps without a
+  road line.
 - Supplement short low-accuracy gaps with a road route only when both adjacent
   anchors have good measured accuracy and confident road matches. Reject actual
   collection gaps, long spans, implausible travel, excessive road detours, distant

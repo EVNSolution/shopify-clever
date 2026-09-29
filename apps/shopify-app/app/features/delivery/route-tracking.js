@@ -591,6 +591,11 @@ function getNewestRoadMatchedPath(currentPath, incomingPath) {
   const currentTimestamp = Date.parse(currentPath.lastInputOccurredAt ?? "");
   const incomingTimestamp = Date.parse(incomingPath.lastInputOccurredAt ?? "");
   if (Number.isFinite(currentTimestamp) && Number.isFinite(incomingTimestamp)) {
+    if (incomingTimestamp === currentTimestamp
+      && incomingPath.inputPointCount === currentPath.inputPointCount
+      && incomingPath.watermark === currentPath.watermark
+      && currentPath.inferredGeometry
+      && !incomingPath.inferredGeometry) return currentPath;
     return incomingTimestamp >= currentTimestamp ? incomingPath : currentPath;
   }
   return incomingPath.inputPointCount >= currentPath.inputPointCount ? incomingPath : currentPath;
@@ -725,12 +730,12 @@ function getRouteTrackingLineFeatures(snapshot) {
   const features = [];
   if (roadMatchedPath.matchedGeometry) {
     for (const coordinates of roadMatchedPath.matchedGeometry.coordinates) {
-      features.push(createTrackingLineFeature(coordinates, "trackingTrail"));
+      features.push(createTrackingLineFeature(coordinates, "trackingTrail", { trackingSource: "matched" }));
     }
   }
   if (!usesInterpolationLevels && roadMatchedPath.uncertainGeometry) {
     for (const coordinates of roadMatchedPath.uncertainGeometry.coordinates) {
-      features.push(createTrackingLineFeature(coordinates, "trackingConnector"));
+      features.push(createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "uncertain" }));
     }
   }
   if (roadMatchedPath.inferredGeometry) {
@@ -813,11 +818,7 @@ function getRouteTrackingLineFeatures(snapshot) {
   for (const segment of tailSegments) {
     const coordinates = segment.map((point) => point.coordinates);
     if (coordinates.length < 2 || areCoordinatesEqual(coordinates[0], coordinates.at(-1))) continue;
-    features.push({
-      type: "Feature",
-      geometry: { coordinates, type: "LineString" },
-      properties: { trackingType: "trackingConnector" },
-    });
+    features.push(createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "raw" }));
   }
   return features;
 }
@@ -939,7 +940,7 @@ function buildRecordedTrackingSegments(points, snapshot) {
   return segments
     .map((segment) => segment.map((point) => point.coordinates))
     .filter((coordinates) => coordinates.length >= 2 && !areCoordinatesEqual(coordinates[0], coordinates.at(-1)))
-    .map((coordinates) => createTrackingLineFeature(coordinates, "trackingConnector"));
+    .map((coordinates) => createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "raw" }));
 }
 
 function createTrackingLineFeature(coordinates, trackingType, properties = {}) {
