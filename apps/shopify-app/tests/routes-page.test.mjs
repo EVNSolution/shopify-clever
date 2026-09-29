@@ -662,10 +662,10 @@ test("Route group detail keeps its own page instead of becoming a child route", 
   assert.match(routeGroupDetailSource, /routePlan: null/);
   assert.match(routeGroupDetailSource, /route_group_detail\.api\.summary/);
   assert.match(routeGroupDetailSource, /logStructuredMetric\("route_group_detail\.api\.summary"/);
-  assert.match(routeGroupDetailSource, /count: 3/);
+  assert.match(routeGroupDetailSource, /count: 4 \+ childRouteData\.length/);
   assert.match(routeGroupDetailSource, /routeGroupCount: routeGroupData\.routeGroup \? 1 : 0/);
   assert.doesNotMatch(routeGroupDetailSource, /keys: getTopLevelKeys|driverData\.drivers\?\.length/);
-  assert.match(routeGroupDetailSource, /logRouteGroupApiSummary\(\{ routeGroupData, departureLocationData, driverData \}\)/);
+  assert.match(routeGroupDetailSource, /logRouteGroupApiSummary\(\{ routeGroupData, departureLocationData, driverData, orderData, childRouteData \}\)/);
   assert.match(routeGroupDetailSource, /resolveRouteTimeZone\(\{[\s\S]*departureLocation: departureLocationData\.departureLocation,[\s\S]*routePlan: null/);
   assert.match(routeGroupDetailSource, /ianaTimezone: routeTimeZoneData\.ianaTimezone/);
   assert.match(routeGroupDetailSource, /timezoneSource: routeTimeZoneData\.timezoneSource/);

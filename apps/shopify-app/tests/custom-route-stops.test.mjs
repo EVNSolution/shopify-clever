@@ -168,7 +168,8 @@ test("route detail branches the first add dialog and keeps custom stops DB-only"
   assert.match(routeDetailSource, /addStopTargetRouteRequired && !addStopTargetRoutePlanId/);
   assert.match(customStopDialogSource, /targetRouteRequired && !targetRoutePlanId/);
   assert.match(routeDetailSource, /accessibilityLabel="Loading available orders"/);
-  assert.doesNotMatch(groupDetailSource, /fetchDeliveryOrders/);
+  assert.match(groupDetailSource, /fetchDeliveryOrders\(request, \{\}, \{ cacheKey \}\)/);
+  assert.doesNotMatch(groupDetailSource, /syncDeliveryOrders|orderUpdate|customerUpdate/);
 
   assert.match(routeDetailServerSource, /intent === "loadAddOrderCandidates"/);
   assert.match(routeDetailServerSource, /intent === "createCustomStop"/);
