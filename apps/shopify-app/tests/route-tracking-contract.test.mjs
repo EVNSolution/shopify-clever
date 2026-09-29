@@ -13,6 +13,7 @@ import {
   getRouteTrackingCompletionTime,
   getRouteTrackingFitCoordinates,
   getRouteTrackingPresentation,
+  getRouteTrackingServiceDate,
   getRouteTrackingStreamInactivityMs,
   isRouteTrackingPayloadForRoute,
   mergeRouteTrackingProgress,
@@ -335,6 +336,112 @@ test("tracking window defaults to the route service date and excludes later stal
   assert.deepEqual(getRouteTrackingPathPoints(serviceDay).map((point) => point.eventId), ["south-start", "south-return"]);
   assert.equal(serviceDay.latestPosition.eventId, "south-return");
   assert.equal(selectRouteTrackingWindow(snapshot, { allRecords: true }), snapshot);
+});
+
+test("tracking display uses the actual route-start date when the planned date differs", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    executionEvidence: {
+      start: { eventId: "started-late", occurredAt: "2026-09-18T13:00:00.000Z" },
+    },
+    recordedPath: {
+      geometry: { coordinates: [[-79.4, 43.7], [-79.399, 43.701]], type: "LineString" },
+      samples: ["2026-09-18T13:00:00.000Z", "2026-09-18T13:01:00.000Z"].map((occurredAt, index) => ({
+        eventId: `late-${index}`,
+        occurredAt,
+        receivedAt: occurredAt,
+        sourceIndex: index,
+      })),
+      sourcePointCount: 2,
+    },
+  });
+
+  const date = getRouteTrackingServiceDate(snapshot, "2026-09-17", "America/Toronto");
+  assert.equal(date, "2026-09-18");
+  assert.equal(getRouteTrackingServiceDate({}, "2026-09-17", "America/Toronto"), "2026-09-17");
+  assert.equal(getRouteTrackingLineFeatures(selectRouteTrackingWindow(snapshot, {
+    date,
+    includeNextDay: true,
+    timeZone: "America/Toronto",
+  })).length, 1);
+});
+
+test("tracking display keeps road-matched lines through the next service day but not a third day", () => {
+  const times = [
+    "2026-09-18T03:59:00.000Z", // September 17 in Toronto
+    "2026-09-18T04:01:00.000Z", // September 18 in Toronto
+    "2026-09-19T13:00:00.000Z", // September 19 in Toronto
+    "2026-09-19T13:01:00.000Z",
+  ];
+  const coordinates = [
+    [-79.4, 43.7], [-79.399, 43.701], [-79.398, 43.702], [-79.397, 43.703],
+  ];
+  const samples = times.map((occurredAt, sourceIndex) => ({
+    eventId: `window-${sourceIndex}`,
+    occurredAt,
+    receivedAt: occurredAt,
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    interpolationLevel: 0,
+  });
+  const snapshot = normalizeRouteTrackingSnapshot({
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: 4 },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      matchedGeometry: {
+        coordinates: [coordinates.slice(0, 2), coordinates.slice(2)],
+        type: "MultiLineString",
+      },
+      matchedRanges: [range(0, 1), range(2, 3)],
+    },
+  });
+
+  const serviceWindow = selectRouteTrackingWindow(snapshot, {
+    date: "2026-09-17",
+    includeNextDay: true,
+    timeZone: "America/Toronto",
+  });
+  const features = getRouteTrackingLineFeatures(serviceWindow);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), ["trackingTrail"]);
+  assert.deepEqual(features[0].geometry.coordinates, coordinates.slice(0, 2));
+  assert.deepEqual(getRouteTrackingPathPoints(serviceWindow).map((point) => point.eventId), ["window-0", "window-1"]);
+});
+
+test("tracking display includes a recovered inferred segment across service-day midnight", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      inferredGeometry: {
+        coordinates: [[[-79.4, 43.7], [-79.399, 43.701]]],
+        type: "MultiLineString",
+      },
+      inferredRanges: [{
+        startEventId: "before-midnight",
+        endEventId: "after-midnight",
+        startOccurredAt: "2026-09-18T03:59:00.000Z",
+        endOccurredAt: "2026-09-18T04:01:00.000Z",
+        startSourceIndex: 0,
+        endSourceIndex: 1,
+        interpolationLevel: 1,
+        reason: "ROAD_GAP_INFERENCE",
+      }],
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(selectRouteTrackingWindow(snapshot, {
+    date: "2026-09-17",
+    includeNextDay: true,
+    timeZone: "America/Toronto",
+  }));
+  assert.deepEqual(features.map((feature) => [feature.properties.trackingType, feature.properties.trackingSource]), [
+    ["trackingConnector", "inferred"],
+  ]);
 });
 
 test("service-day filtering falls back to raw GPS only for a matched range that crosses midnight", () => {

@@ -1004,16 +1004,31 @@ function getRouteTrackingPathSummary(snapshot) {
   };
 }
 
+function getRouteTrackingServiceDate(snapshot, plannedDate, timeZone) {
+  const startedAt = textOrNull(snapshot?.executionEvidence?.start?.occurredAt);
+  const startedDate = startedAt ? getDateKeyInTimeZone(startedAt, timeZone) : null;
+  if (startedDate) return startedDate;
+  return /^\d{4}-\d{2}-\d{2}$/.test(plannedDate ?? "") ? plannedDate : null;
+}
+
 function selectRouteTrackingWindow(snapshot, options = {}) {
   if (!snapshot || options.allRecords === true) return snapshot;
   const date = textOrNull(options.date);
   const timeZone = textOrNull(options.timeZone);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date ?? "") || !timeZone) return snapshot;
+  const allowedDates = new Set([date]);
+  if (options.includeNextDay === true) {
+    const nextDate = new Date(`${date}T00:00:00.000Z`);
+    if (!Number.isNaN(nextDate.getTime())) {
+      nextDate.setUTCDate(nextDate.getUTCDate() + 1);
+      allowedDates.add(nextDate.toISOString().slice(0, 10));
+    }
+  }
 
   const normalized = normalizeRouteTrackingSnapshot(snapshot);
   const points = getRouteTrackingPathPoints(normalized);
   const selectedIndexes = points.flatMap((point, index) => (
-    getDateKeyInTimeZone(getPositionTimestamp(point), timeZone) === date ? [index] : []
+    allowedDates.has(getDateKeyInTimeZone(getPositionTimestamp(point), timeZone)) ? [index] : []
   ));
   const selectedPoints = selectedIndexes.map((index) => points[index]);
   const selectedSamples = selectedIndexes.map((index) => normalized.recordedPath?.samples[index]).filter(Boolean);
@@ -1049,33 +1064,33 @@ function selectRouteTrackingWindow(snapshot, options = {}) {
     ...normalized,
     latestPosition,
     recentPositions: normalized.recentPositions.filter((position) => (
-      getDateKeyInTimeZone(getPositionTimestamp(position), timeZone) === date
+      allowedDates.has(getDateKeyInTimeZone(getPositionTimestamp(position), timeZone))
     )),
     recordedPath,
     roadMatchedPath: selectRoadMatchedPathWindow(
       normalized.roadMatchedPath,
-      date,
+      allowedDates,
       timeZone,
       firstSourceIndex,
       lastSourceIndex,
     ),
     stopArrivals: normalized.stopArrivals.filter((arrival) => (
-      getDateKeyInTimeZone(getPositionTimestamp(arrival), timeZone) === date
+      allowedDates.has(getDateKeyInTimeZone(getPositionTimestamp(arrival), timeZone))
     )),
   };
 }
 
-function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourceIndex, lastSourceIndex) {
+function selectRoadMatchedPathWindow(roadMatchedPath, allowedDates, timeZone, firstSourceIndex, lastSourceIndex) {
   if (!roadMatchedPath?.qualityVersion) return null;
   const safelyRenderedRanges = [...roadMatchedPath.matchedRanges, ...roadMatchedPath.uncertainRanges];
   const selectGeometry = (geometry, ranges) => {
     if (!geometry || ranges.length !== geometry.coordinates.length) return null;
-    const coordinates = geometry.coordinates.filter((_, index) => isRoadMatchRangeInsideDate(ranges[index], date, timeZone));
+    const coordinates = geometry.coordinates.filter((_, index) => isRoadMatchRangeInsideWindow(ranges[index], allowedDates, timeZone));
     return coordinates.length > 0 ? { coordinates, type: "MultiLineString" } : null;
   };
-  const inferredRanges = roadMatchedPath.inferredRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
-  const matchedRanges = roadMatchedPath.matchedRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
-  const uncertainRanges = roadMatchedPath.uncertainRanges.filter((range) => isRoadMatchRangeInsideDate(range, date, timeZone));
+  const inferredRanges = roadMatchedPath.inferredRanges.filter((range) => isRoadMatchRangeInsideWindow(range, allowedDates, timeZone));
+  const matchedRanges = roadMatchedPath.matchedRanges.filter((range) => isRoadMatchRangeInsideWindow(range, allowedDates, timeZone));
+  const uncertainRanges = roadMatchedPath.uncertainRanges.filter((range) => isRoadMatchRangeInsideWindow(range, allowedDates, timeZone));
   const clipRangeToSelectedSources = (range, reason = range.reason) => ({
     ...range,
     reason,
@@ -1086,11 +1101,11 @@ function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourc
     roadMatchedPath.unmatchedRanges,
     roadMatchedPath.inferredRanges,
   ).flatMap((range) => {
-    if (!doesRoadMatchRangeIncludeDate(range, date, timeZone)) return [];
+    if (!doesRoadMatchRangeIncludeWindow(range, allowedDates, timeZone)) return [];
     return [clipRangeToSelectedSources(range)];
   }).concat(
     safelyRenderedRanges
-      .filter((range) => doesRoadMatchRangeCrossDate(range, date, timeZone))
+      .filter((range) => doesRoadMatchRangeCrossWindow(range, allowedDates, timeZone))
       .map((range) => clipRangeToSelectedSources(range, "WINDOW_BOUNDARY")),
   ).filter((range) => range.endSourceIndex >= range.startSourceIndex);
   const selectedRanges = [...matchedRanges, ...uncertainRanges, ...inferredRanges, ...unmatchedRanges];
@@ -1100,7 +1115,7 @@ function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourc
     inferredGeometry: selectGeometry(roadMatchedPath.inferredGeometry, roadMatchedPath.inferredRanges),
     inferredRanges,
     lastInputOccurredAt: lastSelectedRange?.endOccurredAt ?? null,
-    lastMatchedPosition: getDateKeyInTimeZone(roadMatchedPath.lastMatchedPosition?.occurredAt, timeZone) === date
+    lastMatchedPosition: allowedDates.has(getDateKeyInTimeZone(roadMatchedPath.lastMatchedPosition?.occurredAt, timeZone))
       ? roadMatchedPath.lastMatchedPosition
       : null,
     matchedGeometry: selectGeometry(roadMatchedPath.matchedGeometry, roadMatchedPath.matchedRanges),
@@ -1111,20 +1126,20 @@ function selectRoadMatchedPathWindow(roadMatchedPath, date, timeZone, firstSourc
   };
 }
 
-function isRoadMatchRangeInsideDate(range, date, timeZone) {
-  return getDateKeyInTimeZone(Date.parse(range?.startOccurredAt ?? ""), timeZone) === date
-    && getDateKeyInTimeZone(Date.parse(range?.endOccurredAt ?? ""), timeZone) === date;
+function isRoadMatchRangeInsideWindow(range, allowedDates, timeZone) {
+  return allowedDates.has(getDateKeyInTimeZone(Date.parse(range?.startOccurredAt ?? ""), timeZone))
+    && allowedDates.has(getDateKeyInTimeZone(Date.parse(range?.endOccurredAt ?? ""), timeZone));
 }
 
-function doesRoadMatchRangeIncludeDate(range, date, timeZone) {
+function doesRoadMatchRangeIncludeWindow(range, allowedDates, timeZone) {
   const startDate = getDateKeyInTimeZone(range?.startOccurredAt, timeZone);
   const endDate = getDateKeyInTimeZone(range?.endOccurredAt, timeZone);
-  return Boolean(startDate && endDate && startDate <= date && endDate >= date);
+  return Boolean(startDate && endDate && [...allowedDates].some((date) => startDate <= date && endDate >= date));
 }
 
-function doesRoadMatchRangeCrossDate(range, date, timeZone) {
-  return doesRoadMatchRangeIncludeDate(range, date, timeZone)
-    && !isRoadMatchRangeInsideDate(range, date, timeZone);
+function doesRoadMatchRangeCrossWindow(range, allowedDates, timeZone) {
+  return doesRoadMatchRangeIncludeWindow(range, allowedDates, timeZone)
+    && !isRoadMatchRangeInsideWindow(range, allowedDates, timeZone);
 }
 
 function getTurnAngleDegrees(anchor, vertex, next) {
@@ -1380,6 +1395,7 @@ export {
   getRouteTrackingFreshness,
   getRouteTrackingFitCoordinates,
   getRouteTrackingPresentation,
+  getRouteTrackingServiceDate,
   getRouteTrackingReconnectDelayMs,
   getRouteTrackingStreamInactivityMs,
   isRouteTrackingPayloadForRoute,

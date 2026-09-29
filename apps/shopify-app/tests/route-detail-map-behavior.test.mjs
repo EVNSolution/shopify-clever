@@ -13,6 +13,7 @@ import {
   syncRouteDetailRouteLine,
   syncRouteDetailTrackingVisibility,
 } from "../app/features/delivery/route-detail-map.js";
+import { selectRouteTrackingWindow } from "../app/features/delivery/route-tracking.js";
 
 const TRACKING_LAYER_IDS = [
   "route-detail-live-tracking-trail",
@@ -514,6 +515,38 @@ test("tracking layers reuse their sources while current driver position stays ex
   assert.equal(syncRouteDetailLiveTracking(fake.map, snapshot, []), true);
   assert.deepEqual(fake.calls.addSource, ["route-detail-live-tracking"]);
   assert.deepEqual(fake.calls.addLayer, TRACKING_LAYER_IDS);
+});
+
+test("a recovered next-day road segment reaches the visible tracking map source", () => {
+  const fake = createFakeMap();
+  const snapshot = selectRouteTrackingWindow({
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      inferredGeometry: {
+        coordinates: [[[-79.4, 43.7], [-79.399, 43.701]]],
+        type: "MultiLineString",
+      },
+      inferredRanges: [{
+        startEventId: "before-midnight",
+        endEventId: "after-midnight",
+        startOccurredAt: "2026-09-18T03:59:00.000Z",
+        endOccurredAt: "2026-09-18T04:01:00.000Z",
+        startSourceIndex: 0,
+        endSourceIndex: 1,
+        interpolationLevel: 1,
+      }],
+    },
+  }, {
+    date: "2026-09-17",
+    includeNextDay: true,
+    timeZone: "America/Toronto",
+  });
+
+  assert.equal(syncRouteDetailLiveTracking(fake.map, snapshot), true);
+  assert.deepEqual(fake.sources.get("route-detail-live-tracking").data.features.map((feature) => (
+    feature.properties.trackingType
+  )), ["trackingConnector"]);
+  assert.equal(fake.layers.get("route-detail-live-tracking-connector")?.layout?.visibility, "visible");
 });
 
 test("planned route sync recreates a missing layer when its source still exists", () => {
