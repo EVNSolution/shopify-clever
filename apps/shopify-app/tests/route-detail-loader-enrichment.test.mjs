@@ -9,6 +9,10 @@ const routeDetailServerSource = readFileSync(
   join(root, "app/features/delivery/route-detail.server.js"),
   "utf8",
 );
+const routeGroupDetailSource = readFileSync(
+  join(root, "app/routes/app.routes.groups.$routeGroupId.jsx"),
+  "utf8",
+);
 const routeTimeZoneSource = readFileSync(
   join(root, "app/features/delivery/route-timezone.server.js"),
   "utf8",
@@ -35,6 +39,12 @@ test("all group children receive canonical delivery outcomes before All routes r
     routeDetailServerSource,
     /mergeRouteGroupChildDetail\(\s*attachDeliveryOrderFieldsToRouteDetails\(\s*attachDeliveryOrderItemsToRouteDetails\(/,
   );
+});
+
+test("All routes loads each child stop outcome before building its rows", () => {
+  assert.match(routeGroupDetailSource, /fetchDeliveryRoutePlanDetail\(request, routePlanId,/);
+  assert.match(routeGroupDetailSource, /attachDeliveryOrderFieldsToStops\(routePlanData\.stops/);
+  assert.match(routeGroupDetailSource, /mergeCurrentChildDirectDetail\(details, directChildDetail\)/);
 });
 
 test("route detail uses the configured delivery-only store timezone without a Shopify timezone request", () => {

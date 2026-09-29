@@ -17,6 +17,7 @@ import {
   partitionRefreshableRouteDetails,
 } from "./route-order-refresh.js";
 import { getTimeZoneAbbreviationForInstant } from "../shopify/shop-timezone.server.js";
+import { countRouteStopsByStatus } from "./route-helpers.js";
 
 const routeDetailServerSource = readFileSync(new URL("./route-detail.server.js", import.meta.url), "utf8");
 
@@ -102,6 +103,33 @@ test("enriches route details with canonical order fields through a shared lookup
   assert.equal(enriched[0].stops[0].deliveryStopStatus, "DELIVERED");
   assert.equal(enriched[1].stops[0].deliveryStopStatus, "FAILED");
   assert.deepEqual(routeDetails.map((detail) => detail.stops[0].status), ["ASSIGNED", "ASSIGNED"]);
+});
+
+test("All routes counts completed stops from direct child details and canonical orders", () => {
+  const sizes = [19, 22, 11, 2];
+  const orders = sizes.flatMap((size, routeIndex) => Array.from({ length: size }, (_, stopIndex) => ({
+    name: `#${routeIndex}-${stopIndex}`,
+    deliveryStopStatus: "COMPLETED",
+  })));
+  const thinDetails = sizes.map((size, routeIndex) => ({
+    routePlanId: `route-${routeIndex}`,
+    routePlan: { id: `route-${routeIndex}`, status: "COMPLETED" },
+    stops: Array.from({ length: size }, (_, stopIndex) => ({
+      orderName: `#${routeIndex}-${stopIndex}`,
+      status: "ASSIGNED",
+    })),
+  }));
+  const enriched = attachDeliveryOrderFieldsToRouteDetails(thinDetails, orders);
+  const details = enriched.reduce((all, detail) => mergeCurrentChildDirectDetail(all, {
+    routePlanId: detail.routePlanId,
+    routePlan: detail.routePlan,
+    stops: attachDeliveryOrderFieldsToStops(detail.stops, orders),
+  }), enriched);
+
+  assert.deepEqual(details.map((detail) => countRouteStopsByStatus(
+    detail.stops,
+    ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"],
+  )), sizes);
 });
 
 test("derives timezone abbreviation from the ETA instant, including DST changes", () => {
