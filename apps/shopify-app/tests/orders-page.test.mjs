@@ -930,14 +930,15 @@ test("Orders page creates routes through the group endpoint", () => {
   assert.match(ordersPageSource, /routeScope,/);
   assert.match(ordersPageSource, /createDeliveryRouteGroup\(\s*request,\s*buildCreateRouteGroupPayload\(\{/s);
   assert.match(ordersPageServerSource, /const routePlanPayload = buildCreateRoutePlanPayload\(routePlanPayloadInput\)/);
-  assert.match(ordersPageServerSource, /if \(routeGroup\?\.id\) return \{ routeGroup, errors: \[\] \}/);
+  assert.match(ordersPageServerSource, /hasNamedInitialRoute\(routeGroup, routePlanPayload\.name, plannedOrders\.map\(\(order\) => order\.orderId\)\)/);
   assert.match(ordersPageSource, /const routePlanFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /const shopify = useAppBridge\(\)/);
   assert.match(ordersPageSource, /const navigate = useNavigate\(\)/);
   assert.match(ordersPageSource, /const sessionToken = await shopify\.idToken\(\)/);
   assert.match(ordersPageSource, /const routeDraftScope = buildRouteScopeFromOrders\(plannedOrders\)/);
   assert.match(ordersPageSource, /formData\.set\("routeScope", JSON\.stringify\(routeDraftScope\)\)/);
-  assert.match(ordersPageSource, /formData\.set\("routeName", routePlanTitle\.trim\(\) \|\| DEFAULT_ROUTE_PLAN_TITLE\)/);
+  assert.match(ordersPageSource, /const routeName = routePlanTitle\.trim\(\) \|\| DEFAULT_ROUTE_PLAN_TITLE/);
+  assert.match(ordersPageSource, /formData\.set\("routeName", routeName\)/);
   assert.match(ordersPageSource, /formData\.set\("orderScope", orderFilters\.scope\)/);
   assert.match(ordersPageSource, /formData\.set\("shopifySessionToken", sessionToken\)/);
   assert.match(ordersPageSource, /routePlanFetcher\.submit\(formData, \{ method: "post" \}\)/);

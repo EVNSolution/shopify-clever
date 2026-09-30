@@ -148,11 +148,12 @@ function loadSubmitRouteAction(overrides = {}) {
   const handlerSource = sourceBetween("const submitRouteAction = async (intent, fields = {}) => {", "const submitCustomerEmailAction = async (intent) => {");
   const dependencyNames = [
     "ordinaryMutationPendingRef", "setRouteGroupClientError", "shopify", "FormData",
-    "routeGroupId", "routeActionFetcher",
+    "routeGroupId", "routeActionFetcher", "routeDraftSavePendingRef",
   ];
   const dependencies = {
     FormData,
     ordinaryMutationPendingRef: { current: false },
+    routeDraftSavePendingRef: { current: false },
     routeActionFetcher: { submit: () => {} },
     routeGroupId: null,
     setRouteGroupClientError: () => {},
@@ -432,6 +433,28 @@ test("copy and split save responses reconcile before route loader revalidation",
   assert.equal(shouldRevalidate({ formData: formDataFor("copyRoutePlan"), defaultShouldRevalidate: true }), false);
   assert.equal(shouldRevalidate({ formData: formDataFor("saveRouteDraft"), defaultShouldRevalidate: true }), false);
   assert.equal(shouldRevalidate({ formData: formDataFor("deleteRoute"), defaultShouldRevalidate: true }), true);
+});
+
+test("global Save submits once while token is pending and a token failure permits retry", async () => {
+  let resolveToken;
+  let count = 0;
+  const token = new Promise((resolve) => { resolveToken = resolve; });
+  const pending = { current: false };
+  const submit = loadSubmitRouteAction({ routeDraftSavePendingRef: pending,
+    shopify: { idToken: () => token }, routeActionFetcher: { submit: () => { count += 1; } } });
+  const first = submit("saveRouteDraft");
+  assert.equal(await submit("saveRouteDraft"), false);
+  resolveToken("fixture-token");
+  assert.equal(await first, true);
+  assert.equal(count, 1);
+  assert.equal(pending.current, true);
+  let attempts = 0;
+  const retryPending = { current: false };
+  const retry = loadSubmitRouteAction({ routeDraftSavePendingRef: retryPending,
+    shopify: { idToken: async () => { if (attempts++ === 0) throw new Error("token failure"); return "token"; } } });
+  assert.equal(await retry("saveRouteDraft"), false);
+  assert.equal(retryPending.current, false);
+  assert.equal(await retry("saveRouteDraft"), true);
 });
 
 test("an ordinary mutation lock acquired while awaiting a token blocks an unrelated submission", async () => {

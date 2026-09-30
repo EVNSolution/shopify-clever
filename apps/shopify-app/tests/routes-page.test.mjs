@@ -702,7 +702,7 @@ test("Route group detail requires an explicit atomic copy mode and preserves suc
   assert.match(routeDetailSource, /lastRouteActionIntentRef\.current !== "copyRouteGroup"/);
   assert.match(routeDetailSource, /navigateWithEmbeddedContext\(routeGroupPath\(copiedRouteGroup\.id\)\)/);
   assert.match(routeDetailSource, />실제 주문으로 복사</);
-  assert.match(routeDetailSource, /원본 주문을 공유하며 진행\/잠금 상태의 영향을 받음/);
+  assert.match(routeDetailSource, /원본 주문과 완료 상태를 공유하며, 중복 배차·배송 시작은 제한됨/);
   assert.match(routeDetailSource, />가상 주문으로 독립 복사</);
   assert.match(routeDetailSource, /새 CLEVER 전용 ID를 만들며 Shopify와 동기화되지 않음/);
   assert.match(routeDetailSource, /disabled=\{copyRouteGroupRequestBusy \|\| !copyRouteGroupDialogState\.mode\}/);

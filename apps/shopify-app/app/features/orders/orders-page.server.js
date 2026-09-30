@@ -1,4 +1,5 @@
 import { data } from "react-router";
+import { randomUUID } from "node:crypto";
 import {
   bulkUpdateDeliveryOrders,
   createDeliveryOrdersSelectionSnapshot,
@@ -60,7 +61,7 @@ import {
   getShopLocalDate,
 } from "../shopify/shop-timezone.server";
 import { getOrdersLoaderDeliveryErrors } from "./orders-loader-auth";
-import { buildCreateRouteGroupPayload } from "./route-group-create";
+import { buildCreateRouteGroupPayload, hasNamedInitialRoute } from "./route-group-create";
 
 const PERF_CAPTURE_ENABLED = import.meta.env.DEV || process.env.CLEVER_PERF_CAPTURE === "1";
 const INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token";
@@ -532,6 +533,7 @@ async function handleOrdersAction(request) {
     request,
     buildCreateRouteGroupPayload({
       depot: routePlanPayload.depot,
+      initialRouteRequestId: textOrUndefined(formData.get("initialRouteRequestId")) ?? randomUUID(),
       plannedOrders,
       routeName: routePlanPayload.name,
       routeScope,
@@ -552,7 +554,10 @@ async function handleOrdersAction(request) {
     errorCount: routePlanErrors.length,
   });
 
-  if (routeGroup?.id) return { routeGroup, errors: [] };
+  if (routePlanErrors.length > 0) return { errors: routePlanErrors };
+  if (hasNamedInitialRoute(routeGroup, routePlanPayload.name, plannedOrders.map((order) => order.orderId))) {
+    return { routeGroup, errors: [] };
+  }
 
   return {
     errors: routePlanErrors.length > 0

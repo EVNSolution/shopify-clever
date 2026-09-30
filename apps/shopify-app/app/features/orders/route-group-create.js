@@ -1,6 +1,6 @@
 import { DEFAULT_ROUTE_PLAN_TITLE, textOrUndefined } from "./orders-page.shared.js";
 
-export function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, routeScope }) {
+export function buildCreateRouteGroupPayload({ depot, initialRouteRequestId, plannedOrders, routeName, routeScope }) {
   const deliveryDates = plannedOrders
     .map((order) => textOrUndefined(order.deliveryDate))
     .filter(Boolean)
@@ -13,7 +13,19 @@ export function buildCreateRouteGroupPayload({ depot, plannedOrders, routeName, 
     ...(dateRangeEnd ? { dateRangeEnd } : {}),
     ...(dateRangeStart ? { planDate: dateRangeStart } : {}),
     ...(depot ? { depot } : {}),
+    ...(initialRouteRequestId ? { initialRoute: { requestId: initialRouteRequestId } } : {}),
     name: textOrUndefined(routeName) ?? DEFAULT_ROUTE_PLAN_TITLE,
     orderIds: plannedOrders.map((order) => order.orderId),
   };
+}
+
+export function hasNamedInitialRoute(routeGroup, routeName, orderIds) {
+  const children = (routeGroup?.children ?? []).filter((child) => child?.routePlanId ?? child?.routePlan?.id);
+  if (!routeGroup?.id || routeGroup.name !== routeName || children.length !== 1) return false;
+  const child = children[0];
+  const savedOrderIds = child.orderIds ?? [];
+  return child.routePlan?.name === routeName && child.routePlan?.status === "READY"
+    && savedOrderIds.length === orderIds.length
+    && new Set(savedOrderIds).size === orderIds.length
+    && orderIds.every((orderId) => savedOrderIds.includes(orderId));
 }
