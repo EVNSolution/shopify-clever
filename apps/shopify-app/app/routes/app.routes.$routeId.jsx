@@ -100,7 +100,6 @@ import {
 } from "../features/delivery/route-detail-map";
 import {
   consumeRouteTrackingSseChunk,
-  formatRouteTrackingCompletionLabel,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingCompletionTime,
   getRouteTrackingPathSummary,
@@ -713,61 +712,6 @@ const routeDetailMapCanvasStyle = {
 const routeTrackingMapCanvasStyle = {
   height: "100%",
   minHeight: 0,
-};
-
-const routeTrackingMapDateControlsStyle = {
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid rgba(138, 138, 138, 0.55)",
-  borderRadius: "10px",
-  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.12)",
-  display: "grid",
-  gap: "7px",
-  left: "12px",
-  padding: "9px 11px",
-  position: "absolute",
-  top: "12px",
-  zIndex: 2,
-};
-
-const routeTrackingMapDateControlStyle = {
-  alignItems: "center",
-  color: "#303030",
-  display: "flex",
-  fontSize: "12px",
-  fontWeight: 650,
-  gap: "8px",
-  lineHeight: 1.2,
-};
-
-const routeTrackingMapFreshnessStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid rgba(138, 138, 138, 0.55)",
-  borderRadius: "999px",
-  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.12)",
-  color: "#303030",
-  display: "flex",
-  fontSize: "12px",
-  fontWeight: 700,
-  gap: "7px",
-  left: "50%",
-  lineHeight: 1,
-  padding: "9px 12px",
-  pointerEvents: "none",
-  position: "absolute",
-  top: "12px",
-  transform: "translateX(-50%)",
-  whiteSpace: "nowrap",
-  zIndex: 2,
-};
-
-const routeTrackingMapFreshnessDotStyle = {
-  background: "#d82c0d",
-  border: "2px solid #ffffff",
-  borderRadius: "50%",
-  boxShadow: "0 0 0 1px rgba(216, 44, 13, 0.22)",
-  height: "9px",
-  width: "9px",
 };
 
 const routeMetaActionsStyle = {
@@ -2421,12 +2365,6 @@ function getReturnToDepotEvidenceTitle(evidence, ianaTimezone, language) {
   ].filter(Boolean).join(" · ") || undefined;
 }
 
-function formatTrackingElapsedSeconds(value, now = Date.now()) {
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return ROUTE_EMPTY_LABEL;
-  return `${Math.max(0, Math.floor((now - date.getTime()) / 1000))}s ago`;
-}
-
 function formatTrackingRange(firstValue, lastValue, ianaTimezone) {
   const firstDate = firstValue ? new Date(firstValue) : null;
   const lastDate = lastValue ? new Date(lastValue) : null;
@@ -3923,7 +3861,6 @@ export default function RouteDetailPage() {
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
   const [routeTrackingSnapshot, setRouteTrackingSnapshot] = useState(null);
-  const [showAllRouteTrackingRecords, setShowAllRouteTrackingRecords] = useState(false);
   const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
   const [routeExecutionStatus, setRouteExecutionStatus] = useState(loaderRouteExecutionStatus);
@@ -4031,12 +3968,12 @@ export default function RouteDetailPage() {
   );
   const displayedRouteTrackingSnapshot = useMemo(
     () => selectRouteTrackingWindow(routeScopedTrackingSnapshot, {
-      allRecords: showAllRouteTrackingRecords,
+      allRecords: false,
       date: routeTrackingWindowDate,
       includeNextDay: true,
       timeZone: ianaTimezone,
     }),
-    [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingWindowDate, showAllRouteTrackingRecords],
+    [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingWindowDate],
   );
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
@@ -4044,7 +3981,6 @@ export default function RouteDetailPage() {
   useEffect(() => {
     routeTrackingSnapshotRef.current = null;
     setRouteTrackingSnapshot(null);
-    setShowAllRouteTrackingRecords(false);
     setTrackingConnectionState("idle");
   }, [effectiveRoutePlan?.id]);
   useEffect(() => {
@@ -4207,7 +4143,6 @@ export default function RouteDetailPage() {
   const returnToDepotEvidence = routeExecutionEvidence?.returnToDepot;
   const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
   const latestTrackingOccurredAt = latestTrackingPosition?.occurredAt ?? latestTrackingPosition?.receivedAt;
-  const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? null;
   const routeTrackingCompletionTime = getRouteTrackingCompletionTime(displayedRouteTrackingSnapshot);
   const routeTrackingIsCompleted = routeExecutionStatus === "COMPLETED";
   const showRouteTrackingFreshness = shouldShowRouteTrackingFreshness({
@@ -4217,7 +4152,6 @@ export default function RouteDetailPage() {
     ianaTimezone,
     now: routeTrackingClock,
   });
-  const routeTrackingFreshnessTime = routeTrackingCompletionTime ?? routeTrackingClock;
   const routeTrackingPathSummary = useMemo(
     () => getRouteTrackingPathSummary(displayedRouteTrackingSnapshot),
     [displayedRouteTrackingSnapshot],
@@ -7531,48 +7465,6 @@ export default function RouteDetailPage() {
               </>
             }
           >
-            {isTrackingMapView ? (
-              <>
-                <div aria-label="Tracking date controls" style={routeTrackingMapDateControlsStyle}>
-                  <label style={{ ...routeTrackingMapDateControlStyle, cursor: "pointer" }}>
-                    <input
-                      checked={showAllRouteTrackingRecords}
-                      onChange={(event) => setShowAllRouteTrackingRecords(event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>All recorded dates</span>
-                  </label>
-                  {!showAllRouteTrackingRecords ? (
-                    <span aria-label="Selected tracking date" style={routeTrackingMapDateControlStyle}>
-                      {routeTrackingWindowDate ? `${routeTrackingWindowDate} and next day` : "Available tracking dates"}
-                    </span>
-                  ) : null}
-                </div>
-                {routeTrackingIsCompleted ? (
-                  <div
-                    aria-label="Route completion time"
-                    style={routeTrackingMapFreshnessStyle}
-                    title={routeTrackingCompletionTime == null
-                      ? "Authoritative route completion time is unavailable."
-                      : `Route completed ${formatTrackingTimestamp(routeTrackingCompletionTime, ianaTimezone)}.`}
-                  >
-                    <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
-                    <span>{formatRouteTrackingCompletionLabel(routeTrackingCompletionTime, ianaTimezone)}</span>
-                  </div>
-                ) : latestTrackingOccurredAt && showRouteTrackingFreshness ? (
-                  <div
-                    aria-label="Current position freshness"
-                    style={routeTrackingMapFreshnessStyle}
-                    title={`Position recorded ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}${latestTrackingReceivedAt ? `; received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}` : ""}. Double-click the red marker to focus.`}
-                  >
-                    <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
-                    <span>{showAllRouteTrackingRecords
-                      ? `Current position ${formatTrackingElapsedSeconds(latestTrackingOccurredAt, routeTrackingFreshnessTime)}`
-                      : `Last recorded position ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}`}</span>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
             <MapResizeHandle
               ariaLabel="Resize route map height"
               controls="route-detail-map"
@@ -7926,7 +7818,7 @@ export default function RouteDetailPage() {
                       <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
                     </div>
                     <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>{showAllRouteTrackingRecords ? "All-record range" : "Service-day range"}</span>
+                      <span style={routeChildTrackingMetricLabelStyle}>Service-day range</span>
                       <strong
                         style={{ ...routeChildTrackingMetricValueStyle, whiteSpace: "nowrap" }}
                         title={routeTrackingPathSummary.firstOccurredAt
