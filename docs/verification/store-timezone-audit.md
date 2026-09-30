@@ -8,9 +8,9 @@ The existing Shopify timezone query returns `shop.ianaTimezone`; `shop-timezone.
 
 | Screen / surface | Live read-only inspection | Code / local evidence | Result |
 | --- | --- | --- | --- |
-| Orders list, ordered/processed/updated timeline, results timestamp | Inspected; existing timestamps are Toronto local | Explicit store-zone timeline/result tests; Seoul host | Existing formatting retained; app-zone fallback added |
+| Orders list, ordered/processed/updated timeline, results timestamp | Inspected; existing timestamps are Toronto local | Actual Orders fixture in Seoul, Los Angeles, UTC; timeline/result/date-filter assertions | Existing formatting retained; app-zone fallback added |
 | Orders order-date calendar | Opened, without submitting changes | Store-midnight filter tests; calendar starts from store date | Calendar dates preserved; instant fallback dates corrected |
-| Orders delivery-date/day/area/type/state filters, sorting, grouping | Main list inspected; individual combinations not applied live | Existing filter suite plus store midnight cases; date-only comparisons and instant sorting audited | Store-local fallback day and reference date supplied |
+| Orders delivery-date/day/area/type/state filters, sorting, grouping | Main list inspected; individual combinations not applied live | Actual Order date calendar/filter fixture in three zones, existing filter suite and store midnight cases; date-only comparisons and instant sorting audited | Store-local fallback day and reference date supplied |
 | Orders map/item/note popovers | Not individually opened live | Audited: no additional instant formatter; shared order rows/timeline | Code evidence only |
 | Orders bulk edit / route planning / add-to-route modals | Not submitted or individually opened live | Audited date-only delivery inputs and shared row/filter handling; existing tests | No production round-trip claimed |
 | Inventory list, Changed time | Opened; current list empty | Shared formatter unit coverage; list call site supplies store zone | UTC slice replaced |
@@ -22,7 +22,7 @@ The existing Shopify timezone query returns `shop.ianaTimezone`; `shop-timezone.
 | Route group / child detail | Opened existing group and child | Shared component child/unassigned rows audited and contracts | Created/Updated use store zone |
 | Start Time modal | Opened and closed without Apply/save | Existing wall-time conversion tests: API JSON round-trip, summer/winter, DST gap/fold; store-calendar fallback | Existing IANA/UTC contract preserved |
 | Tracking and evidence / completion timestamps | Opened completed route; Toronto offset visible | Existing tracking suite and explicit IANA formatters audited | No Tracking/GPS change |
-| Customer email dialog | Opened and closed; Preview/Send not invoked | Event/sent history formatter test, summer/winter | UTC history slice fixed; actual recipient-history view not inspected live |
+| Customer email dialog | Opened and closed; Preview/Send not invoked | Actual multi-child recipient/list preview fixture in three browser zones, summer/winter; formatter tests | UTC history slice fixed; live recipient-history view not opened, synthetic actual component verified |
 | Route copy, delete, dispatch, line/stop edit, add-order, unsaved-change/notice dialogs | Not submitted or all opened live | Audited: date-only add-order filters or existing start picker; other dialogs have no timestamp formatter | Code/test evidence only; no production mutation claimed |
 | Drivers list, Joined / last-seen search data | Inspected | Actual component fixture with midnight instant in Seoul, Los Angeles, UTC | Store-local date fixed |
 | Drivers Invite / Download app dialogs | Opened and closed | No instant fields rendered | Pass |
@@ -39,8 +39,8 @@ The server previously returned `processedAt` as a UTC calendar prefix and `eta` 
 
 ## Verification limits
 
-Actual Inventory Products/Orders/history and Drivers fixtures passed under browser zones `Asia/Seoul`, `America/Los_Angeles`, and `UTC`. Routes fixtures also passed the same three browser overrides for Created/Modified and summer/winter/midnight Start values. The subsequent Orders fixture became unresponsive; no successful full Orders browser-zone fixture run is claimed. Production Orders and explicit-zone unit tests provide its current evidence. Synthetic fixtures block production requests and writes; framework prefetch is omitted from the Inventory harness only.
+Actual Inventory Products/Orders/history and Drivers fixtures passed under browser zones `Asia/Seoul`, `America/Los_Angeles`, and `UTC`. Routes fixtures also passed the same three browser overrides for Created/Modified and summer/winter/midnight Start values. After restart, the Orders harness was repaired to provide Vite `import.meta.env.DEV/PROD` and the actual JSON route-groups resource action. The previous timeout and resource errors were fixture defects. Actual Orders list/result timestamp, timeline metadata, calendar, and applied date-only filter now pass in all three zones. Actual Inventory Orders ETA displays `00:15 EDT` with full `2026-07-17 00:15 EDT` tooltip in all three zones. Actual customer-email recipient-list and selected-preview history show identical summer/winter values in all three zones; no Send action is invoked. Synthetic fixtures block production requests and writes; framework prefetch is omitted from the Inventory harness only.
 
 No production input/save/reload cycle was attempted. Serialization and re-display round trips are tested with synthetic values. Existing four schedule/plan-date discrepancies were not modified; their intended dates and historical cause remain unproven.
 
-Local full verification, exact-head CI, and deployment readiness are reported in the PR after fresh checks. Production deployment remains pending separate review of this expanded scope. Raw GPS Shopify PR300 and server PR463 are excluded.
+PR-head CI passed the full app/API required profiles. The user subsequently authorized deployment once implementation is verified; exact merged-head CI, API-first rollout, runtime SHA, backward compatibility, read-only smoke, and rollback evidence are required before completion. Raw GPS Shopify PR300 and server PR463 are excluded.
