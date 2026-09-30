@@ -46,6 +46,8 @@ test("route creation intent is guarded before the asynchronous Shopify token res
     plannedOrderIds: ["gid://shopify/Order/1"],
     plannedOrders: [{ id: "gid://shopify/Order/1", orderId: "delivery-order-1" }],
     routeCreatePendingRef,
+    routeCreateAttemptRef: { current: null },
+    crypto: { randomUUID: () => "11111111-1111-4111-8111-111111111111" },
     routePlanFetcher: {
       state: "idle",
       submit(formData, options) {
@@ -92,6 +94,23 @@ test("route creation intent is guarded before the asynchronous Shopify token res
   assert.equal(submittedRouteRequestRef.current, true);
 });
 
+test("adding more orders retains the merchant's title instead of regenerating it", () => {
+  let title = "Friday all deliveries";
+  const order = { id: "order-1" };
+  const addToPlan = vm.runInNewContext(`(${extractArrow("handleAddToPlan", "selectOrderDataOrder")})`, {
+    buildRoutePlanTitleFromOrders: () => "2026.09.11 Friday",
+    checkedOrderIds: [order.id], displayOrderById: new Map([[order.id, order]]),
+    isOrderCancelled: () => false, language: "en", plannedOrderIdSet: new Set(),
+    plannedOrderIds: [], plannedOrderRowById: new Map(), selectedOrderRows: [order],
+    routePlanTitleEditedRef: { current: true },
+    setCreateRouteClientError() {}, setPlanFitRequest() {}, setPlannedOrderIds() {},
+    setPlannedOrderRows() {}, setSelectedOrderRows() {},
+    setRoutePlanTitle: (value) => { title = value; },
+  });
+  addToPlan();
+  assert.equal(title, "Friday all deliveries");
+});
+
 test("Add to map excludes cancelled orders from table and map-popup paths", () => {
   const readyOrder = { id: "ready", name: "#ready" };
   const cancelledOrder = { id: "cancelled", name: "#cancelled", cancelledAt: "2026-09-03T00:00:00Z" };
@@ -112,6 +131,7 @@ test("Add to map excludes cancelled orders from table and map-popup paths", () =
     setPlanFitRequest: (updater) => updater(0),
     setPlannedOrderIds: (orderIds) => plannedOrderRows.push(orderIds),
     setPlannedOrderRows() {},
+    routePlanTitleEditedRef: { current: false },
     setRoutePlanTitle() {},
     setSelectedOrderRows() {},
     translate: (_language, _key, params) => `${params.count} cancelled excluded`,
@@ -136,6 +156,7 @@ test("Add to map excludes cancelled orders from table and map-popup paths", () =
       assert.fail("cancelled popup order must not be added");
     },
     setPlannedOrderRows() {},
+    routePlanTitleEditedRef: { current: false },
     setRoutePlanTitle() {},
     setSelectedOrderId() {},
     setSelectedOrderRows() {},
@@ -247,8 +268,8 @@ test("frozen selection keeps known cancelled exclusions across create and replac
 test("route creation uses a single group-backed action", () => {
   assert.match(pageSource, /const handleCreateRoute = \(\) => submitNewRoute\("createRouteGroup"\)/);
   assert.doesNotMatch(pageSource, /handleCreateRouteGroup|createRoutePlan/);
-  assert.doesNotMatch(pageSource, /initialRoute/);
-  assert.doesNotMatch(serverSource, /initialRoute/);
+  assert.match(pageSource, /initialRouteRequestId/);
+  assert.match(serverSource, /initialRouteRequestId/);
   assert.doesNotMatch(serverSource, /\bcreateDeliveryRoutePlan\(/);
   assert.doesNotMatch(serverSource, /createDeliveryRoutePlanBatch/);
   assert.match(serverSource, /const routePlanPayload = buildCreateRoutePlanPayload\(routePlanPayloadInput\)/);

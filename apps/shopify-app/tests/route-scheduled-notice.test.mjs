@@ -36,6 +36,7 @@ function runSaveEffect({ errors = [], outcomeUnknown = false, next = null, delet
     navigateAfterRouteDraftSaveRef: { current: next },
     splitSaveExpectationRef: { current: null },
     ordinaryMutationPendingRef: { current: true },
+    routeDraftSavePendingRef: { current: true },
     routeActionFetcher: { state: "idle", data: { errors, outcomeUnknown } },
     deletedRoutePlanIds: deleted ? ["route-1"] : [],
     effectiveRoutePlan: { id: "route-1" },
@@ -55,6 +56,7 @@ function runSaveEffect({ errors = [], outcomeUnknown = false, next = null, delet
   const run = Function(...Object.keys(bindings), effect);
   run(...Object.values(bindings));
   run(...Object.values(bindings));
+  assert.equal(bindings.routeDraftSavePendingRef.current, false);
   return calls;
 }
 

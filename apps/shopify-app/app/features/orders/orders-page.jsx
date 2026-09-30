@@ -3300,6 +3300,7 @@ function OrdersPageContent({ loaderData }) {
   const [activeOrderDataOrderId, setActiveOrderDataOrderId] = useState(null);
   const [orderDataDraft, setOrderDataDraft] = useState(() => getOrderDataDraft(null));
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
+  const routePlanTitleEditedRef = useRef(false);
   const [routeCreatePending, setRouteCreatePending] = useState(false);
   const isCreatingRoute = routeCreatePending || routePlanFetcher.state !== "idle";
   const [routeAssignActionsOpen, setRouteAssignActionsOpen] = useState(false);
@@ -3332,6 +3333,7 @@ function OrdersPageContent({ loaderData }) {
   const submittedRouteRequestRef = useRef(false);
   const submittedRouteIntentRef = useRef(null);
   const routeCreatePendingRef = useRef(false);
+  const routeCreateAttemptRef = useRef(null);
   const orderSyncSubmittedRef = useRef(false);
   const activeOrdersRefreshRequestIdRef = useRef(null);
   const activeOrdersReconciliationRef = useRef(null);
@@ -4700,7 +4702,7 @@ function OrdersPageContent({ loaderData }) {
 
     setPlannedOrderIds(nextOrderIds);
     setPlannedOrderRows(nextOrders);
-    setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
+    if (!routePlanTitleEditedRef.current) setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setSelectedOrderRows((currentOrders) =>
       updatePagedOrderSelection(currentOrders, [{ id: orderId }], false));
     setCreateRouteClientError(null);
@@ -4741,7 +4743,7 @@ function OrdersPageContent({ loaderData }) {
 
     setPlannedOrderIds(nextOrderIds);
     setPlannedOrderRows(nextOrders);
-    setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
+    if (!routePlanTitleEditedRef.current) setRoutePlanTitle(buildRoutePlanTitleFromOrders(nextOrders));
     setSelectedOrderRows([]);
     setCreateRouteClientError(cancelledOrderCount > 0
       ? translate(language, "orders.routeActions.cancelledOrdersExcluded", { count: cancelledOrderCount })
@@ -4857,6 +4859,8 @@ function OrdersPageContent({ loaderData }) {
     setPlannedOrderIds([]);
     setPlannedOrderRows([]);
     setRoutePlanTitle(DEFAULT_ROUTE_PLAN_TITLE);
+    routePlanTitleEditedRef.current = false;
+    routeCreateAttemptRef.current = null;
     setRouteAssignActionsOpen(false);
     setRouteAddModalOpen(false);
   };
@@ -4898,7 +4902,12 @@ function OrdersPageContent({ loaderData }) {
 
     routeCreatePendingRef.current = true;
     setRouteCreatePending(true);
+    const routeName = routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE;
+    const creationKey = JSON.stringify({ shopifyOrderIds: plannedOrders.map((order) => order.id), routeName });
     try {
+      if (routeCreateAttemptRef.current?.key !== creationKey) {
+        routeCreateAttemptRef.current = { key: creationKey, requestId: crypto.randomUUID() };
+      }
       setCreateRouteClientError(null);
       const sessionToken = await shopify.idToken();
       submittedRouteRequestRef.current = true;
@@ -4909,7 +4918,8 @@ function OrdersPageContent({ loaderData }) {
       formData.set("_intent", intent);
       formData.set("plannedOrderIds", JSON.stringify(plannedOrders.map((order) => order.id)));
       formData.set("routeScope", JSON.stringify(routeDraftScope));
-      formData.set("routeName", routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE);
+      formData.set("routeName", routeName);
+      formData.set("initialRouteRequestId", routeCreateAttemptRef.current.requestId);
       formData.set("orderScope", orderFilters.scope);
       formData.set("shopifySessionToken", sessionToken);
       routePlanFetcher.submit(formData, { method: "post" });
@@ -5798,7 +5808,10 @@ function OrdersPageContent({ loaderData }) {
             <input
               aria-label="Route plan title"
               value={routePlanTitle}
-              onChange={(event) => setRoutePlanTitle(event.currentTarget.value)}
+              onChange={(event) => {
+                routePlanTitleEditedRef.current = true;
+                setRoutePlanTitle(event.currentTarget.value);
+              }}
               placeholder="YYYY.MM.DD X요일"
               style={routePlanTitleFieldStyle}
             />

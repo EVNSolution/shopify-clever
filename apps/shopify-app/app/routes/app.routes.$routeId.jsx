@@ -3707,6 +3707,7 @@ export default function RouteDetailPage() {
   const [ordinaryMutationPending, setOrdinaryMutationPending] = useState(false);
   const [ordinaryMutationUncertain, setOrdinaryMutationUncertain] = useState(false);
   const ordinaryMutationPendingRef = useRef(false);
+  const routeDraftSavePendingRef = useRef(false);
   const ordinarySplitRevisionRef = useRef(null);
   const copySourceRoutePlanIdRef = useRef(null);
   const routeGroupActionBusy = routeActionFetcher.state !== "idle" || ordinaryMutationPending;
@@ -5388,10 +5389,16 @@ export default function RouteDetailPage() {
     const blockedByOrdinaryMutation = () => ordinaryMutationPendingRef.current
       && intent !== "copyRoutePlan" && intent !== "saveRouteDraft";
     if (blockedByOrdinaryMutation()) return false;
+    const isDraftSave = intent === "saveRouteDraft" || intent === "saveRouteStops";
+    if (isDraftSave && routeDraftSavePendingRef.current) return false;
+    if (isDraftSave) routeDraftSavePendingRef.current = true;
     try {
       setRouteGroupClientError(null);
       const sessionToken = await shopify.idToken();
-      if (blockedByOrdinaryMutation()) return false;
+      if (blockedByOrdinaryMutation()) {
+        if (isDraftSave) routeDraftSavePendingRef.current = false;
+        return false;
+      }
       const formData = new FormData();
       formData.set("_intent", intent);
       if (routeGroupId) formData.set("routeGroupId", routeGroupId);
@@ -5400,6 +5407,7 @@ export default function RouteDetailPage() {
       routeActionFetcher.submit(formData, { method: "post" });
       return true;
     } catch {
+      if (isDraftSave) routeDraftSavePendingRef.current = false;
       setRouteGroupClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
@@ -6240,6 +6248,7 @@ export default function RouteDetailPage() {
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "saveRouteStops") return;
+    routeDraftSavePendingRef.current = false;
     lastRouteActionIntentRef.current = null;
     const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
     navigateAfterRouteDraftSaveRef.current = null;
@@ -6255,6 +6264,7 @@ export default function RouteDetailPage() {
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;
+    routeDraftSavePendingRef.current = false;
     lastRouteActionIntentRef.current = null;
     const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
     navigateAfterRouteDraftSaveRef.current = null;
@@ -6811,6 +6821,8 @@ export default function RouteDetailPage() {
     let wasDragPanEnabled = null;
     let polygonDragAnimationFrame = null;
     let pendingPolygonDragLngLat = null;
+    let polygonCornerStartPoint = null;
+    let polygonCornerMoved = false;
 
     const getFeaturePointIndex = (feature) => {
       const pointIndex = numberOrUndefined(feature?.properties?.pointIndex);
@@ -6876,6 +6888,8 @@ export default function RouteDetailPage() {
 
       preventMapGesture(event);
       routePolygonCornerDragIndexRef.current = pointIndex;
+      polygonCornerStartPoint = event.point;
+      polygonCornerMoved = false;
       suppressNextRoutePolygonMapClick();
       wasDragPanEnabled = typeof map.dragPan?.isEnabled === "function" ? map.dragPan.isEnabled() : true;
       map.dragPan?.disable?.();
@@ -6886,6 +6900,13 @@ export default function RouteDetailPage() {
       if (routePolygonCornerDragIndexRef.current == null) return;
 
       preventMapGesture(event);
+      if (!polygonCornerMoved && polygonCornerStartPoint && event.point) {
+        polygonCornerMoved = Math.hypot(
+          event.point.x - polygonCornerStartPoint.x,
+          event.point.y - polygonCornerStartPoint.y,
+        ) >= 3;
+      }
+      if (!polygonCornerMoved) return;
       pendingPolygonDragLngLat = event.lngLat
         ? { lat: event.lngLat.lat, lng: event.lngLat.lng }
         : null;
@@ -6899,11 +6920,18 @@ export default function RouteDetailPage() {
 
       preventMapGesture(event);
       cancelPendingPolygonDrag();
-      const nextPoints = syncDraggedPolygonPoint(event.lngLat) ?? routePolygonPointsRef.current;
+      const shouldClose = routePolygonCornerDragIndexRef.current === 0
+        && !polygonCornerMoved && !routePolygonClosedRef.current
+        && routePolygonPointsRef.current.length >= 3;
+      const nextPoints = polygonCornerMoved
+        ? syncDraggedPolygonPoint(event.lngLat) ?? routePolygonPointsRef.current
+        : routePolygonPointsRef.current;
       routePolygonCornerDragIndexRef.current = null;
+      polygonCornerStartPoint = null;
       restoreDragPan();
       if (canvas) canvas.style.cursor = "crosshair";
       setRoutePolygonDraftPoints(nextPoints);
+      if (shouldClose) setRoutePolygonClosed(true);
       setIsPolygonTargetPickerOpen(false);
       syncRouteEditPolygon(map, nextPoints, routePolygonClosedRef.current);
     };
@@ -8638,7 +8666,7 @@ export default function RouteDetailPage() {
                     style={routeGroupCopyChoiceLabelStyle}
                   >실제 주문으로 복사</label>
                   <span id="copy-route-group-reference-description" style={routeGroupCopyChoiceDescriptionStyle}>
-                    원본 주문을 공유하며 진행/잠금 상태의 영향을 받음
+                    원본 주문과 완료 상태를 공유하며, 중복 배차·배송 시작은 제한됨
                   </span>
                 </span>
               </div>

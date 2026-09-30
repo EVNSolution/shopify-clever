@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import test from "node:test";
 import vm from "node:vm";
 import { buildCreateRoutePlanPayload } from "../app/features/delivery/route-plans.server.js";
-import { buildCreateRouteGroupPayload } from "../app/features/orders/route-group-create.js";
+import { buildCreateRouteGroupPayload, hasNamedInitialRoute } from "../app/features/orders/route-group-create.js";
 import { textOrUndefined } from "../app/features/orders/orders-page.shared.js";
 import { translate } from "../app/i18n/i18n.js";
 
@@ -30,16 +30,18 @@ const plannedOrders = [
   { id: "gid://shopify/Order/2", orderId: "order-2", deliveryDate: "2026-09-10" },
 ];
 
-async function runCreation(intent, preflightErrors) {
+async function runCreation(intent, preflightErrors, creationResponse) {
   const requests = [];
   let preflights = 0;
   const action = vm.runInNewContext(`(${server.slice(actionStart, actionEnd)})`, {
     authenticate: { admin: async () => ({ admin: {}, session: { shop: "test-shop" } }) },
     buildCreateRoutePlanPayload,
     buildCreateRouteGroupPayload,
+    hasNamedInitialRoute,
+    randomUUID: () => "11111111-1111-4111-8111-111111111111",
     createDeliveryRouteGroup: async (_request, payload, options) => {
       requests.push({ payload, options });
-      return { routeGroup: { id: "created-route" }, errors: [] };
+      return creationResponse ?? { routeGroup: { id: "created-route", name: payload.name, children: [{ routePlanId: "child-1", routePlan: { name: payload.name, status: "READY" }, orderIds: payload.orderIds }] }, errors: [] };
     },
     createDeliveryRoutePlanBatch: () => assert.fail("Orders must not create a standalone route"),
     buildCreateRoutePlanBatchPayload: () => assert.fail("Orders must not build a standalone route"),
@@ -76,6 +78,7 @@ test("explicit and default route creation use the same group endpoint and exact 
       payload: {
         dateRangeStart: "2026-09-10", dateRangeEnd: "2026-09-10", planDate: "2026-09-10",
         depot: { address: "Depot", latitude: 43.7, longitude: -79.4 },
+        initialRoute: { requestId: "11111111-1111-4111-8111-111111111111" },
         name: "Thursday route", orderIds: ["order-1", "order-2"],
       },
       options: { sessionToken: "test-token" },
@@ -96,3 +99,14 @@ test("cancelled-order preflight blocks unified creation without dropping selecte
   assert.equal(result.errors, errors);
   assert.equal(requests.length, 0);
 });
+
+ test("a zero-route or partial error response cannot navigate as successful creation", async () => {
+  for (const creationResponse of [
+    { routeGroup: { id: "empty-group", name: "Thursday route", children: [] }, errors: [] },
+    { routeGroup: { id: "partial" }, errors: [{ code: "SAVE_FAILED", message: "failed" }] },
+  ]) {
+    const { result } = await runCreation("createRouteGroup", undefined, creationResponse);
+    assert.ok(result.errors.length > 0);
+    assert.equal(result.routeGroup, undefined);
+  }
+ });
