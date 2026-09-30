@@ -69,12 +69,13 @@ test("additional and forbidden object-detail routes are not present", () => {
     appRouteFiles.filter((file) => file.includes("$")),
     [
       "app.route-groups.$routeGroupId.jsx",
+      "app.route-original-observations.$routePlanId.jsx",
       "app.route-tracking.$routePlanId.jsx",
       "app.routes.$routeId.jsx",
       "app.routes.groups.$routeGroupId.jsx",
       "app.routes.groups.$routeGroupId_.routes.$routeId.jsx",
     ],
-    "only route plans, parent route groups, and the authenticated tracking resource may be parameterized",
+    "only route plans, parent route groups, and the authenticated tracking resources may be parameterized",
   );
 });
 

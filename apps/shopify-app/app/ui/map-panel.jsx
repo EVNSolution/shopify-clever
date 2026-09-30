@@ -341,6 +341,8 @@ export function MapToolbar({ actions = [], statusLabel, statusGlyph }) {
             ) : (
               <button
                 aria-label={action.ariaLabel}
+                aria-pressed={action.pressed}
+                title={action.ariaLabel}
                 disabled={action.disabled}
                 key={action.ariaLabel}
                 onClick={action.onClick}
