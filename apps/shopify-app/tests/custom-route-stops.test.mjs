@@ -30,7 +30,11 @@ function loadAddStopTargetRouteOptionsBuilder() {
   const end = routeDetailSource.indexOf("\nfunction applyRouteRowDraftState(", start);
   assert.notEqual(start, -1);
   assert.notEqual(end, -1);
-  return Function(`${routeDetailSource.slice(start, end)}\nreturn buildAddStopTargetRouteOptions;`)();
+  const statusStart = routeDetailSource.indexOf("function isRouteExecutionLockedForStopMembership(");
+  const statusEnd = routeDetailSource.indexOf("\nfunction isRouteExecutionInProgressForStopMembership(", statusStart);
+  assert.notEqual(statusStart, -1);
+  assert.notEqual(statusEnd, -1);
+  return Function(`${routeDetailSource.slice(statusStart, statusEnd)}\n${routeDetailSource.slice(start, end)}\nreturn buildAddStopTargetRouteOptions;`)();
 }
 
 process.env.CLEVER_DELIVERY_API_URL = "https://delivery.test/";
@@ -196,6 +200,7 @@ test("materialized groups require a real target route while empty groups may sta
     { isUnassigned: true, routePlanId: null, title: "Unassigned" },
     { routePlanId: "route-44", title: "#44" },
     { routePlanId: "route-46", title: "#46" },
+    { routePlanId: "incomplete", title: "Preserved history", status: "Incomplete" },
   ]), [
     { disabled: true, label: "Select route", value: "" },
     { label: "#44", value: "route-44" },

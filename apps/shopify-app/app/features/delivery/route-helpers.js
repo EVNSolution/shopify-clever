@@ -78,6 +78,7 @@ export function formatRouteStatus(status) {
   const value = textOrUndefined(status)?.toUpperCase().replace(/[\s-]+/g, "_");
   if (value === "IN_PROGRESS") return "In progress";
   if (value === "COMPLETED") return "Completed";
+  if (value === "INCOMPLETE") return "Incomplete";
   if (value === "CANCELLED") return "Cancelled";
   return "Ready";
 }
