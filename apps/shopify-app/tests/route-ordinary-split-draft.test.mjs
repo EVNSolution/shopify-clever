@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { routeGroupPath, withEmbeddedShopifyContext } from "../app/features/delivery/route-paths.js";
 
 const root = process.cwd();
 const source = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
@@ -149,6 +150,7 @@ function loadSubmitRouteAction(overrides = {}) {
   const dependencyNames = [
     "ordinaryMutationPendingRef", "setRouteGroupClientError", "shopify", "FormData",
     "routeGroupId", "routeActionFetcher", "routeDraftSavePendingRef",
+    "routeGroupPath", "withEmbeddedShopifyContext", "searchParams",
   ];
   const dependencies = {
     FormData,
@@ -156,6 +158,9 @@ function loadSubmitRouteAction(overrides = {}) {
     routeDraftSavePendingRef: { current: false },
     routeActionFetcher: { submit: () => {} },
     routeGroupId: null,
+    routeGroupPath,
+    withEmbeddedShopifyContext,
+    searchParams: new URLSearchParams(),
     setRouteGroupClientError: () => {},
     shopify: { idToken: async () => "session-token" },
     ...overrides,
@@ -433,6 +438,22 @@ test("copy and split save responses reconcile before route loader revalidation",
   assert.equal(shouldRevalidate({ formData: formDataFor("copyRoutePlan"), defaultShouldRevalidate: true }), false);
   assert.equal(shouldRevalidate({ formData: formDataFor("saveRouteDraft"), defaultShouldRevalidate: true }), false);
   assert.equal(shouldRevalidate({ formData: formDataFor("deleteRoute"), defaultShouldRevalidate: true }), true);
+});
+
+test("Copy from a group child submits to the existing group action with embedded context", async () => {
+  let submission;
+  const submit = loadSubmitRouteAction({
+    routeGroupId: "single-group",
+    searchParams: new URLSearchParams("shop=kfood.myshopify.com&host=fixture&embedded=1&id_token=excluded"),
+    routeActionFetcher: { submit: (form, options) => { submission = { form, options }; } },
+  });
+  assert.equal(await submit("copyRouteGroup", { copyMode: "REFERENCE", expectedUpdatedAt: "revision" }), true);
+  assert.equal(submission.options.action, "/app/routes/groups/single-group?shop=kfood.myshopify.com&host=fixture&embedded=1");
+  assert.equal(submission.options.method, "post");
+  assert.equal(submission.form.get("_intent"), "copyRouteGroup");
+  assert.equal(submission.form.get("routeGroupId"), "single-group");
+  assert.equal(submission.form.get("copyMode"), "REFERENCE");
+  assert.equal(submission.form.get("expectedUpdatedAt"), "revision");
 });
 
 test("global Save submits once while token is pending and a token failure permits retry", async () => {
