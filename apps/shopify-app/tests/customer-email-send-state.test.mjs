@@ -101,6 +101,16 @@ test("customer email send state explains the preview and recipient selection gat
   });
 });
 
+test("incomplete email guidance does not imply an active or delivered route", () => {
+  const state = getCustomerEmailPreviewEmptyState({
+    preview: { counts: { totalStops: 3 }, recipients: [] },
+    routeExecutionStatus: "INCOMPLETE",
+    signal: "DELIVERED",
+  });
+  assert.equal(state.detail, "This route ended incomplete. Review the recorded stop outcomes and choose a message before previewing again.");
+  assert.equal(state.title, "No stops match Delivered");
+});
+
 test("customer email send state requires each applicable confirmation", () => {
   assert.deepEqual(getCustomerEmailSendReadiness({
     ...readyInput,

@@ -39,6 +39,12 @@ export function getCustomerEmailPreviewEmptyState({ preview, routeExecutionStatu
 
   const signalLabel = CUSTOMER_EMAIL_SIGNAL_LABELS[signal] ?? "this message";
   const totalStops = nonNegativeCount(preview?.counts?.totalStops);
+  if (routeExecutionStatus === "INCOMPLETE" && totalStops > 0) {
+    return {
+      detail: "This route ended incomplete. Review the recorded stop outcomes and choose a message before previewing again.",
+      title: `No stops match ${signalLabel}`,
+    };
+  }
   const defaultSignal = getCustomerEmailDefaultSignal(routeExecutionStatus);
   if (totalStops > 0 && defaultSignal !== signal) {
     const routeStatusLabel = routeExecutionStatus === "COMPLETED" ? "Completed" : "In-progress";

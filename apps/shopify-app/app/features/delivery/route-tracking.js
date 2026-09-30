@@ -23,7 +23,7 @@ function nonNegativeNumberOrNull(value) {
 
 function normalizeRouteExecutionStatus(status) {
   const value = textOrNull(status)?.toUpperCase().replace(/[\s-]+/g, "_");
-  if (value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELLED") return value;
+  if (value === "IN_PROGRESS" || value === "COMPLETED" || value === "INCOMPLETE" || value === "CANCELLED") return value;
   return "READY";
 }
 
@@ -194,6 +194,12 @@ function normalizeRouteTrackingSnapshot(snapshot) {
 
   return {
     executionEvidence: normalizeRouteExecutionEvidence(snapshot?.executionEvidence),
+    operationalState: snapshot?.operationalState && typeof snapshot.operationalState === "object"
+      ? {
+          routePlanId: textOrNull(snapshot.operationalState.routePlanId),
+          routeStatus: textOrNull(snapshot.operationalState.routeStatus),
+        }
+      : null,
     schemaVersion: textOrNull(snapshot?.schemaVersion) ?? "route_tracking.v1",
     routePlanId: textOrNull(snapshot?.routePlanId),
     policy: snapshot?.policy && typeof snapshot.policy === "object" ? { ...snapshot.policy } : null,
@@ -335,6 +341,7 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
   const mergedBase = normalizeRouteTrackingSnapshot({
     ...historyBase,
     executionEvidence: incomingSnapshot.executionEvidence ?? current.executionEvidence,
+    operationalState: incomingSnapshot.operationalState ?? current.operationalState,
     policy: incomingSnapshot.policy ?? current.policy,
     progress: mergeTrackingProgressSnapshot(current.progress, incomingSnapshot.progress),
     roadMatchedPath: getNewestRoadMatchedPath(current.roadMatchedPath, incomingSnapshot.roadMatchedPath),
@@ -1266,11 +1273,23 @@ function getRouteTrackingFreshness(snapshot, now = Date.now()) {
 
 function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
   const status = normalizeRouteExecutionStatus(currentStatus);
+  // Finalization is authoritative and has no synthetic driver event. A buffered
+  // event from the closed stream must not undo the loader's terminal status.
+  if (status === "INCOMPLETE") return status;
   const eventType = textOrNull(event?.eventType);
   if (eventType === "ROUTE_STARTED") return "IN_PROGRESS";
   if (eventType === "ROUTE_PAUSED") return "READY";
   if (eventType === "ROUTE_COMPLETED") return "COMPLETED";
   return status;
+}
+
+function getRouteExecutionStatusFromTrackingSnapshot(currentStatus, snapshot, routePlanId) {
+  const status = normalizeRouteExecutionStatus(currentStatus);
+  const expectedRoutePlanId = textOrNull(routePlanId);
+  if (status === "INCOMPLETE" || !expectedRoutePlanId) return status;
+  if (textOrNull(snapshot?.routePlanId) !== expectedRoutePlanId
+    || textOrNull(snapshot?.operationalState?.routePlanId) !== expectedRoutePlanId) return status;
+  return snapshot.operationalState.routeStatus === "INCOMPLETE" ? "INCOMPLETE" : status;
 }
 
 function getRouteTrackingCompletionTime(snapshot) {
@@ -1360,6 +1379,14 @@ function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
       trackingLabel: "Completed",
     };
   }
+  if (executionStatus === "INCOMPLETE") {
+    return {
+      connectionLabel: "closed",
+      driverStage: snapshot?.progress?.currentStage ?? "READY",
+      mode: "history",
+      trackingLabel: "Incomplete",
+    };
+  }
   if (executionStatus === "CANCELLED") {
     return {
       connectionLabel: "closed",
@@ -1388,6 +1415,7 @@ export {
   doesTrackingEventRefreshEta,
   shouldRevalidateTrackingEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteExecutionStatusFromTrackingSnapshot,
   formatRouteTrackingCompletionLabel,
   getRouteTrackingCompletionTime,
   getRouteTrackingLineFeatures,
