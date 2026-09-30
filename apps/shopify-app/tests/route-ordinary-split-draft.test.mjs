@@ -398,7 +398,7 @@ test("ordinary READY route exposes direct Copy and keeps Add Empty local", () =>
   assert.match(source, /effectiveRoutePlan\?\.status[\s\S]*READY/);
   assert.match(source, /submitRouteAction\("copyRoutePlan", \{[\s\S]*expectedRoutePlanUpdatedAt: effectiveRoutePlan\.updatedAt/);
   assert.match(source, /onClick=\{handleCopyOrdinaryRoute\}/);
-  assert.match(source, /\{copyRoutePlanBusy \? "Copying…" : "Copy"\}/);
+  assert.match(source, /\{copyRoutePlanBusy \? "Copying…" : "Copy Route"\}/);
 });
 
 test("ordinary Copy navigates only after a confirmed standalone READY route response", () => {
