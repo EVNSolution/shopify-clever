@@ -1,3 +1,4 @@
+import { getStoreDate } from "../shopify/store-date-time.js";
 import { createElement as h, useEffect, useMemo, useRef, useState } from "react";
 
 import { storeLocalDateTimeToIso } from "./child-route-detail-presentation.js";
@@ -174,7 +175,7 @@ export function buildRouteStartCalendarMonth(year, month) {
 }
 
 function getInitialVisibleMonth(draft) {
-  const date = isValidDateText(draft?.date) ? draft.date : new Date().toISOString().slice(0, 10);
+  const date = isValidDateText(draft?.date) ? draft.date : getStoreDate(new Date(), draft?.timezone) ?? getStoreDate(new Date(), "UTC");
   const [year, month] = date.split("-").map(Number);
   return { month, year };
 }

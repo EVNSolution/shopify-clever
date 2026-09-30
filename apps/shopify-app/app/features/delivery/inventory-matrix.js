@@ -1,12 +1,14 @@
+import { formatStoreInstant, getStoreDate } from "../shopify/store-date-time.js";
+
 const UNKNOWN_DATE = "—";
 
-export function buildInventoryProductMatrix(orders) {
+export function buildInventoryProductMatrix(orders, storeTimeZone = "UTC") {
   const products = [];
   const productIndex = new Map();
   const rowIndex = new Map();
 
   for (const order of Array.isArray(orders) ? orders : []) {
-    const date = normalizeInventoryDate(order?.deliveryDate ?? order?.orderDateLocal ?? order?.processedAt ?? order?.createdAt);
+    const date = normalizeInventoryDate(order?.deliveryDate ?? order?.orderDateLocal ?? order?.processedAtInstant ?? order?.processedAt ?? order?.createdAt, storeTimeZone);
     let row = rowIndex.get(date);
     if (!row) {
       row = { date, label: formatInventoryDateLabel(date), quantities: {}, total: 0 };
@@ -43,7 +45,7 @@ export function buildInventoryProductMatrix(orders) {
 }
 
 
-export function buildInventoryHistoryItems(inventory) {
+export function buildInventoryHistoryItems(inventory, storeTimeZone = "UTC") {
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
   const history = [];
 
@@ -51,11 +53,11 @@ export function buildInventoryHistoryItems(inventory) {
     const historyOrders = orders.map((order, index) => buildInventoryHistoryOrder(order, index));
     history.push(buildInventoryHistoryItem({
       orders: historyOrders,
-      title: formatInventoryHistoryTitle(inventory),
+      title: formatInventoryHistoryTitle(inventory, storeTimeZone),
     }));
   }
 
-  history.push(...buildInventoryChangeHistoryItems(inventory?.lastChange));
+  history.push(...buildInventoryChangeHistoryItems(inventory?.lastChange, storeTimeZone));
   return history;
 }
 
@@ -93,7 +95,7 @@ function buildInventoryHistoryOrder(order, index) {
   };
 }
 
-function buildInventoryChangeHistoryItems(lastChange) {
+function buildInventoryChangeHistoryItems(lastChange, storeTimeZone) {
   if (!Array.isArray(lastChange) || lastChange.length === 0) return [];
 
   const groups = new Map();
@@ -101,7 +103,7 @@ function buildInventoryChangeHistoryItems(lastChange) {
     const groupKey = textOrNumber(event?.createdAt) ?? "unknown";
     let group = groups.get(groupKey);
     if (!group) {
-      group = { events: [], title: formatInventoryHistoryChangeTitle(event?.createdAt) };
+      group = { events: [], title: formatInventoryHistoryChangeTitle(event?.createdAt, storeTimeZone) };
       groups.set(groupKey, group);
     }
     group.events.push(event);
@@ -183,22 +185,18 @@ function getInventoryHistoryItemDelta(item) {
   return getNumber(item?.quantityDelta ?? item?.quantity ?? item?.currentQuantity) ?? 1;
 }
 
-function formatInventoryHistoryTitle(inventory) {
-  const time = formatInventoryHistoryTime(inventory?.createdAt ?? inventory?.created_at);
+function formatInventoryHistoryTitle(inventory, storeTimeZone) {
+  const time = formatInventoryHistoryTime(inventory?.createdAt ?? inventory?.created_at, storeTimeZone);
   return time ? `Initial snapshot · ${time}` : "Initial snapshot";
 }
 
-function formatInventoryHistoryChangeTitle(value) {
-  const time = formatInventoryHistoryTime(value);
+function formatInventoryHistoryChangeTitle(value, storeTimeZone) {
+  const time = formatInventoryHistoryTime(value, storeTimeZone);
   return time ? `Inventory update · ${time}` : "Inventory update";
 }
 
-function formatInventoryHistoryTime(value) {
-  const text = textOrNumber(value);
-  if (!text) return null;
-  const date = new Date(text);
-  if (Number.isNaN(date.getTime())) return text;
-  return date.toISOString().slice(0, 16).replace("T", " ");
+function formatInventoryHistoryTime(value, storeTimeZone) {
+  return formatStoreInstant(value, storeTimeZone, { empty: null });
 }
 
 function getNumber(value) {
@@ -241,19 +239,18 @@ function formatInventoryDisplayName(value) {
   return english?.length ? english.join(" ") : value;
 }
 
-function normalizeInventoryDate(value) {
+function normalizeInventoryDate(value, storeTimeZone) {
   const text = normalizeText(value);
   if (!text) return UNKNOWN_DATE;
-  const match = text.match(/^\d{4}-\d{2}-\d{2}/);
-  return match ? match[0] : text;
+  return getStoreDate(text, storeTimeZone) ?? text;
 }
 
 function formatInventoryDateLabel(value) {
   if (value === UNKNOWN_DATE) return "No date";
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
-  const date = new Date(`${value}T00:00:00`);
+  const date = new Date(`${value}T00:00:00Z`);
   if (Number.isNaN(date.getTime())) return value;
-  return new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "2-digit", weekday: "short" }).format(date);
+  return new Intl.DateTimeFormat("en-US", { day: "2-digit", month: "2-digit", weekday: "short", timeZone: "UTC" }).format(date);
 }
 
 function compareInventoryDateRows(left, right) {

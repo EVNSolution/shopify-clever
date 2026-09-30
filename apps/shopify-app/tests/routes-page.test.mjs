@@ -296,8 +296,8 @@ test("Routes table exposes actual route metrics without parent group rows", () =
   assert.match(routesPageSource, /translate\(language, "routes\.table\.totalPrice"\)/);
   assert.match(routesPageSource, /formatRouteAmount\(route\.totalAmount, route\.currencyCode\)/);
   assert.match(routesPageSource, /formatRouteInstant\(route\.startTime, route\.startTimeZone \?\? routeTimeZones\[route\.id\]\)/);
-  assert.match(routesPageSource, /formatRouteInstant\(route\.createdAt\)/);
-  assert.match(routesPageSource, /formatRouteInstant\(route\.updatedAt\)/);
+  assert.match(routesPageSource, /formatRouteInstant\(route\.createdAt, storeTimeZone\)/);
+  assert.match(routesPageSource, /formatRouteInstant\(route\.updatedAt, storeTimeZone\)/);
 });
 
 test("Routes page keeps copied controls out while using checkbox route selection actions", () => {
@@ -1235,13 +1235,13 @@ test("Route detail uses child-only rows and global routeIdx save assertions", ()
 });
 
 test("Route group detail keeps an unsplit group visible as route #1", () => {
-  assert.match(routeDetailSource, /function buildUnsplitRouteGroupRow\(routeGroup, routeStops = \[\]\) \{/);
+  assert.match(routeDetailSource, /function buildUnsplitRouteGroupRow\(routeGroup, routeStops = \[\], storeTimeZone\) \{/);
   assert.match(routeDetailSource, /if \(!routeGroup \|\| routeStops\.length === 0\) return null/);
   assert.match(routeDetailSource, /routeKey: "routeIdx:1"/);
   assert.match(routeDetailSource, /routePlanId: null/);
   assert.match(routeDetailSource, /isPreviewOnly: true/);
   assert.match(routeDetailSource, /title: "#1"/);
-  assert.match(routeDetailSource, /if \(routeGroupChildRows\.length === 0\) return \[buildUnsplitRouteGroupRow\(routeGroup, routeStops\)\]\.filter\(Boolean\)/);
+  assert.match(routeDetailSource, /if \(routeGroupChildRows\.length === 0\) return \[buildUnsplitRouteGroupRow\(routeGroup, routeStops, storeTimeZone\)\]\.filter\(Boolean\)/);
 });
 
 test("Route group detail Add Empty Route stays local without saving", () => {
@@ -1311,7 +1311,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, /const assignmentStops = buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
   assert.match(routeDetailSource, /const allRouteGroupStops = useMemo/);
   assert.match(routeDetailSource, /const routePlanRowsColumnWidths = \[/);
-  assert.match(routeDetailSource, /function buildRouteGroupChildRows\(routeGroup, childDetailsByRoutePlanId = new Map\(\), routeStops = \[\], ianaTimezone\) \{/);
+  assert.match(routeDetailSource, /function buildRouteGroupChildRows\(routeGroup, childDetailsByRoutePlanId = new Map\(\), routeStops = \[\], ianaTimezone, storeTimeZone\) \{/);
   assert.match(routeDetailSource, /getVisibleRouteGroupChildren\(routeGroup\)\.map/);
   assert.match(routeDetailSource, /const routeIdx = numberOrUndefined\(child\?\.routeIdx\)/);
   assert.match(routeDetailSource, /routeIdx: routeIdx \?\? null/);

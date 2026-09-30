@@ -77,7 +77,7 @@ test("Drivers table uses compact support columns and separates joined date", () 
   assert.match(source, /<col style=\{\{ width: "110px" \}\} \/>/);
   assert.match(source, /<th style=\{tableHeaderCellStyle\}>Joined<\/th>/);
   assert.match(source, /<td style=\{tableCellStyle\}>\{driver\.joinedAt\}<\/td>/);
-  assert.match(source, /joinedAt: formatDriverTimestamp\(driver\.createdAt\) \?\? "—"/);
+  assert.match(source, /joinedAt: formatDriverTimestamp\(driver\.createdAt, storeTimeZone\) \?\? "—"/);
   assert.doesNotMatch(source, /<span style=\{\{ color: "#616161", fontSize: "12px" \}\}>\{driver\.lastSeenAt\}<\/span>/);
 });
 

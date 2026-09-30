@@ -1,3 +1,5 @@
+import { formatStoreInstant } from "../features/shopify/store-date-time";
+import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
@@ -21,7 +23,6 @@ import {
   buildChildRouteOrderRows,
   summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
-  formatStoreLocalOrderDate,
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
@@ -2277,8 +2278,8 @@ function getRouteStartTimeLabel(value) {
 }
 
 
-function getRouteCreatedLabel(routePlan) {
-  return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL;
+function getRouteCreatedLabel(routePlan, storeTimeZone) {
+  return formatStoreInstant(routePlan?.createdAt, storeTimeZone, { empty: ROUTE_EMPTY_LABEL });
 }
 
 function formatTrackingTimestamp(value, ianaTimezone) {
@@ -2872,13 +2873,13 @@ function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
   return detailsByRoutePlanId;
 }
 
-function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
+function buildUnsplitRouteGroupRow(routeGroup, routeStops = [], storeTimeZone) {
   if (!routeGroup || routeStops.length === 0) return null;
 
   return {
     attemptedCount: countRouteStopsByStatus(routeStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
     color: MAP_MARKER_PALETTE.plannedOrder.color,
-    createdLabel: getRouteCreatedLabel(routeGroup),
+    createdLabel: getRouteCreatedLabel(routeGroup, storeTimeZone),
     startDateTime: "",
     deliveredCount: countRouteStopsByStatus(routeStops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]),
     driverId: null,
@@ -2914,7 +2915,7 @@ function isOrdinaryRouteDetailPresentation(routePlan, routeGroup) {
     .length <= 1;
 }
 
-function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = [], ianaTimezone) {
+function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = [], ianaTimezone, storeTimeZone) {
   const routeGroupChildRows = getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
     const routeIdx = numberOrUndefined(child?.routeIdx);
     const routeIndex = routeIdx ?? numberOrUndefined(child?.sortOrder) ?? index + 1;
@@ -2937,7 +2938,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     return {
       attemptedCount: countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
       color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[index % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
-      createdLabel: getRouteCreatedLabel(childRoutePlan),
+      createdLabel: getRouteCreatedLabel(childRoutePlan, storeTimeZone),
       startDateTime: getRouteStartDateTimeValue(childRoutePlan, ianaTimezone),
       deliveredCount: countRouteStopsByStatus(stops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]),
       driverId: textOrUndefined(child?.driverId ?? childRoutePlan?.driverId) ?? null,
@@ -2969,13 +2970,13 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     (numberOrUndefined(first.routeIdx) ?? numberOrUndefined(first.routeIndex) ?? 0)
     - (numberOrUndefined(second.routeIdx) ?? numberOrUndefined(second.routeIndex) ?? 0)
   ));
-  if (routeGroupChildRows.length === 0) return [buildUnsplitRouteGroupRow(routeGroup, routeStops)].filter(Boolean);
+  if (routeGroupChildRows.length === 0) return [buildUnsplitRouteGroupRow(routeGroup, routeStops, storeTimeZone)].filter(Boolean);
 
   const assignedOrderIds = new Set(routeGroupChildRows.flatMap((row) => row.orderIds));
   const unassignedStops = routeStops.filter((stop) => !assignedOrderIds.has(stop.orderId));
   if (unassignedStops.length > 0) {
     routeGroupChildRows.push({
-      ...buildUnsplitRouteGroupRow(routeGroup, unassignedStops),
+      ...buildUnsplitRouteGroupRow(routeGroup, unassignedStops, storeTimeZone),
       id: `routeGroup:${routeGroup.id}:unassigned`,
       routeKey: `routeGroup:${routeGroup.id}:unassigned`,
       isGeneratedTitle: false,
@@ -3489,14 +3490,14 @@ function hasCustomerEmailUncertainOutcome(recipient) {
   return (numberOrUndefined(getCustomerEmailRecipientHistory(recipient)?.uncertainCount) ?? 0) > 0;
 }
 
-function formatCustomerEmailHistory(history) {
+function formatCustomerEmailHistory(history, storeTimeZone) {
   if (!history) return "No send history";
   const sendCount = numberOrUndefined(history.sendCount) ?? 0;
   const uncertainCount = numberOrUndefined(history.uncertainCount) ?? 0;
   const lastStatus = textOrUndefined(history.lastStatus);
   const lastProviderStatus = textOrUndefined(history.lastProviderStatus)?.replaceAll("_", " ");
-  const lastProviderEventAt = textOrUndefined(history.lastProviderEventAt)?.replace("T", " ").slice(0, 16);
-  const lastSentAt = textOrUndefined(history.lastSentAt)?.replace("T", " ").slice(0, 16);
+  const lastProviderEventAt = formatStoreInstant(history.lastProviderEventAt, storeTimeZone, { empty: null });
+  const lastSentAt = formatStoreInstant(history.lastSentAt, storeTimeZone, { empty: null });
   return [
     `${sendCount} previous send${sendCount === 1 ? "" : "s"}`,
     uncertainCount > 0 ? `${uncertainCount} unresolved outcome${uncertainCount === 1 ? "" : "s"}` : null,
@@ -3587,6 +3588,7 @@ function createCustomerEmailDialogOpenState(signal) {
 }
 
 export default function RouteDetailPage() {
+  const storeTimeZone = useStoreTimeZone();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const navigateWithEmbeddedContext = useCallback(
@@ -3661,8 +3663,8 @@ export default function RouteDetailPage() {
     [routeGroupStopsSource],
   );
   const routeGroupChildRows = useMemo(
-    () => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource, ianaTimezone),
-    [ianaTimezone, routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource],
+    () => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource, ianaTimezone, storeTimeZone),
+    [ianaTimezone, routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource, storeTimeZone],
   );
   const siblingRouteRows = routeGroupChildRows.filter((routeRow) => routeRow.routePlanId);
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
@@ -3675,10 +3677,10 @@ export default function RouteDetailPage() {
   const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds));
   const routeTotalDistance = getRouteMetricLabel(formatRouteDistanceMeters(routeMetrics?.distanceMeters));
   const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
-  const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
-  const routeUpdatedLabel = formatStoreLocalOrderDate(
+  const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan, storeTimeZone);
+  const routeUpdatedLabel = formatStoreInstant(
     effectiveRoutePlan?.updatedAt ?? effectiveRoutePlan?.modifiedAt ?? effectiveRoutePlan?.createdAt,
-    ianaTimezone,
+    storeTimeZone,
   );
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
   const currentSiblingRouteIndex = siblingRouteRows.findIndex((routeRow) => routeRow.routePlanId === effectiveRoutePlan?.id);
@@ -8406,7 +8408,7 @@ export default function RouteDetailPage() {
                         const missingDiagnosticsLabel = formatCustomerEmailMissingTemplateDiagnostics(recipient);
                         const hasPriorSend = hasCustomerEmailPriorSend(recipient);
                         const hasUncertainOutcome = hasCustomerEmailUncertainOutcome(recipient);
-                        const historyLabel = formatCustomerEmailHistory(getCustomerEmailRecipientHistory(recipient));
+                        const historyLabel = formatCustomerEmailHistory(getCustomerEmailRecipientHistory(recipient), storeTimeZone);
                         return (
                           <label
                             key={recipientKey}
@@ -8478,7 +8480,7 @@ export default function RouteDetailPage() {
                       <>
                         <span>{getCustomerEmailRecipientOrder(activeCustomerEmailRecipient)} {getCustomerEmailRecipientEmail(activeCustomerEmailRecipient) ?? ""}</span>
                         <span style={hasCustomerEmailPriorSend(activeCustomerEmailRecipient) ? customerEmailWarningTextStyle : null}>
-                          {formatCustomerEmailHistory(getCustomerEmailRecipientHistory(activeCustomerEmailRecipient))}
+                          {formatCustomerEmailHistory(getCustomerEmailRecipientHistory(activeCustomerEmailRecipient), storeTimeZone)}
                         </span>
                         {hasCustomerEmailPriorSend(activeCustomerEmailRecipient) ? (
                           <span style={customerEmailWarningTextStyle}>This recipient has prior send history.</span>
