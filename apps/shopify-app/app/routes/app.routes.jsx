@@ -15,6 +15,8 @@ import {
   getRouteDeletePayloadKeys,
   toggleRouteSelection,
 } from "../features/delivery/route-list-rows";
+import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
+import { fetchRouteFallbackTimeZone, resolveRouteListTimeZones } from "../features/delivery/route-timezone.server";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { getServiceErrorNotice } from "../features/service-errors";
@@ -339,10 +341,10 @@ export const loader = async ({ request }) => {
   }
 
   const authenticationStartedAt = Date.now();
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const authenticationMs = Date.now() - authenticationStartedAt;
   const shopifyShopCacheKey = session?.shop;
-  const [routePlanResult, routeGroupResult] = await Promise.all([
+  const [routePlanResult, routeGroupResult, departureLocationData, fallbackTimeZoneData] = await Promise.all([
     measureRouteLoaderStep(() =>
       fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey }),
     ),
@@ -353,11 +355,25 @@ export const loader = async ({ request }) => {
         { cacheKey: shopifyShopCacheKey },
       ),
     ),
+    fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
+    fetchRouteFallbackTimeZone(admin, shopifyShopCacheKey),
   ]);
   const routePlanData = routePlanResult.data;
   const routeGroupData = routeGroupResult.data;
+  const routeTimeZones = await resolveRouteListTimeZones({
+    departureLocation: departureLocationData.departureLocation,
+    fallbackTimeZoneData,
+    routeGroups: routeGroupData.routeGroups,
+    routePlans: routePlanData.routePlans,
+  });
   const loaderData = {
-    errors: [...(routePlanData.errors ?? []), ...(routeGroupData.errors ?? [])],
+    routeTimeZones,
+    errors: [
+      ...(routePlanData.errors ?? []),
+      ...(routeGroupData.errors ?? []),
+      ...(departureLocationData.errors ?? []),
+      ...(fallbackTimeZoneData.errors ?? []),
+    ],
     routeGroups: routeGroupData.routeGroups ?? [],
     routePlans: routePlanData.routePlans ?? [],
   };
@@ -540,11 +556,25 @@ function formatRouteAmount(totalAmount, currencyCode) {
   }
 }
 
-function formatRouteInstant(value) {
+function formatRouteInstant(value, timeZone = "UTC") {
   if (!value) return "-";
   const instant = new Date(value);
   if (Number.isNaN(instant.getTime())) return "-";
-  return `${instant.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+  try {
+    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
+      timeZone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZoneName: "short",
+    }).formatToParts(instant).map((part) => [part.type, part.value]));
+    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
+  } catch {
+    return "-";
+  }
 }
 
 function buildRoutesSummary(routeRows) {
@@ -655,6 +685,7 @@ export default function RoutesPage() {
   const {
     routeGroups = [],
     routePlans = [],
+    routeTimeZones = {},
     errors = [],
     routesPerformance: serverRoutesPerformance,
   } = useLoaderData();
@@ -927,7 +958,7 @@ export default function RoutesPage() {
                       <span style={getStatusBadgeStyle(route.status)}>{route.isClickable ? translate(language, `routes.status.${formatRouteStatus(route.status).toLowerCase().replaceAll(" ", "_")}`) : "-"}</span>
                     </td>
                     <td style={routeTableCellStyle}>{route.driver ?? "-"}</td>
-                    <td style={routeTableCellStyle}>{formatRouteInstant(route.startTime)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.startTime, route.startTimeZone ?? routeTimeZones[route.id])}</td>
                     <td style={routeNumberCellStyle}>{route.orders ?? "-"}</td>
                     <td style={routeNumberCellStyle}>{route.totalItems ?? "-"}</td>
                     <td style={routeTableCellStyle}>{formatRouteDurationSeconds(route.driveTimeSeconds)}</td>

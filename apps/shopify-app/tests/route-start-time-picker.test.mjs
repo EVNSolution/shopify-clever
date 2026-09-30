@@ -1,6 +1,7 @@
 /* eslint-env node */
 import assert from "node:assert/strict";
 import test from "node:test";
+import { spawnSync } from "node:child_process";
 
 import {
   buildRouteStartCalendarMonth,
@@ -9,6 +10,7 @@ import {
   getRouteStartPlanDateError,
   getRouteStartPickerSummary,
   getRouteStartTimezoneOptions,
+  getRouteStartTimezoneAbbreviation,
   getRouteStartTimezoneSourceLabel,
   isRouteStartDraftSavable,
 } from "../app/features/delivery/route-start-time-picker.js";
@@ -93,4 +95,25 @@ test("route start validation preserves the selected local date and reports plan-
   assert.equal(getRouteStartPlanDateError(buildRouteStartDraft("2026-09-12T00:30", "America/Toronto"), "2026-09-11"), "plan_date_mismatch");
   assert.equal(getRouteStartPlanDateError(buildRouteStartDraft("2026-09-11T17:30", "America/Toronto"), null), null);
   assert.equal(getRouteStartPlanDateError(buildRouteStartDraft("", "America/Toronto"), "2026-09-11"), null);
+});
+
+test("picker timezone abbreviation and calendar month follow the selected date across host timezones", () => {
+  const calendarCheck = spawnSync(process.execPath, ["--input-type=module", "-e", 'import { buildRouteStartCalendarMonth } from "./app/features/delivery/route-start-time-picker.js"; console.log(buildRouteStartCalendarMonth(2026, 1).label);'], { encoding: "utf8", env: { ...process.env, TZ: "America/Los_Angeles" } });
+  assert.equal(calendarCheck.status, 0, calendarCheck.stderr);
+  assert.equal(calendarCheck.stdout.trim(), "January 2026");
+  const previousTZ = process.env.TZ;
+  try {
+    for (const hostTimeZone of ["Asia/Seoul", "UTC", "America/Los_Angeles"]) {
+      process.env.TZ = hostTimeZone;
+      assert.equal(buildRouteStartCalendarMonth(2026, 1).label, "January 2026");
+      assert.equal(getRouteStartTimezoneAbbreviation(buildRouteStartDraft("2026-01-16T09:00", "America/Toronto"), "EDT"), "EST");
+      assert.equal(getRouteStartTimezoneAbbreviation(buildRouteStartDraft("2026-07-16T09:00", "America/Toronto"), "EST"), "EDT");
+      assert.equal(getRouteStartTimezoneAbbreviation(buildRouteStartDraft("2026-03-08T01:59", "America/Toronto")), "EST");
+      assert.equal(getRouteStartTimezoneAbbreviation(buildRouteStartDraft("2026-03-08T03:00", "America/Toronto")), "EDT");
+      assert.equal(getRouteStartTimezoneAbbreviation(buildRouteStartDraft("2026-03-08T02:30", "America/Toronto")), undefined);
+    }
+  } finally {
+    if (previousTZ === undefined) delete process.env.TZ;
+    else process.env.TZ = previousTZ;
+  }
 });

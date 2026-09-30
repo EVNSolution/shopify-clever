@@ -201,7 +201,7 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.match(routesPageSource, /if \(url\.pathname === "\/app\/routes\/"\) \{/);
   assert.match(routesPageSource, /url\.pathname = "\/app\/routes"/);
   assert.match(routesPageSource, /return redirect\(`\$\{url\.pathname\}\$\{url\.search\}\$\{url\.hash\}`\)/);
-  assert.match(routesPageSource, /const \{ session \} = await authenticate\.admin\(request\)/);
+  assert.match(routesPageSource, /const \{ admin, session \} = await authenticate\.admin\(request\)/);
   assert.match(routesPageSource, /const shopifyShopCacheKey = session\?\.shop/);
   assert.match(routesPageSource, /fetchDeliveryRoutePlans\(request,\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\}\)/);
   assert.match(
@@ -295,7 +295,7 @@ test("Routes table exposes actual route metrics without parent group rows", () =
   assert.match(routesPageSource, /translate\(language, "routes\.table\.totalItems"\)/);
   assert.match(routesPageSource, /translate\(language, "routes\.table\.totalPrice"\)/);
   assert.match(routesPageSource, /formatRouteAmount\(route\.totalAmount, route\.currencyCode\)/);
-  assert.match(routesPageSource, /formatRouteInstant\(route\.startTime\)/);
+  assert.match(routesPageSource, /formatRouteInstant\(route\.startTime, route\.startTimeZone \?\? routeTimeZones\[route\.id\]\)/);
   assert.match(routesPageSource, /formatRouteInstant\(route\.createdAt\)/);
   assert.match(routesPageSource, /formatRouteInstant\(route\.updatedAt\)/);
 });
@@ -375,7 +375,7 @@ test("Routes table uses aligned CLEVER planning columns", () => {
   assert.match(routeListRowsSource, /formatRouteDeliveryScope\(routePlan\)/);
   assert.match(routeListRowsSource, /date: formatRouteTableDate\(routePlan\)/);
   assert.doesNotMatch(routesPageSource, /<td style=\{routeTableCellStyle\}>\{route\.date\}<\/td>/);
-  assert.match(routesPageSource, /formatRouteInstant\(route\.startTime\)/);
+  assert.match(routesPageSource, /formatRouteInstant\(route\.startTime, route\.startTimeZone \?\? routeTimeZones\[route\.id\]\)/);
   assert.doesNotMatch(routesPageSource, /\{route\.plannedFor\}/);
   assert.doesNotMatch(routesPageSource, /\{route\.deliveryDate\}/);
   assert.doesNotMatch(routesPageSource, />Delivery day<\/th>/);

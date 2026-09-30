@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   getRouteTimeZoneLocation,
   resolveRouteTimeZone,
+  resolveRouteListTimeZones,
 } from "../app/features/delivery/route-timezone.server.js";
 
 test("route timezone follows the route depot marker before the saved departure location", async () => {
@@ -71,4 +72,26 @@ test("route timezone preserves the shop setting as the final fallback", async ()
 
   assert.equal(result.ianaTimezone, "America/Vancouver");
   assert.equal(result.timezoneSource, "fallback");
+});
+
+test("list timezone matches detail depot resolution, keeps saved overrides and deduplicates locations", async () => {
+  let geocodeCalls = 0;
+  const departureLocation = { address: "Toronto, Ontario" };
+  const options = { geocodeAddress: async () => {
+    geocodeCalls += 1;
+    return { latitude: 43.6532, longitude: -79.3832 };
+  } };
+  const routePlans = [
+    { id: "legacy" },
+    { id: "override", scheduledStartTimeZone: "America/Vancouver" },
+    { id: "depot", depot: { latitude: 37.5124328, longitude: 126.9269873 } },
+  ];
+  const result = await resolveRouteListTimeZones({
+    departureLocation,
+    fallbackTimeZoneData: { ianaTimezone: "UTC" },
+    routePlans,
+    routeGroups: [{ children: [{ routePlan: { id: "child" } }] }],
+  }, options);
+  assert.deepEqual(result, { legacy: "America/Toronto", override: "America/Vancouver", depot: "Asia/Seoul", child: "America/Toronto" });
+  assert.equal(geocodeCalls, 1);
 });
