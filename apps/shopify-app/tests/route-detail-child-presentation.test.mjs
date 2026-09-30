@@ -681,13 +681,12 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
   assert.doesNotMatch(routeDetailSource, /key=\{routeMapViewKey\}/);
   assert.doesNotMatch(routeDetailSource, /aria-label="Tracking map legend"|>Planned route<|>GPS tracking</);
-  assert.match(routeDetailSource, /aria-label="Tracking date controls"/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Tracking date controls"|aria-label="Selected tracking date"|All recorded dates|Available tracking dates|and next day/);
   assert.doesNotMatch(routeDetailSource, />Road-matched GPS|>Unmatched GPS/);
-  assert.match(routeDetailSource, /<span>All recorded dates<\/span>/);
-  assert.match(routeDetailSource, /!showAllRouteTrackingRecords \? \(\s*<span aria-label="Selected tracking date"/);
   assert.match(routeDetailSource, /getRouteTrackingServiceDate\(/);
+  assert.match(routeDetailSource, /allRecords: false/);
   assert.match(routeDetailSource, /includeNextDay: true/);
-  assert.match(routeDetailSource, /routeTrackingWindowDate \? `\$\{routeTrackingWindowDate\} and next day`/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Current position freshness"|aria-label="Route completion time"|routeTrackingMapDateControlsStyle|routeTrackingMapFreshnessStyle/);
   assert.match(routeDetailSource, /\[mapRenderKey, scheduleMapRecovery\]/);
   assert.doesNotMatch(routeDetailSource, /\[isTrackingMapView, mapRenderKey, scheduleMapRecovery\]/);
   assert.match(
