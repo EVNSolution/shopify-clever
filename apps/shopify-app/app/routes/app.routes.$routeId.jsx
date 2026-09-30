@@ -7084,19 +7084,27 @@ export default function RouteDetailPage() {
                     disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
                     onClick={handleCopyOrdinaryRoute}
                     style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this READY route without changing the original"}
+                    title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy this READY route without changing the original"}
                     type="button"
-                  >{copyRoutePlanBusy ? "Copying…" : "Copy"}</button>
+                  >
+                    <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
+                      <s-icon type="duplicate" size="small" color={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
+                      {copyRoutePlanBusy ? "Copying…" : "Copy Route"}
+                    </span>
+                  </button>
                 ) : null}
                 {canShowRouteCopy && routeGroupId ? (
                   <button
                     disabled={routeGroupActionBusy || hasRouteAllocationDraft}
                     onClick={handleCopyRouteGroup}
                     style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this group title and orders"}
+                    title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy the title and orders without changing the original"}
                     type="button"
                   >
-                    {copyRouteGroupBusy ? "Copying…" : "Copy Group Route"}
+                    <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
+                      <s-icon type="duplicate" size="small" color={routeGroupActionBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
+                      {copyRouteGroupBusy ? "Copying…" : "Copy Route"}
+                    </span>
                   </button>
                 ) : null}
                 <div aria-label="Route utilities" className="route-action-icon-group" role="group">
@@ -8647,10 +8655,10 @@ export default function RouteDetailPage() {
         >
           <div style={routeGroupCopyDialogContentStyle}>
             <div>
-              <h2 id="copy-route-group-title" style={routeLineEditorTitleStyle}>Copy Group Route</h2>
+              <h2 id="copy-route-group-title" style={routeLineEditorTitleStyle}>Copy Route</h2>
               <p style={routeLineEditorLabelStyle}>복사 방식을 선택해주세요. 선택 전에는 복사가 실행되지 않습니다.</p>
             </div>
-            <div aria-label="Route group copy mode" role="radiogroup" style={{ display: "grid", gap: "8px" }}>
+            <div aria-label="Route copy mode" role="radiogroup" style={{ display: "grid", gap: "8px" }}>
               <div style={routeGroupCopyChoiceStyle}>
                 <input
                   aria-describedby="copy-route-group-reference-description"
@@ -8723,7 +8731,7 @@ export default function RouteDetailPage() {
                   ...(copyRouteGroupRequestBusy || !copyRouteGroupDialogState.mode ? { opacity: 0.55 } : null),
                 }}
                 type="button"
-              >{copyRouteGroupRequestBusy ? "Copying…" : "Copy route group"}</button>
+              >{copyRouteGroupRequestBusy ? "Copying…" : "Copy Route"}</button>
             </div>
           </div>
         </dialog>

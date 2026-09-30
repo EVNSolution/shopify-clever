@@ -706,7 +706,7 @@ test("Route group detail requires an explicit atomic copy mode and preserves suc
   assert.match(routeDetailSource, />가상 주문으로 독립 복사</);
   assert.match(routeDetailSource, /새 CLEVER 전용 ID를 만들며 Shopify와 동기화되지 않음/);
   assert.match(routeDetailSource, /disabled=\{copyRouteGroupRequestBusy \|\| !copyRouteGroupDialogState\.mode\}/);
-  assert.match(routeDetailSource, /\{copyRouteGroupBusy \? "Copying…" : "Copy Group Route"\}/);
+  assert.match(routeDetailSource, /\{copyRouteGroupBusy \? "Copying…" : "Copy Route"\}/);
 });
 
 test("Route detail loader reads the selected persisted route plan", () => {
