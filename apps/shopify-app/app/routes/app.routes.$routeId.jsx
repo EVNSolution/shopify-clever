@@ -3683,6 +3683,9 @@ export default function RouteDetailPage() {
     storeTimeZone,
   );
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
+  const canShowRouteCopy = !routeGroupId || new Set(
+    getVisibleRouteGroupChildren(routeGroup).map(getRouteGroupChildRoutePlanId),
+  ).size === 1;
   const currentSiblingRouteIndex = siblingRouteRows.findIndex((routeRow) => routeRow.routePlanId === effectiveRoutePlan?.id);
   const previousSiblingRoute = siblingRouteRows[currentSiblingRouteIndex - 1] ?? null;
   const nextSiblingRoute = siblingRouteRows[currentSiblingRouteIndex + 1] ?? null;
@@ -5404,7 +5407,12 @@ export default function RouteDetailPage() {
       if (routeGroupId) formData.set("routeGroupId", routeGroupId);
       formData.set("shopifySessionToken", sessionToken);
       for (const [key, value] of Object.entries(fields)) formData.set(key, value);
-      routeActionFetcher.submit(formData, { method: "post" });
+      routeActionFetcher.submit(formData, {
+        method: "post",
+        ...(intent === "copyRouteGroup" && routeGroupId ? {
+          action: withEmbeddedShopifyContext(routeGroupPath(routeGroupId), searchParams),
+        } : {}),
+      });
       return true;
     } catch {
       if (isDraftSave) routeDraftSavePendingRef.current = false;
@@ -5993,7 +6001,7 @@ export default function RouteDetailPage() {
   };
 
   const handleCopyRouteGroup = () => {
-    if (!isRouteGroupDetail || routeGroupActionBusy) return;
+    if (!routeGroupId || !canShowRouteCopy || routeGroupActionBusy) return;
     if (hasRouteAllocationDraft) {
       setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
       return;
@@ -7071,7 +7079,7 @@ export default function RouteDetailPage() {
                     type="button"
                   >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
                 ) : null}
-                {effectiveRoutePlan?.id && !routeGroupId ? (
+                {canShowRouteCopy && effectiveRoutePlan?.id && !routeGroupId ? (
                   <button
                     disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
                     onClick={handleCopyOrdinaryRoute}
@@ -7080,7 +7088,7 @@ export default function RouteDetailPage() {
                     type="button"
                   >{copyRoutePlanBusy ? "Copying…" : "Copy"}</button>
                 ) : null}
-                {isRouteGroupDetail ? (
+                {canShowRouteCopy && routeGroupId ? (
                   <button
                     disabled={routeGroupActionBusy || hasRouteAllocationDraft}
                     onClick={handleCopyRouteGroup}
