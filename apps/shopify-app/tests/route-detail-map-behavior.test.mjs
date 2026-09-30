@@ -18,7 +18,6 @@ import { selectRouteTrackingWindow } from "../app/features/delivery/route-tracki
 const TRACKING_LAYER_IDS = [
   "route-detail-live-tracking-trail",
   "route-detail-live-tracking-connector",
-  "route-detail-live-tracking-inferred",
   "route-detail-live-driver-position",
 ];
 const DRIVER_POSITION_LAYER_ID = "route-detail-live-driver-position";
@@ -498,7 +497,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   );
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["visible", "visible", "visible", "visible"],
+    ["visible", "visible", "visible"],
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.paint?.["circle-color"], "#d82c0d");
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "visible");
@@ -509,7 +508,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   assert.equal(syncRouteDetailTrackingVisibility(fake.map, false), true);
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["none", "none", "none", "none"],
+    ["none", "none", "none"],
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "none");
 
@@ -518,7 +517,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   assert.deepEqual(fake.calls.addLayer, TRACKING_LAYER_IDS);
 });
 
-test("a recovered next-day road segment reaches the visible tracking map source", () => {
+test("a recovered next-day inferred segment stays in the source without a visible inferred layer", () => {
   const fake = createFakeMap();
   const snapshot = selectRouteTrackingWindow({
     roadMatchedPath: {
@@ -547,21 +546,15 @@ test("a recovered next-day road segment reaches the visible tracking map source"
   assert.deepEqual(fake.sources.get("route-detail-live-tracking").data.features.map((feature) => (
     feature.properties.trackingType
   )), ["trackingConnector"]);
-  assert.equal(fake.layers.get("route-detail-live-tracking-inferred")?.layout?.visibility, "visible");
-  assert.deepEqual(fake.layers.get("route-detail-live-tracking-inferred")?.filter, [
-    "all",
-    ["==", ["get", "trackingType"], "trackingConnector"],
-    ["==", ["get", "trackingSource"], "inferred"],
-  ]);
+  assert.equal(fake.layers.has("route-detail-live-tracking-inferred"), false);
   assert.deepEqual(fake.layers.get("route-detail-live-tracking-connector")?.filter, [
     "all",
     ["==", ["get", "trackingType"], "trackingConnector"],
     ["!=", ["get", "trackingSource"], "inferred"],
   ]);
-  assert.notDeepEqual(
-    fake.layers.get("route-detail-live-tracking-inferred")?.paint,
-    fake.layers.get("route-detail-live-tracking-connector")?.paint,
-  );
+  assert.deepEqual(fake.layers.get("route-detail-live-tracking-trail")?.filter, [
+    "==", ["get", "trackingType"], "trackingTrail",
+  ]);
 });
 
 test("planned route sync recreates a missing layer when its source still exists", () => {
@@ -579,4 +572,50 @@ test("planned route sync recreates a missing layer when its source still exists"
 
   assert.equal(didSync, true);
   assert.ok(fake.layers.has("route-detail-osrm-route-line"));
+});
+
+
+test("Tracking omits the amber inferred overlay while preserving yellow plans, markers and red GPS through refreshes", () => {
+  const plannedGeometry = {
+    type: "LineString", coordinates: [[-79.4, 43.7], [-79.399, 43.701]],
+  };
+  const snapshot = {
+    latestPosition: { longitude: -79.399, latitude: 43.701 },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      matchedGeometry: { type: "MultiLineString", coordinates: [[[-79.4, 43.7], [-79.3995, 43.7005]]] },
+      inferredGeometry: { type: "MultiLineString", coordinates: [[[-79.3995, 43.7005], [-79.399, 43.701]]] },
+    },
+  };
+  const originalSnapshot = structuredClone(snapshot);
+  for (const order of [["plan", "gps", "markers"], ["gps", "markers", "plan"], ["markers", "plan", "gps"]]) {
+    const fake = createFakeMap({ images: ["route-detail-departure-pin", "route-detail-stop-pin-eab308-1"] });
+    const sync = {
+      plan: () => syncRouteDetailRouteLine(fake.map, plannedGeometry, "#eab308", { isTrackingReference: true }),
+      gps: () => syncRouteDetailLiveTracking(fake.map, snapshot),
+      markers: () => syncRouteDetailMapMarkerLayers(fake.map,
+        { coordinates: [-79.4, 43.7], hasCoordinates: true },
+        [{ coordinates: [-79.399, 43.701], hasCoordinates: true, id: "stop-1", stop: 1 }],
+        [], "#eab308"),
+    };
+    for (const name of [...order, "gps", "plan", "markers"]) assert.equal(sync[name](), true);
+    for (const isTrackingView of [false, true, false, true]) {
+      assert.equal(syncRouteDetailTrackingVisibility(fake.map, isTrackingView), true);
+      assert.equal(fake.layers.has("route-detail-live-tracking-inferred"), false);
+      const trail = fake.layers.get("route-detail-live-tracking-trail");
+      assert.equal(trail.paint["line-color"], "#d32f2f");
+      assert.deepEqual(trail.paint["line-dasharray"], [1.5, 1.25]);
+      assert.deepEqual(trail.filter, ["==", ["get", "trackingType"], "trackingTrail"]);
+      assert.equal(trail.layout.visibility, isTrackingView ? "visible" : "none");
+      assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID).layout.visibility, isTrackingView ? "visible" : "none");
+      assert.ok(fake.layers.has("route-detail-stop-markers"));
+      assert.ok(fake.layers.has("route-detail-departure-marker"));
+      assert.deepEqual(fake.sources.get("route-detail-osrm-route").data.features[0].geometry, plannedGeometry);
+      assert.deepEqual(fake.layers.get("route-detail-osrm-route-line").paint["line-color"], ["coalesce", ["get", "routeColor"], "#eab308"]);
+      const features = fake.sources.get("route-detail-live-tracking").data.features;
+      assert.deepEqual(features.filter((f) => f.properties.trackingSource === "matched").map((f) => f.geometry.coordinates), snapshot.roadMatchedPath.matchedGeometry.coordinates);
+      assert.deepEqual(features.filter((f) => f.properties.trackingSource === "inferred").map((f) => f.geometry.coordinates), snapshot.roadMatchedPath.inferredGeometry.coordinates);
+    }
+  }
+  assert.deepEqual(snapshot, originalSnapshot);
 });

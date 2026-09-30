@@ -715,7 +715,7 @@ const routeTrackingMapCanvasStyle = {
   minHeight: 0,
 };
 
-const routeTrackingMapLegendStyle = {
+const routeTrackingMapDateControlsStyle = {
   background: "rgba(255, 255, 255, 0.94)",
   border: "1px solid rgba(138, 138, 138, 0.55)",
   borderRadius: "10px",
@@ -729,7 +729,7 @@ const routeTrackingMapLegendStyle = {
   zIndex: 2,
 };
 
-const routeTrackingMapLegendItemStyle = {
+const routeTrackingMapDateControlStyle = {
   alignItems: "center",
   color: "#303030",
   display: "flex",
@@ -737,19 +737,6 @@ const routeTrackingMapLegendItemStyle = {
   fontWeight: 650,
   gap: "8px",
   lineHeight: 1.2,
-};
-
-const routeTrackingMapGpsKeyStyle = {
-  borderTop: "3.5px dashed #d32f2f",
-  height: 0,
-  width: "22px",
-};
-
-const routeTrackingMapReferenceKeyStyle = {
-  borderRadius: "999px",
-  height: "5.5px",
-  opacity: 0.78,
-  width: "22px",
 };
 
 const routeTrackingMapFreshnessStyle = {
@@ -7546,19 +7533,8 @@ export default function RouteDetailPage() {
           >
             {isTrackingMapView ? (
               <>
-                <div aria-label="Tracking map legend" style={routeTrackingMapLegendStyle}>
-                  <span style={routeTrackingMapLegendItemStyle}>
-                    <span
-                      aria-hidden="true"
-                      style={{ ...routeTrackingMapReferenceKeyStyle, background: routePathColor }}
-                    />
-                    <span>Planned route</span>
-                  </span>
-                  <span style={routeTrackingMapLegendItemStyle}>
-                    <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
-                    <span>GPS tracking</span>
-                  </span>
-                  <label style={{ ...routeTrackingMapLegendItemStyle, cursor: "pointer" }}>
+                <div aria-label="Tracking date controls" style={routeTrackingMapDateControlsStyle}>
+                  <label style={{ ...routeTrackingMapDateControlStyle, cursor: "pointer" }}>
                     <input
                       checked={showAllRouteTrackingRecords}
                       onChange={(event) => setShowAllRouteTrackingRecords(event.target.checked)}
@@ -7567,7 +7543,7 @@ export default function RouteDetailPage() {
                     <span>All recorded dates</span>
                   </label>
                   {!showAllRouteTrackingRecords ? (
-                    <span aria-label="Selected tracking date" style={routeTrackingMapLegendItemStyle}>
+                    <span aria-label="Selected tracking date" style={routeTrackingMapDateControlStyle}>
                       {routeTrackingWindowDate ? `${routeTrackingWindowDate} and next day` : "Available tracking dates"}
                     </span>
                   ) : null}
