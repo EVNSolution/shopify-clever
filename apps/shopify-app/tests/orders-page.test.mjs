@@ -1088,7 +1088,7 @@ test("Orders loader merges delivery server planning state before background sync
   assert.match(ordersPageSource, /const serverOrdersRequestPromise = shouldLoadOrders\s*\?\s*\(resourceFlags\.pagination[\s\S]*fetchDeliveryOrdersPage\([\s\S]*:\s*fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\)\s*:\s*null/);
   assert.match(ordersPageSource, /const serverOrderDataPromise = shouldLoadOrders\s*\?\s*serverOrdersRequestPromise\.then/);
   assert.match(ordersPageSource, /Promise\.resolve\(\{ data: \{ orders: \[\], errors: \[\] \}, durationMs: 0 \}\)/);
-  assert.match(ordersPageSource, /const serverOrderRows = mapCanonicalOrdersToOrderRows\(serverOrderData\.orders\)/);
+  assert.match(ordersPageSource, /const serverOrderRows = mapCanonicalOrdersToOrderRows\(serverOrderData\.orders, shopTimeZoneData\.ianaTimezone\)/);
   assert.match(
     ordersPageSource,
     /const mergedOrders = canonicalFirst\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\{\s*includeCanonicalOnly:\s*!shouldLoadShopifyOrders \|\| orderData\.complete !== true,\s*\},\s*\)/,
@@ -1216,7 +1216,7 @@ test("Orders page syncs loaded Shopify snapshots without adding sync cards", () 
   assert.match(ordersPageSource, /if \(!autoSyncOrdersOnLoad\) return/);
   assert.match(ordersPageSource, /getOrderSyncSnapshots\(safeOrders\)/);
   assert.match(ordersPageSource, /ordersSyncFetcher\.submit\(formData, \{ method: "post" \}\)/);
-  assert.match(ordersPageSource, /mapCanonicalOrdersToOrderRows\(ordersSyncFetcher\.data\?\.syncedOrders\)/);
+  assert.match(ordersPageSource, /mapCanonicalOrdersToOrderRows\(ordersSyncFetcher\.data\?\.syncedOrders, shopTimeZone\)/);
   assert.match(ordersPageSource, /const displayOrders = useMemo\(/);
   assert.match(ordersPageSource, /syncedOrders\.length > 0[\s\S]*mergeShopifyOrderRowsWithCanonicalRows\(safeOrders, syncedOrders\)[\s\S]*: safeOrders/);
   assert.doesNotMatch(ordersPageSource, /Orders sync KPI/);
@@ -2032,7 +2032,7 @@ test("Orders page filters table rows by order date, delivery date, delivery day,
   assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
   assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
   assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, ordersCacheKey, perf, shopLocalDate \} = displayLoaderData/);
-  assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? new Date\(\),\s*\[shopLocalDate\],\s*\)/);
+  assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? getStoreDate\(new Date\(\), shopTimeZone\),\s*\[shopLocalDate, shopTimeZone\],\s*\)/);
   assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
   assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
   assert.match(ordersPageSource, /deliveryAreas: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryArea: ""/);
@@ -2364,7 +2364,7 @@ test("Orders inventory detail shows a printable product matrix without delta", (
   assert.match(inventoryDetailSource, /order\.items\.map/);
   assert.match(inventoryDetailSource, /const headerActionStyle = \{/);
   assert.match(inventoryDetailSource, /marginLeft: "auto"/);
-  assert.match(inventoryDetailSource, /Output: \{formatOutputTime\(generatedAt\)\}/);
+  assert.match(inventoryDetailSource, /Output: \{formatOutputTime\(generatedAt, storeTimeZone\)\}/);
   assert.match(inventoryDetailSource, /aria-label="Inventory detail view"/);
   assert.match(inventoryDetailSource, /needsSessionTokenRefresh: hasSessionTokenRefreshError\(errors\)/);
   assert.match(inventoryDetailSource, /shopify\s*\.\s*idToken\(\)/);

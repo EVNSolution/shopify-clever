@@ -14,6 +14,7 @@ import {
   recordShopifyAdminTokenRefreshFailure,
   syncShopifyOfflineTokenToDeliveryApi,
 } from "../features/delivery/shopify-token-sync.server";
+import { fetchRouteFallbackTimeZone } from "../features/delivery/route-timezone.server";
 import { fetchShopifyAppPreferences } from "../features/settings/app-preferences.server";
 import { withEmbeddedShopifyContext } from "../features/delivery/route-paths";
 import { isEmbeddedShopifyContext } from "../features/shopify/app-bridge-bootstrap";
@@ -162,6 +163,7 @@ function useAppNavigationPerformance() {
 export const loader = async ({ request }) => {
   let language = DEFAULT_LANGUAGE;
   let authenticatedShop;
+  let ianaTimezone = "UTC";
 
   if (hasShopifyAdminContext(request)) {
     let authenticated;
@@ -179,8 +181,15 @@ export const loader = async ({ request }) => {
     const { admin, session } = authenticated;
     authenticatedShop = session?.shop;
     await syncShopifyOfflineTokenToDeliveryApi(request, session);
-    const { appPreferences } = await fetchShopifyAppPreferences(admin);
+    const [{ appPreferences }, timeZoneData] = await Promise.all([
+      fetchShopifyAppPreferences(admin),
+      fetchRouteFallbackTimeZone(admin, session?.shop),
+    ]);
+    ianaTimezone = timeZoneData.ianaTimezone || "UTC";
     language = appPreferences.language;
+  // eslint-disable-next-line no-undef
+  } else if (process.env.CLEVER_ORDERS_SOURCE_MODE === "delivery_only") {
+    ianaTimezone = (await fetchRouteFallbackTimeZone(null)).ianaTimezone || "UTC";
   }
 
   return {
@@ -188,6 +197,7 @@ export const loader = async ({ request }) => {
     apiKey: process.env.SHOPIFY_API_KEY || "",
     embedded: isEmbeddedShopifyContext(request.url),
     language,
+    ianaTimezone,
     tokenSyncHealth: getShopifyTokenSyncHealth(authenticatedShop),
   };
 };

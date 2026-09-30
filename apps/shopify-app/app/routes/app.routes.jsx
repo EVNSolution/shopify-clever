@@ -1,3 +1,5 @@
+import { formatStoreInstant } from "../features/shopify/store-date-time";
+import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -557,24 +559,7 @@ function formatRouteAmount(totalAmount, currencyCode) {
 }
 
 function formatRouteInstant(value, timeZone = "UTC") {
-  if (!value) return "-";
-  const instant = new Date(value);
-  if (Number.isNaN(instant.getTime())) return "-";
-  try {
-    const parts = Object.fromEntries(new Intl.DateTimeFormat("en-US", {
-      timeZone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-      hourCycle: "h23",
-      timeZoneName: "short",
-    }).formatToParts(instant).map((part) => [part.type, part.value]));
-    return `${parts.year}-${parts.month}-${parts.day} ${parts.hour}:${parts.minute} ${parts.timeZoneName}`;
-  } catch {
-    return "-";
-  }
+  return formatStoreInstant(value, timeZone, { empty: "-" });
 }
 
 function buildRoutesSummary(routeRows) {
@@ -678,6 +663,7 @@ function getStatusBadgeStyle(status) {
 }
 
 export default function RoutesPage() {
+  const storeTimeZone = useStoreTimeZone();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
@@ -964,8 +950,8 @@ export default function RoutesPage() {
                     <td style={routeTableCellStyle}>{formatRouteDurationSeconds(route.driveTimeSeconds)}</td>
                     <td style={routeTableCellStyle}>{formatRouteDistanceMeters(route.distanceMeters)}</td>
                     <td style={routeTableCellStyle}>{formatRouteAmount(route.totalAmount, route.currencyCode)}</td>
-                    <td style={routeTableCellStyle}>{formatRouteInstant(route.createdAt)}</td>
-                    <td style={routeTableCellStyle}>{formatRouteInstant(route.updatedAt)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.createdAt, storeTimeZone)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.updatedAt, storeTimeZone)}</td>
                   </tr>
                 ))}
               </tbody>

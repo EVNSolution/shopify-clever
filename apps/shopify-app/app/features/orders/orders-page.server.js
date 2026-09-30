@@ -874,7 +874,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
   const shopTimeZoneData = shopTimeZoneDataResult.data;
   const routeGroupData = routeGroupDataResult.data;
   const shopLocalDate = getShopLocalDate(shopTimeZoneData);
-  const serverOrderRows = mapCanonicalOrdersToOrderRows(serverOrderData.orders);
+  const serverOrderRows = mapCanonicalOrdersToOrderRows(serverOrderData.orders, shopTimeZoneData.ianaTimezone);
   const mergedOrders = canonicalFirst
     ? serverOrderRows
     : mergeShopifyOrderRowsWithCanonicalRows(

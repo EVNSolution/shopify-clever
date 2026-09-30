@@ -99,7 +99,7 @@ test("route detail customer email send requires independent resend acknowledgeme
   assert.match(routeDetailSource, /const selectedCustomerEmailHasPriorSends = selectedCustomerEmailRecipients\.some\(hasCustomerEmailPriorSend\)/);
   assert.match(routeDetailSource, /hasPriorSends: selectedCustomerEmailHasPriorSends/);
   assert.match(routeDetailSource, /resendConfirmed: customerEmailResendConfirmed/);
-  assert.match(routeDetailSource, /formatCustomerEmailHistory\(getCustomerEmailRecipientHistory\(recipient\)\)/);
+  assert.match(routeDetailSource, /formatCustomerEmailHistory\(getCustomerEmailRecipientHistory\(recipient\), storeTimeZone\)/);
   assert.match(routeDetailSource, /history\.lastProviderStatus/);
   assert.match(routeDetailSource, /history\.lastProviderEventAt/);
   assert.match(routeDetailSource, /Confirm resend to recipients with prior send history/);

@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
+import { formatStoreInstant } from "../app/features/shopify/store-date-time.js";
 import { buildRouteRows } from "../app/features/delivery/route-list-rows.js";
 import { formatStoreLocalDateTimeInput, storeLocalDateTimeToIso } from "../app/features/delivery/child-route-detail-presentation.js";
 import { resolveRouteListTimeZones } from "../app/features/delivery/route-timezone.server.js";
@@ -25,7 +26,7 @@ function loadFormatRouteInstant() {
   const end = routesPageSource.indexOf("function buildRoutesSummary(", start);
   assert.notEqual(start, -1, "route instant formatter is present");
   assert.notEqual(end, -1, "Routes summary follows the instant formatter");
-  return Function(`${routesPageSource.slice(start, end)}\nreturn formatRouteInstant;`)();
+  return Function("formatStoreInstant", `${routesPageSource.slice(start, end)}\nreturn formatRouteInstant;`)(formatStoreInstant);
 }
 
 test("Routes list renders the exact 12-column contract", () => {
@@ -62,8 +63,8 @@ test("group color is rendered inside the route name cell and route metrics stay 
   assert.match(row, /formatRouteDurationSeconds\(route\.driveTimeSeconds\)/);
   assert.match(row, /formatRouteDistanceMeters\(route\.distanceMeters\)/);
   assert.match(row, /formatRouteAmount\(route\.totalAmount, route\.currencyCode\)/);
-  assert.match(row, /formatRouteInstant\(route\.createdAt\)/);
-  assert.match(row, /formatRouteInstant\(route\.updatedAt\)/);
+  assert.match(row, /formatRouteInstant\(route\.createdAt, storeTimeZone\)/);
+  assert.match(row, /formatRouteInstant\(route\.updatedAt, storeTimeZone\)/);
 });
 
 test("Routes header has no Actions or childless-group recovery UI", () => {

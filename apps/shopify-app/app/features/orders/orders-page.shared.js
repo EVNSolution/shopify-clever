@@ -102,7 +102,7 @@ function formatOrdersTimestamp(value, shopTimeZone) {
     minute: "2-digit",
     month: "2-digit",
     second: "2-digit",
-    ...(shopTimeZone ? { timeZone: shopTimeZone } : {}),
+    timeZone: shopTimeZone || "UTC",
     year: "numeric",
   }).format(new Date(value));
 }
@@ -141,7 +141,7 @@ function formatOrderDateTimePart(value, shopTimeZone, options) {
 
   return new Intl.DateTimeFormat("en-CA", {
     ...options,
-    ...(shopTimeZone ? { timeZone: shopTimeZone } : {}),
+    timeZone: shopTimeZone || "UTC",
   }).format(date);
 }
 

@@ -1,6 +1,7 @@
+import { getStoreDate } from "../shopify/store-date-time.js";
 import { formatDeliveryScopeLabel } from "../delivery/delivery-labels.js";
 
-export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
+export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "UTC") {
   if (!Array.isArray(canonicalOrders)) return [];
 
   return canonicalOrders.map((order) => {
@@ -18,8 +19,8 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
     const orderCreatedAt = textOrUndefined(order?.orderCreatedAt);
     const orderedDate =
       textOrUndefined(order?.orderDateLocal) ??
-      formatDateOnly(orderCreatedAt) ??
-      formatDateOnly(order?.processedAt);
+      getStoreDate(orderCreatedAt, storeTimeZone) ??
+      getStoreDate(order?.processedAt, storeTimeZone) ?? undefined;
     const deliveryDate = textOrUndefined(order?.deliveryDate);
     const timeWindowStart = textOrUndefined(order?.timeWindowStart);
     const timeWindowEnd = textOrUndefined(order?.timeWindowEnd);
@@ -73,6 +74,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       deliveryDay,
       orderCreatedAt,
       orderedDate,
+      ...(textOrUndefined(order?.orderDateLocal) ? { orderDateLocal: order.orderDateLocal } : {}),
       deliveryBatchStartDate: textOrUndefined(order?.deliveryBatchStartDate),
       deliveryBatchEndDate: textOrUndefined(order?.deliveryBatchEndDate),
       deliveryDate,
@@ -458,19 +460,6 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function formatDateOnly(value) {
-  const text = textOrUndefined(value);
-  if (!text) return undefined;
-
-  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
-    return text.slice(0, 10);
-  }
-
-  const date = new Date(text);
-  if (Number.isNaN(date.getTime())) return undefined;
-
-  return date.toISOString().slice(0, 10);
-}
 
 function textOrUndefined(value) {
   if (value == null) return undefined;
@@ -491,4 +480,13 @@ function numberOrUndefined(value) {
   if (value == null) return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
+}
+
+export function normalizeOrderRowsStoreDates(rows, storeTimeZone) {
+  return (Array.isArray(rows) ? rows : []).map(order => {
+    if (order?.orderDateLocal) return order;
+    const instant = order?.orderCreatedAt ?? order?.rawPayload?.createdAt ?? order?.shopifyOrderSnapshot?.createdAt ?? order?.processedAt;
+    const orderedDate = getStoreDate(instant, storeTimeZone);
+    return orderedDate && orderedDate !== order?.orderedDate ? { ...order, orderedDate } : order;
+  });
 }

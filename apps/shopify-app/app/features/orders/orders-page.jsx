@@ -1,4 +1,6 @@
 /* eslint-disable react/prop-types */
+import { formatStoreInstant, getStoreDate } from "../shopify/store-date-time";
+import { useStoreTimeZone } from "../../ui/store-time-zone";
 import { startTransition, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -11,7 +13,7 @@ import { createDepartureMarkerElement } from "../maps/map-markers";
 import { createMapLibreMap } from "../maps/maplibre-map";
 import { installMissingMapImageFallback } from "../maps/maplibre-missing-images";
 import { installPmtilesProtocol } from "../maps/pmtiles-protocol";
-import { getOrderSyncSnapshots, mapCanonicalOrdersToOrderRows, mergeShopifyOrderRowsWithCanonicalRows } from "./canonical-orders";
+import { getOrderSyncSnapshots, mapCanonicalOrdersToOrderRows, normalizeOrderRowsStoreDates, mergeShopifyOrderRowsWithCanonicalRows } from "./canonical-orders";
 import { getOrderAreaSuggestion } from "./order-area-suggestion";
 import {
   buildOrdersResourceRequest,
@@ -1760,11 +1762,8 @@ function compareOrderSortValues(leftValue, rightValue) {
   });
 }
 
-function formatInventoryChangedAt(value) {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return date.toISOString().slice(0, 16).replace("T", " ");
+function formatInventoryChangedAt(value, storeTimeZone) {
+  return formatStoreInstant(value, storeTimeZone);
 }
 
 function formatInventoryDeltaSummary(inventory) {
@@ -2597,7 +2596,9 @@ function OrdersPageContent({ loaderData }) {
   );
   const displayLoaderData = restoredOrdersView.loaderData;
   const { orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, ordersCacheKey, perf, shopLocalDate } = displayLoaderData;
-  const { deliveryCycle, shopTimeZone } = displayLoaderData;
+  const { deliveryCycle } = displayLoaderData;
+  const storeTimeZone = useStoreTimeZone();
+  const shopTimeZone = displayLoaderData.shopTimeZone || storeTimeZone;
   const autoSyncOrdersOnLoad = featureFlags?.autoSyncOrdersOnLoad === true;
   const backgroundReconciliationEnabled = featureFlags?.backgroundReconciliation === true;
   const paginationEnabled = featureFlags?.pagination === true;
@@ -2660,16 +2661,16 @@ function OrdersPageContent({ loaderData }) {
     [loadedRouteGroups],
   );
   const syncedOrders = useMemo(
-    () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders),
-    [ordersSyncFetcher.data?.syncedOrders],
+    () => mapCanonicalOrdersToOrderRows(ordersSyncFetcher.data?.syncedOrders, shopTimeZone),
+    [ordersSyncFetcher.data?.syncedOrders, shopTimeZone],
   );
   const refreshedOrders = useMemo(
-    () => mapCanonicalOrdersToOrderRows(ordersRefreshFetcher.data?.syncedOrders),
-    [ordersRefreshFetcher.data?.syncedOrders],
+    () => mapCanonicalOrdersToOrderRows(ordersRefreshFetcher.data?.syncedOrders, shopTimeZone),
+    [ordersRefreshFetcher.data?.syncedOrders, shopTimeZone],
   );
   const bulkUpdatedOrders = useMemo(
-    () => mapCanonicalOrdersToOrderRows(orderBulkUpdateFetcher.data?.updatedOrders),
-    [orderBulkUpdateFetcher.data?.updatedOrders],
+    () => mapCanonicalOrdersToOrderRows(orderBulkUpdateFetcher.data?.updatedOrders, shopTimeZone),
+    [orderBulkUpdateFetcher.data?.updatedOrders, shopTimeZone],
   );
   const displayOrders = useMemo(
     () => {
@@ -2682,11 +2683,11 @@ function OrdersPageContent({ loaderData }) {
           ? mergeShopifyOrderRowsWithCanonicalRows(syncMergedOrders, refreshedOrders)
           : syncMergedOrders;
 
-      return bulkUpdatedOrders.length > 0
+      return normalizeOrderRowsStoreDates(bulkUpdatedOrders.length > 0
         ? mergeShopifyOrderRowsWithCanonicalRows(refreshMergedOrders, bulkUpdatedOrders)
-        : refreshMergedOrders;
+        : refreshMergedOrders, shopTimeZone);
     },
-    [bulkUpdatedOrders, refreshedOrders, safeOrders, syncedOrders],
+    [bulkUpdatedOrders, refreshedOrders, safeOrders, syncedOrders, shopTimeZone],
   );
   const ordersResultGeneratedAt = useMemo(
     () => formatOrdersResultGeneratedAt(
@@ -2729,8 +2730,8 @@ function OrdersPageContent({ loaderData }) {
     ({ key }) => !visibleOrderFilterKeys.includes(key),
   );
   const orderFilterReferenceDate = useMemo(
-    () => shopLocalDate ?? new Date(),
-    [shopLocalDate],
+    () => shopLocalDate ?? getStoreDate(new Date(), shopTimeZone),
+    [shopLocalDate, shopTimeZone],
   );
   const activeOrderFilters = useMemo(
     () => hasActiveOrderFilters(orderFilters),
@@ -3358,7 +3359,7 @@ function OrdersPageContent({ loaderData }) {
   const [orderedDateCalendarOpen, setOrderedDateCalendarOpen] = useState(false);
   const [pendingOrderedDateStart, setPendingOrderedDateStart] = useState("");
   const [orderedDateCalendarMonth, setOrderedDateCalendarMonth] = useState(() =>
-    getCalendarMonthValue(shopLocalDate),
+    getCalendarMonthValue(orderFilterReferenceDate),
   );
   const [orderedDateCalendarPosition, setOrderedDateCalendarPosition] = useState(null);
   const orderedDateLabel = formatOrderDateRangeLabel(
@@ -3791,7 +3792,7 @@ function OrdersPageContent({ loaderData }) {
                 <td style={inventoryCellStyle}>{inventory.ordersCount ?? inventory.orderIds?.length ?? inventory.orders?.length ?? 0}</td>
                 <td style={inventoryCellStyle}>{inventory.itemSummary?.totalQuantity ?? 0}</td>
                 <td style={inventoryCellStyle}>{formatInventoryDeltaSummary(inventory)}</td>
-                <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt)}</td>
+                <td style={inventoryCellStyle}>{formatInventoryChangedAt(inventory.updatedAt, shopTimeZone)}</td>
               </tr>
             ))}
           </tbody>
@@ -4267,7 +4268,7 @@ function OrdersPageContent({ loaderData }) {
 
     positionOrderedDateCalendar();
     setOrderedDateCalendarMonth(
-      getCalendarMonthValue(orderFilters.orderedDateFrom || shopLocalDate),
+      getCalendarMonthValue(orderFilters.orderedDateFrom || orderFilterReferenceDate),
     );
     setOrderedDateCalendarOpen(true);
   };
