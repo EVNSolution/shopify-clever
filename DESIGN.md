@@ -1,8 +1,12 @@
-# CLEVER Shopify App Design Source of Truth
+# Design
+
+## Source of truth
 
 - Status: Active
-- Last updated: 2026-09-22
-- Applies to: `apps/shopify-app`, with current emphasis on route detail and tracking operations
+- Last updated: 2026-10-01
+- Applies to: `apps/shopify-app`, with current emphasis on Orders filters and route detail/tracking operations
+
+- Evidence: actual Safari interactions on EasyRoutes and CLEVER K-food Orders (2026-10-01), existing Orders filter component and v2 contract. See [interaction evidence](docs/ui/orders-filter-interaction-review.md). No component gallery or Storybook exists in this repo; the Orders component and this document own the pattern.
 
 ## Brand
 
@@ -31,6 +35,12 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Evidence disclosure: connection state, execution events, return-to-depot evidence, point counts, and recorded range.
 - Stop table: authoritative ordered stop detail.
 
+### Orders
+
+- Keep the table toolbar in one horizontal row: active conditions, Add filter, Clear all, order/selection counts and actions. Remove the Orders search input. Incoming search URLs remain visible as a removable chip.
+- Route plan keeps its title and Assign action in a single row; omit explanatory copy. The route title input and Order summary remain separate.
+- Expose only supported dimensions: Stop type, Delivery status, Order date, Delivery date, Payment, Fulfillment, Cancellation, Area.
+
 ## Design principles
 
 1. Put the operator's next decision before diagnostic detail.
@@ -56,12 +66,21 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Tracking evidence uses a native disclosure so keyboard and assistive technology behavior remain reliable.
 - Tables remain the primary detailed operations surface.
 
+### Orders filter controls
+
+- Open the chosen condition beside its trigger. Active chips appear before Add filter and stay on one line. Show compact values (short dates or a first value plus count) in chips no wider than 180px, with the full condition in accessible text/title. Keep the popover adjacent to its visible trigger, preferably below; adjust only for actual viewport space.
+- Enumeration values use checkboxes; multiple values are OR, different dimensions are AND. Keep supported enum choices stable when result facets change. Checkbox/radio selections are a local draft until the panel Add filter button applies them and closes the popover; Escape, outside click, and close discard the draft.
+- Order date and Delivery date both show a month calendar immediately. Select inclusive ranges directly on the calendar; never replace it with From/To inputs. Selecting a complete calendar range or preset applies it and closes the popover. Date presets are shortcuts to calendar selection. Weekday reveals weekday checkboxes and may further narrow the scheduled range. Existing store-timezone and inclusive-range behavior remains authoritative.
+- A chip remove button and a panel Clear reset only that condition. Clear all resets all filters and the existing selection/page state.
+
 ## Accessibility
 
 - Controls retain native button, checkbox, details, and summary semantics.
 - Selected tabs expose `aria-pressed`; grouped operational regions have specific accessible labels.
 - Status is communicated with text in addition to color.
-- Focus indicators must remain visible and hit targets should be at least 36 px high.
+- Focus indicators must remain visible. Primary action controls should be at least 36px high; compact applied-filter chips use 28px height with a 24px-wide remove target.
+
+- Orders filter dialogs close on Escape or outside interaction and restore trigger focus when explicitly closed.
 
 ## Responsive behavior
 
@@ -69,6 +88,8 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - The primary tracking grid collapses from four columns to two, then one on narrow screens.
 - Evidence metrics wrap into fewer columns while retaining label/value pairs.
 - The map height remains independently resizable and is not changed by shell layout work.
+
+- Orders toolbar uses horizontal scrolling on narrow screens; controls and chip text do not wrap into a second row. Popovers fit within the viewport independently of toolbar overflow.
 
 ## Interaction states
 
@@ -81,6 +102,10 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 ## Content voice
 
 Use concise operational English consistent with the existing app. Prefer concrete labels such as “Latest position,” “GPS gaps,” and “Tracking evidence.” Avoid celebratory or marketing copy.
+
+- Orders uses short names: Order date (주문일), Delivery date (배송·픽업일), Stop type (배송 유형), Delivery status (배송 상태), Payment (결제 상태), Fulfillment (주문 처리상태).
+- Delivery date means the scheduled delivery/pickup date; Fulfillment remains Shopify fulfillment, separate from CLEVER delivery progress. Stop type retains our evening-delivery and unknown values. Cancellation does not imply Shopify Archived/Open support.
+- Do not copy EasyRoutes shipping-method, task, route, address, tag, or other dimensions unless this app has a matching data contract and a requested need.
 
 ## Implementation constraints
 

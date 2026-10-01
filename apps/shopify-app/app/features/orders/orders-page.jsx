@@ -321,6 +321,8 @@ const inventoryListStyle = {
 const routePlanHeaderStyle = {
   alignItems: "center",
   display: "flex",
+  flexWrap: "nowrap",
+  whiteSpace: "nowrap",
   gap: "8px",
   justifyContent: "space-between",
 };
@@ -5108,10 +5110,7 @@ function OrdersPageContent({ loaderData }) {
           </label>
           <div style={routePlanDetailStyle}>
             <div style={routePlanHeaderStyle}>
-              <div style={{ display: "grid", gap: "2px" }}>
-                <s-heading>Route plan</s-heading>
-                <span style={routeAddSnapshotHintStyle}>{translate(language, "orders.routeActions.flowHelp")}</span>
-              </div>
+              <s-heading>Route plan</s-heading>
               <div style={routePlanHeaderActionsStyle}>
                 <button
                   type="button"
@@ -5205,7 +5204,6 @@ function OrdersPageContent({ loaderData }) {
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
             <OrderFilterBar filters={orderFilters} facets={ordersFacetsFilterKey === resourceFilterKey ? ordersFacets?.facets : undefined} language={language} today={orderFilterReferenceDate} buttonStyle={orderFilterButtonStyle} onChange={handleV2OrderFiltersChange} onClear={handleClearOrderFilters} />
-            <s-search-field label={language === "ko" ? "주문 검색" : "Search orders"} labelAccessibilityVisibility="exclusive" placeholder={language === "ko" ? "주문 검색" : "Search orders"} value={orderFilters.search ?? ""} onInput={event => handleV2OrderFiltersChange({ ...orderFilters, search: event.currentTarget.value })} />
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Visible order count" style={orderSelectionCountStyle}>
                 Orders: {ordersPageUpdating ? "Updating…" : filteredOrders.length}
