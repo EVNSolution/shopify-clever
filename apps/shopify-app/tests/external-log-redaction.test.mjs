@@ -1,3 +1,4 @@
+/* eslint-env node */
 import assert from "node:assert/strict";
 import { readdir, readFile } from "node:fs/promises";
 import test from "node:test";
@@ -97,15 +98,26 @@ test("Compliance webhook logs hash the authenticated shop and never interpolate 
 });
 
 test("Shopify lifecycle webhook logs hash shops and never interpolate authenticated domains", async () => {
-  for (const relativePath of [
-    "../app/routes/webhooks.app.scopes_update.jsx",
-    "../app/routes/webhooks.app.uninstalled.jsx",
-  ]) {
-    const source = await readFile(new URL(relativePath, import.meta.url), "utf8");
-    assert.match(source, /hashShopIdentifier\(shop\)/, relativePath);
-    assert.match(source, /logSafeOperationalEvent/, relativePath);
-    assert.doesNotMatch(source, /`[^`]*\$\{shop\}[^`]*`/, relativePath);
-    assert.doesNotMatch(source, /console\.(?:log|warn|error)/, relativePath);
+  const lifecycleBoundaries = [
+    {
+      implementationPath: "../app/routes/webhooks.app.scopes_update.jsx",
+      routePath: "../app/routes/webhooks.app.scopes_update.jsx",
+    },
+    {
+      implementationPath: "../app/features/delivery/app-uninstalled-webhook-admission.server.js",
+      routePath: "../app/routes/webhooks.app.uninstalled.jsx",
+    },
+  ];
+
+  for (const { implementationPath, routePath } of lifecycleBoundaries) {
+    const implementationSource = await readFile(new URL(implementationPath, import.meta.url), "utf8");
+    const routeSource = implementationPath === routePath
+      ? implementationSource
+      : await readFile(new URL(routePath, import.meta.url), "utf8");
+    assert.match(implementationSource, /hashShopIdentifier\(shop\)/, implementationPath);
+    assert.match(implementationSource, /logSafeOperationalEvent/, implementationPath);
+    assert.doesNotMatch(implementationSource, /`[^`]*\$\{shop\}[^`]*`/, implementationPath);
+    assert.doesNotMatch(implementationSource + routeSource, /console\.(?:log|warn|error)/, routePath);
   }
 });
 
