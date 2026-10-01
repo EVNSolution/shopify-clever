@@ -560,3 +560,30 @@ export function buildChildRouteOrderRows(stops, {
     };
   });
 }
+
+export function buildRouteOrderRows(routeRows, {
+  actualArrivalByStopId = {},
+  actualArrivalRoutePlanId,
+  ianaTimezone,
+} = {}) {
+  return (Array.isArray(routeRows) ? routeRows : []).flatMap((routeRow, routeIndex) => {
+    const sourceRouteId = firstText(routeRow?.id, routeRow?.routeKey) ?? `route-${routeIndex + 1}`;
+    const sourceRoutePlanId = firstText(routeRow?.routePlanId);
+    const routeActualArrivalByStopId = sourceRoutePlanId && sourceRoutePlanId === actualArrivalRoutePlanId
+      ? actualArrivalByStopId
+      : {};
+
+    return buildChildRouteOrderRows(routeRow?.stops, {
+      actualArrivalByStopId: routeActualArrivalByStopId,
+      ianaTimezone,
+    }).map((row) => ({
+      ...row,
+      rowKey: `${sourceRouteId}:${row.id}`,
+      sourceRouteColor: firstText(routeRow?.color),
+      sourceRouteId,
+      sourceRoutePlanId: sourceRoutePlanId ?? null,
+      sourceRouteStatus: firstText(routeRow?.status),
+      sourceRouteTitle: routeRow?.isUnassigned ? "Unassigned" : firstText(routeRow?.title) ?? `Route ${routeIndex + 1}`,
+    }));
+  });
+}

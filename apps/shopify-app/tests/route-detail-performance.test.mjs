@@ -17,7 +17,8 @@ test("route detail keeps expensive route and timeline derived arrays memoized", 
     "contextRouteRows",
     "timelineRouteRows",
     "contextTimelineRouteRows",
-    "childRouteOrderRows",
+    "orderTableRouteRows",
+    "routeOrderRows",
     "routePolygonSourceStops",
     "polygonCandidateStops",
     "polygonCandidateOrderIds",
@@ -82,9 +83,9 @@ test("main map handlers read current child rows and actions without rebinding", 
   assert.notEqual(mainMapEffectStart, -1);
   assert.notEqual(mainMapEffectEnd, -1);
 
-  const childRowsBinding = routeDetailSource.indexOf("const childRouteOrderRows = useMemo(");
+  const childRowsBinding = routeDetailSource.indexOf("const routeOrderRows = useMemo(");
   const childRowsRefSync = routeDetailSource.indexOf(
-    "childRouteOrderRowsRef.current = childRouteOrderRows;",
+    "childRouteOrderRowsRef.current = isRouteGroupDetail ? [] : routeOrderRows;",
   );
   const toggleHandlerBinding = routeDetailSource.indexOf(
     "const handleToggleChildStopActions = (event, rowId) => {",
@@ -104,9 +105,9 @@ test("main map handlers read current child rows and actions without rebinding", 
     mainMapEffectSource,
     /handleToggleChildStopActionsRef\.current\?\.\(event, row\.id\)/,
   );
-  assert.doesNotMatch(mainMapEffectSource, /childRouteOrderRows\.find/);
+  assert.doesNotMatch(mainMapEffectSource, /routeOrderRows\.find/);
   assert.doesNotMatch(mainMapEffectSource, /handleToggleChildStopActions\(event, row\.id\)/);
 
   const dependencySource = mainMapEffectSource.slice(mainMapEffectSource.lastIndexOf("}, ["));
-  assert.doesNotMatch(dependencySource, /childRouteOrderRows|handleToggleChildStopActions/);
+  assert.doesNotMatch(dependencySource, /routeOrderRows|handleToggleChildStopActions/);
 });

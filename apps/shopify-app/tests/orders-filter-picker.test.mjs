@@ -54,9 +54,14 @@ test("active chips precede Add filter and each chip anchors its own progressive 
   const bar = readFileSync(join(process.cwd(), "app/features/orders/order-filter-bar.jsx"), "utf8");
   assert.ok(bar.indexOf("groups.map") < bar.indexOf('commandFor="orders-v2-add-filter"'));
   assert.match(bar, /openEditor\(group, event\.currentTarget\)/);
-  assert.match(bar, /openEditor\(group, addFilterAnchor\.current\)/);
+  assert.match(bar, /addFilterPositionAnchor = useRef\(null\)/);
+  assert.match(bar, /ref=\{addFilterPositionAnchor\}/);
+  assert.match(
+    bar,
+    /openEditor\(\s*group,\s*addFilterAnchor\.current,\s*addFilterPositionAnchor\.current,?\s*\)/,
+  );
   assert.match(bar, /onChange\(\{ \.\.\.filters, search: undefined \}\)/);
-  assert.match(bar, /addEventListener\("scroll", positionPanel, true\)/);
+  assert.doesNotMatch(bar, /addEventListener\("scroll", positionPanel, true\)/);
   assert.doesNotMatch(bar, /window\.innerHeight - 400/);
   assert.match(bar, /requestAnimationFrame\(\(\) => addFilterAnchor\.current\?\.focus\(\)\)/);
   assert.match(bar, /if \(!isV2\) \{/);
@@ -105,18 +110,39 @@ const bar = readFileSync(join(process.cwd(), "app/features/orders/order-filter-b
 });
 
 
-test("short filter panels stay adjacent when opened above a low trigger", () => {
+test("filter panels use document coordinates inside the embedded scroll surface", () => {
   const bar = readFileSync(join(process.cwd(), "app/features/orders/order-filter-bar.jsx"), "utf8");
   const positionSource = bar.match(/const panelPosition = ([\s\S]*?);\n {2}const openEditor/)?.[1];
   assert.ok(positionSource);
   const positionPanel = vm.runInNewContext(`(${positionSource})`, {
-    window: { innerWidth: 1000, innerHeight: 720 },
+    window: {
+      innerWidth: 1000,
+      innerHeight: 720,
+      scrollX: 41,
+      scrollY: 900,
+    },
   });
   const above = positionPanel({ getBoundingClientRect: () => ({ left: 30, top: 620, bottom: 650 }) });
-  // A 140px panel must end 6px above the trigger, regardless of the 420px cap.
-  const panelBottom = above.bottom !== undefined ? 720 - above.bottom : above.top + 140;
-  assert.equal(620 - panelBottom, 6);
+  assert.equal(above.left, 71);
+  assert.equal(above.top, 1514);
+  assert.equal(above.transform, "translateY(-100%)");
+  assert.equal(620 + 900 - above.top, 6);
   const below = positionPanel({ getBoundingClientRect: () => ({ left: 30, top: 200, bottom: 230 }) });
-  assert.equal(below.top, 236);
-  assert.equal(below.bottom, undefined);
+  assert.equal(below.left, 71);
+  assert.equal(below.top, 1136);
+  assert.equal(below.transform, undefined);
+  assert.equal(below.top - (230 + 900), 6);
+
+  const displayContentsHost = positionPanel({
+    getBoundingClientRect: () => ({ left: 0, top: 0, bottom: 0 }),
+  });
+  const layoutWrapper = positionPanel({
+    getBoundingClientRect: () => ({ left: 396, top: 344, bottom: 372 }),
+  });
+  assert.equal(displayContentsHost.top, 906);
+  assert.equal(layoutWrapper.left, 437);
+  assert.equal(layoutWrapper.top, 1278);
+  assert.notEqual(layoutWrapper.top, displayContentsHost.top);
+  assert.match(bar, /position:\s*"absolute"/);
+  assert.doesNotMatch(bar, /addEventListener\("scroll", positionPanel, true\)/);
 });

@@ -18,6 +18,17 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "
       textOrUndefined(order?.deliveryWeekday);
     const orderCreatedAt = textOrUndefined(order?.orderCreatedAt);
     const orderedDate = getOrderDate(order, storeTimeZone);
+    const hasCanonicalNote = Object.hasOwn(order ?? {}, "note");
+    const hasCanonicalCustomerNote = Object.hasOwn(order ?? {}, "customerNote");
+    const noteSource = hasCanonicalNote
+      ? order.note
+      : order?.rawPayload?.note ?? order?.shopifyOrderSnapshot?.note;
+    const customerNoteSource = hasCanonicalCustomerNote
+      ? order.customerNote
+      : order?.rawPayload?.customerNote ??
+        order?.rawPayload?.customer_note ??
+        order?.rawPayload?.customer?.note ??
+        order?.shopifyOrderSnapshot?.customer?.note;
     const deliveryDate = textOrUndefined(order?.deliveryDate);
     const timeWindowStart = textOrUndefined(order?.timeWindowStart);
     const timeWindowEnd = textOrUndefined(order?.timeWindowEnd);
@@ -52,6 +63,10 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "
       ...(Object.hasOwn(order ?? {}, "processedAt") ? { processedAt: textOrUndefined(order?.processedAt) ?? null } : {}),
       updatedAt: textOrUndefined(order?.updatedAtShopify),
       cancelledAt: textOrUndefined(order?.cancelledAt),
+      ...(hasCanonicalNote || noteSource != null ? { note: textOrUndefined(noteSource) ?? "" } : {}),
+      ...(hasCanonicalCustomerNote || customerNoteSource != null
+        ? { customerNote: textOrUndefined(customerNoteSource) ?? "" }
+        : {}),
       totalPriceAmount: textOrUndefined(order?.totalPriceAmount),
       ...(textOrUndefined(
         order?.shippingPriceAmount

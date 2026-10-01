@@ -32,7 +32,9 @@ export function OrderFilterBar({
     normalizeV2Filters({}),
   );
   const anchor = useRef(null),
+    positionAnchor = useRef(null),
     addFilterAnchor = useRef(null),
+    addFilterPositionAnchor = useRef(null),
     panel = useRef(null);
   const local = (en, ko) => (language === "ko" ? ko : en);
   const compactGroupLabel = (group) =>
@@ -83,19 +85,22 @@ export function OrderFilterBar({
     const maxHeight = Math.max(80, Math.min(420, placeAbove ? above : below));
     return {
       left: Math.max(
-        viewportMargin,
-        Math.min(rect.left, window.innerWidth - 320 - viewportMargin),
+        window.scrollX + viewportMargin,
+        Math.min(
+          rect.left + window.scrollX,
+          window.scrollX + window.innerWidth - 320 - viewportMargin,
+        ),
       ),
-      ...(placeAbove
-        ? { bottom: window.innerHeight - rect.top + gap }
-        : { top: rect.bottom + gap }),
+      top: (placeAbove ? rect.top - gap : rect.bottom + gap) + window.scrollY,
+      ...(placeAbove ? { transform: "translateY(-100%)" } : {}),
       maxHeight,
     };
   };
-  const openEditor = (group, target) => {
-    if (!target) return;
+  const openEditor = (group, target, positioningTarget = target) => {
+    if (!target || !positioningTarget) return;
     anchor.current = target;
-    setPosition(panelPosition(target));
+    positionAnchor.current = positioningTarget;
+    setPosition(panelPosition(positioningTarget));
     setDraftFilters(
       normalizeV2Filters(filters.filterVersion === "2" ? filters : {}),
     );
@@ -107,7 +112,7 @@ export function OrderFilterBar({
   useEffect(() => {
     if (!editing) return undefined;
     const positionPanel = () => {
-      const next = panelPosition(anchor.current);
+      const next = panelPosition(positionAnchor.current);
       if (next) setPosition(next);
     };
     const pointer = (event) => {
@@ -130,12 +135,10 @@ export function OrderFilterBar({
     document.addEventListener("pointerdown", pointer);
     document.addEventListener("keydown", keyboard);
     window.addEventListener("resize", positionPanel);
-    window.addEventListener("scroll", positionPanel, true);
     return () => {
       document.removeEventListener("pointerdown", pointer);
       document.removeEventListener("keydown", keyboard);
       window.removeEventListener("resize", positionPanel);
-      window.removeEventListener("scroll", positionPanel, true);
     };
   }, [editing]);
   useEffect(() => {
@@ -324,19 +327,21 @@ export function OrderFilterBar({
           </button>
         </span>
       ) : null}
-      <s-button
-        ref={addFilterAnchor}
-        commandFor="orders-v2-add-filter"
-        onClick={() => {
-          if (editing) {
-            setEditing(null);
-            setPosition(null);
-          }
-        }}
-      >
-        {local("Add filter", "필터 추가")}
-        {groups.length ? ` (${groups.length})` : ""}
-      </s-button>
+      <span ref={addFilterPositionAnchor} style={{ display: "inline-flex" }}>
+        <s-button
+          ref={addFilterAnchor}
+          commandFor="orders-v2-add-filter"
+          onClick={() => {
+            if (editing) {
+              setEditing(null);
+              setPosition(null);
+            }
+          }}
+        >
+          {local("Add filter", "필터 추가")}
+          {groups.length ? ` (${groups.length})` : ""}
+        </s-button>
+      </span>
       <s-menu
         id="orders-v2-add-filter"
         accessibilityLabel={local("Add order filter", "주문 필터 추가")}
@@ -344,7 +349,13 @@ export function OrderFilterBar({
         {Object.keys(V2_LABELS).map((group) => (
           <s-button
             key={group}
-            onClick={() => openEditor(group, addFilterAnchor.current)}
+            onClick={() =>
+              openEditor(
+                group,
+                addFilterAnchor.current,
+                addFilterPositionAnchor.current,
+              )
+            }
           >
             {labelV2(V2_LABELS[group], language)}
           </s-button>
@@ -370,7 +381,7 @@ export function OrderFilterBar({
               role="dialog"
               aria-label={labelV2(V2_LABELS[editing], language)}
               style={{
-                position: "fixed",
+                position: "absolute",
                 ...position,
                 width: "min(320px, calc(100vw - 16px))",
                 maxHeight: position.maxHeight,

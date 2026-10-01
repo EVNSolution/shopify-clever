@@ -1,5 +1,7 @@
 /* eslint-env node */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import { translate } from "../app/i18n/i18n.js";
@@ -74,6 +76,34 @@ test("route add-order date filters stay unfiltered until their required date is 
 
   assert.deepEqual(filterRouteAddOrderCandidatesByDate(candidates, { mode: "single" }), candidates);
   assert.deepEqual(filterRouteAddOrderCandidatesByDate(candidates, { mode: "range" }), candidates);
+});
+
+test("route add-order candidates expose and filter orders whose selected date is pending", () => {
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ name: "#1001", orderId: "delivery-pending", deliveryDate: null }),
+    candidate({ name: "#1002", orderId: "order-date-missing", orderedDate: null, deliveryDate: "2026-08-13" }),
+    candidate({ name: "#1003", orderId: "dated", deliveryDate: "2026-08-20" }),
+  ]);
+
+  assert.equal(candidates[0].deliveryDate, "Date pending");
+  assert.equal(candidates[1].orderDate, "No date");
+  assert.deepEqual(
+    filterRouteAddOrderCandidatesByDate(candidates, { field: "deliveryDate", mode: "missing" }).map((order) => order.orderId),
+    ["delivery-pending"],
+  );
+  assert.deepEqual(
+    filterRouteAddOrderCandidatesByDate(candidates, { field: "orderDate", mode: "missing" }).map((order) => order.orderId),
+    ["order-date-missing"],
+  );
+});
+
+test("route add-order dialog offers the pending label that matches the selected date field", () => {
+  const routeDetailSource = readFileSync(
+    join(process.cwd(), "app/routes/app.routes.$routeId.jsx"),
+    "utf8",
+  );
+
+  assert.match(routeDetailSource, /<option value="missing">\{addOrderDateField === "deliveryDate" \? "Date pending" : "No date"\}<\/option>/);
 });
 
 test("route add-order search accepts number variants, whitespace, and partial prefixed names", () => {
