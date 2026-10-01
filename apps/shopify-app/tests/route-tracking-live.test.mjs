@@ -199,7 +199,7 @@ test("Tracking shell prioritizes route status and keeps technical evidence secon
   assert.match(routeDetailSource, /<summary[^>]*>Tracking evidence<\/summary>/);
   assert.match(routeDetailSource, /className="route-tracking-primary-grid"/);
   assert.match(globalCssSource, /\.route-tracking-primary-grid/);
-  assert.match(globalCssSource, /@media \(max-width: 760px\)[\s\S]*\.route-tracking-primary-grid/);
+  assert.match(globalCssSource, /@media \(max-width: 520px\)[\s\S]*\.route-tracking-primary-grid/);
 });
 
 test("Tracking map keeps marker focus and clock updates without date or freshness overlays", () => {

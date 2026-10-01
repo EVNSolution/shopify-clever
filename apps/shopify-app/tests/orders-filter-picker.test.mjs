@@ -63,7 +63,7 @@ test("active chips precede Add filter and each chip anchors its own progressive 
   assert.match(bar, /onChange\(\{ \.\.\.filters, search: undefined \}\)/);
   assert.doesNotMatch(bar, /addEventListener\("scroll", positionPanel, true\)/);
   assert.doesNotMatch(bar, /window\.innerHeight - 400/);
-  assert.match(bar, /requestAnimationFrame\(\(\) => addFilterAnchor\.current\?\.focus\(\)\)/);
+  assert.match(bar, /requestAnimationFrame\(\(\) => addFilterAnchor\.current\?\.focus\(\{ preventScroll: true \}\)\)/);
   assert.match(bar, /if \(!isV2\) \{/);
   assert.match(bar, /const \[draftFilters, setDraftFilters\] = useState/);
   assert.match(bar, /applyAndClose\(\s*datePresetV2\(\s*draftFilters/);

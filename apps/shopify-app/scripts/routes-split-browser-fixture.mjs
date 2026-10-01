@@ -47,10 +47,11 @@ const makeStop = (index, prefix = "source") => ({
 });
 const fixtureStops = Array.from({ length: 6 }, (_, index) => makeStop(index + 1));
 const copiedFixtureStops = Array.from({ length: 6 }, (_, index) => makeStop(index + 1, "copy-virtual"));
+const fixtureDriverName = new URLSearchParams(location.search).has("long-driver") ? "X".repeat(80) : "Alex";
 const makePlan = (id, name, index = 0) => ({
   createdAt: "2026-08-22T0" + index + ":00:00.000Z", deliveryDate: "2026-08-22",
   depot: { address: "Fixture depot", latitude: 43.65, longitude: -79.38, name: "Fixture depot" },
-  driver: { displayName: ["Alex", "Blair", "Casey"][index] || "Unassigned", id: "driver-" + (index + 1) },
+  driver: { displayName: [fixtureDriverName, "Blair", "Casey"][index] || "Unassigned", id: "driver-" + (index + 1) },
   id, itemSummary: { totalQuantity: (index + 1) * 3 }, name, planDate: "2026-08-22",
   routeMetrics: { distanceMeters: (index + 1) * 1000, durationSeconds: (index + 1) * 600 },
   scheduledStartAt: "2026-08-22T" + String(9 + index).padStart(2, "0") + ":00:00.000-04:00",

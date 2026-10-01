@@ -35,6 +35,7 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Evidence disclosure: connection state, execution events, return-to-depot evidence, point counts, and recorded range.
 - Stop table: authoritative ordered stop detail.
 - Show the same detailed stop/order table on a standalone route, a saved child route, and the group All routes view. All routes prepends route identity and includes every child-route stop plus the explicit Unassigned row set; keep the route summary and timeline available alongside it.
+- In standalone route and All routes detail, show the map first, then the stop timeline, then the order list.
 
 ### Orders
 
@@ -81,13 +82,14 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Selected tabs expose `aria-pressed`; grouped operational regions have specific accessible labels.
 - Status is communicated with text in addition to color.
 - Focus indicators must remain visible. Primary action controls should be at least 36px high; compact applied-filter chips use 28px height with a 24px-wide remove target.
+- Filter chips and the Add filter trigger do not shrink inside the horizontally scrolling toolbar. Opening, closing, applying, clearing, and Escape restore keyboard focus without scrolling either the document or toolbar.
 
 - Orders filter dialogs close on Escape or outside interaction and restore trigger focus when explicitly closed.
 
 ## Responsive behavior
 
 - Tabs may horizontally scroll instead of shrinking labels beyond recognition.
-- The primary tracking grid collapses from four columns to two, then one on narrow screens.
+- The primary tracking grid uses four columns above 900px, two through 521–900px, and one at 520px or below. Summary spacing is compact (8px sections, 10px row gap); explicit label/value line heights and start alignment keep the 4px label/value gap stable. Long driver values wrap within their metric.
 - Evidence metrics wrap into fewer columns while retaining label/value pairs.
 - The map height remains independently resizable and is not changed by shell layout work.
 
