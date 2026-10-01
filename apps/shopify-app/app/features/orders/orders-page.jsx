@@ -56,10 +56,7 @@ import {
 } from "./orders-table-columns";
 import {
   filterOrders,
-  getOrderDeliveryDateFilterOptions,
-  getOrderFilterOptions,
-  getServerOrderFilterOptions,
-  getOrderFiltersFromSearchParams,
+
   getOrderDeliveryDateValue,
   getOrderDeliveryExceptionState,
   getOrderDeliveryStateFilterValue,
@@ -68,15 +65,17 @@ import {
   isOrderCancelled,
   isOrderPickupComplete,
   isOrderRouteCreated,
-  ORDER_DELIVERY_DATE_PENDING,
-  ORDER_DELIVERY_STATE_OPTIONS,
+
+
   ORDER_HISTORY_SCOPE,
-  ORDER_PLANNING_SCOPE,
-  ORDER_WEEKDAY_OPTIONS,
+
+
   sortOrdersByDeliveryDatePriority,
-  updateOrderFiltersForChange,
+
   updateOrderFilterSearchParams,
 } from "./order-filters";
+import { OrderFilterBar } from "./order-filter-bar";
+import { getOrdersUiFilters as getOrderFiltersFromSearchParams, normalizeV2Filters, V2_OPTIONS } from "./order-filters-v2.js";
 import { InfoPill } from "../../ui/info-pill";
 import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
 import { TabLayout } from "../../ui/tab-layout";
@@ -117,6 +116,7 @@ function submitOrdersResourceRequest(submit, resource, filterSearchParams, optio
 }
 
 function getOrdersResourceFilters(filters = {}) {
+  if (filters.filterVersion === "2") return filters;
   return {
     ...filters,
     scope: ORDER_HISTORY_SCOPE,
@@ -152,34 +152,6 @@ const ORDER_PAYMENT_CHANGE_OPTIONS = [
   { label: "Awaiting payment", value: "PENDING" },
   { label: "Unknown", value: "UNKNOWN" },
 ];
-const ORDER_FILTER_WEEKDAY_KEY_BY_VALUE = Object.freeze({
-  SUNDAY: "orders.filters.weekday.sunday",
-  MONDAY: "orders.filters.weekday.monday",
-  TUESDAY: "orders.filters.weekday.tuesday",
-  WEDNESDAY: "orders.filters.weekday.wednesday",
-  THURSDAY: "orders.filters.weekday.thursday",
-  FRIDAY: "orders.filters.weekday.friday",
-  SATURDAY: "orders.filters.weekday.saturday",
-});
-const ORDER_FILTER_STATE_KEY_BY_VALUE = Object.freeze({
-  unplanned: "orders.filters.state.unplanned",
-  planned: "orders.filters.state.planned",
-  assigned_undelivered: "orders.filters.state.assignedUndelivered",
-  past_due: "orders.filters.state.pastDue",
-  delivered: "orders.filters.state.delivered",
-  fulfilled: "orders.filters.state.fulfilled",
-  unfulfilled: "orders.filters.state.unfulfilled",
-});
-const ORDER_FILTER_TYPES = [
-  { key: "orderedDate", labelKey: "orders.filters.orderDate" },
-  { key: "deliveryDate", labelKey: "orders.filters.deliveryDate" },
-  { key: "deliveryWeekday", labelKey: "orders.filters.deliveryDay" },
-  { key: "pickupWeekday", labelKey: "orders.filters.pickupDay" },
-  { key: "serviceType", labelKey: "orders.filters.type" },
-  { key: "deliveryArea", labelKey: "orders.filters.area" },
-  { key: "deliveryState", labelKey: "orders.filters.state" },
-];
-const CALENDAR_WEEKDAYS = ["S", "M", "T", "W", "T", "F", "S"];
 
 export function getActiveOrderFilterKeys(filters = {}) {
   return [
@@ -573,14 +545,6 @@ const orderControlsStyle = {
   padding: "6px 10px 8px",
 };
 
-const orderFiltersPanelStyle = {
-  alignItems: "center",
-  display: "flex",
-  flex: "0 0 auto",
-  flexWrap: "nowrap",
-  gap: "6px",
-};
-
 const tableWrapStyle = {
   boxSizing: "border-box",
   height: "calc(100vh - 150px)",
@@ -633,341 +597,6 @@ const ordersPageButtonStyle = {
 const disabledOrdersPageButtonStyle = {
   ...disabledOrderFilterButtonStyle,
   ...compactOrdersPageButtonStyle,
-};
-
-const orderFilterControlStyle = {
-  background: "#ffffff",
-  border: "1px solid #d6d6d6",
-  borderRadius: "8px",
-  boxSizing: "border-box",
-  color: "#303030",
-  flex: "0 1 122px",
-  fontSize: "13px",
-  height: "30px",
-  minWidth: "104px",
-  padding: "0 8px",
-};
-
-const orderFilterDateFieldStyle = {
-  ...orderFilterControlStyle,
-  alignItems: "center",
-  display: "flex",
-  flex: "0 1 176px",
-  gap: "6px",
-  minWidth: "148px",
-  overflow: "hidden",
-  position: "relative",
-};
-
-const orderFilterDateButtonStyle = {
-  background: "transparent",
-  border: 0,
-  color: "#303030",
-  cursor: "pointer",
-  flex: "1 1 auto",
-  font: "inherit",
-  fontWeight: 650,
-  height: "26px",
-  minWidth: 0,
-  overflow: "hidden",
-  padding: "0 24px 0 0",
-  textAlign: "left",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const orderFilterDatePlaceholderButtonStyle = {
-  ...orderFilterDateButtonStyle,
-  color: "#616161",
-  fontWeight: 500,
-};
-
-const orderFilterSelectFieldStyle = {
-  ...orderFilterControlStyle,
-  display: "flex",
-  padding: 0,
-  position: "relative",
-};
-
-const orderFilterMenuButtonStyle = {
-  background: "transparent",
-  border: 0,
-  boxSizing: "border-box",
-  color: "#303030",
-  cursor: "pointer",
-  flex: "1 1 auto",
-  font: "inherit",
-  fontWeight: 650,
-  height: "100%",
-  minWidth: 0,
-  overflow: "hidden",
-  padding: "0 28px 0 8px",
-  textAlign: "left",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
-const orderFilterMenuPlaceholderStyle = {
-  ...orderFilterMenuButtonStyle,
-  color: "#616161",
-  fontWeight: 500,
-};
-
-const orderFilterIndicatorStyle = {
-  display: "grid",
-  gap: "2px",
-  justifyItems: "center",
-  lineHeight: 1,
-  pointerEvents: "none",
-  position: "absolute",
-  right: "10px",
-  top: "50%",
-  transform: "translateY(-50%)",
-};
-
-const orderFilterChevronTriangleStyle = {
-  height: 0,
-  width: 0,
-  borderLeft: "3px solid transparent",
-  borderRight: "3px solid transparent",
-};
-
-const orderFilterChevronUpStyle = {
-  ...orderFilterChevronTriangleStyle,
-  borderBottom: "4px solid #8a8a8a",
-};
-
-const orderFilterChevronDownStyle = {
-  ...orderFilterChevronTriangleStyle,
-  borderTop: "4px solid #8a8a8a",
-};
-
-const orderFilterClearButtonStyle = {
-  alignItems: "center",
-  background: "transparent",
-  border: 0,
-  borderRadius: "6px",
-  color: "#616161",
-  cursor: "pointer",
-  display: "inline-flex",
-  fontSize: "15px",
-  height: "22px",
-  justifyContent: "center",
-  lineHeight: 1,
-  padding: 0,
-  position: "absolute",
-  right: "4px",
-  top: "50%",
-  transform: "translateY(-50%)",
-  width: "22px",
-};
-
-const orderFilterMenuStyle = {
-  background: "#ffffff",
-  border: "1px solid #d6d6d6",
-  borderRadius: "10px",
-  boxShadow: "0 10px 28px rgba(0, 0, 0, 0.14)",
-  display: "grid",
-  gap: "2px",
-  maxHeight: "240px",
-  overflowY: "auto",
-  padding: "6px",
-  position: "absolute",
-  zIndex: 2147483647,
-};
-
-const orderFilterMenuOptionStyle = {
-  background: "transparent",
-  border: 0,
-  borderRadius: "7px",
-  color: "#303030",
-  cursor: "pointer",
-  font: "inherit",
-  fontSize: "13px",
-  lineHeight: 1.25,
-  padding: "7px 8px",
-  textAlign: "left",
-};
-
-const selectedOrderFilterMenuOptionStyle = {
-  ...orderFilterMenuOptionStyle,
-  background: "#f1f1f1",
-  fontWeight: 700,
-};
-
-function renderOrderFilterChevron() {
-  return (
-    <span aria-hidden="true" style={orderFilterIndicatorStyle}>
-      <span style={orderFilterChevronUpStyle} />
-      <span style={orderFilterChevronDownStyle} />
-    </span>
-  );
-}
-
-function OrderFilterMenu({ ariaLabel, clearLabel, label, onChange, onClear, options, value, active = Boolean(value), showLabel = false }) {
-  const fieldRef = useRef(null);
-  const menuRef = useRef(null);
-  const [open, setOpen] = useState(false);
-  const [menuPosition, setMenuPosition] = useState(null);
-  const selectedOption = options.find((option) => option.value === value);
-  const displayLabel = selectedOption
-    ? (showLabel ? `${label}: ${selectedOption.label}` : selectedOption.label)
-    : label;
-
-  const positionMenu = useCallback(() => {
-    const rect = fieldRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const width = Math.max(rect.width, 168);
-    const left = Math.max(
-      window.scrollX + 8,
-      Math.min(rect.left + window.scrollX, window.scrollX + window.innerWidth - width - 8),
-    );
-    setMenuPosition({ left, top: rect.bottom + window.scrollY + 4, width });
-  }, []);
-
-  useEffect(() => {
-    if (!open) return undefined;
-
-    positionMenu();
-    const handleDocumentPointerDown = (event) => {
-      if (fieldRef.current?.contains(event.target)) return;
-      if (menuRef.current?.contains(event.target)) return;
-      setOpen(false);
-      setMenuPosition(null);
-    };
-    const handleKeyDown = (event) => {
-      if (event.key === "Escape") {
-        setOpen(false);
-        setMenuPosition(null);
-      }
-    };
-
-    document.addEventListener("pointerdown", handleDocumentPointerDown);
-    document.addEventListener("keydown", handleKeyDown);
-    window.addEventListener("resize", positionMenu);
-    return () => {
-      document.removeEventListener("pointerdown", handleDocumentPointerDown);
-      document.removeEventListener("keydown", handleKeyDown);
-      window.removeEventListener("resize", positionMenu);
-    };
-  }, [open, positionMenu]);
-
-  return (
-    <div ref={fieldRef} style={orderFilterSelectFieldStyle}>
-      <button
-        aria-expanded={open}
-        aria-haspopup="listbox"
-        aria-label={ariaLabel}
-        style={active ? orderFilterMenuButtonStyle : orderFilterMenuPlaceholderStyle}
-        type="button"
-        onClick={() => {
-          if (!open) positionMenu();
-          setOpen((isOpen) => !isOpen);
-        }}
-      >{displayLabel}</button>
-      {active ? (
-        <button
-          type="button"
-          aria-label={clearLabel}
-          style={orderFilterClearButtonStyle}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => onClear()}
-        >×</button>
-      ) : (
-        renderOrderFilterChevron()
-      )}
-      {open && menuPosition
-        ? createPortal(
-            <div
-              ref={menuRef}
-              role="listbox"
-              style={{
-                ...orderFilterMenuStyle,
-                left: `${menuPosition.left}px`,
-                top: `${menuPosition.top}px`,
-                width: `${menuPosition.width}px`,
-              }}
-            >
-              {options.map((option) => (
-                <button
-                  key={option.value}
-                  aria-selected={option.value === value}
-                  role="option"
-                  style={option.value === value ? selectedOrderFilterMenuOptionStyle : orderFilterMenuOptionStyle}
-                  type="button"
-                  onClick={() => {
-                    onChange(option.value);
-                    setOpen(false);
-                    setMenuPosition(null);
-                  }}
-                >{option.label}</button>
-              ))}
-            </div>,
-            document.body,
-          )
-        : null}
-    </div>
-  );
-}
-
-const orderDateCalendarStyle = {
-  background: "#ffffff",
-  border: "1px solid #d6d6d6",
-  borderRadius: "10px",
-  boxShadow: "0 8px 24px rgba(0, 0, 0, 0.14)",
-  display: "grid",
-  gap: "8px",
-  padding: "10px",
-  position: "absolute",
-  width: "238px",
-  zIndex: 2147483647,
-};
-
-const orderDateCalendarHeaderStyle = {
-  alignItems: "center",
-  display: "flex",
-  justifyContent: "space-between",
-};
-
-const orderDateCalendarGridStyle = {
-  display: "grid",
-  gap: "3px",
-  gridTemplateColumns: "repeat(7, 1fr)",
-};
-
-const orderDateCalendarWeekdayStyle = {
-  color: "#8a8a8a",
-  fontSize: "11px",
-  textAlign: "center",
-};
-
-const orderDateCalendarDayStyle = {
-  background: "transparent",
-  border: "1px solid transparent",
-  borderRadius: "7px",
-  color: "#303030",
-  cursor: "pointer",
-  fontSize: "12px",
-  height: "26px",
-  padding: 0,
-};
-
-const orderDateCalendarDayMutedStyle = {
-  ...orderDateCalendarDayStyle,
-  color: "#b5b5b5",
-};
-
-const orderDateCalendarDaySelectedStyle = {
-  ...orderDateCalendarDayStyle,
-  background: "#303030",
-  borderColor: "#303030",
-  color: "#ffffff",
-};
-
-const orderDateCalendarDayRangeStyle = {
-  ...orderDateCalendarDayStyle,
-  background: "#f1f1f1",
 };
 
 const orderActionOverlayStyle = {
@@ -1795,100 +1424,6 @@ function formatRouteDraftAreaSummary(values) {
   return `${values[0]} +${values.length - 1}`;
 }
 
-function formatOrderDateValue(value) {
-  return value ? value.replaceAll("-", ".") : "";
-}
-
-function formatDeliveryDateFilterLabel(value, count, language) {
-  if (value === ORDER_DELIVERY_DATE_PENDING) {
-    return translate(language, "orders.filters.datePending", { count });
-  }
-
-  const date = new Date(`${value}T00:00:00.000Z`);
-  if (Number.isNaN(date.getTime())) return `${value} (${count})`;
-
-  const weekday = new Intl.DateTimeFormat("en-US", {
-    timeZone: "UTC",
-    weekday: "short",
-  }).format(date);
-
-  return `${weekday} ${value.slice(5, 7)}/${value.slice(8, 10)} (${count})`;
-}
-
-function translateOrderFilterOptions(language, options, translationKeyByValue) {
-  return options.map((option) => {
-    const translationKey = translationKeyByValue[option.value];
-    return translationKey ? { ...option, label: translate(language, translationKey) } : option;
-  });
-}
-
-function formatOrderDateRangeLabel(startDate, endDate) {
-  if (!startDate && !endDate) return "";
-  if (!endDate || startDate === endDate) return formatOrderDateValue(startDate);
-
-  return `${formatOrderDateValue(startDate)}~${formatOrderDateValue(endDate)}`;
-}
-
-function getCalendarMonthValue(value = new Date()) {
-  if (typeof value === "string" && /^\d{4}-\d{2}/.test(value)) {
-    return value.slice(0, 7);
-  }
-
-  const date = value instanceof Date ? value : new Date(value);
-  const safeDate = Number.isNaN(date.getTime()) ? new Date() : date;
-
-  return `${safeDate.getUTCFullYear()}-${String(safeDate.getUTCMonth() + 1).padStart(2, "0")}`;
-}
-
-function shiftCalendarMonth(monthValue, offset) {
-  const [year, month] = monthValue.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1 + offset, 1));
-
-  return getCalendarMonthValue(date);
-}
-
-function formatCalendarMonthLabel(monthValue) {
-  const [year, month] = monthValue.split("-").map(Number);
-  const date = new Date(Date.UTC(year, month - 1, 1));
-
-  return new Intl.DateTimeFormat("en-US", {
-    month: "short",
-    timeZone: "UTC",
-    year: "numeric",
-  }).format(date);
-}
-
-function getCalendarDays(monthValue) {
-  const [year, month] = monthValue.split("-").map(Number);
-  const monthStart = new Date(Date.UTC(year, month - 1, 1));
-  const gridStart = new Date(monthStart);
-  gridStart.setUTCDate(monthStart.getUTCDate() - monthStart.getUTCDay());
-
-  return Array.from({ length: 42 }, (_, dayOffset) => {
-    const date = new Date(gridStart);
-    date.setUTCDate(gridStart.getUTCDate() + dayOffset);
-    const dateValue = date.toISOString().slice(0, 10);
-
-    return {
-      currentMonth: dateValue.startsWith(monthValue),
-      dateValue,
-      dayOfMonth: String(date.getUTCDate()),
-    };
-  });
-}
-
-function getCalendarDayStyle(day, filters, pendingDateStart) {
-  const startDate = pendingDateStart || filters.orderedDateFrom;
-  const endDate = pendingDateStart ? "" : filters.orderedDateTo;
-  const isRangeBoundary = day.dateValue === startDate || day.dateValue === endDate;
-  const isInRange = startDate && endDate && day.dateValue > startDate && day.dateValue < endDate;
-
-  if (isRangeBoundary) return orderDateCalendarDaySelectedStyle;
-  if (isInRange) return orderDateCalendarDayRangeStyle;
-
-  return day.currentMonth ? orderDateCalendarDayStyle : orderDateCalendarDayMutedStyle;
-}
-
 function formatDeliveryValue(value) {
   return typeof value === "string" && value.trim().length > 0 ? value : "—";
 }
@@ -2256,7 +1791,8 @@ function formatOrderTotal(order) {
   return `${amount.toFixed(2)} ${textOrUndefined(order?.currencyCode) ?? ""}`.trim();
 }
 
-function formatOrderDeliveryState(order, referenceDate) {
+function formatOrderDeliveryState(order, referenceDate, language = "en") {
+  if (order?.filterVersion === "2") return V2_OPTIONS.deliveryProgress.find(option => option[0] === order.queryDeliveryProgress)?.[language === "ko" ? 2 : 1] ?? (language === "ko" ? "미확인" : "Unknown");
   if (isOrderPickupComplete(order)) return "Complete";
   const stateValue = getOrderDeliveryStateFilterValue(order, referenceDate);
 
@@ -2332,6 +1868,7 @@ function formatOrderPaymentState(order) {
 }
 
 function getOrderDeliveryStatePillTone(order, referenceDate) {
+  if (order?.filterVersion === "2") return order.queryDeliveryProgress === "delivered" ? "success" : ["failed", "cancelled"].includes(order.queryDeliveryProgress) ? "critical" : "neutral";
   if (isOrderPickupComplete(order)) return "success";
   const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
 
@@ -2345,6 +1882,7 @@ function getOrderDeliveryStatePillTone(order, referenceDate) {
 }
 
 function getOrderDeliveryStateHint(order, referenceDate) {
+  if (order?.filterVersion === "2") return order.queryDeliveryProgress === "pickup_elapsed" ? "The scheduled pickup period ended; collection is not confirmed." : undefined;
   if (isOrderPickupComplete(order)) return "Pickup period ended; marked complete automatically";
   const exceptionState = getOrderDeliveryExceptionState(order, referenceDate);
 
@@ -2672,8 +2210,13 @@ function OrdersPageContent({ loaderData }) {
     () => mapCanonicalOrdersToOrderRows(orderBulkUpdateFetcher.data?.updatedOrders, shopTimeZone),
     [orderBulkUpdateFetcher.data?.updatedOrders, shopTimeZone],
   );
+  const urlOrderFilters = useMemo(
+    () => getOrderFiltersFromSearchParams(searchParams),
+    [searchParams],
+  );
   const displayOrders = useMemo(
     () => {
+      if (urlOrderFilters.filterVersion === "2") return normalizeOrderRowsStoreDates(safeOrders, shopTimeZone);
       const syncMergedOrders =
         syncedOrders.length > 0
           ? mergeShopifyOrderRowsWithCanonicalRows(safeOrders, syncedOrders)
@@ -2687,7 +2230,7 @@ function OrdersPageContent({ loaderData }) {
         ? mergeShopifyOrderRowsWithCanonicalRows(refreshMergedOrders, bulkUpdatedOrders)
         : refreshMergedOrders, shopTimeZone);
     },
-    [bulkUpdatedOrders, refreshedOrders, safeOrders, syncedOrders, shopTimeZone],
+    [bulkUpdatedOrders, refreshedOrders, safeOrders, syncedOrders, shopTimeZone, urlOrderFilters.filterVersion],
   );
   const ordersResultGeneratedAt = useMemo(
     () => formatOrdersResultGeneratedAt(
@@ -2696,16 +2239,12 @@ function OrdersPageContent({ loaderData }) {
     ),
     [ordersFreshness?.resultGeneratedAt, ordersPageInfo?.readWatermark, shopTimeZone],
   );
-  const urlOrderFilters = useMemo(
-    () => getOrderFiltersFromSearchParams(searchParams),
-    [searchParams],
-  );
   const resourceFilterSearchParams = useMemo(() => {
     const resourceFilters = updateOrderFilterSearchParams(
       new URLSearchParams(),
       getOrdersResourceFilters(urlOrderFilters),
     );
-    if (shopLocalDate) resourceFilters.set("routeOpsToday", shopLocalDate);
+    if (shopLocalDate && urlOrderFilters.filterVersion !== "2") resourceFilters.set("routeOpsToday", shopLocalDate);
     return resourceFilters;
   }, [shopLocalDate, urlOrderFilters]);
   const resourceFilterKey = resourceFilterSearchParams.toString();
@@ -2723,12 +2262,6 @@ function OrdersPageContent({ loaderData }) {
     return nextSearchParams;
   }, [paginationEnabled, searchParams]);
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
-  const [visibleOrderFilterKeys, setVisibleOrderFilterKeys] = useState(() =>
-    getActiveOrderFilterKeys(urlOrderFilters),
-  );
-  const availableOrderFilterTypes = ORDER_FILTER_TYPES.filter(
-    ({ key }) => !visibleOrderFilterKeys.includes(key),
-  );
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? getStoreDate(new Date(), shopTimeZone),
     [shopLocalDate, shopTimeZone],
@@ -2737,14 +2270,6 @@ function OrdersPageContent({ loaderData }) {
     () => hasActiveOrderFilters(orderFilters),
     [orderFilters],
   );
-  const activeOrderFilterCount = [
-    orderFilters.orderedDateFrom || orderFilters.orderedDateTo,
-    orderFilters.deliveryDate,
-    orderFilters.deliveryWeekday || (orderFilters.serviceCategory && !orderFilters.serviceType),
-    orderFilters.serviceType,
-    orderFilters.deliveryArea,
-    orderFilters.deliveryState,
-  ].filter(Boolean).length;
   const effectiveOrderFilters = useMemo(
     () =>
       activeOrderFilters
@@ -2752,15 +2277,6 @@ function OrdersPageContent({ loaderData }) {
         : orderFilters,
     [activeOrderFilters, orderFilters],
   );
-
-  useEffect(() => {
-    setVisibleOrderFilterKeys((currentKeys) =>
-      getActiveOrderFilterKeys(orderFilters).reduce(
-        (nextKeys, filterKey) => updateVisibleOrderFilterKeys(nextKeys, filterKey, true),
-        currentKeys,
-      ),
-    );
-  }, [orderFilters]);
 
   useEffect(() => {
     ordersPageCacheRef.current.clear();
@@ -2831,14 +2347,14 @@ function OrdersPageContent({ loaderData }) {
   }, [routeGroupsFetcher.data, routeGroupsFetcher.state]);
 
   useEffect(() => {
-    if (!paginationEnabled) return undefined;
+    if (!paginationEnabled && urlOrderFilters.filterVersion !== "2") return undefined;
 
     const sequence = resourceSequenceRef.current + 1;
     resourceSequenceRef.current = sequence;
     const pageRequestKey = `page-${sequence}`;
     const facetsRequestKey = `facets-${sequence}`;
     const mapRequestKey = `map-${sequence}`;
-    const shouldLoadPage = initializedResourceFiltersRef.current;
+    const shouldLoadPage = paginationEnabled && initializedResourceFiltersRef.current;
     initializedResourceFiltersRef.current = true;
     latestPageRequestKeyRef.current = pageRequestKey;
     latestFacetsRequestKeyRef.current = facetsRequestKey;
@@ -2909,6 +2425,7 @@ function OrdersPageContent({ loaderData }) {
     submitOrdersPageResource,
     getOrdersResourceSessionToken,
     paginationEnabled,
+    urlOrderFilters.filterVersion,
     resourceFilterKey,
     resourceFilterSearchParams,
   ]);
@@ -3124,61 +2641,8 @@ function OrdersPageContent({ loaderData }) {
       { selectedCount: ordersSelectionFetcher.data.selectedCount ?? 0 },
     );
   }, [ordersSelectionFetcher.data, ordersSelectionFetcher.state]);
-  const orderFilterOptionOrders = useMemo(
-    () =>
-      activeOrderFilters
-        ? filterOrders(displayOrders, {
-            ...effectiveOrderFilters,
-            tab: "all",
-            deliveryArea: "",
-            deliveryDate: "",
-            deliveryState: "",
-            deliveryWeekday: "",
-            orderedDateFrom: "",
-            orderedDateTo: "",
-            serviceType: "",
-            referenceDate: orderFilterReferenceDate,
-          })
-        : displayOrders,
-    [activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate],
-  );
-  const orderFilterOptions = useMemo(
-    () => paginationEnabled && ordersFacets && ordersFacetsFilterKey === resourceFilterKey
-      ? getServerOrderFilterOptions(ordersFacets.facets)
-      : ({
-      deliveryAreas: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...effectiveOrderFilters,
-        tab: "all",
-        deliveryArea: "",
-        referenceDate: orderFilterReferenceDate,
-      })).deliveryAreas,
-      deliveryDates: getOrderDeliveryDateFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...effectiveOrderFilters,
-        tab: "all",
-        deliveryDate: "",
-        referenceDate: orderFilterReferenceDate,
-      })),
-      deliveryWeekdays: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...effectiveOrderFilters,
-        tab: "all",
-        deliveryWeekday: "",
-        referenceDate: orderFilterReferenceDate,
-      })).deliveryWeekdays,
-      deliveryStates: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...effectiveOrderFilters,
-        tab: "all",
-        deliveryState: "",
-        referenceDate: orderFilterReferenceDate,
-      })).deliveryStates,
-      serviceTypes: getOrderFilterOptions(filterOrders(orderFilterOptionOrders, {
-        ...effectiveOrderFilters,
-        tab: "all",
-        serviceType: "",
-        referenceDate: orderFilterReferenceDate,
-      })).serviceTypes,
-    }),
-    [effectiveOrderFilters, orderFilterOptionOrders, orderFilterReferenceDate, ordersFacets, ordersFacetsFilterKey, paginationEnabled, resourceFilterKey],
-  );
+
+
   const filteredOrders = useMemo(
     () =>
       paginationEnabled &&
@@ -3342,8 +2806,6 @@ function OrdersPageContent({ loaderData }) {
   const pendingOrdersRefreshCompletionRef = useRef(null);
   const ordersRefreshRevalidationObservedRef = useRef(false);
   const sessionTokenRefreshSubmittedRef = useRef(false);
-  const orderedDateCalendarRef = useRef(null);
-  const orderedDateFieldRef = useRef(null);
   const itemPopoverAnchorRef = useRef(null);
   const itemPopoverRef = useRef(null);
   const notePopoverAnchorRef = useRef(null);
@@ -3358,17 +2820,7 @@ function OrdersPageContent({ loaderData }) {
   const [ordersMapHeight, setOrdersMapHeight] = useState(ORDERS_MAP_DEFAULT_HEIGHT);
   const [planFitRequest, setPlanFitRequest] = useState(0);
   const [selectedOrderFocusRequest, setSelectedOrderFocusRequest] = useState(0);
-  const [orderedDateCalendarOpen, setOrderedDateCalendarOpen] = useState(false);
-  const [pendingOrderedDateStart, setPendingOrderedDateStart] = useState("");
-  const [orderedDateCalendarMonth, setOrderedDateCalendarMonth] = useState(() =>
-    getCalendarMonthValue(orderFilterReferenceDate),
-  );
-  const [orderedDateCalendarPosition, setOrderedDateCalendarPosition] = useState(null);
-  const orderedDateLabel = formatOrderDateRangeLabel(
-    orderFilters.orderedDateFrom,
-    orderFilters.orderedDateTo,
-  );
-  const orderedDateFilterActive = Boolean(orderFilters.orderedDateFrom || orderFilters.orderedDateTo);
+
   const visibleItemPopoverOrderId = pinnedItemPopoverOrderId ?? hoveredItemPopoverOrderId;
   const visibleNoteOrderId = pinnedNoteOrderId ?? hoveredNoteOrderId;
   const syncItemPopover = useCallback(() => {
@@ -3553,10 +3005,7 @@ function OrdersPageContent({ loaderData }) {
       </span>
     );
   };
-  const orderedDateCalendarDays = useMemo(
-    () => getCalendarDays(orderedDateCalendarMonth),
-    [orderedDateCalendarMonth],
-  );
+
   const checkedInventoryIdSet = useMemo(
     () => new Set(checkedInventoryIds),
     [checkedInventoryIds],
@@ -4181,113 +3630,6 @@ function OrdersPageContent({ loaderData }) {
     }
   }, [tableOrders]);
 
-  const handleOrderFilterChange = (filterKey, filterValue) => {
-    const nextFilters = updateOrderFiltersForChange(orderFilters, filterKey, filterValue);
-
-    const nextSearchParams = beginOrderResourceTransition(nextFilters);
-
-    setSearchParams(
-      nextSearchParams,
-      {
-        preventScrollReset: true,
-        replace: true,
-      },
-    );
-  };
-
-  const handleAddOrderFilter = (filterKey) => {
-    setVisibleOrderFilterKeys((currentKeys) =>
-      updateVisibleOrderFilterKeys(currentKeys, filterKey, true),
-    );
-    if (filterKey === "deliveryWeekday" || filterKey === "pickupWeekday") {
-      handleOrderFilterChange(filterKey, orderFilters.deliveryWeekday);
-    }
-  };
-
-  const handleClearOrderFilter = (filterKey) => {
-    const nextFilters = updateOrderFiltersForChange(orderFilters, filterKey, "");
-
-    if (filterKey === "orderedDate") {
-      nextFilters.orderedDateFrom = "";
-      nextFilters.orderedDateTo = "";
-      setPendingOrderedDateStart("");
-      setOrderedDateCalendarOpen(false);
-      setOrderedDateCalendarPosition(null);
-    }
-    setVisibleOrderFilterKeys((currentKeys) =>
-      updateVisibleOrderFilterKeys(currentKeys, filterKey, false),
-    );
-
-    const nextSearchParams = beginOrderResourceTransition(nextFilters);
-
-    setSearchParams(
-      nextSearchParams,
-      {
-        preventScrollReset: true,
-        replace: true,
-      },
-    );
-  };
-
-  const applyOrderedDateRange = useCallback((startDate, endDate) => {
-    const nextFilters = {
-      ...orderFilters,
-      orderedDateFrom: startDate,
-      orderedDateTo: endDate,
-    };
-
-    const nextSearchParams = beginOrderResourceTransition(nextFilters);
-
-    setSearchParams(
-      nextSearchParams,
-      {
-        preventScrollReset: true,
-        replace: true,
-      },
-    );
-  }, [beginOrderResourceTransition, orderFilters, setSearchParams]);
-
-  const positionOrderedDateCalendar = useCallback(() => {
-    const rect = orderedDateFieldRef.current?.getBoundingClientRect();
-    if (!rect) return;
-
-    const width = 238;
-    setOrderedDateCalendarPosition({
-      left: Math.max(
-        window.scrollX + 8,
-        Math.min(rect.left + window.scrollX, window.scrollX + window.innerWidth - width - 8),
-      ),
-      top: rect.bottom + window.scrollY + 4,
-    });
-  }, []);
-
-  const handleOrderedDateCalendarOpen = () => {
-    if (orderedDateCalendarOpen) {
-      setOrderedDateCalendarOpen(false);
-      setOrderedDateCalendarPosition(null);
-      return;
-    }
-
-    positionOrderedDateCalendar();
-    setOrderedDateCalendarMonth(
-      getCalendarMonthValue(orderFilters.orderedDateFrom || orderFilterReferenceDate),
-    );
-    setOrderedDateCalendarOpen(true);
-  };
-
-  const handleOrderedDatePick = (dateValue) => {
-    if (!pendingOrderedDateStart) {
-      setPendingOrderedDateStart(dateValue);
-      return;
-    }
-
-    const [startDate, endDate] = [pendingOrderedDateStart, dateValue].sort();
-    applyOrderedDateRange(startDate, endDate);
-    setPendingOrderedDateStart("");
-    setOrderedDateCalendarOpen(false);
-    setOrderedDateCalendarPosition(null);
-  };
-
   useEffect(() => {
     if (!pinnedItemPopoverOrderId) return undefined;
 
@@ -4312,66 +3654,14 @@ function OrdersPageContent({ loaderData }) {
     return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
   }, [pinnedNoteOrderId]);
 
-  useEffect(() => {
-    if (!orderedDateCalendarOpen) return undefined;
-
-    const handleDocumentPointerDown = (event) => {
-      if (orderedDateCalendarRef.current?.contains(event.target)) return;
-      if (orderedDateFieldRef.current?.contains(event.target)) return;
-
-      if (pendingOrderedDateStart) {
-        applyOrderedDateRange(pendingOrderedDateStart, pendingOrderedDateStart);
-      }
-
-      setPendingOrderedDateStart("");
-      setOrderedDateCalendarOpen(false);
-      setOrderedDateCalendarPosition(null);
-    };
-    const handleWindowLayoutChange = () => positionOrderedDateCalendar();
-
-    document.addEventListener("pointerdown", handleDocumentPointerDown);
-    window.addEventListener("resize", handleWindowLayoutChange);
-    return () => {
-      document.removeEventListener("pointerdown", handleDocumentPointerDown);
-      window.removeEventListener("resize", handleWindowLayoutChange);
-    };
-  }, [
-    applyOrderedDateRange,
-    orderedDateCalendarOpen,
-    pendingOrderedDateStart,
-    positionOrderedDateCalendar,
-  ]);
-
-  const handleClearOrderFilters = () => {
-    const nextFilters = {
-      deliveryArea: "",
-      deliveryDate: "",
-      deliveryState: "",
-      deliveryWeekday: "",
-      orderedDate: "",
-      orderedDateFrom: "",
-      orderedDateTo: "",
-      scope: ORDER_PLANNING_SCOPE,
-      search: "",
-      serviceCategory: "",
-      serviceType: "",
-      tab: "unplanned",
-    };
-
+  const handleV2OrderFiltersChange = (nextFilters) => {
     const nextSearchParams = beginOrderResourceTransition(nextFilters);
-    setPendingOrderedDateStart("");
-    setVisibleOrderFilterKeys([]);
-    setOrderedDateCalendarOpen(false);
-    setOrderedDateCalendarPosition(null);
-
-    setSearchParams(
-      nextSearchParams,
-      {
-        preventScrollReset: true,
-        replace: true,
-      },
-    );
+    setSelectedOrderRows([]); setSelectionSnapshot(null); setSelectionExcludedOrderIds([]);
+    latestSelectionRequestKeyRef.current = null; pendingSelectionExclusionsRef.current = null;
+    setOrdersPageInfo(null);
+    setSearchParams(nextSearchParams, { preventScrollReset: true, replace: true });
   };
+  const handleClearOrderFilters = () => handleV2OrderFiltersChange(normalizeV2Filters({}));
 
   const handleOrdersPageChange = async (targetPage) => {
     if (!paginationEnabled || ordersPageFetcher.state !== "idle") return;
@@ -5914,165 +5204,8 @@ function OrdersPageContent({ loaderData }) {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
-            <s-button
-              commandFor="orders-filter-popover"
-              disabled={availableOrderFilterTypes.length === 0}
-            >
-              {translate(language, "orders.filters.add")} {activeOrderFilterCount > 0 ? `(${activeOrderFilterCount})` : ""}
-            </s-button>
-            <s-menu id="orders-filter-popover" accessibilityLabel={translate(language, "orders.filters.label")}>
-              {availableOrderFilterTypes.map((filterType) => (
-                <s-button
-                  key={filterType.key}
-                  onClick={() => handleAddOrderFilter(filterType.key)}
-                >{translate(language, filterType.labelKey)}</s-button>
-              ))}
-            </s-menu>
-            {visibleOrderFilterKeys.length > 0 ? (
-              <div aria-label="Active order filters" role="group" style={orderFiltersPanelStyle}>
-                {visibleOrderFilterKeys.includes("orderedDate") ? (
-                  <div ref={orderedDateFieldRef} style={orderFilterDateFieldStyle}>
-              <button
-                aria-label={translate(language, "orders.filters.aria.orderedDate")}
-                style={orderedDateFilterActive ? orderFilterDateButtonStyle : orderFilterDatePlaceholderButtonStyle}
-                type="button"
-                onClick={handleOrderedDateCalendarOpen}
-              >{orderedDateFilterActive ? orderedDateLabel : translate(language, "orders.filters.orderDate")}</button>
-              {orderedDateFilterActive ? (
-                <button
-                  type="button"
-                  aria-label={translate(language, "orders.filters.clear.orderedDate")}
-                  style={orderFilterClearButtonStyle}
-                  onPointerDown={(event) => event.stopPropagation()}
-                  onClick={() => handleClearOrderFilter("orderedDate")}
-                >×</button>
-              ) : (
-                renderOrderFilterChevron()
-              )}
-              {orderedDateCalendarOpen && orderedDateCalendarPosition
-                ? createPortal(
-                    <div
-                      ref={orderedDateCalendarRef}
-                      style={{
-                        ...orderDateCalendarStyle,
-                        left: `${orderedDateCalendarPosition.left}px`,
-                        top: `${orderedDateCalendarPosition.top}px`,
-                      }}
-                    >
-                      <div style={orderDateCalendarHeaderStyle}>
-                        <button
-                          type="button"
-                          style={orderFilterButtonStyle}
-                          onClick={() => setOrderedDateCalendarMonth(shiftCalendarMonth(orderedDateCalendarMonth, -1))}
-                        >‹</button>
-                        <strong>{formatCalendarMonthLabel(orderedDateCalendarMonth)}</strong>
-                        <button
-                          type="button"
-                          style={orderFilterButtonStyle}
-                          onClick={() => setOrderedDateCalendarMonth(shiftCalendarMonth(orderedDateCalendarMonth, 1))}
-                        >›</button>
-                      </div>
-                      <div style={orderDateCalendarGridStyle}>
-                        {CALENDAR_WEEKDAYS.map((weekday) => (
-                          <span key={weekday} style={orderDateCalendarWeekdayStyle}>{weekday}</span>
-                        ))}
-                        {orderedDateCalendarDays.map((day) => (
-                          <button
-                            key={day.dateValue}
-                            type="button"
-                            style={getCalendarDayStyle(day, orderFilters, pendingOrderedDateStart)}
-                            onClick={() => handleOrderedDatePick(day.dateValue)}
-                          >{day.dayOfMonth}</button>
-                        ))}
-                      </div>
-                    </div>,
-                    document.body,
-                  )
-                : null}
-                  </div>
-                ) : null}
-                {visibleOrderFilterKeys.includes("deliveryDate") ? (
-                  <OrderFilterMenu
-              ariaLabel={translate(language, "orders.filters.aria.deliveryDate")}
-              clearLabel={translate(language, "orders.filters.clear.deliveryDate")}
-              label={translate(language, "orders.filters.deliveryDate")}
-              options={orderFilterOptions.deliveryDates.map(({ count, value }) => ({
-                label: formatDeliveryDateFilterLabel(value, count, language),
-                value,
-              }))}
-              value={orderFilters.deliveryDate}
-              onChange={(filterValue) => handleOrderFilterChange("deliveryDate", filterValue)}
-              onClear={() => handleClearOrderFilter("deliveryDate")}
-                  />
-                ) : null}
-                {visibleOrderFilterKeys.includes("deliveryWeekday") ? (
-                  <OrderFilterMenu
-              ariaLabel={translate(language, "orders.filters.aria.deliveryDay")}
-              clearLabel={translate(language, "orders.filters.clear.deliveryDay")}
-              label={translate(language, "orders.filters.deliveryDay")}
-              options={translateOrderFilterOptions(language, ORDER_WEEKDAY_OPTIONS, ORDER_FILTER_WEEKDAY_KEY_BY_VALUE)}
-              value={orderFilters.deliveryWeekday}
-              active={Boolean(orderFilters.deliveryWeekday || (orderFilters.serviceCategory && !orderFilters.serviceType))}
-              showLabel
-              onChange={(filterValue) => handleOrderFilterChange("deliveryWeekday", filterValue)}
-              onClear={() => handleClearOrderFilter("deliveryWeekday")}
-                  />
-                ) : null}
-                {visibleOrderFilterKeys.includes("pickupWeekday") ? (
-                  <OrderFilterMenu
-              ariaLabel={translate(language, "orders.filters.aria.pickupDay")}
-              clearLabel={translate(language, "orders.filters.clear.pickupDay")}
-              label={translate(language, "orders.filters.pickupDay")}
-              options={translateOrderFilterOptions(language, ORDER_WEEKDAY_OPTIONS, ORDER_FILTER_WEEKDAY_KEY_BY_VALUE)}
-              value={orderFilters.deliveryWeekday}
-              active={Boolean(orderFilters.deliveryWeekday || (orderFilters.serviceCategory && !orderFilters.serviceType))}
-              showLabel
-              onChange={(filterValue) => handleOrderFilterChange("pickupWeekday", filterValue)}
-              onClear={() => handleClearOrderFilter("pickupWeekday")}
-                  />
-                ) : null}
-                {visibleOrderFilterKeys.includes("serviceType") ? (
-                  <OrderFilterMenu
-              ariaLabel={translate(language, "orders.filters.aria.serviceType")}
-              clearLabel={translate(language, "orders.filters.clear.serviceType")}
-              label={translate(language, "orders.filters.type")}
-              options={[
-                { label: translate(language, "orders.filters.serviceType.delivery"), value: "DELIVERY" },
-                { label: translate(language, "orders.filters.serviceType.eveningDelivery"), value: "EVENING_DELIVERY" },
-                { label: translate(language, "orders.filters.serviceType.pickup"), value: "PICKUP" },
-              ]}
-              value={orderFilters.serviceType}
-              onChange={(filterValue) => handleOrderFilterChange("serviceType", filterValue)}
-              onClear={() => handleClearOrderFilter("serviceType")}
-                  />
-                ) : null}
-                {visibleOrderFilterKeys.includes("deliveryArea") ? (
-                  <OrderFilterMenu
-              ariaLabel={translate(language, "orders.filters.aria.deliveryArea")}
-              clearLabel={translate(language, "orders.filters.clear.deliveryArea")}
-              label={translate(language, "orders.filters.area")}
-              options={orderFilterOptions.deliveryAreas.map((deliveryArea) => ({
-                label: deliveryArea,
-                value: deliveryArea,
-              }))}
-              value={orderFilters.deliveryArea}
-              onChange={(filterValue) => handleOrderFilterChange("deliveryArea", filterValue)}
-              onClear={() => handleClearOrderFilter("deliveryArea")}
-                  />
-                ) : null}
-                {visibleOrderFilterKeys.includes("deliveryState") ? (
-                  <OrderFilterMenu
-              ariaLabel={translate(language, "orders.filters.aria.state")}
-              clearLabel={translate(language, "orders.filters.clear.state")}
-              label={translate(language, "orders.filters.state")}
-              options={translateOrderFilterOptions(language, ORDER_DELIVERY_STATE_OPTIONS, ORDER_FILTER_STATE_KEY_BY_VALUE)}
-              value={orderFilters.deliveryState}
-              onChange={(filterValue) => handleOrderFilterChange("deliveryState", filterValue)}
-              onClear={() => handleClearOrderFilter("deliveryState")}
-                  />
-                ) : null}
-              </div>
-            ) : null}
+            <OrderFilterBar filters={orderFilters} facets={ordersFacetsFilterKey === resourceFilterKey ? ordersFacets?.facets : undefined} language={language} today={orderFilterReferenceDate} buttonStyle={orderFilterButtonStyle} onChange={handleV2OrderFiltersChange} onClear={handleClearOrderFilters} />
+            <s-search-field label={language === "ko" ? "주문 검색" : "Search orders"} labelAccessibilityVisibility="exclusive" placeholder={language === "ko" ? "주문 검색" : "Search orders"} value={orderFilters.search ?? ""} onInput={event => handleV2OrderFiltersChange({ ...orderFilters, search: event.currentTarget.value })} />
             <div style={orderControlsTrailingStyle}>
               <span aria-label="Visible order count" style={orderSelectionCountStyle}>
                 Orders: {ordersPageUpdating ? "Updating…" : filteredOrders.length}
@@ -6101,13 +5234,6 @@ function OrdersPageContent({ loaderData }) {
                   onClick={handleClearOrderSelection}
                 >Clear selection</button>
               ) : null}
-              <button
-                type="button"
-                title="Return to the planning Unplanned view"
-                style={activeOrderFilters ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
-                disabled={!activeOrderFilters}
-                onClick={handleClearOrderFilters}
-              >Clear filters</button>
               <button
                 type="button"
                 style={
@@ -6680,7 +5806,7 @@ function OrdersPageContent({ loaderData }) {
                       </td>
                       <td style={deliveryInfoCellStyle}>
                         {renderDetailPill({
-                          children: formatOrderDeliveryState(order, orderFilterReferenceDate),
+                          children: formatOrderDeliveryState(order, orderFilterReferenceDate, language),
                           details: statePillDetails,
                           detailKey: `${order.id}:state`,
                           label: "State details",

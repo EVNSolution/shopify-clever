@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
+  ORDER_SERVICE_TYPE_OPTIONS,
   getOrderDeliveryDateFilterOptions,
   getOrderFilterOptions,
   getServerOrderFilterOptions,
@@ -57,15 +58,9 @@ test("facet normalization retains legacy strings and handles absent or malformed
 });
 
 test("filter menus receive the accessible labels their component consumes", () => {
-  const source = readFileSync(new URL("../app/features/orders/orders-page.jsx", import.meta.url), "utf8");
-  for (const key of ["deliveryDate", "deliveryDay", "pickupDay", "serviceType", "deliveryArea", "state"]) {
-    assert.ok(source.includes(`ariaLabel={translate(language, "orders.filters.aria.${key}")}`));
-  }
+const source = readFileSync(new URL("../app/features/orders/order-filter-bar.jsx", import.meta.url), "utf8"); assert.match(source, /role="dialog"\s+aria-label=/); assert.match(source, /aria-label=.*local\("Remove"/);
 });
 
 test("service type filter exposes regular and evening delivery as distinct choices", () => {
-  const source = readFileSync(new URL("../app/features/orders/orders-page.jsx", import.meta.url), "utf8");
-  assert.match(source, /orders\.filters\.serviceType\.delivery/);
-  assert.match(source, /orders\.filters\.serviceType\.eveningDelivery/);
-  assert.match(source, /value: "EVENING_DELIVERY"/);
+assert.deepEqual(ORDER_SERVICE_TYPE_OPTIONS.map(option => option.value), ["DELIVERY", "EVENING_DELIVERY", "PICKUP"]);
 });

@@ -1,3 +1,4 @@
+import { getOrdersUiFilters as getOrderFiltersFromSearchParams } from "./order-filters-v2.js";
 import { data } from "react-router";
 import { randomUUID } from "node:crypto";
 import {
@@ -54,7 +55,7 @@ import {
   textOrUndefined,
   withPromiseTimeout,
 } from "./orders-page.shared";
-import { getOrderFiltersFromSearchParams, isOrderCancelled, ORDER_HISTORY_SCOPE } from "./order-filters";
+import { isOrderCancelled, ORDER_HISTORY_SCOPE } from "./order-filters";
 import { resolveOrdersResourceFeatureFlags } from "./orders-resource-flags";
 import {
   fetchShopifyShopTimeZone,
@@ -738,6 +739,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
     ? "inventory"
     : "orders";
   const shouldLoadOrders = activeOrdersView !== "inventory";
+  const queryFilters = getOrderFiltersFromSearchParams(new URL(request.url).searchParams);
   const canonicalFirst = shouldUseCanonicalFirstOrders();
   const autoSyncOrdersOnLoad = shouldAutoSyncOrdersOnLoad();
   const backgroundReconciliation = shouldUseBackgroundReconciliation();
@@ -803,17 +805,17 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
             {
               ...getOrdersResourceFilters(getOrderFiltersFromSearchParams(new URL(request.url).searchParams)),
               page: 1,
-              routeOpsToday: getShopLocalDate(shopTimeZoneData),
+              ...(getOrderFiltersFromSearchParams(new URL(request.url).searchParams).filterVersion === "2" ? {} : { routeOpsToday: getShopLocalDate(shopTimeZoneData) }),
               orderedDateTimeZone: shopTimeZoneData.ianaTimezone,
             },
             { cacheKey: shopifyShopCacheKey },
           ).then((pageData) => ({ ...pageData, orders: pageData.rows }));
         })
-      : fetchDeliveryOrders(
+      : shopTimeZoneDataPromise.then(({ data: data }) => fetchDeliveryOrders(
           request,
-          {},
+          { ...getOrdersResourceFilters(getOrderFiltersFromSearchParams(new URL(request.url).searchParams)), orderedDateTimeZone: data.ianaTimezone },
           { cacheKey: shopifyShopCacheKey },
-        ))
+        )))
     : null;
 
   const serverOrderDataPromise = shouldLoadOrders
@@ -886,7 +888,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
   const routeGroupData = routeGroupDataResult.data;
   const shopLocalDate = getShopLocalDate(shopTimeZoneData);
   const serverOrderRows = mapCanonicalOrdersToOrderRows(serverOrderData.orders, shopTimeZoneData.ianaTimezone);
-  const mergedOrders = canonicalFirst
+  const mergedOrders = canonicalFirst || queryFilters.filterVersion === "2"
     ? serverOrderRows
     : mergeShopifyOrderRowsWithCanonicalRows(
         orderData.orders,
@@ -1205,6 +1207,7 @@ async function resolveOrdersDateContext(request, payload) {
 }
 
 function getOrdersResourceFilters(filters = {}) {
+  if (filters.filterVersion === "2") return filters;
   return {
     ...filters,
     scope: ORDER_HISTORY_SCOPE,

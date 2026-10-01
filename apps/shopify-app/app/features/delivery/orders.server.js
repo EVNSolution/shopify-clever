@@ -269,7 +269,7 @@ function buildDeliveryOrdersPath(filters) {
     if (value == null) continue;
     if (typeof value === "string" && value.trim() === "") continue;
 
-    searchParams.set(key, String(value));
+    for (const item of Array.isArray(value) ? value : [value]) searchParams.append(key, String(item));
   }
 
   const query = searchParams.toString();
@@ -281,7 +281,7 @@ function buildDeliveryOrdersResourcePath(resource, filters) {
 
   for (const [key, value] of Object.entries(filters ?? {})) {
     if (value == null || value === "") continue;
-    searchParams.set(key, String(value));
+    for (const item of Array.isArray(value) ? value : [value]) searchParams.append(key, String(item));
   }
 
   const query = searchParams.toString();

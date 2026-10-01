@@ -47,19 +47,7 @@ test("active URL filters seed visible controls and picker additions persist", ()
 });
 
 test("Add filter uses native menu rows while value controls render in the page row", () => {
-  assert.match(source, /<s-menu id="orders-filter-popover" accessibilityLabel=\{translate\(language, "orders\.filters\.label"\)\}>/);
-  assert.match(source, /availableOrderFilterTypes\.map\(\(filterType\) =>/);
-  assert.match(source, /commandFor="orders-filter-popover"/);
-
-  const popoverStart = source.indexOf('<s-menu id="orders-filter-popover"');
-  const popoverEnd = source.indexOf("</s-menu>", popoverStart);
-  const activeRowStart = source.indexOf('aria-label="Active order filters"', popoverEnd);
-  assert.ok(popoverStart >= 0 && popoverEnd > popoverStart && activeRowStart > popoverEnd);
-
-  const popoverSource = source.slice(popoverStart, popoverEnd);
-  assert.doesNotMatch(popoverSource, /<OrderFilterMenu|<s-box|orderFilterTypeListStyle|handleOrderedDateCalendarOpen/);
-  assert.match(popoverSource, /onClick=\{\(\) => handleAddOrderFilter\(filterType\.key\)\}/);
-  assert.match(source.slice(activeRowStart), /visibleOrderFilterKeys\.includes\("deliveryState"\)[\s\S]*<OrderFilterMenu/);
+const bar = readFileSync(join(process.cwd(), "app/features/orders/order-filter-bar.jsx"), "utf8"); assert.match(source, /<OrderFilterBar/); assert.match(bar, /<s-menu\s+id="orders-v2-add-filter"/); assert.match(bar, /groups.map\(\(?group\)? =>/); assert.doesNotMatch(source, /<OrderFilterMenu/);
 });
 
 test("Orders rows no longer render Area or Payment cells", () => {
@@ -85,9 +73,5 @@ test("day filter controls restore their service category and replace the opposit
 });
 
 test("service-specific day filters live in Add filter without a standalone category toggle", () => {
-  assert.match(source, /key: "deliveryWeekday", labelKey: "orders.filters.deliveryDay"/);
-  assert.match(source, /key: "pickupWeekday", labelKey: "orders.filters.pickupDay"/);
-  assert.doesNotMatch(source, /ORDER_SERVICE_CATEGORY_OPTIONS|orderServiceCategoryStyle/);
-  assert.match(source, /onChange=\{\(filterValue\) => handleOrderFilterChange\("pickupWeekday", filterValue\)\}/);
-  assert.match(source, /onClear=\{\(\) => handleClearOrderFilter\("pickupWeekday"\)\}/);
+const bar = readFileSync(join(process.cwd(), "app/features/orders/order-filter-bar.jsx"), "utf8"); assert.match(bar, /renderChoices\(\s*"scheduledWeekdays"/); assert.doesNotMatch(bar, /serviceCategory|pickupWeekday/);
 });

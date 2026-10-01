@@ -20,7 +20,7 @@ export function buildOrdersResourceRequest(resource, filterSearchParams, options
   return {
     action: path,
     payload: {
-      filters: Object.fromEntries(searchParams),
+      filters: readResourceFilters(searchParams),
       ...(options.page ? { page: String(options.page) } : {}),
       ...(options.readWatermark ? { readWatermark: options.readWatermark } : {}),
       ...(resource === "map" && options.limit ? { limit: String(options.limit) } : {}),
@@ -179,4 +179,12 @@ function text(value) {
 function normalizeOrderIds(values) {
   if (!Array.isArray(values)) return [];
   return [...new Set(values.map(text).filter(Boolean))];
+}
+
+function readResourceFilters(params) {
+  const filters = Object.fromEntries(params);
+  if (filters.filterVersion === "2") for (const key of ["scheduledWeekdays", "serviceTypes", "deliveryProgress", "fulfillmentStatuses", "paymentStatuses", "areas"]) {
+    const values = params.getAll(key); if (values.length) filters[key] = values;
+  }
+  return filters;
 }

@@ -1,3 +1,4 @@
+import { V2_LABELS, V2_OPTIONS, labelV2 } from "../app/features/orders/order-filters-v2.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -14,6 +15,7 @@ const ordersPageSource = readFileSync(
 const routesPageSource = readFileSync(join(root, "app/routes/app.routes.jsx"), "utf8");
 
 test("affected Orders list controls and columns use the app language", () => {
+
   assert.equal(translate("ko", "orders.filters.add"), "필터 추가");
   assert.equal(translate("ko", "orders.filters.label"), "주문 필터");
   assert.equal(translate("ko", "orders.table.amount"), "금액");
@@ -22,11 +24,13 @@ test("affected Orders list controls and columns use the app language", () => {
     "every visible Orders column needs an explicit translation key",
   );
   assert.match(ordersPageSource, /useRouteLoaderData\("routes\/app"\)\?\.language/);
-  assert.match(ordersPageSource, /translate\(language, "orders\.filters\.add"\)/);
+  assert.match(ordersPageSource, /<OrderFilterBar/);
   assert.match(ordersPageSource, /translate\(language, column\.translationKey\)/);
+
 });
 
 test("Orders Add filter static labels and options have Korean dictionary coverage", () => {
+
   const expectedTranslations = {
     "orders.filters.orderDate": "주문일",
     "orders.filters.deliveryDate": "배송일",
@@ -84,12 +88,7 @@ test("Orders Add filter static labels and options have Korean dictionary coverag
     translate("en", "orders.filters.datePending", { count: 3 }),
     "Date pending (3)",
   );
-  assert.match(ordersPageSource, /ORDER_FILTER_WEEKDAY_KEY_BY_VALUE/);
-  assert.match(ordersPageSource, /ORDER_FILTER_STATE_KEY_BY_VALUE/);
-  assert.match(ordersPageSource, /translateOrderFilterOptions\(language, ORDER_WEEKDAY_OPTIONS/);
-  assert.match(ordersPageSource, /translateOrderFilterOptions\(language, ORDER_DELIVERY_STATE_OPTIONS/);
-  assert.match(ordersPageSource, /translate\(language, "orders\.filters\.aria\.orderedDate"\)/);
-  assert.match(ordersPageSource, /translate\(language, "orders\.filters\.clear\.state"\)/);
+
 });
 
 test("affected Routes list labels use the app language without adding a Dispatch action", () => {
@@ -113,4 +112,11 @@ test("affected Routes list labels use the app language without adding a Dispatch
   assert.match(routesPageSource, /formatLocalizedRouteGroupSummary\(language, route, routeGroupById\)/);
   assert.doesNotMatch(routesPageSource, /routes\.group\.withoutRoutes|groupsWithoutRoutes/);
   assert.doesNotMatch(routesPageSource, />Dispatch</);
+});
+
+test("v2 filter labels and options have explicit Korean meanings", () => {
+  assert.equal(labelV2(V2_LABELS.received, "ko"), "주문 접수일");
+  assert.equal(labelV2(V2_LABELS.scheduled, "ko"), "배송·픽업 예정일");
+  for (const labels of Object.values(V2_LABELS)) assert.notEqual(labels[0], labels[1]);
+  for (const options of Object.values(V2_OPTIONS)) for (const [, en, ko] of options) assert.notEqual(en, ko);
 });

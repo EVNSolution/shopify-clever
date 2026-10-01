@@ -29,13 +29,7 @@ const ordersPageServerSource = readFileSync(
 );
 
 test("orders choose filter types before showing values and show order amount by default", () => {
-  assert.match(ordersPageSource, /<s-button[\s\S]*?commandFor="orders-filter-popover"[\s\S]*translate\(language, "orders\.filters\.add"\)/);
-  assert.match(ordersPageSource, /<s-menu id="orders-filter-popover"/);
-  assert.match(ordersPageSource, /aria-label="Active order filters"/);
-  assert.match(ordersPageSource, /\{ key: "totalPriceAmount", label: "Amount", translationKey: "orders\.table\.amount" \}/);
-  assert.match(ordersPageSource, /formatOrderTotal\(order\)/);
-  assert.doesNotMatch(ordersPageSource, /\{ key: "hasCoordinates", label: "Coordinates" \}/);
-  assert.doesNotMatch(ordersPageSource, /\{order\.hasCoordinates \? "Yes" : "No"\}/);
+assert.match(ordersPageSource, /<OrderFilterBar/); assert.match(ordersPageSource, /formatOrderTotal\(order\)/); assert.doesNotMatch(ordersPageSource, /<OrderFilterMenu/);
 });
 const rootDocumentSource = readFileSync(join(root, "app/root.jsx"), "utf8");
 const shopifyOrdersSource = readFileSync(
@@ -101,7 +95,7 @@ test("Orders tab loads Shopify orders and renders them in the shared map layout"
   assert.doesNotMatch(ordersPageSource, /Shopify orders connected to the delivery map/);
   assert.match(ordersPageSource, /primary=\{/);
   assert.match(ordersPageSource, /id="orders-map"/);
-  assert.match(ordersPageSource, /labelKey: "orders\.filters\.area"/);
+  assert.match(ordersPageSource, /<OrderFilterBar/);
   assert.match(ordersPageSource, /label: "Ordered"/);
   assert.match(ordersPageSource, /label: "Delivery"/);
   assert.match(serviceErrorsSource, /PROTECTED_ORDER_ACCESS/);
@@ -309,7 +303,7 @@ test("Orders loader can isolate CLEVER delivery orders for synthetic dev data", 
     ordersPageSource,
     /const shouldLoadShopifyOrders =\s*shouldLoadShopifyMetadata && !canonicalFirst/,
   );
-  assert.match(ordersPageSource, /canonicalFirst\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows/);
+  assert.match(ordersPageSource, /canonicalFirst \|\| queryFilters.filterVersion === "2"\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows/);
 });
 
 test("Order page keeps the current rows when a failed pagination response is empty", () => {
@@ -1083,16 +1077,18 @@ test("Date pending opens Fix data while Area stays out of the table", () => {
 });
 
 test("Orders loader merges delivery server planning state before background sync", () => {
+
   assert.match(ordersPageSource, /const activeOrdersView = new URL\(request\.url\)\.searchParams\.get\("view"\) === "inventory"/);
   assert.match(ordersPageSource, /const shouldLoadOrders = activeOrdersView !== "inventory"/);
   assert.match(ordersPageSource, /const serverOrdersStartedAt = getSafePerformanceNow\(\)/);
-  assert.match(ordersPageSource, /const serverOrdersRequestPromise = shouldLoadOrders\s*\?\s*\(resourceFlags\.pagination[\s\S]*fetchDeliveryOrdersPage\([\s\S]*:\s*fetchDeliveryOrders\(\s*request,\s*\{\},\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\},?\s*\)\)\s*:\s*null/);
+  assert.match(ordersPageSource, /shopTimeZoneDataPromise.then/);
+  assert.match(ordersPageSource, /orderedDateTimeZone: data.ianaTimezone/);
   assert.match(ordersPageSource, /const serverOrderDataPromise = shouldLoadOrders\s*\?\s*serverOrdersRequestPromise\.then/);
   assert.match(ordersPageSource, /Promise\.resolve\(\{ data: \{ orders: \[\], errors: \[\] \}, durationMs: 0 \}\)/);
   assert.match(ordersPageSource, /const serverOrderRows = mapCanonicalOrdersToOrderRows\(serverOrderData\.orders, shopTimeZoneData\.ianaTimezone\)/);
   assert.match(
     ordersPageSource,
-    /const mergedOrders = canonicalFirst\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\{\s*includeCanonicalOnly:\s*!shouldLoadShopifyOrders \|\| orderData\.complete !== true,\s*\},\s*\)/,
+    /const mergedOrders = canonicalFirst \|\| queryFilters.filterVersion === "2"\s*\?\s*serverOrderRows\s*:\s*mergeShopifyOrderRowsWithCanonicalRows\(\s*orderData\.orders,\s*serverOrderRows,\s*\{\s*includeCanonicalOnly:\s*!shouldLoadShopifyOrders \|\| orderData\.complete !== true,\s*\},\s*\)/,
   );
   assert.match(ordersPageSource, /orders: mergedOrders/);
   assert.match(ordersPageSource, /activeOrdersView,/);
@@ -1101,6 +1097,7 @@ test("Orders loader merges delivery server planning state before background sync
   assert.match(ordersPageSource, /DELIVERY_SESSION_TOKEN_MISSING_ERROR_CODE/);
   assert.match(ordersPageSource, /INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE = "Invalid Shopify session token"/);
   assert.match(ordersPageSource, /error\?\.code === "UNAUTHORIZED"[\s\S]*error\?\.message === INVALID_SHOPIFY_SESSION_TOKEN_MESSAGE/);
+
 });
 
 test("Orders resources bind planning queries to the shop-local date", () => {
@@ -1359,17 +1356,11 @@ test("Orders table treats no active filters as literally unfiltered", () => {
 });
 
 test("Orders filter changes apply directly without automatic delivery-date lock rewrites", () => {
-  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?updateOrderFiltersForChange\(orderFilters, filterKey, filterValue\)/);
-  assert.doesNotMatch(ordersPageSource, /autoAppliedDeliveryDateFilter/);
-  assert.doesNotMatch(ordersPageSource, /setAutoAppliedDeliveryDateFilter/);
+assert.match(ordersPageSource, /const handleV2OrderFiltersChange = \(nextFilters\) =>/); assert.doesNotMatch(ordersPageSource, /autoAppliedDeliveryDateFilter/);
 });
 
 test("Orders clear filters resets date placeholders even with a draft", () => {
-  assert.match(ordersPageSource, /const handleClearOrderFilters = \(\) => \{/);
-  assert.match(ordersPageSource, /deliveryDate: ""/);
-  assert.match(ordersPageSource, /orderedDateFrom: ""/);
-  assert.match(ordersPageSource, /orderedDateTo: ""/);
-  assert.doesNotMatch(ordersPageSource, /ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR/);
+assert.match(ordersPageSource, /handleV2OrderFiltersChange\(normalizeV2Filters\(\{\}\)\)/); assert.doesNotMatch(ordersPageSource, /ROUTE_PLAN_DELIVERY_DATE_FILTER_LOCKED_ERROR/);
 });
 
 test("Orders page shows a route summary before moving to Routes", () => {
@@ -1427,6 +1418,7 @@ test("Orders page keeps Add to map in the table controls", () => {
 });
 
 test("Orders table hides Area and Payment while keeping delivery state operational", () => {
+
   assert.doesNotMatch(ordersPageSource, /label: "Area details"|label: "Payment details"/);
   assert.doesNotMatch(ordersPageSource, /\{ key: "deliveryArea", label: "Area", translationKey: "orders\.table\.area" \}/);
   assert.match(ordersPageSource, /\{ key: "orderedDate", label: "Ordered", translationKey: "orders\.table\.ordered" \}/);
@@ -1456,7 +1448,7 @@ test("Orders table hides Area and Payment while keeping delivery state operation
   assert.match(ordersPageSource, /function formatOrderDeliveryLabel\(order\) \{/);
   assert.match(ordersPageSource, /if \(!order\) return "—"/);
   assert.match(ordersPageSource, /: "Date pending"/);
-  assert.match(ordersPageSource, /function formatOrderDeliveryState\(order, referenceDate\) \{/);
+  assert.match(ordersPageSource, /function formatOrderDeliveryState\(order, referenceDate, language = "en"\) \{/);
   assert.match(ordersPageSource, /getOrderDeliveryExceptionState\(order, referenceDate\)/);
   assert.doesNotMatch(ordersPageSource, /Assigned · overdue/);
   assert.match(ordersPageSource, /Past due/);
@@ -1561,6 +1553,7 @@ test("Orders table hides Area and Payment while keeping delivery state operation
   assert.doesNotMatch(ordersPageSource, /\{order\.status\}<\/td>/);
   assert.doesNotMatch(ordersPageSource, /\{order\.paymentStatus\}<\/td>/);
   assert.doesNotMatch(ordersPageSource, /\{order\.attributes\}<\/td>/);
+
 });
 
 test("Orders table keeps planned orders visible but removes them from selectable candidates", () => {
@@ -2025,132 +2018,7 @@ test("Orders table headers sort rows by ascending and descending values", () => 
 });
 
 test("Orders page filters table rows by order date, delivery date, delivery day, type, and area", () => {
-  assert.match(ordersPageSource, /import \{ Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams \} from "react-router"/);
-  assert.match(ordersPageSource, /import \{[\s\S]*filterOrders[\s\S]*getOrderFilterOptions[\s\S]*getOrderFiltersFromSearchParams[\s\S]*ORDER_HISTORY_SCOPE[\s\S]*ORDER_PLANNING_SCOPE[\s\S]*ORDER_WEEKDAY_OPTIONS[\s\S]*updateOrderFilterSearchParams[\s\S]*\} from "(?:\.\.\/features\/orders|\.)\/order-filters"/);
-  assert.match(ordersPageSource, /const \[searchParams, setSearchParams\] = useSearchParams\(\)/);
-  assert.match(ordersPageSource, /const \[optimisticOrderFilters, setOptimisticOrderFilters\] = useState\(null\)/);
-  assert.match(ordersPageSource, /const urlOrderFilters = useMemo\(\s*\(\) => getOrderFiltersFromSearchParams\(searchParams\),\s*\[searchParams\],\s*\)/);
-  assert.match(ordersPageSource, /const orderFilters = optimisticOrderFilters \?\? urlOrderFilters/);
-  assert.match(ordersPageSource, /setOptimisticOrderFilters\(null\);\s*\}, \[searchParams\]\)/);
-  assert.match(ordersPageSource, /const \{ orders, ordersLoaded, inventories, routeGroups, errors, departureLocation, featureFlags, freshness, needsSessionTokenRefresh, ordersCacheKey, perf, shopLocalDate \} = displayLoaderData/);
-  assert.match(ordersPageSource, /const orderFilterReferenceDate = useMemo\(\s*\(\) => shopLocalDate \?\? getStoreDate\(new Date\(\), shopTimeZone\),\s*\[shopLocalDate, shopTimeZone\],\s*\)/);
-  assert.match(ordersPageSource, /const effectiveOrderFilters = useMemo\([\s\S]*ORDER_HISTORY_SCOPE[\s\S]*: orderFilters,[\s\S]*\[activeOrderFilters, orderFilters\]/);
-  assert.match(ordersPageSource, /const orderFilterOptionOrders = useMemo\(\s*\(\) =>\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?deliveryArea: "",[\s\S]*?deliveryWeekday: "",[\s\S]*?orderedDateFrom: "",[\s\S]*?orderedDateTo: "",[\s\S]*?serviceType: "",[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate\],\s*\)/);
-  assert.match(ordersPageSource, /deliveryAreas: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryArea: ""/);
-  assert.match(ordersPageSource, /deliveryDates: getOrderDeliveryDateFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryDate: ""/);
-  assert.match(ordersPageSource, /deliveryWeekdays: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?deliveryWeekday: ""/);
-  assert.match(ordersPageSource, /serviceTypes: getOrderFilterOptions\(filterOrders\(orderFilterOptionOrders, \{[\s\S]*?serviceType: ""/);
-  assert.match(ordersPageSource, /const appliedOrdersPageFilterKeyRef = useRef\(resourceFilterKey\)/);
-  assert.match(ordersPageSource, /appliedOrdersPageFilterKeyRef\.current = resourceFilterKey/);
-  assert.match(ordersPageSource, /const filteredOrders = useMemo\(\s*\(\) =>\s*paginationEnabled &&\s*\(\s*ordersResourceTransitionPending \|\|\s*appliedOrdersPageFilterKeyRef\.current !== resourceFilterKey\s*\)\s*\?\s*displayOrders\s*:\s*activeOrderFilters\s*\? filterOrders\(displayOrders, \{[\s\S]*?\.\.\.effectiveOrderFilters,[\s\S]*?referenceDate: orderFilterReferenceDate,[\s\S]*?\}\)\s*: displayOrders,\s*\[activeOrderFilters, displayOrders, effectiveOrderFilters, orderFilterReferenceDate, ordersResourceTransitionPending, paginationEnabled, resourceFilterKey\],\s*\)/);
-  assert.match(ordersPageSource, /getOrderSortValue\(leftOrder, sortConfig\.key, orderFilterReferenceDate\)/);
-  assert.match(ordersPageSource, /const sortedOrders = useMemo\(\(\) => \{\s*if \(!sortConfig\) return sortOrdersByDeliveryDatePriority\(filteredOrders\)/);
-  assert.match(ordersPageSource, /aria-label=\{translate\(language, "orders\.filters\.aria\.orderedDate"\)\}/);
-  assert.match(ordersPageSource, /const orderedDateFieldRef = useRef\(null\)/);
-  assert.match(ordersPageSource, /const rect = orderedDateFieldRef\.current\?\.getBoundingClientRect\(\)/);
-  assert.match(ordersPageSource, /if \(orderedDateFieldRef\.current\?\.contains\(event\.target\)\) return/);
-  assert.match(ordersPageSource, /<div ref=\{orderedDateFieldRef\} style=\{orderFilterDateFieldStyle\}>/);
-  assert.match(ordersPageSource, /style=\{orderedDateFilterActive \? orderFilterDateButtonStyle : orderFilterDatePlaceholderButtonStyle\}/);
-  assert.match(ordersPageSource, /const orderFilterDateFieldStyle = \{[\s\S]*?overflow:\s*"hidden"/);
-  assert.match(ordersPageSource, /const orderFilterDateButtonStyle = \{[\s\S]*?fontWeight:\s*650[\s\S]*?minWidth:\s*0/);
-  assert.match(ordersPageSource, /const orderFilterDatePlaceholderButtonStyle = \{[\s\S]*?\.\.\.orderFilterDateButtonStyle[\s\S]*?fontWeight:\s*500/);
-  assert.match(ordersPageSource, /const orderFilterSelectFieldStyle = \{/);
-  assert.match(ordersPageSource, /function OrderFilterMenu\(\{ ariaLabel, clearLabel, label, onChange, onClear, options, value, active = Boolean\(value\), showLabel = false \}\)/);
-  assert.match(ordersPageSource, /const \[menuPosition, setMenuPosition\] = useState\(null\)/);
-  assert.match(ordersPageSource, /\{open && menuPosition\s*\? createPortal/);
-  assert.match(ordersPageSource, /aria-haspopup="listbox"/);
-  assert.match(ordersPageSource, /role="listbox"/);
-  assert.match(ordersPageSource, /const orderFilterMenuStyle = \{/);
-  assert.match(ordersPageSource, /const orderFilterMenuStyle = \{[\s\S]*?position:\s*"absolute"/);
-  assert.match(ordersPageSource, /rect\.bottom \+ window\.scrollY \+ 4/);
-  assert.match(ordersPageSource, /const orderFilterMenuOptionStyle = \{/);
-  assert.match(ordersPageSource, /const orderFilterClearButtonStyle = \{/);
-  assert.match(ordersPageSource, /if \(!startDate && !endDate\) return ""/);
-  assert.match(ordersPageSource, /function formatOrderDateValue\(value\) \{[\s\S]*?replaceAll\("-", "\."\)/);
-  assert.match(ordersPageSource, /`\$\{formatOrderDateValue\(startDate\)\}~\$\{formatOrderDateValue\(endDate\)\}`/);
-  assert.match(ordersPageSource, /textAlign:\s*"left"/);
-  assert.match(ordersPageSource, /\{orderedDateFilterActive \? orderedDateLabel : translate\(language, "orders\.filters\.orderDate"\)\}<\/button>/);
-  assert.match(ordersPageSource, /aria-label=\{translate\(language, "orders\.filters\.clear\.orderedDate"\)\}/);
-  assert.match(ordersPageSource, /const \[pendingOrderedDateStart, setPendingOrderedDateStart\] = useState\(""\)/);
-  assert.match(ordersPageSource, /const \[orderedDateCalendarPosition, setOrderedDateCalendarPosition\] = useState\(null\)/);
-  assert.match(ordersPageSource, /\{orderedDateCalendarOpen && orderedDateCalendarPosition\s*\? createPortal/);
-  assert.match(ordersPageSource, /const orderDateCalendarStyle = \{[\s\S]*?position:\s*"absolute"/);
-  assert.doesNotMatch(ordersPageSource, /window\.addEventListener\("scroll", positionMenu, true\)/);
-  assert.match(ordersPageSource, /orderedDateFrom: startDate/);
-  assert.match(ordersPageSource, /orderedDateTo: endDate/);
-  assert.match(ordersPageSource, /applyOrderedDateRange\(pendingOrderedDateStart, pendingOrderedDateStart\)/);
-  assert.match(ordersPageSource, /getCalendarDayStyle\(day, orderFilters, pendingOrderedDateStart\)/);
-  assert.match(ordersPageSource, /const nextFilters = \{\s*\.\.\.orderFilters,\s*orderedDateFrom: startDate,\s*orderedDateTo: endDate,\s*\}/);
-  assert.match(ordersPageSource, /const nextSearchParams = beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(\s*nextSearchParams/);
-  assert.match(ordersPageSource, /const handleClearOrderFilter = \(filterKey\) => \{/);
-  assert.match(ordersPageSource, /nextFilters\.orderedDateFrom = ""/);
-  assert.match(ordersPageSource, /nextFilters\.orderedDateTo = ""/);
-  assert.match(ordersPageSource, /const nextFilters = updateOrderFiltersForChange\(orderFilters, filterKey, ""\)/);
-  assert.match(ordersPageSource, /onClick=\{handleOrderedDateCalendarOpen\}/);
-  assert.match(ordersPageSource, /ariaLabel=\{translate\(language, "orders\.filters\.aria\.deliveryDay"\)\}/);
-  assert.match(ordersPageSource, /value=\{orderFilters\.deliveryWeekday\}/);
-  assert.match(ordersPageSource, /const handleOrderFilterChange = \(filterKey, filterValue\) => \{[\s\S]*?const nextSearchParams = beginOrderResourceTransition\(nextFilters\);[\s\S]*?setSearchParams\(\s*nextSearchParams/);
-  assert.match(ordersPageSource, /label=\{translate\(language, "orders\.filters\.deliveryDay"\)\}/);
-  assert.match(ordersPageSource, /renderOrderFilterChevron\(\)/);
-  assert.match(ordersPageSource, /options=\{translateOrderFilterOptions\(language, ORDER_WEEKDAY_OPTIONS, ORDER_FILTER_WEEKDAY_KEY_BY_VALUE\)\}/);
-  assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryWeekday", filterValue\)/);
-  assert.match(ordersPageSource, /clearLabel=\{translate\(language, "orders\.filters\.clear\.deliveryDay"\)\}/);
-  assert.match(ordersPageSource, /ariaLabel=\{translate\(language, "orders\.filters\.aria\.deliveryDate"\)\}/);
-  assert.match(ordersPageSource, /label=\{translate\(language, "orders\.filters\.deliveryDate"\)\}/);
-  assert.match(ordersPageSource, /orderFilterOptions\.deliveryDates\.map\(\(\{ count, value \}\) => \(\{/);
-  assert.match(ordersPageSource, /formatDeliveryDateFilterLabel\(value, count, language\)/);
-  assert.match(ordersPageSource, /value=\{orderFilters\.deliveryDate\}/);
-  assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryDate", filterValue\)/);
-  assert.match(ordersPageSource, /clearLabel=\{translate\(language, "orders\.filters\.clear\.deliveryDate"\)\}/);
-  assert.match(ordersPageSource, /aria-label="Visible order count"/);
-  assert.match(ordersPageSource, /ariaLabel=\{translate\(language, "orders\.filters\.aria\.serviceType"\)\}/);
-  assert.match(ordersPageSource, /label=\{translate\(language, "orders\.filters\.type"\)\}/);
-  assert.match(ordersPageSource, /\{ label: translate\(language, "orders\.filters\.serviceType\.delivery"\), value: "DELIVERY" \}/);
-  assert.match(ordersPageSource, /\{ label: translate\(language, "orders\.filters\.serviceType\.pickup"\), value: "PICKUP" \}/);
-  assert.match(ordersPageSource, /clearLabel=\{translate\(language, "orders\.filters\.clear\.serviceType"\)\}/);
-  assert.match(ordersPageSource, /ariaLabel=\{translate\(language, "orders\.filters\.aria\.deliveryArea"\)\}/);
-  assert.match(ordersPageSource, /label=\{translate\(language, "orders\.filters\.area"\)\}/);
-  assert.match(ordersPageSource, /orderFilterOptions\.deliveryAreas\.map\(\(deliveryArea\) => \(\{/);
-  assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryArea", filterValue\)/);
-  assert.match(ordersPageSource, /clearLabel=\{translate\(language, "orders\.filters\.clear\.deliveryArea"\)\}/);
-  assert.match(ordersPageSource, /ariaLabel=\{translate\(language, "orders\.filters\.aria\.state"\)\}/);
-  assert.match(ordersPageSource, /label=\{translate\(language, "orders\.filters\.state"\)\}/);
-  assert.match(ordersPageSource, /ORDER_DELIVERY_STATE_OPTIONS/);
-  assert.match(ordersPageSource, /options=\{translateOrderFilterOptions\(language, ORDER_DELIVERY_STATE_OPTIONS, ORDER_FILTER_STATE_KEY_BY_VALUE\)\}/);
-  assert.doesNotMatch(ordersPageSource, /stateOption\) => orderFilterOptions\.deliveryStates\.includes/);
-  assert.match(ordersPageSource, /handleOrderFilterChange\("deliveryState", filterValue\)/);
-  assert.match(ordersPageSource, /clearLabel=\{translate\(language, "orders\.filters\.clear\.state"\)\}/);
-  assert.match(ordersPageSource, /const nextSearchParams = beginOrderResourceTransition\(nextFilters\);\s*setSearchParams\(/);
-  assert.match(ordersPageSource, />Clear filters<\/button>/);
-  assert.match(ordersPageSource, />Clear selection<\/button>/);
-  assert.match(ordersPageSource, />Clear<\/button>/);
-  assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0 \|\| snapshotSelectionActive\}/);
-  assert.match(ordersPageSource, /deliveryWeekday: ""/);
-  assert.match(ordersPageSource, /orderedDateFrom: ""/);
-  assert.match(ordersPageSource, /orderedDateTo: ""/);
-  assert.match(ordersPageSource, /const orderFilterControlStyle = \{[\s\S]*?flex:\s*"0 1 122px"[\s\S]*?minWidth:\s*"104px"[\s\S]*?padding:\s*"0 8px"/);
-  assert.match(ordersPageSource, /const orderFilterDateFieldStyle = \{[\s\S]*?\.\.\.orderFilterControlStyle[\s\S]*?flex:\s*"0 1 176px"[\s\S]*?minWidth:\s*"148px"/);
-  assert.match(ordersPageSource, /boxSizing:\s*"border-box"/);
-  assert.match(ordersPageSource, /const orderControlsStyle = \{[\s\S]*?flexWrap:\s*"nowrap"[\s\S]*?overflowX:\s*"auto"[\s\S]*?padding:\s*"6px 10px 8px"/);
-  assert.match(ordersPageSource, /const orderControlsTrailingStyle = \{[\s\S]*?flex:\s*"0 0 auto"[\s\S]*?marginLeft:\s*"auto"/);
-  assert.doesNotMatch(ordersPageSource, /aria-label="Order planning tabs" role="tablist"/);
-  assert.doesNotMatch(ordersPageSource, /ORDER_STATUS_TABS\.map/);
-  assert.doesNotMatch(ordersPageSource, /aria-label="Choose order scope"/);
-  assert.doesNotMatch(ordersPageSource, />Planning Scope<\/option>/);
-  assert.doesNotMatch(ordersPageSource, />History \/ All Orders<\/option>/);
-  assert.doesNotMatch(ordersPageSource, /aria-label="Search orders"/);
-  assert.doesNotMatch(ordersPageSource, /placeholder="Search orders"/);
-  assert.doesNotMatch(ordersPageSource, /type="search"/);
-  assert.doesNotMatch(ordersPageSource, /formatServiceTypeLabel\(serviceType\)/);
-  assert.doesNotMatch(ordersPageSource, /const serviceTypeFilterOptions = useMemo\(/);
-  assert.doesNotMatch(ordersPageSource, /const orderFilterSearchStyle = \{/);
-  assert.doesNotMatch(ordersPageSource, /background:\s*"#ffffff",\s*\n\s*borderBottom:\s*"1px solid #ebebeb"/);
-  assert.doesNotMatch(ordersPageSource, /const allOrdersShown = orderFilters\.planned === "all"/);
-  assert.doesNotMatch(ordersPageSource, /aria-pressed=\{allOrdersShown\}/);
-  assert.doesNotMatch(ordersPageSource, /Showing all orders, including past and planned orders/);
-  assert.doesNotMatch(ordersPageSource, /Include past and planned orders/);
-  assert.doesNotMatch(ordersPageSource, />\s*Un-routed\s*<\/button>/);
-  assert.doesNotMatch(ordersPageSource, /Show routed orders/);
+assert.match(ordersPageSource, /filterOrders\(displayOrders/); assert.match(ordersPageSource, /getOrdersUiFilters as getOrderFiltersFromSearchParams/); assert.match(ordersPageSource, /getOrdersResourceFilters\(urlOrderFilters\)/); assert.match(ordersPageSource, /onChange=\{handleV2OrderFiltersChange\}/); assert.match(ordersPageSource, /setSelectedOrderRows\(\[\]\)/);
 });
 
 test("Orders paginated resource defaults to all history orders and renders numeric page buttons", () => {
