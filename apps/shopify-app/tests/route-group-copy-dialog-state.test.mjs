@@ -19,6 +19,7 @@ test("copy dialog opens without a dangerous default mode", () => {
     isOpen: true,
     isSubmitting: false,
     mode: null,
+    requestId: null,
   });
   assert.equal(beginRouteGroupCopySubmit(state).accepted, false);
 });
@@ -45,7 +46,17 @@ test("copy failure keeps the selected dialog open with its error", () => {
     isOpen: true,
     isSubmitting: false,
     mode: "REFERENCE",
+    requestId: started.requestId,
   });
+});
+
+test("Copy keeps its logical request key through response loss, and a new dialog starts a fresh request", () => {
+  const state = selectRouteGroupCopyMode(openRouteGroupCopyDialog(), "REFERENCE");
+  const first = beginRouteGroupCopySubmit(state, "11111111-1111-4111-8111-111111111111");
+  const retry = beginRouteGroupCopySubmit(failRouteGroupCopySubmit(first.state, "Response lost"), "22222222-2222-4222-8222-222222222222");
+  assert.equal(retry.state.requestId, first.state.requestId);
+  const fresh = beginRouteGroupCopySubmit(selectRouteGroupCopyMode(openRouteGroupCopyDialog(), "REFERENCE"), "22222222-2222-4222-8222-222222222222");
+  assert.notEqual(fresh.state.requestId, first.state.requestId);
 });
 
 test("copy success closes and resets the dialog", () => {

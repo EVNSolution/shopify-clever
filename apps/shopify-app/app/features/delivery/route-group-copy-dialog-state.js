@@ -6,6 +6,7 @@ export function createRouteGroupCopyDialogState() {
     isOpen: false,
     isSubmitting: false,
     mode: null,
+    requestId: null,
   };
 }
 
@@ -18,16 +19,16 @@ export function openRouteGroupCopyDialog() {
 
 export function selectRouteGroupCopyMode(state, mode) {
   if (state?.isSubmitting || !ROUTE_GROUP_COPY_MODES.has(mode)) return state;
-  return { ...state, error: null, mode };
+  return { ...state, error: null, mode, requestId: mode === state.mode ? state.requestId : null };
 }
 
-export function beginRouteGroupCopySubmit(state) {
+export function beginRouteGroupCopySubmit(state, requestId) {
   if (!state?.isOpen || state.isSubmitting || !ROUTE_GROUP_COPY_MODES.has(state.mode)) {
     return { accepted: false, state };
   }
   return {
     accepted: true,
-    state: { ...state, error: null, isSubmitting: true },
+    state: { ...state, error: null, isSubmitting: true, requestId: state.requestId ?? requestId ?? globalThis.crypto.randomUUID() },
   };
 }
 
