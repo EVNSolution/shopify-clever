@@ -1,3 +1,4 @@
+import { getOrderDate } from "./order-date.js";
 import {
   formatDeliveryScopeLabel,
   getAppstleSubscriptionOrderKind,
@@ -657,8 +658,7 @@ function mapOrderNode(order, options = {}) {
       routeScopeKey && deliveryArea ? `${routeScopeKey}|${deliveryArea}` : routeScopeKey,
     timeWindowEnd: undefined,
     timeWindowStart: undefined,
-    orderedDate:
-      formatDateOnly(order.createdAt) ?? formatDateOnly(order.processedAt),
+    orderedDate: getOrderDate(order, options.deliveryCycle?.timeZone ?? "UTC"),
     coordinates: [longitude, latitude],
     hasCoordinates: latitude != null && longitude != null,
     shopifyOrderSnapshot: order,
@@ -675,20 +675,6 @@ function buildRouteScopeKey({ deliveryDate, serviceType, timeWindowEnd, timeWind
     textOrUndefined(timeWindowStart) ?? "",
     textOrUndefined(timeWindowEnd) ?? "",
   ].join("|");
-}
-
-function formatDateOnly(value) {
-  const text = textOrUndefined(value);
-  if (!text) return undefined;
-
-  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
-    return text.slice(0, 10);
-  }
-
-  const date = new Date(text);
-  if (Number.isNaN(date.getTime())) return undefined;
-
-  return date.toISOString().slice(0, 10);
 }
 
 function mapShippingAddress(address) {

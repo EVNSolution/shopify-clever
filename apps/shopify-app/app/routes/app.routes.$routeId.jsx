@@ -6034,6 +6034,7 @@ export default function RouteDetailPage() {
       return;
     }
     const submitted = await submitRouteGroupAction("copyRouteGroup", {
+      copyRequestId: submission.state.requestId,
       copyMode: submission.state.mode,
       expectedUpdatedAt: routeGroup.updatedAt,
     });

@@ -794,15 +794,21 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
 
   const serverOrdersRequestPromise = shouldLoadOrders
     ? (resourceFlags.pagination
-      ? shopTimeZoneDataPromise.then(({ data: shopTimeZoneData }) => fetchDeliveryOrdersPage(
-          request,
-          {
-            ...getOrdersResourceFilters(getOrderFiltersFromSearchParams(new URL(request.url).searchParams)),
-            page: 1,
-            routeOpsToday: getShopLocalDate(shopTimeZoneData),
-          },
-          { cacheKey: shopifyShopCacheKey },
-        ).then((pageData) => ({ ...pageData, orders: pageData.rows })))
+      ? shopTimeZoneDataPromise.then(({ data: shopTimeZoneData }) => {
+          if (!shopTimeZoneData.ianaTimezone || (shopTimeZoneData.errors ?? []).length > 0) {
+            throw new Response("Store timezone unavailable", { status: 503 });
+          }
+          return fetchDeliveryOrdersPage(
+            request,
+            {
+              ...getOrdersResourceFilters(getOrderFiltersFromSearchParams(new URL(request.url).searchParams)),
+              page: 1,
+              routeOpsToday: getShopLocalDate(shopTimeZoneData),
+              orderedDateTimeZone: shopTimeZoneData.ianaTimezone,
+            },
+            { cacheKey: shopifyShopCacheKey },
+          ).then((pageData) => ({ ...pageData, orders: pageData.rows }));
+        })
       : fetchDeliveryOrders(
           request,
           {},
@@ -962,10 +968,11 @@ export async function loadOrdersPageResource(request) {
   const payload = await readOrdersQueryResourcePayload(request);
   return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.page.fetch", async (correlationId) => {
     requireOrdersResourceFlag("pagination");
+    const dateContext = await resolveOrdersDateContext(request, payload);
     const pageData = await fetchDeliveryOrdersPage(
       request,
       {
-        ...payload.filters,
+        ...dateContext.filters,
         page: payload.page ?? 1,
         readWatermark: payload.readWatermark,
       },
@@ -981,7 +988,7 @@ export async function loadOrdersPageResource(request) {
       value: {
         ...pageData,
         _requestKey: payload._requestKey ?? null,
-        rows: mapCanonicalOrdersToOrderRows(pageData.rows),
+        rows: mapCanonicalOrdersToOrderRows(pageData.rows, dateContext.timeZone),
       },
     };
   });
@@ -991,9 +998,10 @@ export async function loadOrdersFacetsResource(request) {
   const payload = await readOrdersQueryResourcePayload(request);
   return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.facets.fetch", async (correlationId) => {
     requireOrdersResourceFlag("pagination");
+    const dateContext = await resolveOrdersDateContext(request, payload);
     const result = await fetchDeliveryOrderFacets(
       request,
-      payload.filters,
+      dateContext.filters,
       { correlationId, sessionToken: payload.shopifySessionToken },
     );
     return {
@@ -1011,10 +1019,11 @@ export async function loadOrdersMapPointsResource(request) {
   const payload = await readOrdersQueryResourcePayload(request);
   return measureOrdersResource(authenticatedResourceRequest(request, payload.shopifySessionToken), "orders.map_points.fetch", async (correlationId) => {
     requireOrdersResourceFlag("compactMap");
+    const dateContext = await resolveOrdersDateContext(request, payload);
     const result = await fetchDeliveryOrderMapPoints(
       request,
       {
-        ...payload.filters,
+        ...dateContext.filters,
         limit: payload.limit,
       },
       { correlationId, sessionToken: payload.shopifySessionToken },
@@ -1058,9 +1067,10 @@ export async function handleOrdersSelectionSnapshotsResource(request) {
     requireOrdersResourceFlag("selectionSnapshots");
 
     if (request.method === "POST") {
+      const dateContext = await resolveOrdersDateContext(request, payload);
       const result = await createDeliveryOrdersSelectionSnapshot(request, {
         excludeOrderIds: payload.excludeOrderIds,
-        filters: payload.filters,
+        filters: dateContext.filters,
         sort: "id_desc",
       }, { correlationId, sessionToken });
       return {
@@ -1177,6 +1187,21 @@ async function readOrdersQueryResourcePayload(request) {
     readWatermark: textOrUndefined(payload.readWatermark),
     shopifySessionToken: sessionToken,
   };
+}
+
+async function resolveOrdersDateContext(request, payload) {
+  let shopTimeZoneData;
+  if (process.env.CLEVER_ORDERS_SOURCE_MODE === "delivery_only") {
+    shopTimeZoneData = getDeliveryOnlyShopTimeZoneData();
+  } else {
+    const { admin, session } = await authenticate.admin(authenticatedResourceRequest(request, payload.shopifySessionToken));
+    shopTimeZoneData = await fetchShopifyShopTimeZone(admin, { cacheKey: session?.shop });
+  }
+  const timeZone = shopTimeZoneData.ianaTimezone;
+  if (!timeZone || (shopTimeZoneData.errors ?? []).length > 0) {
+    throw new Response("Store timezone is unavailable; retry the Orders request.", { status: 503 });
+  }
+  return { timeZone, filters: { ...payload.filters, orderedDateTimeZone: timeZone } };
 }
 
 function getOrdersResourceFilters(filters = {}) {

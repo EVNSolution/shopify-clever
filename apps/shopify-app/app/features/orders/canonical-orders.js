@@ -1,4 +1,4 @@
-import { getStoreDate } from "../shopify/store-date-time.js";
+import { getOrderDate } from "./order-date.js";
 import { formatDeliveryScopeLabel } from "../delivery/delivery-labels.js";
 
 export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "UTC") {
@@ -17,10 +17,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "
       textOrUndefined(order?.deliveryDayRaw) ??
       textOrUndefined(order?.deliveryWeekday);
     const orderCreatedAt = textOrUndefined(order?.orderCreatedAt);
-    const orderedDate =
-      textOrUndefined(order?.orderDateLocal) ??
-      getStoreDate(orderCreatedAt, storeTimeZone) ??
-      getStoreDate(order?.processedAt, storeTimeZone) ?? undefined;
+    const orderedDate = getOrderDate(order, storeTimeZone);
     const deliveryDate = textOrUndefined(order?.deliveryDate);
     const timeWindowStart = textOrUndefined(order?.timeWindowStart);
     const timeWindowEnd = textOrUndefined(order?.timeWindowEnd);
@@ -51,7 +48,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "
       eta: "—",
       email: textOrUndefined(order?.email),
       phone: textOrUndefined(order?.phone) ?? "",
-      processedAt: textOrUndefined(order?.processedAt),
+      ...(Object.hasOwn(order ?? {}, "processedAt") ? { processedAt: textOrUndefined(order?.processedAt) ?? null } : {}),
       updatedAt: textOrUndefined(order?.updatedAtShopify),
       cancelledAt: textOrUndefined(order?.cancelledAt),
       totalPriceAmount: textOrUndefined(order?.totalPriceAmount),
@@ -484,9 +481,7 @@ function numberOrUndefined(value) {
 
 export function normalizeOrderRowsStoreDates(rows, storeTimeZone) {
   return (Array.isArray(rows) ? rows : []).map(order => {
-    if (order?.orderDateLocal) return order;
-    const instant = order?.orderCreatedAt ?? order?.rawPayload?.createdAt ?? order?.shopifyOrderSnapshot?.createdAt ?? order?.processedAt;
-    const orderedDate = getStoreDate(instant, storeTimeZone);
-    return orderedDate && orderedDate !== order?.orderedDate ? { ...order, orderedDate } : order;
+    const orderedDate = getOrderDate(order, storeTimeZone);
+    return orderedDate !== order?.orderedDate ? { ...order, orderedDate } : order;
   });
 }

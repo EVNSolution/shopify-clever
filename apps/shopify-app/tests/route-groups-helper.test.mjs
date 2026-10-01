@@ -157,6 +157,21 @@ test("route group helper copies a group through the atomic copy command", async 
   });
 });
 
+test("copy helper preserves a logical request UUID through response loss and retry", async () => {
+  const calls = [];
+  const requestId = "8766c234-1bbe-4b19-919a-78007a56890d";
+  const fetch = async (_url, init) => {
+    calls.push(JSON.parse(init.body));
+    if (calls.length === 1) throw new Error("response lost after commit");
+    return jsonResponse({ data: { routeGroup: { id: requestId } }, error: null }, 201);
+  };
+  const options = { expectedUpdatedAt: "2026-08-06T10:15:00.000Z", fetch, mode: "REFERENCE", requestId, sessionToken: "fixture-token" };
+  assert.ok((await copyDeliveryRouteGroup(makeRequest(), "source-1", options)).errors.length > 0);
+  assert.equal((await copyDeliveryRouteGroup(makeRequest(), "source-1", options)).routeGroup.id, requestId);
+  assert.deepEqual(calls[0], calls[1]);
+  assert.equal(calls[0].requestId, requestId);
+});
+
 test("route group helper rejects missing revision and invalid copy modes before calling the API", async () => {
   const fakeFetch = makeFetch();
 

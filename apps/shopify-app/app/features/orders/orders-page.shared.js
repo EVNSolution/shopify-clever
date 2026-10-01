@@ -1,3 +1,4 @@
+import { getOrderDate, getOrderReceivedAt } from "./order-date.js";
 import { ORDER_FILTER_QUERY_KEYS } from "./order-filters.js";
 
 export const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft";
@@ -18,12 +19,15 @@ export function textOrUndefined(value) {
 }
 
 export function buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone }) {
-  const orderedAt = getOrderTimestampValue(order, ["orderCreatedAt", "createdAt"]);
+  const sourceReceivedAt = getOrderReceivedAt(order);
+  const orderedAt = sourceReceivedAt === undefined
+    ? getOrderTimestampValue(order, ["orderCreatedAt"]) ?? textOrUndefined(order?.rawPayload?.createdAt ?? order?.shopifyOrderSnapshot?.createdAt)
+    : sourceReceivedAt;
   const processedAt = getOrderTimestampValue(order, ["processedAt"]);
   const updatedAt = getOrderTimestampValue(order, ["updatedAt", "updatedAtShopify"]);
-  const orderedDate =
-    textOrUndefined(order?.orderedDate) ??
-    formatOrderDateTimePart(orderedAt, shopTimeZone, DATE_FORMAT_OPTIONS);
+  const orderedDate = sourceReceivedAt === undefined
+    ? textOrUndefined(order?.orderedDate) ?? formatOrderDateTimePart(orderedAt, shopTimeZone, DATE_FORMAT_OPTIONS)
+    : getOrderDate(order, shopTimeZone);
   const orderedTime = formatOrderDateTimePart(orderedAt, shopTimeZone, TIME_FORMAT_OPTIONS);
   const timeZone = textOrUndefined(deliveryCycle?.timeZone) ?? textOrUndefined(shopTimeZone);
   const routeSequence =

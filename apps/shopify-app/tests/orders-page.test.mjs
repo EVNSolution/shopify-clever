@@ -853,7 +853,7 @@ test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop tim
   });
 
   assert.deepEqual(timelineDetails, [
-    "Ordered: 2026-07-14, 12:05",
+    "Ordered: 2026-07-14, 12:10",
     "Processed: 12:10",
     "Updated: 12:30",
     "Cutoff: Tue, 12:00",
@@ -883,7 +883,7 @@ test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop tim
       shopTimeZone: "America/Toronto",
     }),
     [
-      "Ordered: 2026-07-14, 12:05",
+      "Ordered: 2026-07-14, 12:10",
       "Processed: 12:10",
       "Time zone: America/Toronto",
     ],
@@ -900,9 +900,9 @@ test("Ordered timeline formats Shopify and delivery-cycle timestamps in shop tim
       shopTimeZone: "America/Toronto",
     }),
     [
-      "Ordered: 2026-07-14, 12:05",
-      "Processed: 2026-07-15, 12:10",
-      "Updated: 2026-07-15, 12:30",
+      "Ordered: 2026-07-15, 12:10",
+      "Processed: 12:10",
+      "Updated: 12:30",
       "Time zone: America/Toronto",
     ],
   );

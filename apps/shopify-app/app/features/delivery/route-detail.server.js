@@ -643,6 +643,7 @@ export const routeDetailAction = async ({ params, request }) => {
     const copyMode = textOrUndefined(formData.get("copyMode"));
     const expectedUpdatedAt = textOrUndefined(formData.get("expectedUpdatedAt"));
     return copyDeliveryRouteGroup(request, routeGroupIdFromParams, {
+      requestId: textOrUndefined(formData.get("copyRequestId")),
       expectedUpdatedAt,
       mode: copyMode,
       sessionToken: shopifySessionToken,
