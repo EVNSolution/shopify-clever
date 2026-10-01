@@ -556,12 +556,16 @@ const routeChildSelectionBarStyle = {
 const routeChildSelectionGroupStyle = {
   alignItems: "center",
   display: "flex",
+  flex: "1 1 220px",
+  minWidth: 0,
   flexWrap: "wrap",
   gap: "8px",
 };
 
 const routeChildSelectionButtonStyle = {
   alignItems: "center",
+  maxWidth: "100%",
+  overflowWrap: "anywhere",
   background: "#ffffff",
   border: "1px solid #c9c9c9",
   borderRadius: "8px",
@@ -716,17 +720,20 @@ const routeTrackingMapCanvasStyle = {
 };
 
 const routeMetaActionsStyle = {
+  alignItems: "flex-start",
   borderBottom: "1px solid #ececec",
-  display: "grid",
+  display: "flex",
+  flexWrap: "wrap",
   gap: "8px",
-  gridTemplateColumns: "minmax(0, 1fr) auto",
   padding: "6px 8px",
 };
 
 const routeMetaGridStyle = {
   display: "grid",
+  flex: "1 1 220px",
   gap: "2px",
   gridTemplateColumns: "minmax(0, 1fr)",
+  minWidth: 0,
 };
 
 const routeMetaItemStyle = {
@@ -740,9 +747,11 @@ const routeMetaItemStyle = {
 };
 
 const routeActionColumnStyle = {
-  display: "grid",
+  display: "flex",
+  flexWrap: "wrap",
   gap: "4px",
-  width: "128px",
+  justifyContent: "flex-end",
+  marginLeft: "auto",
 };
 
 const routeActionButtonStyle = {
@@ -764,14 +773,6 @@ const routeActionButtonStyle = {
 
 const routeActionsStyle = {
   position: "relative",
-  width: "100%",
-};
-
-const routeAddOrderButtonStyle = {
-  ...routeActionButtonStyle,
-  background: "#303030",
-  borderColor: "#303030",
-  color: "#ffffff",
 };
 
 const routeActionsButtonStyle = {
@@ -788,6 +789,7 @@ const routeActionsMenuStyle = {
   boxShadow: "0 8px 24px rgba(0, 0, 0, 0.14)",
   display: "grid",
   gap: "4px",
+  maxWidth: "calc(100vw - 32px)",
   padding: "6px",
   position: "absolute",
   right: 0,
@@ -3821,7 +3823,7 @@ export default function RouteDetailPage() {
   const [customStopDraft, setCustomStopDraft] = useState(() => createCustomStopDraft());
   const [customStopFieldErrors, setCustomStopFieldErrors] = useState({});
   const [activeCustomStopEditRow, setActiveCustomStopEditRow] = useState(null);
-  const [isRouteActionsMenuOpen, setIsRouteActionsMenuOpen] = useState(false);
+  const [routeActionsMenu, setRouteActionsMenu] = useState(null);
   const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [pendingInProgressRouteChange, setPendingInProgressRouteChange] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
@@ -5645,7 +5647,7 @@ export default function RouteDetailPage() {
 
   const handleAddEmptyRoute = () => {
     if (routeGroupActionBusy || ordinaryMutationPendingRef.current) return;
-    setIsRouteActionsMenuOpen(false);
+    setRouteActionsMenu(null);
     if (!canDraftEditChildStopMembership) {
       setRouteGroupClientError("Routes can only be split before the route has started.");
       return;
@@ -5718,7 +5720,7 @@ export default function RouteDetailPage() {
   };
 
   const handleReverseCurrentRouteStops = () => {
-    setIsRouteActionsMenuOpen(false);
+    setRouteActionsMenu(null);
     if (routeGroupActionBusy) return;
     if (!canReorderRouteStops) {
       setRouteActionNotice({
@@ -5862,7 +5864,7 @@ export default function RouteDetailPage() {
   };
 
   const handlePreviewRouteOptimization = () => {
-    setIsRouteActionsMenuOpen(false);
+    setRouteActionsMenu(null);
     submitRouteGroupAction("previewRouteOptimization", {
       draft: JSON.stringify(buildRouteDraftPayload(contextTimelineRouteRows, {
         deletedRoutePlanIds,
@@ -7064,85 +7066,6 @@ export default function RouteDetailPage() {
               </button>
             </div> : null}
             <div style={routeHeaderRightStyle}>
-              <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
-                {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
-                  <button
-                    disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleDispatchRoute}
-                    style={{
-                      ...(canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle),
-                      minHeight: "36px",
-                    }}
-                    title={routeDriverId
-                      ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
-                      : "Assign a driver before dispatching this route."}
-                    type="button"
-                  >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
-                ) : null}
-                {canShowRouteCopy && effectiveRoutePlan?.id && !routeGroupId ? (
-                  <button
-                    disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
-                    onClick={handleCopyOrdinaryRoute}
-                    style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy this READY route without changing the original"}
-                    type="button"
-                  >
-                    <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
-                      <s-icon type="duplicate" size="small" color={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
-                      {copyRoutePlanBusy ? "Copying…" : "Copy Route"}
-                    </span>
-                  </button>
-                ) : null}
-                {canShowRouteCopy && routeGroupId ? (
-                  <button
-                    disabled={routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleCopyRouteGroup}
-                    style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy the title and orders without changing the original"}
-                    type="button"
-                  >
-                    <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
-                      <s-icon type="duplicate" size="small" color={routeGroupActionBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
-                      {copyRouteGroupBusy ? "Copying…" : "Copy Route"}
-                    </span>
-                  </button>
-                ) : null}
-                <div aria-label="Route utilities" className="route-action-icon-group" role="group">
-                  <RouteActionIconButton
-                    icon="refresh"
-                    label={refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
-                    description={hasRouteAllocationDraft ? "Save or revert Route changes before updating" : undefined}
-                    busy={refreshRouteOrdersBusy}
-                    disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleRefreshRouteOrders}
-                  />
-                  {isMaterializedChildRouteDetail ? (
-                    <RouteActionIconButton
-                      icon="email"
-                      label="Send email"
-                      disabled={!effectiveRoutePlan?.id}
-                      onClick={openCustomerEmailDialog}
-                    />
-                  ) : null}
-                  {!isMaterializedChildRouteDetail ? (
-                    <RouteActionIconButton
-                      icon="inventory"
-                      onClick={handleViewInventory}
-                      label={translate(language, "routes.detail.inventory.view")}
-                      description={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
-                      disabled={!inventoryDetailHref}
-                    />
-                  ) : null}
-                  <RouteActionIconButton
-                    icon="delete"
-                    label={deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
-                    danger
-                    busy={deleteRouteBusy}
-                    disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
-                    onClick={handleDeleteRoute}
-                  />
-                </div>
-              </div>
               {routeGroupId && (isRouteGroupDetail || (isMaterializedChildRouteDetail && currentSiblingRouteIndex >= 0)) ? (
                 <div
                   aria-label="Routes in this group"
@@ -7267,11 +7190,58 @@ export default function RouteDetailPage() {
                     {translate(language, "routes.detail.dispatched")}
                   </span>
                 ) : null}
+                <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
+                  {canShowRouteCopy && effectiveRoutePlan?.id && !routeGroupId ? (
+                    <button
+                      disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
+                      onClick={handleCopyOrdinaryRoute}
+                      style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                      title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy this READY route without changing the original"}
+                      type="button"
+                    >
+                      <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
+                        <s-icon type="duplicate" size="small" color={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
+                        {copyRoutePlanBusy ? "Copying…" : "Copy Route"}
+                      </span>
+                    </button>
+                  ) : null}
+                  {canShowRouteCopy && routeGroupId ? (
+                    <button
+                      disabled={routeGroupActionBusy || hasRouteAllocationDraft}
+                      onClick={handleCopyRouteGroup}
+                      style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
+                      title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy the title and orders without changing the original"}
+                      type="button"
+                    >
+                      <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
+                        <s-icon type="duplicate" size="small" color={routeGroupActionBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
+                        {copyRouteGroupBusy ? "Copying…" : "Copy Route"}
+                      </span>
+                    </button>
+                  ) : null}
+                  <div aria-label="Route utilities" className="route-action-icon-group" role="group">
+                    {isMaterializedChildRouteDetail ? (
+                      <RouteActionIconButton
+                        icon="email"
+                        label="Send email"
+                        disabled={!effectiveRoutePlan?.id}
+                        onClick={openCustomerEmailDialog}
+                      />
+                    ) : null}
+                    {!isMaterializedChildRouteDetail ? (
+                      <RouteActionIconButton
+                        icon="inventory"
+                        onClick={handleViewInventory}
+                        label={translate(language, "routes.detail.inventory.view")}
+                        description={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
+                        disabled={!inventoryDetailHref}
+                      />
+                    ) : null}
+                  </div>
+                </div>
                 {!isMaterializedChildRouteDetail && !isRouteGroupDetail ? (
                   <div aria-label="Route summary" className="route-overview-summary">
                     {renderRouteHeaderMetric("Orders", routeDetail.orders)}
-                    {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
-                    {renderRouteHeaderMetric("Driver", routeDriverSummary)}
                   </div>
                 ) : null}
               </div>
@@ -7350,48 +7320,68 @@ export default function RouteDetailPage() {
             </div>
           ) : null}
 
-          {isMaterializedChildRouteDetail ? (
-            <section aria-label="Child route controls" style={routeChildSelectionBarStyle}>
-              <div style={routeChildSelectionGroupStyle}>
+          {!isRouteGroupDetail ? (
+            <section aria-label="Route schedule and dispatch" style={routeChildSelectionBarStyle}>
+              {isMaterializedChildRouteDetail ? (
+                <div style={routeChildSelectionGroupStyle}>
+                  <button
+                    aria-label="Change route start time"
+                    disabled={routeGroupActionBusy}
+                    onClick={() => handleOpenRouteSelector("startTime", currentTimelineRouteRow ?? {
+                      routePlanId: effectiveRoutePlan?.id,
+                      startDateTime: routeStartDateTimeValue,
+                      title: routeDetailTitle,
+                    })}
+                    style={{
+                      ...routeChildSelectionButtonStyle,
+                      ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                    }}
+                    type="button"
+                  >
+                    <span>{
+                      (currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel) === ROUTE_EMPTY_LABEL
+                        ? "Set start time"
+                        : currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel
+                    }</span>
+                    {renderRouteEditableChevron()}
+                  </button>
+                  <button
+                    aria-label="Change route driver"
+                    disabled={isRouteExecutionLockedForStopMembership(routeExecutionStatus)}
+                    onClick={() => handleOpenRouteSelector("driver", currentTimelineRouteRow ?? {
+                      routePlanId: effectiveRoutePlan?.id,
+                      title: routeDetailTitle,
+                    })}
+                    style={{
+                      ...routeChildSelectionButtonStyle,
+                      ...(isRouteExecutionLockedForStopMembership(routeExecutionStatus) ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                    }}
+                    type="button"
+                  >
+                    <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
+                    {renderRouteEditableChevron()}
+                  </button>
+                </div>
+              ) : (
+                <div aria-label="Route schedule and driver" style={routeChildSelectionGroupStyle}>
+                  {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
+                  {renderRouteHeaderMetric("Driver", routeDriverSummary)}
+                </div>
+              )}
+              {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
                 <button
-                  aria-label="Change route start time"
-                  disabled={routeGroupActionBusy}
-                  onClick={() => handleOpenRouteSelector("startTime", currentTimelineRouteRow ?? {
-                    routePlanId: effectiveRoutePlan?.id,
-                    startDateTime: routeStartDateTimeValue,
-                    title: routeDetailTitle,
-                  })}
+                  disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
+                  onClick={handleDispatchRoute}
                   style={{
-                    ...routeChildSelectionButtonStyle,
-                    ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                    ...(canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle),
+                    minHeight: "36px",
                   }}
+                  title={routeDriverId
+                    ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
+                    : "Assign a driver before dispatching this route."}
                   type="button"
-                >
-                  <span>{
-                    (currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel) === ROUTE_EMPTY_LABEL
-                      ? "Set start time"
-                      : currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel
-                  }</span>
-                  {renderRouteEditableChevron()}
-                </button>
-                <button
-                  aria-label="Change route driver"
-                  disabled={isRouteExecutionLockedForStopMembership(routeExecutionStatus)}
-                  onClick={() => handleOpenRouteSelector("driver", currentTimelineRouteRow ?? {
-                    routePlanId: effectiveRoutePlan?.id,
-                    title: routeDetailTitle,
-                  })}
-                  style={{
-                    ...routeChildSelectionButtonStyle,
-                    ...(isRouteExecutionLockedForStopMembership(routeExecutionStatus) ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                  }}
-                  type="button"
-                >
-                  <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
-                  {renderRouteEditableChevron()}
-                </button>
-              </div>
-              <span style={routeStatusBadgeStyle}>{formatRouteStatus(routeExecutionStatus)}</span>
+                >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
+              ) : null}
             </section>
           ) : null}
 
@@ -7522,57 +7512,90 @@ export default function RouteDetailPage() {
             />
           </MapPanel>
 
-          {!isTrackingMapView ? (
-            <section style={routeMetaActionsStyle}>
+          <section style={routeMetaActionsStyle}>
+            {!isTrackingMapView ? (
               <section aria-label="Route timing" style={routeMetaGridStyle}>
                 <div style={routeMetaItemStyle}>Route start: {departureLocation.address}</div>
                 <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
                 <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
               </section>
-              <div aria-label="Route actions" style={routeActionColumnStyle}>
-                {routeGroupId && !isMaterializedChildRouteDetail ? (
+            ) : null}
+            <div
+              aria-label="Route actions"
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setRouteActionsMenu(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.currentTarget.querySelector('[aria-expanded="true"]')?.focus();
+                  setRouteActionsMenu(null);
+                }
+                if (!routeActionsMenu || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+                const items = Array.from(event.currentTarget.querySelectorAll('[role="menuitem"]:not(:disabled)'));
+                if (items.length === 0) return;
+                event.preventDefault();
+                const currentIndex = items.indexOf(event.target);
+                const nextIndex = event.key === "Home" ? 0
+                  : event.key === "End" ? items.length - 1
+                    : event.key === "ArrowDown" ? (currentIndex + 1) % items.length
+                      : currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+                items[nextIndex].focus();
+              }}
+              role="toolbar"
+              style={routeActionColumnStyle}
+            >
+              {!isTrackingMapView && (routeGroupId || isOrdinaryRouteDetail) ? (
+                <div style={routeActionsStyle}>
                   <button
-                    disabled={routeGroupActionBusy}
-                    onClick={handleAddOrderToCurrentRoute}
-                    style={routeAddOrderButtonStyle}
-                    type="button"
-                  >Add order</button>
-                ) : null}
-                {routeGroupId || isOrdinaryRouteDetail ? (
-                <button
-                  disabled={routeGroupActionBusy}
-                  onClick={handleAddEmptyRoute}
-                  style={routeActionButtonStyle}
-                  type="button"
-                >{translate(language, "routes.group.addEmpty")}</button>
-                ) : null}
-                <div
-                  aria-label="Actions"
-                  onBlur={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget)) setIsRouteActionsMenuOpen(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setIsRouteActionsMenuOpen(false);
-                  }}
-                  role="toolbar"
-                  style={routeActionsStyle}
-                >
-                  <button
-                    aria-expanded={isRouteActionsMenuOpen}
-                    onClick={() => setIsRouteActionsMenuOpen((open) => !open)}
+                    aria-expanded={routeActionsMenu === "add"}
+                    aria-haspopup="menu"
+                    onClick={() => setRouteActionsMenu((menu) => menu === "add" ? null : "add")}
                     style={routeActionsButtonStyle}
                     type="button"
-                  >Actions</button>
-                  {isRouteActionsMenuOpen ? (
-                    <div aria-label="Route action menu" role="menu" style={routeActionsMenuStyle}>
+                  >Add ▾</button>
+                  {routeActionsMenu === "add" ? (
+                    <div aria-label="Add route actions" role="menu" style={routeActionsMenuStyle}>
+                      {routeGroupId && !isMaterializedChildRouteDetail ? (
+                        <button
+                          disabled={routeGroupActionBusy}
+                          onClick={handleAddOrderToCurrentRoute}
+                          role="menuitem"
+                          style={routeActionButtonStyle}
+                          type="button"
+                        >Add order</button>
+                      ) : null}
+                      {routeGroupId || isOrdinaryRouteDetail ? (
+                        <button
+                          disabled={routeGroupActionBusy}
+                          onClick={handleAddEmptyRoute}
+                          role="menuitem"
+                          style={routeActionButtonStyle}
+                          type="button"
+                        >{translate(language, "routes.group.addEmpty")}</button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {!isTrackingMapView ? (
+                <div style={routeActionsStyle}>
+                  <button
+                    aria-expanded={routeActionsMenu === "edit"}
+                    aria-haspopup="menu"
+                    onClick={() => setRouteActionsMenu((menu) => menu === "edit" ? null : "edit")}
+                    style={routeActionsButtonStyle}
+                    type="button"
+                  >Edit ▾</button>
+                  {routeActionsMenu === "edit" ? (
+                    <div aria-label="Edit route actions" role="menu" style={routeActionsMenuStyle}>
                       {isMaterializedChildRouteDetail ? (
-                      <button
-                        disabled={routeGroupActionBusy}
-                        onClick={handleReverseCurrentRouteStops}
-                        role="menuitem"
-                        style={routeActionButtonStyle}
-                        type="button"
-                      >Reverse stops</button>
+                        <button
+                          disabled={routeGroupActionBusy}
+                          onClick={handleReverseCurrentRouteStops}
+                          role="menuitem"
+                          style={routeActionButtonStyle}
+                          type="button"
+                        >Reverse stops</button>
                       ) : null}
                       <button
                         disabled={routeGroupActionBusy || !hasEditableRouteRows}
@@ -7587,9 +7610,40 @@ export default function RouteDetailPage() {
                     </div>
                   ) : null}
                 </div>
+              ) : null}
+              <div style={routeActionsStyle}>
+                <button
+                  aria-label="More route actions"
+                  aria-expanded={routeActionsMenu === "more"}
+                  aria-haspopup="menu"
+                  onClick={() => setRouteActionsMenu((menu) => menu === "more" ? null : "more")}
+                  style={routeActionsButtonStyle}
+                  type="button"
+                >…</button>
+                {routeActionsMenu === "more" ? (
+                  <div aria-label="More route actions" role="menu" style={routeActionsMenuStyle}>
+                    <button
+                      aria-busy={refreshRouteOrdersBusy || undefined}
+                      disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
+                      onClick={handleRefreshRouteOrders}
+                      role="menuitem"
+                      style={{ ...routeActionButtonStyle, ...(!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft ? { cursor: "not-allowed", opacity: 0.55 } : null) }}
+                      title={hasRouteAllocationDraft ? "Save or revert Route changes before updating" : undefined}
+                      type="button"
+                    >{refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}</button>
+                    <button
+                      aria-busy={deleteRouteBusy || undefined}
+                      disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
+                      onClick={handleDeleteRoute}
+                      role="menuitem"
+                      style={{ ...routeActionButtonStyle, color: "#b42318", ...(routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? { cursor: "not-allowed", opacity: 0.55 } : null) }}
+                      type="button"
+                    >{deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}</button>
+                  </div>
+                ) : null}
               </div>
-            </section>
-          ) : null}
+            </div>
+          </section>
 
           {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
             <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>

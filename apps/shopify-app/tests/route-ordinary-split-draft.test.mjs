@@ -45,7 +45,7 @@ function loadRouteDraftPayloadBuilder() {
 function loadAddEmptyHandler(overrides = {}) {
   const handlerSource = sourceBetween("const handleAddEmptyRoute = () => {", "const handleReverseCurrentRouteStops = () => {");
   const dependencyNames = [
-    "routeGroupActionBusy", "ordinaryMutationPendingRef", "setIsRouteActionsMenuOpen", "canDraftEditChildStopMembership",
+    "routeGroupActionBusy", "ordinaryMutationPendingRef", "setRouteActionsMenu", "canDraftEditChildStopMembership",
     "setRouteGroupClientError", "hasIncompatibleAddEmptyDraft", "isOrdinarySplitDraft",
     "contextRouteRows", "getNextChildRouteDraft", "ROUTE_EMPTY_LABEL", "setClientRouteRows",
     "isOrdinaryRouteDetail", "setIsOrdinarySplitDraft", "routeGroupId", "currentRouteRowsSource",
@@ -67,7 +67,7 @@ function loadAddEmptyHandler(overrides = {}) {
     routeGroupId: null,
     setClientRouteRows: () => {},
     setIsOrdinarySplitDraft: () => {},
-    setIsRouteActionsMenuOpen: () => {},
+    setRouteActionsMenu: () => {},
     setRouteGroupClientError: () => {},
     setRouteTimelineOrderByRouteId: () => {},
     submitRouteGroupAction: () => {},
