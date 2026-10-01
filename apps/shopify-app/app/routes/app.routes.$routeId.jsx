@@ -640,14 +640,16 @@ const routeTrackingStatusFactsStyle = {
 };
 
 const routeChildTrackingSummaryStyle = {
+  alignContent: "start",
   background: "#ffffff",
   borderBottom: "1px solid #e3e3e3",
   display: "grid",
-  gap: "12px",
-  padding: "14px",
+  gap: "8px",
+  padding: "10px 12px",
 };
 
 const routeChildTrackingMetricStyle = {
+  alignContent: "start",
   borderLeft: "1px solid #e3e3e3",
   display: "grid",
   gap: "4px",
@@ -659,12 +661,16 @@ const routeChildTrackingMetricLabelStyle = {
   color: "#6d7175",
   fontSize: "11px",
   fontWeight: 650,
+  lineHeight: 1.2,
 };
 
 const routeChildTrackingMetricValueStyle = {
   color: "#303030",
   fontSize: "14px",
   fontWeight: 750,
+  lineHeight: 1.25,
+  minWidth: 0,
+  overflowWrap: "anywhere",
 };
 
 const routeTrackingSummaryHeaderStyle = {
@@ -7709,6 +7715,80 @@ export default function RouteDetailPage() {
             </section>
           ) : null}
 
+          {!isMaterializedChildRouteDetail && !isTrackingMapView ? (
+            <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
+              <>
+                <div className="route-group-detail-scroll" style={{ ...routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight }}>
+                  {timelineRouteRows.map((routeRow) => (
+                    <div
+                      key={routeRow.id}
+                      onDragEnter={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
+                      onDragOver={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+                      onDrop={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDrop(event, routeRow)}
+                      style={{
+                        ...routeTimelineLaneStyle,
+                        ...(isRouteGroupDetail ? { minHeight: "68px", paddingTop: "20px" } : null),
+                        "--route-line-color": softenRouteColor(routeRow.color),
+                        "--route-marker-color": routeRow.color,
+                      }}
+                    >
+                      <div title={routeRow.title} style={{ ...routeTimelineLabelStyle, ...(isRouteGroupDetail ? { minWidth: "180px", maxWidth: "180px", borderRight: 0 } : null) }}>{routeRow.title}</div>
+                      <span title="Start" style={{ ...routeTimelineStartStyle, position: "relative" }}>
+                        {isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>Start</span> : null}
+                        {renderRouteTimelineStartIcon()}
+                      </span>
+                      {routeRow.stops.map((stop) => (
+                        <span
+                          key={stop.id}
+                          ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)}
+                          onDragEnter={handleRouteTimelineStopDragEnter}
+                          onDragOver={(event) => handleRouteTimelineStopDragOver(event, routeRow, stop)}
+                          style={{ ...routeTimelineSegmentStyle, ...(isRouteGroupDetail ? { flex: "1 0 74px", position: "relative", justifyContent: "flex-end" } : null) }}
+                          title={stop.order}
+                        >
+                          <span style={{ ...routeTimelineLineStyle, ...(isRouteGroupDetail ? { flex: 1 } : null) }}></span>
+                          <button
+                            data-route-timeline-stop-button="true"
+                            ref={(node) => setRouteTimelineStopRef(stop.id, node)}
+                            draggable={canReorderRouteStops && !routeRow.isPreviewOnly}
+                            onDragEnd={handleRouteTimelineDragEnd}
+                            onDragStart={!canReorderRouteStops || routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                            onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+                            onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
+                            onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
+                            aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
+                            aria-label={`Show ${stop.order} stop details`}
+                            style={{
+                              ...routeTimelineStopStyle,
+                              ...(isRouteGroupDetail ? { position: "relative", width: "24px", height: "24px" } : null),
+                              ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
+                            }}
+                            type="button"
+                          >{isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>{stop.order}</span> : null}{stop.stop}</button>
+                        </span>
+                      ))}
+                      {isRouteGroupDetail ? (
+                        <span style={{ display: "flex", flex: "1 0 64px", alignItems: "center" }}>
+                          <span style={{ ...routeTimelineLineStyle, flex: 1 }} />
+                          <span title="End" style={{ ...routeTimelineStartStyle, position: "relative", background: "#303030" }}>
+                            <span style={allRoutesTimelineLabelStyle}>End</span>⚑
+                          </span>
+                        </span>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+                <div
+                  onDragOver={handleRouteTimelineDragOver}
+                  onDrop={canDraftEditChildStopMembership ? handleRouteTimelineRemoveDrop : undefined}
+                  style={routeTimelineBottomSpacerStyle}
+                >
+                  <div style={routeTimelineDropHintStyle}>{isRouteGroupDetail ? "Drop orders here to remove them from this group" : "Drop orders here to remove them from the route"}</div>
+                </div>
+              </>
+            </section>
+          ) : null}
+
           {childDetailTab === "stops" && routeOrderRows.length > 0 ? (
             <div
               style={{
@@ -8124,79 +8204,6 @@ export default function RouteDetailPage() {
             </div>
           )}
 
-          {!isMaterializedChildRouteDetail && !isTrackingMapView ? (
-            <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
-              <>
-                <div className="route-group-detail-scroll" style={{ ...routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight }}>
-                  {timelineRouteRows.map((routeRow) => (
-                    <div
-                      key={routeRow.id}
-                      onDragEnter={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
-                      onDragOver={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                      onDrop={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDrop(event, routeRow)}
-                      style={{
-                        ...routeTimelineLaneStyle,
-                        ...(isRouteGroupDetail ? { minHeight: "68px", paddingTop: "20px" } : null),
-                        "--route-line-color": softenRouteColor(routeRow.color),
-                        "--route-marker-color": routeRow.color,
-                      }}
-                    >
-                      <div title={routeRow.title} style={{ ...routeTimelineLabelStyle, ...(isRouteGroupDetail ? { minWidth: "180px", maxWidth: "180px", borderRight: 0 } : null) }}>{routeRow.title}</div>
-                      <span title="Start" style={{ ...routeTimelineStartStyle, position: "relative" }}>
-                        {isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>Start</span> : null}
-                        {renderRouteTimelineStartIcon()}
-                      </span>
-                      {routeRow.stops.map((stop) => (
-                        <span
-                          key={stop.id}
-                          ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)}
-                          onDragEnter={handleRouteTimelineStopDragEnter}
-                          onDragOver={(event) => handleRouteTimelineStopDragOver(event, routeRow, stop)}
-                          style={{ ...routeTimelineSegmentStyle, ...(isRouteGroupDetail ? { flex: "1 0 74px", position: "relative", justifyContent: "flex-end" } : null) }}
-                          title={stop.order}
-                        >
-                          <span style={{ ...routeTimelineLineStyle, ...(isRouteGroupDetail ? { flex: 1 } : null) }}></span>
-                          <button
-                            data-route-timeline-stop-button="true"
-                            ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                            draggable={canReorderRouteStops && !routeRow.isPreviewOnly}
-                            onDragEnd={handleRouteTimelineDragEnd}
-                            onDragStart={!canReorderRouteStops || routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
-                            onClick={(event) => handleRouteTimelineStopClick(event, stop)}
-                            onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
-                            onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
-                            aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
-                            aria-label={`Show ${stop.order} stop details`}
-                            style={{
-                              ...routeTimelineStopStyle,
-                              ...(isRouteGroupDetail ? { position: "relative", width: "24px", height: "24px" } : null),
-                              ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
-                            }}
-                            type="button"
-                          >{isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>{stop.order}</span> : null}{stop.stop}</button>
-                        </span>
-                      ))}
-                      {isRouteGroupDetail ? (
-                        <span style={{ display: "flex", flex: "1 0 64px", alignItems: "center" }}>
-                          <span style={{ ...routeTimelineLineStyle, flex: 1 }} />
-                          <span title="End" style={{ ...routeTimelineStartStyle, position: "relative", background: "#303030" }}>
-                            <span style={allRoutesTimelineLabelStyle}>End</span>⚑
-                          </span>
-                        </span>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-                <div
-                  onDragOver={handleRouteTimelineDragOver}
-                  onDrop={canDraftEditChildStopMembership ? handleRouteTimelineRemoveDrop : undefined}
-                  style={routeTimelineBottomSpacerStyle}
-                >
-                  <div style={routeTimelineDropHintStyle}>{isRouteGroupDetail ? "Drop orders here to remove them from this group" : "Drop orders here to remove them from the route"}</div>
-                </div>
-              </>
-            </section>
-          ) : null}
             {!routeTimelineDrag && activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
               <>
                 <div

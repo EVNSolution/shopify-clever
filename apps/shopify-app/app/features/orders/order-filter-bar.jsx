@@ -48,10 +48,10 @@ export function OrderFilterBar({
   const close = () => {
     setEditing(null);
     setPosition(null);
-    anchor.current?.focus();
+    anchor.current?.focus({ preventScroll: true });
   };
   const focusAddFilter = () =>
-    requestAnimationFrame(() => addFilterAnchor.current?.focus());
+    requestAnimationFrame(() => addFilterAnchor.current?.focus({ preventScroll: true }));
   const applyAndClose = (nextFilters) => {
     const previousAnchor = anchor.current;
     onChange(nextFilters);
@@ -61,7 +61,7 @@ export function OrderFilterBar({
       (previousAnchor?.isConnected
         ? previousAnchor
         : addFilterAnchor.current
-      )?.focus(),
+      )?.focus({ preventScroll: true }),
     );
   };
   const clearGroup = (group) => {
@@ -128,7 +128,7 @@ export function OrderFilterBar({
       if (event.key === "Escape") {
         setEditing(null);
         setPosition(null);
-        anchor.current?.focus();
+        anchor.current?.focus({ preventScroll: true });
       }
     };
     positionPanel();
@@ -142,7 +142,7 @@ export function OrderFilterBar({
     };
   }, [editing]);
   useEffect(() => {
-    if (editing) panel.current?.querySelector("button, input")?.focus();
+    if (editing) panel.current?.querySelector("button, input")?.focus({ preventScroll: true });
   }, [editing]);
   const toggle = (key, value) => {
     setDraftFilters((current) => {
@@ -222,6 +222,7 @@ export function OrderFilterBar({
           key={group}
           style={{
             display: "inline-flex",
+            flexShrink: 0,
             alignItems: "center",
             border: "1px solid #c9cccf",
             borderRadius: 8,
@@ -277,6 +278,7 @@ export function OrderFilterBar({
         <span
           style={{
             display: "inline-flex",
+            flexShrink: 0,
             alignItems: "center",
             border: "1px solid #c9cccf",
             borderRadius: 8,
@@ -327,7 +329,7 @@ export function OrderFilterBar({
           </button>
         </span>
       ) : null}
-      <span ref={addFilterPositionAnchor} style={{ display: "inline-flex" }}>
+      <span ref={addFilterPositionAnchor} style={{ display: "inline-flex", flexShrink: 0 }}>
         <s-button
           ref={addFilterAnchor}
           commandFor="orders-v2-add-filter"

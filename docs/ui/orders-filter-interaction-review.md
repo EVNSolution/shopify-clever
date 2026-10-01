@@ -45,3 +45,46 @@ Reference evidence is the actual authenticated Safari UI. Local interaction evid
 - Visual: popovers remain next to the visible trigger rather than jumping to the top; chips use short date labels and first-value-plus-count summaries with full accessible text and tooltips. The measured Order range chip is about 141px wide, compared with the former 260px cap.
 - Automated: app suite 888/888; focused filter tests 20/20; build, typecheck, scoped ESLint and public URL guard pass. Independent code review has no remaining findings.
 - The preview is a local synthetic fixture. No production orders, saved views, routes, deployment or upstream Shopify data were changed.
+
+## 2026-10-02: repeat-open scroll regression
+
+The earlier repeat-open check covered the native Add filter menu. It did not cover
+closing the actual filter editor while its trigger was outside the visible frame.
+The real `OrderFilterBar` fixture now records document/toolbar scrolling, trigger
+and dialog bounds, and focus events before and after the component's own handlers.
+
+- Before the fix, closing Delivery date moved document `scrollY` from `239.5` to
+  `620.5` (381 px). The trigger focus call scrolled it back into view; subsequent
+  popovers then opened against a different viewport position.
+- All five programmatic focus paths now use `preventScroll`. The same close
+  scenario retains `239.5`; Escape, applying No date, and clearing the filter also
+  retain their captured document and toolbar scroll positions.
+- At the actual narrow Orders viewport, an applied chip's wrapper shrank to 2 px
+  around a 104.9 px button. Active/search chips and the Add filter wrapper now
+  preserve their width and use the existing horizontal overflow container.
+- Positioning still prefers below the trigger and uses above when the viewport
+  has insufficient space. This intentional placement is separate from a document
+  jump caused by focus restoration.
+
+Run the isolated real-component fixture with:
+
+```sh
+cd apps/shopify-app
+node scripts/orders-filter-browser-fixture.mjs --port 4179
+```
+
+Use the 636/1000 px widths and 360/560/760 px iframe heights. Open the actual date
+editor near the top, middle, and bottom; inspect its diagnostic before/after
+coordinates when closing, pressing Escape, applying, and clearing. Also verify
+calendar range completion, weekday disclosure, enumeration drafts, and reopening
+after the toolbar has scrolled horizontally. These checks use synthetic filters;
+authenticated production verification remains a separate release check.
+
+`Run focus regression` automatically checks all editor focus transitions and the
+six initial trigger wrappers, including the search chip. It verifies both preserved
+scroll coordinates and the expected keyboard focus target (editor, original chip,
+or Add filter, including the Polaris shadow host). Against release `afbaa26`, five closing/applying
+scenarios move the document 653–667 px and four chip wrappers measure 2 px, so the
+suite fails. The corrected component passes all seven checks at 636×560,
+1000×360, and 636×760 iframe sizes. Results include the actual before/after
+coordinates in the visible regression output; they do not inspect source strings.
