@@ -103,3 +103,20 @@ test("day filter controls restore their service category and replace the opposit
 test("service-specific day filters live in Add filter without a standalone category toggle", () => {
 const bar = readFileSync(join(process.cwd(), "app/features/orders/order-filter-bar.jsx"), "utf8"); assert.match(bar, /renderChoices\(\s*"scheduledWeekdays"/); assert.doesNotMatch(bar, /serviceCategory|pickupWeekday/);
 });
+
+
+test("short filter panels stay adjacent when opened above a low trigger", () => {
+  const bar = readFileSync(join(process.cwd(), "app/features/orders/order-filter-bar.jsx"), "utf8");
+  const positionSource = bar.match(/const panelPosition = ([\s\S]*?);\n {2}const openEditor/)?.[1];
+  assert.ok(positionSource);
+  const positionPanel = vm.runInNewContext(`(${positionSource})`, {
+    window: { innerWidth: 1000, innerHeight: 720 },
+  });
+  const above = positionPanel({ getBoundingClientRect: () => ({ left: 30, top: 620, bottom: 650 }) });
+  // A 140px panel must end 6px above the trigger, regardless of the 420px cap.
+  const panelBottom = above.bottom !== undefined ? 720 - above.bottom : above.top + 140;
+  assert.equal(620 - panelBottom, 6);
+  const below = positionPanel({ getBoundingClientRect: () => ({ left: 30, top: 200, bottom: 230 }) });
+  assert.equal(below.top, 236);
+  assert.equal(below.bottom, undefined);
+});

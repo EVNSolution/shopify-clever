@@ -100,6 +100,15 @@ export const V2_LABELS = {
   areas: ["Area", "지역"],
 };
 export const labelV2 = (labels, language) => labels[language === "ko" ? 1 : 0];
+export function filterV2Options(options, facetValues, selectedValues = []) {
+  if (!Array.isArray(facetValues)) return options;
+  const available = new Set(
+    facetValues.filter(({ count }) => count > 0).map(({ value }) => value),
+  );
+  return options.filter(
+    ([value]) => available.has(value) || selectedValues.includes(value),
+  );
+}
 export function normalizeV2Filters(filters = {}) {
   const result = { filterVersion: "2" };
   for (const key of V2_FILTER_KEYS) {
