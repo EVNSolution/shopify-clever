@@ -267,7 +267,7 @@ const routeOverviewTopBarStyle = {
   alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "var(--route-detail-control-gap, 8px)",
   justifyContent: "space-between",
 };
 
@@ -281,7 +281,7 @@ const routeOverviewTitleLineStyle = {
   alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "var(--route-detail-control-gap, 8px)",
   minWidth: 0,
 };
 
@@ -373,7 +373,7 @@ const routeHeaderRightStyle = {
   maxWidth: "100%",
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "var(--route-detail-control-gap, 8px)",
   justifyContent: "flex-end",
 };
 
@@ -499,7 +499,7 @@ const routeChildTabsStyle = {
   background: "#fafafa",
   borderBottom: "1px solid #e3e3e3",
   display: "flex",
-  gap: "4px",
+  gap: "var(--route-detail-control-gap, 8px)",
   minHeight: "48px",
   overflowX: "auto",
   padding: "6px 10px",
@@ -547,7 +547,7 @@ const routeChildSelectionBarStyle = {
   borderBottom: "1px solid #ececec",
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "var(--route-detail-control-gap, 8px)",
   justifyContent: "space-between",
   minHeight: "48px",
   padding: "7px 12px",
@@ -559,7 +559,7 @@ const routeChildSelectionGroupStyle = {
   flex: "1 1 220px",
   minWidth: 0,
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "var(--route-detail-control-gap, 8px)",
 };
 
 const routeChildSelectionButtonStyle = {
@@ -575,7 +575,7 @@ const routeChildSelectionButtonStyle = {
   fontFamily: "inherit",
   fontSize: "13px",
   fontWeight: 650,
-  gap: "5px",
+  gap: "var(--route-detail-control-gap, 8px)",
   minHeight: "32px",
   padding: "4px 10px",
 };
@@ -720,7 +720,7 @@ const routeTrackingMapCanvasStyle = {
 };
 
 const routeMetaActionsStyle = {
-  alignItems: "flex-start",
+  alignItems: "center",
   borderBottom: "1px solid #ececec",
   display: "flex",
   flexWrap: "wrap",
@@ -747,9 +747,10 @@ const routeMetaItemStyle = {
 };
 
 const routeActionColumnStyle = {
+  alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "4px",
+  gap: "var(--route-detail-control-gap, 8px)",
   justifyContent: "flex-end",
   marginLeft: "auto",
 };
@@ -804,7 +805,7 @@ const routeHeaderActionsStyle = {
   flexWrap: "wrap",
   justifyContent: "flex-end",
   minWidth: 0,
-  gap: "6px",
+  gap: "var(--route-detail-control-gap, 8px)",
 };
 
 const routeDisabledActionButtonStyle = {
@@ -7010,7 +7011,7 @@ export default function RouteDetailPage() {
   }, [activeRouteMapHeight, isMapReady]);
 
   return (
-    <main style={routesDetailPageStyle}>
+    <main className="route-detail-controls" style={routesDetailPageStyle}>
       {hasRouteAllocationDraft ? (
         <div aria-label="Unsaved route draft" role="status" style={routeDraftBarStyle}>
           <span style={routeDraftBarTextStyle}>{saveRouteDraftBusy ? "Saving route changes…" : "Unsaved route changes"}</span>
@@ -7040,7 +7041,7 @@ export default function RouteDetailPage() {
       ) : null}
       <div style={routesDetailContentStyle}>
         <header
-          className={isMaterializedChildRouteDetail ? "route-child-overview-header" : "route-overview-header"}
+          className={`route-detail-control-row ${isMaterializedChildRouteDetail ? "route-child-overview-header" : "route-overview-header"}`}
           style={isMaterializedChildRouteDetail || isRouteGroupDetail ? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle}
         >
           <div style={isMaterializedChildRouteDetail || isRouteGroupDetail ? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle}>
@@ -7191,50 +7192,33 @@ export default function RouteDetailPage() {
                   </span>
                 ) : null}
                 <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
-                  {canShowRouteCopy && effectiveRoutePlan?.id && !routeGroupId ? (
-                    <button
-                      disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
-                      onClick={handleCopyOrdinaryRoute}
-                      style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                      title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy this READY route without changing the original"}
-                      type="button"
-                    >
-                      <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
-                        <s-icon type="duplicate" size="small" color={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
-                        {copyRoutePlanBusy ? "Copying…" : "Copy Route"}
-                      </span>
-                    </button>
-                  ) : null}
-                  {canShowRouteCopy && routeGroupId ? (
-                    <button
-                      disabled={routeGroupActionBusy || hasRouteAllocationDraft}
-                      onClick={handleCopyRouteGroup}
-                      style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                      title={hasRouteAllocationDraft ? "Copy Route: save or revert Route changes before copying" : "Copy Route: copy the title and orders without changing the original"}
-                      type="button"
-                    >
-                      <span style={{ alignItems: "center", display: "inline-flex", gap: "4px" }}>
-                        <s-icon type="duplicate" size="small" color={routeGroupActionBusy || hasRouteAllocationDraft ? "subdued" : "base"} aria-hidden="true" />
-                        {copyRouteGroupBusy ? "Copying…" : "Copy Route"}
-                      </span>
-                    </button>
-                  ) : null}
-                  <div aria-label="Route utilities" className="route-action-icon-group" role="group">
+                  <div className="route-action-icon-group" role="group" aria-label="Route actions">
+                    {canShowRouteCopy && effectiveRoutePlan?.id && !routeGroupId ? (
+                      <RouteActionIconButton
+                        icon="duplicate"
+                        label="Copy Route"
+                        busy={copyRoutePlanBusy}
+                        disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
+                        onClick={handleCopyOrdinaryRoute}
+                        description={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this READY route without changing the original"}
+                      />
+                    ) : null}
+                    {canShowRouteCopy && routeGroupId ? (
+                      <RouteActionIconButton
+                        icon="duplicate"
+                        label="Copy Route"
+                        busy={copyRouteGroupBusy}
+                        disabled={routeGroupActionBusy || hasRouteAllocationDraft}
+                        onClick={handleCopyRouteGroup}
+                        description={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy the title and orders without changing the original"}
+                      />
+                    ) : null}
                     {isMaterializedChildRouteDetail ? (
                       <RouteActionIconButton
                         icon="email"
                         label="Send email"
                         disabled={!effectiveRoutePlan?.id}
                         onClick={openCustomerEmailDialog}
-                      />
-                    ) : null}
-                    {!isMaterializedChildRouteDetail ? (
-                      <RouteActionIconButton
-                        icon="inventory"
-                        onClick={handleViewInventory}
-                        label={translate(language, "routes.detail.inventory.view")}
-                        description={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
-                        disabled={!inventoryDetailHref}
                       />
                     ) : null}
                   </div>
@@ -7270,7 +7254,7 @@ export default function RouteDetailPage() {
 
         <section style={routesDetailCardStyle}>
           {hasRouteTrackingDetail ? (
-            <div aria-label={translate(language, "routes.detail.sections.accessibilityLabel")} role="toolbar" style={routeChildTabsStyle}>
+            <div className="route-detail-control-row" aria-label={translate(language, "routes.detail.sections.accessibilityLabel")} role="toolbar" style={routeChildTabsStyle}>
               <button
                 aria-pressed={childDetailTab === "stops"}
                 onClick={() => handleChildDetailTabChange("stops")}
@@ -7321,7 +7305,7 @@ export default function RouteDetailPage() {
           ) : null}
 
           {!isRouteGroupDetail ? (
-            <section aria-label="Route schedule and dispatch" style={routeChildSelectionBarStyle}>
+            <section aria-label="Route schedule and dispatch" className="route-detail-control-row" style={routeChildSelectionBarStyle}>
               {isMaterializedChildRouteDetail ? (
                 <div style={routeChildSelectionGroupStyle}>
                   <button
@@ -7522,6 +7506,7 @@ export default function RouteDetailPage() {
             ) : null}
             <div
               aria-label="Route actions"
+              className="route-detail-control-row"
               onBlur={(event) => {
                 if (!event.currentTarget.contains(event.relatedTarget)) setRouteActionsMenu(null);
               }}
@@ -9206,6 +9191,7 @@ export default function RouteDetailPage() {
             />
             <div
               aria-label={`${activeRouteSelector.title} selector`}
+              className="route-detail-selector-controls"
               role="dialog"
               style={{
                 ...routeLineEditorDialogStyle,

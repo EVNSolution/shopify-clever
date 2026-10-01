@@ -647,7 +647,8 @@ test("child detail uses a flat reference-style title area and keeps inventory se
   assert.match(routeDetailSource, /Updated on \{routeUpdatedLabel\}/);
   assert.match(routeDetailSource, /aria-label="Edit child route name"/);
   assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
-  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*routes\.detail\.inventory\.view/);
+  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*routes\.detail\.sections\.inventory/);
+  assert.doesNotMatch(routeDetailSource, /icon="inventory"/);
   assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
 });
 
@@ -697,7 +698,7 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.doesNotMatch(tabHandlerSource, /clearMapRecoveryTimer|mapLoadedRef|setIsMapReady|setMapStatus/);
   assert.match(routeDetailSource, /syncRouteDetailTrackingVisibility\(map, isTrackingMapView\);\s*bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /if \(mapCanvas\?\.style\.cursor === "pointer"\) mapCanvas\.style\.cursor = "";/);
-  assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\}/);
+  assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div[^>]*aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\}/);
   assert.match(routeDetailSource, /\) : isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
   assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isTrackingMapView \? \(/);
 });

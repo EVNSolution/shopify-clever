@@ -1223,3 +1223,73 @@ s-badge {
 .route-action-icon:focus-within .route-action-icon__tooltip { visibility: visible; }
 
 .route-action-icon-group:has(.route-action-icon:hover) .route-action-icon:not(:hover) .route-action-icon__tooltip { visibility: hidden; }
+
+/* Route Detail uses the existing 36px tab size and 8px control spacing. */
+.route-detail-controls {
+  --route-detail-control-height: 36px;
+  --route-detail-control-gap: 8px;
+  --route-detail-control-radius: 8px;
+}
+
+.route-detail-control-row,
+.route-detail-selector-controls {
+  box-sizing: border-box;
+}
+
+/* Override legacy inline dimensions only inside the rearranged control areas. */
+.route-detail-control-row button,
+.route-detail-selector-controls button:not(.route-start-time-picker__day),
+.route-detail-selector-controls input:not([type="checkbox"]):not([type="radio"]),
+.route-detail-selector-controls select {
+  box-sizing: border-box;
+  border-radius: var(--route-detail-control-radius) !important;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 20px !important;
+  min-height: var(--route-detail-control-height) !important;
+  min-width: var(--route-detail-control-height);
+  padding: 6px 10px !important;
+}
+
+.route-detail-control-row button,
+.route-detail-selector-controls button:not(.route-start-time-picker__day) {
+  align-items: center;
+  display: inline-flex;
+  gap: var(--route-detail-control-gap);
+  justify-content: center;
+}
+
+.route-detail-control-row button[role="menuitem"],
+.route-detail-selector-controls button[role="option"] {
+  justify-content: flex-start;
+  text-align: left;
+}
+
+.route-detail-control-row .route-action-icon-group {
+  background: transparent;
+  border: 0;
+  gap: var(--route-detail-control-gap);
+  padding: 0;
+}
+
+.route-detail-control-row .route-action-icon__button,
+.route-detail-control-row button[aria-label="Edit child route name"] {
+  height: var(--route-detail-control-height);
+  padding: 0 !important;
+  width: var(--route-detail-control-height) !important;
+}
+
+.route-detail-control-row .route-action-icon__button {
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+}
+
+.route-detail-control-row button:focus-visible,
+.route-detail-selector-controls :is(button, input, select):focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}
+
+.route-detail-selector-controls .route-start-time-picker__calendar-header {
+  grid-template-columns: var(--route-detail-control-height) minmax(0, 1fr) var(--route-detail-control-height);
+}
