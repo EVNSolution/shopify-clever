@@ -184,26 +184,93 @@ test("schedule and driver sit under tabs before the map, Dispatch retains its ha
 });
 
 
-test("Copy keeps its duplicate icon and appears only for a single distinct route", () => {
-  const headerStart = source.indexOf('<div aria-label="Route detail actions"');
-  const copyEnd = source.indexOf('<div aria-label="Route utilities"', headerStart);
-  const copyJsx = `${source.slice(headerStart, copyEnd)}</div>`;
-  const copyCompiled = ts.transpileModule(`const tree = (${copyJsx});`, {
+const iconSource = readFileSync(new URL("../app/ui/route-action-icon-button.jsx", import.meta.url), "utf8");
+const iconCompiled = ts.transpileModule(iconSource.slice(iconSource.indexOf("export function")).replace("export function", "function"), {
+  compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
+}).outputText;
+function renderHeader(overrides = {}) {
+  const start = source.indexOf('<div aria-label="Route detail actions"');
+  const end = source.indexOf("{!isMaterializedChildRouteDetail && !isRouteGroupDetail ? (", start);
+  const jsx = source.slice(start, end).trim();
+  const headerCompiled = ts.transpileModule(`const tree = (${jsx});`, {
     compilerOptions: { jsx: ts.JsxEmit.React, target: ts.ScriptTarget.ES2022 },
   }).outputText;
-  const copyConditionStart = source.indexOf("const canShowRouteCopy =");
-  const copyCondition = source.slice(copyConditionStart, source.indexOf(";", copyConditionStart) + 1);
-  for (const ids of [["route-1"], ["route-1", "route-2"], ["route-1", "route-1"]]) {
-    const context = { ...renderActions().context, routeHeaderActionsStyle: {}, routeDisabledActionButtonStyle: {},
-      canCopyOrdinaryRoute: true, copyRoutePlanBusy: false, copyRouteGroupBusy: false,
-      routeGroup: ids, getVisibleRouteGroupChildren: (group) => group, getRouteGroupChildRoutePlanId: (id) => id,
-      handleCopyOrdinaryRoute: () => {}, handleCopyRouteGroup: () => {} };
-    const tree = new Function(...Object.keys(context), `${copyCondition}; ${copyCompiled}; return tree;`)(...Object.values(context));
-    const copy = button(tree, "Copy Route");
-    if (new Set(ids).size > 1) assert.equal(copy, undefined);
+  const conditionStart = source.indexOf("const canShowRouteCopy =");
+  const condition = source.slice(conditionStart, source.indexOf(";", conditionStart) + 1);
+  let tooltipId = 0;
+  const context = { ...renderActions().context, routeHeaderActionsStyle: {},
+    useId: () => `tooltip-${++tooltipId}`,
+    React: { createElement: (type, props, ...children) => typeof type === "function" ? type(props ?? {})
+      : ({ type, props: props ?? {}, children: children.flat(Infinity).filter((child) => child !== null && child !== false && child !== undefined) }) },
+    canCopyOrdinaryRoute: true, copyRoutePlanBusy: false, copyRouteGroupBusy: false,
+    getVisibleRouteGroupChildren: (group) => group, getRouteGroupChildRoutePlanId: (id) => id,
+    routeGroup: ["route-1"], inventoryDetailHref: "/inventory", openCustomerEmailDialog: () => {},
+    handleCopyOrdinaryRoute: () => {}, handleCopyRouteGroup: () => {}, ...overrides };
+  const tree = new Function(...Object.keys(context), `${iconCompiled}; ${condition}; ${headerCompiled}; return tree;`)(...Object.values(context));
+  return { tree, context };
+}
+function copyButton(tree) {
+  return nodes(tree).find((node) => node.type === "button" && node.props["aria-label"] === "Copy Route");
+}
+
+test("Copy is icon-only with an accessible hover/focus tooltip, preserving single distinct route visibility", () => {
+  for (const ids of [[], ["route-1"], ["route-1", "route-2"], ["route-1", "route-1"]]) {
+    const { tree, context } = renderHeader({ routeGroup: ids });
+    const copy = copyButton(tree);
+    if (new Set(ids).size !== 1) assert.equal(copy, undefined);
     else {
       assert.equal(copy.props.onClick, context.handleCopyRouteGroup);
+      assert.equal(text(copy), "");
       assert.ok(nodes(copy).some((node) => node.type === "s-icon" && node.props.type === "duplicate" && node.props["aria-hidden"] === "true"));
+      const tooltip = nodes(tree).find((node) => node.props.id === copy.props["aria-describedby"]);
+      assert.equal(tooltip.props.role, "tooltip");
+      assert.ok(text(tooltip).startsWith("Copy Route"));
     }
   }
+  const { tree, context } = renderHeader({ routeGroupId: null });
+  assert.equal(copyButton(tree).props.onClick, context.handleCopyOrdinaryRoute);
+});
+
+test("Copy retains disabled/busy guards and focusable unavailable explanation", () => {
+  for (const guards of [{ canCopyOrdinaryRoute: false }, { routeGroupActionBusy: true }, { copyRoutePlanBusy: true }, { hasRouteAllocationDraft: true }]) {
+    const { tree } = renderHeader({ routeGroupId: null, ...guards });
+    const copy = copyButton(tree);
+    assert.equal(copy.props.disabled, true);
+    const wrapper = nodes(tree).find((node) => node.props.className === "route-action-icon");
+    assert.equal(wrapper.props.tabIndex, 0);
+    assert.equal(wrapper.props["aria-describedby"], copy.props["aria-describedby"]);
+  }
+  const busy = copyButton(renderHeader({ copyRouteGroupBusy: true }).tree);
+  assert.equal(busy.props["aria-busy"], true);
+  // Group busy policy stays as before: group Copy busy is reported, while existing action/draft guards disable it.
+  assert.equal(busy.props.disabled, false);
+  for (const guards of [{ routeGroupActionBusy: true }, { hasRouteAllocationDraft: true }]) {
+    assert.equal(copyButton(renderHeader(guards).tree).props.disabled, true);
+  }
+});
+
+test("header removes duplicate Inventory but retains child email and the Inventory tab handler", () => {
+  for (const isMaterializedChildRouteDetail of [false, true]) {
+    const { tree, context } = renderHeader({ isMaterializedChildRouteDetail });
+    assert.equal(nodes(tree).some((node) => node.type === "s-icon" && node.props.type === "inventory"), false);
+    const email = nodes(tree).find((node) => node.type === "button" && node.props["aria-label"] === "Send email");
+    if (isMaterializedChildRouteDetail) assert.equal(email.props.onClick, context.openCustomerEmailDialog);
+    else assert.equal(email, undefined);
+  }
+  const tabs = source.slice(source.indexOf('role="toolbar" style={routeChildTabsStyle}'), controlsStart);
+  assert.match(tabs, /disabled=\{!inventoryDetailHref\}[\s\S]*onClick=\{handleViewInventory\}[\s\S]*routes.detail.sections.inventory/);
+});
+
+test("rearranged controls share scoped sizing while keeping map tools outside the control rows", () => {
+  const css = readFileSync(new URL("../app/styles/global.css", import.meta.url), "utf8");
+  assert.match(css, /\.route-detail-controls\s*\{[\s\S]*--route-detail-control-height: 36px;[\s\S]*--route-detail-control-gap: 8px;/);
+  assert.match(css, /min-height: var\(--route-detail-control-height\) !important/);
+  assert.match(css, /box-sizing: border-box/);
+  assert.match(css, /width: var\(--route-detail-control-height\)/);
+  assert.match(css, /\.route-action-icon:focus-within \.route-action-icon__tooltip/);
+  assert.match(source, /<main className="route-detail-controls"/);
+  assert.match(controlsJsx, /className="route-detail-control-row"/);
+  assert.match(actionsJsx, /className="route-detail-control-row"/);
+  assert.match(source, /aria-label=\{`\$\{activeRouteSelector.title\} selector`\}\s*className="route-detail-selector-controls"/);
+  assert.doesNotMatch(source.slice(source.indexOf("<MapPanel", controlsStart), actionsStart), /route-detail-control-row/);
 });

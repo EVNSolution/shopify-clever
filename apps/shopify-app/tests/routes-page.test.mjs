@@ -601,14 +601,15 @@ test("Route detail wires route group action buttons through App Bridge", () => {
   assert.doesNotMatch(routeDetailSource, /submitRouteGroupAction\("assignPolygonToRoute"/);
 });
 
-test("Route detail exposes inventory and delete header actions", () => {
+test("Route detail retains Inventory tab and delete action", () => {
   assert.match(routeDetailSource, /function getLinkedInventoryId\(routePlan, routeGroup, routeGroupChild, isRouteGroupDetail\) \{/);
   assert.doesNotMatch(routeDetailSource, /if \(childInventoryId \|\| !isRouteGroupDetail\) return childInventoryId/);
   assert.match(routeDetailSource, /childInventoryId \?\? textOrUndefined\(routeGroup\?\.linkedInventoryId \?\? routeGroup\?\.inventoryId\)/);
   assert.match(routeDetailSource, /routeGroup\?\.linkedInventoryId \?\? routeGroup\?\.inventoryId/);
   assert.match(routeDetailSource, /`\/app\/orders\/inventory\?id=\$\{encodeURIComponent\(linkedInventoryId\)\}\$\{effectiveRoutePlan\?\.id \? `&routePlanId=\$\{encodeURIComponent\(effectiveRoutePlan\.id\)\}` : ""\}`/);
   assert.match(routeDetailSource, /disabled=\{!inventoryDetailHref\}/);
-  assert.match(routeDetailSource, /routes\.detail\.inventory\.view/);
+  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*routes\.detail\.sections\.inventory/);
+  assert.doesNotMatch(routeDetailSource, /icon="inventory"/);
   assert.match(routeDetailSource, /routes\.detail\.inventory\.unavailable/);
   assert.match(routeDetailSource, /if \(inventoryDetailHref\) requestRouteNavigation\(inventoryDetailHref\)/);
   assert.match(routeDetailSource, /Delete \$\{routeDetailTitle\} on the next global Save\?/);
@@ -706,7 +707,7 @@ test("Route group detail requires an explicit atomic copy mode and preserves suc
   assert.match(routeDetailSource, />가상 주문으로 독립 복사</);
   assert.match(routeDetailSource, /새 CLEVER 전용 ID를 만들며 Shopify와 동기화되지 않음/);
   assert.match(routeDetailSource, /disabled=\{copyRouteGroupRequestBusy \|\| !copyRouteGroupDialogState\.mode\}/);
-  assert.match(routeDetailSource, /\{copyRouteGroupBusy \? "Copying…" : "Copy Route"\}/);
+  assert.match(routeDetailSource, /busy=\{copyRouteGroupBusy\}/);
 });
 
 test("Route detail loader reads the selected persisted route plan", () => {
@@ -1488,7 +1489,7 @@ test("Route detail page provides page navigation back to the route list", () => 
   assert.match(routeDetailSource, /<span>Back to routes<\/span>/);
   assert.match(routeDetailSource, /aria-label="Back to routes list"/);
   assert.match(routeDetailSource, /const routeOverviewTopBarStyle = \{/);
-  assert.match(routeDetailSource, /className=\{isMaterializedChildRouteDetail \? "route-child-overview-header" : "route-overview-header"\}/);
+  assert.match(routeDetailSource, /className=\{`route-detail-control-row \$\{isMaterializedChildRouteDetail \? "route-child-overview-header" : "route-overview-header"\}`\}/);
   assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
   assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle\}/);
   assert.match(routeDetailSource, /aria-label="Back to routes list"/);
