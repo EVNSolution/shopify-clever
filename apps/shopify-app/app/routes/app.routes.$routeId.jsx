@@ -673,22 +673,11 @@ const routeChildTrackingMetricValueStyle = {
   overflowWrap: "anywhere",
 };
 
-const routeTrackingSummaryHeaderStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "10px",
-  justifyContent: "space-between",
-};
-
-const routeTrackingSummaryTitleStyle = {
-  color: "#303030",
-  fontSize: "13px",
-  fontWeight: 750,
-};
-
-const routeTrackingSummaryHintStyle = {
-  color: "#6d7175",
-  fontSize: "11px",
+const routeTrackingPrimaryMetricStyle = {
+  ...routeChildTrackingMetricStyle,
+  borderLeft: 0,
+  minWidth: 0,
+  padding: "2px 0",
 };
 
 const routeTrackingEvidenceStyle = {
@@ -7789,6 +7778,123 @@ export default function RouteDetailPage() {
             </section>
           ) : null}
 
+          {!isTrackingMapView ? (
+            <div className="route-group-detail-scroll" style={routesDetailTableFrameStyle}>
+              <table aria-label="Driver route rows" style={routePlanRowsTableStyle}>
+                <colgroup>
+                  {routePlanRowsColumnWidths.map((width, index) => (
+                    <col key={`${width}-${index}`} style={{ width }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={routeNameHeaderCellStyle}>Name</th>
+                    <th style={routeStatusHeaderCellStyle}>Status</th>
+                    <th style={routesDetailHeaderCellStyle}>Driver</th>
+                    <th style={routesDetailHeaderCellStyle}>Start time</th>
+                    <th style={routesDetailHeaderCellStyle}>Stops</th>
+                    <th style={routesDetailHeaderCellStyle}>Delivered</th>
+                    <th style={routesDetailHeaderCellStyle}>Attempted</th>
+                    <th style={routesDetailHeaderCellStyle}>Total items</th>
+                    <th style={routesDetailHeaderCellStyle}>Total drive time</th>
+                    <th style={routesDetailHeaderCellStyle}>Total distance</th>
+                    <th style={routesDetailHeaderCellStyle}>Total weight</th>
+                    <th style={routesDetailHeaderCellStyle}>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timelineRouteRows.filter((routeRow) => !routeRow.isUnassigned).map((routeRow) => (
+                    <tr key={routeRow.id}>
+                      <td style={routeNameCellStyle}>
+                        <span style={routeLineNameStyle}>
+                          <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: routeRow.color }}></span>
+                          <button
+                            aria-label={routeRow.routePlanId ? `Open ${routeRow.title} route detail` : `${routeRow.title} route preview`}
+                            disabled={!routeRow.routePlanId}
+                            onClick={() => routeRow.routePlanId ? requestRouteNavigation(routeGroupId ? routeGroupChildPath(routeGroupId, routeRow.routePlanId) : routePlanPath(routeRow.routePlanId)) : undefined}
+                            style={{
+                              ...routeLineTitleButtonStyle,
+                              ...(routeRow.isPreviewOnly ? { cursor: "default" } : null),
+                            }}
+                            type="button"
+                          >
+                            {routeRow.title}
+                          </button>
+                          <button
+                            aria-label={`Edit ${routeRow.title} name`}
+                            disabled={routeRow.isPreviewOnly || routeRow.isUnassigned}
+                            onClick={() => handleOpenRouteLineEditor(routeRow)}
+                            style={{
+                              ...routeLineEditButtonStyle,
+                              ...(routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "default", opacity: 0.4 } : null),
+                            }}
+                            type="button"
+                          >
+                            {renderRouteLineEditIcon()}
+                          </button>
+                        </span>
+                      </td>
+                      <td style={routeStatusCellStyle}><span style={routeRowStatusStyle}>{formatRouteStatus(routeRow.status)}</span></td>
+                      <td style={routesDetailCellStyle}>
+                        <button
+                          aria-label="Change route driver"
+                          disabled={routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus)}
+                          onClick={() => handleOpenRouteSelector("driver", routeRow)}
+                          style={{
+                            ...routeEditableValueStyle,
+                            ...(routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus) ? { cursor: "default", opacity: 0.65 } : null),
+                          }}
+                          type="button"
+                        >
+                          <span style={routeEditableValueTextStyle}>{routeRow.driverLabel}</span>
+                          {renderRouteEditableChevron()}
+                        </button>
+                      </td>
+                      <td style={routesDetailCellStyle}>
+                        <button
+                          aria-label="Change route start time"
+                          disabled={routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned}
+                          onClick={() => handleOpenRouteSelector("startTime", routeRow)}
+                          style={{
+                            ...routeEditableValueStyle,
+                            ...(routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                          }}
+                          type="button"
+                        >
+                          <span style={routeEditableValueTextStyle}>{routeRow.startTimeLabel ?? routeStartTimeLabel}</span>
+                          {renderRouteEditableChevron()}
+                        </button>
+                      </td>
+                      <td style={routesDetailCellStyle}>{routeRow.stopsCount}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.deliveredCount}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.attemptedCount}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.totalItems}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.driveTimeLabel}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.totalDistanceLabel}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.totalWeightLabel}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.createdLabel}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {isRouteGroupDetail ? (
+                  <tfoot style={{ background: "#f6f6f7", fontWeight: 600 }}>
+                    <tr aria-label="All routes totals">
+                      <td colSpan={4} style={routesDetailCellStyle}>Total</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedStops}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.delivered}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.attempted}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedItems}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(allRoutesSummary.durationSeconds))}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDistanceMeters(allRoutesSummary.distanceMeters))}</td>
+                      <td style={routesDetailCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+                      <td style={routesDetailCellStyle} />
+                    </tr>
+                  </tfoot>
+                ) : null}
+              </table>
+            </div>
+          ) : null}
+
           {childDetailTab === "stops" && routeOrderRows.length > 0 ? (
             <div
               style={{
@@ -7956,24 +8062,20 @@ export default function RouteDetailPage() {
           {isTrackingMapView ? (
             <section aria-label="Route tracking" style={routeChildTrackingStyle}>
               <section aria-label="Route tracking summary" style={routeChildTrackingSummaryStyle}>
-                <div style={routeTrackingSummaryHeaderStyle}>
-                  <strong style={routeTrackingSummaryTitleStyle}>Route overview</strong>
-                  <span style={routeTrackingSummaryHintStyle}>Operational status from recorded driver events</span>
-                </div>
                 <div className="route-tracking-primary-grid">
-                  <div style={{ ...routeChildTrackingMetricStyle, borderLeft: 0, paddingLeft: 0 }}>
+                  <div style={routeTrackingPrimaryMetricStyle}>
                     <span style={routeChildTrackingMetricLabelStyle}>Driver</span>
                     <strong style={routeChildTrackingMetricValueStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</strong>
                   </div>
-                  <div style={routeChildTrackingMetricStyle}>
+                  <div style={routeTrackingPrimaryMetricStyle}>
                     <span style={routeChildTrackingMetricLabelStyle}>Delivery progress</span>
                     <strong style={routeChildTrackingMetricValueStyle}>{trackingDeliveredCount} / {routeOrderRows.length} delivered</strong>
                   </div>
-                  <div style={routeChildTrackingMetricStyle}>
+                  <div style={routeTrackingPrimaryMetricStyle}>
                     <span style={routeChildTrackingMetricLabelStyle}>Latest position</span>
                     <strong style={routeChildTrackingMetricValueStyle}>{formatTrackingPosition(latestTrackingPosition)}</strong>
                   </div>
-                  <div style={routeChildTrackingMetricStyle}>
+                  <div style={routeTrackingPrimaryMetricStyle}>
                     <span style={routeChildTrackingMetricLabelStyle}>GPS gaps</span>
                     <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.gapCount}</strong>
                   </div>
@@ -8087,122 +8189,7 @@ export default function RouteDetailPage() {
                 </table>
               </div>
             </section>
-          ) : (
-            <div className="route-group-detail-scroll" style={routesDetailTableFrameStyle}>
-              <table aria-label="Driver route rows" style={routePlanRowsTableStyle}>
-                <colgroup>
-                  {routePlanRowsColumnWidths.map((width, index) => (
-                    <col key={`${width}-${index}`} style={{ width }} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th style={routeNameHeaderCellStyle}>Name</th>
-                    <th style={routeStatusHeaderCellStyle}>Status</th>
-                    <th style={routesDetailHeaderCellStyle}>Driver</th>
-                    <th style={routesDetailHeaderCellStyle}>Start time</th>
-                    <th style={routesDetailHeaderCellStyle}>Stops</th>
-                    <th style={routesDetailHeaderCellStyle}>Delivered</th>
-                    <th style={routesDetailHeaderCellStyle}>Attempted</th>
-                    <th style={routesDetailHeaderCellStyle}>Total items</th>
-                    <th style={routesDetailHeaderCellStyle}>Total drive time</th>
-                    <th style={routesDetailHeaderCellStyle}>Total distance</th>
-                    <th style={routesDetailHeaderCellStyle}>Total weight</th>
-                    <th style={routesDetailHeaderCellStyle}>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timelineRouteRows.filter((routeRow) => !routeRow.isUnassigned).map((routeRow) => (
-                    <tr key={routeRow.id}>
-                      <td style={routeNameCellStyle}>
-                        <span style={routeLineNameStyle}>
-                          <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: routeRow.color }}></span>
-                          <button
-                            aria-label={routeRow.routePlanId ? `Open ${routeRow.title} route detail` : `${routeRow.title} route preview`}
-                            disabled={!routeRow.routePlanId}
-                            onClick={() => routeRow.routePlanId ? requestRouteNavigation(routeGroupId ? routeGroupChildPath(routeGroupId, routeRow.routePlanId) : routePlanPath(routeRow.routePlanId)) : undefined}
-                            style={{
-                              ...routeLineTitleButtonStyle,
-                              ...(routeRow.isPreviewOnly ? { cursor: "default" } : null),
-                            }}
-                            type="button"
-                          >
-                            {routeRow.title}
-                          </button>
-                          <button
-                            aria-label={`Edit ${routeRow.title} name`}
-                            disabled={routeRow.isPreviewOnly || routeRow.isUnassigned}
-                            onClick={() => handleOpenRouteLineEditor(routeRow)}
-                            style={{
-                              ...routeLineEditButtonStyle,
-                              ...(routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "default", opacity: 0.4 } : null),
-                            }}
-                            type="button"
-                          >
-                            {renderRouteLineEditIcon()}
-                          </button>
-                        </span>
-                      </td>
-                      <td style={routeStatusCellStyle}><span style={routeRowStatusStyle}>{formatRouteStatus(routeRow.status)}</span></td>
-                      <td style={routesDetailCellStyle}>
-                        <button
-                          aria-label="Change route driver"
-                          disabled={routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus)}
-                          onClick={() => handleOpenRouteSelector("driver", routeRow)}
-                          style={{
-                            ...routeEditableValueStyle,
-                            ...(routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus) ? { cursor: "default", opacity: 0.65 } : null),
-                          }}
-                          type="button"
-                        >
-                          <span style={routeEditableValueTextStyle}>{routeRow.driverLabel}</span>
-                          {renderRouteEditableChevron()}
-                        </button>
-                      </td>
-                      <td style={routesDetailCellStyle}>
-                        <button
-                          aria-label="Change route start time"
-                          disabled={routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned}
-                          onClick={() => handleOpenRouteSelector("startTime", routeRow)}
-                          style={{
-                            ...routeEditableValueStyle,
-                            ...(routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                          }}
-                          type="button"
-                        >
-                          <span style={routeEditableValueTextStyle}>{routeRow.startTimeLabel ?? routeStartTimeLabel}</span>
-                          {renderRouteEditableChevron()}
-                        </button>
-                      </td>
-                      <td style={routesDetailCellStyle}>{routeRow.stopsCount}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.deliveredCount}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.attemptedCount}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.totalItems}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.driveTimeLabel}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.totalDistanceLabel}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.totalWeightLabel}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.createdLabel}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                {isRouteGroupDetail ? (
-                  <tfoot style={{ background: "#f6f6f7", fontWeight: 600 }}>
-                    <tr aria-label="All routes totals">
-                      <td colSpan={4} style={routesDetailCellStyle}>Total</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedStops}</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.delivered}</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.attempted}</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedItems}</td>
-                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(allRoutesSummary.durationSeconds))}</td>
-                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDistanceMeters(allRoutesSummary.distanceMeters))}</td>
-                      <td style={routesDetailCellStyle}>{ROUTE_EMPTY_LABEL}</td>
-                      <td style={routesDetailCellStyle} />
-                    </tr>
-                  </tfoot>
-                ) : null}
-              </table>
-            </div>
-          )}
+          ) : null}
 
             {!routeTimelineDrag && activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
               <>
