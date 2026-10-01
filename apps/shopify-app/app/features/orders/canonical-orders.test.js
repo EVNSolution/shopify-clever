@@ -95,7 +95,8 @@ test("maps server canonical orders to existing Orders row shape", () => {
       deliveryArea: "Mississauga",
       deliveryDay: "Friday",
       orderCreatedAt: "2026-05-01T15:30:00.000Z",
-      orderedDate: "2026-05-01",
+      orderedDate: "2026-05-07",
+      orderDateLocal: "2026-05-01",
       deliveryBatchStartDate: "2026-05-07",
       deliveryBatchEndDate: "2026-05-09",
       deliveryDate: "2026-05-08",
@@ -150,6 +151,41 @@ test("canonical order adapter falls back safely and only trusts numeric coordina
   assert.equal(row.address, "Toronto, ON");
   assert.deepEqual(row.coordinates, [undefined, undefined]);
   assert.equal(row.hasCoordinates, false);
+});
+
+test("canonical order adapter preserves note source precedence and intentional blank clears", () => {
+  const [topLevel, rawFallback, snapshotFallback] = mapCanonicalOrdersToOrderRows([
+    {
+      shopifyOrderGid: "gid://shopify/Order/2303",
+      note: "Leave beside the side door",
+      customerNote: "Call on arrival",
+    },
+    {
+      shopifyOrderGid: "gid://shopify/Order/2310",
+      note: "   ",
+      customerNote: "",
+      rawPayload: {
+        note: "Use the loading entrance",
+        customer: { note: "Ring unit 2310" },
+      },
+    },
+    {
+      shopifyOrderGid: "gid://shopify/Order/2311",
+      note: null,
+      customerNote: null,
+      shopifyOrderSnapshot: {
+        note: "Keep refrigerated",
+        customer: { note: "Text only" },
+      },
+    },
+  ]);
+
+  assert.equal(topLevel.note, "Leave beside the side door");
+  assert.equal(topLevel.customerNote, "Call on arrival");
+  assert.equal(rawFallback.note, "");
+  assert.equal(rawFallback.customerNote, "");
+  assert.equal(snapshotFallback.note, "Keep refrigerated");
+  assert.equal(snapshotFallback.customerNote, "Text only");
 });
 
 test("canonical order adapter exposes Delivery API items as Shopify-style line items", () => {
@@ -344,6 +380,49 @@ test("merges server planning metadata into Shopify rows without losing sync snap
     shopifyRows[1].shopifyOrderSnapshot,
   ]);
   assert.equal(mergedRows[1], shopifyRows[1]);
+});
+
+test("canonical rows keep absent notes sparse when merged with Shopify source rows", () => {
+  const [canonicalRow] = mapCanonicalOrdersToOrderRows([
+    {
+      shopifyOrderGid: "gid://shopify/Order/1001",
+      planningStatus: "PLANNED",
+    },
+  ]);
+
+  assert.equal(Object.hasOwn(canonicalRow, "note"), false);
+  assert.equal(Object.hasOwn(canonicalRow, "customerNote"), false);
+
+  const [mergedRow] = mergeShopifyOrderRowsWithCanonicalRows(
+    [{
+      id: "gid://shopify/Order/1001",
+      note: "Shopify order note",
+      customerNote: "Shopify customer note",
+    }],
+    [canonicalRow],
+  );
+
+  assert.equal(mergedRow.note, "Shopify order note");
+  assert.equal(mergedRow.customerNote, "Shopify customer note");
+
+  const [blankCanonicalRow] = mapCanonicalOrdersToOrderRows([
+    {
+      shopifyOrderGid: "gid://shopify/Order/1001",
+      note: "",
+      customerNote: "   ",
+    },
+  ]);
+  const [clearedRow] = mergeShopifyOrderRowsWithCanonicalRows(
+    [{
+      id: "gid://shopify/Order/1001",
+      note: "Stale Shopify order note",
+      customerNote: "Stale Shopify customer note",
+    }],
+    [blankCanonicalRow],
+  );
+
+  assert.equal(clearedRow.note, "");
+  assert.equal(clearedRow.customerNote, "");
 });
 
 test("keeps canonical-only order rows for history and all-orders coverage", () => {

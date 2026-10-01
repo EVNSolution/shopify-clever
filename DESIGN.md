@@ -34,6 +34,7 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Operational summary: driver, delivery progress, latest position, and GPS gap signal.
 - Evidence disclosure: connection state, execution events, return-to-depot evidence, point counts, and recorded range.
 - Stop table: authoritative ordered stop detail.
+- Show the same detailed stop/order table on a standalone route, a saved child route, and the group All routes view. All routes prepends route identity and includes every child-route stop plus the explicit Unassigned row set; keep the route summary and timeline available alongside it.
 
 ### Orders
 
@@ -65,6 +66,7 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Tracking summary is a single bordered region with a four-column primary grid.
 - Tracking evidence uses a native disclosure so keyboard and assistive technology behavior remain reliable.
 - Tables remain the primary detailed operations surface.
+- Stop-table disclosures use a route-scoped row key. All routes is read-only and links each assigned row to its child route for operational actions; Unassigned has no route action. Actual arrival evidence is shown only when it belongs to that same route; never reuse one child route's tracking evidence for another child or Unassigned.
 
 ### Orders filter controls
 

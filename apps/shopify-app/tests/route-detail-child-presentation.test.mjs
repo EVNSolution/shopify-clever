@@ -8,6 +8,7 @@ import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
   buildChildRouteOrderRows,
+  buildRouteOrderRows,
   summarizeChildRouteMoney,
   formatChildDriveTimeLabel,
   formatChildEtaLabel,
@@ -49,6 +50,65 @@ test("child route rows expose notes and summarize shipping and order totals", ()
     shippingPriceState: "missing",
     totalPriceLabel: "–",
   });
+});
+
+test("route order rows include every child and unassigned stop without crossing route evidence", () => {
+  const rows = buildRouteOrderRows([
+    {
+      color: "#0b84d8",
+      id: "route-1",
+      routePlanId: "route-plan-1",
+      status: "Ready",
+      title: "#1",
+      stops: [{
+        deliveryStopId: "stop-1",
+        note: "Keep chilled",
+        orderId: "order-1",
+        orderName: "#1001",
+      }],
+    },
+    {
+      color: "#7c3aed",
+      id: "route-2",
+      routePlanId: "route-plan-2",
+      status: "Completed",
+      title: "#2",
+      stops: [{
+        deliveryStopId: "stop-2",
+        orderId: "order-2",
+        orderName: "#1002",
+      }],
+    },
+    {
+      color: "#64748b",
+      id: "unassigned",
+      isUnassigned: true,
+      routePlanId: null,
+      status: "Ready",
+      title: "Unassigned",
+      stops: [{
+        deliveryStopId: "stop-3",
+        orderId: "order-3",
+        orderName: "#1003",
+      }],
+    },
+  ], {
+    actualArrivalByStopId: {
+      "stop-1": "2026-10-01T14:10:00Z",
+      "stop-2": "2026-10-01T15:20:00Z",
+    },
+    actualArrivalRoutePlanId: "route-plan-1",
+    ianaTimezone: "America/Toronto",
+  });
+
+  assert.deepEqual(rows.map((row) => row.order), ["#1001", "#1002", "#1003"]);
+  assert.deepEqual(rows.map((row) => row.sourceRouteTitle), ["#1", "#2", "Unassigned"]);
+  assert.deepEqual(rows.map((row) => row.sourceRoutePlanId), ["route-plan-1", "route-plan-2", null]);
+  assert.deepEqual(rows.map((row) => row.sourceRouteStatus), ["Ready", "Completed", "Ready"]);
+  assert.equal(rows[0].note, "Keep chilled");
+  assert.equal(rows[0].hasActualArrival, true);
+  assert.equal(rows[1].hasActualArrival, false);
+  assert.match(rows[0].rowKey, /route-1.*stop-1/);
 });
 
 test("original shipping totals distinguish confirmed zero, missing snapshots, and mixed currencies", () => {
@@ -316,8 +376,8 @@ test("child order table columns include a sticky Actions column with the confirm
   ]);
 
   assert.match(routeDetailSource, /aria-label="Child route order stops"/);
-  assert.match(routeDetailSource, /CHILD_ROUTE_ORDER_COLUMNS\.map\(\(column\) =>/);
-  assert.match(routeDetailSource, /childRouteOrderRows\.map\(\(row\) =>/);
+  assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
+  assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) =>/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
@@ -343,6 +403,21 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, />\s*Send to route\s*<\/button>/);
   assert.match(routeDetailSource, />\s*View in Shopify\s*<\/a>/);
   assert.match(routeDetailSource, />\s*Open tracking\s*<\/button>/);
+});
+
+test("one-route and All routes reuse the detailed order table while preserving route summaries", () => {
+  assert.match(routeDetailSource, /const orderTableRouteRows = useMemo\([\s\S]*isRouteGroupDetail[\s\S]*timelineRouteRows/);
+  assert.match(routeDetailSource, /buildRouteOrderRows\(orderTableRouteRows/);
+  assert.match(routeDetailSource, /childDetailTab === "stops" && routeOrderRows\.length > 0/);
+  assert.match(routeDetailSource, /const routeOrderColumns = isRouteGroupDetail[\s\S]*\{ key: "route", label: "Route" \}/);
+  assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
+  assert.match(routeDetailSource, /\{row\.sourceRouteTitle\}/);
+  assert.match(routeDetailSource, /findRouteOrderRow\(routeOrderRows, activeChildOrderDisclosure\.rowId\)/);
+  assert.match(routeDetailSource, /summarizeChildRouteMoney\(routeOrderRows\)/);
+  assert.match(routeDetailSource, /isRouteGroupDetail \? \([\s\S]*href=\{withEmbeddedShopifyContext\(routeGroupChildPath\(routeGroupId, row\.sourceRoutePlanId\), searchParams\)\}[\s\S]*>Open route<\/a>/);
+  assert.match(routeDetailSource, /\) : null\}\s+\{isTrackingMapView \? \(/);
+  assert.match(routeDetailSource, /aria-label="Driver route rows"/);
+  assert.match(routeDetailSource, /aria-label="Route stop timeline"/);
 });
 
 test("custom stops stay visible but never become Shopify-linked child rows", () => {
@@ -460,7 +535,7 @@ test("Stops and Tracking route markers share one order popup with the existing s
   assert.doesNotMatch(routeDetailSource, /if \(!isTrackingMapView\) bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /content\.className = "route-stop-map-popup__content"/);
   assert.match(routeDetailSource, /actions\.dataset\.childStopActionsTrigger = "true"/);
-  assert.match(routeDetailSource, /handleToggleChildStopActions\(event, row\.id\)/);
+  assert.match(routeDetailSource, /handleToggleChildStopActionsRef\.current\?\.\(event, row\.id\)/);
   assert.match(routeDetailSource, /activeRouteTimelineStopPopover\.mode === "pinned"[\s\S]*handleToggleChildStopActions\(event, activeRouteTimelineStop\.id\)/);
 });
 
@@ -589,7 +664,7 @@ test("child timeline keeps breathing room while table stop digits stay geometric
   assert.match(routeDetailSource, /const routeNumberMarkerGlyphStyle = \{[\s\S]*lineHeight: 1[\s\S]*transform: "translateY\(0\.1em\)"/);
   assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "11px"[\s\S]*fontWeight: 700[\s\S]*transform: "none"/);
   assert.match(routeDetailSource, /<span style=\{routeNumberMarkerGlyphStyle\}>\{stop\.stop\}<\/span>/);
-  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
+  assert.match(routeDetailSource, /<span style=\{\{ \.\.\.childRouteTableStopMarkerStyle, background: row\.sourceRouteColor \?\? routeLineColor \}\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
   assert.doesNotMatch(routeDetailSource, /textBox:/);
 });
 
@@ -606,10 +681,10 @@ test("Items and Attributes use hover and click disclosures above their trigger",
   assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);
   assert.doesNotMatch(routeDetailSource, /<td onMouseLeave=\{handleChildOrderDisclosureMouseLeave\} style=\{childRouteDisclosureCellStyle\}>/);
   assert.match(routeDetailSource, /data-child-order-disclosure-popover="true"/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "items"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "items"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "attributes"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "attributes"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onBlur=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /aria-haspopup="dialog"/);
@@ -699,7 +774,7 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.match(routeDetailSource, /syncRouteDetailTrackingVisibility\(map, isTrackingMapView\);\s*bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /if \(mapCanvas\?\.style\.cursor === "pointer"\) mapCanvas\.style\.cursor = "";/);
   assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div[^>]*aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\}/);
-  assert.match(routeDetailSource, /\) : isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
+  assert.match(routeDetailSource, /\{isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
   assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isTrackingMapView \? \(/);
 });
 

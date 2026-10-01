@@ -21,12 +21,12 @@ export function buildRouteAddOrderCandidates(orders) {
     .map((order) => ({
       address: getOrderAddress(order),
       customer: text(order?.customer ?? order?.recipientName) ?? "Unknown recipient",
-      deliveryDate: getOrderDeliveryDateValue(order) ?? "–",
+      deliveryDate: text(getOrderDeliveryDateValue(order)) ?? "Date pending",
       deliveryDay: getOrderDeliveryWeekday(order) ?? "–",
       id: text(order?.id ?? order?.shopifyOrderGid ?? order?.orderId),
       itemCount: getOrderItemCount(order),
       name: text(order?.name) ?? text(order?.orderId),
-      orderDate: normalizeDateOnly(order?.orderedDate) ?? "–",
+      orderDate: normalizeDateOnly(order?.orderedDate) ?? "No date",
       orderId: text(order?.orderId),
     }));
 }
@@ -34,8 +34,11 @@ export function buildRouteAddOrderCandidates(orders) {
 export function filterRouteAddOrderCandidatesByDate(candidates, filter = {}) {
   const orders = Array.isArray(candidates) ? candidates : [];
   const field = filter.field === "orderDate" ? "orderDate" : "deliveryDate";
-  const mode = ["single", "range"].includes(filter.mode) ? filter.mode : "all";
+  const mode = ["single", "range", "missing"].includes(filter.mode) ? filter.mode : "all";
   if (mode === "all") return orders;
+  if (mode === "missing") {
+    return orders.filter((order) => !normalizeDateOnly(order?.[field]));
+  }
 
   const startDate = normalizeDateOnly(filter.startDate);
   const endDate = normalizeDateOnly(filter.endDate);

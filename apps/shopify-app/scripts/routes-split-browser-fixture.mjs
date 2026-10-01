@@ -34,10 +34,16 @@ window.fetch = async (input, init) => {
 };
 const makeStop = (index, prefix = "source") => ({
   address: { address1: index + " Fixture Street", city: "Toronto", countryCode: "CA", postalCode: "M5V 1A1", province: "ON" },
+  attributes: [{ key: "Fixture route", value: prefix }], currencyCode: "CAD",
   deliveryStopId: prefix + "-stop-" + index, itemCount: index, latitude: 43.64 + index / 1000,
+  lineItems: [{ quantity: index, sku: prefix.toUpperCase() + "-" + index, title: "Fixture item " + index }],
   longitude: -79.39 - index / 1000, orderId: prefix + "-order-" + index, orderName: "#FIX-" + index,
-  recipientName: "Fixture customer " + index, sequence: index, status: "PENDING",
+  note: "Fixture note for " + prefix + " stop " + index,
+  orderCreatedAt: "2026-08-21T" + String(9 + (index % 8)).padStart(2, "0") + ":15:00.000-04:00",
+  paymentStatus: index % 2 === 0 ? "PENDING" : "PAID", recipientName: "Fixture customer " + index,
+  sequence: index, serviceMinutes: 5 + index, serviceType: "Evening delivery", status: "PENDING",
   shopifyOrderId: "gid://shopify/Order/fixture-" + index,
+  totalPriceAmount: String(index * 25), totalShippingPriceAmount: "5.00", totalShippingPriceCurrencyCode: "CAD",
 });
 const fixtureStops = Array.from({ length: 6 }, (_, index) => makeStop(index + 1));
 const copiedFixtureStops = Array.from({ length: 6 }, (_, index) => makeStop(index + 1, "copy-virtual"));
@@ -268,6 +274,6 @@ const server = createServer((request, response) => {
   if (request.url === "/global.css") { response.setHeader("content-type", "text/css"); response.end(readFileSync(`${appDirectory}/app/styles/global.css`)); return; }
   if (request.url === "/fixture.js") { response.setHeader("content-type", "text/javascript"); response.end(readFileSync(bundlePath)); return; }
   response.setHeader("cache-control", "no-store"); response.setHeader("content-type", "text/html; charset=utf-8");
-  response.end(`<!doctype html><html><head><title>Routes split-on-save fixture</title><script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script><link rel="stylesheet" href="/global.css"></head><body style="font-family:Arial;margin:0"><aside style="background:#fff4cc;padding:8px;position:sticky;top:0;z-index:1000">Local synthetic fixture · network and production mutations disabled · <a href="/?mode=ordinary">ordinary complete</a> · <a href="/?mode=ordinary&copy=error">copy error</a> · <a href="/?mode=ordinary&copy=unknown">copy unknown</a> · <a href="/?mode=ordinary&copy=incomplete">copy incomplete</a> · <a href="/?mode=ordinary&save=incomplete">save incomplete</a> · <a href="/?mode=ordinary&save=error">save error</a> · <a href="/?mode=ordinary&save=unknown">save unknown</a> · <a href="/?mode=bridge&save=complete">existing group complete</a> · <a href="/?mode=singleton">saved singleton</a> · <a href="/?mode=saved">saved 3-member list</a><div id="fixture-status" style="margin-top:6px;font-weight:700">Total action submissions: 0 · Copy submissions: 0 · Save submissions: 0 · Add Empty server submissions: 0 · Original unchanged: yes (6 stops)</div></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`);
+  response.end(`<!doctype html><html><head><title>Routes split-on-save fixture</title><script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script><link rel="stylesheet" href="/global.css"></head><body style="font-family:Arial;margin:0"><aside style="background:#fff4cc;padding:8px;position:sticky;top:0;z-index:1000">Local synthetic fixture · network and production mutations disabled · <a href="/?mode=ordinary">ordinary route detail</a> · <a href="/?mode=reference">All routes detail</a> · <a href="/?mode=unassigned">All routes with unassigned</a> · <a href="/?mode=ordinary&copy=error">copy error</a> · <a href="/?mode=ordinary&copy=unknown">copy unknown</a> · <a href="/?mode=ordinary&copy=incomplete">copy incomplete</a> · <a href="/?mode=ordinary&save=incomplete">save incomplete</a> · <a href="/?mode=ordinary&save=error">save error</a> · <a href="/?mode=ordinary&save=unknown">save unknown</a> · <a href="/?mode=bridge&save=complete">existing group complete</a> · <a href="/?mode=singleton">saved singleton</a> · <a href="/?mode=saved">saved 3-member list</a><div id="fixture-status" style="margin-top:6px;font-weight:700">Total action submissions: 0 · Copy submissions: 0 · Save submissions: 0 · Add Empty server submissions: 0 · Original unchanged: yes (6 stops)</div></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`);
 });
 server.listen(port, "127.0.0.1", () => console.log(`Routes split fixture ready at http://127.0.0.1:${port}/?mode=ordinary`));

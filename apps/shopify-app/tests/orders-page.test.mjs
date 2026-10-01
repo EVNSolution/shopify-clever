@@ -751,6 +751,25 @@ test("Orders ID stays centered while Note uses a separate headerless column", ()
   assert.doesNotMatch(ordersPageSource, /<ul style=\{noteListStyle\}>/);
 });
 
+test("Orders note helpers do not resurrect stale notes after an intentional blank clear", () => {
+  const helperSource = ordersPageSource.slice(
+    ordersPageSource.indexOf("function getOrderNote("),
+    ordersPageSource.indexOf("function getShopifyAdminOrderUrl("),
+  );
+  const helpers = runInNewContext(`${helperSource}; ({ getCustomerNote, getOrderNote })`, {
+    textOrUndefined: (value) => typeof value === "string" ? value.trim() || undefined : undefined,
+  });
+
+  assert.equal(helpers.getOrderNote({ note: " ", rawPayload: { note: "Stale order note" } }), undefined);
+  assert.equal(
+    helpers.getCustomerNote({
+      customerNote: "",
+      shopifyOrderSnapshot: { customer: { note: "Stale customer note" } },
+    }),
+    undefined,
+  );
+});
+
 test("Ordered pill exposes order timing and delivery-cycle sequence on hover", () => {
   assert.match(ordersPageSource, /deliveryCycle: preferencesData\.appPreferences\.deliveryCycle \?\? null/);
   assert.match(ordersPageSource, /export function buildOrderTimelineDetails\(\{ deliveryCycle, order, shopTimeZone \}\) \{/);

@@ -18,6 +18,15 @@ const selectionRouteSource = read("app/routes/app.orders_.selection-snapshots.js
 const ordersPageServerSource = read("app/features/orders/orders-page.server.js");
 const ordersResourceStateSource = read("app/features/orders/orders-resource-state.js");
 
+function loadAuthenticatedResourceRequest() {
+  const start = ordersPageServerSource.indexOf("function authenticatedResourceRequest(");
+  const end = ordersPageServerSource.indexOf("function parseJsonArray(", start);
+  assert.notEqual(start, -1, "authenticated resource helper must exist");
+  assert.notEqual(end, -1, "authenticated resource helper boundary must exist");
+  const source = ordersPageServerSource.slice(start, end);
+  return Function(`${source}\nreturn authenticatedResourceRequest;`)();
+}
+
 test("Orders pagination, facets, and map use independent authenticated POST resources", () => {
   assert.match(pageRouteSource, /loadOrdersPageResource/);
   assert.match(pageRouteSource, /export const action/);
@@ -55,6 +64,32 @@ test("Orders pagination, facets, and map use independent authenticated POST reso
     ordersPageServerSource,
     /async function measureOrdersResource\(request, name, operation\) \{[\s\S]*await authenticate\.admin\(request\)/,
   );
+});
+
+test("Orders resource authentication preserves a fresh App Bridge retry header over a stale body token", () => {
+  const authenticatedResourceRequest = loadAuthenticatedResourceRequest();
+  const retryRequest = authenticatedResourceRequest(
+    new Request("https://app.example/app/orders/page", {
+      headers: { authorization: "Bearer fresh-retry-token" },
+      method: "POST",
+    }),
+    "stale-body-token",
+  );
+  const fallbackRequest = authenticatedResourceRequest(
+    new Request("https://app.example/app/orders/page", { method: "POST" }),
+    "body-token",
+  );
+  const invalidHeaderRequest = authenticatedResourceRequest(
+    new Request("https://app.example/app/orders/page", {
+      headers: { authorization: "Basic not-a-shopify-session" },
+      method: "POST",
+    }),
+    "body-token",
+  );
+
+  assert.equal(retryRequest.headers.get("authorization"), "Bearer fresh-retry-token");
+  assert.equal(fallbackRequest.headers.get("authorization"), "Bearer body-token");
+  assert.equal(invalidHeaderRequest.headers.get("authorization"), "Bearer body-token");
 });
 
 test("Orders selection snapshots use an authenticated action and never put the token in a URL", () => {

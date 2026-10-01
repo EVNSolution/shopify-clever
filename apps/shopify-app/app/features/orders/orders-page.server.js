@@ -1223,7 +1223,9 @@ function integerOrUndefined(value) {
 
 function authenticatedResourceRequest(request, sessionToken) {
   const headers = new Headers(request.headers);
-  headers.set("authorization", `Bearer ${sessionToken}`);
+  if (!/^Bearer\s+\S+/iu.test(headers.get("authorization") ?? "")) {
+    headers.set("authorization", `Bearer ${sessionToken}`);
+  }
   headers.delete("content-length");
   headers.delete("content-type");
   return new Request(request.url, { headers, method: "GET" });
