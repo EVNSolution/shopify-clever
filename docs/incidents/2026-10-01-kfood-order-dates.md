@@ -1,5 +1,7 @@
 # K-food 주문 날짜 및 메모 표시 조사 — 2026-10-01
 
+> 아래 초기 조사는 10/1 당시 상태다. 10/2 서버 PR #470 배포 후의 메모 연결 확인은 마지막 절에 기록했다. 초기 서버 미수정 상태를 현재 상태로 해석하지 않는다.
+
 ## 확인 범위
 
 - Shopify Admin 실제 주문 화면, CLEVER Orders의 Date pending 목록, 운영 DB의 Shopify 원본과 delivery facts를 읽기 전용으로 대조했다.
@@ -145,3 +147,38 @@ Shopify session expired도 전달 범위에 포함합니다. 앱에서는 새 Au
 - 로컬 실제 컴포넌트 fixture: 단일 경로 6행, All routes 다중 경로 전체 행, Unassigned 포함 42행, item disclosure, child 경로 링크 및 기존 summary 유지 확인.
 
 운영 재배포, 운영 화면의 수정 후 검증, 기존 날짜 데이터 보정은 수행하지 않았다. 세션 만료 전체 원인의 제거를 주장하지 않으며 확인된 토큰 처리 결함을 수정한 범위다.
+
+## 2026-10-02: 서버 메모 변경과 주문번호 우측 표시 재대조
+
+참조 채팅 `인계 작업 확인 및 준비`를 읽고, 서버 PR #470 본문·변경 파일·실제 작업 트리 및 배포 증거를 대조했다. 서버 메모 변경은 merge `4d18e0f7378a1b79bb04afdc7170a9471cae9b3b`에 포함되며 해당 채팅의 배포 증거는 10/2 01:48 KST 적용을 기록한다. 이 조사에서 서버를 재배포하거나 운영 토큰을 갱신하지 않았다.
+
+### 아이콘이 안 보이게 된 경로
+
+- `aa4e22d6` (7/10): 주문번호 바로 오른쪽에 메모 아이콘과 Order Note / Customer Note 팝오버를 도입했다.
+- `363c0771` (8/4): canonical-first가 켜지면 직접 Shopify 조회 결과 대신 canonical rows만 사용했다. 당시 canonical adapter에 두 메모 필드가 없어 값이 탈락할 수 있었다. 실제 운영 flag 활성 시점은 Git 이력만으로 확정할 수 없다.
+- `7a490608` (10/1): Filter V2도 canonical rows만 쓰도록 바뀌어 해당 경로가 확대됐다.
+- 현재 `orders-page.jsx`는 여전히 주문번호 다음 Notes 열과 `orderNote || customerNote` 조건을 가진다. UI 삭제가 아니라 입력 값이 없어 버튼이 렌더링되지 않는 회귀다.
+- 앱의 `a2fcdf8`은 필드 보존을 복구했지만, 확인 시점 원격 main과 최신 앱 배포 기록은 여전히 `568f203`이다. 서버 배포가 별도 Shopify 앱 배포를 대신하지 않는다.
+
+### 서버에서 해결된 것과 남은 것
+
+서버 `toCanonicalOrderRow()`와 paginated query는 `note`, `customerNote`, `deliveryInstructions`를 구분한다. `null`, 빈 문자열, 필드 없음도 구분한다. 새 서버의 명시적 `null` 삭제가 앱의 옛 raw/snapshot fallback을 되살리지 않도록 이 앱 작업에서도 보완했으며, 이 동작은 실패 재현 후 회귀 테스트로 고정했다.
+
+단, `order-sync.query.ts`의 공용 `ORDER_FIELDS`는 주문 `note`를 읽지만 `customer { note }`는 읽지 않는다. PR #470도 고객 프로필 메모의 추가 조회는 범위에 포함하지 않았다고 명시한다. 그러므로 **원본 payload에 이미 있는 고객 메모를 반환하는 것**과 **Shopify 고객 메모를 수집·갱신하는 것**은 다르다. 앱 배포만으로 후자를 해결할 수 없다.
+
+서버 후속 전달용:
+
+```text
+대상: /Users/jiin/Documents/Files/03_Work_EVnSolution/01_Repos/04_CLEVER_Route/clever-route-server
+PR #470의 메모 projection 이후 고객 프로필 메모 수집 경로를 확인·완성하세요.
+현재 order-sync.query.ts ORDER_FIELDS에는 order.note만 있고 customer.note가 없습니다.
+webhook refetch/pull/reconciliation/snapshot에서 customer.note가 실제 저장·갱신되는지,
+snapshot parser와 권한 부족 fallback까지 확인하세요. 기존 권한과 개인정보 범위를
+유지하고 Shopify 원본으로 역기록하지 마세요. 목록 화면마다 Shopify를 재조회하지 말고
+수신 경로에서 원본 고객 메모를 보존하세요. 권한 문제를 이유로 정상 주문 수신 전체를
+실패시키지 않는 계약도 정하세요. 고객 프로필만 수정됐을 때 어떤 이벤트/동기화로
+갱신되는지 확인하고, order note/customer note/배송 지시 및 null clear를 각각 테스트하세요.
+앱 canonical-first/V2에서 두 메모가 주문번호 우측 팝오버에 구분돼 표시되는지 확인하세요.
+```
+
+이번 앱 계약 보완 검증: 명시적 null의 실패 재현 후 Orders/canonical 집중 테스트 123/123, typecheck, build, 변경 파일 ESLint, diff check 및 독립 검토를 통과했다. 주문번호 우측 기존 UI는 변경하지 않았다. 앱 배포나 고객 메모 수집 경로의 서버 수정은 이번 확인에 포함하지 않았다.

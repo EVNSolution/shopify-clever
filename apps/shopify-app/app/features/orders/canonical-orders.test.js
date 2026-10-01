@@ -171,8 +171,6 @@ test("canonical order adapter preserves note source precedence and intentional b
     },
     {
       shopifyOrderGid: "gid://shopify/Order/2311",
-      note: null,
-      customerNote: null,
       shopifyOrderSnapshot: {
         note: "Keep refrigerated",
         customer: { note: "Text only" },
@@ -186,6 +184,35 @@ test("canonical order adapter preserves note source precedence and intentional b
   assert.equal(rawFallback.customerNote, "");
   assert.equal(snapshotFallback.note, "Keep refrigerated");
   assert.equal(snapshotFallback.customerNote, "Text only");
+});
+
+test("canonical API null notes clear stale raw, snapshot, and Shopify merge notes", () => {
+  const [row] = mapCanonicalOrdersToOrderRows([{
+    shopifyOrderGid: "gid://shopify/Order/1001",
+    note: null,
+    customerNote: null,
+    deliveryInstructions: "Use the loading entrance",
+    rawPayload: { note: "Old order note", customer: { note: "Old customer note" } },
+    shopifyOrderSnapshot: { note: "Old snapshot note", customer: { note: "Old snapshot customer note" } },
+  }]);
+  assert.equal(row.note, "");
+  assert.equal(row.customerNote, "");
+
+  const [merged] = mergeShopifyOrderRowsWithCanonicalRows(
+    [{ id: row.id, note: "Old Shopify note", customerNote: "Old Shopify customer note" }],
+    [row],
+  );
+  assert.equal(merged.note, "");
+  assert.equal(merged.customerNote, "");
+});
+
+test("canonical delivery instructions are not relabeled as order or customer notes", () => {
+  const [row] = mapCanonicalOrdersToOrderRows([{
+    shopifyOrderGid: "gid://shopify/Order/1001",
+    deliveryInstructions: "Use the loading entrance",
+  }]);
+  assert.equal(Object.hasOwn(row, "note"), false);
+  assert.equal(Object.hasOwn(row, "customerNote"), false);
 });
 
 test("canonical order adapter exposes Delivery API items as Shopify-style line items", () => {
