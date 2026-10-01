@@ -59,6 +59,10 @@ jobs:
       - name: Typecheck app
         run: npm run typecheck
 
+      - name: Verify Shopify token authority SDK source contract
+        working-directory: apps/shopify-app
+        run: npm run verify:token-authority-sdk-source
+
       - name: Test app
         run: npm test
 

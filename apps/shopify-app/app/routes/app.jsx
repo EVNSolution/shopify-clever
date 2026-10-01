@@ -12,7 +12,6 @@ import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import {
   getShopifyTokenSyncHealth,
   recordShopifyAdminTokenRefreshFailure,
-  syncShopifyOfflineTokenToDeliveryApi,
 } from "../features/delivery/shopify-token-sync.server";
 import { fetchRouteFallbackTimeZone } from "../features/delivery/route-timezone.server";
 import { fetchShopifyAppPreferences } from "../features/settings/app-preferences.server";
@@ -180,7 +179,6 @@ export const loader = async ({ request }) => {
     }
     const { admin, session } = authenticated;
     authenticatedShop = session?.shop;
-    await syncShopifyOfflineTokenToDeliveryApi(request, session);
     const [{ appPreferences }, timeZoneData] = await Promise.all([
       fetchShopifyAppPreferences(admin),
       fetchRouteFallbackTimeZone(admin, session?.shop),
