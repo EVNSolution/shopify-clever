@@ -1,3 +1,4 @@
+import { V2_FILTER_KEYS } from "./order-filters-v2.js";
 import { getOrderDate, getOrderReceivedAt } from "./order-date.js";
 import { ORDER_FILTER_QUERY_KEYS } from "./order-filters.js";
 
@@ -6,6 +7,7 @@ export const ORDERS_VIEW_SNAPSHOT_TTL_MS = 30 * 60_000;
 
 const ORDERS_UI_ONLY_QUERY_KEYS = new Set([
   ...Object.values(ORDER_FILTER_QUERY_KEYS),
+  ...V2_FILTER_KEYS,
   "q",
   "view",
 ]);

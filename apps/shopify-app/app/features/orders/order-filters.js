@@ -1,3 +1,4 @@
+import { activeV2Groups, normalizeV2Filters, V2_FILTER_KEYS, writeV2Filters } from "./order-filters-v2.js";
 export const ORDER_FILTER_QUERY_KEYS = {
   deliveryArea: "deliveryArea",
   deliveryDate: "deliveryDate",
@@ -90,6 +91,7 @@ const DATE_ONLY_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 export function filterOrders(orders, filters = {}) {
   if (!Array.isArray(orders)) return [];
 
+  if (filters.filterVersion === "2") return orders; // Server predicates are authoritative, including paginated rows.
   const normalizedFilters = normalizeOrderFilters(filters);
   const options = {
     referenceDate: filters.referenceDate,
@@ -311,6 +313,9 @@ export function updateOrderFilterSearchParams(currentSearchParams, filters = {})
     nextSearchParams.delete(queryKey);
   }
 
+  if (normalizedFilters.filterVersion === "2") return writeV2Filters(nextSearchParams, normalizedFilters);
+  for (const queryKey of V2_FILTER_KEYS) nextSearchParams.delete(queryKey);
+
   for (const [filterKey, filterValue] of Object.entries(normalizedFilters)) {
     if (!filterValue) continue;
 
@@ -321,6 +326,7 @@ export function updateOrderFilterSearchParams(currentSearchParams, filters = {})
 }
 
 export function normalizeOrderFilters(filters = {}) {
+  if (filters.filterVersion === "2") return normalizeV2Filters(filters);
   const legacyOrderedDate = normalizeDateOnlyValue(filters.orderedDate);
   const orderedDateFrom = normalizeDateOnlyValue(filters.orderedDateFrom) || legacyOrderedDate;
   const orderedDateTo = normalizeDateOnlyValue(filters.orderedDateTo) || legacyOrderedDate;
@@ -377,6 +383,7 @@ export function updateOrderFiltersForChange(filters, filterKey, filterValue) {
 }
 
 export function hasActiveOrderFilters(filters = {}) {
+  if (filters.filterVersion === "2") return activeV2Groups(filters).length > 0 || Boolean(filters.search);
   const normalizedFilters = normalizeOrderFilters(filters);
 
   return Object.entries(normalizedFilters).some(

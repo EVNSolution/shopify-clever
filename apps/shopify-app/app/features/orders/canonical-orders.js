@@ -10,9 +10,9 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "
     const hasCoordinates =
       order?.hasCoordinates === true && latitude != null && longitude != null;
     const shippingAddress = normalizeShippingAddress(order?.shippingAddress);
-    const serviceType = textOrUndefined(order?.serviceType) ?? inferServiceType(order);
+    const serviceType = textOrUndefined(order?.serviceType) ?? (order?.filterVersion === "2" ? undefined : inferServiceType(order));
     const deliveryArea =
-      textOrUndefined(order?.deliveryArea) ?? (serviceType === "PICKUP" ? "Pickup" : undefined);
+      textOrUndefined(order?.deliveryArea) ?? (order?.filterVersion !== "2" && serviceType === "PICKUP" ? "Pickup" : undefined);
     const deliveryDay =
       textOrUndefined(order?.deliveryDayRaw) ??
       textOrUndefined(order?.deliveryWeekday);
@@ -33,6 +33,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "
     const routeSequence = numberOrUndefined(order?.routeSequence ?? order?.sequence);
 
     return {
+      ...(order?.filterVersion === "2" ? { filterVersion: "2", queryDeliveryProgress: order.queryDeliveryProgress } : {}),
       id: textOrUndefined(order?.shopifyOrderGid),
       orderId: textOrUndefined(order?.orderId),
       deliveryStopId: textOrUndefined(order?.deliveryStopId),

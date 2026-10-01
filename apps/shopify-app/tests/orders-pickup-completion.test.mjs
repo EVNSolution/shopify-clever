@@ -1,3 +1,4 @@
+import { V2_OPTIONS } from "../app/features/orders/order-filters-v2.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -54,14 +55,17 @@ test("client state filters include expired pickup in completed but not past-due 
 
 test("Orders renders Complete before route failure and does not replace delivery completion labels", () => {
   const source = readFileSync(new URL("../app/features/orders/orders-page.jsx", import.meta.url), "utf8");
-  const declaration = source.match(/function formatOrderDeliveryState\(order, referenceDate\) \{[\s\S]*?\n\}/)?.[0];
+  const declaration = source.match(/function formatOrderDeliveryState\(order, referenceDate, language = "en"\) \{[\s\S]*?\n\}/)?.[0];
   assert.ok(declaration);
   const format = vm.runInNewContext(`(${declaration})`, {
+    V2_OPTIONS,
     isOrderPickupComplete: filters.isOrderPickupComplete,
     getOrderDeliveryStateFilterValue: filters.getOrderDeliveryStateFilterValue,
     normalizePaymentStatus: value => String(value ?? "").trim().toUpperCase(),
   });
   assert.equal(format(expiredPickup, "2026-09-07"), "Complete");
+  assert.equal(format({ ...expiredPickup, filterVersion: "2", queryDeliveryProgress: "pickup_elapsed" }, "2026-09-07"), "Pickup period ended");
+  assert.equal(format({ ...expiredPickup, filterVersion: "2", queryDeliveryProgress: "pickup_elapsed" }, "2026-09-07", "ko"), "픽업 기간 종료");
   assert.equal(format({ serviceType: "DELIVERY", deliveryStopStatus: "DELIVERED" }, "2026-09-07"), "Delivered");
   assert.equal(format({ serviceType: "DELIVERY", deliveryDate: "2026-09-04", deliveryStopStatus: "PENDING" }, "2026-09-07"), "Past due");
 });
