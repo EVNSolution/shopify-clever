@@ -10,12 +10,14 @@ import {
   changeV2DateRange,
   clearV2Group,
   datePresetV2,
+  filterV2Options,
   getDatePresetV2,
   getOrdersUiFilters,
   normalizeV2Filters,
   readV2Filters,
   v2CompactChipValue,
   V2_GROUPS,
+  V2_OPTIONS,
   writeV2Filters,
 } from "../app/features/orders/order-filters-v2.js";
 import { buildOrdersResourceRequest } from "../app/features/orders/orders-resource-state.js";
@@ -311,4 +313,19 @@ test("filter bar renders concise filter choices, independent chips, and a remova
   } finally {
     await unlink(path);
   }
+});
+
+
+test("facet choices hide empty values but retain selections and pending facet fallback", () => {
+  for (const group of ["serviceTypes", "deliveryProgress", "fulfillmentStatuses", "paymentStatuses"]) {
+    const options = V2_OPTIONS[group];
+    const first = options[0][0], second = options[1][0];
+    const counts = [{ value: first, count: 5 }, { value: second, count: 0 }];
+    assert.deepEqual(filterV2Options(options, counts), [options[0]]);
+    assert.deepEqual(filterV2Options(options, counts, [second]), options.slice(0, 2));
+    assert.deepEqual(filterV2Options(options, []), []);
+    assert.deepEqual(filterV2Options(options, undefined), options);
+  }
+  assert.deepEqual(filterV2Options([["__MISSING__"]], [{ value: "__MISSING__", count: 0 }]), []);
+  assert.deepEqual(filterV2Options([["__MISSING__"]], [], ["__MISSING__"]), [["__MISSING__"]]);
 });

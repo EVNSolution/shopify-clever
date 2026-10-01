@@ -6,6 +6,7 @@ import {
   changeV2DateRange,
   clearV2Group,
   datePresetV2,
+  filterV2Options,
   getDatePresetV2,
   labelV2,
   normalizeV2Filters,
@@ -85,9 +86,9 @@ export function OrderFilterBar({
         viewportMargin,
         Math.min(rect.left, window.innerWidth - 320 - viewportMargin),
       ),
-      top: placeAbove
-        ? Math.max(viewportMargin, rect.top - gap - maxHeight)
-        : rect.bottom + gap,
+      ...(placeAbove
+        ? { bottom: window.innerHeight - rect.top + gap }
+        : { top: rect.bottom + gap }),
       maxHeight,
     };
   };
@@ -161,12 +162,23 @@ export function OrderFilterBar({
             ...(facets?.areas ?? [])
               .filter((item) => item.count > 0 && item.value !== "__MISSING__")
               .map((item) => item.value),
+            ...(filters.areas ?? []),
             ...(draftFilters.areas ?? []),
           ]),
         ].map((value) => [value, value, value])
       : (V2_OPTIONS[editing] ?? []);
-  const availableOptions =
-    editing === "areas" ? options : (V2_OPTIONS[editing] ?? []);
+  const availableOptions = filterV2Options(options, facets?.[editing], [
+    ...(filters[editing] ?? []),
+    ...(draftFilters[editing] ?? []),
+  ]);
+  const showAreaMissing =
+    filterV2Options(
+      [["__MISSING__"]],
+      facets?.areas,
+      filters.areaMissing === "true" || draftFilters.areaMissing === "true"
+        ? ["__MISSING__"]
+        : [],
+    ).length > 0;
   const renderChoices = (key, choices) =>
     choices.map(([value, en, ko]) => (
       <label
@@ -496,9 +508,17 @@ export function OrderFilterBar({
               ) : (
                 <>
                   {renderChoices(editing, availableOptions)}
+                  {editing !== "areas" && availableOptions.length === 0 ? (
+                    <p>
+                      {local(
+                        "No matching options",
+                        "선택 가능한 항목이 없습니다",
+                      )}
+                    </p>
+                  ) : null}
                   {editing === "areas" ? (
                     <>
-                      {availableOptions.length === 0 ? (
+                      {availableOptions.length === 0 && !showAreaMissing ? (
                         <p>
                           {local(
                             "No areas available",
@@ -506,27 +526,29 @@ export function OrderFilterBar({
                           )}
                         </p>
                       ) : null}
-                      <label
-                        style={{ display: "flex", gap: 8, padding: "8px 0" }}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={draftFilters.areaMissing === "true"}
-                          onChange={(event) => {
-                            const input = event.currentTarget;
-                            if (input instanceof HTMLInputElement)
-                              setDraftFilters((current) =>
-                                normalizeV2Filters({
-                                  ...current,
-                                  areaMissing: input.checked
-                                    ? "true"
-                                    : undefined,
-                                }),
-                              );
-                          }}
-                        />
-                        {local("Area not set", "지역 미정")}
-                      </label>
+                      {showAreaMissing ? (
+                        <label
+                          style={{ display: "flex", gap: 8, padding: "8px 0" }}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={draftFilters.areaMissing === "true"}
+                            onChange={(event) => {
+                              const input = event.currentTarget;
+                              if (input instanceof HTMLInputElement)
+                                setDraftFilters((current) =>
+                                  normalizeV2Filters({
+                                    ...current,
+                                    areaMissing: input.checked
+                                      ? "true"
+                                      : undefined,
+                                  }),
+                                );
+                            }}
+                          />
+                          {local("Area not set", "지역 미정")}
+                        </label>
+                      ) : null}
                     </>
                   ) : null}
                 </>
