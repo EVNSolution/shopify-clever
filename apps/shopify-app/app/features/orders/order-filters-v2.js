@@ -174,6 +174,14 @@ export function shiftV2Date(date, days) {
   result.setUTCDate(result.getUTCDate() + days);
   return result.toISOString().slice(0, 10);
 }
+export function changeV2DateBound(filters, group, bound, value) {
+  const prefix = group === "received" ? "received" : "scheduled";
+  return normalizeV2Filters({
+    ...(filters.filterVersion === "2" ? filters : {}),
+    [`${prefix}Date${bound}`]: value,
+    ...(group === "scheduled" ? { scheduledDateMissing: undefined } : {}),
+  });
+}
 export function datePresetV2(filters, group, preset, today) {
   const result = clearV2Group(
     filters.filterVersion === "2" ? filters : {},

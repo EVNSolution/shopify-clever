@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   activeV2Groups,
+  changeV2DateBound,
   clearV2Group,
   datePresetV2,
   labelV2,
@@ -299,10 +300,14 @@ export function OrderFilterBar({
                         onChange={(event) => {
                           const input = event.currentTarget;
                           if (input instanceof HTMLInputElement)
-                            update({
-                              [`${prefix}Date${suffix}`]: input.value,
-                              scheduledDateMissing: undefined,
-                            });
+                            onChange(
+                              changeV2DateBound(
+                                filters,
+                                editing,
+                                suffix,
+                                input.value,
+                              ),
+                            );
                         }}
                       />
                     </label>

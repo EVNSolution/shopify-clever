@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import process from "node:process";
 import { build } from "esbuild";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   activeV2Groups,
+  changeV2DateBound,
   clearV2Group,
   datePresetV2,
   getOrdersUiFilters,
@@ -35,6 +37,36 @@ const base = normalizeV2Filters({
   areas: ["North, East", "Toronto"],
   areaMissing: true,
   search: "sample",
+});
+test("custom received dates preserve no scheduled date; scheduled bounds leave that mode", () => {
+  const missing = normalizeV2Filters({
+    scheduledDateMissing: true,
+    serviceTypes: ["PICKUP"],
+    paymentStatuses: ["PENDING"],
+    cancelled: false,
+  });
+  const received = changeV2DateBound(missing, "received", "From", "2026-10-01");
+  assert.deepEqual(received, { ...missing, receivedDateFrom: "2026-10-01" });
+  const scheduled = changeV2DateBound(
+    received,
+    "scheduled",
+    "To",
+    "2026-10-03",
+  );
+  assert.equal(scheduled.scheduledDateMissing, undefined);
+  assert.equal(scheduled.scheduledDateTo, "2026-10-03");
+  assert.equal(scheduled.receivedDateFrom, "2026-10-01");
+  assert.deepEqual(scheduled.serviceTypes, missing.serviceTypes);
+  assert.deepEqual(scheduled.paymentStatuses, missing.paymentStatuses);
+  assert.equal(scheduled.cancelled, "false");
+  const reversed = changeV2DateBound(received, "received", "To", "2026-09-29");
+  assert.equal(reversed.receivedDateFrom, "2026-09-29");
+  assert.equal(reversed.receivedDateTo, "2026-10-01");
+  assert.equal(reversed.scheduledDateMissing, "true");
+  assert.equal(
+    changeV2DateBound(received, "received", "From", "").receivedDateFrom,
+    undefined,
+  );
 });
 test("each chip removes only its dimension; no weekday or service side effects", () => {
   for (const group of Object.keys(V2_GROUPS)) {
