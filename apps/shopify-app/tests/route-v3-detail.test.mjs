@@ -168,8 +168,8 @@ test("ordinary presentation hides sibling navigation and keeps route actions sep
   assert.equal(showSiblingNavigator(false, "group-1", -1, true), true);
   assert.equal(showSiblingNavigator(true, "group-1", 0, false), true);
 
-  const routeActionsStart = routeDetailSource.indexOf('<div aria-label="Route actions"');
-  const routeActionsEnd = routeDetailSource.indexOf('<div\n                  aria-label="Actions"', routeActionsStart);
+  const routeActionsStart = routeDetailSource.indexOf('aria-label="Route actions"');
+  const routeActionsEnd = routeDetailSource.indexOf('{isMaterializedChildRouteDetail && childDetailTab === "stops"', routeActionsStart);
   const routeActions = routeDetailSource.slice(routeActionsStart, routeActionsEnd);
   assert.match(routeDetailSource, /aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\} role="toolbar"/);
   assert.match(routeDetailSource, /translate\(language, "routes\.detail\.sections\.addOrders"\)/);

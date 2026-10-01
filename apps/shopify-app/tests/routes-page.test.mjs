@@ -1524,9 +1524,9 @@ test("child detail supports adding and reversing stops without refreshing over a
   assert.match(routeDetailSource, /hasRouteAllocationDraftRef\.current = hasRouteAllocationDraft/);
   assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
   assert.match(routeDetailSource, />Add order<\/button>/);
-  assert.match(routeDetailSource, />\{translate\(language, "routes\.group\.addEmpty"\)\}<\/button>[\s\S]*aria-label="Actions"/);
-  assert.match(routeDetailSource, /aria-expanded=\{isRouteActionsMenuOpen\}[\s\S]*>Actions<\/button>/);
-  assert.match(routeDetailSource, /aria-label="Route action menu"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
+  assert.match(routeDetailSource, /aria-label="Add route actions"[\s\S]*>\{translate\(language, "routes\.group\.addEmpty"\)\}<\/button>/);
+  assert.match(routeDetailSource, /aria-expanded=\{routeActionsMenu === "edit"\}[\s\S]*>Edit ▾<\/button>/);
+  assert.match(routeDetailSource, /aria-label="Edit route actions"[\s\S]*>Reverse stops<\/button>[\s\S]*>\{reOptimizeRouteGroupBusy \? "Working…" : "Re-optimize"\}<\/button>/);
   assert.doesNotMatch(routeDetailSource, />Stop actions<\//);
   assert.match(routeDetailSource, /filterAndSortRouteAddOrderCandidates\(availableAddOrderCandidates, \{[\s\S]*query: addOrderSearchQuery/);
   assert.match(routeDetailSource, /type="search"[\s\S]*value=\{addOrderSearchQuery\}/);
