@@ -59,7 +59,7 @@ export const V2_OPTIONS = {
   ],
   fulfillmentStatuses: [
     ["UNFULFILLED", "Unfulfilled", "미처리"],
-    ["PARTIALLY_FULFILLED", "Partially fulfilled", "일부 처리"],
+    ["PARTIALLY_FULFILLED", "Partial", "일부 처리"],
     ["FULFILLED", "Fulfilled", "처리 완료"],
     ["IN_PROGRESS", "In progress", "처리중"],
     ["ON_HOLD", "On hold", "보류"],
@@ -70,7 +70,7 @@ export const V2_OPTIONS = {
   ],
   paymentStatuses: [
     ["PAID", "Paid", "결제완료"],
-    ["PENDING", "Awaiting payment", "결제대기"],
+    ["PENDING", "Payment pending", "결제대기"],
     ["PARTIALLY_PAID", "Partially paid", "일부 결제"],
     ["REFUNDED", "Refunded", "환불"],
     ["PARTIALLY_REFUNDED", "Partially refunded", "일부 환불"],
@@ -90,12 +90,12 @@ export const V2_OPTIONS = {
   ],
 };
 export const V2_LABELS = {
-  received: ["Order received date", "주문 접수일"],
-  scheduled: ["Scheduled delivery / pickup date", "배송·픽업 예정일"],
-  serviceTypes: ["Service type", "유형"],
-  deliveryProgress: ["Routing & delivery status", "배차·배송 상태"],
-  fulfillmentStatuses: ["Shopify fulfillment", "Shopify 주문 처리상태"],
-  paymentStatuses: ["Operational payment status", "운영 결제상태"],
+  serviceTypes: ["Stop type", "배송 유형"],
+  deliveryProgress: ["Delivery status", "배송 상태"],
+  received: ["Order date", "주문일"],
+  scheduled: ["Delivery date", "배송·픽업일"],
+  paymentStatuses: ["Payment", "결제 상태"],
+  fulfillmentStatuses: ["Fulfillment", "주문 처리상태"],
   cancelled: ["Cancellation", "취소 여부"],
   areas: ["Area", "지역"],
 };
@@ -182,7 +182,22 @@ export function changeV2DateBound(filters, group, bound, value) {
     ...(group === "scheduled" ? { scheduledDateMissing: undefined } : {}),
   });
 }
+export function changeV2DateRange(filters, group, value) {
+  const [from, to] = String(value ?? "").split("--");
+  if (!from || !to) return normalizeV2Filters(filters);
+  const prefix = group === "received" ? "received" : "scheduled";
+  return normalizeV2Filters({
+    ...(filters.filterVersion === "2" ? filters : {}),
+    [`${prefix}DateFrom`]: from,
+    [`${prefix}DateTo`]: to,
+    ...(group === "scheduled" ? { scheduledDateMissing: undefined } : {}),
+  });
+}
 export function datePresetV2(filters, group, preset, today) {
+  const weekdays =
+    group === "scheduled" && preset !== "missing"
+      ? filters.scheduledWeekdays
+      : undefined;
   const result = clearV2Group(
     filters.filterVersion === "2" ? filters : {},
     group,
@@ -190,7 +205,11 @@ export function datePresetV2(filters, group, preset, today) {
   const prefix = group === "received" ? "received" : "scheduled";
   if (preset === "missing") return { ...result, scheduledDateMissing: "true" };
   if (preset === "past")
-    return { ...result, scheduledDateTo: shiftV2Date(today, -1) };
+    return {
+      ...result,
+      ...(weekdays?.length ? { scheduledWeekdays: weekdays } : {}),
+      scheduledDateTo: shiftV2Date(today, -1),
+    };
   const from =
     preset === "yesterday"
       ? shiftV2Date(today, -1)
@@ -201,6 +220,7 @@ export function datePresetV2(filters, group, preset, today) {
           : today;
   return {
     ...result,
+    ...(weekdays?.length ? { scheduledWeekdays: weekdays } : {}),
     [`${prefix}DateFrom`]: from,
     [`${prefix}DateTo`]:
       preset === "next7"
@@ -209,6 +229,25 @@ export function datePresetV2(filters, group, preset, today) {
           ? today
           : from,
   };
+}
+export function getDatePresetV2(filters, group, today) {
+  if (group === "scheduled" && filters.scheduledDateMissing === "true")
+    return "missing";
+  const prefix = group === "received" ? "received" : "scheduled";
+  const from = filters[`${prefix}DateFrom`];
+  const to = filters[`${prefix}DateTo`];
+  if (!from && !to) return undefined;
+  const exact = (date) => from === date && to === date;
+  if (exact(today)) return "today";
+  if (group === "received") {
+    if (exact(shiftV2Date(today, -1))) return "yesterday";
+    if (from === shiftV2Date(today, -6) && to === today) return "last7";
+  } else {
+    if (exact(shiftV2Date(today, 1))) return "tomorrow";
+    if (from === today && to === shiftV2Date(today, 6)) return "next7";
+    if (!from && to === shiftV2Date(today, -1)) return "past";
+  }
+  return "custom";
 }
 export function v2ChipValue(filters, group, language) {
   if (group === "received" || group === "scheduled") {
@@ -251,6 +290,59 @@ export function v2ChipValue(filters, group, language) {
   if (group === "areas" && filters.areaMissing === "true")
     values.push(labelV2(["Area not set", "지역 미정"], language));
   return values.join(", ");
+}
+
+export function v2CompactChipValue(filters, group, language, today) {
+  if (group === "received" || group === "scheduled") {
+    if (group === "scheduled" && filters.scheduledDateMissing === "true")
+      return labelV2(["No date", "날짜없음"], language);
+    const prefix = group === "received" ? "received" : "scheduled";
+    const from = filters[`${prefix}DateFrom`];
+    const to = filters[`${prefix}DateTo`];
+    const currentYear = String(today ?? "").slice(0, 4);
+    const shortDate = (date) => {
+      if (!date) return "…";
+      const [year, month, day] = date.split("-");
+      return year && year !== currentYear
+        ? `${year}/${month}/${day}`
+        : `${month}/${day}`;
+    };
+    const dates =
+      from || to
+        ? from === to
+          ? shortDate(from)
+          : `${shortDate(from)}–${shortDate(to)}`
+        : "";
+    const weekdays = (filters.scheduledWeekdays ?? []).map((value) =>
+      labelV2(
+        V2_OPTIONS.scheduledWeekdays
+          .find((option) => option[0] === value)
+          ?.slice(1) ?? [value, value],
+        language,
+      ),
+    );
+    const weekdaySummary = weekdays.length
+      ? `${weekdays[0]}${weekdays.length > 1 ? ` +${weekdays.length - 1}` : ""}`
+      : "";
+    return [dates, group === "scheduled" ? weekdaySummary : ""]
+      .filter(Boolean)
+      .join(" · ");
+  }
+  if (group === "cancelled") return v2ChipValue(filters, group, language);
+  const values = (filters[group] ?? []).map((value) =>
+    labelV2(
+      V2_OPTIONS[group]?.find((option) => option[0] === value)?.slice(1) ?? [
+        value,
+        value,
+      ],
+      language,
+    ),
+  );
+  if (group === "areas" && filters.areaMissing === "true")
+    values.push(labelV2(["Area not set", "지역 미정"], language));
+  return values.length > 1
+    ? `${values[0]} +${values.length - 1}`
+    : (values[0] ?? "");
 }
 
 export function getOrdersUiFilters(params) {

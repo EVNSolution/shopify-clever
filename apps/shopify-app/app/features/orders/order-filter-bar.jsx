@@ -3,14 +3,16 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   activeV2Groups,
-  changeV2DateBound,
+  changeV2DateRange,
   clearV2Group,
   datePresetV2,
+  getDatePresetV2,
   labelV2,
   normalizeV2Filters,
   V2_LABELS,
   V2_OPTIONS,
   v2ChipValue,
+  v2CompactChipValue,
 } from "./order-filters-v2.js";
 
 export function OrderFilterBar({
@@ -24,35 +26,102 @@ export function OrderFilterBar({
 }) {
   const [editing, setEditing] = useState(null);
   const [position, setPosition] = useState(null);
+  const [weekdayOpen, setWeekdayOpen] = useState(false);
+  const [draftFilters, setDraftFilters] = useState(() =>
+    normalizeV2Filters({}),
+  );
   const anchor = useRef(null),
+    addFilterAnchor = useRef(null),
     panel = useRef(null);
   const local = (en, ko) => (language === "ko" ? ko : en);
+  const compactGroupLabel = (group) =>
+    group === "received"
+      ? local("Order", "주문")
+      : group === "scheduled"
+        ? local("Delivery", "배송")
+        : labelV2(V2_LABELS[group], language);
   const isV2 = filters.filterVersion === "2";
   const groups = isV2 ? activeV2Groups(filters) : [];
   const close = () => {
     setEditing(null);
+    setPosition(null);
     anchor.current?.focus();
+  };
+  const focusAddFilter = () =>
+    requestAnimationFrame(() => addFilterAnchor.current?.focus());
+  const applyAndClose = (nextFilters) => {
+    const previousAnchor = anchor.current;
+    onChange(nextFilters);
+    setEditing(null);
+    setPosition(null);
+    requestAnimationFrame(() =>
+      (previousAnchor?.isConnected
+        ? previousAnchor
+        : addFilterAnchor.current
+      )?.focus(),
+    );
+  };
+  const clearGroup = (group) => {
+    if (!isV2) {
+      close();
+      return;
+    }
+    onChange(clearV2Group(filters, group));
+    setEditing(null);
+    setPosition(null);
+    focusAddFilter();
+  };
+  const panelPosition = (target) => {
+    const rect = target?.getBoundingClientRect();
+    if (!rect) return null;
+    const gap = 6;
+    const viewportMargin = 8;
+    const below = window.innerHeight - rect.bottom - gap - viewportMargin;
+    const above = rect.top - gap - viewportMargin;
+    const placeAbove = below < 180 && above > below;
+    const maxHeight = Math.max(80, Math.min(420, placeAbove ? above : below));
+    return {
+      left: Math.max(
+        viewportMargin,
+        Math.min(rect.left, window.innerWidth - 320 - viewportMargin),
+      ),
+      top: placeAbove
+        ? Math.max(viewportMargin, rect.top - gap - maxHeight)
+        : rect.bottom + gap,
+      maxHeight,
+    };
+  };
+  const openEditor = (group, target) => {
+    if (!target) return;
+    anchor.current = target;
+    setPosition(panelPosition(target));
+    setDraftFilters(
+      normalizeV2Filters(filters.filterVersion === "2" ? filters : {}),
+    );
+    setWeekdayOpen(
+      group === "scheduled" && (filters.scheduledWeekdays ?? []).length > 0,
+    );
+    setEditing(group);
   };
   useEffect(() => {
     if (!editing) return undefined;
     const positionPanel = () => {
-      const rect = anchor.current?.getBoundingClientRect();
-      if (!rect) return;
-      setPosition({
-        left: Math.max(8, Math.min(rect.left, window.innerWidth - 340)),
-        top: Math.min(rect.bottom + 6, Math.max(8, window.innerHeight - 400)),
-      });
+      const next = panelPosition(anchor.current);
+      if (next) setPosition(next);
     };
     const pointer = (event) => {
       if (
         !panel.current?.contains(event.target) &&
         !anchor.current?.contains(event.target)
-      )
+      ) {
         setEditing(null);
+        setPosition(null);
+      }
     };
     const keyboard = (event) => {
       if (event.key === "Escape") {
         setEditing(null);
+        setPosition(null);
         anchor.current?.focus();
       }
     };
@@ -60,27 +129,29 @@ export function OrderFilterBar({
     document.addEventListener("pointerdown", pointer);
     document.addEventListener("keydown", keyboard);
     window.addEventListener("resize", positionPanel);
+    window.addEventListener("scroll", positionPanel, true);
     return () => {
       document.removeEventListener("pointerdown", pointer);
       document.removeEventListener("keydown", keyboard);
       window.removeEventListener("resize", positionPanel);
+      window.removeEventListener("scroll", positionPanel, true);
     };
   }, [editing]);
   useEffect(() => {
-    if (editing && position)
-      panel.current?.querySelector("button, input")?.focus();
-  }, [editing, position]);
-  const update = (patch) =>
-    onChange(normalizeV2Filters({ ...(isV2 ? filters : {}), ...patch }));
+    if (editing) panel.current?.querySelector("button, input")?.focus();
+  }, [editing]);
   const toggle = (key, value) => {
-    const selected = isV2 ? (filters[key] ?? []) : [];
-    update({
-      [key]: selected.includes(value)
-        ? selected.filter((item) => item !== value)
-        : [...selected, value],
-      ...(key === "scheduledWeekdays"
-        ? { scheduledDateMissing: undefined }
-        : {}),
+    setDraftFilters((current) => {
+      const selected = current[key] ?? [];
+      return normalizeV2Filters({
+        ...current,
+        [key]: selected.includes(value)
+          ? selected.filter((item) => item !== value)
+          : [...selected, value],
+        ...(key === "scheduledWeekdays"
+          ? { scheduledDateMissing: undefined }
+          : {}),
+      });
     });
   };
   const options =
@@ -90,18 +161,12 @@ export function OrderFilterBar({
             ...(facets?.areas ?? [])
               .filter((item) => item.count > 0 && item.value !== "__MISSING__")
               .map((item) => item.value),
-            ...(filters.areas ?? []),
+            ...(draftFilters.areas ?? []),
           ]),
         ].map((value) => [value, value, value])
       : (V2_OPTIONS[editing] ?? []);
-  const availableOptions = options.filter(
-    (option) =>
-      !facets ||
-      (facets[editing] ?? []).some(
-        (item) => item.value === option[0] && item.count > 0,
-      ) ||
-      (filters[editing] ?? []).includes(option[0]),
-  );
+  const availableOptions =
+    editing === "areas" ? options : (V2_OPTIONS[editing] ?? []);
   const renderChoices = (key, choices) =>
     choices.map(([value, en, ko]) => (
       <label
@@ -115,7 +180,7 @@ export function OrderFilterBar({
       >
         <input
           type="checkbox"
-          checked={isV2 && (filters[key] ?? []).includes(value)}
+          checked={(draftFilters[key] ?? []).includes(value)}
           onChange={() => toggle(key, value)}
         />
         {local(en, ko)}
@@ -123,75 +188,165 @@ export function OrderFilterBar({
     ));
   const dateGroup = editing === "received" || editing === "scheduled";
   const prefix = editing === "received" ? "received" : "scheduled";
+  const dateFrom = draftFilters[`${prefix}DateFrom`];
+  const dateTo = draftFilters[`${prefix}DateTo`];
+  const dateRangeValue =
+    dateFrom && dateTo ? `${dateFrom}--${dateTo}` : undefined;
+  const selectedDatePreset = dateGroup
+    ? getDatePresetV2(draftFilters, editing, today)
+    : undefined;
+  const scheduledWeekdaysChanged =
+    editing === "scheduled" &&
+    JSON.stringify(draftFilters.scheduledWeekdays ?? []) !==
+      JSON.stringify((isV2 ? filters.scheduledWeekdays : []) ?? []);
   const active = groups.length > 0 || Boolean(filters.search) || !isV2;
   return (
     <>
-      <span ref={anchor} tabIndex={-1}>
-        <s-button commandFor="orders-v2-add-filter">
-          {local("Add filter", "필터 추가")}
-          {groups.length ? ` (${groups.length})` : ""}
-        </s-button>
-      </span>
-      <s-menu
-        id="orders-v2-add-filter"
-        accessibilityLabel={local("Add order filter", "주문 필터 추가")}
-      >
-        {Object.keys(V2_LABELS).map((group) => (
-          <s-button key={group} onClick={() => setEditing(group)}>
-            {labelV2(V2_LABELS[group], language)}
-          </s-button>
-        ))}
-      </s-menu>
-      {!isV2 ? (
-        <span style={{ fontSize: 12 }}>
-          {local(
-            "Legacy link filters retained. Choosing a new condition replaces them.",
-            "이전 링크 조건을 유지합니다. 새 조건을 선택하면 이전 조건이 교체됩니다.",
-          )}
-        </span>
-      ) : null}
       {groups.map((group) => (
         <span
           key={group}
           style={{
             display: "inline-flex",
+            alignItems: "center",
             border: "1px solid #c9cccf",
             borderRadius: 8,
-            maxWidth: "100%",
+            maxWidth: 180,
+            height: 28,
+            overflow: "hidden",
             background: "#fff",
+            whiteSpace: "nowrap",
           }}
         >
           <button
             type="button"
-            onClick={() => setEditing(group)}
+            title={`${labelV2(V2_LABELS[group], language)}: ${v2ChipValue(filters, group, language)}`}
+            aria-label={`${labelV2(V2_LABELS[group], language)}: ${v2ChipValue(filters, group, language)}`}
+            onClick={(event) => openEditor(group, event.currentTarget)}
             style={{
               ...buttonStyle,
               border: 0,
               minWidth: 0,
-              maxWidth: "100%",
-              whiteSpace: "normal",
+              maxWidth: 156,
+              height: 26,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              padding: "3px 6px",
+              fontSize: 12,
+              lineHeight: "18px",
             }}
           >
-            {labelV2(V2_LABELS[group], language)}:{" "}
-            {v2ChipValue(filters, group, language)}
+            {compactGroupLabel(group)}:{" "}
+            {v2CompactChipValue(filters, group, language, today)}
           </button>
           <button
             type="button"
             aria-label={`${local("Remove", "삭제")}: ${labelV2(V2_LABELS[group], language)}`}
-            style={{ ...buttonStyle, border: 0, minWidth: 28 }}
-            onClick={() => onChange(clearV2Group(filters, group))}
+            style={{
+              ...buttonStyle,
+              border: 0,
+              minWidth: 24,
+              width: 24,
+              height: 26,
+              padding: 0,
+              fontSize: 16,
+              lineHeight: "20px",
+            }}
+            onClick={() => clearGroup(group)}
           >
             ×
           </button>
         </span>
       ))}
+      {filters.search ? (
+        <span
+          style={{
+            display: "inline-flex",
+            alignItems: "center",
+            border: "1px solid #c9cccf",
+            borderRadius: 8,
+            maxWidth: 180,
+            height: 28,
+            overflow: "hidden",
+            background: "#fff",
+            whiteSpace: "nowrap",
+          }}
+        >
+          <span
+            title={`${local("Search", "검색")}: ${filters.search}`}
+            style={{
+              ...buttonStyle,
+              border: 0,
+              minWidth: 0,
+              maxWidth: 156,
+              height: 26,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+              padding: "3px 6px",
+              fontSize: 12,
+              lineHeight: "18px",
+            }}
+          >
+            {local("Search", "검색")}: {filters.search}
+          </span>
+          <button
+            type="button"
+            aria-label={local("Remove search", "검색 삭제")}
+            style={{
+              ...buttonStyle,
+              border: 0,
+              minWidth: 24,
+              width: 24,
+              height: 26,
+              padding: 0,
+              fontSize: 16,
+              lineHeight: "20px",
+            }}
+            onClick={() => {
+              onChange({ ...filters, search: undefined });
+              focusAddFilter();
+            }}
+          >
+            ×
+          </button>
+        </span>
+      ) : null}
+      <s-button
+        ref={addFilterAnchor}
+        commandFor="orders-v2-add-filter"
+        onClick={() => {
+          if (editing) {
+            setEditing(null);
+            setPosition(null);
+          }
+        }}
+      >
+        {local("Add filter", "필터 추가")}
+        {groups.length ? ` (${groups.length})` : ""}
+      </s-button>
+      <s-menu
+        id="orders-v2-add-filter"
+        accessibilityLabel={local("Add order filter", "주문 필터 추가")}
+      >
+        {Object.keys(V2_LABELS).map((group) => (
+          <s-button
+            key={group}
+            onClick={() => openEditor(group, addFilterAnchor.current)}
+          >
+            {labelV2(V2_LABELS[group], language)}
+          </s-button>
+        ))}
+      </s-menu>
       <button
         type="button"
         disabled={!active}
         style={buttonStyle}
         onClick={() => {
-          close();
+          setEditing(null);
+          setPosition(null);
           onClear();
+          focusAddFilter();
         }}
       >
         {local("Clear all", "모두 지우기")}
@@ -206,7 +361,7 @@ export function OrderFilterBar({
                 position: "fixed",
                 ...position,
                 width: "min(320px, calc(100vw - 16px))",
-                maxHeight: "min(420px, calc(100vh - 16px))",
+                maxHeight: position.maxHeight,
                 overflowY: "auto",
                 padding: 16,
                 boxSizing: "border-box",
@@ -238,18 +393,22 @@ export function OrderFilterBar({
               </div>
               {dateGroup ? (
                 <>
-                  <p>
-                    {editing === "received"
-                      ? local(
-                          "The day Shopify received the order, in the store timezone.",
-                          "Shopify 주문 접수일 · 가게 시간대 기준",
-                        )
-                      : local(
-                          "Scheduled date, not actual delivery or pickup completion.",
-                          "예정일 기준 · 실제 배송완료·픽업 수령일이 아닙니다.",
-                        )}
-                  </p>
-                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                  {editing === "scheduled" ? (
+                    <p>
+                      {local(
+                        "Scheduled delivery or pickup date",
+                        "예정 배송·픽업일",
+                      )}
+                    </p>
+                  ) : null}
+                  <div
+                    style={{
+                      display: "flex",
+                      flexWrap: "wrap",
+                      gap: 6,
+                      margin: "10px 0",
+                    }}
+                  >
                     {(editing === "received"
                       ? [
                           ["today", "Today", "오늘"],
@@ -267,74 +426,48 @@ export function OrderFilterBar({
                       <button
                         key={value}
                         type="button"
+                        aria-pressed={selectedDatePreset === value}
                         style={buttonStyle}
                         onClick={() =>
-                          onChange(datePresetV2(filters, editing, value, today))
+                          applyAndClose(
+                            datePresetV2(draftFilters, editing, value, today),
+                          )
                         }
                       >
                         {local(en, ko)}
                       </button>
                     ))}
                   </div>
-                  <p>
-                    {local(
-                      "Custom range · both dates included",
-                      "직접 기간 선택 · 시작일과 종료일 포함",
-                    )}
-                  </p>
-                  {[
-                    ["From", "시작일", "From"],
-                    ["To", "종료일", "To"],
-                  ].map(([en, ko, suffix]) => (
-                    <label
-                      key={suffix}
-                      style={{ display: "grid", gap: 4, margin: "8px 0" }}
-                    >
-                      {local(en, ko)}
-                      <input
-                        type="date"
-                        value={
-                          isV2 ? (filters[`${prefix}Date${suffix}`] ?? "") : ""
-                        }
-                        style={{ ...buttonStyle, minWidth: 0 }}
-                        onChange={(event) => {
-                          const input = event.currentTarget;
-                          if (input instanceof HTMLInputElement)
-                            onChange(
-                              changeV2DateBound(
-                                filters,
-                                editing,
-                                suffix,
-                                input.value,
-                              ),
-                            );
-                        }}
-                      />
-                    </label>
-                  ))}
+                  <s-date-picker
+                    type="range"
+                    value={dateRangeValue}
+                    defaultView={(dateFrom ?? dateTo ?? today).slice(0, 7)}
+                    onChange={(event) => {
+                      const range = event.currentTarget.value;
+                      if (!range.split("--")[1]) return;
+                      applyAndClose(
+                        changeV2DateRange(draftFilters, editing, range),
+                      );
+                    }}
+                  />
                   {editing === "scheduled" ? (
-                    <>
-                      <p>
-                        {local(
-                          "Narrow by actual scheduled weekday",
-                          "예정일의 실제 요일로 좁히기",
-                        )}
-                      </p>
+                    <details
+                      open={weekdayOpen}
+                      onToggle={(event) =>
+                        setWeekdayOpen(event.currentTarget.open)
+                      }
+                      style={{ marginTop: 10 }}
+                    >
+                      <summary>{local("Weekday", "요일")}</summary>
                       {renderChoices(
                         "scheduledWeekdays",
                         V2_OPTIONS.scheduledWeekdays,
                       )}
-                    </>
+                    </details>
                   ) : null}
                 </>
               ) : editing === "cancelled" ? (
                 <>
-                  <p>
-                    {local(
-                      "Upstream order cancellation; independent of payment and delivery status.",
-                      "원본 주문 취소 여부 · 결제·배송 상태와 별개",
-                    )}
-                  </p>
                   {[
                     ["false", "Not cancelled", "취소되지 않음"],
                     ["true", "Cancelled", "취소됨"],
@@ -346,8 +479,15 @@ export function OrderFilterBar({
                       <input
                         type="radio"
                         name="orders-cancelled"
-                        checked={isV2 && filters.cancelled === value}
-                        onChange={() => update({ cancelled: value })}
+                        checked={draftFilters.cancelled === value}
+                        onChange={() =>
+                          setDraftFilters((current) =>
+                            normalizeV2Filters({
+                              ...current,
+                              cancelled: value,
+                            }),
+                          )
+                        }
                       />
                       {local(en, ko)}
                     </label>
@@ -355,43 +495,71 @@ export function OrderFilterBar({
                 </>
               ) : (
                 <>
-                  {editing === "paymentStatuses" ? (
-                    <p>
-                      {local(
-                        "CLEVER payment corrections take priority.",
-                        "CLEVER 결제 보정값이 우선합니다.",
-                      )}
-                    </p>
-                  ) : null}
-                  {editing === "deliveryProgress" ? (
-                    <p>
-                      {local(
-                        "Pickup period ended does not confirm collection.",
-                        "픽업 기간 종료는 실제 수령 확인이 아닙니다.",
-                      )}
-                    </p>
-                  ) : null}
                   {renderChoices(editing, availableOptions)}
                   {editing === "areas" ? (
-                    <label
-                      style={{ display: "flex", gap: 8, padding: "8px 0" }}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={isV2 && filters.areaMissing === "true"}
-                        onChange={(event) => {
-                          const input = event.currentTarget;
-                          if (input instanceof HTMLInputElement)
-                            update({
-                              areaMissing: input.checked ? "true" : undefined,
-                            });
-                        }}
-                      />
-                      {local("Area not set", "지역 미정")}
-                    </label>
+                    <>
+                      {availableOptions.length === 0 ? (
+                        <p>
+                          {local(
+                            "No areas available",
+                            "사용 가능한 지역이 없습니다",
+                          )}
+                        </p>
+                      ) : null}
+                      <label
+                        style={{ display: "flex", gap: 8, padding: "8px 0" }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={draftFilters.areaMissing === "true"}
+                          onChange={(event) => {
+                            const input = event.currentTarget;
+                            if (input instanceof HTMLInputElement)
+                              setDraftFilters((current) =>
+                                normalizeV2Filters({
+                                  ...current,
+                                  areaMissing: input.checked
+                                    ? "true"
+                                    : undefined,
+                                }),
+                              );
+                          }}
+                        />
+                        {local("Area not set", "지역 미정")}
+                      </label>
+                    </>
                   ) : null}
                 </>
               )}
+              <div
+                style={{
+                  display: "flex",
+                  justifyContent: "flex-end",
+                  gap: 6,
+                  marginTop: 12,
+                  paddingTop: 10,
+                  borderTop: "1px solid #e1e3e5",
+                }}
+              >
+                <button
+                  type="button"
+                  style={buttonStyle}
+                  onClick={() => clearGroup(editing)}
+                >
+                  {local("Clear filter", "필터 지우기")}
+                </button>
+                {!dateGroup ||
+                (editing === "scheduled" &&
+                  (weekdayOpen || scheduledWeekdaysChanged)) ? (
+                  <button
+                    type="button"
+                    style={buttonStyle}
+                    onClick={() => applyAndClose(draftFilters)}
+                  >
+                    {local("Add filter", "필터 추가")}
+                  </button>
+                ) : null}
+              </div>
             </div>,
             document.body,
           )

@@ -7,11 +7,14 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   activeV2Groups,
   changeV2DateBound,
+  changeV2DateRange,
   clearV2Group,
   datePresetV2,
+  getDatePresetV2,
   getOrdersUiFilters,
   normalizeV2Filters,
   readV2Filters,
+  v2CompactChipValue,
   V2_GROUPS,
   writeV2Filters,
 } from "../app/features/orders/order-filters-v2.js";
@@ -68,6 +71,38 @@ test("custom received dates preserve no scheduled date; scheduled bounds leave t
     undefined,
   );
 });
+test("calendar ranges update both bounds atomically and preserve scheduled weekdays", () => {
+  const before = normalizeV2Filters({
+    receivedDateFrom: "2026-10-01",
+    receivedDateTo: "2026-10-02",
+    areas: ["Toronto"],
+  });
+  assert.deepEqual(
+    changeV2DateRange(before, "received", "2026-10-04--"),
+    before,
+  );
+  const selected = changeV2DateRange(
+    normalizeV2Filters({
+      scheduledDateMissing: true,
+      scheduledWeekdays: ["MONDAY"],
+      paymentStatuses: ["PAID"],
+    }),
+    "scheduled",
+    "2026-10-04--2026-10-09",
+  );
+  assert.equal(selected.scheduledDateMissing, undefined);
+  assert.equal(selected.scheduledDateFrom, "2026-10-04");
+  assert.equal(selected.scheduledDateTo, "2026-10-09");
+  assert.deepEqual(selected.paymentStatuses, ["PAID"]);
+  assert.deepEqual(
+    changeV2DateRange(
+      normalizeV2Filters({ scheduledWeekdays: ["MONDAY"] }),
+      "scheduled",
+      "2026-10-04--2026-10-04",
+    ).scheduledWeekdays,
+    ["MONDAY"],
+  );
+});
 test("each chip removes only its dimension; no weekday or service side effects", () => {
   for (const group of Object.keys(V2_GROUPS)) {
     const result = clearV2Group(base, group);
@@ -87,6 +122,28 @@ test("each chip removes only its dimension; no weekday or service side effects",
     base.serviceTypes,
   );
 });
+test("compact chips shorten dates and summarize additional selected values", () => {
+  assert.equal(
+    v2CompactChipValue(base, "scheduled", "en", "2026-10-01"),
+    "10/02–10/08 · Friday +1",
+  );
+  assert.equal(
+    v2CompactChipValue(base, "serviceTypes", "ko", "2026-10-01"),
+    "일반 배송 +1",
+  );
+  assert.equal(
+    v2CompactChipValue(
+      normalizeV2Filters({
+        receivedDateFrom: "2025-12-31",
+        receivedDateTo: "2026-01-02",
+      }),
+      "received",
+      "en",
+      "2026-10-01",
+    ),
+    "2025/12/31–01/02",
+  );
+});
 test("missing schedule is exclusive, presets use supplied store dates, ranges include endpoints", () => {
   const noDate = datePresetV2(base, "scheduled", "missing", "2026-10-01");
   assert.equal(noDate.scheduledDateMissing, "true");
@@ -98,6 +155,24 @@ test("missing schedule is exclusive, presets use supplied store dates, ranges in
   assert.equal(last.receivedDateTo, "2026-10-01");
   const next = datePresetV2(base, "scheduled", "next7", "2026-10-01");
   assert.equal(next.scheduledDateTo, "2026-10-07");
+  assert.deepEqual(next.scheduledWeekdays, base.scheduledWeekdays);
+  assert.deepEqual(
+    datePresetV2(base, "scheduled", "past", "2026-10-01")
+      .scheduledWeekdays,
+    base.scheduledWeekdays,
+  );
+  assert.equal(getDatePresetV2(next, "scheduled", "2026-10-01"), "next7");
+  assert.equal(
+    getDatePresetV2(
+      normalizeV2Filters({
+        receivedDateFrom: "2026-09-28",
+        receivedDateTo: "2026-10-01",
+      }),
+      "received",
+      "2026-10-01",
+    ),
+    "custom",
+  );
   assert.deepEqual(
     normalizeV2Filters({
       receivedDateFrom: "2026-10-09",
@@ -190,7 +265,7 @@ test("all BFF query endpoints repeat arrays; snapshot POST preserves JSON arrays
     else process.env.CLEVER_DELIVERY_API_URL = previous;
   }
 });
-test("filter bar renders eight choices, no fixed value controls, independent chips and Korean labels", async () => {
+test("filter bar renders concise filter choices, independent chips, and a removable incoming search", async () => {
   const bundle = await build({
     entryPoints: ["app/features/orders/order-filter-bar.jsx"],
     bundle: true,
@@ -221,11 +296,18 @@ test("filter bar renders eight choices, no fixed value controls, independent chi
     assert.doesNotMatch(initial, /type="date"|type="checkbox"/);
     assert.match(initial, /필터 추가/);
     const active = render(base);
-    assert.match(active, /Shopify 주문 처리상태: 미처리/);
-    assert.match(active, /운영 결제상태: 결제대기/);
-    assert.match(active, /배차·배송 상태: 배차됨/);
-    assert.match(active, /삭제: 유형/);
+    assert.match(active, /주문 처리상태: 미처리/);
+    assert.match(active, /결제 상태: 결제대기/);
+    assert.match(active, /배송 상태: 배차됨/);
+    assert.match(active, /삭제: 배송 유형/);
+    assert.match(active, /검색: sample/);
+    assert.match(active, /검색 삭제/);
     assert.match(active, /모두 지우기/);
+    const legacySearch = render({
+      deliveryState: "planned",
+      search: "legacy order",
+    });
+    assert.match(legacySearch, /검색: legacy order/);
   } finally {
     await unlink(path);
   }

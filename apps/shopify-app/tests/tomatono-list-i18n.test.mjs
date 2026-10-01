@@ -1,4 +1,4 @@
-import { V2_LABELS, V2_OPTIONS, labelV2 } from "../app/features/orders/order-filters-v2.js";
+import { V2_LABELS, V2_OPTIONS } from "../app/features/orders/order-filters-v2.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -115,8 +115,26 @@ test("affected Routes list labels use the app language without adding a Dispatch
 });
 
 test("v2 filter labels and options have explicit Korean meanings", () => {
-  assert.equal(labelV2(V2_LABELS.received, "ko"), "주문 접수일");
-  assert.equal(labelV2(V2_LABELS.scheduled, "ko"), "배송·픽업 예정일");
+  assert.deepEqual(V2_LABELS, {
+    serviceTypes: ["Stop type", "배송 유형"],
+    deliveryProgress: ["Delivery status", "배송 상태"],
+    received: ["Order date", "주문일"],
+    scheduled: ["Delivery date", "배송·픽업일"],
+    paymentStatuses: ["Payment", "결제 상태"],
+    fulfillmentStatuses: ["Fulfillment", "주문 처리상태"],
+    cancelled: ["Cancellation", "취소 여부"],
+    areas: ["Area", "지역"],
+  });
+  assert.equal(
+    V2_OPTIONS.paymentStatuses.find(([value]) => value === "PENDING")[1],
+    "Payment pending",
+  );
+  assert.equal(
+    V2_OPTIONS.fulfillmentStatuses.find(
+      ([value]) => value === "PARTIALLY_FULFILLED",
+    )[1],
+    "Partial",
+  );
   for (const labels of Object.values(V2_LABELS)) assert.notEqual(labels[0], labels[1]);
   for (const options of Object.values(V2_OPTIONS)) for (const [, en, ko] of options) assert.notEqual(en, ko);
 });
