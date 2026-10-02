@@ -68,6 +68,14 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Tracking evidence uses a native disclosure so keyboard and assistive technology behavior remain reliable.
 - Tables remain the primary detailed operations surface.
 - Stop-table disclosures use a route-scoped row key. All routes is read-only and links each assigned row to its child route for operational actions; Unassigned has no route action. Actual arrival evidence is shown only when it belongs to that same route; never reuse one child route's tracking evidence for another child or Unassigned.
+- Standalone and saved child route tables place a read-only Start row before the first order and an End row after the last order in both Stops and Tracking. These endpoint rows are outside order selection, counts, actions, and reordering. Do not synthesize one Start/End pair for All routes or Unassigned.
+- Endpoint times use the same presentation as order ETA: show the planned time alone, then strike it through and show the observed time in green when evidence exists. Evidence labels such as actual departure and `Return confirmed` stay available to assistive text and tooltips instead of taking visible table space. Planned End requires a complete route schedule: saved start, every outbound leg, service time, time-window waits, and a consistent return leg when the route returns to depot. Actual departure requires the recorded start occurrence; completion alone is not depot-return evidence.
+
+### Route Add orders
+
+- Search covers all same-store orders regardless of the selected delivery-date filter, including orders labeled `Date Pending`. Date filters still narrow the browse list when search is empty.
+- Visibility and addability are separate. Already assigned, cancelled, terminal delivery, and missing-coordinate orders stay visible with a concise reason and disabled selection. The server action revalidates selected IDs against the addable set.
+- Adding a cross-date or Date Pending order preserves its original delivery date and targets the chosen saved child route. The dialog does not imply that browsing or selection changes the order's date.
 
 ### Orders filter controls
 
@@ -94,6 +102,7 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - The map height remains independently resizable and is not changed by shell layout work.
 
 - Orders toolbar uses horizontal scrolling on narrow screens; controls and chip text do not wrap into a second row. Popovers fit within the viewport independently of toolbar overflow.
+- Route endpoint rows follow the same table width and horizontal-scroll behavior as order rows. Endpoint addresses may wrap or truncate through the existing table treatment; observed times use the same two-line planned-versus-actual treatment as order ETA.
 
 ## Interaction states
 

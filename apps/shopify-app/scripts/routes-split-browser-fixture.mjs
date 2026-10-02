@@ -24,6 +24,25 @@ const fetchFixtureAsset = window.fetch.bind(window);
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input.url, window.location.href);
   const method = init?.method ?? (typeof input === "string" ? "GET" : input.method) ?? "GET";
+  if (url.pathname === "/app/route-tracking/route-usability" && url.searchParams.get("mode") === "snapshot") {
+    return Response.json({ data: { snapshot: {
+      executionEvidence: {
+        routeEndMode: "RETURN_TO_DEPOT",
+        schemaVersion: "route_execution_evidence.v1",
+        start: { eventId: "fixture-start", occurredAt: "2026-08-22T13:03:00.000Z" },
+        completion: { eventId: "fixture-complete", occurredAt: "2026-08-22T15:00:00.000Z" },
+        returnToDepot: { status: "CONFIRMED", source: "LOCATION_UPDATED", observedAt: "2026-08-22T15:08:00.000Z" },
+        timeSemantics: "EVENT_TIMESTAMPS_ONLY",
+      },
+      progress: { completedStopIds: ["usability-stop-1", "usability-stop-2"] },
+      routePlanId: "route-usability",
+      status: "COMPLETED",
+      stopArrivals: [
+        { deliveryStopId: "usability-stop-1", driverId: "driver-1", eventId: "arrival-1", occurredAt: "2026-08-22T14:02:00.000Z", routePlanId: "route-usability" },
+        { deliveryStopId: "usability-stop-2", driverId: "driver-1", eventId: "arrival-2", occurredAt: "2026-08-22T14:35:00.000Z", routePlanId: "route-usability" },
+      ],
+    } } });
+  }
   if (url.origin === "https://cdn.shopify.com" && method.toUpperCase() === "GET") {
     return fetchFixtureAsset(input, init);
   }
@@ -42,6 +61,7 @@ const makeStop = (index, prefix = "source") => ({
   orderCreatedAt: "2026-08-21T" + String(9 + (index % 8)).padStart(2, "0") + ":15:00.000-04:00",
   paymentStatus: index % 2 === 0 ? "PENDING" : "PAID", recipientName: "Fixture customer " + index,
   sequence: index, serviceMinutes: 5 + index, serviceType: "Evening delivery", status: "PENDING",
+  durationFromPreviousSeconds: 600 + index * 60,
   shopifyOrderId: "gid://shopify/Order/fixture-" + index,
   totalPriceAmount: String(index * 25), totalShippingPriceAmount: "5.00", totalShippingPriceCurrencyCode: "CAD",
 });
@@ -78,7 +98,33 @@ const makeGroup = (plans, id = "saved-group") => ({
 });
 const singletonGroup = makeGroup([copied], "singleton-group");
 const params = new URLSearchParams(location.search);
-const mode = params.get("mode") || "ordinary";
+const pathMode = location.pathname.split("/").filter(Boolean).at(-1);
+const mode = ["bridge", "ordinary", "reference", "saved", "singleton", "unassigned", "usability"].includes(pathMode)
+  ? pathMode
+  : params.get("mode") || "ordinary";
+const usabilityStops = [1, 2, 3].map((index) => ({
+  ...makeStop(index, "usability"),
+  durationFromPreviousSeconds: 900,
+  serviceMinutes: 5,
+  timeWindowStart: index === 1 ? "2026-08-22T14:00:00.000Z" : null,
+}));
+const usabilityPlan = {
+  ...makePlan("route-usability", "Saturday deliveries"),
+  depot: { latitude: 43.65, longitude: -79.38 },
+  routeEndMode: "RETURN_TO_DEPOT",
+  routeGroupingChild: { groupingId: "usability-group", routePlanId: "route-usability" },
+  routeMetrics: { distanceMeters: 42_000, durationSeconds: 5_400 },
+  scheduledStartAt: "2026-08-22T13:00:00.000Z",
+  status: "COMPLETED",
+  stops: usabilityStops,
+  stopsCount: usabilityStops.length,
+};
+const usabilityCandidates = [
+  { addable: true, addBlockedReason: null, address: "10 Crossdate Ave, Toronto, ON", customer: "Crossdate customer", deliveryDate: "2026-08-29", deliveryDay: "Saturday", itemCount: 2, name: "#SYN-2401", orderDate: "2026-08-20", orderId: "crossdate-order" },
+  { addable: true, addBlockedReason: null, address: "20 Pending Rd, Toronto, ON", customer: "Pending customer", deliveryDate: "Date Pending", deliveryDay: "–", itemCount: 1, name: "#SYN-2402", orderDate: "2026-08-20", orderId: "pending-order" },
+  { addable: false, addBlockedReason: "Already assigned to a route", address: "30 Planned St, Toronto, ON", customer: "Planned customer", deliveryDate: "Date Pending", deliveryDay: "–", itemCount: 3, name: "#SYN-2403", orderDate: "2026-08-19", orderId: "planned-order" },
+  { addable: false, addBlockedReason: "Missing coordinates", address: "40 Missing Coordinate St, Toronto, ON", customer: "Blocked customer", deliveryDate: "2026-09-05", deliveryDay: "Saturday", itemCount: 1, name: "#SYN-2404", orderDate: "2026-08-18", orderId: "missing-coordinate-order" },
+];
 const unassignedStops = Array.from({ length: 42 }, (_, index) => makeStop(index + 1, "group"));
 const unassignedPlans = [44, 46, 47, 48].map((routeIdx, index) => ({
   ...makePlan("route-" + routeIdx, "#" + routeIdx, index),
@@ -90,12 +136,21 @@ const copyResult = params.get("copy") || "complete";
 const saveResult = params.get("save") || "complete";
 if (mode === "bridge") copied.routeGroupingChild = { groupingId: singletonGroup.id, routePlanId: copied.id };
 const detailData = (routePlan, routeGroup = null) => ({
+  addOrderCandidates: mode === "usability" ? usabilityCandidates : [],
   childRouteDetails: (routeGroup?.children || []).map(child => ({ routePlan: child.routePlan, stops: child.routePlan.stops || [] })),
+  currentDepartureLocation: {
+    address: mode === "usability" ? "100 Depot Road, Toronto, ON" : "Current setting must not replace saved depot",
+    hasCoordinates: true,
+    name: "Current setting",
+    coordinates: [-79.38, 43.65],
+  },
   drivers: [], errors: [], ianaTimezone: "America/Toronto", routeGroup, routePlan,
+  routeMetrics: routePlan?.routeMetrics ?? null,
   stops: routePlan?.stops || [], timezoneAbbreviation: "EDT",
 });
 let persistedPlans = mode === "bridge" ? [copied] : [original];
 let persistedGroup = mode === "bridge" ? singletonGroup : null;
+if (mode === "usability") { persistedPlans = [usabilityPlan]; persistedGroup = makeGroup([usabilityPlan], "usability-group"); }
 if (mode === "unassigned") { persistedPlans = unassignedPlans; persistedGroup = unassignedGroup; }
 if (mode === "reference") {
   persistedPlans = [
@@ -124,6 +179,15 @@ const fixtureAction = async ({ request }) => {
   const intent = formData.get("_intent");
   totalActionSubmissions += 1;
   renderFixtureStatus();
+  if (intent === "loadAddOrderCandidates") return { addOrderCandidates: usabilityCandidates, errors: [] };
+  if (intent === "addRouteOrders") {
+    const requestedOrderIds = JSON.parse(String(formData.get("orderIds") || "[]"));
+    const addableOrderIds = new Set(usabilityCandidates.filter(candidate => candidate.addable).map(candidate => candidate.orderId));
+    if (requestedOrderIds.some(orderId => !addableOrderIds.has(orderId))) {
+      return { errors: [{ message: "Fixture rejected a blocked order" }] };
+    }
+    return { addedOrders: requestedOrderIds.length, errors: [], routeGroup: persistedGroup };
+  }
   if (intent === "queryNextRouteIdx" || String(intent).toLowerCase().includes("addempty")) {
     addEmptyServerSubmissions += 1;
     renderFixtureStatus();
@@ -219,7 +283,7 @@ const listLoader = () => mode === "saved"
     : mode === "bridge"
       ? { errors: [], routeGroups: [persistedGroup], routePlans: [original] }
       : { errors: [], routeGroups: persistedGroup ? [persistedGroup] : [], routePlans: persistedPlans };
-const initialPath = mode === "reference" ? "/app/routes/groups/reference-group" : mode === "unassigned" ? (params.get("child") === "1" ? "/app/routes/groups/unassigned-group/routes/route-46" : "/app/routes/groups/unassigned-group") : mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original";
+const initialPath = mode === "usability" ? "/app/routes/groups/usability-group/routes/route-usability" : mode === "reference" ? "/app/routes/groups/reference-group" : mode === "unassigned" ? (params.get("child") === "1" ? "/app/routes/groups/unassigned-group/routes/route-46" : "/app/routes/groups/unassigned-group") : mode === "saved" || mode === "singleton" ? "/app/routes" : mode === "bridge" ? "/app/routes/route-copy" : "/app/routes/route-original";
 const router = createMemoryRouter([{
   id: "routes/app", path: "/", loader: () => ({ language: "en" }), children: [
     { path: "app/routes", loader: listLoader, element: React.createElement(RoutesPage) },
@@ -273,8 +337,13 @@ await build({
 
 const server = createServer((request, response) => {
   if (request.url === "/global.css") { response.setHeader("content-type", "text/css"); response.end(readFileSync(`${appDirectory}/app/styles/global.css`)); return; }
-  if (request.url === "/fixture.js") { response.setHeader("content-type", "text/javascript"); response.end(readFileSync(bundlePath)); return; }
+  if (request.url === "/fixture.js") { response.setHeader("cache-control", "no-store"); response.setHeader("content-type", "text/javascript"); response.end(readFileSync(bundlePath)); return; }
+  const requestUrl = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
+  const pathMode = requestUrl.pathname.split("/").filter(Boolean).at(-1);
+  const mode = ["bridge", "ordinary", "reference", "saved", "singleton", "unassigned", "usability"].includes(pathMode)
+    ? pathMode
+    : requestUrl.searchParams.get("mode") || "ordinary";
   response.setHeader("cache-control", "no-store"); response.setHeader("content-type", "text/html; charset=utf-8");
-  response.end(`<!doctype html><html><head><title>Routes split-on-save fixture</title><script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script><link rel="stylesheet" href="/global.css"></head><body style="font-family:Arial;margin:0"><aside style="background:#fff4cc;padding:8px;position:sticky;top:0;z-index:1000">Local synthetic fixture · network and production mutations disabled · <a href="/?mode=ordinary">ordinary route detail</a> · <a href="/?mode=reference">All routes detail</a> · <a href="/?mode=unassigned">All routes with unassigned</a> · <a href="/?mode=ordinary&copy=error">copy error</a> · <a href="/?mode=ordinary&copy=unknown">copy unknown</a> · <a href="/?mode=ordinary&copy=incomplete">copy incomplete</a> · <a href="/?mode=ordinary&save=incomplete">save incomplete</a> · <a href="/?mode=ordinary&save=error">save error</a> · <a href="/?mode=ordinary&save=unknown">save unknown</a> · <a href="/?mode=bridge&save=complete">existing group complete</a> · <a href="/?mode=singleton">saved singleton</a> · <a href="/?mode=saved">saved 3-member list</a><div id="fixture-status" style="margin-top:6px;font-weight:700">Total action submissions: 0 · Copy submissions: 0 · Save submissions: 0 · Add Empty server submissions: 0 · Original unchanged: yes (6 stops)</div></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`);
+  response.end(`<!doctype html><html><head><title>Routes split-on-save fixture</title><script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script><link rel="stylesheet" href="/global.css"></head><body style="font-family:Arial;margin:0"><aside style="background:#fff4cc;padding:8px;position:sticky;top:0;z-index:1000">Local synthetic fixture · mode ${mode} · network and production mutations disabled · <a href="/fixture/usability">route usability</a> · <a href="/fixture/ordinary">ordinary route detail</a> · <a href="/fixture/reference">All routes detail</a> · <a href="/fixture/unassigned">All routes with unassigned</a> · <a href="/?mode=ordinary&copy=error">copy error</a> · <a href="/?mode=ordinary&copy=unknown">copy unknown</a> · <a href="/?mode=ordinary&copy=incomplete">copy incomplete</a> · <a href="/?mode=ordinary&save=incomplete">save incomplete</a> · <a href="/?mode=ordinary&save=error">save error</a> · <a href="/?mode=ordinary&save=unknown">save unknown</a> · <a href="/?mode=bridge&save=complete">existing group complete</a> · <a href="/fixture/singleton">saved singleton</a> · <a href="/fixture/saved">saved 3-member list</a><div id="fixture-status" style="margin-top:6px;font-weight:700">Total action submissions: 0 · Copy submissions: 0 · Save submissions: 0 · Add Empty server submissions: 0 · Original unchanged: yes (6 stops)</div></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`);
 });
 server.listen(port, "127.0.0.1", () => console.log(`Routes split fixture ready at http://127.0.0.1:${port}/?mode=ordinary`));

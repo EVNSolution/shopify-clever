@@ -37,13 +37,37 @@ test("route add-order candidates include every eligible unplanned order regardle
     candidate({ id: "gid://shopify/Order/1004", name: "#1004", orderId: "order-1004", hasCoordinates: false }),
     candidate({ id: "gid://shopify/Order/1005", name: "#1005", orderId: "order-1005", deliveryStopStatus: "DELIVERED" }),
     candidate({ id: "gid://shopify/Order/1006", name: "#1006", orderId: "order-1006", cancelledAt: "2026-08-01T00:00:00Z" }),
+    candidate({ id: "gid://shopify/Order/1007", name: "#1007", orderId: "order-1007", deliveryStopStatus: "FAILED" }),
+    candidate({ id: "gid://shopify/Order/1008", name: "#1008", orderId: "order-1008", deliveryStopStatus: "SKIPPED" }),
+    candidate({ id: "gid://shopify/Order/1009", name: "#1009", orderId: "order-1009", deliveryStopStatus: "CANCELLED" }),
   ], {
     routePlan: { deliveryDate: "2026-08-06" },
   });
 
-  assert.deepEqual(candidates.map((order) => order.orderId), ["order-1001", "order-1002"]);
+  assert.deepEqual(candidates.map((order) => order.orderId), [
+    "order-1001",
+    "order-1002",
+    "order-1003",
+    "order-1004",
+    "order-1005",
+    "order-1006",
+    "order-1007",
+    "order-1008",
+    "order-1009",
+  ]);
   assert.equal(candidates[0].orderDate, "2026-08-01");
   assert.equal(candidates[1].deliveryDate, "2026-08-13");
+  assert.deepEqual(candidates.map((order) => [order.addable, order.addBlockedReason]), [
+    [true, null],
+    [true, null],
+    [false, "Already assigned to a route"],
+    [false, "Missing coordinates"],
+    [false, "Delivery completed"],
+    [false, "Cancelled"],
+    [false, "Delivery failed"],
+    [false, "Delivery skipped"],
+    [false, "Cancelled"],
+  ]);
 });
 
 test("route add-order candidates support all, specific, and inclusive range date filters", () => {
@@ -85,7 +109,7 @@ test("route add-order candidates expose and filter orders whose selected date is
     candidate({ name: "#1003", orderId: "dated", deliveryDate: "2026-08-20" }),
   ]);
 
-  assert.equal(candidates[0].deliveryDate, "Date pending");
+  assert.equal(candidates[0].deliveryDate, "Date Pending");
   assert.equal(candidates[1].orderDate, "No date");
   assert.deepEqual(
     filterRouteAddOrderCandidatesByDate(candidates, { field: "deliveryDate", mode: "missing" }).map((order) => order.orderId),
@@ -103,7 +127,7 @@ test("route add-order dialog offers the pending label that matches the selected 
     "utf8",
   );
 
-  assert.match(routeDetailSource, /<option value="missing">\{addOrderDateField === "deliveryDate" \? "Date pending" : "No date"\}<\/option>/);
+  assert.match(routeDetailSource, /<option value="missing">\{addOrderDateField === "deliveryDate" \? "Date Pending" : "No date"\}<\/option>/);
 });
 
 test("route add-order search accepts number variants, whitespace, and partial prefixed names", () => {
@@ -149,7 +173,7 @@ test("route add-order query intersects date filters and empty query restores all
       query: "1496",
       startDate: "2026-08-06",
     }).map((order) => order.orderId),
-    ["matching-date"],
+    ["other-date", "matching-date"],
   );
   assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: "   " }).map((order) => order.orderId), [
     "other-date",
@@ -168,11 +192,31 @@ test("visible-only Select all retains selections outside the current filters", (
   );
 });
 
+test("visible-only Select all excludes blocked orders", () => {
+  const visible = [
+    { addable: true, orderId: "available" },
+    { addable: false, orderId: "blocked" },
+  ];
+
+  assert.deepEqual(updateRouteAddOrderSelection([], visible, true), ["available"]);
+});
+
 test("route add-order search labels and empty states are localized", () => {
   assert.equal(translate("en", "routes.addOrder.search.label"), "Order number");
   assert.equal(translate("ko", "routes.addOrder.search.label"), "주문번호");
   assert.match(translate("en", "routes.addOrder.search.placeholder"), /#1496/);
   assert.match(translate("ko", "routes.addOrder.search.placeholder"), /1496/);
-  assert.match(translate("en", "routes.addOrder.search.empty"), /No eligible orders/);
-  assert.match(translate("ko", "routes.addOrder.search.empty"), /추가 가능한 주문/);
+  assert.match(translate("en", "routes.addOrder.search.empty"), /No orders/);
+  assert.match(translate("ko", "routes.addOrder.search.empty"), /일치하는 주문/);
+});
+
+test("route add-order UI exposes blocked orders and the action validates only addable candidates", () => {
+  const routeDetailSource = readFileSync(join(process.cwd(), "app/routes/app.routes.$routeId.jsx"), "utf8");
+  const routeDetailServerSource = readFileSync(join(process.cwd(), "app/features/delivery/route-detail.server.js"), "utf8");
+
+  assert.match(routeDetailSource, /Search covers all delivery dates, including Date Pending/);
+  assert.match(routeDetailSource, /disabled=\{!order\.addable\}/);
+  assert.match(routeDetailSource, /\{order\.addBlockedReason \?\? "Available"\}/);
+  assert.match(routeDetailSource, /selectableFilteredAddOrderCandidates/);
+  assert.match(routeDetailServerSource, /buildRouteAddOrderCandidates\(orderData\.orders\)[\s\S]*\.filter\(\(order\) => order\.addable\)/);
 });

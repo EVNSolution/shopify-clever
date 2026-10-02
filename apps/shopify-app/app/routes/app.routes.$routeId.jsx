@@ -20,6 +20,7 @@ import { CustomerEmailSendResultPanel } from "../features/customer-notifications
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
+  buildRouteEndpointPresentation,
   buildRouteOrderRows,
   summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
@@ -865,6 +866,11 @@ const childRouteOrderRowStyle = {
   height: "40px",
 };
 
+const childRouteEndpointRowStyle = {
+  ...childRouteOrderRowStyle,
+  background: "#f7f7f7",
+};
+
 const childRouteTableStopMarkerStyle = {
   background: "var(--route-marker-color, #0b84d8)",
   borderRadius: "999px",
@@ -876,6 +882,13 @@ const childRouteTableStopMarkerStyle = {
   padding: 0,
   placeItems: "center",
   width: "20px",
+};
+
+const childRouteEndpointMarkerStyle = {
+  ...childRouteTableStopMarkerStyle,
+  background: "#27805c",
+  fontSize: "11px",
+  fontWeight: 800,
 };
 
 const routeNumberMarkerGlyphStyle = {
@@ -1710,7 +1723,7 @@ const routeAddOrderTableWrapStyle = {
 const routeAddOrderTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "980px",
+  minWidth: "1170px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -2540,21 +2553,33 @@ function buildDepartureLocation(routePlan, currentDepartureLocation) {
       )
       : null;
   const coordinates = depotCoordinates ?? currentCoordinates;
+  const savedDepotName = textOrUndefined(routePlan?.depot?.name);
+  const savedDepotAddress = textOrUndefined(routePlan?.depot?.address);
+  const currentDepartureName = textOrUndefined(currentDepartureLocation?.name);
+  const currentDepartureAddress = textOrUndefined(currentDepartureLocation?.address);
+  const savedDepotLabel = savedDepotAddress ?? savedDepotName;
+  const currentDepartureLabel = currentDepartureAddress ?? currentDepartureName;
   const name =
-    textOrUndefined(routePlan?.depot?.name) ??
-    textOrUndefined(currentDepartureLocation?.name) ??
+    savedDepotName ??
+    currentDepartureName ??
     "Company location";
   const address =
-    textOrUndefined(routePlan?.depot?.address) ??
-    textOrUndefined(currentDepartureLocation?.address) ??
+    savedDepotAddress ??
+    currentDepartureAddress ??
     "Company location";
 
   return {
     id: `${routePlan?.id ?? "route"}:departure`,
     name,
     address,
+    addressSource: savedDepotLabel
+      ? "SAVED_DEPOT"
+      : currentDepartureLabel ? "CURRENT_SETTING" : "UNAVAILABLE",
     coordinates,
+    currentCoordinates,
+    endpointAddress: savedDepotLabel ?? currentDepartureLabel ?? null,
     hasCoordinates: coordinates != null,
+    savedCoordinates: depotCoordinates,
   };
 }
 
@@ -3378,7 +3403,7 @@ function renderChildRouteEta(row) {
   const hasActualArrival = row?.hasActualArrival === true;
 
   return (
-    <s-stack alignItems="center" direction="block" gap="small-100">
+    <s-stack alignItems="center" direction="block" gap="small-100" title={row?.timeTitle}>
       <s-text accessibilityVisibility="exclusive">{row?.etaLabel ?? "ETA"}: </s-text>
       {hasActualArrival && row?.expectedArrival !== ROUTE_EMPTY_LABEL ? (
         <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{row.expectedArrival}</s-text></del>
@@ -3393,11 +3418,85 @@ function renderChildRouteEta(row) {
       )}
       {hasActualArrival ? (
         <>
-          <s-text accessibilityVisibility="exclusive">Actual arrival: </s-text>
+          <s-text accessibilityVisibility="exclusive">{row?.actualLabel ?? "Actual arrival"}: </s-text>
           <s-text fontVariantNumeric="tabular-nums" tone="success" type="strong">{row.actualArrival}</s-text>
         </>
       ) : null}
     </s-stack>
+  );
+}
+
+function formatRouteEndpointTimestamp(value, referenceValue, ianaTimezone) {
+  const localValue = formatStoreLocalDateTimeInput(value, ianaTimezone);
+  if (!localValue) return ROUTE_EMPTY_LABEL;
+  const referenceLocalValue = formatStoreLocalDateTimeInput(referenceValue, ianaTimezone);
+  return referenceLocalValue && referenceLocalValue.slice(0, 10) === localValue.slice(0, 10)
+    ? localValue.slice(11)
+    : `${localValue.slice(5, 10).replace("-", ".")} ${localValue.slice(11)}`;
+}
+
+function renderRouteEndpointTime(endpoint, referenceValue, plannedLabel) {
+  const plannedTime = formatRouteEndpointTimestamp(endpoint?.plannedAt, referenceValue, endpoint?.ianaTimezone);
+  const actualTime = endpoint?.actualAt
+    ? formatRouteEndpointTimestamp(endpoint.actualAt, referenceValue, endpoint.ianaTimezone)
+    : ROUTE_EMPTY_LABEL;
+  const actualLabel = endpoint?.actualLabel ?? "Actual";
+
+  return renderChildRouteEta({
+    actualArrival: actualTime,
+    actualLabel,
+    etaLabel: plannedLabel,
+    expectedArrival: plannedTime,
+    hasActualArrival: endpoint?.actualAt != null,
+    timeTitle: endpoint?.actualAt
+      ? `${plannedLabel}: ${plannedTime}; ${actualLabel}: ${actualTime}`
+      : `${plannedLabel}: ${plannedTime}`,
+  });
+}
+
+function renderRouteEndpointOrderRow({ endpoint, kind, referenceValue }) {
+  const isStart = kind === "start";
+  return (
+    <tr aria-label={`Route ${kind}`} data-route-endpoint={kind} style={childRouteEndpointRowStyle}>
+      <td style={childRouteStopCellStyle}>
+        <span style={childRouteEndpointMarkerStyle}>{isStart ? "★" : "◆"}</span>
+      </td>
+      <td style={{ ...childRouteOrderCellStyle, fontWeight: 700 }}>{isStart ? "Start" : "End"}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteExpectedArrivalCellStyle}>
+        {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
+      </td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={{ ...childRouteActionsCellStyle, background: "#f7f7f7" }}>{ROUTE_EMPTY_LABEL}</td>
+    </tr>
+  );
+}
+
+function renderRouteEndpointTrackingRow({ endpoint, kind, referenceValue }) {
+  const isStart = kind === "start";
+  return (
+    <tr aria-label={`Route tracking ${kind}`} data-route-tracking-endpoint={kind} style={childRouteEndpointRowStyle}>
+      <td style={childRouteStopCellStyle}>
+        <span style={childRouteEndpointMarkerStyle}>{isStart ? "★" : "◆"}</span>
+      </td>
+      <td style={{ ...childRouteOrderCellStyle, fontWeight: 700 }}>{isStart ? "Start" : "End"}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteExpectedArrivalCellStyle}>
+        {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
+      </td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
+    </tr>
   );
 }
 
@@ -3985,6 +4084,8 @@ export default function RouteDetailPage() {
     }),
     [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingWindowDate],
   );
+  const routeExecutionEvidence = displayedRouteTrackingSnapshot?.executionEvidence;
+  const returnToDepotEvidence = routeExecutionEvidence?.returnToDepot;
   useEffect(() => {
     setRouteExecutionStatus(loaderRouteExecutionStatus);
   }, [loaderRouteExecutionStatus]);
@@ -4102,6 +4203,23 @@ export default function RouteDetailPage() {
     () => buildChildActualArrivalByStopId(displayedRouteTrackingSnapshot?.stopArrivals),
     [displayedRouteTrackingSnapshot?.stopArrivals],
   );
+  const routeEndpointPresentation = useMemo(() => buildRouteEndpointPresentation({
+    actualArrivalByStopId,
+    departureLocation,
+    executionEvidence: routeExecutionEvidence,
+    ianaTimezone,
+    routeMetrics,
+    routePlan: effectiveRoutePlan,
+    stops: orderedRouteStops,
+  }), [
+    actualArrivalByStopId,
+    departureLocation,
+    effectiveRoutePlan,
+    ianaTimezone,
+    orderedRouteStops,
+    routeExecutionEvidence,
+    routeMetrics,
+  ]);
   const orderTableRouteRows = useMemo(
     () => (isRouteGroupDetail
       ? timelineRouteRows
@@ -4136,8 +4254,12 @@ export default function RouteDetailPage() {
     }),
     [addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart, addOrderSearchQuery, availableAddOrderCandidates],
   );
-  const allAddOrderCandidatesSelected = filteredAddOrderCandidates.length > 0
-    && filteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
+  const selectableFilteredAddOrderCandidates = useMemo(
+    () => filteredAddOrderCandidates.filter((order) => order.addable),
+    [filteredAddOrderCandidates],
+  );
+  const allAddOrderCandidatesSelected = selectableFilteredAddOrderCandidates.length > 0
+    && selectableFilteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
   childRouteOrderRowsRef.current = isRouteGroupDetail ? [] : routeOrderRows;
   const routeTrackingPresentation = useMemo(
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
@@ -4157,8 +4279,6 @@ export default function RouteDetailPage() {
       : routeTrackingPresentation.connectionLabel;
   const routeTrackingPolicy = displayedRouteTrackingSnapshot?.policy;
   const routeTrackingProgress = displayedRouteTrackingSnapshot?.progress;
-  const routeExecutionEvidence = displayedRouteTrackingSnapshot?.executionEvidence;
-  const returnToDepotEvidence = routeExecutionEvidence?.returnToDepot;
   const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
   const latestTrackingOccurredAt = latestTrackingPosition?.occurredAt ?? latestTrackingPosition?.receivedAt;
   const routeTrackingCompletionTime = getRouteTrackingCompletionTime(displayedRouteTrackingSnapshot);
@@ -6103,6 +6223,16 @@ export default function RouteDetailPage() {
   }, [addOrderCandidates]);
 
   useEffect(() => {
+    const addableOrderIds = new Set(
+      availableAddOrderCandidates.filter((order) => order.addable).map((order) => order.orderId),
+    );
+    setSelectedAddOrderIds((orderIds) => {
+      const nextOrderIds = orderIds.filter((orderId) => addableOrderIds.has(orderId));
+      return nextOrderIds.length === orderIds.length ? orderIds : nextOrderIds;
+    });
+  }, [availableAddOrderCandidates]);
+
+  useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "loadAddOrderCandidates") return;
     lastRouteActionIntentRef.current = null;
@@ -7895,7 +8025,7 @@ export default function RouteDetailPage() {
             </div>
           ) : null}
 
-          {childDetailTab === "stops" && routeOrderRows.length > 0 ? (
+          {childDetailTab === "stops" && (routeOrderRows.length > 0 || !isRouteGroupDetail) ? (
             <div
               style={{
                 ...routesDetailTableFrameStyle,
@@ -7927,6 +8057,11 @@ export default function RouteDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
+                  {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
+                    endpoint: routeEndpointPresentation.start,
+                    kind: "start",
+                    referenceValue: routeEndpointPresentation.start.plannedAt,
+                  }) : null}
                   {routeOrderRows.map((row) => (
                     <tr key={row.rowKey} style={childRouteOrderRowStyle}>
                       {isRouteGroupDetail ? (
@@ -8036,6 +8171,11 @@ export default function RouteDetailPage() {
                       </td>
                     </tr>
                   ))}
+                  {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
+                    endpoint: routeEndpointPresentation.end,
+                    kind: "end",
+                    referenceValue: routeEndpointPresentation.start.plannedAt,
+                  }) : null}
                 </tbody>
               </table>
               <div
@@ -8162,6 +8302,11 @@ export default function RouteDetailPage() {
                     </tr>
                   </thead>
                   <tbody>
+                    {renderRouteEndpointTrackingRow({
+                      endpoint: routeEndpointPresentation.start,
+                      kind: "start",
+                      referenceValue: routeEndpointPresentation.start.plannedAt,
+                    })}
                     {routeOrderRows.map((row) => (
                       <tr
                         key={row.id}
@@ -8185,6 +8330,11 @@ export default function RouteDetailPage() {
                         <td style={childRouteOrderCellStyle}>{row.address}</td>
                       </tr>
                     ))}
+                    {renderRouteEndpointTrackingRow({
+                      endpoint: routeEndpointPresentation.end,
+                      kind: "end",
+                      referenceValue: routeEndpointPresentation.start.plannedAt,
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -8933,6 +9083,9 @@ export default function RouteDetailPage() {
                           >{translate(language, "routes.addOrder.search.clear")}</button>
                         ) : null}
                       </span>
+                      <span style={{ color: "#6d7175", fontSize: "11px" }}>
+                        Search covers all delivery dates, including Date Pending.
+                      </span>
                     </label>
                     <label style={routeAddOrderFilterFieldStyle}>
                       <span style={routeAddOrderFilterLabelStyle}>Date field</span>
@@ -8957,7 +9110,7 @@ export default function RouteDetailPage() {
                         <option value="all">All</option>
                         <option value="single">Specific date</option>
                         <option value="range">Date range</option>
-                        <option value="missing">{addOrderDateField === "deliveryDate" ? "Date pending" : "No date"}</option>
+                        <option value="missing">{addOrderDateField === "deliveryDate" ? "Date Pending" : "No date"}</option>
                       </select>
                     </label>
                     {addOrderDateMode === "single" ? (
@@ -9018,6 +9171,7 @@ export default function RouteDetailPage() {
                       <col style={{ width: "118px" }} />
                       <col style={{ width: "110px" }} />
                       <col style={{ width: "72px" }} />
+                      <col style={{ width: "190px" }} />
                     </colgroup>
                     <thead>
                       <tr>
@@ -9036,16 +9190,19 @@ export default function RouteDetailPage() {
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Delivery date</th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Day</th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Items</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Availability</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredAddOrderCandidates.map((order) => (
-                        <tr key={order.orderId}>
+                        <tr key={order.orderId} style={order.addable ? undefined : { background: "#fafafa", opacity: 0.72 }}>
                           <td style={routeAddOrderCellStyle}>
                             <input
                               aria-label={`Select ${order.name}`}
                               checked={selectedAddOrderIdSet.has(order.orderId)}
+                              disabled={!order.addable}
                               onChange={(event) => handleToggleAddOrder(order.orderId, event.currentTarget.checked)}
+                              title={order.addBlockedReason ?? undefined}
                               type="checkbox"
                             />
                           </td>
@@ -9056,6 +9213,9 @@ export default function RouteDetailPage() {
                           <td style={routeAddOrderCellStyle}>{order.deliveryDate}</td>
                           <td style={routeAddOrderCellStyle}>{order.deliveryDay}</td>
                           <td style={routeAddOrderCellStyle}>{order.itemCount}</td>
+                          <td style={routeAddOrderCellStyle} title={order.addBlockedReason ?? "Available to add"}>
+                            {order.addBlockedReason ?? "Available"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
