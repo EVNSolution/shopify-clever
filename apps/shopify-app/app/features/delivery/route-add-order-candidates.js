@@ -13,22 +13,34 @@ const DISPLAY_ORDER_COLLATOR = new Intl.Collator("en", {
 
 export function buildRouteAddOrderCandidates(orders) {
   return (Array.isArray(orders) ? orders : [])
-    .filter((order) => {
-      if (!text(order?.orderId) || order?.hasCoordinates !== true) return false;
-      if (isOrderRouteCreated(order) || isOrderCancelled(order) || isOrderDeliveryComplete(order)) return false;
-      return true;
-    })
-    .map((order) => ({
-      address: getOrderAddress(order),
-      customer: text(order?.customer ?? order?.recipientName) ?? "Unknown recipient",
-      deliveryDate: text(getOrderDeliveryDateValue(order)) ?? "Date pending",
-      deliveryDay: getOrderDeliveryWeekday(order) ?? "–",
-      id: text(order?.id ?? order?.shopifyOrderGid ?? order?.orderId),
-      itemCount: getOrderItemCount(order),
-      name: text(order?.name) ?? text(order?.orderId),
-      orderDate: normalizeDateOnly(order?.orderedDate) ?? "No date",
-      orderId: text(order?.orderId),
-    }));
+    .filter((order) => text(order?.orderId))
+    .map((order) => {
+      const addBlockedReason = getRouteAddOrderBlockedReason(order);
+      return {
+        addable: addBlockedReason == null,
+        addBlockedReason,
+        address: getOrderAddress(order),
+        customer: text(order?.customer ?? order?.recipientName) ?? "Unknown recipient",
+        deliveryDate: text(getOrderDeliveryDateValue(order)) ?? "Date Pending",
+        deliveryDay: getOrderDeliveryWeekday(order) ?? "–",
+        id: text(order?.id ?? order?.shopifyOrderGid ?? order?.orderId),
+        itemCount: getOrderItemCount(order),
+        name: text(order?.name) ?? text(order?.orderId),
+        orderDate: normalizeDateOnly(order?.orderedDate) ?? "No date",
+        orderId: text(order?.orderId),
+      };
+    });
+}
+
+export function getRouteAddOrderBlockedReason(order) {
+  const stopStatus = text(order?.deliveryStopStatus ?? order?.deliveryStatus)?.toUpperCase().replace(/[\s-]+/g, "_");
+  if (isOrderRouteCreated(order)) return "Already assigned to a route";
+  if (isOrderCancelled(order) || stopStatus === "CANCELLED") return "Cancelled";
+  if (isOrderDeliveryComplete(order)) return "Delivery completed";
+  if (stopStatus === "FAILED") return "Delivery failed";
+  if (stopStatus === "SKIPPED") return "Delivery skipped";
+  if (order?.hasCoordinates !== true) return "Missing coordinates";
+  return null;
 }
 
 export function filterRouteAddOrderCandidatesByDate(candidates, filter = {}) {
@@ -60,7 +72,10 @@ export function filterRouteAddOrderCandidatesByDate(candidates, filter = {}) {
 
 export function filterAndSortRouteAddOrderCandidates(candidates, filter = {}) {
   const query = normalizeOrderSearchQuery(filter.query);
-  return filterRouteAddOrderCandidatesByDate(candidates, filter)
+  const dateFilteredCandidates = query
+    ? (Array.isArray(candidates) ? candidates : [])
+    : filterRouteAddOrderCandidatesByDate(candidates, filter);
+  return dateFilteredCandidates
     .map((order, index) => ({ index, order }))
     .filter(({ order }) => !query || normalizeOrderSearchQuery(order?.name).includes(query))
     .sort((left, right) => (
@@ -74,6 +89,7 @@ export function updateRouteAddOrderSelection(selectedOrderIds, visibleCandidates
   const selectedIds = Array.isArray(selectedOrderIds) ? selectedOrderIds : [];
   const visibleOrderIds = new Set(
     (Array.isArray(visibleCandidates) ? visibleCandidates : [])
+      .filter((order) => order?.addable !== false)
       .map((order) => text(order?.orderId))
       .filter(Boolean),
   );

@@ -8,6 +8,7 @@ import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
   buildChildRouteOrderRows,
+  buildRouteEndpointPresentation,
   buildRouteOrderRows,
   summarizeChildRouteMoney,
   formatChildDriveTimeLabel,
@@ -19,6 +20,174 @@ import {
   isMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../app/features/delivery/child-route-detail-presentation.js";
+
+test("route endpoints include service, waits, and a consistent return leg in planned arrival", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: {
+      start: { occurredAt: "2026-07-15T13:02:00.000Z" },
+      completion: { occurredAt: "2026-07-15T15:30:00.000Z" },
+      returnToDepot: { status: "CONFIRMED", observedAt: "2026-07-15T15:42:00.000Z" },
+      routeEndMode: "RETURN_TO_DEPOT",
+    },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 5_400 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [
+      { durationFromPreviousSeconds: 1_800, serviceMinutes: 10, timeWindowStart: "10:00" },
+      { durationFromPreviousSeconds: 1_200, serviceMinutes: 5 },
+    ],
+  });
+
+  assert.equal(endpoints.start.plannedAt, "2026-07-15T13:00:00.000Z");
+  assert.equal(endpoints.start.actualAt, "2026-07-15T13:02:00.000Z");
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T15:15:00.000Z");
+  assert.equal(endpoints.end.actualAt, "2026-07-15T15:42:00.000Z");
+  assert.equal(endpoints.end.actualLabel, "Return confirmed");
+  assert.equal(endpoints.end.address, "4475 Chesswood Dr");
+});
+
+test("route endpoints do not treat completion or duration-only metrics as depot arrival", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: {
+      completion: { occurredAt: "2026-07-15T15:30:00.000Z" },
+      returnToDepot: { status: "UNCONFIRMED", observedAt: "2026-07-15T15:30:00.000Z" },
+      routeEndMode: "RETURN_TO_DEPOT",
+    },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 5_400 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ serviceMinutes: 5 }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, null);
+  assert.equal(endpoints.end.actualAt, null);
+  assert.equal(endpoints.end.actualLabel, "Unconfirmed");
+});
+
+test("route planned return is unavailable when a serviced stop has no service duration", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_800 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: null }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, null);
+});
+
+test("route planned return tolerates rounded outbound legs by clamping a tiny negative return leg", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_199.6 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: 5 }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T13:25:00.000Z");
+});
+
+test("current departure address is labeled only when it matches the saved depot coordinates", () => {
+  const baseInput = {
+    departureLocation: {
+      address: "Current depot label",
+      addressSource: "CURRENT_SETTING",
+      currentCoordinates: [-79.38, 43.65],
+      savedCoordinates: [-79.38, 43.65],
+    },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_800 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: 5 }],
+  };
+
+  assert.equal(buildRouteEndpointPresentation(baseInput).start.address, "Current depot label");
+  assert.equal(
+    buildRouteEndpointPresentation(baseInput).start.addressTitle,
+    "Current location address matched to the saved depot coordinates",
+  );
+  assert.equal(buildRouteEndpointPresentation({
+    ...baseInput,
+    departureLocation: { ...baseInput.departureLocation, currentCoordinates: [-79.4, 43.7] },
+  }).start.address, "–");
+});
+
+test("route endpoints do not present a generic fallback as a saved depot address", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: {
+      address: "Company location",
+      addressSource: "UNAVAILABLE",
+      savedCoordinates: [-79.38, 43.65],
+    },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT" },
+  });
+
+  assert.equal(endpoints.start.address, "–");
+  assert.equal(endpoints.end.address, "–");
+});
+
+test("route endpoints require event occurrence time and default unknown end mode to depot return", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: {
+      completion: { occurredAt: "2026-07-15T15:30:00.000Z" },
+      start: { receivedAt: "2026-07-15T13:02:00.000Z" },
+    },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_800 },
+    routePlan: { scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: 5 }],
+  });
+
+  assert.equal(endpoints.start.actualAt, null);
+  assert.equal(endpoints.end.address, "4475 Chesswood Dr");
+  assert.equal(endpoints.end.actualAt, null);
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T13:35:00.000Z");
+});
+
+test("route planned arrival accepts ISO time-window starts", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 2_400 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{
+      durationFromPreviousSeconds: 1_800,
+      serviceMinutes: 5,
+      timeWindowStart: "2026-07-15T14:00:00.000Z",
+    }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T14:15:00.000Z");
+});
+
+test("last-stop route endpoint uses the last stop address and observed stop arrival", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    actualArrivalByStopId: { "stop-2": "2026-07-16T04:05:00.000Z" },
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "END_AT_LAST_STOP" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 3_000 },
+    routePlan: { routeEndMode: "END_AT_LAST_STOP", scheduledStartAt: "2026-07-16T03:00:00.000Z" },
+    stops: [
+      { deliveryStopId: "stop-1", durationFromPreviousSeconds: 1_200, serviceMinutes: 5 },
+      { address: "2 Test St", deliveryStopId: "stop-2", durationFromPreviousSeconds: 1_800, serviceMinutes: 5 },
+    ],
+  });
+
+  assert.equal(endpoints.end.address, "2 Test St");
+  assert.equal(endpoints.end.plannedAt, "2026-07-16T03:55:00.000Z");
+  assert.equal(endpoints.end.actualAt, "2026-07-16T04:05:00.000Z");
+  assert.equal(endpoints.end.actualLabel, "Actual arrival");
+});
 
 test("child route rows expose notes and summarize shipping and order totals", () => {
   const rows = buildChildRouteOrderRows([{
@@ -50,6 +219,19 @@ test("child route rows expose notes and summarize shipping and order totals", ()
     shippingPriceState: "missing",
     totalPriceLabel: "–",
   });
+});
+
+test("standalone Stops and Tracking tables render endpoint rows outside order iteration", () => {
+  assert.match(routeDetailSource, /data-route-endpoint=\{kind\}/);
+  assert.match(routeDetailSource, /data-route-tracking-endpoint=\{kind\}/);
+  assert.match(routeDetailSource, /!isRouteGroupDetail \? renderRouteEndpointOrderRow\(\{[\s\S]*kind: "start"/);
+  assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) => \([\s\S]*!isRouteGroupDetail \? renderRouteEndpointOrderRow\(\{[\s\S]*kind: "end"/);
+  assert.match(routeDetailSource, /renderRouteEndpointTrackingRow\(\{[\s\S]*kind: "start"[\s\S]*routeOrderRows\.map\(\(row\) => \([\s\S]*renderRouteEndpointTrackingRow\(\{[\s\S]*kind: "end"/);
+  assert.match(routeDetailSource, /routeEndpointPresentation = useMemo\(\(\) => buildRouteEndpointPresentation/);
+  assert.match(routeDetailSource, /function renderRouteEndpointTime[\s\S]*return renderChildRouteEta\(\{/);
+  assert.doesNotMatch(routeDetailSource, />Planned \{plannedTime\}</);
+  assert.doesNotMatch(routeDetailSource, /\? `\$\{actualShortLabel\} \$\{actualTime\}` : "Unconfirmed"/);
+  assert.doesNotMatch(routeDetailSource, /completion.*actualEndAt/);
 });
 
 test("route order rows include every child and unassigned stop without crossing route evidence", () => {
@@ -408,7 +590,7 @@ test("child order table columns include a sticky Actions column with the confirm
 test("one-route and All routes reuse the detailed order table while preserving route summaries", () => {
   assert.match(routeDetailSource, /const orderTableRouteRows = useMemo\([\s\S]*isRouteGroupDetail[\s\S]*timelineRouteRows/);
   assert.match(routeDetailSource, /buildRouteOrderRows\(orderTableRouteRows/);
-  assert.match(routeDetailSource, /childDetailTab === "stops" && routeOrderRows\.length > 0/);
+  assert.match(routeDetailSource, /childDetailTab === "stops" && \(routeOrderRows\.length > 0 \|\| !isRouteGroupDetail\)/);
   assert.match(routeDetailSource, /const routeOrderColumns = isRouteGroupDetail[\s\S]*\{ key: "route", label: "Route" \}/);
   assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /\{row\.sourceRouteTitle\}/);
