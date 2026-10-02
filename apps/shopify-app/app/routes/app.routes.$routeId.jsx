@@ -3401,28 +3401,42 @@ function renderStopOrderLabel(row) {
 
 function renderChildRouteEta(row) {
   const hasActualArrival = row?.hasActualArrival === true;
+  const expectedArrival = row?.expectedArrival ?? ROUTE_EMPTY_LABEL;
+  const hasExpectedArrival = expectedArrival !== ROUTE_EMPTY_LABEL;
+  const etaLabel = row?.etaLabel ?? "ETA";
+  const accessibleLabel = [
+    hasExpectedArrival ? `${etaLabel}: ${expectedArrival}` : null,
+    hasActualArrival ? `${row?.actualLabel ?? "Actual arrival"}: ${row.actualArrival}` : null,
+  ].filter(Boolean).join("; ") || "ETA unavailable";
 
   return (
-    <s-stack alignItems="center" direction="block" gap="small-100" title={row?.timeTitle}>
-      <s-text accessibilityVisibility="exclusive">{row?.etaLabel ?? "ETA"}: </s-text>
-      {hasActualArrival && row?.expectedArrival !== ROUTE_EMPTY_LABEL ? (
-        <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{row.expectedArrival}</s-text></del>
-      ) : (
-        <s-text
-          fontVariantNumeric="tabular-nums"
-          tone={row?.etaLabel === "Rolling ETA" ? "success" : undefined}
-          type={row?.etaLabel === "Rolling ETA" ? "strong" : undefined}
-        >
-          {row?.expectedArrival ?? ROUTE_EMPTY_LABEL}
-        </s-text>
-      )}
-      {hasActualArrival ? (
-        <>
-          <s-text accessibilityVisibility="exclusive">{row?.actualLabel ?? "Actual arrival"}: </s-text>
-          <s-text fontVariantNumeric="tabular-nums" tone="success" type="strong">{row.actualArrival}</s-text>
-        </>
+    <span
+      aria-label={accessibleLabel}
+      role="group"
+      style={{ alignItems: "center", display: "inline-flex", flexDirection: "column", gap: "4px" }}
+      title={accessibleLabel}
+    >
+      {hasExpectedArrival || !hasActualArrival ? (
+        <span aria-hidden="true">
+          {hasActualArrival ? (
+            <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{expectedArrival}</s-text></del>
+          ) : (
+            <s-text
+              fontVariantNumeric="tabular-nums"
+              tone={etaLabel === "Rolling ETA" ? "success" : undefined}
+              type={etaLabel === "Rolling ETA" ? "strong" : undefined}
+            >
+              {expectedArrival}
+            </s-text>
+          )}
+        </span>
       ) : null}
-    </s-stack>
+      {hasActualArrival ? (
+        <span aria-hidden="true">
+          <s-text fontVariantNumeric="tabular-nums" tone="success" type="strong">{row.actualArrival}</s-text>
+        </span>
+      ) : null}
+    </span>
   );
 }
 
@@ -3448,9 +3462,6 @@ function renderRouteEndpointTime(endpoint, referenceValue, plannedLabel) {
     etaLabel: plannedLabel,
     expectedArrival: plannedTime,
     hasActualArrival: endpoint?.actualAt != null,
-    timeTitle: endpoint?.actualAt
-      ? `${plannedLabel}: ${plannedTime}; ${actualLabel}: ${actualTime}`
-      : `${plannedLabel}: ${plannedTime}`,
   });
 }
 
