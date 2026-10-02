@@ -707,7 +707,7 @@ export const routeDetailAction = async ({ params, request }) => {
     }
 
     const candidateOrderIdSet = new Set(
-      buildRouteAddOrderCandidates(orderData.orders)
+      buildRouteAddOrderCandidates(orderData.orders, { routeGroup: routeGroupData.routeGroup })
         .filter((order) => order.addable)
         .map((order) => order.orderId),
     );
