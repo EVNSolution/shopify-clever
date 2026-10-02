@@ -29,7 +29,7 @@ function candidate(overrides = {}) {
   };
 }
 
-test("route add-order candidates include every eligible unplanned order regardless of route date", () => {
+test("route add-order candidates include eligible orders from other route groups regardless of route date", () => {
   const candidates = buildRouteAddOrderCandidates([
     candidate(),
     candidate({ id: "gid://shopify/Order/1002", name: "#1002", orderedDate: "2026-08-02T12:00:00Z", orderId: "order-1002", deliveryDate: "2026-08-13" }),
@@ -60,13 +60,53 @@ test("route add-order candidates include every eligible unplanned order regardle
   assert.deepEqual(candidates.map((order) => [order.addable, order.addBlockedReason]), [
     [true, null],
     [true, null],
-    [false, "Already assigned to a route"],
+    [true, null],
     [false, "Missing coordinates"],
     [false, "Delivery completed"],
     [false, "Cancelled"],
     [false, "Delivery failed"],
     [false, "Delivery skipped"],
     [false, "Cancelled"],
+  ]);
+});
+
+test("route add-order candidates block only orders assigned within the current route group", () => {
+  const routeGroup = {
+    assignments: [{ orderId: "unassigned-member" }],
+    children: [
+      { orderIds: ["current-child"], routePlanId: "route-current" },
+      { orderIds: ["sibling-child"], routePlanId: "route-sibling" },
+      { orderIds: ["child-without-plan"] },
+    ],
+  };
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ orderId: "foreign-planned", routePlanId: "route-foreign" }),
+    candidate({ orderId: "current-child", routePlanId: "route-current" }),
+    candidate({ orderId: "sibling-child", routePlanId: "route-sibling" }),
+    candidate({ orderId: "unassigned-member", routePlanId: "legacy-primary" }),
+    candidate({ orderId: "child-without-plan", routePlanId: "legacy-primary" }),
+  ], { routeGroup });
+
+  assert.deepEqual(candidates.map(({ addable, addBlockedReason, orderId }) => [orderId, addable, addBlockedReason]), [
+    ["foreign-planned", true, null],
+    ["current-child", false, "Already assigned within this route group"],
+    ["sibling-child", false, "Already assigned within this route group"],
+    ["unassigned-member", true, null],
+    ["child-without-plan", true, null],
+  ]);
+});
+
+test("route add-order candidates keep terminal blockers for orders planned in another group", () => {
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ orderId: "foreign-delivered", routePlanId: "route-foreign", deliveryStopStatus: "DELIVERED" }),
+    candidate({ orderId: "foreign-cancelled", routePlanId: "route-foreign", cancelledAt: "2026-08-01T00:00:00Z" }),
+    candidate({ orderId: "foreign-missing-coordinates", routePlanId: "route-foreign", hasCoordinates: false }),
+  ], { routeGroup: { children: [] } });
+
+  assert.deepEqual(candidates.map(({ addBlockedReason }) => addBlockedReason), [
+    "Delivery completed",
+    "Cancelled",
+    "Missing coordinates",
   ]);
 });
 
@@ -104,7 +144,7 @@ test("route add-order date filters stay unfiltered until their required date is 
 
 test("route add-order candidates expose and filter orders whose selected date is pending", () => {
   const candidates = buildRouteAddOrderCandidates([
-    candidate({ name: "#1001", orderId: "delivery-pending", deliveryDate: null }),
+    candidate({ name: "#2324", orderId: "delivery-pending", deliveryDate: null, routePlanId: "foreign-plan" }),
     candidate({ name: "#1002", orderId: "order-date-missing", orderedDate: null, deliveryDate: "2026-08-13" }),
     candidate({ name: "#1003", orderId: "dated", deliveryDate: "2026-08-20" }),
   ]);
@@ -115,6 +155,11 @@ test("route add-order candidates expose and filter orders whose selected date is
     filterRouteAddOrderCandidatesByDate(candidates, { field: "deliveryDate", mode: "missing" }).map((order) => order.orderId),
     ["delivery-pending"],
   );
+  assert.deepEqual(
+    filterAndSortRouteAddOrderCandidates(candidates, { query: "2324" }).map((order) => order.orderId),
+    ["delivery-pending"],
+  );
+  assert.deepEqual(updateRouteAddOrderSelection([], [candidates[0]], true), ["delivery-pending"]);
   assert.deepEqual(
     filterRouteAddOrderCandidatesByDate(candidates, { field: "orderDate", mode: "missing" }).map((order) => order.orderId),
     ["order-date-missing"],
@@ -218,5 +263,5 @@ test("route add-order UI exposes blocked orders and the action validates only ad
   assert.match(routeDetailSource, /disabled=\{!order\.addable\}/);
   assert.match(routeDetailSource, /\{order\.addBlockedReason \?\? "Available"\}/);
   assert.match(routeDetailSource, /selectableFilteredAddOrderCandidates/);
-  assert.match(routeDetailServerSource, /buildRouteAddOrderCandidates\(orderData\.orders\)[\s\S]*\.filter\(\(order\) => order\.addable\)/);
+  assert.match(routeDetailServerSource, /buildRouteAddOrderCandidates\(orderData\.orders, \{ routeGroup: routeGroupData\.routeGroup \}\)[\s\S]*\.filter\(\(order\) => order\.addable\)/);
 });

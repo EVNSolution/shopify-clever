@@ -19,6 +19,7 @@ import { createRoot } from "react-dom/client";
 import { createMemoryRouter, RouterProvider } from "react-router";
 import RoutesPage from ${JSON.stringify(`${appDirectory}/app/routes/app.routes.jsx`)};
 import RouteDetail, { shouldRevalidate as shouldRevalidateRouteDetail } from ${JSON.stringify(`${appDirectory}/app/routes/app.routes.$routeId.jsx`)};
+import { buildRouteAddOrderCandidates } from ${JSON.stringify(`${appDirectory}/app/features/delivery/route-add-order-candidates.js`)};
 
 const fetchFixtureAsset = window.fetch.bind(window);
 window.fetch = async (input, init) => {
@@ -119,12 +120,13 @@ const usabilityPlan = {
   stops: usabilityStops,
   stopsCount: usabilityStops.length,
 };
-const usabilityCandidates = [
-  { addable: true, addBlockedReason: null, address: "10 Crossdate Ave, Toronto, ON", customer: "Crossdate customer", deliveryDate: "2026-08-29", deliveryDay: "Saturday", itemCount: 2, name: "#SYN-2401", orderDate: "2026-08-20", orderId: "crossdate-order" },
-  { addable: true, addBlockedReason: null, address: "20 Pending Rd, Toronto, ON", customer: "Pending customer", deliveryDate: "Date Pending", deliveryDay: "–", itemCount: 1, name: "#SYN-2402", orderDate: "2026-08-20", orderId: "pending-order" },
-  { addable: false, addBlockedReason: "Already assigned to a route", address: "30 Planned St, Toronto, ON", customer: "Planned customer", deliveryDate: "Date Pending", deliveryDay: "–", itemCount: 3, name: "#SYN-2403", orderDate: "2026-08-19", orderId: "planned-order" },
-  { addable: false, addBlockedReason: "Missing coordinates", address: "40 Missing Coordinate St, Toronto, ON", customer: "Blocked customer", deliveryDate: "2026-09-05", deliveryDay: "Saturday", itemCount: 1, name: "#SYN-2404", orderDate: "2026-08-18", orderId: "missing-coordinate-order" },
-];
+const usabilityCandidates = buildRouteAddOrderCandidates([
+  { hasCoordinates: true, address: "10 Crossdate Ave, Toronto, ON", customer: "Crossdate customer", deliveryDate: "2026-08-29", itemCount: 2, name: "#SYN-2401", orderedDate: "2026-08-20", orderId: "crossdate-order" },
+  { hasCoordinates: true, address: "20 Pending Rd, Toronto, ON", customer: "Pending customer", deliveryDate: null, itemCount: 1, name: "#SYN-2402", orderedDate: "2026-08-20", orderId: "pending-order" },
+  { hasCoordinates: true, address: "30 Planned St, Toronto, ON", customer: "Planned customer", deliveryDate: null, itemCount: 3, name: "#SYN-2403", orderedDate: "2026-08-19", orderId: "planned-order", planningStatus: "PLANNED", routePlanId: "foreign-route" },
+  { hasCoordinates: false, address: "40 Missing Coordinate St, Toronto, ON", customer: "Blocked customer", deliveryDate: "2026-09-05", itemCount: 1, name: "#SYN-2404", orderedDate: "2026-08-18", orderId: "missing-coordinate-order" },
+  { hasCoordinates: true, name: "#SYN-2405", orderId: "current-order", routePlanId: "route-usability" },
+], { routeGroup: { children: [{ routePlanId: "route-usability", orderIds: ["current-order"] }] } });
 const unassignedStops = Array.from({ length: 42 }, (_, index) => makeStop(index + 1, "group"));
 const unassignedPlans = [44, 46, 47, 48].map((routeIdx, index) => ({
   ...makePlan("route-" + routeIdx, "#" + routeIdx, index),
