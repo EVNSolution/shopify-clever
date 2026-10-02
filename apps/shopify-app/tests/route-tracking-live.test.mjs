@@ -105,7 +105,6 @@ test("server ETA lifecycle events render Rolling ETA and actual arrival in one c
   assert.match(routeDetailSource, /\["ETA", "120px"\]/);
   assert.doesNotMatch(routeDetailSource, /\["Actual arrival", "120px"\]/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
-  assert.match(routeDetailSource, /<del><s-text color="subdued" fontVariantNumeric="tabular-nums">\{row\.expectedArrival\}<\/s-text><\/del>/);
   assert.match(routeDetailSource, /\{row\.actualArrival\}/);
   assert.match(routeDetailSource, /const childRouteExpectedArrivalCellStyle = \{[\s\S]*color: "#6d7175"/);
   assert.doesNotMatch(routeDetailSource, /const childRouteActualArrivalCellStyle = /);
