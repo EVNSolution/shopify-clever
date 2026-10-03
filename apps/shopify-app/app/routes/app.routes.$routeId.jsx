@@ -31,6 +31,8 @@ import {
   filterAndSortRouteAddOrderCandidates,
   updateRouteAddOrderSelection,
 } from "../features/delivery/route-add-order-candidates";
+import { RouteOriginalGpsPoints, renderGpsPointsIcon } from "../features/delivery/route-original-gps-points";
+import { gpsDiagnosticSearchParams } from "../features/delivery/route-gps-diagnostics";
 import { CustomStopDialog } from "../features/delivery/custom-stop-dialog";
 import {
   createCustomStopDraft,
@@ -3704,7 +3706,7 @@ function createCustomerEmailDialogOpenState(signal) {
 export default function RouteDetailPage() {
   const storeTimeZone = useStoreTimeZone();
   const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigateWithEmbeddedContext = useCallback(
     (destination) => {
       if (
@@ -7615,6 +7617,12 @@ export default function RouteDetailPage() {
                       icon: renderMapRefreshIcon(),
                       onClick: handleRefreshMap,
                     },
+                    ...(isTrackingMapView ? [{
+                      ariaLabel: "Show original GPS points",
+                      pressed: searchParams.get("gpsPoints") === "raw",
+                      icon: renderGpsPointsIcon(),
+                      onClick: () => setSearchParams(gpsDiagnosticSearchParams(searchParams, searchParams.get("gpsPoints") !== "raw"), { preventScrollReset: true }),
+                    }] : []),
                     ...(!isTrackingMapView ? [{
                       ariaLabel: isRoutePolygonEditMode ? "Stop editing route polygon" : "Edit route polygon",
                       disabled: !hasEditableRouteRows,
@@ -7646,6 +7654,19 @@ export default function RouteDetailPage() {
               value={activeRouteMapHeight}
             />
           </MapPanel>
+          {isTrackingMapView && searchParams.get("gpsPoints") === "raw" ? (
+            <RouteOriginalGpsPoints
+              key={`${searchParams.get("host") ?? ""}:${searchParams.get("shop") ?? ""}:${trackingRoutePlanId}:${mapRenderKey}:${routeTrackingDeliveryDate}:${ianaTimezone}`}
+              serviceDate={routeTrackingDeliveryDate}
+              getToken={() => shopifyRef.current.idToken()}
+              routePlanId={trackingRoutePlanId}
+              mapRef={mapRef}
+              mapReady={isMapReady}
+              timeZone={ianaTimezone}
+              onClose={() => setSearchParams(gpsDiagnosticSearchParams(searchParams, false), { replace: true, preventScrollReset: true })}
+            />
+          ) : null}
+
 
           <section style={routeMetaActionsStyle}>
             {!isTrackingMapView ? (
