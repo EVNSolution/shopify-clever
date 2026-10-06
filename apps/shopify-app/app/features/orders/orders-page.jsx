@@ -2301,6 +2301,7 @@ function OrdersPageContent({ loaderData }) {
     return resourceFilters;
   }, [shopLocalDate, urlOrderFilters]);
   const resourceFilterKey = resourceFilterSearchParams.toString();
+  const nonpaginatedFilterKeyRef = useRef(resourceFilterKey);
   const appliedOrdersPageFilterKeyRef = useRef(resourceFilterKey);
   const ordersResourceTransitionPending = paginationEnabled && optimisticOrderFilters !== null;
   const beginOrderResourceTransition = useCallback((nextFilters) => {
@@ -2339,6 +2340,12 @@ function OrdersPageContent({ loaderData }) {
         : orderFilters,
     [activeOrderFilters, orderFilters],
   );
+
+  useEffect(() => {
+    const changed = nonpaginatedFilterKeyRef.current !== resourceFilterKey;
+    nonpaginatedFilterKeyRef.current = resourceFilterKey;
+    if (!paginationEnabled && changed) revalidator.revalidate();
+  }, [paginationEnabled, resourceFilterKey, revalidator]);
 
   useEffect(() => {
     ordersPageCacheRef.current.clear();

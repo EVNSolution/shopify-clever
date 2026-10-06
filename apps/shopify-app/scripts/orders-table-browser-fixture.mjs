@@ -26,9 +26,11 @@ import { createMemoryRouter, Outlet, RouterProvider } from "react-router";
 import OrdersPage from "./app/features/orders/orders-page.jsx";
 import { mapCanonicalOrdersToOrderRows } from "./app/features/orders/canonical-orders.js";
 import { shouldRevalidateOrdersRoute } from "./app/features/orders/orders-page.shared.js";
+import { normalizeOrderNumberPrefix } from "./app/features/orders/order-number-search.js";
 
 const PAGE_SIZE = 50;
 const TOTAL_ORDERS = 123;
+const paginationEnabled = new URLSearchParams(window.location.search).get("pagination") !== "off";
 const allOrders = Array.from({ length: TOTAL_ORDERS }, (_value, index) => {
   const sequence = TOTAL_ORDERS - index;
   const orderNumber = 2300 + sequence;
@@ -38,8 +40,9 @@ const allOrders = Array.from({ length: TOTAL_ORDERS }, (_value, index) => {
     shopifyOrderLegacyId: String(900000 + sequence),
     name: "#" + orderNumber,
     recipientName: "Sample Customer " + ((index % 4) + 1),
+    ...(index === 1 ? { phone: "2335" } : {}),
     shippingAddress: {
-      address1: (100 + sequence) + " Fixture Street",
+      address1: index === 0 ? "2335 Fixture Street" : (100 + sequence) + " Fixture Street",
       city: ["Toronto", "Oakville", "London"][index % 3],
       provinceCode: "ON",
       zip: "M4P " + String(100 + sequence).slice(-3),
@@ -63,16 +66,11 @@ const allOrders = Array.from({ length: TOTAL_ORDERS }, (_value, index) => {
 });
 
 const toRows = (orders) => mapCanonicalOrdersToOrderRows(orders, "America/Toronto");
-const normalizedSearch = (value) => String(value ?? "").trim().replace(/^#(?=\\d+$)/, "");
 const matchingOrders = (filters = {}) => {
-  const query = normalizedSearch(filters.search).toLowerCase();
+  const query = normalizeOrderNumberPrefix(filters.orderNumberPrefix ?? filters.search).toLowerCase();
   const areas = new Set((Array.isArray(filters.areas) ? filters.areas : filters.areas ? [filters.areas] : []).map(String));
   return allOrders.filter((order) => {
-    const matchesSearch = !query || [
-      order.name?.replace(/^#/, ""),
-      order.recipientName,
-      order.shippingAddress?.address1,
-    ].some((value) => String(value ?? "").toLowerCase().includes(query));
+    const matchesSearch = !query || normalizeOrderNumberPrefix(order.name).toLowerCase().startsWith(query);
     return matchesSearch && (areas.size === 0 || areas.has(order.deliveryArea));
   });
 };
@@ -80,7 +78,7 @@ const pageResponse = ({ page = 1, filters = {}, requestKey = null } = {}) => {
   const matches = matchingOrders(filters);
   const totalPages = Math.max(1, Math.ceil(matches.length / PAGE_SIZE));
   const currentPage = Math.min(Math.max(Number(page) || 1, 1), totalPages);
-  const rows = toRows(matches.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
+  const rows = toRows(paginationEnabled ? matches.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE) : matches);
   return {
     rows,
     pageInfo: {
@@ -130,7 +128,7 @@ const createLoaderData = (pageData) => ({
     autoSyncOrdersOnLoad: false,
     backgroundReconciliation: false,
     compactMap: true,
-    pagination: true,
+    pagination: paginationEnabled,
     performanceCapture: false,
     selectionSnapshots: true,
   },
