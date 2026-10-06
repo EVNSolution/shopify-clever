@@ -75,6 +75,7 @@ import {
   updateOrderFilterSearchParams,
 } from "./order-filters";
 import { OrderFilterBar } from "./order-filter-bar";
+import { OrderSearchField } from "./order-search-field";
 import { getOrdersUiFilters as getOrderFiltersFromSearchParams, normalizeOrderSearch, normalizeV2Filters, V2_OPTIONS } from "./order-filters-v2.js";
 import { InfoPill } from "../../ui/info-pill";
 import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
@@ -544,27 +545,6 @@ const orderControlsStyle = {
   flexWrap: "wrap",
   gap: "6px",
   padding: "6px 10px 8px",
-};
-
-const orderSearchFormStyle = {
-  display: "flex",
-  flex: "1 1 200px",
-  marginLeft: "auto",
-  maxWidth: "320px",
-  minWidth: 0,
-};
-
-const orderSearchInputStyle = {
-  background: "#ffffff",
-  border: "1px solid #c9cccf",
-  borderRadius: "8px",
-  boxSizing: "border-box",
-  color: "#303030",
-  fontSize: "13px",
-  minHeight: "30px",
-  minWidth: 0,
-  padding: "5px 10px",
-  width: "100%",
 };
 
 const orderSelectionToolbarStyle = {
@@ -3397,6 +3377,14 @@ function OrdersPageContent({ loaderData }) {
     requestedFilterKey: resourceFilterKey,
     resourceError: ordersResourceError,
   });
+  const resolvedOrderSearch = paginationEnabled
+    ? urlOrderFilters.search
+    : loaderData.resolvedOrderSearch ?? urlOrderFilters.search;
+  const ordersSearchBusy =
+    normalizeOrderSearch(orderSearchValue) !== normalizeOrderSearch(resolvedOrderSearch ?? "") ||
+    (paginationEnabled
+      ? ordersPageUpdating
+      : navigation.state !== "idle" || revalidator.state !== "idle");
   const ordersPageNumbers = useMemo(
     () => getOrdersPageNumbers(ordersCurrentPage, ordersTotalPages),
     [ordersCurrentPage, ordersTotalPages],
@@ -5300,23 +5288,13 @@ function OrdersPageContent({ loaderData }) {
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
             <OrderFilterBar filters={orderFilters} facets={ordersFacetsFilterKey === resourceFilterKey ? ordersFacets?.facets : undefined} language={language} today={orderFilterReferenceDate} buttonStyle={orderFilterButtonStyle} onChange={handleV2OrderFiltersChange} onClear={handleClearOrderFilters} hideSearchChip />
-            <form
-              role="search"
-              style={orderSearchFormStyle}
-              onSubmit={(event) => {
-                event.preventDefault();
-                handleOrderSearchSubmit();
-              }}
-            >
-              <input
-                type="search"
-                aria-label="Search orders"
-                placeholder="Search order number"
-                value={orderSearchValue}
-                style={orderSearchInputStyle}
-                onChange={handleOrderSearchChange}
-              />
-            </form>
+            <OrderSearchField
+              value={orderSearchValue}
+              busy={ordersSearchBusy}
+              onChange={handleOrderSearchChange}
+              onSubmit={() => handleOrderSearchSubmit()}
+              onClear={() => handleOrderSearchSubmit("")}
+            />
           </div>
           {orderActionModalOpen
             ? createPortal(

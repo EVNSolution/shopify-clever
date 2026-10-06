@@ -622,7 +622,8 @@ test("Orders search applies an order-number query through the paged filter contr
   assert.match(ordersPageSource, /placeholder="Search order number"/);
   assert.match(ordersPageSource, /normalizeOrderSearch/);
   assert.match(ordersPageSource, /setTimeout\([\s\S]{0,500}300/);
-  assert.match(ordersPageSource, /<form[\s\S]{0,500}onSubmit=\{\(event\) => \{[\s\S]{0,200}handleOrderSearchSubmit\(\)/);
+  assert.match(ordersPageSource, /<OrderSearchField[\s\S]{0,500}onSubmit=\{\(\) => handleOrderSearchSubmit\(\)\}/);
+  assert.match(ordersPageSource, /<form[\s\S]{0,500}onSubmit=\{\(event\) => \{[\s\S]{0,200}onSubmit\(\)/);
   assert.match(ordersPageSource, /handleV2OrderFiltersChange\([\s\S]{0,240}search:/);
 });
 

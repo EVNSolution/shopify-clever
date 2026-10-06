@@ -30,7 +30,10 @@ import { normalizeOrderNumberPrefix } from "./app/features/orders/order-number-s
 
 const PAGE_SIZE = 50;
 const TOTAL_ORDERS = 123;
-const paginationEnabled = new URLSearchParams(window.location.search).get("pagination") !== "off";
+const fixtureParams = new URLSearchParams(window.location.search);
+const paginationEnabled = fixtureParams.get("pagination") !== "off";
+const fixtureDelayMs = Math.max(0, Math.min(10000, Number(fixtureParams.get("delay")) || 0));
+const waitForResults = () => new Promise((resolve) => setTimeout(resolve, fixtureDelayMs));
 const allOrders = Array.from({ length: TOTAL_ORDERS }, (_value, index) => {
   const sequence = TOTAL_ORDERS - index;
   const orderNumber = 2300 + sequence;
@@ -150,6 +153,10 @@ async function readPayload(request) {
 async function pageAction({ request }) {
   const payload = await readPayload(request);
   recordFixtureAction("page", payload);
+  await waitForResults();
+  if (payload.filters?.search === fixtureParams.get("error")) {
+    return { _requestKey: payload._requestKey, rows: [], errors: [{ message: "Synthetic order search failed. Try another number." }] };
+  }
   return pageResponse({
     page: payload.page,
     filters: payload.filters,
@@ -245,7 +252,10 @@ const router = createMemoryRouter([{
     loader: ({ request }) => {
       const params = new URL(request.url).searchParams;
       const pageData = pageResponse({ filters: { search: params.get("search") ?? "", areas: params.getAll("areas") } });
-      return { ordersPageData: Promise.resolve(createLoaderData(pageData)) };
+      return { ordersPageData: waitForResults().then(() => ({
+        ...createLoaderData(pageData),
+        resolvedOrderSearch: params.get("search") ?? "",
+      })) };
     },
     shouldRevalidate: shouldRevalidateOrdersRoute,
     element: React.createElement(OrdersPage),
@@ -265,7 +275,7 @@ const router = createMemoryRouter([{
     path: "orders/selection-snapshots",
     action: selectionAction,
   }],
-}], { initialEntries: ["/app/orders?filterVersion=2"] });
+}], { initialEntries: ["/app/orders?filterVersion=2" + (fixtureParams.has("search") ? "&search=" + encodeURIComponent(fixtureParams.get("search")) : "")] });
 
 window.__ordersFixture = { actions: fixtureActions, allOrders, pageResponse };
 createRoot(document.getElementById("app")).render(React.createElement(RouterProvider, { router }));
