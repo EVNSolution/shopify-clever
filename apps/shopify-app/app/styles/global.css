@@ -32,6 +32,112 @@ s-badge {
   font-family: var(--app-font-family);
 }
 
+.order-search-field {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c9cccf;
+  border-radius: 8px;
+  box-sizing: border-box;
+  display: flex;
+  flex: 1 1 200px;
+  gap: 6px;
+  margin-left: auto;
+  max-width: 320px;
+  min-height: 30px;
+  min-width: 0;
+  padding-right: 8px;
+}
+
+.order-search-field:focus-within {
+  border-color: #005bd3;
+  outline: 2px solid #005bd3;
+  outline-offset: 1px;
+}
+
+.order-search-field__input {
+  -webkit-appearance: none;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: inherit;
+  box-sizing: border-box;
+  box-shadow: none;
+  color: #303030;
+  flex: 1;
+  font-size: 13px;
+  line-height: 18px;
+  min-height: 28px;
+  min-width: 0;
+  outline: none;
+  padding: 5px 0 5px 10px;
+  width: 100%;
+}
+
+.order-search-field__input::-webkit-search-decoration,
+.order-search-field__input::-webkit-search-cancel-button {
+  -webkit-appearance: none;
+  appearance: none;
+  display: none;
+}
+
+.order-search-field__status,
+.order-search-field__clear-slot {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 20px;
+  justify-content: center;
+}
+
+.order-search-field__spinner {
+  animation: order-search-spin 750ms linear infinite;
+  border: 2px solid #dce5f4;
+  border-radius: 50%;
+  border-top-color: #005bd3;
+  box-sizing: border-box;
+  height: 14px;
+  width: 14px;
+}
+
+.order-search-field__status-text {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.order-search-field__clear {
+  align-items: center;
+  background: #6d7175;
+  border: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  height: 20px;
+  justify-content: center;
+  padding: 0;
+  width: 20px;
+}
+
+.order-search-field__clear:hover {
+  background: #303030;
+}
+
+.order-search-field__clear:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}
+
+@keyframes order-search-spin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .order-search-field__spinner { animation: none; }
+}
+
 .order-number-button {
   background-color: transparent;
   border-radius: 8px;

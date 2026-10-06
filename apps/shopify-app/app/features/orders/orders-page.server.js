@@ -928,6 +928,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
 
   return {
     orders: mergedOrders,
+    resolvedOrderSearch: queryFilters.search ?? "",
     ordersCacheKey: shopifyShopCacheKey ?? null,
     ordersLoaded: shouldLoadOrders,
     inventories: inventoryData.inventories,
