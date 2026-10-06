@@ -24,6 +24,7 @@ export function OrderFilterBar({
   onChange,
   onClear,
   buttonStyle,
+  hideSearchChip = false,
 }) {
   const [editing, setEditing] = useState(null);
   const [position, setPosition] = useState(null);
@@ -274,7 +275,7 @@ export function OrderFilterBar({
           </button>
         </span>
       ))}
-      {filters.search ? (
+      {filters.search && !hideSearchChip ? (
         <span
           style={{
             display: "inline-flex",

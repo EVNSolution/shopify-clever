@@ -9,6 +9,8 @@ import {
   createDeliveryRoutePlanBatch,
 } from "../app/features/delivery/route-plans.server.js";
 
+import { buildOrdersResourceRequest } from "../app/features/orders/orders-resource-state.js";
+
 const root = process.cwd();
 const pageSource = readFileSync(join(root, "app/features/orders/orders-page.jsx"), "utf8");
 const serverSource = readFileSync(join(root, "app/features/orders/orders-page.server.js"), "utf8");
@@ -208,6 +210,7 @@ test("frozen selection keeps known cancelled exclusions across create and replac
   const createSubmissions = [];
   const createSnapshot = vm.runInNewContext(`(${extractArrow("handleSelectAllFilteredOrders", "replaceSelectionExclusions")})`, {
     FormData,
+    buildOrdersResourceRequest,
     getOrdersResourceSessionToken: async () => "session-token",
     getSafePerformanceNow: () => 0,
     isOrderCancelled: (order) => Boolean(order.cancelledAt),

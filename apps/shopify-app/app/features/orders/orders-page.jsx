@@ -28,7 +28,7 @@ import {
   updateOrdersSelectionExclusions,
   updateVisibleOrdersSelectionExclusions,
 } from "./orders-resource-state";
-import { getOrdersPageNumbers } from "./orders-pagination";
+import { getOrdersPageNumbers, getOrdersPageRange } from "./orders-pagination";
 import { createOrdersResourceSessionTokenGetter } from "./orders-session-token-cache";
 import {
   DEFAULT_CENTER,
@@ -75,7 +75,7 @@ import {
   updateOrderFilterSearchParams,
 } from "./order-filters";
 import { OrderFilterBar } from "./order-filter-bar";
-import { getOrdersUiFilters as getOrderFiltersFromSearchParams, normalizeV2Filters, V2_OPTIONS } from "./order-filters-v2.js";
+import { getOrdersUiFilters as getOrderFiltersFromSearchParams, normalizeOrderSearch, normalizeV2Filters, V2_OPTIONS } from "./order-filters-v2.js";
 import { InfoPill } from "../../ui/info-pill";
 import { MapPanel, MapResizeHandle, MapToolbar, renderMapFitIcon, renderMapRefreshIcon, renderMapWidthIcon, renderMapZoomInIcon, renderMapZoomOutIcon } from "../../ui/map-panel";
 import { TabLayout } from "../../ui/tab-layout";
@@ -541,10 +541,52 @@ const orderTableLayoutStyle = {
 const orderControlsStyle = {
   alignItems: "center",
   display: "flex",
-  flexWrap: "nowrap",
+  flexWrap: "wrap",
   gap: "6px",
-  overflowX: "auto",
   padding: "6px 10px 8px",
+};
+
+const orderSearchFormStyle = {
+  display: "flex",
+  flex: "1 1 200px",
+  marginLeft: "auto",
+  maxWidth: "320px",
+  minWidth: 0,
+};
+
+const orderSearchInputStyle = {
+  background: "#ffffff",
+  border: "1px solid #c9cccf",
+  borderRadius: "8px",
+  boxSizing: "border-box",
+  color: "#303030",
+  fontSize: "13px",
+  minHeight: "30px",
+  minWidth: 0,
+  padding: "5px 10px",
+  width: "100%",
+};
+
+const orderSelectionToolbarStyle = {
+  alignItems: "center",
+  background: "#ffffff",
+  borderBottom: "1px solid #dcdfe4",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "10px",
+  fontSize: "13px",
+  fontWeight: 650,
+  minHeight: "32px",
+  padding: "6px 8px",
+};
+
+const orderSelectionLinkStyle = {
+  background: "transparent",
+  border: 0,
+  color: "#005bd3",
+  cursor: "pointer",
+  font: "inherit",
+  padding: "4px 0",
 };
 
 const tableWrapStyle = {
@@ -822,6 +864,15 @@ const tableStyle = {
   minWidth: "1420px",
   tableLayout: "fixed",
   width: "100%",
+};
+
+const visuallyHiddenTableHeaderStyle = {
+  clipPath: "inset(50%)",
+  height: "1px",
+  overflow: "hidden",
+  position: "absolute",
+  whiteSpace: "nowrap",
+  width: "1px",
 };
 
 const tableHeaderCellStyle = {
@@ -2264,6 +2315,15 @@ function OrdersPageContent({ loaderData }) {
     return nextSearchParams;
   }, [paginationEnabled, searchParams]);
   const orderFilters = optimisticOrderFilters ?? urlOrderFilters;
+  const [orderSearchValue, setOrderSearchValue] = useState(() => urlOrderFilters.search ?? "");
+  const orderSearchTimerRef = useRef(null);
+
+  useEffect(() => {
+    clearTimeout(orderSearchTimerRef.current);
+    setOrderSearchValue(urlOrderFilters.search ?? "");
+  }, [urlOrderFilters]);
+
+  useEffect(() => () => clearTimeout(orderSearchTimerRef.current), []);
   const orderFilterReferenceDate = useMemo(
     () => shopLocalDate ?? getStoreDate(new Date(), shopTimeZone),
     [shopLocalDate, shopTimeZone],
@@ -3454,6 +3514,13 @@ function OrdersPageContent({ loaderData }) {
       snapshotSelectableTableOrders.every((order) => !selectionExcludedOrderIdSet.has(order.orderId))
     : selectableTableOrders.length > 0 &&
       selectableTableOrders.every((order) => checkedOrderIdSet.has(order.id));
+  const someVisibleOrdersChecked = snapshotSelectionActive
+    ? snapshotSelectableTableOrders.some((order) => !selectionExcludedOrderIdSet.has(order.orderId))
+    : selectableTableOrders.some((order) => checkedOrderIdSet.has(order.id));
+  const filteredOrderCount = paginationEnabled
+    ? ordersPageResult?.countPrecision === "exact" ? ordersPageResult.count : null
+    : filteredOrders.length;
+  const ordersPageRange = getOrdersPageRange(ordersPageInfo, ordersPageResult, tableOrders.length);
   const createRouteDisabled = plannedOrders.length === 0 || isCreatingRoute;
   const addToRouteDisabled = createRouteDisabled || safeRouteGroups.length === 0;
 
@@ -3610,7 +3677,8 @@ function OrdersPageContent({ loaderData }) {
 
   useEffect(() => {
     const tableElement = tableRef.current;
-    if (!tableElement) return;
+    // Hidden selection-mode headers cannot provide reliable column measurements.
+    if (!tableElement || selectedOrderCount > 0) return;
 
     const { tableWidth: measuredTableWidth, widths } = getTableColumnPixelState(tableElement);
     const pillMinWidths = getTableColumnPillMinWidths(tableElement, widths.length);
@@ -3630,7 +3698,7 @@ function OrdersPageContent({ loaderData }) {
       setLockedTableWidth(nextTableWidth);
       setTableColumnWidths(nextWidths);
     }
-  }, [tableOrders]);
+  }, [tableOrders, selectedOrderCount]);
 
   useEffect(() => {
     if (!pinnedItemPopoverOrderId) return undefined;
@@ -3657,6 +3725,8 @@ function OrdersPageContent({ loaderData }) {
   }, [pinnedNoteOrderId]);
 
   const handleV2OrderFiltersChange = (nextFilters) => {
+    clearTimeout(orderSearchTimerRef.current);
+    setOrderSearchValue(nextFilters.search ?? "");
     const nextSearchParams = beginOrderResourceTransition(nextFilters);
     setSelectedOrderRows([]); setSelectionSnapshot(null); setSelectionExcludedOrderIds([]);
     latestSelectionRequestKeyRef.current = null; pendingSelectionExclusionsRef.current = null;
@@ -3664,6 +3734,25 @@ function OrdersPageContent({ loaderData }) {
     setSearchParams(nextSearchParams, { preventScrollReset: true, replace: true });
   };
   const handleClearOrderFilters = () => handleV2OrderFiltersChange(normalizeV2Filters({}));
+
+  const handleOrderSearchSubmit = (value = orderSearchValue) => {
+    clearTimeout(orderSearchTimerRef.current);
+    const search = normalizeOrderSearch(value);
+    setOrderSearchValue(search);
+    if (search === (orderFilters.search ?? "")) return;
+    handleV2OrderFiltersChange({ ...orderFilters, search: search || undefined });
+  };
+
+  const handleOrderSearchChange = (event) => {
+    const value = event.currentTarget.value;
+    clearTimeout(orderSearchTimerRef.current);
+    setOrderSearchValue(value);
+    if (!value.trim()) {
+      handleOrderSearchSubmit(value);
+      return;
+    }
+    orderSearchTimerRef.current = setTimeout(() => handleOrderSearchSubmit(value), 300);
+  };
 
   const handleOrdersPageChange = async (targetPage) => {
     if (!paginationEnabled || ordersPageFetcher.state !== "idle") return;
@@ -3746,7 +3835,7 @@ function OrdersPageContent({ loaderData }) {
       .map((order) => order.orderId);
     pendingSelectionExclusionsRef.current = { excludeOrderIds, requestKey };
     const formData = new FormData();
-    formData.set("filters", JSON.stringify(Object.fromEntries(resourceFilterSearchParams)));
+    formData.set("filters", JSON.stringify(buildOrdersResourceRequest("selection", resourceFilterSearchParams).payload.filters));
     formData.set("excludeOrderIds", JSON.stringify(excludeOrderIds));
     formData.set("_requestKey", requestKey);
     formData.set("shopifySessionToken", await getOrdersResourceSessionToken());
@@ -5203,56 +5292,24 @@ function OrdersPageContent({ loaderData }) {
       lower={
         <div style={orderTableLayoutStyle}>
           <div style={orderControlsStyle}>
-            <OrderFilterBar filters={orderFilters} facets={ordersFacetsFilterKey === resourceFilterKey ? ordersFacets?.facets : undefined} language={language} today={orderFilterReferenceDate} buttonStyle={orderFilterButtonStyle} onChange={handleV2OrderFiltersChange} onClear={handleClearOrderFilters} />
-            <div style={orderControlsTrailingStyle}>
-              <span aria-label="Visible order count" style={orderSelectionCountStyle}>
-                Orders: {ordersPageUpdating ? "Updating…" : filteredOrders.length}
-                {!ordersPageUpdating && paginationEnabled && ordersPageResult?.countPrecision === "exact"
-                  ? ` / ${ordersPageResult.count}`
-                  : !ordersPageUpdating && filteredOrders.length !== displayOrders.length
-                    ? ` / ${displayOrders.length}`
-                    : ""}
-              </span>
-              <span aria-label="Selected orders" style={orderSelectionCountStyle}>Selected: {selectedOrderCount}</span>
-              {selectionSnapshotsEnabled ? (
-                <button
-                  type="button"
-                  style={ordersSelectionFetcher.state === "idle" && !snapshotSelectionActive ? orderFilterButtonStyle : disabledOrderFilterButtonStyle}
-                  disabled={ordersSelectionFetcher.state !== "idle" || snapshotSelectionActive}
-                  onClick={handleSelectAllFilteredOrders}
-                >{snapshotSelectionActive
-                    ? "All filtered selected"
-                    : ordersSelectionFetcher.state === "idle" ? "Select all filtered" : "Freezing…"}</button>
-              ) : null}
-              {selectedOrderCount > 0 ? (
-                <button
-                  type="button"
-                  style={orderFilterButtonStyle}
-                  disabled={snapshotSelectionUpdating}
-                  onClick={handleClearOrderSelection}
-                >Clear selection</button>
-              ) : null}
-              <button
-                type="button"
-                style={
-                  checkedOrderIds.length === 0 || snapshotSelectionActive
-                    ? disabledCreateRouteButtonStyle
-                    : addToPlanButtonStyle
-                }
-                disabled={checkedOrderIds.length === 0 || snapshotSelectionActive}
-                onClick={handleAddToPlan}
-              >Add to map</button>
-              <button
-                type="button"
-                style={
-                  !hasOrderActionSelection || isBulkUpdatingOrders
-                    ? disabledCreateRouteButtonStyle
-                    : addToPlanButtonStyle
-                }
-                disabled={!hasOrderActionSelection || isBulkUpdatingOrders}
-                onClick={handleOpenOrderAction}
-              >Action</button>
-            </div>
+            <OrderFilterBar filters={orderFilters} facets={ordersFacetsFilterKey === resourceFilterKey ? ordersFacets?.facets : undefined} language={language} today={orderFilterReferenceDate} buttonStyle={orderFilterButtonStyle} onChange={handleV2OrderFiltersChange} onClear={handleClearOrderFilters} hideSearchChip />
+            <form
+              role="search"
+              style={orderSearchFormStyle}
+              onSubmit={(event) => {
+                event.preventDefault();
+                handleOrderSearchSubmit();
+              }}
+            >
+              <input
+                type="search"
+                aria-label="Search orders"
+                placeholder="Search order number"
+                value={orderSearchValue}
+                style={orderSearchInputStyle}
+                onChange={handleOrderSearchChange}
+              />
+            </form>
           </div>
           {orderActionModalOpen
             ? createPortal(
@@ -5465,60 +5522,61 @@ function OrdersPageContent({ loaderData }) {
                 document.body,
               )
             : null}
-          {paginationEnabled ? (
-            <nav aria-busy={ordersPageUpdating} aria-label="Orders pagination" style={ordersPaginationBlockStyle}>
-              <span
-                aria-label={ordersPageUpdating ? "Loading order results" : "Orders page status"}
-                aria-live="polite"
-                style={{ ...orderSelectionCountStyle, alignItems: "center", display: "flex", gap: "12px" }}
-              >
-                {ordersPageUpdating ? (
-                  <>
-                    <s-spinner size="base" accessibilityLabel="Loading order results"></s-spinner>
-                    <span>Updating order results…</span>
-                  </>
-                ) : (
-                  <>
-                    {ordersResourceError ? (
-                      <span role="status">Showing previous results — {ordersResourceError}</span>
-                    ) : null}
-                    {ordersPageResult?.countPrecision === "exact" && ordersPageResult.count != null
-                      ? <span>{ordersPageResult.count} total orders</span>
-                      : null}
-                    <span>Page {ordersCurrentPage} of {ordersTotalPages}</span>
-                  </>
-                )}
-              </span>
-              <div style={ordersPaginationButtonsStyle}>
-                {ordersPageNumbers.map((pageNumber) => {
-                  if (typeof pageNumber !== "number") {
-                    return <span key={pageNumber} aria-hidden="true">…</span>;
-                  }
-                  const active = pageNumber === ordersCurrentPage;
-                  const disabled = active || ordersPageUpdating;
-                  return (
-                    <button
-                      key={pageNumber}
-                      type="button"
-                      aria-current={active ? "page" : undefined}
-                      aria-label={`Go to orders page ${pageNumber}`}
-                      style={
-                        active
-                          ? activeOrdersPageButtonStyle
-                          : disabled ? disabledOrdersPageButtonStyle : ordersPageButtonStyle
-                      }
-                      disabled={disabled}
-                      onClick={() => handleOrdersPageChange(pageNumber)}
-                    >{pageNumber}</button>
-                  );
-                })}
-              </div>
-            </nav>
-          ) : null}
           {routeGroupsError ? (
             <div aria-live="polite" role="status" style={orderPageNoticeStyle}>
               {routeGroupsError}
             </div>
+          ) : null}
+          {selectedOrderCount > 0 ? (
+            <div role="toolbar" aria-label="Selected order actions" style={orderSelectionToolbarStyle}>
+              <input
+                type="checkbox"
+                aria-label="Select all visible orders for plan"
+                checked={allVisibleOrdersChecked}
+                ref={(element) => {
+                  if (element) element.indeterminate = someVisibleOrdersChecked && !allVisibleOrdersChecked;
+                }}
+                disabled={snapshotSelectionActive
+                  ? snapshotSelectableTableOrders.length === 0 || snapshotSelectionUpdating
+                  : selectableTableOrders.length === 0}
+                onChange={toggleAllVisibleOrderChecks}
+              />
+              <span aria-live="polite">{selectedOrderCount} selected</span>
+              {selectionSnapshotsEnabled && !snapshotSelectionActive &&
+                (filteredOrderCount == null || selectedOrderCount < filteredOrderCount) ? (
+                  <button
+                    type="button"
+                    style={orderSelectionLinkStyle}
+                    title="Select matching orders across all pages. Cancelled orders are excluded."
+                    disabled={ordersSelectionFetcher.state !== "idle" || ordersPageUpdating}
+                    onClick={handleSelectAllFilteredOrders}
+                  >{ordersSelectionFetcher.state !== "idle"
+                      ? "Selecting…"
+                      : filteredOrderCount == null ? "Select all matching orders" : `Select all ${filteredOrderCount} orders`}</button>
+              ) : null}
+            <button
+              type="button"
+              style={orderSelectionLinkStyle}
+              disabled={snapshotSelectionUpdating}
+              onClick={handleClearOrderSelection}
+            >Clear selection</button>
+            <div style={orderControlsTrailingStyle}>
+              <button
+                type="button"
+                style={checkedOrderIds.length === 0 || snapshotSelectionActive
+                  ? disabledCreateRouteButtonStyle : addToPlanButtonStyle}
+                disabled={checkedOrderIds.length === 0 || snapshotSelectionActive}
+                onClick={handleAddToPlan}
+              >Add to map</button>
+              <button
+                type="button"
+                style={!hasOrderActionSelection || isBulkUpdatingOrders
+                  ? disabledCreateRouteButtonStyle : addToPlanButtonStyle}
+                disabled={!hasOrderActionSelection || isBulkUpdatingOrders}
+                onClick={handleOpenOrderAction}
+              >Action</button>
+            </div>
+          </div>
           ) : null}
           <div style={tableWrapStyle}>
             <table
@@ -5534,18 +5592,20 @@ function OrdersPageContent({ loaderData }) {
                   />
                 ))}
               </colgroup>
-              <thead>
+              <thead style={selectedOrderCount > 0 ? visuallyHiddenTableHeaderStyle : undefined}>
                 <tr>
                   <th scope="col" style={checkboxHeaderCellStyle}>
-                    <input
-                      type="checkbox"
-                      aria-label="Select all visible orders for plan"
-                      checked={allVisibleOrdersChecked}
-                      disabled={snapshotSelectionActive
-                        ? snapshotSelectableTableOrders.length === 0 || snapshotSelectionUpdating
-                        : selectableTableOrders.length === 0}
-                      onChange={toggleAllVisibleOrderChecks}
-                    />
+                    {selectedOrderCount === 0 ? (
+                      <input
+                        type="checkbox"
+                        aria-label="Select all visible orders for plan"
+                        checked={allVisibleOrdersChecked}
+                        disabled={snapshotSelectionActive
+                          ? snapshotSelectableTableOrders.length === 0 || snapshotSelectionUpdating
+                          : selectableTableOrders.length === 0}
+                        onChange={toggleAllVisibleOrderChecks}
+                      />
+                    ) : null}
                   </th>
                   {SORTABLE_ORDER_COLUMNS.flatMap((column, columnIndex) => [
                     <th
@@ -5554,16 +5614,18 @@ function OrdersPageContent({ loaderData }) {
                       style={resizableHeaderCellStyle}
                       aria-sort={getHeaderAriaSort(column.key)}
                     >
-                      <button
-                        type="button"
-                        style={tableHeaderButtonStyle}
-                        onClick={() => handleSort(column.key)}
-                      >
-                        {translate(language, column.translationKey)}
-                        <span aria-hidden="true">
-                          {getSortIndicator(column.key)}
-                        </span>
-                      </button>
+                      {selectedOrderCount > 0 ? translate(language, column.translationKey) : (
+                        <button
+                          type="button"
+                          style={tableHeaderButtonStyle}
+                          onClick={() => handleSort(column.key)}
+                        >
+                          {translate(language, column.translationKey)}
+                          <span aria-hidden="true">
+                            {getSortIndicator(column.key)}
+                          </span>
+                        </button>
+                      )}
                       {column.key !== "name" && columnIndex < SORTABLE_ORDER_COLUMNS.length - 1 ? (
                         <span
                           aria-hidden="true"
@@ -5582,6 +5644,13 @@ function OrdersPageContent({ loaderData }) {
                 </tr>
               </thead>
               <tbody>
+                {tableOrders.length === 0 && !ordersPageUpdating ? (
+                  <tr>
+                    <td colSpan={tableColumnWidths.length} style={tableCellStyle}>
+                      <span role="status">No matching orders</span>
+                    </td>
+                  </tr>
+                ) : null}
                 {tableOrders.map((order) => {
                   const orderIsPlanned = plannedOrderIdSet.has(order.id);
                   const orderIsCancelled = isOrderCancelled(order);
@@ -5817,6 +5886,60 @@ function OrdersPageContent({ loaderData }) {
               </tbody>
             </table>
           </div>
+          {paginationEnabled ? (
+            <nav aria-busy={ordersPageUpdating} aria-label="Orders pagination" style={ordersPaginationBlockStyle}>
+              <span
+                aria-label={ordersPageUpdating ? "Loading order results" : "Orders page status"}
+                aria-live="polite"
+                style={{ ...orderSelectionCountStyle, alignItems: "center", display: "flex", gap: "12px" }}
+              >
+                {ordersPageUpdating ? (
+                  <>
+                    <s-spinner size="base" accessibilityLabel="Loading order results"></s-spinner>
+                    <span>Updating order results…</span>
+                  </>
+                ) : (
+                  <>
+                    {ordersResourceError ? (
+                      <span role="status">Showing previous results — {ordersResourceError}</span>
+                    ) : null}
+                    {ordersPageRange
+                      ? <span>{ordersPageRange.start}–{ordersPageRange.end} of {ordersPageRange.total} orders</span>
+                      : null}
+                    <span>Page {ordersCurrentPage} of {ordersTotalPages}</span>
+                  </>
+                )}
+              </span>
+              <div style={ordersPaginationButtonsStyle}>
+                {ordersPageNumbers.map((pageNumber) => {
+                  if (typeof pageNumber !== "number") {
+                    return <span key={pageNumber} aria-hidden="true">…</span>;
+                  }
+                  const active = pageNumber === ordersCurrentPage;
+                  const disabled = active || ordersPageUpdating;
+                  return (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      aria-current={active ? "page" : undefined}
+                      aria-label={`Go to orders page ${pageNumber}`}
+                      style={
+                        active
+                          ? activeOrdersPageButtonStyle
+                          : disabled ? disabledOrdersPageButtonStyle : ordersPageButtonStyle
+                      }
+                      disabled={disabled}
+                      onClick={() => handleOrdersPageChange(pageNumber)}
+                    >{pageNumber}</button>
+                  );
+                })}
+              </div>
+            </nav>
+          ) : (
+            <div aria-label="Order count" style={ordersPaginationBlockStyle}>
+              <span style={orderSelectionCountStyle}>{filteredOrders.length} orders</span>
+            </div>
+          )}
         </div>
       }
     />
