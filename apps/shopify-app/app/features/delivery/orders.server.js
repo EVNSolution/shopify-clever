@@ -4,6 +4,7 @@ import {
   primeDeliveryApiGetResponseCache,
 } from "./route-plans.server.js";
 import { sanitizeTelemetryValue } from "../telemetry/structured-telemetry.server.js";
+import { normalizeOrderNumberPrefix } from "../orders/order-number-search.js";
 
 const DELIVERY_ORDERS_SYNC_SOURCE = "clever-app-orders";
 const DELIVERY_ORDERS_SYNC_REASON = "orders_page_open";
@@ -141,7 +142,7 @@ export async function createDeliveryOrdersSelectionSnapshot(request, payload = {
   const result = await deliveryApiRequest(request, "/admin/orders/selection-snapshots", {
     body: JSON.stringify({
       excludeOrderIds: normalizeStringArray(payload.excludeOrderIds),
-      filters: normalizeObject(payload.filters),
+      filters: orderNumberFilters(payload.filters),
       sort: textOrUndefined(payload.sort) ?? "id_desc",
     }),
     correlationId: options.correlationId,
@@ -265,7 +266,7 @@ export async function bulkUpdateDeliveryOrders(request, payload = {}, options = 
 function buildDeliveryOrdersPath(filters) {
   const searchParams = new URLSearchParams();
 
-  for (const [key, value] of Object.entries(filters ?? {})) {
+  for (const [key, value] of Object.entries(orderNumberFilters(filters))) {
     if (value == null) continue;
     if (typeof value === "string" && value.trim() === "") continue;
 
@@ -279,7 +280,7 @@ function buildDeliveryOrdersPath(filters) {
 function buildDeliveryOrdersResourcePath(resource, filters) {
   const searchParams = new URLSearchParams();
 
-  for (const [key, value] of Object.entries(filters ?? {})) {
+  for (const [key, value] of Object.entries(orderNumberFilters(filters))) {
     if (value == null || value === "") continue;
     for (const item of Array.isArray(value) ? value : [value]) searchParams.append(key, String(item));
   }
@@ -287,6 +288,16 @@ function buildDeliveryOrdersResourcePath(resource, filters) {
   const query = searchParams.toString();
   const path = `/admin/orders/${resource}`;
   return query ? `${path}?${query}` : path;
+}
+
+function orderNumberFilters(filters) {
+  const result = { ...normalizeObject(filters) };
+  const prefix = normalizeOrderNumberPrefix(result.orderNumberPrefix ?? result.search ?? result.q);
+  delete result.search;
+  delete result.q;
+  delete result.orderNumberPrefix;
+  if (prefix) result.orderNumberPrefix = prefix;
+  return result;
 }
 
 function normalizePageFilters(filters) {

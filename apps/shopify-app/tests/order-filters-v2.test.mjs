@@ -48,7 +48,7 @@ test("order number search accepts a leading hash and trims surrounding whitespac
   assert.equal(normalizeOrderSearch("  #2385  "), "2385");
   assert.equal(normalizeOrderSearch("2385"), "2385");
   assert.equal(normalizeOrderSearch("  customer name  "), "customer name");
-  assert.equal(normalizeOrderSearch("  #customer  "), "#customer");
+  assert.equal(normalizeOrderSearch("  #customer  "), "customer");
   assert.equal(normalizeOrderSearch("   "), "");
 });
 test("custom received dates preserve no scheduled date; scheduled bounds leave that mode", () => {
@@ -291,8 +291,11 @@ test("all BFF query endpoints repeat arrays; snapshot POST preserves JSON arrays
       const query = new URL(url).searchParams;
       assert.deepEqual(query.getAll("areas"), base.areas);
       assert.deepEqual(query.getAll("serviceTypes"), base.serviceTypes);
+      assert.equal(query.get("orderNumberPrefix"), base.search);
+      assert.equal(query.has("search"), false);
     }
-    assert.deepEqual(JSON.parse(calls[4].options.body).filters, base);
+    const { search, ...otherFilters } = base;
+    assert.deepEqual(JSON.parse(calls[4].options.body).filters, { ...otherFilters, orderNumberPrefix: search });
   } finally {
     if (previous === undefined) delete process.env.CLEVER_DELIVERY_API_URL;
     else process.env.CLEVER_DELIVERY_API_URL = previous;

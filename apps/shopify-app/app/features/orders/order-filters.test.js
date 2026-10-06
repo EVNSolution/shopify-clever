@@ -311,10 +311,10 @@ test("keeps date-pending orders first when delivery-date sorting is ascending", 
   );
 });
 
-test("parses and applies search while removing legacy q query parameters", () => {
+test("rejects address searches while preserving legacy q query parsing", () => {
   assert.deepEqual(
     filterOrders(orders, { scope: "history", search: "city centre" }).map((order) => order.id),
-    ["order-3"],
+    [],
   );
 
   assert.deepEqual(getOrderFiltersFromSearchParams(new URLSearchParams("q=claire")), {

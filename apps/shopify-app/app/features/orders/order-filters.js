@@ -1,4 +1,5 @@
 import { activeV2Groups, normalizeV2Filters, V2_FILTER_KEYS, writeV2Filters } from "./order-filters-v2.js";
+import { normalizeOrderNumberPrefix } from "./order-number-search.js";
 export const ORDER_FILTER_QUERY_KEYS = {
   deliveryArea: "deliveryArea",
   deliveryDate: "deliveryDate",
@@ -826,28 +827,9 @@ function isOrderNeedsReview(order, referenceDate) {
 }
 
 function orderMatchesSearch(order, searchValue) {
-  const query = normalizeSearchText(searchValue);
+  const query = normalizeOrderNumberPrefix(searchValue).toLowerCase();
   if (!query) return true;
-
-  return [
-    order?.name,
-    order?.orderId,
-    order?.legacyResourceId,
-    order?.customer,
-    order?.address,
-    order?.email,
-    order?.phone,
-    order?.deliveryArea,
-    order?.deliveryLabel,
-    order?.planningStatus,
-    order?.serviceType,
-  ]
-    .map(normalizeSearchText)
-    .some((value) => value.includes(query));
-}
-
-function normalizeSearchText(value) {
-  return textOrEmpty(value).toLowerCase();
+  return normalizeOrderNumberPrefix(order?.name).toLowerCase().startsWith(query);
 }
 
 function textOrEmpty(value) {

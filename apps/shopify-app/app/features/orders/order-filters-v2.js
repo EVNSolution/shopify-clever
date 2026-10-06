@@ -1,4 +1,5 @@
 import { getOrderFiltersFromSearchParams } from "./order-filters.js";
+import { normalizeOrderNumberPrefix } from "./order-number-search.js";
 export const V2_FILTER_KEYS = [
   "filterVersion",
   "receivedDateFrom",
@@ -17,8 +18,7 @@ export const V2_FILTER_KEYS = [
   "search",
 ];
 export function normalizeOrderSearch(value) {
-  const search = String(value ?? "").trim();
-  return /^#\d+$/.test(search) ? search.slice(1) : search;
+  return normalizeOrderNumberPrefix(value);
 }
 
 export const V2_ARRAY_KEYS = [
