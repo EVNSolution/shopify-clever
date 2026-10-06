@@ -16,6 +16,11 @@ export const V2_FILTER_KEYS = [
   "areaMissing",
   "search",
 ];
+export function normalizeOrderSearch(value) {
+  const search = String(value ?? "").trim();
+  return /^#\d+$/.test(search) ? search.slice(1) : search;
+}
+
 export const V2_ARRAY_KEYS = [
   "scheduledWeekdays",
   "serviceTypes",

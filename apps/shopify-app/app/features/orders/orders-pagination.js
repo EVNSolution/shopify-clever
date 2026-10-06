@@ -1,3 +1,15 @@
+// The existing Orders page API returns up to 50 rows per numbered page.
+export function getOrdersPageRange(pageInfo, result, rowCount) {
+  if (result?.countPrecision !== "exact" || !Number.isSafeInteger(result.count) || result.count < 0) {
+    return null;
+  }
+  const total = result.count;
+  const currentPage = Number.isSafeInteger(pageInfo?.currentPage) && pageInfo.currentPage > 0
+    ? pageInfo.currentPage : 1;
+  const start = total > 0 && rowCount > 0 ? Math.min(total, (currentPage - 1) * 50 + 1) : 0;
+  return { start, end: start > 0 ? Math.min(total, start + rowCount - 1) : 0, total };
+}
+
 export function getOrdersPageNumbers(currentPage, totalPages) {
   if (totalPages <= 7) {
     return Array.from({ length: totalPages }, (_value, index) => index + 1);

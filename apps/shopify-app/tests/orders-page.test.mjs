@@ -601,9 +601,9 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.doesNotMatch(ordersPageSource, /const orderFilterBarStyle = \{/);
   assert.doesNotMatch(ordersPageSource, /const planActionRowStyle = \{/);
   assert.match(orderControlsStyleBlock, /padding:\s*"6px 10px 8px"/);
-  assert.match(orderControlsStyleBlock, /flexWrap:\s*"nowrap"/);
-  assert.match(orderControlsStyleBlock, /overflowX:\s*"auto"/);
+  assert.match(orderControlsStyleBlock, /flexWrap:\s*"wrap"/);
   assert.doesNotMatch(orderControlsStyleBlock, /maxWidth:\s*"100%"/);
+  assert.doesNotMatch(orderControlsStyleBlock, /overflowX:\s*"auto"/);
   assert.doesNotMatch(orderControlsStyleBlock, /overflowX:\s*"visible"/);
   assert.doesNotMatch(orderControlsStyleBlock, /overflowY:\s*"visible"/);
   assert.match(ordersPageSource, /className="orders-error-filter" role="alert" style=\{orderPageNoticeStyle\}/);
@@ -614,6 +614,16 @@ test("Orders filter and plan controls sit outside the table scroll area", () => 
   assert.doesNotMatch(ordersPageSource, /style=\{orderFilterBarStyle\}/);
   assert.doesNotMatch(ordersPageSource, /style=\{planActionRowStyle\}/);
   assert.match(ordersPageSource, /<div style=\{tableWrapStyle\}>\s*<table/s);
+});
+
+test("Orders search applies an order-number query through the paged filter contract", () => {
+  assert.match(ordersPageSource, /type="search"/);
+  assert.match(ordersPageSource, /aria-label="Search orders"/);
+  assert.match(ordersPageSource, /placeholder="Search order number"/);
+  assert.match(ordersPageSource, /normalizeOrderSearch/);
+  assert.match(ordersPageSource, /setTimeout\([\s\S]{0,500}300/);
+  assert.match(ordersPageSource, /<form[\s\S]{0,500}onSubmit=\{\(event\) => \{[\s\S]{0,200}handleOrderSearchSubmit\(\)/);
+  assert.match(ordersPageSource, /handleV2OrderFiltersChange\([\s\S]{0,240}search:/);
 });
 
 test("Orders table uses a compact centered layout", () => {
@@ -654,7 +664,43 @@ test("Orders table has a compact checkbox column for route-plan candidates", () 
   assert.doesNotMatch(ordersPageSource, /routePlanningUnavailable/);
 });
 
+test("Orders selection replaces the normal header with a viewport-safe action toolbar", () => {
+  const selectedToolbarSource = ordersPageSource.slice(
+    ordersPageSource.indexOf('<div role="toolbar" aria-label="Selected order actions"'),
+    ordersPageSource.indexOf('<div style={tableWrapStyle}>', ordersPageSource.indexOf('<div role="toolbar" aria-label="Selected order actions"')),
+  );
+  assert.match(selectedToolbarSource, /Select all visible orders for plan/);
+  assert.match(selectedToolbarSource, /\{selectedOrderCount\} selected/);
+  assert.match(selectedToolbarSource, /Select all \$\{filteredOrderCount\} orders/);
+  assert.match(selectedToolbarSource, />Clear selection<\/button>/);
+  assert.match(selectedToolbarSource, />Add to map<\/button>/);
+  assert.match(selectedToolbarSource, />Action<\/button>/);
+  assert.ok(
+    ordersPageSource.indexOf('aria-label="Selected order actions"') <
+      ordersPageSource.indexOf('aria-label="Shopify orders"'),
+    "selected actions must render before the horizontally scrolling table",
+  );
+  assert.match(ordersPageSource, /const visuallyHiddenTableHeaderStyle = \{[\s\S]*?clipPath:\s*"inset\(50%\)"/);
+  assert.match(ordersPageSource, /<thead style=\{selectedOrderCount > 0 \? visuallyHiddenTableHeaderStyle : undefined\}>/);
+  assert.match(ordersPageSource, /selectedOrderCount === 0 \? \(\s*<input[\s\S]{0,240}Select all visible orders for plan/);
+  assert.match(ordersPageSource, /selectedOrderCount > 0 \? translate\(language, column\.translationKey\) : \(\s*<button/);
+  assert.doesNotMatch(ordersPageSource, />Select all filtered<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /aria-label="Selected orders"/);
+});
+
+test("Orders pagination follows the table and reports the exact row range", () => {
+  assert.match(ordersPageSource, /getOrdersPageRange/);
+  assert.match(ordersPageSource, /\{ordersPageRange\.start\}–\{ordersPageRange\.end\} of \{ordersPageRange\.total\} orders/);
+  assert.ok(
+    ordersPageSource.indexOf('aria-label="Orders pagination"') >
+      ordersPageSource.indexOf('aria-label="Shopify orders"'),
+    "pagination must render after the orders table",
+  );
+});
+
 test("Orders order number opens the matching Shopify order directly in a new tab", () => {
+  const orderNumberButtonStyleBlock =
+    ordersPageSource.match(/const orderNumberButtonStyle = \{[\s\S]*?\n\};/)?.[0] ?? "";
   assert.match(ordersPageSource, /const orderNumberButtonStyle = \{/);
   assert.match(ordersPageSource, /width:\s*"100%"/);
   assert.match(ordersPageSource, /padding:\s*0/);
@@ -671,7 +717,7 @@ test("Orders order number opens the matching Shopify order directly in a new tab
     ordersPageSource,
     /className="order-number-button"[\s\S]{0,300}onClick=\{\(\) => handleSelectOrder\(order\.id\)\}/,
   );
-  assert.doesNotMatch(ordersPageSource, /#005bd3/);
+  assert.doesNotMatch(orderNumberButtonStyleBlock, /#005bd3/);
   assert.doesNotMatch(ordersPageSource, />View<\/button>/);
 });
 
@@ -1054,7 +1100,7 @@ test("Orders page bulk-changes selected server order state or payment", () => {
   assert.match(ordersPageSource, /formData\.set\("_intent", "bulkUpdateOrders"\)/);
   assert.match(ordersPageSource, /formData\.set\("orderIds", JSON\.stringify\(checkedServerOrderIds\)\)/);
   assert.match(ordersPageSource, /orderBulkUpdateFetcher\.submit\(formData, \{ method: "post" \}\)/);
-  assert.match(ordersPageSource, />Action<\/button>/);
+  assert.match(ordersPageSource, /onClick=\{handleOpenOrderAction\}[\s\S]{0,300}Action/);
   assert.match(ordersPageSource, /aria-modal="true" role="dialog"/);
   assert.match(ordersPageSource, /option.value === ORDER_DATA_FIX_ACTION/);
   assert.match(ordersPageSource, />Save<\/button>/);
@@ -1158,6 +1204,19 @@ test("Orders frozen all-filtered selection persists across pages and patches can
   assert.match(ordersPageSource, /option\.value !== ORDER_DATA_FIX_ACTION/);
   assert.match(ordersPageSource, /snapshotSelectionActive && orderActionField === ORDER_DATA_FIX_ACTION/);
   assert.match(ordersPageSource, /전체 선택에서는 상태 또는 결제만 일괄 변경할 수 있습니다/);
+});
+
+test("Orders frozen selection preserves repeated Area filters with the order search", () => {
+  const selectAllFilteredSource = ordersPageSource.slice(
+    ordersPageSource.indexOf("const handleSelectAllFilteredOrders = async () =>"),
+    ordersPageSource.indexOf("const replaceSelectionExclusions = async", ordersPageSource.indexOf("const handleSelectAllFilteredOrders = async () =>")),
+  );
+  assert.match(
+    selectAllFilteredSource,
+    /buildOrdersResourceRequest\("selection", resourceFilterSearchParams\)\.payload\.filters/,
+  );
+  assert.match(selectAllFilteredSource, /formData\.set\("filters", JSON\.stringify\(/);
+  assert.doesNotMatch(selectAllFilteredSource, /Object\.fromEntries\(resourceFilterSearchParams\)/);
 });
 
 test("Orders preserve every server-owned route membership while keeping a primary route", () => {
@@ -1427,13 +1486,13 @@ test("Orders page keeps Add to map in the table controls", () => {
   assert.match(ordersPageSource, /checkedOrderIds\.length === 0/);
   assert.match(ordersPageSource, /const nextOrderIds = Array\.from\(new Set\(\[\.\.\.plannedOrderIds, \.\.\.selectedOrderIds\]\)\)/);
   assert.match(ordersPageSource, /setRoutePlanTitle\(buildRoutePlanTitleFromOrders\(nextOrders\)\)/);
-  assert.match(ordersPageSource, />Add to map<\/button>/);
+  assert.match(ordersPageSource, /onClick=\{handleAddToPlan\}[\s\S]{0,300}Add to map/);
   assert.match(ordersPageSource, /disabled=\{checkedOrderIds\.length === 0 \|\| snapshotSelectionActive\}/);
   assert.match(ordersPageSource, /const orderControlsTrailingStyle = \{[\s\S]*?marginLeft:\s*"auto"/);
   assert.match(ordersPageSource, />Clear selection<\/button>/);
   assert.doesNotMatch(ordersPageSource, /shown ·/);
   assert.doesNotMatch(ordersPageSource, /added to plan\./);
-  assert.doesNotMatch(ordersPageSource, />Add to map<\/button>[\s\S]{0,400}>Assign<\/button>/);
+  assert.doesNotMatch(ordersPageSource, /onClick=\{handleAddToPlan\}[\s\S]{0,400}onClick=\{handleToggleRouteAssignActions\}/);
 });
 
 test("Orders table hides Area and Payment while keeping delivery state operational", () => {
@@ -2062,10 +2121,14 @@ test("Orders paginated resource defaults to all history orders and renders numer
     ordersPageServerSource,
     /getOrdersResourceFilters\(getOrderFiltersFromSearchParams\([\s\S]*page: 1,[\s\S]*routeOpsToday/,
   );
-  assert.match(ordersPageSource, /formData\.set\("filters", JSON\.stringify\(Object\.fromEntries\(resourceFilterSearchParams\)\)\)/);
+  assert.match(
+    ordersPageSource,
+    /buildOrdersResourceRequest\("selection", resourceFilterSearchParams\)\.payload\.filters/,
+  );
+  assert.doesNotMatch(ordersPageSource, /Object\.fromEntries\(resourceFilterSearchParams\)/);
   assert.match(ordersPageSource, /const ordersCurrentPage = getPositiveInteger\(ordersPageInfo\?\.currentPage\)/);
   assert.match(ordersPageSource, /const ordersTotalPages = getPositiveInteger\(ordersPageInfo\?\.totalPages\)/);
-  assert.match(ordersPageSource, /import \{ getOrdersPageNumbers \} from "\.\/orders-pagination"/);
+  assert.match(ordersPageSource, /import \{ getOrdersPageNumbers, getOrdersPageRange \} from "\.\/orders-pagination"/);
   assert.match(ordersPageSource, /ordersPageNumbers\.map\(\(pageNumber\) =>/);
   assert.match(
     ordersPageSource,
@@ -2087,7 +2150,7 @@ test("Orders paginated resource defaults to all history orders and renders numer
   );
   assert.match(ordersPageSource, />Updating order results…<\/span>/);
   assert.match(ordersPageSource, /const disabled = active \|\| ordersPageUpdating/);
-  assert.match(ordersPageSource, /\{ordersPageResult\.count\} total orders/);
+  assert.match(ordersPageSource, /\{ordersPageRange\.start\}–\{ordersPageRange\.end\} of \{ordersPageRange\.total\} orders/);
   assert.match(ordersPageSource, /Page \{ordersCurrentPage\} of \{ordersTotalPages\}/);
   assert.doesNotMatch(ordersPageSource, /\? `, \$\{ordersPageResult\.count\} orders`/);
   assert.match(ordersPageSource, /typeof pageNumber !== "number"/);

@@ -13,6 +13,7 @@ import {
   filterV2Options,
   getDatePresetV2,
   getOrdersUiFilters,
+  normalizeOrderSearch,
   normalizeV2Filters,
   readV2Filters,
   v2CompactChipValue,
@@ -42,6 +43,13 @@ const base = normalizeV2Filters({
   areas: ["North, East", "Toronto"],
   areaMissing: true,
   search: "sample",
+});
+test("order number search accepts a leading hash and trims surrounding whitespace", () => {
+  assert.equal(normalizeOrderSearch("  #2385  "), "2385");
+  assert.equal(normalizeOrderSearch("2385"), "2385");
+  assert.equal(normalizeOrderSearch("  customer name  "), "customer name");
+  assert.equal(normalizeOrderSearch("  #customer  "), "#customer");
+  assert.equal(normalizeOrderSearch("   "), "");
 });
 test("custom received dates preserve no scheduled date; scheduled bounds leave that mode", () => {
   const missing = normalizeV2Filters({
@@ -227,6 +235,29 @@ test("URL and token-safe resource requests retain repeated arrays including comm
     assert.deepEqual(result.payload.filters, base);
     assert.doesNotMatch(result.action, /test-token|Toronto/);
   }
+});
+test("selection requests preserve repeated V2 filters with the order search", () => {
+  const filters = normalizeV2Filters({
+    areas: ["Toronto", "Oakville"],
+    search: "Sample",
+    serviceTypes: ["DELIVERY", "PICKUP"],
+  });
+  const params = writeV2Filters(new URLSearchParams(), filters);
+  const result = buildOrdersResourceRequest("selection", params);
+  assert.deepEqual(result.payload.filters.areas, filters.areas);
+  assert.deepEqual(result.payload.filters.serviceTypes, filters.serviceTypes);
+  assert.equal(result.payload.filters.search, "Sample");
+});
+test("selection requests preserve the legacy route operations date", () => {
+  const params = new URLSearchParams({
+    routeOpsToday: "2026-10-06",
+    scope: "history",
+    search: "2385",
+  });
+  const result = buildOrdersResourceRequest("selection", params);
+  assert.equal(result.payload.filters.routeOpsToday, "2026-10-06");
+  assert.equal(result.payload.filters.scope, "history");
+  assert.equal(result.payload.filters.search, "2385");
 });
 test("all BFF query endpoints repeat arrays; snapshot POST preserves JSON arrays and bools", async () => {
   const previous = process.env.CLEVER_DELIVERY_API_URL;
