@@ -103,7 +103,8 @@ test("mixed-group drag, send, polygon, removal, and save handlers apply row-leve
   assert.match(sourceBetween("const moveDraggedTimelineStop = ", "const handleRouteTimelineDragStart = "), /isRouteTimelineStopMoveAllowed\(sourceRouteRow, targetRouteRow\)/);
   assert.match(sourceBetween("const handleRouteTimelineDragStart = ", "const handleRouteTimelineStopClick = "), /isRouteStopReorderAllowed\(routeRow.status\)/);
   assert.match(sourceBetween("const handleSendChildStopToRoute = ", "const handleOpenChildStopSendTargets = "), /isRouteTimelineStopMoveAllowed\(sourceRouteRow, targetRouteRow\)/);
-  assert.match(sourceBetween("const removeChildStopFromGroup = ", "const handleRemoveChildStopFromGroup = "), /isRouteExecutionLockedForStopMembership\(sourceRouteRow.status\)/);
+  assert.match(sourceBetween("const canRemoveChildStopFromGroup = ", "const removeChildStopFromGroup = "), /isRouteExecutionLockedForStopMembership\(sourceRouteRow.status\)/);
+  assert.match(sourceBetween("const removeChildStopFromGroup = ", "const handleSendChildStopToRoute = "), /canRemoveChildStopFromGroup\(row\)/);
   assert.match(sourceBetween("const handleRouteTimelineRemoveDrop = ", "const submitRouteAction = "), /isRouteExecutionLockedForStopMembership\(sourceRouteRow.status\)/);
   assert.match(sourceBetween("const handleAssignPolygonToRoute = ", "const handleOpenRouteSelector = "), /isRouteTimelineStopMoveAllowed\(routeRow, targetRouteRow\)/);
   assert.match(sourceBetween("const canSaveRouteDraft = ", "const routePolygonSourceStops = "), /hasTerminalRouteStopDraft\(contextRouteRows, routeTimelineOrderByRouteId\)/);

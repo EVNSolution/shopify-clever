@@ -216,6 +216,7 @@ export async function createDeliveryRoutePlanBatch(request, payload, options = {
 export async function fetchDeliveryRoutePlans(request, options = {}) {
   const result = await deliveryApiRequest(request, "/admin/route-plans", {
     cacheKey: options.cacheKey,
+    refreshCache: options.refreshCache,
     fetch: options.fetch,
     method: "GET",
     sessionToken: options.sessionToken,
@@ -862,7 +863,9 @@ export async function deliveryApiRequest(request, path, options = {}) {
       path,
     });
     const now = Date.now();
-    const cachedResult = readDeliveryApiGetCache(cacheKey, now);
+    const cachedResult = !options.refreshCache || deliveryApiGetCache.get(cacheKey)?.refreshing
+      ? readDeliveryApiGetCache(cacheKey, now)
+      : null;
 
     if (cachedResult) {
       return cachedResult;
@@ -882,16 +885,21 @@ export async function deliveryApiRequest(request, path, options = {}) {
     });
     const cacheEntry = {
       expiresAt: now + cacheTtlMs,
+      refreshing: Boolean(options.refreshCache),
+      inFlight: true,
       promise: resultPromise.then(
         (result) => {
-          if (result.errors.length > 0) {
+          cacheEntry.refreshing = false;
+          cacheEntry.inFlight = false;
+          cacheEntry.expiresAt = Date.now() + cacheTtlMs;
+          if (result.errors.length > 0 && deliveryApiGetCache.get(cacheKey) === cacheEntry) {
             deliveryApiGetCache.delete(cacheKey);
           }
 
           return result;
         },
         (error) => {
-          deliveryApiGetCache.delete(cacheKey);
+          if (deliveryApiGetCache.get(cacheKey) === cacheEntry) deliveryApiGetCache.delete(cacheKey);
           throw error;
         },
       ),
@@ -1111,7 +1119,7 @@ function readDeliveryApiGetCache(cacheKey, now) {
   const cached = deliveryApiGetCache.get(cacheKey);
 
   if (!cached) return null;
-  if (cached.expiresAt <= now) {
+  if (!cached.inFlight && cached.expiresAt <= now) {
     deliveryApiGetCache.delete(cacheKey);
     return null;
   }
@@ -1122,8 +1130,8 @@ function readDeliveryApiGetCache(cacheKey, now) {
 function pruneDeliveryApiGetCache(now) {
   for (const [cacheKey, cached] of deliveryApiGetCache) {
     if (
-      cached.expiresAt <= now ||
-      deliveryApiGetCache.size > MAX_DELIVERY_API_GET_CACHE_ENTRIES
+      !cached.inFlight && (cached.expiresAt <= now ||
+      deliveryApiGetCache.size > MAX_DELIVERY_API_GET_CACHE_ENTRIES)
     ) {
       deliveryApiGetCache.delete(cacheKey);
     }

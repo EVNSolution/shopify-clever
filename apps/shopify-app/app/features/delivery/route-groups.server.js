@@ -158,6 +158,7 @@ function normalizeRouteGroupCopyErrors(errors) {
 export async function fetchDeliveryRouteGroups(request, query = {}, options = {}) {
   const result = await deliveryApiRequest(request, `/admin/route-groups${buildQueryString(query)}`, {
     cacheKey: options.cacheKey,
+    refreshCache: options.refreshCache,
     correlationId: options.correlationId,
     fetch: options.fetch,
     method: "GET",

@@ -1,9 +1,9 @@
 import { formatStoreInstant } from "../features/shopify/store-date-time";
 import { useStoreTimeZone } from "../ui/store-time-zone";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
-import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteLoaderData, useSearchParams } from "react-router";
+import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   formatRouteStatus,
@@ -20,7 +20,17 @@ import {
 } from "../features/delivery/route-list-rows";
 import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
 import { fetchRouteFallbackTimeZone, resolveRouteListTimeZones } from "../features/delivery/route-timezone.server";
-import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
+import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans, getCleverAppId } from "../features/delivery/route-plans.server";
+import {
+  confirmRouteListRefresh,
+  getConfirmedRouteListRefresh,
+  getRouteListRefreshKey,
+  isRouteListRefreshCleanup,
+  readRouteListRefresh,
+  readRouteListRefreshRequest,
+  ROUTE_LIST_REFRESH_PARAM,
+  routeListRefreshWasAttempted,
+} from "../features/delivery/route-list-refresh";
 import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { getServiceErrorNotice } from "../features/service-errors";
 import { authenticate } from "../shopify.server";
@@ -352,15 +362,18 @@ export const loader = async ({ request }) => {
   const { admin, session } = await authenticate.admin(request);
   const authenticationMs = Date.now() - authenticationStartedAt;
   const shopifyShopCacheKey = session?.shop;
+  const refreshKey = getRouteListRefreshKey(getCleverAppId(), shopifyShopCacheKey);
+  const requestedRefresh = readRouteListRefreshRequest(refreshKey, url);
+  const refreshCache = requestedRefresh.length > 0;
   const [routePlanResult, routeGroupResult, departureLocationData, fallbackTimeZoneData] = await Promise.all([
     measureRouteLoaderStep(() =>
-      fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey }),
+      fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey, refreshCache }),
     ),
     measureRouteLoaderStep(() =>
       fetchDeliveryRouteGroups(
         request,
         { view: "routes-list" },
-        { cacheKey: shopifyShopCacheKey },
+        { cacheKey: shopifyShopCacheKey, refreshCache },
       ),
     ),
     fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
@@ -402,11 +415,25 @@ export const loader = async ({ request }) => {
 
   return {
     ...loaderData,
+    routesRefresh: {
+      key: refreshKey,
+      requested: requestedRefresh,
+      confirmed: getConfirmedRouteListRefresh(
+        requestedRefresh,
+        buildRouteRows(loaderData.routePlans, loaderData.routeGroups),
+        [...(routePlanData.errors ?? []), ...(routeGroupData.errors ?? [])],
+      ),
+    },
     routesPerformance,
   };
 };
 
 export function shouldRevalidate(args) {
+  if (isRouteListRefreshCleanup(args)) return false;
+  if ((!args.formMethod || args.formMethod.toLowerCase() === "get")
+    && /^\/app\/routes\/?$/.test(args.nextUrl?.pathname ?? "")
+    && args.nextUrl.searchParams.has(ROUTE_LIST_REFRESH_PARAM)
+    && args.currentUrl?.searchParams.get(ROUTE_LIST_REFRESH_PARAM) !== args.nextUrl.searchParams.get(ROUTE_LIST_REFRESH_PARAM)) return true;
   return shouldRevalidateRoutesRoute(args);
 }
 
@@ -682,7 +709,11 @@ export default function RoutesPage() {
     routeTimeZones = {},
     errors = [],
     routesPerformance: serverRoutesPerformance,
+    routesRefresh,
   } = useLoaderData();
+  const revalidator = useRevalidator();
+  const refreshAttemptRef = useRef(null);
+  const [hasPendingListRefresh, setHasPendingListRefresh] = useState(false);
   const routeGroupById = new Map(routeGroups.map((routeGroup) => [String(routeGroup?.id), routeGroup]));
   const shopify = useAppBridge();
   const routeDeleteFetcher = useFetcher();
@@ -712,6 +743,31 @@ export default function RoutesPage() {
     { context: "routes_page" },
   );
   const isRoutesIndex = !routeId && !routeGroupId;
+
+  useEffect(() => {
+    if (!isRoutesIndex) {
+      refreshAttemptRef.current = null;
+      return;
+    }
+    confirmRouteListRefresh(routesRefresh?.key, routesRefresh?.confirmed);
+    const pending = readRouteListRefresh(routesRefresh?.key);
+    setHasPendingListRefresh(pending.length > 0);
+    if (!pending.length && searchParams.has(ROUTE_LIST_REFRESH_PARAM)) {
+      const cleanSearch = new URLSearchParams(searchParams);
+      cleanSearch.delete(ROUTE_LIST_REFRESH_PARAM);
+      navigate(withEmbeddedShopifyContext(`/app/routes?${cleanSearch}`, searchParams), { replace: true });
+      return;
+    }
+    const signature = JSON.stringify(pending);
+    if (pending.length && revalidator.state === "idle"
+      && !routeListRefreshWasAttempted(pending, routesRefresh?.requested)
+      && refreshAttemptRef.current !== signature) {
+      refreshAttemptRef.current = signature;
+      const refreshSearch = new URLSearchParams(searchParams);
+      refreshSearch.set(ROUTE_LIST_REFRESH_PARAM, JSON.stringify({ key: routesRefresh.key, pending }));
+      navigate(withEmbeddedShopifyContext(`/app/routes?${refreshSearch}`, searchParams), { replace: true });
+    }
+  }, [isRoutesIndex, navigate, revalidator.state, routesRefresh, searchParams]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof performance === "undefined") return undefined;
@@ -870,6 +926,14 @@ export default function RoutesPage() {
 
         {routesNoticeMessage ? (
           <div style={routesErrorStyle}>{routesNoticeMessage}</div>
+        ) : null}
+        {hasPendingListRefresh ? (
+          <div role="status" style={routesErrorStyle}>
+            {translate(language, "routes.list.refreshPending")}{" "}
+            <button disabled={revalidator.state !== "idle"} onClick={() => revalidator.revalidate()} type="button">
+              {translate(language, "routes.list.refreshRetry")}
+            </button>
+          </div>
         ) : null}
 
         <section aria-label="Routes summary" style={routesSummaryCardsStyle}>

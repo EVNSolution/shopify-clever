@@ -6,6 +6,15 @@ import test from "node:test";
 import { formatRouteStatus, isTerminalRouteExecutionStatus, mergeRouteExecutionStatus } from "../app/features/delivery/route-helpers.js";
 import { buildRouteRows } from "../app/features/delivery/route-list-rows.js";
 import { translate } from "../app/i18n/i18n.js";
+import { withEmbeddedShopifyContext } from "../app/features/delivery/route-paths.js";
+import {
+  confirmRouteListRefresh,
+  getRouteListRefreshKey,
+  readRouteListRefresh,
+  rememberRouteListRefresh,
+  routeListRefreshWasAttempted,
+  ROUTE_LIST_REFRESH_PARAM,
+} from "../app/features/delivery/route-list-refresh.js";
 import {
   getRouteExecutionStatusFromTrackingEvent,
   getRouteExecutionStatusFromTrackingSnapshot,
@@ -369,28 +378,63 @@ test("missing child display status does not inherit its group aggregate", () => 
 });
 
 
-test("native history return refreshes only a known stale Routes list", () => {
-  const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
-  const start = source.indexOf("const handleRoutesHistoryReturn = () => {");
-  const end = source.indexOf("    window.addEventListener", start);
+test("the list component requests one mismatch refresh and retains an explicit retry after failure", () => {
+  const source = readFileSync(new URL("../app/routes/app.routes.jsx", import.meta.url), "utf8");
+  const start = source.indexOf("    if (!isRoutesIndex) {");
+  const end = source.indexOf("  }, [isRoutesIndex, navigate, revalidator.state, routesRefresh, searchParams]);", start);
   assert.ok(start >= 0 && end > start);
-  const routesListNeedsRefreshRef = { current: false };
-  const window = { location: { pathname: "/app/routes" } };
+  const applyEffect = Function("isRoutesIndex", "refreshAttemptRef", "routesRefresh", "setHasPendingListRefresh", "revalidator", "confirmRouteListRefresh", "readRouteListRefresh", "routeListRefreshWasAttempted", "searchParams", "navigate", "withEmbeddedShopifyContext", "ROUTE_LIST_REFRESH_PARAM", source.slice(start, end));
+  const values = new Map();
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  const key = getRouteListRefreshKey("synthetic-app", "synthetic.myshopify.com");
+  const attemptRef = { current: null };
   let reads = 0;
-  const revalidator = { revalidate: () => { reads += 1; } };
-  const onReturn = Function("routesListNeedsRefreshRef", "window", "revalidator", `${source.slice(start, end)}; return handleRoutesHistoryReturn;`)(routesListNeedsRefreshRef, window, revalidator);
-  onReturn();
-  assert.equal(reads, 0);
-  routesListNeedsRefreshRef.current = true;
-  window.location.pathname = "/app/routes/another-synthetic-route";
-  onReturn();
-  assert.equal(reads, 0);
-  window.location.pathname = "/app/routes";
-  onReturn();
-  assert.equal(reads, 1);
-  assert.equal(routesListNeedsRefreshRef.current, null);
-  onReturn();
-  assert.equal(reads, 1);
+  let pendingVisible = false;
+  let searchParams = new URLSearchParams("shop=synthetic.myshopify.com&embedded=1");
+  const navigations = [];
+  const navigate = (href, options) => {
+    navigations.push({ href, options });
+    searchParams = new URL(href, "https://synthetic-app.test").searchParams;
+  };
+  const revalidator = { state: "idle", revalidate: () => { reads += 1; } };
+  let routesRefresh = { key, requested: [], confirmed: [] };
+  const confirm = (name, confirmed) => confirmRouteListRefresh(name, confirmed, storage);
+  const read = name => readRouteListRefresh(name, storage);
+  const run = (isRoutesIndex = true) => applyEffect(isRoutesIndex, attemptRef, routesRefresh, value => { pendingVisible = value; }, revalidator, confirm, read, routeListRefreshWasAttempted, searchParams, navigate, withEmbeddedShopifyContext, ROUTE_LIST_REFRESH_PARAM);
+  run();
+  assert.equal(navigations.length, 0, "unchanged navigation does not request a refresh");
+  rememberRouteListRefresh(key, "synthetic-route", "INCOMPLETE", storage);
+  run(false);
+  assert.equal(navigations.length, 0, "nested details leave the marker pending");
+  run();
+  assert.equal(navigations.length, 1);
+  assert.deepEqual(navigations[0].options, { replace: true });
+  assert.deepEqual(JSON.parse(searchParams.get(ROUTE_LIST_REFRESH_PARAM)), { key, pending: read(key) });
+  assert.equal(pendingVisible, true);
+  run();
+  assert.equal(navigations.length, 1, "rerenders cannot start duplicate query requests");
+  routesRefresh = { key, requested: read(key), confirmed: [] };
+  run();
+  run();
+  assert.equal(navigations.length, 1, "an unsuccessful attempt cannot create an automatic retry loop");
+  assert.equal(pendingVisible, true, "failure keeps the Retry control visible");
+  assert.equal(searchParams.has(ROUTE_LIST_REFRESH_PARAM), true, "the failed query is retained for revalidation and reload");
+  const retryHandler = source.match(/onClick=\{(\(\) => revalidator\.revalidate\(\))\} type="button"/);
+  assert.ok(retryHandler, "the rendered Retry control uses the real revalidator");
+  const retry = Function("revalidator", `return ${retryHandler[1]};`)(revalidator);
+  retry();
+  assert.equal(reads, 1, "the user can explicitly retry the failed query refresh");
+  assert.match(source, /<button disabled=\{revalidator\.state !== "idle"\} onClick=\{\(\) => revalidator\.revalidate\(\)\}/);
+  routesRefresh.confirmed = routesRefresh.requested;
+  run();
+  assert.equal(pendingVisible, false);
+  assert.deepEqual(read(key), []);
+  assert.equal(navigations.length, 2, "success removes only the refresh metadata with replace navigation");
+  assert.equal(searchParams.has(ROUTE_LIST_REFRESH_PARAM), false);
+  assert.equal(searchParams.get("shop"), "synthetic.myshopify.com");
+  assert.equal(searchParams.get("embedded"), "1");
+  run();
+  assert.equal(navigations.length, 2, "successful confirmation ends the refresh flow");
 });
 
 test("batched terminal driver events update the production status ref before ETA decisions", () => {
@@ -417,20 +461,31 @@ test("batched terminal driver events update the production status ref before ETA
   assert.equal(queued.reduce((state, update) => update(state), { routeId, status: "IN_PROGRESS" }).status, "COMPLETED");
 });
 
-test("pending list refresh clears after reconciliation and survives navigation to another route", () => {
+test("detail mismatch markers survive unmount and another route until the list confirms current state", () => {
   const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
-  const start = source.indexOf("    const pending = routesListNeedsRefreshRef.current;");
-  const end = source.indexOf("  }, [cachedRouteRows,", start);
+  const start = source.indexOf("    if (!trackingRoutePlanId || !isTerminalRouteExecutionStatus(routeExecutionStatus)) return;");
+  const end = source.indexOf("  }, [cachedRouteRows, routeExecutionStatus, routesListData, trackingRoutePlanId]);", start);
   assert.ok(start >= 0 && end > start);
-  const reconcile = Function("routesListNeedsRefreshRef", "cachedRouteRows", "trackingRoutePlanId", "routeExecutionStatus", "routesListData", "normalizeRouteExecutionStatus", "isTerminalRouteExecutionStatus", source.slice(start, end));
-  const pending = { current: null };
-  const data = { routePlans: [{ id: "synthetic-a", status: "READY" }, { id: "synthetic-b", status: "READY" }] };
-  const apply = (routeId, status) => reconcile(pending, buildRouteRows(data.routePlans), routeId, status, data, normalizeRouteExecutionStatus, isTerminalRouteExecutionStatus);
+  const values = new Map();
+  const storage = { getItem: key => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: key => values.delete(key) };
+  const key = getRouteListRefreshKey("synthetic-app", "synthetic.myshopify.com");
+  const remember = (name, id, status) => rememberRouteListRefresh(name, id, status, storage);
+  const observe = Function("trackingRoutePlanId", "isTerminalRouteExecutionStatus", "routeExecutionStatus", "cachedRouteRows", "routesListData", "normalizeRouteExecutionStatus", "rememberRouteListRefresh", source.slice(start, end));
+  const data = { routesRefresh: { key }, routePlans: [{ id: "synthetic-a", status: "READY" }, { id: "synthetic-b", status: "READY" }] };
+  const apply = (routeId, status) => observe(routeId, isTerminalRouteExecutionStatus, status, buildRouteRows(data.routePlans), data, normalizeRouteExecutionStatus, remember);
+  apply("synthetic-a", "READY");
+  assert.equal(values.size, 0);
   apply("synthetic-a", "INCOMPLETE");
-  assert.deepEqual(pending.current, { routeId: "synthetic-a", status: "INCOMPLETE" });
+  const marker = readRouteListRefresh(key, storage);
+  assert.equal(marker[0].routeId, "synthetic-a");
+  assert.equal(marker[0].status, "INCOMPLETE");
+  assert.equal(typeof marker[0].version, "string");
   apply("synthetic-b", "READY");
-  assert.equal(pending.current.routeId, "synthetic-a");
+  assert.deepEqual(readRouteListRefresh(key, storage), marker);
   data.routePlans[0].status = "INCOMPLETE";
   apply("synthetic-b", "READY");
-  assert.equal(pending.current, null);
+  assert.deepEqual(readRouteListRefresh(key, storage), marker, "the detail effect cannot consume the pending marker");
+  confirmRouteListRefresh(key, marker, storage);
+  assert.deepEqual(readRouteListRefresh(key, storage), []);
+  assert.doesNotMatch(source, /routesListNeedsRefreshRef|handleRoutesHistoryReturn/);
 });

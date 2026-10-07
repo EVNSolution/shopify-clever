@@ -680,7 +680,7 @@ test("child stop actions keep active route membership locked", () => {
   assert.doesNotMatch(routeDetailSource, /\["serviceType", "Service type"\]/);
   assert.match(routeDetailSource, /const routeMembershipChangeIsInProgress = isRouteExecutionInProgressForStopMembership\(routeExecutionStatus\)/);
   assert.match(routeDetailSource, /const canAddOrRemoveChildStops = canDraftEditChildStopMembership/);
-  assert.match(routeDetailSource, /disabled=\{!canAddOrRemoveChildStops\}/);
+  assert.match(routeDetailSource, /disabled=\{!canRemoveChildStopFromGroup\(activeChildStopActionsRow\)\}/);
   assert.match(routeDetailSource, /disabled=\{!canDraftEditChildStopMembership \|\| childStopSendTargetRows\.length === 0\}/);
   assert.match(routeDetailSource, /heading: "Change in-progress route\?"/);
   assert.match(routeDetailSource, /Adding a stop changes the active stop list/);

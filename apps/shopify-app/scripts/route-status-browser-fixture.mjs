@@ -15,6 +15,7 @@ const portArgumentIndex = process.argv.indexOf("--port");
 const port = portArgumentIndex >= 0 ? Number(process.argv[portArgumentIndex + 1]) : 43821;
 if (!Number.isInteger(port) || port < 1 || port > 65535) throw new Error("Invalid fixture port");
 const bundlePath = resolve(tmpdir(), `route-status-browser-fixture-${port}.js`);
+const serverBundlePath = resolve(appDirectory, "node_modules/.cache", `route-status-server-fixture-${port}.mjs`);
 
 const entry = `
 import React from "react";
@@ -32,6 +33,8 @@ const pendingLoaders = [];
 const snapshotHolds = new Set();
 const loaderHolds = new Map();
 const streams = new Set();
+const nativeFetch = window.fetch.bind(window);
+let failNextList = false;
 let nextRequestId = 1;
 let router;
 let saved;
@@ -139,9 +142,20 @@ const detailData = (routePlan, routeGroup = null) => ({
   drivers: [], errors: [], ianaTimezone: "America/Toronto", timezoneAbbreviation: "EDT", timezoneSource: "fixture",
   routePlan, routeGroup, routeMetrics: routePlan?.routeMetrics ?? null, stops: routePlan?.stops || [],
 });
-const listLoader = () => {
+const listLoader = async ({ request }) => {
   record("list-loader");
-  return clone({ errors: [], routeGroups: [makeGroup()], routePlans: plans, routeTimeZones: {} });
+  const fail = failNextList; failNextList = false;
+  const response = await nativeFetch("/app/routes-fixture/list", {
+    method: "POST", signal: request.signal, headers: { "content-type": "application/json" },
+    body: JSON.stringify({ plans, group: makeGroup(), fail, requestUrl: request.url }),
+  });
+  const data = await response.json();
+  record("list-result", { cache: data.fixtureCache, requested: data.routesRefresh?.requested,
+    confirmed: data.routesRefresh?.confirmed, errors: data.errors,
+    statuses: data.routePlans.map(({ id, status }) => ({ id, status })),
+    childStatuses: data.routeGroups.flatMap(group => group.children.map(child => ({ id: child.routePlanId, status: child.routePlan.status }))),
+  });
+  return data;
 };
 const detailLoader = async ({ params, request }) => {
   const routeId = params.routeId;
@@ -296,7 +310,14 @@ window.routeStatusFixture = {
     { event: "tracking_snapshot", data: makeSnapshot(payloadRouteId, "INCOMPLETE") },
     { event: "tracking_progress", data: makeProgressEvent(payloadRouteId, "ROUTE_COMPLETED", "foreign-completion") },
   ]),
-  reset: () => { sessionStorage.removeItem(storageKey); location.href = "/app/routes/?lang=" + language; },
+  reset: async () => {
+    sessionStorage.removeItem(storageKey);
+    for (const key of Object.keys(sessionStorage)) {
+      if (key.startsWith("clever:route-list-refresh:")) sessionStorage.removeItem(key);
+    }
+    await nativeFetch("/app/routes-fixture/reset", { method: "POST" });
+    location.href = "/app/routes/?lang=" + language;
+  },
 };
 const select = document.getElementById("fixture-route");
 for (const plan of plans) {
@@ -312,6 +333,9 @@ document.getElementById("fixture-reset").onclick = () => window.routeStatusFixtu
 document.getElementById("fixture-stale-loader").onclick = () => window.routeStatusFixture.beginStaleLoader();
 document.getElementById("fixture-terminal").onclick = () => terminal(undefined, "INCOMPLETE", false);
 document.getElementById("fixture-terminal-late").onclick = () => terminal(undefined, "INCOMPLETE", true);
+document.getElementById("fixture-cancelled").onclick = () => terminal(undefined, "CANCELLED");
+document.getElementById("fixture-completed").onclick = () => terminal(undefined, "COMPLETED");
+document.getElementById("fixture-fail-list").onclick = () => { failNextList = true; record("list-failure-armed"); };
 document.getElementById("fixture-completed-late").onclick = () => {
   const routeId = currentRouteId();
   const plan = planById(routeId);
@@ -341,6 +365,7 @@ export const authenticate = { admin: async () => ({}) };
 export const boundary = { headers: () => ({}), error: () => null };
 export const deleteDeliveryRoutePlan = () => {};
 export const fetchDeliveryRoutePlans = () => {};
+export const getCleverAppId = () => "synthetic-browser";
 export const fetchShopifyDepartureLocation = () => {};
 export const fetchRouteFallbackTimeZone = () => {};
 export const resolveRouteListTimeZones = () => {};
@@ -371,17 +396,58 @@ await build({
   } }],
 });
 
+// Run the production list loader and GET cache in this isolated local process.
+// Only authentication/settings/timezone are stubbed; plans/groups helpers stay real.
+await build({
+  stdin: { contents: `export { loader } from ${JSON.stringify(`${appDirectory}/app/routes/app.routes.jsx`)};`, resolveDir: appDirectory },
+  bundle: true, format: "esm", platform: "node", packages: "external", outfile: serverBundlePath,
+  plugins: [{ name: "fixture-list-auth", setup(builder) {
+    builder.onResolve({ filter: /shopify\.server$|shopify-locations\.server$|route-timezone\.server$|structured-telemetry\.server(?:\.js)?$|^@shopify\/shopify-app-react-router\/server$/ }, () => ({ path: "list-stub", namespace: "list-fixture" }));
+    builder.onLoad({ filter: /.*/, namespace: "list-fixture" }, () => ({ contents: `
+      export const authenticate = { admin: async () => ({ admin: {}, session: { shop: "synthetic-browser.myshopify.com" } }) };
+      export const fetchShopifyDepartureLocation = async () => ({ departureLocation: null, errors: [] });
+      export const fetchRouteFallbackTimeZone = async () => ({ ianaTimezone: "America/Toronto", errors: [] });
+      export const resolveRouteListTimeZones = async () => ({});
+      export const logStructuredMetric = () => {};
+      export const createTelemetryRequestId = () => "synthetic-correlation";
+      export const logSafeOperationalEvent = () => {};
+      export const sanitizeRequestPath = value => value;
+      export const boundary = { headers: () => ({}) };
+    ` }));
+  } }],
+});
+const { loader: productionListLoader } = await import(serverBundlePath);
+process.env.CLEVER_APP_ID = "synthetic-browser";
+process.env.CLEVER_DELIVERY_API_URL = "http://synthetic-delivery.invalid";
+process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = "15000";
+let sourcePlans = [];
+let sourceGroup = null;
+let failedReadsRemaining = 0;
+let upstreamReads = 0;
+let clockNow = Date.now();
+Date.now = () => clockNow; // Keep the 15-second cache active during manual browser inspection.
+globalThis.fetch = async (url, init) => {
+  if (init.method !== "GET" || !url.startsWith(process.env.CLEVER_DELIVERY_API_URL)) throw new Error("Fixture blocks external transport");
+  upstreamReads += 1;
+  if (failedReadsRemaining > 0) {
+    failedReadsRemaining -= 1;
+    return Response.json({ error: { message: "Synthetic list read failed" } }, { status: 503 });
+  }
+  return Response.json({ data: url.includes("route-groups") ? { routeGroups: [sourceGroup] } : { routePlans: sourcePlans } });
+};
+
 const html = `<!doctype html><html lang="en"><head><title>Routes status synthetic fixture</title>
 <script src="https://cdn.shopify.com/shopifycloud/polaris.js"></script><link rel="stylesheet" href="/global.css">
 <style>body{font-family:Arial;margin:0}#fixture-controls{background:#fff4cc;padding:8px;font-size:12px}#fixture-controls button,#fixture-controls select{margin:3px;padding:4px}#fixture-status{font-weight:700;margin:5px 0}#fixture-log{max-height:150px;overflow:auto;font-size:10px}#fixture-controls details{margin-top:4px}</style></head><body>
 <aside id="fixture-controls" aria-label="Synthetic fixture controls">
-<strong>Local synthetic fixture · Production Routes components · Synthetic tracking transport · Map and App Bridge stubs</strong>
+<strong>Local synthetic fixture · Production Routes components/list loader/GET cache · 15000ms cache with frozen clock · Synthetic transport</strong>
 <div><label>Language <select id="fixture-language"><option value="en">English</option><option value="ko">한국어</option></select></label>
 <label>Route <select id="fixture-route"></select></label><button id="fixture-open">Open selected route</button>
 <button id="fixture-finalize-selected">Finalize selected route before opening</button><button id="fixture-group">Open group aggregate</button><button id="fixture-list">Return to Routes (trailing slash)</button>
 <button id="fixture-refresh">Page refresh</button><button id="fixture-reset">Reset synthetic data</button></div>
 <div><button id="fixture-stale-loader">Hold stale detail loader</button><button id="fixture-terminal">Receive INCOMPLETE snapshot</button>
 <button id="fixture-terminal-late">Receive INCOMPLETE + late duplicates</button><button id="fixture-release-loader">Release stale loader</button><button id="fixture-completed-late">Receive COMPLETED + later events</button>
+<button id="fixture-completed">Receive COMPLETED snapshot</button><button id="fixture-cancelled">Receive CANCELLED snapshot</button><button id="fixture-fail-list">Fail next plans/groups reads</button>
 <button id="fixture-defer-a">Hold A snapshot and open A</button><button id="fixture-open-b">Open B</button>
 <button id="fixture-release-snapshot">Release held snapshots</button><button id="fixture-foreign">Receive foreign route payload</button></div>
 <div id="fixture-status"></div><details><summary>Fixture request log and procedure</summary>
@@ -390,9 +456,35 @@ const html = `<!doctype html><html lang="en"><head><title>Routes status syntheti
 <p>Group aggregate is IN_PROGRESS. Incomplete child is INCOMPLETE. Completed return grace has raw IN_PROGRESS and display COMPLETED.</p>
 <pre id="fixture-log"></pre></details></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`;
 
-const server = createServer((request, response) => {
+const server = createServer(async (request, response) => {
   const url = new URL(request.url ?? "/", `http://127.0.0.1:${port}`);
   response.setHeader("cache-control", "no-store");
+  if (request.method === "POST" && url.pathname === "/app/routes-fixture/reset") {
+    clockNow += 15001; upstreamReads = 0;
+    response.end("{}"); return;
+  }
+  if (request.method === "POST" && url.pathname === "/app/routes-fixture/list") {
+    try {
+      let body = "";
+      for await (const chunk of request) body += chunk;
+      const input = JSON.parse(body);
+      sourcePlans = input.plans; sourceGroup = input.group;
+      failedReadsRemaining = input.fail ? 2 : 0;
+      const data = await productionListLoader({ request: new Request(`http://127.0.0.1:${port}/app/routes${new URL(input.requestUrl).search}`, {
+        headers: { authorization: "Bearer synthetic-browser" },
+      }) });
+      response.setHeader("content-type", "application/json");
+      response.end(JSON.stringify({ ...data, fixtureCache: { upstreamReads, ttlMs: 15000, sourceStatus: sourcePlans.find(plan => plan.id === "route-ready")?.status } }));
+    } catch (error) {
+      response.writeHead(500); response.end(JSON.stringify({ error: String(error) }));
+    }
+    return;
+  }
+  if (url.pathname === "/embedded") {
+    response.setHeader("content-type", "text/html; charset=utf-8");
+    response.end(`<h1>Cross-site embedded Routes fixture</h1><p>Top-level localhost, app iframe 127.0.0.1. No refresh cookies.</p><iframe title="Embedded Routes app" src="http://127.0.0.1:${port}/app/routes?embedded=1&shop=synthetic-browser.myshopify.com" style="width:100%;height:1100px;border:1px solid"></iframe>`);
+    return;
+  }
   if (url.pathname === "/global.css") { response.setHeader("content-type", "text/css"); response.end(readFileSync(`${appDirectory}/app/styles/global.css`)); return; }
   if (url.pathname === "/fixture.js") { response.setHeader("content-type", "text/javascript"); response.end(readFileSync(bundlePath)); return; }
   if (url.pathname === "/") { response.writeHead(302, { location: "/app/routes/" + url.search }); response.end(); return; }

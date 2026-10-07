@@ -9,6 +9,12 @@ import { formatStoreInstant } from "../app/features/shopify/store-date-time.js";
 import { buildRouteRows } from "../app/features/delivery/route-list-rows.js";
 import { formatStoreLocalDateTimeInput, storeLocalDateTimeToIso } from "../app/features/delivery/child-route-detail-presentation.js";
 import { resolveRouteListTimeZones } from "../app/features/delivery/route-timezone.server.js";
+import {
+  getConfirmedRouteListRefresh,
+  getRouteListRefreshKey,
+  readRouteListRefreshRequest,
+} from "../app/features/delivery/route-list-refresh.js";
+import { getCleverAppId } from "../app/features/delivery/route-plans.server.js";
 
 const root = process.cwd();
 const routesPageSource = readFileSync(join(root, "app/routes/app.routes.jsx"), "utf8");
@@ -125,7 +131,7 @@ test("list loader reads settings and resolves legacy and saved child schedules",
   const admin = {};
   const loaderStart = routesPageSource.indexOf("export const loader = async");
   const loaderEnd = routesPageSource.indexOf("export function shouldRevalidate", loaderStart);
-  const factory = Function("authenticate", "fetchDeliveryRoutePlans", "fetchDeliveryRouteGroups", "fetchShopifyDepartureLocation", "fetchRouteFallbackTimeZone", "resolveRouteListTimeZones", "measureRouteLoaderStep", "logStructuredMetric", `${routesPageSource.slice(loaderStart, loaderEnd).replace("export const loader", "const loader")} return loader;`);
+  const factory = Function("authenticate", "fetchDeliveryRoutePlans", "fetchDeliveryRouteGroups", "fetchShopifyDepartureLocation", "fetchRouteFallbackTimeZone", "resolveRouteListTimeZones", "measureRouteLoaderStep", "logStructuredMetric", "getCleverAppId", "getRouteListRefreshKey", "readRouteListRefreshRequest", "getConfirmedRouteListRefresh", "buildRouteRows", `${routesPageSource.slice(loaderStart, loaderEnd).replace("export const loader", "const loader")} return loader;`);
   const loader = factory(
     { admin: async () => ({ admin, session }) },
     async () => ({ routePlans, errors: [] }),
@@ -135,6 +141,11 @@ test("list loader reads settings and resolves legacy and saved child schedules",
     resolveRouteListTimeZones,
     async (load) => ({ data: await load(), durationMs: 0 }),
     () => {},
+    getCleverAppId,
+    getRouteListRefreshKey,
+    readRouteListRefreshRequest,
+    getConfirmedRouteListRefresh,
+    buildRouteRows,
   );
   const data = await loader({ request: new Request("https://local.test/app/routes") });
   assert.deepEqual(calls, [[admin, session.shop]]);

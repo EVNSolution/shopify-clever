@@ -9,6 +9,7 @@ import { RouteActionIconButton } from "../ui/route-action-icon-button";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { translate } from "../i18n/i18n";
 import { summarizeAllRoutes } from "../features/delivery/all-routes-summary";
+import { rememberRouteListRefresh } from "../features/delivery/route-list-refresh";
 import {
   getCustomerEmailDefaultSignal,
   getCustomerEmailPreviewEmptyState,
@@ -3749,7 +3750,6 @@ function createCustomerEmailDialogOpenState(signal) {
 export default function RouteDetailPage() {
   const storeTimeZone = useStoreTimeZone();
   const navigate = useNavigate();
-  const routesListNeedsRefreshRef = useRef(null);
   const [searchParams] = useSearchParams();
   const navigateWithEmbeddedContext = useCallback(
     (destination) => {
@@ -3760,11 +3760,7 @@ export default function RouteDetailPage() {
       ) {
         window.__cleverRoutesEntryStartedAt = performance.now();
       }
-      const nextDestination = destination === ROUTES_ROOT_PATH && routesListNeedsRefreshRef.current
-        ? `${ROUTES_ROOT_PATH}/`
-        : destination;
-      if (destination === ROUTES_ROOT_PATH) routesListNeedsRefreshRef.current = null;
-      navigate(withEmbeddedShopifyContext(nextDestination, searchParams));
+      navigate(withEmbeddedShopifyContext(destination, searchParams));
     },
     [navigate, searchParams],
   );
@@ -4180,26 +4176,12 @@ export default function RouteDetailPage() {
     }));
   }, [routeExecutionScopeId, loaderRouteExecutionStatus]);
   useEffect(() => {
-    const pending = routesListNeedsRefreshRef.current;
-    const pendingCachedRoute = pending && cachedRouteRows.find((row) => row.id === pending.routeId);
-    if (pending && normalizeRouteExecutionStatus(pendingCachedRoute?.status) === pending.status) {
-      routesListNeedsRefreshRef.current = null;
-    }
     if (!trackingRoutePlanId || !isTerminalRouteExecutionStatus(routeExecutionStatus)) return;
     const cachedRoute = cachedRouteRows.find((row) => row.id === trackingRoutePlanId);
     if (routesListData && normalizeRouteExecutionStatus(cachedRoute?.status) !== routeExecutionStatus) {
-      routesListNeedsRefreshRef.current = { routeId: trackingRoutePlanId, status: routeExecutionStatus };
+      rememberRouteListRefresh(routesListData.routesRefresh?.key, trackingRoutePlanId, routeExecutionStatus);
     }
   }, [cachedRouteRows, routeExecutionStatus, routesListData, trackingRoutePlanId]);
-  useEffect(() => {
-    const handleRoutesHistoryReturn = () => {
-      if (!routesListNeedsRefreshRef.current || !/^\/app\/routes\/?$/.test(window.location.pathname)) return;
-      routesListNeedsRefreshRef.current = null;
-      revalidator.revalidate();
-    };
-    window.addEventListener("popstate", handleRoutesHistoryReturn);
-    return () => window.removeEventListener("popstate", handleRoutesHistoryReturn);
-  }, [revalidator]);
   useEffect(() => {
     routeTrackingSnapshotRef.current = null;
     setRouteTrackingSnapshot(null);
@@ -5337,10 +5319,14 @@ export default function RouteDetailPage() {
     setActiveChildStopEditRow(null);
   };
 
-  const removeChildStopFromGroup = (row) => {
-    if (!row?.id) return;
+  const canRemoveChildStopFromGroup = (row) => {
+    if (!canAddOrRemoveChildStops || !row?.id) return false;
     const sourceRouteRow = timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === row.id));
-    if (!sourceRouteRow || isRouteExecutionLockedForStopMembership(sourceRouteRow.status)) return;
+    return Boolean(sourceRouteRow && !isRouteExecutionLockedForStopMembership(sourceRouteRow.status));
+  };
+
+  const removeChildStopFromGroup = (row) => {
+    if (!canRemoveChildStopFromGroup(row)) return;
     setRoutePreviewByKey({});
     if (row.orderId) setRemovedOrderIds((orderIds) => [...new Set([...orderIds, row.orderId])]);
     animateRouteTimelineChange(() => {
@@ -5354,7 +5340,7 @@ export default function RouteDetailPage() {
   };
 
   const handleRemoveChildStopFromGroup = (row) => {
-    if (!canAddOrRemoveChildStops || !row?.id) return;
+    if (!canRemoveChildStopFromGroup(row)) return;
     if (routeMembershipChangeIsInProgress) {
       setPendingInProgressRouteChange({
         heading: "Change in-progress route?",
@@ -8652,12 +8638,12 @@ export default function RouteDetailPage() {
                 {activeChildStopActionsRow.isCustomStop ? "Edit custom stop" : "Edit stop"}
               </button>
               <button
-                disabled={!canAddOrRemoveChildStops}
+                disabled={!canRemoveChildStopFromGroup(activeChildStopActionsRow)}
                 onClick={() => handleRemoveChildStopFromGroup(activeChildStopActionsRow)}
                 role="menuitem"
                 style={{
                   ...childStopActionsMenuItemStyle,
-                  ...(!canAddOrRemoveChildStops ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                  ...(!canRemoveChildStopFromGroup(activeChildStopActionsRow) ? { cursor: "not-allowed", opacity: 0.55 } : null),
                 }}
                 type="button"
               >
