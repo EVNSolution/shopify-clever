@@ -65,6 +65,29 @@ test("address-only Save clears old coordinates and requires explicit location co
   );
 });
 
+test("untouched future stops without coordinates do not block server-authoritative Dispatch", () => {
+  const baseline = response({
+    hasUnpublishedChanges: true,
+    draft: {
+      schemaVersion: 1,
+      stops: [
+        stop("stop-1", 1),
+        stop("stop-2", 2),
+        stop("stop-3", 3),
+        { ...stop("stop-7", 7), latitude: null, longitude: null },
+      ],
+    },
+  });
+  const editor = createLiveEditor(baseline);
+  assert.deepEqual(getLiveLocationIssues(editor), []);
+  assert.deepEqual(buildLiveCommand(editor, "dispatch", "dispatch-1"), {
+    commandId: "dispatch-1",
+    expectedAssignmentGeneration: "2",
+    expectedRouteVersionId: "child-version",
+    expectedRevision: 3,
+  });
+});
+
 test("future order is a full eligible permutation and protected stop edits are rejected", () => {
   const editor = createLiveEditor(response());
   assert.throws(

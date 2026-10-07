@@ -126,12 +126,12 @@ export function hasLiveLocalEdits(editor) {
 
 export function getLiveLocationIssues(editor) {
   if (!editor) return [];
-  return editor.baseline.editableFutureStopIds.filter((id) => {
-    const edited = editor.edits[id];
-    return edited
-      ? !edited.locationVerified || !validLiveCoordinates(edited)
-      : !validLiveCoordinates(liveStopValues(editor, id));
-  });
+  return Object.entries(editor.edits)
+    .filter(
+      ([, edited]) =>
+        !edited.locationVerified || !validLiveCoordinates(edited),
+    )
+    .map(([id]) => id);
 }
 
 export function buildLiveCommand(editor, action, commandId) {
