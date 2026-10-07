@@ -4,6 +4,53 @@
 연결된 추적 항목은 [대상 issue #292](https://github.com/EVNSolution/shopify-clever/issues/292)와
 [change-control #298](https://github.com/EVNSolution/clever-change-control/issues/298)이다.
 
+## 추가 관리 검토 F03 — 완료된 캐시의 상한
+
+검토 기준 SHA는 `9574506590865310b0bc25c9f5b27d6af217ec39`이다.
+F01 목록 최신화와 F02 제거 버튼은 관리 검토를 통과했다.
+이번 보완은 서버 GET 캐시 helper, 회귀 검사와 이 문서만 변경한다.
+기존 branch·worktree·draft PR과 F01·F02 구현은 유지한다.
+
+실제 `fetchDeliveryRoutePlans`에 하나의 대기 가능한 합성 fetch를 주입했다.
+101개 합성 shop key를 동시에 조회하고 모두 완료한 뒤 key를 다시 조회했다.
+수정 전에는 101개가 모두 cache hit였다. 성공 120개·실패 5개를 섞어도 성공 캐시 120개가 남았다.
+새 회귀 검사 6개 중 이 상한 검사 2개가 실패했다.
+
+요청 완료 시 해당 요청의 캐시 항목이 여전히 현재 항목인지 확인한다.
+현재 항목이면 실패 항목을 제거하고 기존 pruning을 실행한다.
+정상 결과와 예외 종료 경로에 모두 적용한다.
+진행 중 항목은 기존대로 보호한다. 모든 요청 완료 후에는 기존 최대 100개 상한을 충족한다.
+교체된 요청은 새 항목을 덮거나 삭제하지 않으며 새 항목의 TTL을 연장하지 않는다.
+tenant/app 키, TTL, 명시적 갱신과 재시도 정책은 변경하지 않는다.
+
+| 재현·보호 검사 | 수정 전 | 수정 후 |
+| --- | --- | --- |
+| 101개 동시 성공 요청 완료 후 캐시 | 101개 유지. 재조회 upstream 총 101회 | 100개 유지. 제거된 1개 재조회로 총 102회 |
+| 성공 120개·실패 5개 완료 후 캐시 | 성공 캐시 120개 유지 | 성공 캐시 100개 유지. 제거·실패 key 재조회 성공 |
+| 상한 초과와 TTL 경과 중 동일 key 요청 | 정상·명시적 갱신 요청 공유 | 요청 공유 유지. 추가 upstream 요청 없음 |
+| 이전 성공·503·401 응답과 새 항목 경합 | 새 상태와 TTL 유지 | 새 상태와 TTL 유지 |
+
+다음 검사는 생산 함수와 최종 반환값을 사용한다.
+내부 캐시 크기 확인용 API나 전체 캐시 삭제를 추가하지 않았다.
+새 key 재삽입이 다른 hit를 가리지 않도록 최신 key부터 재조회했다.
+
+```bash
+cd apps/shopify-app
+node --test tests/delivery-api-get-cache-limit.test.mjs \
+  tests/route-list-refresh.test.mjs tests/route-child-stop-removal.test.mjs \
+  tests/routes-page.test.mjs tests/routes-table-contract.test.mjs \
+  tests/kfood-shared-server-regressions.test.mjs
+```
+
+- 새 F03 검사 6개와 기존 F01·F02 관련 검사: 145/145 통과.
+- root `npm test`: 1,008/1,008 통과. 실패·건너뜀 0개.
+- root build·typecheck·public URL 검사, 변경 파일 ESLint와 diff 검사: 통과.
+- F03은 서버 캐시 관리 변경이다. 브라우저 검증은 재실행하지 않았다. 기존 합성 iframe 증거는 아래에 보존한다.
+- 새 기능·다른 저장소 구현·병합·배포·운영 데이터 변경·실제 알림 발송은 수행하지 않았다.
+
+연결된 기존 issue·change-control trace는 유지한다. 상태 계약 변경이 없어 context monorepo 구현 반영은 필요하지 않다.
+이번 최종 SHA와 동일 SHA의 CI 결과는 PR 본문에 기록한다.
+
 ## 관리 검토 후 보완
 
 검토 기준 SHA는 `38b3b626d182f3d51f3dd1ee2e4d079305c6e28e`이다.
@@ -150,8 +197,8 @@ KFood의 배송 완료 표시와 복귀 내비게이션 유예는 서버 계약�
 
 | 명령 | 결과 |
 | --- | --- |
-| `npm test` (repo root) | 1,002/1,002 통과. 최종 SHA의 CI는 PR에서 확인한다. |
-| cache·loader·navigation 관련 회귀 검사 (app) | 126/126 통과 |
+| `npm test` (repo root) | 1,008/1,008 통과. 최종 SHA의 CI는 PR에서 확인한다. |
+| F03·cache·loader·navigation·child 제거 회귀 검사 (app) | 145/145 통과 |
 | `node --test tests/route-child-stop-removal.test.mjs` (app) | 13/13 통과 |
 | `npm run build` (repo root) | 통과 |
 | `npm run typecheck` (repo root) | 통과 |

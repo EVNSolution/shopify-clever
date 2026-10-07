@@ -891,15 +891,20 @@ export async function deliveryApiRequest(request, path, options = {}) {
         (result) => {
           cacheEntry.refreshing = false;
           cacheEntry.inFlight = false;
-          cacheEntry.expiresAt = Date.now() + cacheTtlMs;
-          if (result.errors.length > 0 && deliveryApiGetCache.get(cacheKey) === cacheEntry) {
-            deliveryApiGetCache.delete(cacheKey);
+          const settledAt = Date.now();
+          cacheEntry.expiresAt = settledAt + cacheTtlMs;
+          if (deliveryApiGetCache.get(cacheKey) === cacheEntry) {
+            if (result.errors.length > 0) deliveryApiGetCache.delete(cacheKey);
+            pruneDeliveryApiGetCache(settledAt);
           }
 
           return result;
         },
         (error) => {
-          if (deliveryApiGetCache.get(cacheKey) === cacheEntry) deliveryApiGetCache.delete(cacheKey);
+          if (deliveryApiGetCache.get(cacheKey) === cacheEntry) {
+            deliveryApiGetCache.delete(cacheKey);
+            pruneDeliveryApiGetCache(Date.now());
+          }
           throw error;
         },
       ),
