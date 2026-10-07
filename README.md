@@ -12,6 +12,9 @@ On EC2 compose, Shopify app containers join the external route-server Docker net
 API request correlation and the bounded `/perf` capture contract are documented
 in [`docs/api-observability.md`](docs/api-observability.md).
 
+The KFood future delivery editor, private Save, Dispatch, Discard, and release gate
+are documented in [`docs/ui/kfood-live-route-change.md`](docs/ui/kfood-live-route-change.md).
+
 ## Public and dev endpoints
 
 Production/App Store runtime:

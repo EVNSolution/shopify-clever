@@ -1,0 +1,39 @@
+{
+  "verifiedAt": "2026-10-07T09:07:03.167Z",
+  "status": "pass",
+  "serverSourceSha": "9bd6e7b8408508c83b1e4255a62c37ee9b983bf0",
+  "environment": {
+    "database": "temporary PostgreSQL 17 cluster; 127.0.0.1 only; migrations from PR486",
+    "transport": "actual loopback Fastify HTTP",
+    "commerce": "synthetic seven-stop route and locally signed JWTs",
+    "shopifyBoundary": "actual BFF helpers with real fetch; authenticated session provided by test",
+    "providers": "disabled push; no routing/geocoding provider"
+  },
+  "checks": [
+    {
+      "name": "actual HTTP authentication, tenant scope and canonical route/version guards",
+      "result": "pass"
+    },
+    {
+      "name": "Save remains private; lost reply retries the immutable command; command reuse and revision conflicts are preserved",
+      "result": "pass"
+    },
+    {
+      "name": "Dispatch survives lost reply with one publication, preserves current stop and Shopify upstream, invalidates route cache, and stays driver-pending",
+      "result": "pass"
+    },
+    {
+      "name": "driver progression blocks stranded draft; explicit Discard restores publication and survives lost reply with exact command replay",
+      "result": "pass"
+    },
+    {
+      "name": "Discard permits fresh future editing; missing coordinates block Dispatch; exact old receipt retry is followed by fresh authoritative GET",
+      "result": "pass"
+    }
+  ],
+  "limitations": [
+    "Shopify platform authentication and embedded iframe require separate authenticated store verification",
+    "Map/geocode provider calls and driver application Apply are outside this local run"
+  ],
+  "cleanup": "HTTP server, Prisma client and temporary PostgreSQL cluster are closed and removed in finally"
+}

@@ -53,6 +53,7 @@ import { authenticate } from "../../shopify.server";
 import { fetchRouteFallbackTimeZone, resolveRouteTimeZone } from "./route-timezone.server";
 import { readRouteDraftPayload } from "./route-draft";
 import { buildRouteAddOrderCandidates } from "./route-add-order-candidates";
+import { getKfoodLiveChangeContext } from "./live-change.server.js";
 import {
   buildCustomStopPayload,
   createCustomStopDraft,
@@ -420,6 +421,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
   const loaderStartedAt = getRouteDetailPerfNow();
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
+  const liveChangeContext = getKfoodLiveChangeContext(session);
 
   if (routeGroupIdHint) {
     const primaryDataStartedAt = getRouteDetailPerfNow();
@@ -485,6 +487,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
     });
 
     return {
+      ...liveChangeContext,
       addOrderCandidates: buildRouteAddOrderCandidates(orderData.orders, {
         routeGroup: routeGroupData.routeGroup,
         routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
@@ -577,6 +580,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
   });
 
   return {
+    ...liveChangeContext,
     ...routePlanData,
     addOrderCandidates: buildRouteAddOrderCandidates(orderData.orders, {
       routeGroup: routeGroupData.routeGroup,

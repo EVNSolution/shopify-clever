@@ -10,6 +10,7 @@ import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { translate } from "../i18n/i18n";
 import { summarizeAllRoutes } from "../features/delivery/all-routes-summary";
 import { rememberRouteListRefresh } from "../features/delivery/route-list-refresh";
+import { LiveRouteChangeEditor } from "../features/delivery/live-route-change-editor";
 import {
   getCustomerEmailDefaultSignal,
   getCustomerEmailPreviewEmptyState,
@@ -3790,6 +3791,8 @@ export default function RouteDetailPage() {
     ianaTimezone,
     timezoneAbbreviation,
     timezoneSource,
+    liveChangeEnabled = false,
+    liveChangeScopeKey = null,
   } = useLoaderData();
   const effectiveRoutePlan = routePlan;
   const routesListHref = ROUTES_ROOT_PATH;
@@ -4045,6 +4048,14 @@ export default function RouteDetailPage() {
     : loaderRouteExecutionStatus;
   const routeExecutionStatusRef = useRef(routeExecutionStatus);
   routeExecutionStatusRef.current = routeExecutionStatus;
+  const liveChangeActive = Boolean(liveChangeEnabled && liveChangeScopeKey
+    && effectiveRoutePlan?.id && routeExecutionStatus === "IN_PROGRESS");
+  const liveChangeEditorRef = useRef(null);
+  const openedLiveChangeScopeRef = useRef(null);
+  const liveChangeScope = `${liveChangeScopeKey}:${effectiveRoutePlan?.id}`;
+  if (liveChangeActive) openedLiveChangeScopeRef.current = liveChangeScope;
+  const showLiveChangeEditor = Boolean(liveChangeEnabled && liveChangeScopeKey
+    && effectiveRoutePlan?.id && openedLiveChangeScopeRef.current === liveChangeScope);
   const setRouteExecutionStatus = useCallback((update) => {
     if (activeTrackingRoutePlanIdRef.current !== routeExecutionScopeId) return;
     const nextStatus = update(routeExecutionStatusRef.current);
@@ -4365,7 +4376,7 @@ export default function RouteDetailPage() {
   const canAddOrRemoveChildStops = canDraftEditChildStopMembership;
   const canReorderRouteStops = isRouteGroupDetail
     ? contextRouteRows.some((row) => isRouteStopReorderAllowed(row.status))
-    : isRouteStopReorderAllowed(routeExecutionStatus);
+    : !liveChangeActive && isRouteStopReorderAllowed(routeExecutionStatus);
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
     ? trackingRoutePlanId
     : null;
@@ -5285,6 +5296,12 @@ export default function RouteDetailPage() {
 
   const handleOpenChildStopEditor = (row) => {
     if (!row?.deliveryStopId || !canEditStopRow(row)) return;
+    if (liveChangeActive) {
+      setActiveChildStopActions(null);
+      liveChangeEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+      liveChangeEditorRef.current?.focus();
+      return;
+    }
     if (row.isCustomStop) {
       setCustomStopDraft(buildCustomStopDraftFromRow(row));
       setCustomStopFieldErrors({});
@@ -7509,6 +7526,18 @@ export default function RouteDetailPage() {
           </s-banner>
         ) : null}
 
+        {showLiveChangeEditor ? (
+          <div ref={liveChangeEditorRef} tabIndex={-1}>
+            <LiveRouteChangeEditor
+              routePlanId={effectiveRoutePlan.id}
+              scopeKey={liveChangeScopeKey}
+              language={language}
+              routeInProgress={routeExecutionStatus === "IN_PROGRESS"}
+              onMutation={() => revalidator.revalidate()}
+            />
+          </div>
+        ) : null}
+
         <section style={routesDetailCardStyle}>
           {hasRouteTrackingDetail ? (
             <div className="route-detail-control-row" aria-label={translate(language, "routes.detail.sections.accessibilityLabel")} role="toolbar" style={routeChildTabsStyle}>
@@ -7609,7 +7638,7 @@ export default function RouteDetailPage() {
                   {renderRouteHeaderMetric("Driver", routeDriverSummary)}
                 </div>
               )}
-              {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
+              {!isRouteGroupDetail && effectiveRoutePlan?.id && !liveChangeActive ? (
                 <button
                   disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
                   onClick={handleDispatchRoute}

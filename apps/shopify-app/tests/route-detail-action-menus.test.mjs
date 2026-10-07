@@ -155,7 +155,7 @@ function renderControls(overrides = {}) {
   const base = renderActions().context;
   const context = { ...base, ...selectionStyles,
     isRouteGroupDetail: false, isMaterializedChildRouteDetail: false,
-    canDispatchRoute: true, routeGroupActionIntent: null, routeDriverId: "driver-1",
+    canDispatchRoute: true, liveChangeActive: false, routeGroupActionIntent: null, routeDriverId: "driver-1",
     routeDisabledActionButtonStyle: {}, routeExecutionStatus: "READY", routeDriverSummary: "Test driver",
     currentTimelineRouteRow: { routePlanId: "route-1", startTimeLabel: "09:00", driverLabel: "Test driver" },
     routeStartDateTimeValue: "2026-10-01T09:00", routeStartTimeLabel: "09:00", routeDetailTitle: "Test route", ROUTE_EMPTY_LABEL: "—",
@@ -171,6 +171,7 @@ test("schedule and driver sit under tabs before the map, Dispatch retains its ha
   assert.ok(source.indexOf('<h1 className="route-detail-title"') < source.indexOf('aria-label="Route detail actions"'));
   const { tree, context } = renderControls();
   assert.equal(button(tree, "Dispatch").props.onClick, context.handleDispatchRoute);
+  assert.equal(button(renderControls({ liveChangeActive: true }).tree, "Dispatch"), undefined);
   assert.match(text(tree), /Delivery date: Test date.*Driver: Test driver/);
   for (const guards of [{ canDispatchRoute: false }, { routeGroupActionBusy: true }, { hasRouteAllocationDraft: true }]) {
     assert.equal(button(renderControls(guards).tree, "Dispatch").props.disabled, true);

@@ -79,6 +79,23 @@ export function clearDeliveryApiResponseCache() {
   deliveryApiGetCache.clear();
 }
 
+export function invalidateDeliveryRouteResponseCache(request, options = {}) {
+  const authorization = getShopifySessionBearer(request) ?? normalizeShopifySessionBearer(options.sessionToken);
+  if (!authorization) return;
+  const appId = getCleverAppId();
+  const scopes = new Set([
+    getDeliveryApiGetCacheScope({ appId, authorization }),
+    getDeliveryApiGetCacheScope({ appId, authorization, cacheKey: options.cacheKey }),
+  ]);
+  const baseUrl = getDeliveryApiBaseUrl();
+  for (const cacheKey of deliveryApiGetCache.keys()) {
+    const [, cachedBaseUrl, path, , scope] = cacheKey.split("\n");
+    if (cachedBaseUrl === baseUrl && scopes.has(scope) && /^\/admin\/route-(?:plans|groups)(?:\/|\?|$)/u.test(path)) {
+      deliveryApiGetCache.delete(cacheKey);
+    }
+  }
+}
+
 export function primeDeliveryApiGetResponseCache(request, path, result, options = {}) {
   const authorization =
     getShopifySessionHeaderBearer(request) ??
@@ -234,7 +251,10 @@ export async function fetchDeliveryRoutePlanDetail(request, routePlanId, options
     request,
     `/admin/route-plans/${safeRoutePlanId}`,
     {
+      cache: options.cache,
       cacheKey: options.cacheKey,
+      cacheTtlMs: options.cacheTtlMs,
+      refreshCache: options.refreshCache,
       fetch: options.fetch,
       method: "GET",
       sessionToken: options.sessionToken,
@@ -848,7 +868,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
   const cacheTtlMs = Number.isFinite(options.cacheTtlMs)
     ? Math.max(0, Number(options.cacheTtlMs))
     : getDeliveryApiGetCacheTtlMs();
-  const canUseCache = method === "GET" && !options.body && cacheTtlMs > 0;
+  const canUseCache = method === "GET" && !options.body && options.cache !== "no-store" && cacheTtlMs > 0;
 
   if (canUseCache) {
     const cacheScope = getDeliveryApiGetCacheScope({
@@ -875,6 +895,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
       appId,
       authorization,
       body: options.body,
+      cache: options.cache,
       correlationId,
       fetchImpl,
       method,
@@ -919,6 +940,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
     appId,
     authorization,
     body: options.body,
+    cache: options.cache,
     correlationId,
     fetchImpl,
     method,
@@ -928,7 +950,7 @@ export async function deliveryApiRequest(request, path, options = {}) {
     suppressErrorStatuses: options.suppressErrorStatuses,
   });
 
-  if (method !== "GET" && result.errors.length === 0) {
+  if (method !== "GET" && result.errors.length === 0 && !options.skipCacheInvalidation) {
     clearDeliveryApiResponseCache();
   }
 
@@ -939,6 +961,7 @@ async function executeDeliveryApiRequest({
   appId,
   authorization,
   body,
+  cache,
   correlationId,
   fetchImpl,
   method,
@@ -954,6 +977,7 @@ async function executeDeliveryApiRequest({
   try {
     response = await fetchImpl(url, {
       body,
+      ...(cache ? { cache } : {}),
       headers: {
         authorization,
         "x-clever-app-id": appId,
@@ -1008,6 +1032,7 @@ async function executeDeliveryApiRequest({
       headers: {
         "content-type": "text/plain; charset=utf-8",
         "X-Shopify-Retry-Invalid-Session-Request": "1",
+        ...(cache === "no-store" ? { "Cache-Control": "private, no-store" } : {}),
       },
       status: 401,
       statusText: "Unauthorized",
