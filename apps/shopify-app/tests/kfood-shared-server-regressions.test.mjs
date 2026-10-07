@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
-import { formatRouteStatus } from "../app/features/delivery/route-helpers.js";
+import { formatRouteStatus, isTerminalRouteExecutionStatus, mergeRouteExecutionStatus } from "../app/features/delivery/route-helpers.js";
 import { buildRouteRows } from "../app/features/delivery/route-list-rows.js";
 import { translate } from "../app/i18n/i18n.js";
 import {
@@ -15,9 +15,11 @@ import {
   getRouteTrackingPresentation,
   getRouteTrackingServiceDate,
   mergeRouteTrackingSnapshot,
+  mergeRouteTrackingProgress,
   normalizeRouteExecutionStatus,
   normalizeRouteTrackingSnapshot,
   selectRouteTrackingWindow,
+  shouldRevalidateTrackingEta,
 } from "../app/features/delivery/route-tracking.js";
 
 test("K-food preserves and labels the server INCOMPLETE status", () => {
@@ -29,7 +31,7 @@ test("K-food preserves and labels the server INCOMPLETE status", () => {
   assert.equal(translate("ko", "routes.status.incomplete"), "미완료");
 });
 
-test("K-food incomplete tracking retains history and the last real driver stage without completing it", () => {
+test("K-food incomplete tracking retains real driver evidence and displays incomplete without completing it", () => {
   const snapshot = normalizeRouteTrackingSnapshot({
     ...inferredSnapshot(),
     progress: { currentStage: "AT_STOP", completedStopIds: ["delivered-stop"], failedStopIds: ["failed-stop"] },
@@ -37,7 +39,7 @@ test("K-food incomplete tracking retains history and the last real driver stage 
   const before = structuredClone(snapshot);
   assert.deepEqual(getRouteTrackingPresentation("INCOMPLETE", snapshot), {
     connectionLabel: "closed",
-    driverStage: "AT_STOP",
+    driverStage: "INCOMPLETE",
     mode: "history",
     trackingLabel: "Incomplete",
   });
@@ -74,8 +76,8 @@ test("K-food open tracking accepts only same-route authoritative incomplete snap
   const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
   assert.match(source, /getRouteExecutionStatusFromTrackingSnapshot\(currentStatus, snapshot, trackingRoutePlanId\)/);
   assert.match(source, /getRouteExecutionStatusFromTrackingSnapshot\(currentStatus, snapshot, trackingStreamRoutePlanId\)/);
-  assert.match(source, /setRouteExecutionStatus\(loaderRouteExecutionStatus\);\s*\}, \[effectiveRoutePlan\?\.id, loaderRouteExecutionStatus\]\)/);
-  assert.match(source, /if \(isDisposed \|\| controller\.signal\.aborted \|\| !isRouteTrackingPayloadForRoute\(snapshot, trackingRoutePlanId\)\) return;/);
+  assert.match(source, /mergeRouteExecutionStatus\(current.status, loaderRouteExecutionStatus\)/);
+  assert.match(source, /activeTrackingRoutePlanIdRef.current !== trackingRoutePlanId[\s\S]*?!isRouteTrackingPayloadForRoute\(snapshot, trackingRoutePlanId\)\) return;/);
 });
 
 test("K-food incomplete routes cannot dispatch or subscribe as ready routes", () => {
@@ -90,11 +92,6 @@ test("K-food incomplete routes cannot dispatch or subscribe as ready routes", ()
   const streamId = Function("routeExecutionStatus", "trackingRoutePlanId", `return ${stream[1]};`);
   assert.equal(streamId(normalizeRouteExecutionStatus("INCOMPLETE"), "fixture"), null);
   assert.equal(streamId("IN_PROGRESS", "fixture"), "fixture");
-});
-
-test("K-food historical tracking uses absolute positions even with all recorded dates selected", () => {
-  const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
-  assert.match(source, /showAllRouteTrackingRecords && routeTrackingPresentation\.mode === "live"\s*\? `Current position/);
 });
 
 // Synthetic contract fixtures: no production route, driver, or customer data.
@@ -266,4 +263,174 @@ test("K-food Delivered totals count each grouped route once and honor explicit z
   assert.equal(rows.find((row) => row.id === "zero-child").delivered, 0);
   assert.equal(rows.reduce((sum, row) => sum + row.delivered, 0), 3);
   assert.equal(rows.reduce((sum, row) => sum + row.orders, 0), 9);
+});
+
+for (const terminal of ["COMPLETED", "INCOMPLETE", "CANCELLED"]) {
+  test(`terminal ${terminal} resists delayed and duplicate lifecycle events`, () => {
+    for (const eventType of ["ROUTE_PAUSED", "ROUTE_STARTED", "ROUTE_COMPLETED"]) {
+      assert.equal(getRouteExecutionStatusFromTrackingEvent(terminal, { eventType }), terminal);
+    }
+    const snapshot = { routePlanId: "fixture", operationalState: { routePlanId: "fixture", routeStatus: terminal } };
+    assert.equal(getRouteExecutionStatusFromTrackingSnapshot("IN_PROGRESS", snapshot, "fixture"), terminal);
+    assert.equal(getRouteExecutionStatusFromTrackingSnapshot(terminal, {
+      ...snapshot, operationalState: { routePlanId: "fixture", routeStatus: "READY" },
+    }, "fixture"), terminal);
+  });
+}
+
+
+test("partial delivery never invents completion for incomplete or ready routes", () => {
+  const stops = Array.from({ length: 11 }, (_, index) => ({
+    id: `synthetic-stop-${index}`, status: index < 10 ? "DELIVERED" : "ARRIVED",
+  }));
+  const plans = [
+    { id: "synthetic-incomplete", status: "INCOMPLETE", stopsCount: 11, stops, deliveredCount: 10 },
+    { id: "synthetic-ready", status: "READY", stopsCount: 3 },
+    { id: "synthetic-unknown", stopsCount: 3 },
+  ];
+  const group = { id: "synthetic-group", status: "READY", displayStatus: "IN_PROGRESS", children: [
+    { routePlanId: plans[0].id, routePlan: plans[0], displayStatus: "INCOMPLETE" },
+    { routePlanId: plans[1].id, routePlan: plans[1], displayStatus: "READY" },
+  ] };
+  const before = structuredClone({ plans, group });
+  const rows = buildRouteRows(plans, [group]);
+  assert.equal(formatRouteStatus(rows.find(row => row.id === plans[0].id).status), "Incomplete");
+  assert.equal(formatRouteStatus(rows.find(row => row.id === plans[1].id).status), "Ready");
+  assert.equal(formatRouteStatus(rows.find(row => row.id === plans[2].id).status), "Unknown");
+  assert.equal(formatRouteStatus(buildRouteRows([plans[0]])[0].status), "Incomplete");
+  assert.deepEqual({ plans, group }, before);
+  const snapshot = normalizeRouteTrackingSnapshot({
+    routePlanId: plans[0].id,
+    executionEvidence: { start: { eventId: "synthetic-start", occurredAt: "2026-10-03T13:05:00.000Z" } },
+    progress: { currentStage: "AT_STOP", completedStopIds: stops.slice(0, 10).map(stop => stop.id) },
+  });
+  assert.equal(snapshot.progress.completedStopIds.length, 10);
+  assert.equal(getRouteTrackingCompletionTime(snapshot), null);
+  assert.equal(getRouteTrackingPresentation(plans[0].status, snapshot).driverStage, "INCOMPLETE");
+});
+
+test("admin completion remains authoritative while raw return navigation is in progress", () => {
+  const snapshot = normalizeRouteTrackingSnapshot({
+    routePlanId: "synthetic-return",
+    operationalState: { routePlanId: "synthetic-return", routeStatus: "COMPLETED", rawStatus: "IN_PROGRESS" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT", returnToDepot: { status: "UNAVAILABLE" } },
+  });
+  assert.equal(getRouteExecutionStatusFromTrackingSnapshot("IN_PROGRESS", snapshot, snapshot.routePlanId), "COMPLETED");
+  assert.equal(getRouteTrackingPresentation("COMPLETED", snapshot).driverStage, "COMPLETED");
+  assert.equal(getRouteExecutionStatusFromTrackingEvent("COMPLETED", { eventType: "ROUTE_STARTED" }), "COMPLETED");
+});
+
+test("old or duplicate progress does not change status or request ETA again", () => {
+  const latestEvent = { eventId: "synthetic-latest", eventType: "ROUTE_STARTED", occurredAt: "2026-10-03T13:05:00.000Z" };
+  const snapshot = normalizeRouteTrackingSnapshot({ routePlanId: "synthetic-race", progress: { latestEvent } });
+  const oldEvent = { eventId: "synthetic-old", eventType: "ROUTE_PAUSED", occurredAt: "2026-10-03T13:00:00.000Z" };
+  assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", oldEvent, snapshot), "IN_PROGRESS");
+  assert.equal(shouldRevalidateTrackingEta({ ...oldEvent, eventType: "ROUTE_STARTED" }, false, snapshot), false);
+  assert.equal(shouldRevalidateTrackingEta(latestEvent, false, snapshot), false);
+  assert.equal(shouldRevalidateTrackingEta({ eventType: "ROUTE_STARTED" }, false, null, "INCOMPLETE"), false);
+  const completeAtSameTime = { ...latestEvent, eventId: "synthetic-complete", eventType: "ROUTE_COMPLETED" };
+  assert.equal(getRouteExecutionStatusFromTrackingEvent("IN_PROGRESS", completeAtSameTime, snapshot), "COMPLETED");
+});
+
+test("stale operational snapshots cannot erase terminal status", () => {
+  const current = normalizeRouteTrackingSnapshot({
+    routePlanId: "synthetic-race",
+    operationalState: { routePlanId: "synthetic-race", routeStatus: "INCOMPLETE" },
+  });
+  const late = { routePlanId: current.routePlanId, operationalState: { routePlanId: current.routePlanId, routeStatus: "READY" } };
+  assert.equal(mergeRouteTrackingSnapshot(current, late).operationalState.routeStatus, "INCOMPLETE");
+});
+
+test("Routes filters keep incomplete separate from ready and completed rows", () => {
+  const source = readFileSync(new URL("../app/routes/app.routes.jsx", import.meta.url), "utf8");
+  const start = source.indexOf("function normalizeRouteStatus(");
+  const end = source.indexOf("function getStatusBadgeStyle(", start);
+  assert.ok(start >= 0 && end > start);
+  const filterRows = Function("formatRouteStatus", `${source.slice(start, end)}; return filterRouteRows;`)(formatRouteStatus);
+  const rows = ["READY", "DRAFT", "IN_PROGRESS", "INCOMPLETE", "COMPLETED", "CANCELLED", "AWAITING_DRIVER", null]
+    .map((status, index) => ({ id: `synthetic-${index}`, isClickable: true, status }));
+  assert.deepEqual(filterRows(rows, { status: "INCOMPLETE" }).map(row => row.status), ["INCOMPLETE"]);
+  assert.deepEqual(filterRows(rows, { status: "Ready" }).map(row => row.status), ["READY", "DRAFT"]);
+  assert.deepEqual(filterRows(rows, { status: "Completed" }).map(row => row.status), ["COMPLETED"]);
+  assert.deepEqual(filterRows(rows, { status: "UNKNOWN" }).map(row => row.status), ["AWAITING_DRIVER", null]);
+});
+
+test("missing child display status does not inherit its group aggregate", () => {
+  const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
+  const expression = source.match(/const loaderRouteExecutionStatus = ([^;]+);/)?.[1];
+  assert.ok(expression);
+  const displayStatus = Function("normalizeRouteExecutionStatus", "effectiveRoutePlan", "routeGroup", `return ${expression};`);
+  for (const status of ["READY", "IN_PROGRESS", "COMPLETED"]) {
+    const group = { displayStatus: status };
+    assert.equal(displayStatus(normalizeRouteExecutionStatus, { id: "synthetic-child", status: null }, group), "UNKNOWN");
+    assert.equal(displayStatus(normalizeRouteExecutionStatus, { id: "synthetic-child", status: "INCOMPLETE" }, group), "INCOMPLETE");
+    assert.equal(displayStatus(normalizeRouteExecutionStatus, null, group), status);
+  }
+});
+
+
+test("native history return refreshes only a known stale Routes list", () => {
+  const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
+  const start = source.indexOf("const handleRoutesHistoryReturn = () => {");
+  const end = source.indexOf("    window.addEventListener", start);
+  assert.ok(start >= 0 && end > start);
+  const routesListNeedsRefreshRef = { current: false };
+  const window = { location: { pathname: "/app/routes" } };
+  let reads = 0;
+  const revalidator = { revalidate: () => { reads += 1; } };
+  const onReturn = Function("routesListNeedsRefreshRef", "window", "revalidator", `${source.slice(start, end)}; return handleRoutesHistoryReturn;`)(routesListNeedsRefreshRef, window, revalidator);
+  onReturn();
+  assert.equal(reads, 0);
+  routesListNeedsRefreshRef.current = true;
+  window.location.pathname = "/app/routes/another-synthetic-route";
+  onReturn();
+  assert.equal(reads, 0);
+  window.location.pathname = "/app/routes";
+  onReturn();
+  assert.equal(reads, 1);
+  assert.equal(routesListNeedsRefreshRef.current, null);
+  onReturn();
+  assert.equal(reads, 1);
+});
+
+test("batched terminal driver events update the production status ref before ETA decisions", () => {
+  const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
+  const start = source.indexOf("const setRouteExecutionStatus = useCallback((update) => {");
+  const end = source.indexOf("  const canEditRouteStopDetails", start);
+  assert.ok(start >= 0 && end > start);
+  const routeId = "synthetic-batched-route";
+  const routeExecutionStatusRef = { current: "IN_PROGRESS" };
+  const queued = [];
+  const updateStatus = Function("useCallback", "activeTrackingRoutePlanIdRef", "routeExecutionScopeId", "routeExecutionStatusRef", "setRouteExecutionState", "mergeRouteExecutionStatus", `${source.slice(start, end)}; return setRouteExecutionStatus;`)(
+    callback => callback, { current: routeId }, routeId, routeExecutionStatusRef, update => queued.push(update), mergeRouteExecutionStatus,
+  );
+  let snapshot = normalizeRouteTrackingSnapshot({ routePlanId: routeId, operationalState: { routePlanId: routeId, routeStatus: "IN_PROGRESS" } });
+  const revalidations = [];
+  for (const [index, eventType] of ["ROUTE_COMPLETED", "STOP_ARRIVED", "ROUTE_STARTED"].entries()) {
+    const event = { routePlanId: routeId, eventType, eventId: `synthetic-event-${index}`, occurredAt: `2026-10-03T20:0${index}:00.000Z` };
+    updateStatus(status => getRouteExecutionStatusFromTrackingEvent(status, event, snapshot));
+    revalidations.push(shouldRevalidateTrackingEta(event, false, snapshot, routeExecutionStatusRef.current));
+    snapshot = mergeRouteTrackingProgress(snapshot, event);
+  }
+  assert.deepEqual(revalidations, [false, false, false]);
+  assert.equal(routeExecutionStatusRef.current, "COMPLETED");
+  assert.equal(queued.reduce((state, update) => update(state), { routeId, status: "IN_PROGRESS" }).status, "COMPLETED");
+});
+
+test("pending list refresh clears after reconciliation and survives navigation to another route", () => {
+  const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
+  const start = source.indexOf("    const pending = routesListNeedsRefreshRef.current;");
+  const end = source.indexOf("  }, [cachedRouteRows,", start);
+  assert.ok(start >= 0 && end > start);
+  const reconcile = Function("routesListNeedsRefreshRef", "cachedRouteRows", "trackingRoutePlanId", "routeExecutionStatus", "routesListData", "normalizeRouteExecutionStatus", "isTerminalRouteExecutionStatus", source.slice(start, end));
+  const pending = { current: null };
+  const data = { routePlans: [{ id: "synthetic-a", status: "READY" }, { id: "synthetic-b", status: "READY" }] };
+  const apply = (routeId, status) => reconcile(pending, buildRouteRows(data.routePlans), routeId, status, data, normalizeRouteExecutionStatus, isTerminalRouteExecutionStatus);
+  apply("synthetic-a", "INCOMPLETE");
+  assert.deepEqual(pending.current, { routeId: "synthetic-a", status: "INCOMPLETE" });
+  apply("synthetic-b", "READY");
+  assert.equal(pending.current.routeId, "synthetic-a");
+  data.routePlans[0].status = "INCOMPLETE";
+  apply("synthetic-b", "READY");
+  assert.equal(pending.current, null);
 });

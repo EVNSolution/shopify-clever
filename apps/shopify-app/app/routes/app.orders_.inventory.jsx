@@ -1,4 +1,6 @@
 /* eslint-disable react/prop-types */
+import { formatStoreInstant, formatStoreTime } from "../features/shopify/store-date-time";
+import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useEffect, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { Link, PrefetchPageLinks, useLoaderData, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
@@ -785,34 +787,31 @@ function getProductSlots(products) {
   return Array.from({ length: PRODUCT_COLUMNS_PER_TABLE }, (_, index) => products[index] ?? null);
 }
 
-function formatOutputTime(value) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  const pad = (part) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+function formatOutputTime(value, storeTimeZone) {
+  return formatStoreInstant(value, storeTimeZone);
 }
 
-
-function buildInventoryOrderRouteMeta(inventory, matrix, orders) {
+function buildInventoryOrderRouteMeta(inventory, matrix, orders, storeTimeZone) {
   const route = Array.isArray(inventory?.linkedRoutes) ? inventory.linkedRoutes[0] : null;
   return [
     { label: "Driver", value: textOrDisplay(route?.driver?.displayName ?? route?.driverName) },
     { label: "Route", value: textOrDisplay(route?.name ?? inventory?.routeName ?? inventory?.name) },
     { label: "Delivery date", value: matrix.rows.length === 1 ? matrix.rows[0].label : "-" },
-    { label: "Start", value: textOrDisplay(route?.startTime ?? route?.scheduledStartAt) },
+    { label: "Start", value: route?.scheduledStartAt ? formatStoreInstant(route.scheduledStartAt, route.scheduledStartTimeZone || storeTimeZone) : textOrDisplay(route?.startTime) },
     { label: "Orders", value: String(orders.length) },
     { label: "Items", value: String(matrix.totalQuantity ?? 0) },
   ];
 }
 
-function buildInventoryOrderViewRows(orders) {
+function buildInventoryOrderViewRows(orders, storeTimeZone) {
   return (Array.isArray(orders) ? orders : []).map((order, index) => {
     return {
       addressLines: getInventoryOrderAddressLines(order),
       customer: getInventoryOrderCustomer(order),
       customerNote: getInventoryOrderCustomerNote(order),
       driveTime: formatInventoryRouteTime(order?.driveTime ?? order?.driveTimeMinutes ?? order?.routeStop?.driveTime),
-      eta: textOrDisplay(order?.eta ?? order?.routeStop?.eta),
+      eta: formatStoreTime(order?.estimatedArrivalAt ?? order?.routeStop?.estimatedArrivalAt, storeTimeZone, { empty: "-" }),
+      etaTitle: formatStoreInstant(order?.estimatedArrivalAt ?? order?.routeStop?.estimatedArrivalAt, storeTimeZone, { empty: "" }),
       items: getInventoryOrderLineItems(order).map(formatInventoryOrderLineItem),
       orderId: getInventoryOrderName(order, index),
       paymentMethod: formatInventoryPaymentMethod(order),
@@ -987,6 +986,7 @@ function DateCellLabel({ label }) {
 }
 
 export default function InventoryDetailPage() {
+  const storeTimeZone = useStoreTimeZone();
   const { errors, generatedAt, inventory, needsSessionTokenRefresh, routePlanId } = useLoaderData();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const [searchParams] = useSearchParams();
@@ -1000,12 +1000,12 @@ export default function InventoryDetailPage() {
     { errors },
   ], { context: "inventory_detail" });
   const orders = Array.isArray(inventory?.orders) ? inventory.orders : [];
-  const matrix = buildInventoryProductMatrix(orders);
+  const matrix = buildInventoryProductMatrix(orders, storeTimeZone);
   const hasMatrix = matrix.rows.length > 0 && matrix.products.length > 0;
   const productChunks = hasMatrix ? getProductChunks(matrix.products) : [];
-  const historyItems = buildInventoryHistoryItems(inventory);
-  const orderRouteMeta = buildInventoryOrderRouteMeta(inventory, matrix, orders);
-  const orderViewRows = buildInventoryOrderViewRows(orders);
+  const historyItems = buildInventoryHistoryItems(inventory, storeTimeZone);
+  const orderRouteMeta = buildInventoryOrderRouteMeta(inventory, matrix, orders, storeTimeZone);
+  const orderViewRows = buildInventoryOrderViewRows(orders, storeTimeZone);
   const backHref = withEmbeddedShopifyContext(
     routePlanId ? routePlanPath(routePlanId) : "/app/orders?view=inventory",
     searchParams,
@@ -1095,7 +1095,7 @@ export default function InventoryDetailPage() {
                     type="button"
                   >Orders</button>
                 </div>
-                <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt)}</span>
+                <span style={outputTimeStyle}>Output: {formatOutputTime(generatedAt, storeTimeZone)}</span>
                 <button
                   className="inventory-detail-no-print"
                   type="button"
@@ -1149,7 +1149,7 @@ export default function InventoryDetailPage() {
                           <div className="inventory-detail-order-address" style={orderViewAddressCellStyle}>
                             {order.addressLines.map((line, lineIndex) => <span key={lineIndex} style={orderViewAddressLineStyle}>{line}</span>)}
                           </div>
-                          <div style={orderViewCenterCellStyle}>{order.eta}</div>
+                          <div style={orderViewCenterCellStyle} title={order.etaTitle}>{order.eta}</div>
                           <div style={orderViewCenterCellStyle}>{order.driveTime}</div>
                           <div style={orderViewCenterCellStyle}>{order.stopTime}</div>
                           <div

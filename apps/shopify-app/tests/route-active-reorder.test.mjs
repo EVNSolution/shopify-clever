@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { normalizeRouteExecutionStatus } from "../app/features/delivery/route-helpers.js";
+
 const routeDetailSource = readFileSync(
   new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url),
   "utf8",
@@ -24,7 +26,7 @@ function loadStatusHelpers() {
     "function isRouteExecutionLockedForStopMembership(",
     "function getRouteTotalItems(",
   );
-  return Function(`${helperSource}\nreturn { isRouteExecutionLockedForStopMembership, isRouteExecutionInProgressForStopMembership, isRouteStopReorderAllowed, isRouteTimelineStopMoveAllowed, hasTerminalRouteStopDraft };`)();
+  return Function("normalizeRouteExecutionStatus", `${helperSource}\nreturn { isRouteExecutionLockedForStopMembership, isRouteExecutionInProgressForStopMembership, isRouteStopReorderAllowed, isRouteTimelineStopMoveAllowed, hasTerminalRouteStopDraft };`)(normalizeRouteExecutionStatus);
 }
 
 function loadReorderPayloadBuilder() {

@@ -501,6 +501,7 @@ test("delivery webhook forwarding returns retryable failure for outage, timeout,
       );
     }
 
+    let timeoutReason;
     await assert.rejects(
       () => forwardShopifyWebhookToDeliveryApi(
         new Request("https://app.invalid/webhooks/orders", { headers: { "x-shopify-webhook-id": "webhook-id" } }),
@@ -508,12 +509,19 @@ test("delivery webhook forwarding returns retryable failure for outage, timeout,
         {
           timeoutMs: 5,
           fetch: async (_url, { signal }) => new Promise((_resolve, reject) => {
-            signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+            // The mock has no socket to keep Node alive for AbortSignal.timeout.
+            const pendingRequest = setTimeout(() => reject(new Error("Expected request timeout")), 1_000);
+            signal.addEventListener("abort", () => {
+              clearTimeout(pendingRequest);
+              timeoutReason = signal.reason;
+              reject(signal.reason);
+            }, { once: true });
           }),
         },
       ),
       (error) => error instanceof Response && error.status === 503,
     );
+    assert.equal(timeoutReason?.name, "TimeoutError");
   } finally {
     restoreDeliveryApiBaseUrl(previousBaseUrl);
   }

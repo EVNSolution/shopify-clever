@@ -26,6 +26,7 @@
     "vite": "vite",
     "typecheck": "react-router typegen && tsc --noEmit",
     "verify:webhook-sdk-source": "node scripts/verify-shopify-webhook-sdk-source.mjs",
+    "verify:token-authority-sdk-source": "node scripts/verify-shopify-token-authority-sdk-source.mjs",
     "perf:orders": "node scripts/perf-orders.mjs",
     "perf:orders:cohorts": "node scripts/orders-browser-performance-cohorts.mjs",
     "perf:orders:flags": "node scripts/orders-flag-matrix.mjs",

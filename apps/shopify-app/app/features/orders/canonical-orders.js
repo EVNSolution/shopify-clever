@@ -1,6 +1,7 @@
+import { getOrderDate } from "./order-date.js";
 import { formatDeliveryScopeLabel } from "../delivery/delivery-labels.js";
 
-export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
+export function mapCanonicalOrdersToOrderRows(canonicalOrders, storeTimeZone = "UTC") {
   if (!Array.isArray(canonicalOrders)) return [];
 
   return canonicalOrders.map((order) => {
@@ -9,17 +10,25 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
     const hasCoordinates =
       order?.hasCoordinates === true && latitude != null && longitude != null;
     const shippingAddress = normalizeShippingAddress(order?.shippingAddress);
-    const serviceType = textOrUndefined(order?.serviceType) ?? inferServiceType(order);
+    const serviceType = textOrUndefined(order?.serviceType) ?? (order?.filterVersion === "2" ? undefined : inferServiceType(order));
     const deliveryArea =
-      textOrUndefined(order?.deliveryArea) ?? (serviceType === "PICKUP" ? "Pickup" : undefined);
+      textOrUndefined(order?.deliveryArea) ?? (order?.filterVersion !== "2" && serviceType === "PICKUP" ? "Pickup" : undefined);
     const deliveryDay =
       textOrUndefined(order?.deliveryDayRaw) ??
       textOrUndefined(order?.deliveryWeekday);
     const orderCreatedAt = textOrUndefined(order?.orderCreatedAt);
-    const orderedDate =
-      textOrUndefined(order?.orderDateLocal) ??
-      formatDateOnly(orderCreatedAt) ??
-      formatDateOnly(order?.processedAt);
+    const orderedDate = getOrderDate(order, storeTimeZone);
+    const hasCanonicalNote = Object.hasOwn(order ?? {}, "note");
+    const hasCanonicalCustomerNote = Object.hasOwn(order ?? {}, "customerNote");
+    const noteSource = hasCanonicalNote
+      ? order.note
+      : order?.rawPayload?.note ?? order?.shopifyOrderSnapshot?.note;
+    const customerNoteSource = hasCanonicalCustomerNote
+      ? order.customerNote
+      : order?.rawPayload?.customerNote ??
+        order?.rawPayload?.customer_note ??
+        order?.rawPayload?.customer?.note ??
+        order?.shopifyOrderSnapshot?.customer?.note;
     const deliveryDate = textOrUndefined(order?.deliveryDate);
     const timeWindowStart = textOrUndefined(order?.timeWindowStart);
     const timeWindowEnd = textOrUndefined(order?.timeWindowEnd);
@@ -35,6 +44,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
     const routeSequence = numberOrUndefined(order?.routeSequence ?? order?.sequence);
 
     return {
+      ...(order?.filterVersion === "2" ? { filterVersion: "2", queryDeliveryProgress: order.queryDeliveryProgress } : {}),
       id: textOrUndefined(order?.shopifyOrderGid),
       orderId: textOrUndefined(order?.orderId),
       deliveryStopId: textOrUndefined(order?.deliveryStopId),
@@ -50,9 +60,13 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       eta: "—",
       email: textOrUndefined(order?.email),
       phone: textOrUndefined(order?.phone) ?? "",
-      processedAt: textOrUndefined(order?.processedAt),
+      ...(Object.hasOwn(order ?? {}, "processedAt") ? { processedAt: textOrUndefined(order?.processedAt) ?? null } : {}),
       updatedAt: textOrUndefined(order?.updatedAtShopify),
       cancelledAt: textOrUndefined(order?.cancelledAt),
+      ...(hasCanonicalNote || noteSource != null ? { note: textOrUndefined(noteSource) ?? "" } : {}),
+      ...(hasCanonicalCustomerNote || customerNoteSource != null
+        ? { customerNote: textOrUndefined(customerNoteSource) ?? "" }
+        : {}),
       totalPriceAmount: textOrUndefined(order?.totalPriceAmount),
       ...(textOrUndefined(
         order?.shippingPriceAmount
@@ -73,6 +87,7 @@ export function mapCanonicalOrdersToOrderRows(canonicalOrders) {
       deliveryDay,
       orderCreatedAt,
       orderedDate,
+      ...(textOrUndefined(order?.orderDateLocal) ? { orderDateLocal: order.orderDateLocal } : {}),
       deliveryBatchStartDate: textOrUndefined(order?.deliveryBatchStartDate),
       deliveryBatchEndDate: textOrUndefined(order?.deliveryBatchEndDate),
       deliveryDate,
@@ -458,19 +473,6 @@ function numberOrNull(value) {
   return Number.isFinite(number) ? number : null;
 }
 
-function formatDateOnly(value) {
-  const text = textOrUndefined(value);
-  if (!text) return undefined;
-
-  if (/^\d{4}-\d{2}-\d{2}/.test(text)) {
-    return text.slice(0, 10);
-  }
-
-  const date = new Date(text);
-  if (Number.isNaN(date.getTime())) return undefined;
-
-  return date.toISOString().slice(0, 10);
-}
 
 function textOrUndefined(value) {
   if (value == null) return undefined;
@@ -491,4 +493,11 @@ function numberOrUndefined(value) {
   if (value == null) return undefined;
   const number = Number(value);
   return Number.isFinite(number) ? number : undefined;
+}
+
+export function normalizeOrderRowsStoreDates(rows, storeTimeZone) {
+  return (Array.isArray(rows) ? rows : []).map(order => {
+    const orderedDate = getOrderDate(order, storeTimeZone);
+    return orderedDate !== order?.orderedDate ? { ...order, orderedDate } : order;
+  });
 }

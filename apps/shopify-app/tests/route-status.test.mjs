@@ -2,10 +2,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { countRouteStopsByStatus, formatRouteStatus, getRouteStopStatus } from "../app/features/delivery/route-helpers.js";
+import { countRouteStopsByStatus, formatRouteStatus, getRouteStatusBadgeColors, getRouteStopStatus, mergeRouteExecutionStatus, normalizeRouteExecutionStatus } from "../app/features/delivery/route-helpers.js";
 
 test("route status labels collapse legacy lifecycle values into canonical admin states", () => {
-  for (const status of [null, "DRAFT", "PUBLISHED", "OPTIMIZED", "ASSIGNED", "UNAVAILABLE", "UNSTARTED", "READY", "CHANGED"]) {
+  for (const status of ["DRAFT", "PUBLISHED", "OPTIMIZED", "ASSIGNED", "UNSTARTED", "READY", "CHANGED"]) {
     assert.equal(formatRouteStatus(status), "Ready");
   }
 
@@ -16,7 +16,9 @@ test("route status labels collapse legacy lifecycle values into canonical admin 
 });
 
 test("route status labels keep unexpected backend values inside canonical presentation", () => {
-  assert.equal(formatRouteStatus("AWAITING_DRIVER"), "Ready");
+  for (const status of ["AWAITING_DRIVER", "UNAVAILABLE", null, undefined, "", " "]) {
+    assert.equal(formatRouteStatus(status), "Unknown");
+  }
 });
 
 test("stop outcome reads delivery status before route assignment or Shopify fulfillment", () => {
@@ -36,4 +38,28 @@ test("Delivered count follows stop outcomes without treating a completed route a
 
   assert.equal(countRouteStopsByStatus(stops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]), 2);
   assert.equal(countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]), 1);
+});
+
+
+test("normalization and labels share canonical, legacy, and unknown meanings", () => {
+  for (const [input, normalized, label] of [
+    ["READY", "READY", "Ready"], ["in progress", "IN_PROGRESS", "In progress"],
+    ["COMPLETED", "COMPLETED", "Completed"], ["INCOMPLETE", "INCOMPLETE", "Incomplete"],
+    ["CANCELLED", "CANCELLED", "Cancelled"], ["PUBLISHED", "READY", "Ready"],
+    ["AWAITING_DRIVER", "UNKNOWN", "Unknown"], [null, "UNKNOWN", "Unknown"],
+  ]) {
+    assert.equal(normalizeRouteExecutionStatus(input), normalized);
+    assert.equal(formatRouteStatus(normalized), label);
+  }
+});
+
+test("same-route loader reconciliation preserves terminal displays", () => {
+  for (const terminal of ["COMPLETED", "INCOMPLETE", "CANCELLED"]) {
+    assert.equal(mergeRouteExecutionStatus(terminal, "READY"), terminal);
+    assert.equal(mergeRouteExecutionStatus(terminal, null), terminal);
+    assert.equal(mergeRouteExecutionStatus("IN_PROGRESS", terminal), terminal);
+  }
+  assert.equal(mergeRouteExecutionStatus("READY", "IN_PROGRESS"), "IN_PROGRESS");
+  assert.notDeepEqual(getRouteStatusBadgeColors("INCOMPLETE"), getRouteStatusBadgeColors("READY"));
+  assert.notDeepEqual(getRouteStatusBadgeColors("INCOMPLETE"), getRouteStatusBadgeColors("COMPLETED"));
 });

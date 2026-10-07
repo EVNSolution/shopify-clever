@@ -1,3 +1,5 @@
+import { getStoreDate } from "../features/shopify/store-date-time";
+import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useEffect, useMemo, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData } from "react-router";
@@ -550,7 +552,7 @@ function buildDriverSearchText(driver) {
   ].filter(Boolean).join(" "));
 }
 
-function mapDeliveryDriverToRow(driver) {
+function mapDeliveryDriverToRow(driver, storeTimeZone) {
   if (!driver || typeof driver !== "object") return null;
 
   const phone = textOrFallback(formatSavedDriverPhone(driver.phone), driver.phone, "—");
@@ -570,8 +572,8 @@ function mapDeliveryDriverToRow(driver) {
     inviteCode: driver.inviteCode,
     inviteCodeExpiresAt: driver.inviteCodeExpiresAt,
     assignedRoute: { label: "Unassigned" },
-    joinedAt: formatDriverTimestamp(driver.createdAt) ?? "—",
-    lastSeenAt: formatDriverTimestamp(driver.lastSeenAt) ?? null,
+    joinedAt: formatDriverTimestamp(driver.createdAt, storeTimeZone) ?? "—",
+    lastSeenAt: formatDriverTimestamp(driver.lastSeenAt, storeTimeZone) ?? null,
     recentEvents: formatRecentEvents(driver.recentEventsCount),
   };
 }
@@ -596,12 +598,8 @@ function formatOperationalDriverStatus(value, { invitePending } = {}) {
   return formatDriverStatus(value);
 }
 
-function formatDriverTimestamp(value) {
-  if (!value) return null;
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-
-  return date.toISOString().slice(0, 10);
+function formatDriverTimestamp(value, storeTimeZone) {
+  return getStoreDate(value, storeTimeZone);
 }
 
 function formatRecentEvents(value) {
@@ -727,6 +725,7 @@ export const action = async ({ request }) => {
 };
 
 export default function DriversVehiclesPage() {
+  const storeTimeZone = useStoreTimeZone();
   const { driverAppRelease = null, driverDownloadLink = "", drivers = [], errors = [], useGooglePlay = false } = useLoaderData();
   const driverInviteFetcher = useFetcher();
   const driverDeleteFetcher = useFetcher();
@@ -749,16 +748,16 @@ export default function DriversVehiclesPage() {
   const [pendingDriverNameId, setPendingDriverNameId] = useState("");
 
   const serverDriverRows = useMemo(
-    () => (Array.isArray(drivers) ? drivers : []).map(mapDeliveryDriverToRow).filter(Boolean),
-    [drivers],
+    () => (Array.isArray(drivers) ? drivers : []).map((driver) => mapDeliveryDriverToRow(driver, storeTimeZone)).filter(Boolean),
+    [drivers, storeTimeZone],
   );
   const submittedDriverRow = useMemo(
-    () => mapDeliveryDriverToRow(driverInviteFetcher.data?.driver),
-    [driverInviteFetcher.data?.driver],
+    () => mapDeliveryDriverToRow(driverInviteFetcher.data?.driver, storeTimeZone),
+    [driverInviteFetcher.data?.driver, storeTimeZone],
   );
   const submittedUpdatedDriverRow = useMemo(
-    () => mapDeliveryDriverToRow(driverUpdateFetcher.data?.driver),
-    [driverUpdateFetcher.data?.driver],
+    () => mapDeliveryDriverToRow(driverUpdateFetcher.data?.driver, storeTimeZone),
+    [driverUpdateFetcher.data?.driver, storeTimeZone],
   );
   const baseDriverRows = serverDriverRows.length > 0 || errors.length === 0 ? serverDriverRows : driverRows;
   const allDrivers = useMemo(

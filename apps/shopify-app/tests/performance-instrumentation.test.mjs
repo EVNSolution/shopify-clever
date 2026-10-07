@@ -80,7 +80,7 @@ test("Orders performance cohorts use real embedded-browser samples and merge ser
   assert.match(source, /distanceMs <= 1_000/);
 });
 
-test("Orders resource transitions reuse a short-lived in-memory App Bridge session token", () => {
+test("Orders resource transitions acquire App Bridge session tokens through the coalescing getter", () => {
   assert.match(ordersPageSource, /createOrdersResourceSessionTokenGetter\(\(\) => shopify\.idToken\(\)\)/);
   assert.match(ordersPageSource, /const idToken = await getOrdersResourceSessionToken\(\)/);
   assert.doesNotMatch(ordersPageSource, /const idToken = await shopify\.idToken\(\);[\s\S]{0,200}loadOrdersPageResource/);

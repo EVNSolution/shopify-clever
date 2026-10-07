@@ -8,6 +8,8 @@ import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
   buildChildRouteOrderRows,
+  buildRouteEndpointPresentation,
+  buildRouteOrderRows,
   summarizeChildRouteMoney,
   formatChildDriveTimeLabel,
   formatChildEtaLabel,
@@ -18,6 +20,174 @@ import {
   isMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../app/features/delivery/child-route-detail-presentation.js";
+
+test("route endpoints include service, waits, and a consistent return leg in planned arrival", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: {
+      start: { occurredAt: "2026-07-15T13:02:00.000Z" },
+      completion: { occurredAt: "2026-07-15T15:30:00.000Z" },
+      returnToDepot: { status: "CONFIRMED", observedAt: "2026-07-15T15:42:00.000Z" },
+      routeEndMode: "RETURN_TO_DEPOT",
+    },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 5_400 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [
+      { durationFromPreviousSeconds: 1_800, serviceMinutes: 10, timeWindowStart: "10:00" },
+      { durationFromPreviousSeconds: 1_200, serviceMinutes: 5 },
+    ],
+  });
+
+  assert.equal(endpoints.start.plannedAt, "2026-07-15T13:00:00.000Z");
+  assert.equal(endpoints.start.actualAt, "2026-07-15T13:02:00.000Z");
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T15:15:00.000Z");
+  assert.equal(endpoints.end.actualAt, "2026-07-15T15:42:00.000Z");
+  assert.equal(endpoints.end.actualLabel, "Return confirmed");
+  assert.equal(endpoints.end.address, "4475 Chesswood Dr");
+});
+
+test("route endpoints do not treat completion or duration-only metrics as depot arrival", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: {
+      completion: { occurredAt: "2026-07-15T15:30:00.000Z" },
+      returnToDepot: { status: "UNCONFIRMED", observedAt: "2026-07-15T15:30:00.000Z" },
+      routeEndMode: "RETURN_TO_DEPOT",
+    },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 5_400 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ serviceMinutes: 5 }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, null);
+  assert.equal(endpoints.end.actualAt, null);
+  assert.equal(endpoints.end.actualLabel, "Unconfirmed");
+});
+
+test("route planned return is unavailable when a serviced stop has no service duration", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_800 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: null }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, null);
+});
+
+test("route planned return tolerates rounded outbound legs by clamping a tiny negative return leg", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_199.6 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: 5 }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T13:25:00.000Z");
+});
+
+test("current departure address is labeled only when it matches the saved depot coordinates", () => {
+  const baseInput = {
+    departureLocation: {
+      address: "Current depot label",
+      addressSource: "CURRENT_SETTING",
+      currentCoordinates: [-79.38, 43.65],
+      savedCoordinates: [-79.38, 43.65],
+    },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_800 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: 5 }],
+  };
+
+  assert.equal(buildRouteEndpointPresentation(baseInput).start.address, "Current depot label");
+  assert.equal(
+    buildRouteEndpointPresentation(baseInput).start.addressTitle,
+    "Current location address matched to the saved depot coordinates",
+  );
+  assert.equal(buildRouteEndpointPresentation({
+    ...baseInput,
+    departureLocation: { ...baseInput.departureLocation, currentCoordinates: [-79.4, 43.7] },
+  }).start.address, "–");
+});
+
+test("route endpoints do not present a generic fallback as a saved depot address", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: {
+      address: "Company location",
+      addressSource: "UNAVAILABLE",
+      savedCoordinates: [-79.38, 43.65],
+    },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT" },
+  });
+
+  assert.equal(endpoints.start.address, "–");
+  assert.equal(endpoints.end.address, "–");
+});
+
+test("route endpoints require event occurrence time and default unknown end mode to depot return", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: {
+      completion: { occurredAt: "2026-07-15T15:30:00.000Z" },
+      start: { receivedAt: "2026-07-15T13:02:00.000Z" },
+    },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_800 },
+    routePlan: { scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: 5 }],
+  });
+
+  assert.equal(endpoints.start.actualAt, null);
+  assert.equal(endpoints.end.address, "4475 Chesswood Dr");
+  assert.equal(endpoints.end.actualAt, null);
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T13:35:00.000Z");
+});
+
+test("route planned arrival accepts ISO time-window starts", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 2_400 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-07-15T13:00:00.000Z" },
+    stops: [{
+      durationFromPreviousSeconds: 1_800,
+      serviceMinutes: 5,
+      timeWindowStart: "2026-07-15T14:00:00.000Z",
+    }],
+  });
+
+  assert.equal(endpoints.end.plannedAt, "2026-07-15T14:15:00.000Z");
+});
+
+test("last-stop route endpoint uses the last stop address and observed stop arrival", () => {
+  const endpoints = buildRouteEndpointPresentation({
+    actualArrivalByStopId: { "stop-2": "2026-07-16T04:05:00.000Z" },
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "END_AT_LAST_STOP" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 3_000 },
+    routePlan: { routeEndMode: "END_AT_LAST_STOP", scheduledStartAt: "2026-07-16T03:00:00.000Z" },
+    stops: [
+      { deliveryStopId: "stop-1", durationFromPreviousSeconds: 1_200, serviceMinutes: 5 },
+      { address: "2 Test St", deliveryStopId: "stop-2", durationFromPreviousSeconds: 1_800, serviceMinutes: 5 },
+    ],
+  });
+
+  assert.equal(endpoints.end.address, "2 Test St");
+  assert.equal(endpoints.end.plannedAt, "2026-07-16T03:55:00.000Z");
+  assert.equal(endpoints.end.actualAt, "2026-07-16T04:05:00.000Z");
+  assert.equal(endpoints.end.actualLabel, "Actual arrival");
+});
 
 test("child route rows expose notes and summarize shipping and order totals", () => {
   const rows = buildChildRouteOrderRows([{
@@ -49,6 +219,78 @@ test("child route rows expose notes and summarize shipping and order totals", ()
     shippingPriceState: "missing",
     totalPriceLabel: "–",
   });
+});
+
+test("standalone Stops and Tracking tables render endpoint rows outside order iteration", () => {
+  assert.match(routeDetailSource, /data-route-endpoint=\{kind\}/);
+  assert.match(routeDetailSource, /data-route-tracking-endpoint=\{kind\}/);
+  assert.match(routeDetailSource, /!isRouteGroupDetail \? renderRouteEndpointOrderRow\(\{[\s\S]*kind: "start"/);
+  assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) => \([\s\S]*!isRouteGroupDetail \? renderRouteEndpointOrderRow\(\{[\s\S]*kind: "end"/);
+  assert.match(routeDetailSource, /renderRouteEndpointTrackingRow\(\{[\s\S]*kind: "start"[\s\S]*routeOrderRows\.map\(\(row\) => \([\s\S]*renderRouteEndpointTrackingRow\(\{[\s\S]*kind: "end"/);
+  assert.match(routeDetailSource, /routeEndpointPresentation = useMemo\(\(\) => buildRouteEndpointPresentation/);
+  assert.match(routeDetailSource, /function renderRouteEndpointTime[\s\S]*return renderChildRouteEta\(\{/);
+  assert.doesNotMatch(routeDetailSource, />Planned \{plannedTime\}</);
+  assert.doesNotMatch(routeDetailSource, /\? `\$\{actualShortLabel\} \$\{actualTime\}` : "Unconfirmed"/);
+  assert.doesNotMatch(routeDetailSource, /completion.*actualEndAt/);
+});
+
+test("route order rows include every child and unassigned stop without crossing route evidence", () => {
+  const rows = buildRouteOrderRows([
+    {
+      color: "#0b84d8",
+      id: "route-1",
+      routePlanId: "route-plan-1",
+      status: "Ready",
+      title: "#1",
+      stops: [{
+        deliveryStopId: "stop-1",
+        note: "Keep chilled",
+        orderId: "order-1",
+        orderName: "#1001",
+      }],
+    },
+    {
+      color: "#7c3aed",
+      id: "route-2",
+      routePlanId: "route-plan-2",
+      status: "Completed",
+      title: "#2",
+      stops: [{
+        deliveryStopId: "stop-2",
+        orderId: "order-2",
+        orderName: "#1002",
+      }],
+    },
+    {
+      color: "#64748b",
+      id: "unassigned",
+      isUnassigned: true,
+      routePlanId: null,
+      status: "Ready",
+      title: "Unassigned",
+      stops: [{
+        deliveryStopId: "stop-3",
+        orderId: "order-3",
+        orderName: "#1003",
+      }],
+    },
+  ], {
+    actualArrivalByStopId: {
+      "stop-1": "2026-10-01T14:10:00Z",
+      "stop-2": "2026-10-01T15:20:00Z",
+    },
+    actualArrivalRoutePlanId: "route-plan-1",
+    ianaTimezone: "America/Toronto",
+  });
+
+  assert.deepEqual(rows.map((row) => row.order), ["#1001", "#1002", "#1003"]);
+  assert.deepEqual(rows.map((row) => row.sourceRouteTitle), ["#1", "#2", "Unassigned"]);
+  assert.deepEqual(rows.map((row) => row.sourceRoutePlanId), ["route-plan-1", "route-plan-2", null]);
+  assert.deepEqual(rows.map((row) => row.sourceRouteStatus), ["Ready", "Completed", "Ready"]);
+  assert.equal(rows[0].note, "Keep chilled");
+  assert.equal(rows[0].hasActualArrival, true);
+  assert.equal(rows[1].hasActualArrival, false);
+  assert.match(rows[0].rowKey, /route-1.*stop-1/);
 });
 
 test("original shipping totals distinguish confirmed zero, missing snapshots, and mixed currencies", () => {
@@ -316,8 +558,8 @@ test("child order table columns include a sticky Actions column with the confirm
   ]);
 
   assert.match(routeDetailSource, /aria-label="Child route order stops"/);
-  assert.match(routeDetailSource, /CHILD_ROUTE_ORDER_COLUMNS\.map\(\(column\) =>/);
-  assert.match(routeDetailSource, /childRouteOrderRows\.map\(\(row\) =>/);
+  assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
+  assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) =>/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
@@ -343,6 +585,21 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, />\s*Send to route\s*<\/button>/);
   assert.match(routeDetailSource, />\s*View in Shopify\s*<\/a>/);
   assert.match(routeDetailSource, />\s*Open tracking\s*<\/button>/);
+});
+
+test("one-route and All routes reuse the detailed order table while preserving route summaries", () => {
+  assert.match(routeDetailSource, /const orderTableRouteRows = useMemo\([\s\S]*isRouteGroupDetail[\s\S]*timelineRouteRows/);
+  assert.match(routeDetailSource, /buildRouteOrderRows\(orderTableRouteRows/);
+  assert.match(routeDetailSource, /childDetailTab === "stops" && \(routeOrderRows\.length > 0 \|\| !isRouteGroupDetail\)/);
+  assert.match(routeDetailSource, /const routeOrderColumns = isRouteGroupDetail[\s\S]*\{ key: "route", label: "Route" \}/);
+  assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
+  assert.match(routeDetailSource, /\{row\.sourceRouteTitle\}/);
+  assert.match(routeDetailSource, /findRouteOrderRow\(routeOrderRows, activeChildOrderDisclosure\.rowId\)/);
+  assert.match(routeDetailSource, /summarizeChildRouteMoney\(routeOrderRows\)/);
+  assert.match(routeDetailSource, /isRouteGroupDetail \? \([\s\S]*href=\{withEmbeddedShopifyContext\(routeGroupChildPath\(routeGroupId, row\.sourceRoutePlanId\), searchParams\)\}[\s\S]*>Open route<\/a>/);
+  assert.match(routeDetailSource, /\) : null\}\s+\{isTrackingMapView \? \(/);
+  assert.match(routeDetailSource, /aria-label="Driver route rows"/);
+  assert.match(routeDetailSource, /aria-label="Route stop timeline"/);
 });
 
 test("custom stops stay visible but never become Shopify-linked child rows", () => {
@@ -460,7 +717,7 @@ test("Stops and Tracking route markers share one order popup with the existing s
   assert.doesNotMatch(routeDetailSource, /if \(!isTrackingMapView\) bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /content\.className = "route-stop-map-popup__content"/);
   assert.match(routeDetailSource, /actions\.dataset\.childStopActionsTrigger = "true"/);
-  assert.match(routeDetailSource, /handleToggleChildStopActions\(event, row\.id\)/);
+  assert.match(routeDetailSource, /handleToggleChildStopActionsRef\.current\?\.\(event, row\.id\)/);
   assert.match(routeDetailSource, /activeRouteTimelineStopPopover\.mode === "pinned"[\s\S]*handleToggleChildStopActions\(event, activeRouteTimelineStop\.id\)/);
 });
 
@@ -589,7 +846,7 @@ test("child timeline keeps breathing room while table stop digits stay geometric
   assert.match(routeDetailSource, /const routeNumberMarkerGlyphStyle = \{[\s\S]*lineHeight: 1[\s\S]*transform: "translateY\(0\.1em\)"/);
   assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "11px"[\s\S]*fontWeight: 700[\s\S]*transform: "none"/);
   assert.match(routeDetailSource, /<span style=\{routeNumberMarkerGlyphStyle\}>\{stop\.stop\}<\/span>/);
-  assert.match(routeDetailSource, /<span style=\{childRouteTableStopMarkerStyle\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
+  assert.match(routeDetailSource, /<span style=\{\{ \.\.\.childRouteTableStopMarkerStyle, background: row\.sourceRouteColor \?\? routeLineColor \}\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
   assert.doesNotMatch(routeDetailSource, /textBox:/);
 });
 
@@ -606,10 +863,10 @@ test("Items and Attributes use hover and click disclosures above their trigger",
   assert.match(routeDetailSource, /data-child-order-disclosure-trigger="true"/);
   assert.doesNotMatch(routeDetailSource, /<td onMouseLeave=\{handleChildOrderDisclosureMouseLeave\} style=\{childRouteDisclosureCellStyle\}>/);
   assert.match(routeDetailSource, /data-child-order-disclosure-popover="true"/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "items"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}/);
-  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.id, "attributes"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "items"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "items"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "attributes"\)\}/);
+  assert.match(routeDetailSource, /onMouseEnter=\{\(event\) => handleChildOrderDisclosureMouseEnter\(event, row\.rowKey, "attributes"\)\}\s+onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onMouseLeave=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /onBlur=\{handleChildOrderDisclosureMouseLeave\}/);
   assert.match(routeDetailSource, /aria-haspopup="dialog"/);
@@ -647,7 +904,8 @@ test("child detail uses a flat reference-style title area and keeps inventory se
   assert.match(routeDetailSource, /Updated on \{routeUpdatedLabel\}/);
   assert.match(routeDetailSource, /aria-label="Edit child route name"/);
   assert.match(routeDetailSource, /style=\{isMaterializedChildRouteDetail \|\| isRouteGroupDetail \? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle\}/);
-  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*routes\.detail\.inventory\.view/);
+  assert.match(routeDetailSource, /onClick=\{handleViewInventory\}[\s\S]*routes\.detail\.sections\.inventory/);
+  assert.doesNotMatch(routeDetailSource, /icon="inventory"/);
   assert.doesNotMatch(routeDetailSource, />Inventory<\/button>[\s\S]*role="tab"/);
 });
 
@@ -680,14 +938,13 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.match(routeDetailSource, /ariaLabel=\{isTrackingMapView \? "Recorded GPS tracking map" : "Route stop location map"\}/);
   assert.match(routeDetailSource, /canvasKey=\{mapRenderKey\}/);
   assert.doesNotMatch(routeDetailSource, /key=\{routeMapViewKey\}/);
-  assert.match(routeDetailSource, />Planned route</);
-  assert.match(routeDetailSource, />GPS tracking</);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Tracking map legend"|>Planned route<|>GPS tracking</);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Tracking date controls"|aria-label="Selected tracking date"|All recorded dates|Available tracking dates|and next day/);
   assert.doesNotMatch(routeDetailSource, />Road-matched GPS|>Unmatched GPS/);
-  assert.match(routeDetailSource, /<span>All recorded dates<\/span>/);
-  assert.match(routeDetailSource, /!showAllRouteTrackingRecords \? \(\s*<span aria-label="Selected tracking date"/);
   assert.match(routeDetailSource, /getRouteTrackingServiceDate\(/);
+  assert.match(routeDetailSource, /allRecords: false/);
   assert.match(routeDetailSource, /includeNextDay: true/);
-  assert.match(routeDetailSource, /routeTrackingWindowDate \? `\$\{routeTrackingWindowDate\} and next day`/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Current position freshness"|aria-label="Route completion time"|routeTrackingMapDateControlsStyle|routeTrackingMapFreshnessStyle/);
   assert.match(routeDetailSource, /\[mapRenderKey, scheduleMapRecovery\]/);
   assert.doesNotMatch(routeDetailSource, /\[isTrackingMapView, mapRenderKey, scheduleMapRecovery\]/);
   assert.match(
@@ -698,8 +955,8 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.doesNotMatch(tabHandlerSource, /clearMapRecoveryTimer|mapLoadedRef|setIsMapReady|setMapStatus/);
   assert.match(routeDetailSource, /syncRouteDetailTrackingVisibility\(map, isTrackingMapView\);\s*bindStopLayerHandlers\(\)/);
   assert.match(routeDetailSource, /if \(mapCanvas\?\.style\.cursor === "pointer"\) mapCanvas\.style\.cursor = "";/);
-  assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\}/);
-  assert.match(routeDetailSource, /\) : isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
+  assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div[^>]*aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\}/);
+  assert.match(routeDetailSource, /\{isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
   assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isTrackingMapView \? \(/);
 });
 

@@ -100,12 +100,11 @@ test("live tracking keeps the server past-path snapshot while the stream connect
 test("server ETA lifecycle events render Rolling ETA and actual arrival in one column", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
 
-  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
+  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current, previousSnapshot, routeExecutionStatusRef\.current\)/);
   assert.match(routeDetailSource, /revalidatorRef\.current\.revalidate\(\)/);
   assert.match(routeDetailSource, /\["ETA", "120px"\]/);
   assert.doesNotMatch(routeDetailSource, /\["Actual arrival", "120px"\]/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
-  assert.match(routeDetailSource, /<del><s-text color="subdued" fontVariantNumeric="tabular-nums">\{row\.expectedArrival\}<\/s-text><\/del>/);
   assert.match(routeDetailSource, /\{row\.actualArrival\}/);
   assert.match(routeDetailSource, /const childRouteExpectedArrivalCellStyle = \{[\s\S]*color: "#6d7175"/);
   assert.doesNotMatch(routeDetailSource, /const childRouteActualArrivalCellStyle = /);
@@ -129,7 +128,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
     routeMapSource.match(/"line-color": "#d32f2f",\s*"line-dasharray": \[1\.5, 1\.25\],\s*"line-opacity": 0\.9,\s*"line-width": 3\.5/g)?.length,
     1,
   );
-  assert.match(routeMapSource, /"line-color": "#a95a00"/);
+  assert.doesNotMatch(routeMapSource, /route-detail-live-tracking-inferred|"line-color": "#a95a00"/);
   assert.match(routeMapSource, /"line-color": "#68727d"/);
   assert.doesNotMatch(routeMapSource, /#79828c|#a7adb4/);
   assert.doesNotMatch(routeMapSource, /"line-width": 4\.5/);
@@ -179,7 +178,7 @@ test("Tracking tab presents status-aware live or historical tracking and the lat
   assert.match(routeDetailSource, /routeTrackingConnectionLabel/);
   assert.match(routeDetailSource, /displayedRouteTrackingSnapshot\?\.policy/);
   assert.match(routeDetailSource, /Latest position/);
-  assert.match(routeDetailSource, /Position recorded/);
+  assert.match(routeDetailSource, /Last position/);
   assert.match(routeDetailSource, /formatTrackingTimestamp\([^,]+,\s*ianaTimezone\)/);
   assert.match(routeDetailSource, /timeZone:\s*ianaTimezone/);
   assert.match(routeDetailSource, /trackingConnectionState/);
@@ -199,10 +198,10 @@ test("Tracking shell prioritizes route status and keeps technical evidence secon
   assert.match(routeDetailSource, /<summary[^>]*>Tracking evidence<\/summary>/);
   assert.match(routeDetailSource, /className="route-tracking-primary-grid"/);
   assert.match(globalCssSource, /\.route-tracking-primary-grid/);
-  assert.match(globalCssSource, /@media \(max-width: 760px\)[\s\S]*\.route-tracking-primary-grid/);
+  assert.match(globalCssSource, /@media \(max-width: 520px\)[\s\S]*\.route-tracking-primary-grid/);
 });
 
-test("Tracking map uses occurredAt for live freshness and a local terminal label after completion", () => {
+test("Tracking map keeps marker focus and clock updates without date or freshness overlays", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
   const routeMapSource = readIfPresent(routeMapPath);
 
@@ -212,13 +211,8 @@ test("Tracking map uses occurredAt for live freshness and a local terminal label
   assert.match(routeDetailSource, /window\.setInterval\(\(\) => setRouteTrackingClock\(Date\.now\(\)\), 1_000\)/);
   assert.match(routeDetailSource, /getRouteTrackingCompletionTime\(displayedRouteTrackingSnapshot\)/);
   assert.match(routeDetailSource, /shouldShowRouteTrackingFreshness\(/);
-  assert.match(routeDetailSource, /Current position/);
-  assert.match(routeDetailSource, /Last recorded position/);
-  assert.match(routeDetailSource, /formatTrackingElapsedSeconds\(latestTrackingOccurredAt/);
-  assert.match(routeDetailSource, /formatRouteTrackingCompletionLabel\(routeTrackingCompletionTime, ianaTimezone\)/);
-  assert.match(routeDetailSource, /Route completion time/);
-  assert.doesNotMatch(routeDetailSource, /formatTrackingElapsedSeconds\(latestTrackingReceivedAt/);
-  assert.match(routeDetailSource, /showAllRouteTrackingRecords \? "All-record range" : "Service-day range"/);
+  assert.doesNotMatch(routeDetailSource, /aria-label="Current position freshness"|aria-label="Route completion time"|All recorded dates|Selected tracking date/);
+  assert.match(routeDetailSource, />Service-day range<\/span>/);
   assert.match(routeDetailSource, /formatTrackingRange\(/);
   assert.doesNotMatch(routeDetailSource, />Recorded range</);
 });

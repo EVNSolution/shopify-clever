@@ -123,7 +123,7 @@ export async function copyDeliveryRouteGroup(request, routeGroupId, options = {}
   }
 
   const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}/copies`, {
-    body: JSON.stringify({ expectedUpdatedAt, mode }),
+    body: JSON.stringify({ expectedUpdatedAt, mode, ...(options.requestId ? { requestId: options.requestId } : {}) }),
     fetch: options.fetch,
     method: "POST",
     sessionToken: options.sessionToken,

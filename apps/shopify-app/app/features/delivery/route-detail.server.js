@@ -247,7 +247,7 @@ function getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stop
     ...routePlan,
     id: textOrUndefined(routePlan.id) ?? routePlanId,
     name: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
-    status: textOrUndefined(routePlan.status ?? child?.status ?? child?.displayStatus) ?? "DRAFT",
+    status: textOrUndefined(routePlan.status ?? child?.displayStatus ?? child?.status) ?? null,
     driverId: textOrUndefined(routePlan.driverId ?? child?.driverId) ?? null,
     driver: routePlan.driver ?? (child?.driverName ? { displayName: child.driverName } : null),
     stopsCount: numberOrUndefined(routePlan.stopsCount ?? child?.stopsCount) ?? stops.length,
@@ -643,6 +643,7 @@ export const routeDetailAction = async ({ params, request }) => {
     const copyMode = textOrUndefined(formData.get("copyMode"));
     const expectedUpdatedAt = textOrUndefined(formData.get("expectedUpdatedAt"));
     return copyDeliveryRouteGroup(request, routeGroupIdFromParams, {
+      requestId: textOrUndefined(formData.get("copyRequestId")),
       expectedUpdatedAt,
       mode: copyMode,
       sessionToken: shopifySessionToken,
@@ -705,7 +706,11 @@ export const routeDetailAction = async ({ params, request }) => {
       return { errors: [{ message: "현재 child route를 찾지 못했습니다. 페이지를 새로고침해주세요." }] };
     }
 
-    const candidateOrderIdSet = new Set(buildRouteAddOrderCandidates(orderData.orders).map((order) => order.orderId));
+    const candidateOrderIdSet = new Set(
+      buildRouteAddOrderCandidates(orderData.orders, { routeGroup: routeGroupData.routeGroup })
+        .filter((order) => order.addable)
+        .map((order) => order.orderId),
+    );
     const addOrderIds = requestedOrderIds.filter((orderId) => candidateOrderIdSet.has(orderId));
     if (addOrderIds.length !== requestedOrderIds.length) {
       return { errors: [{ message: "선택한 주문 중 현재 Route에 추가할 수 없는 주문이 있습니다." }] };

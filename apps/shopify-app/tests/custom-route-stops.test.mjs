@@ -13,10 +13,11 @@ import {
   buildCustomStopAddress,
   buildCustomStopPayload,
   createCustomStopDraft,
+  isStopTargetRouteValid,
   updateCustomStopDraftField,
   validateCustomStopDraft,
 } from "../app/features/delivery/custom-stop-form.js";
-import { numberOrUndefined } from "../app/features/delivery/route-helpers.js";
+import { normalizeRouteExecutionStatus, numberOrUndefined } from "../app/features/delivery/route-helpers.js";
 
 const root = process.cwd();
 const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
@@ -34,7 +35,7 @@ function loadAddStopTargetRouteOptionsBuilder() {
   const statusEnd = routeDetailSource.indexOf("\nfunction isRouteExecutionInProgressForStopMembership(", statusStart);
   assert.notEqual(statusStart, -1);
   assert.notEqual(statusEnd, -1);
-  return Function(`${routeDetailSource.slice(statusStart, statusEnd)}\n${routeDetailSource.slice(start, end)}\nreturn buildAddStopTargetRouteOptions;`)();
+  return Function("normalizeRouteExecutionStatus", `${routeDetailSource.slice(statusStart, statusEnd)}\n${routeDetailSource.slice(start, end)}\nreturn buildAddStopTargetRouteOptions;`)(normalizeRouteExecutionStatus);
 }
 
 process.env.CLEVER_DELIVERY_API_URL = "https://delivery.test/";
@@ -169,8 +170,8 @@ test("route detail branches the first add dialog and keeps custom stops DB-only"
   assert.match(routeDetailSource, /row\?\.isCustomStop\) return null/);
   assert.match(routeDetailSource, /Unassigned in group/);
   assert.match(routeDetailSource, /Select route/);
-  assert.match(routeDetailSource, /addStopTargetRouteRequired && !addStopTargetRoutePlanId/);
-  assert.match(customStopDialogSource, /targetRouteRequired && !targetRoutePlanId/);
+  assert.match(routeDetailSource, /selectedAddOrderIds.length === 0 \|\| !addStopTargetRouteValid/);
+  assert.match(customStopDialogSource, /busy \|\| !targetRouteValid/);
   assert.match(routeDetailSource, /accessibilityLabel="Loading available orders"/);
   assert.match(groupDetailSource, /fetchDeliveryOrders\(request, \{\}, \{ cacheKey \}\)/);
   assert.doesNotMatch(groupDetailSource, /syncDeliveryOrders|orderUpdate|customerUpdate/);
@@ -198,12 +199,32 @@ test("materialized groups require a real target route while empty groups may sta
   ]);
   assert.deepEqual(buildAddStopTargetRouteOptions([
     { isUnassigned: true, routePlanId: null, title: "Unassigned" },
-    { routePlanId: "route-44", title: "#44" },
-    { routePlanId: "route-46", title: "#46" },
+    { routePlanId: "route-44", title: "#44", status: "READY" },
+    { routePlanId: "route-46", title: "#46", status: "READY" },
     { routePlanId: "incomplete", title: "Preserved history", status: "Incomplete" },
   ]), [
     { disabled: true, label: "Select route", value: "" },
     { label: "#44", value: "route-44" },
     { label: "#46", value: "route-46" },
   ]);
+});
+
+
+test("materialized groups cannot add stops without an enabled child target", () => {
+  const buildOptions = loadAddStopTargetRouteOptionsBuilder();
+  for (const status of ["INCOMPLETE", "COMPLETED", "CANCELLED", "AWAITING_DRIVER", null]) {
+    const options = buildOptions([{ routePlanId: "synthetic-child", title: "Synthetic child", status }]);
+    assert.deepEqual(options, [{ disabled: true, label: "Select route", value: "" }]);
+    assert.equal(isStopTargetRouteValid(options, ""), false);
+    assert.equal(isStopTargetRouteValid(options, "synthetic-child"), false);
+  }
+  const options = buildOptions([
+    { routePlanId: "closed", title: "Closed", status: "INCOMPLETE" },
+    { routePlanId: "ready", title: "Ready", status: "READY" },
+  ]);
+  assert.equal(isStopTargetRouteValid(options, ""), false);
+  assert.equal(isStopTargetRouteValid(options, "closed"), false);
+  assert.equal(isStopTargetRouteValid(options, "ready"), true);
+  assert.equal(isStopTargetRouteValid(buildOptions([]), ""), true);
+  assert.equal(isStopTargetRouteValid([], ""), true);
 });

@@ -1,3 +1,5 @@
+import { formatStoreInstant } from "../features/shopify/store-date-time";
+import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { useFetcher, useLoaderData, useNavigate, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
@@ -18,10 +20,10 @@ import { CustomerEmailSendResultPanel } from "../features/customer-notifications
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
-  buildChildRouteOrderRows,
+  buildRouteEndpointPresentation,
+  buildRouteOrderRows,
   summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
-  formatStoreLocalOrderDate,
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
   storeLocalDateTimeToIso,
 } from "../features/delivery/child-route-detail-presentation";
@@ -33,6 +35,7 @@ import { CustomStopDialog } from "../features/delivery/custom-stop-dialog";
 import {
   createCustomStopDraft,
   isCustomRouteStop,
+  isStopTargetRouteValid,
   updateCustomStopDraftField,
   validateCustomStopDraft,
 } from "../features/delivery/custom-stop-form";
@@ -59,6 +62,9 @@ import {
   firstArray,
   formatRouteDeliveryScope,
   formatRouteStatus,
+  getRouteStatusBadgeColors,
+  isTerminalRouteExecutionStatus,
+  mergeRouteExecutionStatus,
   getRouteGroupChildRoutePlanId,
   getRouteGroupChildRouteName,
   getVisibleRouteGroupChildren,
@@ -66,6 +72,7 @@ import {
   readRouteOptimizedSnapshot,
   textOrUndefined,
 } from "../features/delivery/route-helpers";
+import { buildRouteRows } from "../features/delivery/route-list-rows";
 import { routeDetailAction, routeDetailLoader } from "../features/delivery/route-detail.server";
 import {
   getRouteStopLocationMessage,
@@ -100,7 +107,6 @@ import {
 } from "../features/delivery/route-detail-map";
 import {
   consumeRouteTrackingSseChunk,
-  formatRouteTrackingCompletionLabel,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteExecutionStatusFromTrackingSnapshot,
   getRouteTrackingCompletionTime,
@@ -268,7 +274,7 @@ const routeOverviewTopBarStyle = {
   alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "var(--route-detail-control-gap, 8px)",
   justifyContent: "space-between",
 };
 
@@ -282,7 +288,7 @@ const routeOverviewTitleLineStyle = {
   alignItems: "center",
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "var(--route-detail-control-gap, 8px)",
   minWidth: 0,
 };
 
@@ -374,7 +380,7 @@ const routeHeaderRightStyle = {
   maxWidth: "100%",
   display: "flex",
   flexWrap: "wrap",
-  gap: "10px",
+  gap: "var(--route-detail-control-gap, 8px)",
   justifyContent: "flex-end",
 };
 
@@ -500,7 +506,7 @@ const routeChildTabsStyle = {
   background: "#fafafa",
   borderBottom: "1px solid #e3e3e3",
   display: "flex",
-  gap: "4px",
+  gap: "var(--route-detail-control-gap, 8px)",
   minHeight: "48px",
   overflowX: "auto",
   padding: "6px 10px",
@@ -548,7 +554,7 @@ const routeChildSelectionBarStyle = {
   borderBottom: "1px solid #ececec",
   display: "flex",
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "var(--route-detail-control-gap, 8px)",
   justifyContent: "space-between",
   minHeight: "48px",
   padding: "7px 12px",
@@ -557,12 +563,16 @@ const routeChildSelectionBarStyle = {
 const routeChildSelectionGroupStyle = {
   alignItems: "center",
   display: "flex",
+  flex: "1 1 220px",
+  minWidth: 0,
   flexWrap: "wrap",
-  gap: "8px",
+  gap: "var(--route-detail-control-gap, 8px)",
 };
 
 const routeChildSelectionButtonStyle = {
   alignItems: "center",
+  maxWidth: "100%",
+  overflowWrap: "anywhere",
   background: "#ffffff",
   border: "1px solid #c9c9c9",
   borderRadius: "8px",
@@ -572,7 +582,7 @@ const routeChildSelectionButtonStyle = {
   fontFamily: "inherit",
   fontSize: "13px",
   fontWeight: 650,
-  gap: "5px",
+  gap: "var(--route-detail-control-gap, 8px)",
   minHeight: "32px",
   padding: "4px 10px",
 };
@@ -637,14 +647,16 @@ const routeTrackingStatusFactsStyle = {
 };
 
 const routeChildTrackingSummaryStyle = {
+  alignContent: "start",
   background: "#ffffff",
   borderBottom: "1px solid #e3e3e3",
   display: "grid",
-  gap: "12px",
-  padding: "14px",
+  gap: "8px",
+  padding: "10px 12px",
 };
 
 const routeChildTrackingMetricStyle = {
+  alignContent: "start",
   borderLeft: "1px solid #e3e3e3",
   display: "grid",
   gap: "4px",
@@ -656,30 +668,23 @@ const routeChildTrackingMetricLabelStyle = {
   color: "#6d7175",
   fontSize: "11px",
   fontWeight: 650,
+  lineHeight: 1.2,
 };
 
 const routeChildTrackingMetricValueStyle = {
   color: "#303030",
   fontSize: "14px",
   fontWeight: 750,
+  lineHeight: 1.25,
+  minWidth: 0,
+  overflowWrap: "anywhere",
 };
 
-const routeTrackingSummaryHeaderStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "10px",
-  justifyContent: "space-between",
-};
-
-const routeTrackingSummaryTitleStyle = {
-  color: "#303030",
-  fontSize: "13px",
-  fontWeight: 750,
-};
-
-const routeTrackingSummaryHintStyle = {
-  color: "#6d7175",
-  fontSize: "11px",
+const routeTrackingPrimaryMetricStyle = {
+  ...routeChildTrackingMetricStyle,
+  borderLeft: 0,
+  minWidth: 0,
+  padding: "2px 0",
 };
 
 const routeTrackingEvidenceStyle = {
@@ -716,86 +721,21 @@ const routeTrackingMapCanvasStyle = {
   minHeight: 0,
 };
 
-const routeTrackingMapLegendStyle = {
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid rgba(138, 138, 138, 0.55)",
-  borderRadius: "10px",
-  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.12)",
-  display: "grid",
-  gap: "7px",
-  left: "12px",
-  padding: "9px 11px",
-  position: "absolute",
-  top: "12px",
-  zIndex: 2,
-};
-
-const routeTrackingMapLegendItemStyle = {
-  alignItems: "center",
-  color: "#303030",
-  display: "flex",
-  fontSize: "12px",
-  fontWeight: 650,
-  gap: "8px",
-  lineHeight: 1.2,
-};
-
-const routeTrackingMapGpsKeyStyle = {
-  borderTop: "3.5px dashed #d32f2f",
-  height: 0,
-  width: "22px",
-};
-
-const routeTrackingMapReferenceKeyStyle = {
-  borderRadius: "999px",
-  height: "5.5px",
-  opacity: 0.78,
-  width: "22px",
-};
-
-const routeTrackingMapFreshnessStyle = {
-  alignItems: "center",
-  background: "rgba(255, 255, 255, 0.94)",
-  border: "1px solid rgba(138, 138, 138, 0.55)",
-  borderRadius: "999px",
-  boxShadow: "0 4px 14px rgba(0, 0, 0, 0.12)",
-  color: "#303030",
-  display: "flex",
-  fontSize: "12px",
-  fontWeight: 700,
-  gap: "7px",
-  left: "50%",
-  lineHeight: 1,
-  padding: "9px 12px",
-  pointerEvents: "none",
-  position: "absolute",
-  top: "12px",
-  transform: "translateX(-50%)",
-  whiteSpace: "nowrap",
-  zIndex: 2,
-};
-
-const routeTrackingMapFreshnessDotStyle = {
-  background: "#d82c0d",
-  border: "2px solid #ffffff",
-  borderRadius: "50%",
-  boxShadow: "0 0 0 1px rgba(216, 44, 13, 0.22)",
-  height: "9px",
-  width: "9px",
-};
-
 const routeMetaActionsStyle = {
+  alignItems: "center",
   borderBottom: "1px solid #ececec",
-  display: "grid",
+  display: "flex",
+  flexWrap: "wrap",
   gap: "8px",
-  gridTemplateColumns: "minmax(0, 1fr) auto",
   padding: "6px 8px",
 };
 
 const routeMetaGridStyle = {
   display: "grid",
+  flex: "1 1 220px",
   gap: "2px",
   gridTemplateColumns: "minmax(0, 1fr)",
+  minWidth: 0,
 };
 
 const routeMetaItemStyle = {
@@ -809,9 +749,12 @@ const routeMetaItemStyle = {
 };
 
 const routeActionColumnStyle = {
-  display: "grid",
-  gap: "4px",
-  width: "128px",
+  alignItems: "center",
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "var(--route-detail-control-gap, 8px)",
+  justifyContent: "flex-end",
+  marginLeft: "auto",
 };
 
 const routeActionButtonStyle = {
@@ -833,14 +776,6 @@ const routeActionButtonStyle = {
 
 const routeActionsStyle = {
   position: "relative",
-  width: "100%",
-};
-
-const routeAddOrderButtonStyle = {
-  ...routeActionButtonStyle,
-  background: "#303030",
-  borderColor: "#303030",
-  color: "#ffffff",
 };
 
 const routeActionsButtonStyle = {
@@ -857,6 +792,7 @@ const routeActionsMenuStyle = {
   boxShadow: "0 8px 24px rgba(0, 0, 0, 0.14)",
   display: "grid",
   gap: "4px",
+  maxWidth: "calc(100vw - 32px)",
   padding: "6px",
   position: "absolute",
   right: 0,
@@ -871,7 +807,7 @@ const routeHeaderActionsStyle = {
   flexWrap: "wrap",
   justifyContent: "flex-end",
   minWidth: 0,
-  gap: "6px",
+  gap: "var(--route-detail-control-gap, 8px)",
 };
 
 const routeDisabledActionButtonStyle = {
@@ -936,6 +872,11 @@ const childRouteOrderRowStyle = {
   height: "40px",
 };
 
+const childRouteEndpointRowStyle = {
+  ...childRouteOrderRowStyle,
+  background: "#f7f7f7",
+};
+
 const childRouteTableStopMarkerStyle = {
   background: "var(--route-marker-color, #0b84d8)",
   borderRadius: "999px",
@@ -947,6 +888,13 @@ const childRouteTableStopMarkerStyle = {
   padding: 0,
   placeItems: "center",
   width: "20px",
+};
+
+const childRouteEndpointMarkerStyle = {
+  ...childRouteTableStopMarkerStyle,
+  background: "#27805c",
+  fontSize: "11px",
+  fontWeight: 800,
 };
 
 const routeNumberMarkerGlyphStyle = {
@@ -1781,7 +1729,7 @@ const routeAddOrderTableWrapStyle = {
 const routeAddOrderTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "980px",
+  minWidth: "1170px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -2347,8 +2295,8 @@ function getRouteStartTimeLabel(value) {
 }
 
 
-function getRouteCreatedLabel(routePlan) {
-  return textOrUndefined(routePlan?.createdAt)?.replace("T", " ").slice(0, 16) ?? ROUTE_EMPTY_LABEL;
+function getRouteCreatedLabel(routePlan, storeTimeZone) {
+  return formatStoreInstant(routePlan?.createdAt, storeTimeZone, { empty: ROUTE_EMPTY_LABEL });
 }
 
 function formatTrackingTimestamp(value, ianaTimezone) {
@@ -2435,12 +2383,6 @@ function getReturnToDepotEvidenceTitle(evidence, ianaTimezone, language) {
   ].filter(Boolean).join(" · ") || undefined;
 }
 
-function formatTrackingElapsedSeconds(value, now = Date.now()) {
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime())) return ROUTE_EMPTY_LABEL;
-  return `${Math.max(0, Math.floor((now - date.getTime()) / 1000))}s ago`;
-}
-
 function formatTrackingRange(firstValue, lastValue, ianaTimezone) {
   const firstDate = firstValue ? new Date(firstValue) : null;
   const lastDate = lastValue ? new Date(lastValue) : null;
@@ -2484,14 +2426,33 @@ function formatTrackingPosition(position) {
   return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
 }
 
-function formatTrackingDriverStage(stage) {
+function formatTrackingDriverStage(stage, language = "en") {
+  if (["READY", "COMPLETED", "INCOMPLETE", "CANCELLED", "UNKNOWN"].includes(stage)) {
+    return translate(language, `routes.status.${stage.toLowerCase()}`);
+  }
   return {
-    AT_STOP: "At stop",
-    COMPLETED: "Completed",
-    DRIVING: "Driving",
-    PAUSED: "Paused",
-    READY: "Ready",
-  }[stage] ?? "Ready";
+    AT_STOP: translate(language, "routes.tracking.at_stop"),
+    DRIVING: translate(language, "routes.tracking.driving"),
+    PAUSED: translate(language, "routes.tracking.paused"),
+  }[stage] ?? translate(language, "routes.status.unknown");
+}
+
+function localizeRouteStatus(status, language) {
+  return translate(language, `routes.status.${formatRouteStatus(status).toLowerCase().replaceAll(" ", "_")}`);
+}
+
+function localizeTrackingLabel(label, language) {
+  const status = normalizeRouteExecutionStatus(label);
+  if (status !== "UNKNOWN" || label === "Unknown") return localizeRouteStatus(status, language);
+  const key = {
+    "Tracking stopped": "stopped",
+    "Not started": "not_started",
+    "Waiting for location": "waiting_for_location",
+    Live: "live",
+    Delayed: "delayed",
+    Offline: "offline",
+  }[label];
+  return key ? translate(language, `routes.tracking.${key}`) : label;
 }
 
 function getLiveTrackingStopStatus(row, progress) {
@@ -2502,6 +2463,7 @@ function getLiveTrackingStopStatus(row, progress) {
 }
 
 function isRouteExecutionLockedForStopMembership(status) {
+  if (normalizeRouteExecutionStatus(status) === "UNKNOWN") return true;
   return ["IN_PROGRESS", "EN_ROUTE", "ARRIVED", "COMPLETED", "INCOMPLETE", "DELIVERED", "FAILED", "SKIPPED", "CANCELLED"].includes(
     String(status ?? "").trim().replace(/[\s-]+/g, "_").toUpperCase(),
   );
@@ -2513,7 +2475,15 @@ function isRouteExecutionInProgressForStopMembership(status) {
   );
 }
 
+function findRouteOrderRow(rows, rowKey) {
+  return rows.find((row) => row.rowKey === rowKey)
+    ?? rows.find((row) => row.id === rowKey)
+    ?? null;
+}
+
 function isRouteStopReorderAllowed(status) {
+  if (["EN_ROUTE", "ARRIVED"].includes(String(status).trim().replace(/[\s-]+/g, "_").toUpperCase())) return true;
+  if (normalizeRouteExecutionStatus(status) === "UNKNOWN") return false;
   return !["COMPLETED", "INCOMPLETE", "DELIVERED", "FAILED", "SKIPPED", "CANCELLED"].includes(
     String(status ?? "").trim().replace(/[\s-]+/g, "_").toUpperCase(),
   );
@@ -2627,21 +2597,33 @@ function buildDepartureLocation(routePlan, currentDepartureLocation) {
       )
       : null;
   const coordinates = depotCoordinates ?? currentCoordinates;
+  const savedDepotName = textOrUndefined(routePlan?.depot?.name);
+  const savedDepotAddress = textOrUndefined(routePlan?.depot?.address);
+  const currentDepartureName = textOrUndefined(currentDepartureLocation?.name);
+  const currentDepartureAddress = textOrUndefined(currentDepartureLocation?.address);
+  const savedDepotLabel = savedDepotAddress ?? savedDepotName;
+  const currentDepartureLabel = currentDepartureAddress ?? currentDepartureName;
   const name =
-    textOrUndefined(routePlan?.depot?.name) ??
-    textOrUndefined(currentDepartureLocation?.name) ??
+    savedDepotName ??
+    currentDepartureName ??
     "Company location";
   const address =
-    textOrUndefined(routePlan?.depot?.address) ??
-    textOrUndefined(currentDepartureLocation?.address) ??
+    savedDepotAddress ??
+    currentDepartureAddress ??
     "Company location";
 
   return {
     id: `${routePlan?.id ?? "route"}:departure`,
     name,
     address,
+    addressSource: savedDepotLabel
+      ? "SAVED_DEPOT"
+      : currentDepartureLabel ? "CURRENT_SETTING" : "UNAVAILABLE",
     coordinates,
+    currentCoordinates,
+    endpointAddress: savedDepotLabel ?? currentDepartureLabel ?? null,
     hasCoordinates: coordinates != null,
+    savedCoordinates: depotCoordinates,
   };
 }
 
@@ -2964,13 +2946,13 @@ function mapRouteChildDetailsByRoutePlanId(childRouteDetails = []) {
   return detailsByRoutePlanId;
 }
 
-function buildUnsplitRouteGroupRow(routeGroup, routeStops = []) {
+function buildUnsplitRouteGroupRow(routeGroup, routeStops = [], storeTimeZone) {
   if (!routeGroup || routeStops.length === 0) return null;
 
   return {
     attemptedCount: countRouteStopsByStatus(routeStops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
     color: MAP_MARKER_PALETTE.plannedOrder.color,
-    createdLabel: getRouteCreatedLabel(routeGroup),
+    createdLabel: getRouteCreatedLabel(routeGroup, storeTimeZone),
     startDateTime: "",
     deliveredCount: countRouteStopsByStatus(routeStops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]),
     driverId: null,
@@ -3006,7 +2988,7 @@ function isOrdinaryRouteDetailPresentation(routePlan, routeGroup) {
     .length <= 1;
 }
 
-function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = [], ianaTimezone) {
+function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Map(), routeStops = [], ianaTimezone, storeTimeZone) {
   const routeGroupChildRows = getVisibleRouteGroupChildren(routeGroup).map((child, index) => {
     const routeIdx = numberOrUndefined(child?.routeIdx);
     const routeIndex = routeIdx ?? numberOrUndefined(child?.sortOrder) ?? index + 1;
@@ -3029,7 +3011,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     return {
       attemptedCount: countRouteStopsByStatus(stops, ["ATTEMPTED", "FAILED", "NEEDS_REVIEW"]),
       color: textOrUndefined(child?.color) ?? ROUTE_DEFAULT_COLORS[index % ROUTE_DEFAULT_COLORS.length] ?? MAP_MARKER_PALETTE.plannedOrder.color,
-      createdLabel: getRouteCreatedLabel(childRoutePlan),
+      createdLabel: getRouteCreatedLabel(childRoutePlan, storeTimeZone),
       startDateTime: getRouteStartDateTimeValue(childRoutePlan, ianaTimezone),
       deliveredCount: countRouteStopsByStatus(stops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]),
       driverId: textOrUndefined(child?.driverId ?? childRoutePlan?.driverId) ?? null,
@@ -3061,13 +3043,13 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
     (numberOrUndefined(first.routeIdx) ?? numberOrUndefined(first.routeIndex) ?? 0)
     - (numberOrUndefined(second.routeIdx) ?? numberOrUndefined(second.routeIndex) ?? 0)
   ));
-  if (routeGroupChildRows.length === 0) return [buildUnsplitRouteGroupRow(routeGroup, routeStops)].filter(Boolean);
+  if (routeGroupChildRows.length === 0) return [buildUnsplitRouteGroupRow(routeGroup, routeStops, storeTimeZone)].filter(Boolean);
 
   const assignedOrderIds = new Set(routeGroupChildRows.flatMap((row) => row.orderIds));
   const unassignedStops = routeStops.filter((stop) => !assignedOrderIds.has(stop.orderId));
   if (unassignedStops.length > 0) {
     routeGroupChildRows.push({
-      ...buildUnsplitRouteGroupRow(routeGroup, unassignedStops),
+      ...buildUnsplitRouteGroupRow(routeGroup, unassignedStops, storeTimeZone),
       id: `routeGroup:${routeGroup.id}:unassigned`,
       routeKey: `routeGroup:${routeGroup.id}:unassigned`,
       isGeneratedTitle: false,
@@ -3087,7 +3069,7 @@ function buildAddStopTargetRouteOptions(routeRows = []) {
       && !isRouteExecutionLockedForStopMembership(routeRow.status))
     .map((routeRow) => ({ label: routeRow.title, value: routeRow.routePlanId }));
 
-  return routeOptions.length > 0
+  return routeRows.some((row) => row.routePlanId && !row.isPreviewOnly && !row.isUnassigned)
     ? [{ disabled: true, label: "Select route", value: "" }, ...routeOptions]
     : [{ label: "Unassigned in group", value: "" }];
 }
@@ -3464,28 +3446,113 @@ function renderStopOrderLabel(row) {
 
 function renderChildRouteEta(row) {
   const hasActualArrival = row?.hasActualArrival === true;
+  const expectedArrival = row?.expectedArrival ?? ROUTE_EMPTY_LABEL;
+  const hasExpectedArrival = expectedArrival !== ROUTE_EMPTY_LABEL;
+  const etaLabel = row?.etaLabel ?? "ETA";
+  const accessibleLabel = [
+    hasExpectedArrival ? `${etaLabel}: ${expectedArrival}` : null,
+    hasActualArrival ? `${row?.actualLabel ?? "Actual arrival"}: ${row.actualArrival}` : null,
+  ].filter(Boolean).join("; ") || "ETA unavailable";
 
   return (
-    <s-stack alignItems="center" direction="block" gap="small-100">
-      <s-text accessibilityVisibility="exclusive">{row?.etaLabel ?? "ETA"}: </s-text>
-      {hasActualArrival && row?.expectedArrival !== ROUTE_EMPTY_LABEL ? (
-        <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{row.expectedArrival}</s-text></del>
-      ) : (
-        <s-text
-          fontVariantNumeric="tabular-nums"
-          tone={row?.etaLabel === "Rolling ETA" ? "success" : undefined}
-          type={row?.etaLabel === "Rolling ETA" ? "strong" : undefined}
-        >
-          {row?.expectedArrival ?? ROUTE_EMPTY_LABEL}
-        </s-text>
-      )}
-      {hasActualArrival ? (
-        <>
-          <s-text accessibilityVisibility="exclusive">Actual arrival: </s-text>
-          <s-text fontVariantNumeric="tabular-nums" tone="success" type="strong">{row.actualArrival}</s-text>
-        </>
+    <span
+      aria-label={accessibleLabel}
+      role="group"
+      style={{ alignItems: "center", display: "inline-flex", flexDirection: "column", gap: "4px" }}
+      title={accessibleLabel}
+    >
+      {hasExpectedArrival || !hasActualArrival ? (
+        <span aria-hidden="true">
+          {hasActualArrival ? (
+            <del><s-text color="subdued" fontVariantNumeric="tabular-nums">{expectedArrival}</s-text></del>
+          ) : (
+            <s-text
+              fontVariantNumeric="tabular-nums"
+              tone={etaLabel === "Rolling ETA" ? "success" : undefined}
+              type={etaLabel === "Rolling ETA" ? "strong" : undefined}
+            >
+              {expectedArrival}
+            </s-text>
+          )}
+        </span>
       ) : null}
-    </s-stack>
+      {hasActualArrival ? (
+        <span aria-hidden="true">
+          <s-text fontVariantNumeric="tabular-nums" tone="success" type="strong">{row.actualArrival}</s-text>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+function formatRouteEndpointTimestamp(value, referenceValue, ianaTimezone) {
+  const localValue = formatStoreLocalDateTimeInput(value, ianaTimezone);
+  if (!localValue) return ROUTE_EMPTY_LABEL;
+  const referenceLocalValue = formatStoreLocalDateTimeInput(referenceValue, ianaTimezone);
+  return referenceLocalValue && referenceLocalValue.slice(0, 10) === localValue.slice(0, 10)
+    ? localValue.slice(11)
+    : `${localValue.slice(5, 10).replace("-", ".")} ${localValue.slice(11)}`;
+}
+
+function renderRouteEndpointTime(endpoint, referenceValue, plannedLabel) {
+  const plannedTime = formatRouteEndpointTimestamp(endpoint?.plannedAt, referenceValue, endpoint?.ianaTimezone);
+  const actualTime = endpoint?.actualAt
+    ? formatRouteEndpointTimestamp(endpoint.actualAt, referenceValue, endpoint.ianaTimezone)
+    : ROUTE_EMPTY_LABEL;
+  const actualLabel = endpoint?.actualLabel ?? "Actual";
+
+  return renderChildRouteEta({
+    actualArrival: actualTime,
+    actualLabel,
+    etaLabel: plannedLabel,
+    expectedArrival: plannedTime,
+    hasActualArrival: endpoint?.actualAt != null,
+  });
+}
+
+function renderRouteEndpointOrderRow({ endpoint, kind, referenceValue }) {
+  const isStart = kind === "start";
+  return (
+    <tr aria-label={`Route ${kind}`} data-route-endpoint={kind} style={childRouteEndpointRowStyle}>
+      <td style={childRouteStopCellStyle}>
+        <span style={childRouteEndpointMarkerStyle}>{isStart ? "★" : "◆"}</span>
+      </td>
+      <td style={{ ...childRouteOrderCellStyle, fontWeight: 700 }}>{isStart ? "Start" : "End"}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteExpectedArrivalCellStyle}>
+        {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
+      </td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={{ ...childRouteActionsCellStyle, background: "#f7f7f7" }}>{ROUTE_EMPTY_LABEL}</td>
+    </tr>
+  );
+}
+
+function renderRouteEndpointTrackingRow({ endpoint, kind, referenceValue }) {
+  const isStart = kind === "start";
+  return (
+    <tr aria-label={`Route tracking ${kind}`} data-route-tracking-endpoint={kind} style={childRouteEndpointRowStyle}>
+      <td style={childRouteStopCellStyle}>
+        <span style={childRouteEndpointMarkerStyle}>{isStart ? "★" : "◆"}</span>
+      </td>
+      <td style={{ ...childRouteOrderCellStyle, fontWeight: 700 }}>{isStart ? "Start" : "End"}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteExpectedArrivalCellStyle}>
+        {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
+      </td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
+    </tr>
   );
 }
 
@@ -3582,14 +3649,14 @@ function hasCustomerEmailUncertainOutcome(recipient) {
   return (numberOrUndefined(getCustomerEmailRecipientHistory(recipient)?.uncertainCount) ?? 0) > 0;
 }
 
-function formatCustomerEmailHistory(history) {
+function formatCustomerEmailHistory(history, storeTimeZone) {
   if (!history) return "No send history";
   const sendCount = numberOrUndefined(history.sendCount) ?? 0;
   const uncertainCount = numberOrUndefined(history.uncertainCount) ?? 0;
   const lastStatus = textOrUndefined(history.lastStatus);
   const lastProviderStatus = textOrUndefined(history.lastProviderStatus)?.replaceAll("_", " ");
-  const lastProviderEventAt = textOrUndefined(history.lastProviderEventAt)?.replace("T", " ").slice(0, 16);
-  const lastSentAt = textOrUndefined(history.lastSentAt)?.replace("T", " ").slice(0, 16);
+  const lastProviderEventAt = formatStoreInstant(history.lastProviderEventAt, storeTimeZone, { empty: null });
+  const lastSentAt = formatStoreInstant(history.lastSentAt, storeTimeZone, { empty: null });
   return [
     `${sendCount} previous send${sendCount === 1 ? "" : "s"}`,
     uncertainCount > 0 ? `${uncertainCount} unresolved outcome${uncertainCount === 1 ? "" : "s"}` : null,
@@ -3680,7 +3747,9 @@ function createCustomerEmailDialogOpenState(signal) {
 }
 
 export default function RouteDetailPage() {
+  const storeTimeZone = useStoreTimeZone();
   const navigate = useNavigate();
+  const routesListNeedsRefreshRef = useRef(null);
   const [searchParams] = useSearchParams();
   const navigateWithEmbeddedContext = useCallback(
     (destination) => {
@@ -3691,13 +3760,22 @@ export default function RouteDetailPage() {
       ) {
         window.__cleverRoutesEntryStartedAt = performance.now();
       }
-      navigate(withEmbeddedShopifyContext(destination, searchParams));
+      const nextDestination = destination === ROUTES_ROOT_PATH && routesListNeedsRefreshRef.current
+        ? `${ROUTES_ROOT_PATH}/`
+        : destination;
+      if (destination === ROUTES_ROOT_PATH) routesListNeedsRefreshRef.current = null;
+      navigate(withEmbeddedShopifyContext(nextDestination, searchParams));
     },
     [navigate, searchParams],
   );
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
+  const routesListData = useRouteLoaderData("routes/app.routes");
+  const cachedRouteRows = useMemo(
+    () => buildRouteRows(routesListData?.routePlans, routesListData?.routeGroups),
+    [routesListData],
+  );
   const routeActionFetcher = useFetcher();
   const customerEmailFetcher = useFetcher();
   const {
@@ -3727,7 +3805,10 @@ export default function RouteDetailPage() {
   });
   const trackingRoutePlanId = textOrUndefined(effectiveRoutePlan?.id);
   const hasRouteTrackingDetail = Boolean(trackingRoutePlanId);
-  const loaderRouteExecutionStatus = normalizeRouteExecutionStatus(effectiveRoutePlan?.status);
+  const routeExecutionScopeId = effectiveRoutePlan?.id ?? (routeGroup?.id ? `group:${routeGroup.id}` : null);
+  const loaderRouteExecutionStatus = normalizeRouteExecutionStatus(effectiveRoutePlan ? effectiveRoutePlan.status : routeGroup?.displayStatus ?? routeGroup?.status);
+  const activeTrackingRoutePlanIdRef = useRef(trackingRoutePlanId);
+  activeTrackingRoutePlanIdRef.current = trackingRoutePlanId;
   const routeDetail = useMemo(() => buildRouteDetail(effectiveRoutePlan, routeGroup), [effectiveRoutePlan, routeGroup]);
   const routeDetailTitle = textOrUndefined(routeDetailTitleOverride) ?? (isRouteGroupDetail ? textOrUndefined(routeGroup?.name) : textOrUndefined(routeDetail.route)) ?? "Route";
   const departureLocation = useMemo(
@@ -3754,8 +3835,8 @@ export default function RouteDetailPage() {
     [routeGroupStopsSource],
   );
   const routeGroupChildRows = useMemo(
-    () => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource, ianaTimezone),
-    [ianaTimezone, routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource],
+    () => buildRouteGroupChildRows(routeGroup, routeChildDetailsByRoutePlanId, routeGroupStopsSource, ianaTimezone, storeTimeZone),
+    [ianaTimezone, routeChildDetailsByRoutePlanId, routeGroup, routeGroupStopsSource, storeTimeZone],
   );
   const siblingRouteRows = routeGroupChildRows.filter((routeRow) => routeRow.routePlanId);
   const defaultRouteCandidateTitle = isRouteGroupDetail ? "#1" : routeDetailTitle;
@@ -3768,12 +3849,15 @@ export default function RouteDetailPage() {
   const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds));
   const routeTotalDistance = getRouteMetricLabel(formatRouteDistanceMeters(routeMetrics?.distanceMeters));
   const routeTotalWeight = getRouteMetricLabel(effectiveRoutePlan?.totalWeight, effectiveRoutePlan?.weight);
-  const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan);
-  const routeUpdatedLabel = formatStoreLocalOrderDate(
+  const routeCreatedLabel = getRouteCreatedLabel(effectiveRoutePlan, storeTimeZone);
+  const routeUpdatedLabel = formatStoreInstant(
     effectiveRoutePlan?.updatedAt ?? effectiveRoutePlan?.modifiedAt ?? effectiveRoutePlan?.createdAt,
-    ianaTimezone,
+    storeTimeZone,
   );
   const routeGroupId = textOrUndefined(effectiveRoutePlan?.routeGroupingChild?.groupingId) ?? textOrUndefined(routeGroup?.id);
+  const canShowRouteCopy = !routeGroupId || new Set(
+    getVisibleRouteGroupChildren(routeGroup).map(getRouteGroupChildRoutePlanId),
+  ).size === 1;
   const currentSiblingRouteIndex = siblingRouteRows.findIndex((routeRow) => routeRow.routePlanId === effectiveRoutePlan?.id);
   const previousSiblingRoute = siblingRouteRows[currentSiblingRouteIndex - 1] ?? null;
   const nextSiblingRoute = siblingRouteRows[currentSiblingRouteIndex + 1] ?? null;
@@ -3798,6 +3882,7 @@ export default function RouteDetailPage() {
   const [ordinaryMutationPending, setOrdinaryMutationPending] = useState(false);
   const [ordinaryMutationUncertain, setOrdinaryMutationUncertain] = useState(false);
   const ordinaryMutationPendingRef = useRef(false);
+  const routeDraftSavePendingRef = useRef(false);
   const ordinarySplitRevisionRef = useRef(null);
   const copySourceRoutePlanIdRef = useRef(null);
   const routeGroupActionBusy = routeActionFetcher.state !== "idle" || ordinaryMutationPending;
@@ -3908,7 +3993,7 @@ export default function RouteDetailPage() {
   const [customStopDraft, setCustomStopDraft] = useState(() => createCustomStopDraft());
   const [customStopFieldErrors, setCustomStopFieldErrors] = useState({});
   const [activeCustomStopEditRow, setActiveCustomStopEditRow] = useState(null);
-  const [isRouteActionsMenuOpen, setIsRouteActionsMenuOpen] = useState(false);
+  const [routeActionsMenu, setRouteActionsMenu] = useState(null);
   const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [pendingInProgressRouteChange, setPendingInProgressRouteChange] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
@@ -3954,14 +4039,29 @@ export default function RouteDetailPage() {
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
   const [polygonSelectedOrderIds, setPolygonSelectedOrderIds] = useState([]);
   const [routeTrackingSnapshot, setRouteTrackingSnapshot] = useState(null);
-  const [showAllRouteTrackingRecords, setShowAllRouteTrackingRecords] = useState(false);
   const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
-  const [routeExecutionStatus, setRouteExecutionStatus] = useState(loaderRouteExecutionStatus);
+  const [routeExecutionState, setRouteExecutionState] = useState({ routeId: routeExecutionScopeId, status: loaderRouteExecutionStatus });
+  const routeExecutionStatus = routeExecutionState.routeId === routeExecutionScopeId
+    ? isTerminalRouteExecutionStatus(loaderRouteExecutionStatus)
+      ? mergeRouteExecutionStatus(routeExecutionState.status, loaderRouteExecutionStatus)
+      : routeExecutionState.status
+    : loaderRouteExecutionStatus;
+  const routeExecutionStatusRef = useRef(routeExecutionStatus);
+  routeExecutionStatusRef.current = routeExecutionStatus;
+  const setRouteExecutionStatus = useCallback((update) => {
+    if (activeTrackingRoutePlanIdRef.current !== routeExecutionScopeId) return;
+    const nextStatus = update(routeExecutionStatusRef.current);
+    routeExecutionStatusRef.current = nextStatus;
+    setRouteExecutionState((current) => current.routeId === routeExecutionScopeId
+      ? { ...current, status: mergeRouteExecutionStatus(current.status, nextStatus) }
+      : current);
+  }, [routeExecutionScopeId]);
+  const canEditRouteStopDetails = !isTerminalRouteExecutionStatus(routeExecutionStatus) && routeExecutionStatus !== "UNKNOWN";
   const canDispatchRoute = Boolean(
     effectiveRoutePlan?.id
     && routeDriverId
-    && !["CANCELLED", "COMPLETED", "INCOMPLETE"].includes(routeExecutionStatus),
+    && ["READY", "IN_PROGRESS"].includes(routeExecutionStatus),
   );
   const customerEmailPreviewBusy = customerEmailFetcher.state !== "idle"
     && customerEmailFetcher.formData?.get("_intent") === "previewCustomerEmail";
@@ -4062,20 +4162,47 @@ export default function RouteDetailPage() {
   );
   const displayedRouteTrackingSnapshot = useMemo(
     () => selectRouteTrackingWindow(routeScopedTrackingSnapshot, {
-      allRecords: showAllRouteTrackingRecords,
+      allRecords: false,
       date: routeTrackingWindowDate,
       includeNextDay: true,
       timeZone: ianaTimezone,
     }),
-    [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingWindowDate, showAllRouteTrackingRecords],
+    [ianaTimezone, routeScopedTrackingSnapshot, routeTrackingWindowDate],
   );
+  const routeExecutionEvidence = displayedRouteTrackingSnapshot?.executionEvidence;
+  const returnToDepotEvidence = routeExecutionEvidence?.returnToDepot;
   useEffect(() => {
-    setRouteExecutionStatus(loaderRouteExecutionStatus);
-  }, [effectiveRoutePlan?.id, loaderRouteExecutionStatus]);
+    setRouteExecutionState((current) => ({
+      routeId: routeExecutionScopeId,
+      status: current.routeId === routeExecutionScopeId
+        ? mergeRouteExecutionStatus(current.status, loaderRouteExecutionStatus)
+        : loaderRouteExecutionStatus,
+    }));
+  }, [routeExecutionScopeId, loaderRouteExecutionStatus]);
+  useEffect(() => {
+    const pending = routesListNeedsRefreshRef.current;
+    const pendingCachedRoute = pending && cachedRouteRows.find((row) => row.id === pending.routeId);
+    if (pending && normalizeRouteExecutionStatus(pendingCachedRoute?.status) === pending.status) {
+      routesListNeedsRefreshRef.current = null;
+    }
+    if (!trackingRoutePlanId || !isTerminalRouteExecutionStatus(routeExecutionStatus)) return;
+    const cachedRoute = cachedRouteRows.find((row) => row.id === trackingRoutePlanId);
+    if (routesListData && normalizeRouteExecutionStatus(cachedRoute?.status) !== routeExecutionStatus) {
+      routesListNeedsRefreshRef.current = { routeId: trackingRoutePlanId, status: routeExecutionStatus };
+    }
+  }, [cachedRouteRows, routeExecutionStatus, routesListData, trackingRoutePlanId]);
+  useEffect(() => {
+    const handleRoutesHistoryReturn = () => {
+      if (!routesListNeedsRefreshRef.current || !/^\/app\/routes\/?$/.test(window.location.pathname)) return;
+      routesListNeedsRefreshRef.current = null;
+      revalidator.revalidate();
+    };
+    window.addEventListener("popstate", handleRoutesHistoryReturn);
+    return () => window.removeEventListener("popstate", handleRoutesHistoryReturn);
+  }, [revalidator]);
   useEffect(() => {
     routeTrackingSnapshotRef.current = null;
     setRouteTrackingSnapshot(null);
-    setShowAllRouteTrackingRecords(false);
     setTrackingConnectionState("idle");
   }, [effectiveRoutePlan?.id]);
   useEffect(() => {
@@ -4187,21 +4314,46 @@ export default function RouteDetailPage() {
     () => buildChildActualArrivalByStopId(displayedRouteTrackingSnapshot?.stopArrivals),
     [displayedRouteTrackingSnapshot?.stopArrivals],
   );
-  const childRouteOrderRows = useMemo(
-    () => (hasRouteTrackingDetail
-      ? buildChildRouteOrderRows(currentTimelineRouteRow?.stops ?? [], {
-          actualArrivalByStopId,
-          ianaTimezone,
-        })
-      : []),
-    [actualArrivalByStopId, currentTimelineRouteRow?.stops, hasRouteTrackingDetail, ianaTimezone],
+  const routeEndpointPresentation = useMemo(() => buildRouteEndpointPresentation({
+    actualArrivalByStopId,
+    departureLocation,
+    executionEvidence: routeExecutionEvidence,
+    ianaTimezone,
+    routeMetrics,
+    routePlan: effectiveRoutePlan,
+    stops: orderedRouteStops,
+  }), [
+    actualArrivalByStopId,
+    departureLocation,
+    effectiveRoutePlan,
+    ianaTimezone,
+    orderedRouteStops,
+    routeExecutionEvidence,
+    routeMetrics,
+  ]);
+  const orderTableRouteRows = useMemo(
+    () => (isRouteGroupDetail
+      ? timelineRouteRows
+      : currentTimelineRouteRow ? [currentTimelineRouteRow] : []),
+    [currentTimelineRouteRow, isRouteGroupDetail, timelineRouteRows],
   );
+  const routeOrderRows = useMemo(
+    () => buildRouteOrderRows(orderTableRouteRows, {
+      actualArrivalByStopId,
+      actualArrivalRoutePlanId: trackingRoutePlanId,
+      ianaTimezone,
+    }),
+    [actualArrivalByStopId, ianaTimezone, orderTableRouteRows, trackingRoutePlanId],
+  );
+  const routeOrderColumns = isRouteGroupDetail
+    ? [{ key: "route", label: "Route" }, ...CHILD_ROUTE_ORDER_COLUMNS]
+    : CHILD_ROUTE_ORDER_COLUMNS;
   const addStopTargetRouteOptions = useMemo(
     () => (isRouteGroupDetail ? buildAddStopTargetRouteOptions(routeGroupChildRows) : []),
     [isRouteGroupDetail, routeGroupChildRows],
   );
-  const addStopTargetRouteRequired = addStopTargetRouteOptions.some((option) => option.value);
-  const childRouteMoney = useMemo(() => summarizeChildRouteMoney(childRouteOrderRows), [childRouteOrderRows]);
+  const addStopTargetRouteValid = isStopTargetRouteValid(addStopTargetRouteOptions, addStopTargetRoutePlanId);
+  const childRouteMoney = useMemo(() => summarizeChildRouteMoney(routeOrderRows), [routeOrderRows]);
   const selectedAddOrderIdSet = useMemo(() => new Set(selectedAddOrderIds), [selectedAddOrderIds]);
   const filteredAddOrderCandidates = useMemo(
     () => filterAndSortRouteAddOrderCandidates(availableAddOrderCandidates, {
@@ -4213,17 +4365,25 @@ export default function RouteDetailPage() {
     }),
     [addOrderDateEnd, addOrderDateField, addOrderDateMode, addOrderDateStart, addOrderSearchQuery, availableAddOrderCandidates],
   );
-  const allAddOrderCandidatesSelected = filteredAddOrderCandidates.length > 0
-    && filteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
-  childRouteOrderRowsRef.current = childRouteOrderRows;
+  const selectableFilteredAddOrderCandidates = useMemo(
+    () => filteredAddOrderCandidates.filter((order) => order.addable),
+    [filteredAddOrderCandidates],
+  );
+  const allAddOrderCandidatesSelected = selectableFilteredAddOrderCandidates.length > 0
+    && selectableFilteredAddOrderCandidates.every((order) => selectedAddOrderIdSet.has(order.orderId));
+  childRouteOrderRowsRef.current = isRouteGroupDetail ? [] : routeOrderRows;
   const routeTrackingPresentation = useMemo(
     () => getRouteTrackingPresentation(routeExecutionStatus, displayedRouteTrackingSnapshot, routeTrackingClock),
     [displayedRouteTrackingSnapshot, routeExecutionStatus, routeTrackingClock],
   );
-  const canDraftEditChildStopMembership = !isRouteExecutionLockedForStopMembership(routeExecutionStatus);
+  const canDraftEditChildStopMembership = isRouteGroupDetail
+    ? contextRouteRows.some((row) => !isRouteExecutionLockedForStopMembership(row.status))
+    : !isRouteExecutionLockedForStopMembership(routeExecutionStatus);
   const routeMembershipChangeIsInProgress = isRouteExecutionInProgressForStopMembership(routeExecutionStatus);
   const canAddOrRemoveChildStops = canDraftEditChildStopMembership;
-  const canReorderRouteStops = isRouteStopReorderAllowed(routeExecutionStatus);
+  const canReorderRouteStops = isRouteGroupDetail
+    ? contextRouteRows.some((row) => isRouteStopReorderAllowed(row.status))
+    : isRouteStopReorderAllowed(routeExecutionStatus);
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
     ? trackingRoutePlanId
     : null;
@@ -4234,11 +4394,8 @@ export default function RouteDetailPage() {
       : routeTrackingPresentation.connectionLabel;
   const routeTrackingPolicy = displayedRouteTrackingSnapshot?.policy;
   const routeTrackingProgress = displayedRouteTrackingSnapshot?.progress;
-  const routeExecutionEvidence = displayedRouteTrackingSnapshot?.executionEvidence;
-  const returnToDepotEvidence = routeExecutionEvidence?.returnToDepot;
   const latestTrackingPosition = displayedRouteTrackingSnapshot?.latestPosition ?? null;
   const latestTrackingOccurredAt = latestTrackingPosition?.occurredAt ?? latestTrackingPosition?.receivedAt;
-  const latestTrackingReceivedAt = latestTrackingPosition?.receivedAt ?? null;
   const routeTrackingCompletionTime = getRouteTrackingCompletionTime(displayedRouteTrackingSnapshot);
   const routeTrackingIsCompleted = routeExecutionStatus === "COMPLETED";
   const showRouteTrackingFreshness = shouldShowRouteTrackingFreshness({
@@ -4248,16 +4405,15 @@ export default function RouteDetailPage() {
     ianaTimezone,
     now: routeTrackingClock,
   });
-  const routeTrackingFreshnessTime = routeTrackingCompletionTime ?? routeTrackingClock;
   const routeTrackingPathSummary = useMemo(
     () => getRouteTrackingPathSummary(displayedRouteTrackingSnapshot),
     [displayedRouteTrackingSnapshot],
   );
   const activeChildOrderDisclosureRow = activeChildOrderDisclosure
-    ? childRouteOrderRows.find((row) => row.id === activeChildOrderDisclosure.rowId) ?? null
+    ? findRouteOrderRow(routeOrderRows, activeChildOrderDisclosure.rowId)
     : null;
   const activeChildStopActionsRow = activeChildStopActions
-    ? childRouteOrderRows.find((row) => row.id === activeChildStopActions.rowId) ?? null
+    ? findRouteOrderRow(routeOrderRows, activeChildStopActions.rowId)
     : null;
   const activeChildStopShopifyHref = getShopifyOrderAdminHref(activeChildStopActionsRow);
   const activeChildStopSourceRouteId = activeChildStopActionsRow
@@ -4292,7 +4448,7 @@ export default function RouteDetailPage() {
     || removedOrderIds.length > 0;
   const canSaveRouteDraft = hasEditableRouteRows
     && hasRouteAllocationDraft
-    && routeExecutionStatus !== "INCOMPLETE"
+    && (isRouteGroupDetail || canEditRouteStopDetails)
     && !hasTerminalRouteStopDraft(contextRouteRows, routeTimelineOrderByRouteId)
     && !routeGroupActionBusy
     && !isRoutePolygonEditMode
@@ -4333,7 +4489,7 @@ export default function RouteDetailPage() {
       ];
     })
   ))), [timelineRouteRows]);
-  const trackingDeliveredCount = childRouteOrderRows.filter((row) => completedTrackingStopIds.has(row.id)).length;
+  const trackingDeliveredCount = routeOrderRows.filter((row) => completedTrackingStopIds.has(row.id)).length;
   const routeMapStops = useMemo(() => {
     if (timelineRouteRows.length > 0) {
       return timelineRouteRows.flatMap((routeRow) =>
@@ -4425,13 +4581,12 @@ export default function RouteDetailPage() {
         if (!response.ok) throw new Error(`Tracking snapshot failed with ${response.status}.`);
         const payload = await response.json();
         const snapshot = normalizeRouteTrackingSnapshot(payload?.data?.snapshot ?? payload?.data ?? payload);
-        if (isDisposed || controller.signal.aborted || !isRouteTrackingPayloadForRoute(snapshot, trackingRoutePlanId)) return;
+        if (isDisposed || controller.signal.aborted || activeTrackingRoutePlanIdRef.current !== trackingRoutePlanId
+          || !isRouteTrackingPayloadForRoute(snapshot, trackingRoutePlanId)) return;
         setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingSnapshot(currentStatus, snapshot, trackingRoutePlanId));
-        setRouteTrackingSnapshot((currentSnapshot) => {
-          const nextSnapshot = mergeRouteTrackingSnapshot(currentSnapshot, snapshot);
-          routeTrackingSnapshotRef.current = nextSnapshot;
-          return nextSnapshot;
-        });
+        const nextSnapshot = mergeRouteTrackingSnapshot(routeTrackingSnapshotRef.current, snapshot);
+        routeTrackingSnapshotRef.current = nextSnapshot;
+        setRouteTrackingSnapshot(nextSnapshot);
         if (!hasTrackingStream) setTrackingConnectionState("idle");
       } catch (error) {
         if (!isDisposed && !controller.signal.aborted) {
@@ -4445,7 +4600,7 @@ export default function RouteDetailPage() {
       isDisposed = true;
       controller.abort();
     };
-  }, [trackingRoutePlanId, trackingStreamRoutePlanId]);
+  }, [setRouteExecutionStatus, trackingRoutePlanId, trackingStreamRoutePlanId]);
 
   useEffect(() => {
     if (!trackingStreamRoutePlanId) return undefined;
@@ -4484,45 +4639,35 @@ export default function RouteDetailPage() {
       reconnectTimer = window.setTimeout(connect, trackingReconnectDelayMs);
     };
     const applyTrackingEvent = (trackingEvent) => {
+      if (isDisposed || activeTrackingRoutePlanIdRef.current !== trackingStreamRoutePlanId) return;
       if (trackingEvent.event === "tracking_snapshot") {
         const snapshot = normalizeRouteTrackingSnapshot(trackingEvent.data?.snapshot ?? trackingEvent.data);
         if (!isRouteTrackingPayloadForRoute(snapshot, trackingStreamRoutePlanId)) return;
         setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingSnapshot(currentStatus, snapshot, trackingStreamRoutePlanId));
-        setRouteTrackingSnapshot((currentSnapshot) => {
-          const nextSnapshot = mergeRouteTrackingSnapshot(currentSnapshot, snapshot);
-          routeTrackingSnapshotRef.current = nextSnapshot;
-          return nextSnapshot;
-        });
+        const nextSnapshot = mergeRouteTrackingSnapshot(routeTrackingSnapshotRef.current, snapshot);
+        routeTrackingSnapshotRef.current = nextSnapshot;
+        setRouteTrackingSnapshot(nextSnapshot);
         return;
       }
       if (trackingEvent.event === "tracking_position") {
         const position = trackingEvent.data?.position ?? trackingEvent.data;
         if (!isRouteTrackingPayloadForRoute(position, trackingStreamRoutePlanId)) return;
-        setRouteTrackingSnapshot((currentSnapshot) => {
-          const nextSnapshot = mergeRouteTrackingPosition(
-            currentSnapshot,
-            position,
-          );
-          routeTrackingSnapshotRef.current = nextSnapshot;
-          return nextSnapshot;
-        });
+        const nextSnapshot = mergeRouteTrackingPosition(routeTrackingSnapshotRef.current, position);
+        routeTrackingSnapshotRef.current = nextSnapshot;
+        setRouteTrackingSnapshot(nextSnapshot);
         return;
       }
       if (trackingEvent.event === "tracking_progress") {
         const progressEvent = trackingEvent.data?.progress ?? trackingEvent.data;
         if (!isRouteTrackingPayloadForRoute(progressEvent, trackingStreamRoutePlanId)) return;
-        setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingEvent(currentStatus, progressEvent));
-        if (shouldRevalidateTrackingEta(progressEvent, hasRouteAllocationDraftRef.current)) {
+        const previousSnapshot = routeTrackingSnapshotRef.current;
+        setRouteExecutionStatus((currentStatus) => getRouteExecutionStatusFromTrackingEvent(currentStatus, progressEvent, previousSnapshot));
+        if (shouldRevalidateTrackingEta(progressEvent, hasRouteAllocationDraftRef.current, previousSnapshot, routeExecutionStatusRef.current)) {
           revalidatorRef.current.revalidate();
         }
-        setRouteTrackingSnapshot((currentSnapshot) => {
-          const nextSnapshot = mergeRouteTrackingProgress(
-            currentSnapshot,
-            progressEvent,
-          );
-          routeTrackingSnapshotRef.current = nextSnapshot;
-          return nextSnapshot;
-        });
+        const nextSnapshot = mergeRouteTrackingProgress(routeTrackingSnapshotRef.current, progressEvent);
+        routeTrackingSnapshotRef.current = nextSnapshot;
+        setRouteTrackingSnapshot(nextSnapshot);
       }
     };
     async function connect() {
@@ -4552,6 +4697,7 @@ export default function RouteDetailPage() {
           throw new Error(`Tracking stream failed with ${response.status}.`);
         }
 
+        if (isDisposed || controller.signal.aborted || activeTrackingRoutePlanIdRef.current !== trackingStreamRoutePlanId) return;
         lastFailureStatus = null;
         setTrackingConnectionState("connected");
         armStreamInactivityTimer(controller);
@@ -4605,7 +4751,7 @@ export default function RouteDetailPage() {
       streamController?.abort();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [trackingStreamRoutePlanId]);
+  }, [setRouteExecutionStatus, trackingStreamRoutePlanId]);
 
   useEffect(() => {
     if (!isTrackingMapView || !latestTrackingOccurredAt || routeTrackingPresentation.mode !== "live" || routeTrackingIsCompleted || !showRouteTrackingFreshness) return undefined;
@@ -5149,8 +5295,14 @@ export default function RouteDetailPage() {
     setActiveChildStopActions(null);
   };
 
+  const canEditStopRow = (row) => {
+    const sourceRoute = timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === row?.id));
+    const status = sourceRoute?.status ?? routeExecutionStatus;
+    return !isTerminalRouteExecutionStatus(status) && normalizeRouteExecutionStatus(status) !== "UNKNOWN";
+  };
+
   const handleOpenChildStopEditor = (row) => {
-    if (!row?.deliveryStopId) return;
+    if (!row?.deliveryStopId || !canEditStopRow(row)) return;
     if (row.isCustomStop) {
       setCustomStopDraft(buildCustomStopDraftFromRow(row));
       setCustomStopFieldErrors({});
@@ -5164,7 +5316,7 @@ export default function RouteDetailPage() {
   };
 
   const handleSaveChildStopEdit = () => {
-    if (!activeChildStopEditRow?.deliveryStopId || routeGroupActionBusy) return;
+    if (!activeChildStopEditRow?.deliveryStopId || routeGroupActionBusy || !canEditStopRow(activeChildStopEditRow)) return;
     submitRouteAction("updateRouteStop", {
       deliveryStopId: activeChildStopEditRow.deliveryStopId,
       recipientName: childStopEditDraft.recipientName ?? "",
@@ -5500,18 +5652,30 @@ export default function RouteDetailPage() {
     const blockedByOrdinaryMutation = () => ordinaryMutationPendingRef.current
       && intent !== "copyRoutePlan" && intent !== "saveRouteDraft";
     if (blockedByOrdinaryMutation()) return false;
+    const isDraftSave = intent === "saveRouteDraft" || intent === "saveRouteStops";
+    if (isDraftSave && routeDraftSavePendingRef.current) return false;
+    if (isDraftSave) routeDraftSavePendingRef.current = true;
     try {
       setRouteGroupClientError(null);
       const sessionToken = await shopify.idToken();
-      if (blockedByOrdinaryMutation()) return false;
+      if (blockedByOrdinaryMutation()) {
+        if (isDraftSave) routeDraftSavePendingRef.current = false;
+        return false;
+      }
       const formData = new FormData();
       formData.set("_intent", intent);
       if (routeGroupId) formData.set("routeGroupId", routeGroupId);
       formData.set("shopifySessionToken", sessionToken);
       for (const [key, value] of Object.entries(fields)) formData.set(key, value);
-      routeActionFetcher.submit(formData, { method: "post" });
+      routeActionFetcher.submit(formData, {
+        method: "post",
+        ...(intent === "copyRouteGroup" && routeGroupId ? {
+          action: withEmbeddedShopifyContext(routeGroupPath(routeGroupId), searchParams),
+        } : {}),
+      });
       return true;
     } catch {
+      if (isDraftSave) routeDraftSavePendingRef.current = false;
       setRouteGroupClientError(
         "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
       );
@@ -5741,7 +5905,7 @@ export default function RouteDetailPage() {
 
   const handleAddEmptyRoute = () => {
     if (routeGroupActionBusy || ordinaryMutationPendingRef.current) return;
-    setIsRouteActionsMenuOpen(false);
+    setRouteActionsMenu(null);
     if (!canDraftEditChildStopMembership) {
       setRouteGroupClientError("Routes can only be split before the route has started.");
       return;
@@ -5814,7 +5978,7 @@ export default function RouteDetailPage() {
   };
 
   const handleReverseCurrentRouteStops = () => {
-    setIsRouteActionsMenuOpen(false);
+    setRouteActionsMenu(null);
     if (routeGroupActionBusy) return;
     if (!canReorderRouteStops) {
       setRouteActionNotice({
@@ -5846,6 +6010,7 @@ export default function RouteDetailPage() {
   };
 
   const openAddOrderDialog = () => {
+    if (!isRouteGroupDetail && !canEditRouteStopDetails) return;
     setSelectedAddOrderIds([]);
     setAddOrderDateField("deliveryDate");
     setAddOrderDateMode("all");
@@ -5868,7 +6033,7 @@ export default function RouteDetailPage() {
   };
 
   const handleAddOrderToCurrentRoute = () => {
-    if (!routeGroupId || routeGroupActionBusy) return;
+    if (!routeGroupId || routeGroupActionBusy || (!isRouteGroupDetail && !canEditRouteStopDetails)) return;
     if (isMaterializedChildRouteDetail && (!effectiveRoutePlan?.id || !canAddOrRemoveChildStops)) {
       setRouteActionNotice({
         heading: "Cannot add stops",
@@ -5917,7 +6082,7 @@ export default function RouteDetailPage() {
   };
 
   const handleAddSelectedOrders = () => {
-    if (selectedAddOrderIds.length === 0 || routeGroupActionBusy || (addStopTargetRouteRequired && !addStopTargetRoutePlanId)) return;
+    if (selectedAddOrderIds.length === 0 || routeGroupActionBusy || !addStopTargetRouteValid) return;
     submitRouteGroupAction("addRouteOrders", {
       orderIds: JSON.stringify(selectedAddOrderIds),
       targetRoutePlanId: addStopTargetRoutePlanId,
@@ -5935,7 +6100,7 @@ export default function RouteDetailPage() {
   };
 
   const submitCustomStop = (intent, row = null) => {
-    if (routeGroupActionBusy) return;
+    if (routeGroupActionBusy || (row ? !canEditStopRow(row) : (!addStopTargetRouteValid || (!isRouteGroupDetail && !canEditRouteStopDetails)))) return;
     const fieldErrors = validateCustomStopDraft(customStopDraft);
     if (Object.keys(fieldErrors).length > 0) {
       setCustomStopFieldErrors(fieldErrors);
@@ -5950,6 +6115,7 @@ export default function RouteDetailPage() {
   };
 
   const handleOpenCustomStopEditor = (row) => {
+    if (!canEditStopRow(row)) return;
     if (!row?.deliveryStopId || !row.isCustomStop) return;
     setCustomStopDraft(buildCustomStopDraftFromRow(row));
     setCustomStopFieldErrors({});
@@ -5958,7 +6124,8 @@ export default function RouteDetailPage() {
   };
 
   const handlePreviewRouteOptimization = () => {
-    setIsRouteActionsMenuOpen(false);
+    if (!canReorderRouteStops) return;
+    setRouteActionsMenu(null);
     submitRouteGroupAction("previewRouteOptimization", {
       draft: JSON.stringify(buildRouteDraftPayload(contextTimelineRouteRows, {
         deletedRoutePlanIds,
@@ -6097,7 +6264,7 @@ export default function RouteDetailPage() {
   };
 
   const handleCopyRouteGroup = () => {
-    if (!isRouteGroupDetail || routeGroupActionBusy) return;
+    if (!routeGroupId || !canShowRouteCopy || routeGroupActionBusy) return;
     if (hasRouteAllocationDraft) {
       setRouteGroupClientError("저장하지 않은 Route 변경을 먼저 Save 또는 Revert 해주세요.");
       return;
@@ -6127,6 +6294,7 @@ export default function RouteDetailPage() {
       return;
     }
     const submitted = await submitRouteGroupAction("copyRouteGroup", {
+      copyRequestId: submission.state.requestId,
       copyMode: submission.state.mode,
       expectedUpdatedAt: routeGroup.updatedAt,
     });
@@ -6184,6 +6352,16 @@ export default function RouteDetailPage() {
   useEffect(() => {
     setAvailableAddOrderCandidates(addOrderCandidates);
   }, [addOrderCandidates]);
+
+  useEffect(() => {
+    const addableOrderIds = new Set(
+      availableAddOrderCandidates.filter((order) => order.addable).map((order) => order.orderId),
+    );
+    setSelectedAddOrderIds((orderIds) => {
+      const nextOrderIds = orderIds.filter((orderId) => addableOrderIds.has(orderId));
+      return nextOrderIds.length === orderIds.length ? orderIds : nextOrderIds;
+    });
+  }, [availableAddOrderCandidates]);
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
@@ -6352,6 +6530,7 @@ export default function RouteDetailPage() {
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "saveRouteStops") return;
+    routeDraftSavePendingRef.current = false;
     lastRouteActionIntentRef.current = null;
     const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
     navigateAfterRouteDraftSaveRef.current = null;
@@ -6367,6 +6546,7 @@ export default function RouteDetailPage() {
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
     if (lastRouteActionIntentRef.current !== "saveRouteDraft") return;
+    routeDraftSavePendingRef.current = false;
     lastRouteActionIntentRef.current = null;
     const navigateAfterSave = navigateAfterRouteDraftSaveRef.current;
     navigateAfterRouteDraftSaveRef.current = null;
@@ -6923,6 +7103,8 @@ export default function RouteDetailPage() {
     let wasDragPanEnabled = null;
     let polygonDragAnimationFrame = null;
     let pendingPolygonDragLngLat = null;
+    let polygonCornerStartPoint = null;
+    let polygonCornerMoved = false;
 
     const getFeaturePointIndex = (feature) => {
       const pointIndex = numberOrUndefined(feature?.properties?.pointIndex);
@@ -6988,6 +7170,8 @@ export default function RouteDetailPage() {
 
       preventMapGesture(event);
       routePolygonCornerDragIndexRef.current = pointIndex;
+      polygonCornerStartPoint = event.point;
+      polygonCornerMoved = false;
       suppressNextRoutePolygonMapClick();
       wasDragPanEnabled = typeof map.dragPan?.isEnabled === "function" ? map.dragPan.isEnabled() : true;
       map.dragPan?.disable?.();
@@ -6998,6 +7182,13 @@ export default function RouteDetailPage() {
       if (routePolygonCornerDragIndexRef.current == null) return;
 
       preventMapGesture(event);
+      if (!polygonCornerMoved && polygonCornerStartPoint && event.point) {
+        polygonCornerMoved = Math.hypot(
+          event.point.x - polygonCornerStartPoint.x,
+          event.point.y - polygonCornerStartPoint.y,
+        ) >= 3;
+      }
+      if (!polygonCornerMoved) return;
       pendingPolygonDragLngLat = event.lngLat
         ? { lat: event.lngLat.lat, lng: event.lngLat.lng }
         : null;
@@ -7011,11 +7202,18 @@ export default function RouteDetailPage() {
 
       preventMapGesture(event);
       cancelPendingPolygonDrag();
-      const nextPoints = syncDraggedPolygonPoint(event.lngLat) ?? routePolygonPointsRef.current;
+      const shouldClose = routePolygonCornerDragIndexRef.current === 0
+        && !polygonCornerMoved && !routePolygonClosedRef.current
+        && routePolygonPointsRef.current.length >= 3;
+      const nextPoints = polygonCornerMoved
+        ? syncDraggedPolygonPoint(event.lngLat) ?? routePolygonPointsRef.current
+        : routePolygonPointsRef.current;
       routePolygonCornerDragIndexRef.current = null;
+      polygonCornerStartPoint = null;
       restoreDragPan();
       if (canvas) canvas.style.cursor = "crosshair";
       setRoutePolygonDraftPoints(nextPoints);
+      if (shouldClose) setRoutePolygonClosed(true);
       setIsPolygonTargetPickerOpen(false);
       syncRouteEditPolygon(map, nextPoints, routePolygonClosedRef.current);
     };
@@ -7084,7 +7282,7 @@ export default function RouteDetailPage() {
   }, [activeRouteMapHeight, isMapReady]);
 
   return (
-    <main style={routesDetailPageStyle}>
+    <main className="route-detail-controls" style={routesDetailPageStyle}>
       {hasRouteAllocationDraft ? (
         <div aria-label="Unsaved route draft" role="status" style={routeDraftBarStyle}>
           <span style={routeDraftBarTextStyle}>{saveRouteDraftBusy ? "Saving route changes…" : "Unsaved route changes"}</span>
@@ -7114,7 +7312,7 @@ export default function RouteDetailPage() {
       ) : null}
       <div style={routesDetailContentStyle}>
         <header
-          className={isMaterializedChildRouteDetail ? "route-child-overview-header" : "route-overview-header"}
+          className={`route-detail-control-row ${isMaterializedChildRouteDetail ? "route-child-overview-header" : "route-overview-header"}`}
           style={isMaterializedChildRouteDetail || isRouteGroupDetail ? routeChildOverviewHeaderStyle : routeOverviewHeaderStyle}
         >
           <div style={isMaterializedChildRouteDetail || isRouteGroupDetail ? routeChildOverviewTopBarStyle : routeOverviewTopBarStyle}>
@@ -7140,77 +7338,6 @@ export default function RouteDetailPage() {
               </button>
             </div> : null}
             <div style={routeHeaderRightStyle}>
-              <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
-                {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
-                  <button
-                    disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleDispatchRoute}
-                    style={{
-                      ...(canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle),
-                      minHeight: "36px",
-                    }}
-                    title={routeDriverId
-                      ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
-                      : "Assign a driver before dispatching this route."}
-                    type="button"
-                  >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
-                ) : null}
-                {effectiveRoutePlan?.id && !routeGroupId ? (
-                  <button
-                    disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
-                    onClick={handleCopyOrdinaryRoute}
-                    style={canCopyOrdinaryRoute && !routeGroupActionBusy && !copyRoutePlanBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this READY route without changing the original"}
-                    type="button"
-                  >{copyRoutePlanBusy ? "Copying…" : "Copy"}</button>
-                ) : null}
-                {isRouteGroupDetail ? (
-                  <button
-                    disabled={routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleCopyRouteGroup}
-                    style={!routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle}
-                    title={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this group title and orders"}
-                    type="button"
-                  >
-                    {copyRouteGroupBusy ? "Copying…" : "Copy Group Route"}
-                  </button>
-                ) : null}
-                <div aria-label="Route utilities" className="route-action-icon-group" role="group">
-                  <RouteActionIconButton
-                    icon="refresh"
-                    label={refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}
-                    description={hasRouteAllocationDraft ? "Save or revert Route changes before updating" : undefined}
-                    busy={refreshRouteOrdersBusy}
-                    disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
-                    onClick={handleRefreshRouteOrders}
-                  />
-                  {isMaterializedChildRouteDetail ? (
-                    <RouteActionIconButton
-                      icon="email"
-                      label="Send email"
-                      disabled={!effectiveRoutePlan?.id}
-                      onClick={openCustomerEmailDialog}
-                    />
-                  ) : null}
-                  {!isMaterializedChildRouteDetail ? (
-                    <RouteActionIconButton
-                      icon="inventory"
-                      onClick={handleViewInventory}
-                      label={translate(language, "routes.detail.inventory.view")}
-                      description={inventoryDetailHref ? undefined : translate(language, "routes.detail.inventory.unavailable")}
-                      disabled={!inventoryDetailHref}
-                    />
-                  ) : null}
-                  <RouteActionIconButton
-                    icon="delete"
-                    label={deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}
-                    danger
-                    busy={deleteRouteBusy}
-                    disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
-                    onClick={handleDeleteRoute}
-                  />
-                </div>
-              </div>
               {routeGroupId && (isRouteGroupDetail || (isMaterializedChildRouteDetail && currentSiblingRouteIndex >= 0)) ? (
                 <div
                   aria-label="Routes in this group"
@@ -7327,19 +7454,49 @@ export default function RouteDetailPage() {
                     {renderRouteLineEditIcon()}
                   </button>
                 ) : null}
-                {!isRouteGroupDetail ? <span style={routeStatusBadgeStyle}>
-                  {isMaterializedChildRouteDetail ? formatRouteStatus(routeExecutionStatus) : routeDetail.status}
+                {!isRouteGroupDetail ? <span style={{ ...routeStatusBadgeStyle, ...getRouteStatusBadgeColors(routeExecutionStatus) }}>
+                  {localizeRouteStatus(routeExecutionStatus, language)}
                 </span> : null}
                 {!isRouteGroupDetail && routeDispatched ? (
                   <span aria-label={translate(language, "routes.detail.dispatchedAccessibilityLabel")} style={routeDispatchedBadgeStyle}>
                     {translate(language, "routes.detail.dispatched")}
                   </span>
                 ) : null}
+                <div aria-label="Route detail actions" style={routeHeaderActionsStyle}>
+                  <div className="route-action-icon-group" role="group" aria-label="Route actions">
+                    {canShowRouteCopy && effectiveRoutePlan?.id && !routeGroupId ? (
+                      <RouteActionIconButton
+                        icon="duplicate"
+                        label="Copy Route"
+                        busy={copyRoutePlanBusy}
+                        disabled={!canCopyOrdinaryRoute || routeGroupActionBusy || copyRoutePlanBusy || hasRouteAllocationDraft}
+                        onClick={handleCopyOrdinaryRoute}
+                        description={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy this READY route without changing the original"}
+                      />
+                    ) : null}
+                    {canShowRouteCopy && routeGroupId ? (
+                      <RouteActionIconButton
+                        icon="duplicate"
+                        label="Copy Route"
+                        busy={copyRouteGroupBusy}
+                        disabled={routeGroupActionBusy || hasRouteAllocationDraft}
+                        onClick={handleCopyRouteGroup}
+                        description={hasRouteAllocationDraft ? "Save or revert Route changes before copying" : "Copy the title and orders without changing the original"}
+                      />
+                    ) : null}
+                    {isMaterializedChildRouteDetail ? (
+                      <RouteActionIconButton
+                        icon="email"
+                        label="Send email"
+                        disabled={!effectiveRoutePlan?.id}
+                        onClick={openCustomerEmailDialog}
+                      />
+                    ) : null}
+                  </div>
+                </div>
                 {!isMaterializedChildRouteDetail && !isRouteGroupDetail ? (
                   <div aria-label="Route summary" className="route-overview-summary">
                     {renderRouteHeaderMetric("Orders", routeDetail.orders)}
-                    {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
-                    {renderRouteHeaderMetric("Driver", routeDriverSummary)}
                   </div>
                 ) : null}
               </div>
@@ -7368,7 +7525,7 @@ export default function RouteDetailPage() {
 
         <section style={routesDetailCardStyle}>
           {hasRouteTrackingDetail ? (
-            <div aria-label={translate(language, "routes.detail.sections.accessibilityLabel")} role="toolbar" style={routeChildTabsStyle}>
+            <div className="route-detail-control-row" aria-label={translate(language, "routes.detail.sections.accessibilityLabel")} role="toolbar" style={routeChildTabsStyle}>
               <button
                 aria-pressed={childDetailTab === "stops"}
                 onClick={() => handleChildDetailTabChange("stops")}
@@ -7379,7 +7536,7 @@ export default function RouteDetailPage() {
                 type="button"
               >
                 <span>{translate(language, "routes.detail.sections.stops")}</span>
-                <span style={routeChildTabCountStyle}>{childRouteOrderRows.length}</span>
+                <span style={routeChildTabCountStyle}>{routeOrderRows.length}</span>
               </button>
               <button
                 disabled={!inventoryDetailHref}
@@ -7405,7 +7562,7 @@ export default function RouteDetailPage() {
                 <span>{translate(language, "routes.detail.sections.tracking")}</span>
               </button>
               <button
-                disabled={routeGroupActionBusy}
+                disabled={routeGroupActionBusy || (!isRouteGroupDetail && !canEditRouteStopDetails)}
                 onClick={handleAddOrderToCurrentRoute}
                 style={{
                   ...routeChildTabStyle,
@@ -7418,48 +7575,68 @@ export default function RouteDetailPage() {
             </div>
           ) : null}
 
-          {isMaterializedChildRouteDetail ? (
-            <section aria-label="Child route controls" style={routeChildSelectionBarStyle}>
-              <div style={routeChildSelectionGroupStyle}>
+          {!isRouteGroupDetail ? (
+            <section aria-label="Route schedule and dispatch" className="route-detail-control-row" style={routeChildSelectionBarStyle}>
+              {isMaterializedChildRouteDetail ? (
+                <div style={routeChildSelectionGroupStyle}>
+                  <button
+                    aria-label="Change route start time"
+                    disabled={routeGroupActionBusy}
+                    onClick={() => handleOpenRouteSelector("startTime", currentTimelineRouteRow ?? {
+                      routePlanId: effectiveRoutePlan?.id,
+                      startDateTime: routeStartDateTimeValue,
+                      title: routeDetailTitle,
+                    })}
+                    style={{
+                      ...routeChildSelectionButtonStyle,
+                      ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                    }}
+                    type="button"
+                  >
+                    <span>{
+                      (currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel) === ROUTE_EMPTY_LABEL
+                        ? "Set start time"
+                        : currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel
+                    }</span>
+                    {renderRouteEditableChevron()}
+                  </button>
+                  <button
+                    aria-label="Change route driver"
+                    disabled={isRouteExecutionLockedForStopMembership(routeExecutionStatus)}
+                    onClick={() => handleOpenRouteSelector("driver", currentTimelineRouteRow ?? {
+                      routePlanId: effectiveRoutePlan?.id,
+                      title: routeDetailTitle,
+                    })}
+                    style={{
+                      ...routeChildSelectionButtonStyle,
+                      ...(isRouteExecutionLockedForStopMembership(routeExecutionStatus) ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                    }}
+                    type="button"
+                  >
+                    <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
+                    {renderRouteEditableChevron()}
+                  </button>
+                </div>
+              ) : (
+                <div aria-label="Route schedule and driver" style={routeChildSelectionGroupStyle}>
+                  {renderRouteHeaderMetric("Delivery date", routeDetail.deliveryDate)}
+                  {renderRouteHeaderMetric("Driver", routeDriverSummary)}
+                </div>
+              )}
+              {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
                 <button
-                  aria-label="Change route start time"
-                  disabled={routeGroupActionBusy}
-                  onClick={() => handleOpenRouteSelector("startTime", currentTimelineRouteRow ?? {
-                    routePlanId: effectiveRoutePlan?.id,
-                    startDateTime: routeStartDateTimeValue,
-                    title: routeDetailTitle,
-                  })}
+                  disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
+                  onClick={handleDispatchRoute}
                   style={{
-                    ...routeChildSelectionButtonStyle,
-                    ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                    ...(canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle),
+                    minHeight: "36px",
                   }}
+                  title={routeDriverId
+                    ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
+                    : "Assign a driver before dispatching this route."}
                   type="button"
-                >
-                  <span>{
-                    (currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel) === ROUTE_EMPTY_LABEL
-                      ? "Set start time"
-                      : currentTimelineRouteRow?.startTimeLabel ?? routeStartTimeLabel
-                  }</span>
-                  {renderRouteEditableChevron()}
-                </button>
-                <button
-                  aria-label="Change route driver"
-                  disabled={isRouteExecutionLockedForStopMembership(routeExecutionStatus)}
-                  onClick={() => handleOpenRouteSelector("driver", currentTimelineRouteRow ?? {
-                    routePlanId: effectiveRoutePlan?.id,
-                    title: routeDetailTitle,
-                  })}
-                  style={{
-                    ...routeChildSelectionButtonStyle,
-                    ...(isRouteExecutionLockedForStopMembership(routeExecutionStatus) ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                  }}
-                  type="button"
-                >
-                  <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
-                  {renderRouteEditableChevron()}
-                </button>
-              </div>
-              <span style={routeStatusBadgeStyle}>{formatRouteStatus(routeExecutionStatus)}</span>
+                >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
+              ) : null}
             </section>
           ) : null}
 
@@ -7479,7 +7656,7 @@ export default function RouteDetailPage() {
                   <strong style={routeTrackingStatusTitleStyle}>
                     {routeTrackingPresentation.mode === "live" ? "Live route signal" : "Recorded route tracking"}
                   </strong>
-                  <span style={routeTrackingStatusMetaStyle}>{routeTrackingPresentation.trackingLabel}</span>
+                  <span style={routeTrackingStatusMetaStyle}>{localizeTrackingLabel(routeTrackingPresentation.trackingLabel, language)}</span>
                 </span>
               </div>
               <div style={routeTrackingStatusFactsStyle}>
@@ -7487,7 +7664,7 @@ export default function RouteDetailPage() {
                   ? `Last position ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}`
                   : "No GPS position received"}</span>
                 <span>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</span>
-                <strong>{trackingDeliveredCount} of {childRouteOrderRows.length} delivered</strong>
+                <strong>{trackingDeliveredCount} of {routeOrderRows.length} delivered</strong>
               </div>
             </section>
           ) : null}
@@ -7560,7 +7737,7 @@ export default function RouteDetailPage() {
                     },
                     ...(!isTrackingMapView ? [{
                       ariaLabel: isRoutePolygonEditMode ? "Stop editing route polygon" : "Edit route polygon",
-                      disabled: !hasEditableRouteRows,
+                      disabled: !hasEditableRouteRows || !canDraftEditChildStopMembership,
                       icon: renderRoutePolygonEditIcon(),
                       onClick: handleToggleRoutePolygonEditMode,
                     }] : []),
@@ -7579,59 +7756,6 @@ export default function RouteDetailPage() {
               </>
             }
           >
-            {isTrackingMapView ? (
-              <>
-                <div aria-label="Tracking map legend" style={routeTrackingMapLegendStyle}>
-                  <span style={routeTrackingMapLegendItemStyle}>
-                    <span
-                      aria-hidden="true"
-                      style={{ ...routeTrackingMapReferenceKeyStyle, background: routePathColor }}
-                    />
-                    <span>Planned route</span>
-                  </span>
-                  <span style={routeTrackingMapLegendItemStyle}>
-                    <span aria-hidden="true" style={routeTrackingMapGpsKeyStyle} />
-                    <span>GPS tracking</span>
-                  </span>
-                  <label style={{ ...routeTrackingMapLegendItemStyle, cursor: "pointer" }}>
-                    <input
-                      checked={showAllRouteTrackingRecords}
-                      onChange={(event) => setShowAllRouteTrackingRecords(event.target.checked)}
-                      type="checkbox"
-                    />
-                    <span>All recorded dates</span>
-                  </label>
-                  {!showAllRouteTrackingRecords ? (
-                    <span aria-label="Selected tracking date" style={routeTrackingMapLegendItemStyle}>
-                      {routeTrackingWindowDate ? `${routeTrackingWindowDate} and next day` : "Available tracking dates"}
-                    </span>
-                  ) : null}
-                </div>
-                {routeTrackingIsCompleted ? (
-                  <div
-                    aria-label="Route completion time"
-                    style={routeTrackingMapFreshnessStyle}
-                    title={routeTrackingCompletionTime == null
-                      ? "Authoritative route completion time is unavailable."
-                      : `Route completed ${formatTrackingTimestamp(routeTrackingCompletionTime, ianaTimezone)}.`}
-                  >
-                    <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
-                    <span>{formatRouteTrackingCompletionLabel(routeTrackingCompletionTime, ianaTimezone)}</span>
-                  </div>
-                ) : latestTrackingOccurredAt && showRouteTrackingFreshness ? (
-                  <div
-                    aria-label="Current position freshness"
-                    style={routeTrackingMapFreshnessStyle}
-                    title={`Position recorded ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}${latestTrackingReceivedAt ? `; received ${formatTrackingTimestamp(latestTrackingReceivedAt, ianaTimezone)}` : ""}. Double-click the red marker to focus.`}
-                  >
-                    <span aria-hidden="true" style={routeTrackingMapFreshnessDotStyle} />
-                    <span>{showAllRouteTrackingRecords && routeTrackingPresentation.mode === "live"
-                      ? `Current position ${formatTrackingElapsedSeconds(latestTrackingOccurredAt, routeTrackingFreshnessTime)}`
-                      : `Last recorded position ${formatTrackingTimestamp(latestTrackingOccurredAt, ianaTimezone)}`}</span>
-                  </div>
-                ) : null}
-              </>
-            ) : null}
             <MapResizeHandle
               ariaLabel="Resize route map height"
               controls="route-detail-map"
@@ -7643,60 +7767,94 @@ export default function RouteDetailPage() {
             />
           </MapPanel>
 
-          {!isTrackingMapView ? (
-            <section style={routeMetaActionsStyle}>
+          <section style={routeMetaActionsStyle}>
+            {!isTrackingMapView ? (
               <section aria-label="Route timing" style={routeMetaGridStyle}>
                 <div style={routeMetaItemStyle}>Route start: {departureLocation.address}</div>
                 <div style={routeMetaItemStyle}>⚑ Route end: Loop back to start</div>
                 <div style={routeMetaItemStyle}>◴ Scheduled for: {routeDetail.deliveryDate}</div>
               </section>
-              <div aria-label="Route actions" style={routeActionColumnStyle}>
-                {routeGroupId && !isMaterializedChildRouteDetail ? (
+            ) : null}
+            <div
+              aria-label="Route actions"
+              className="route-detail-control-row"
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) setRouteActionsMenu(null);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Escape") {
+                  event.currentTarget.querySelector('[aria-expanded="true"]')?.focus();
+                  setRouteActionsMenu(null);
+                }
+                if (!routeActionsMenu || !["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
+                const items = Array.from(event.currentTarget.querySelectorAll('[role="menuitem"]:not(:disabled)'));
+                if (items.length === 0) return;
+                event.preventDefault();
+                const currentIndex = items.indexOf(event.target);
+                const nextIndex = event.key === "Home" ? 0
+                  : event.key === "End" ? items.length - 1
+                    : event.key === "ArrowDown" ? (currentIndex + 1) % items.length
+                      : currentIndex <= 0 ? items.length - 1 : currentIndex - 1;
+                items[nextIndex].focus();
+              }}
+              role="toolbar"
+              style={routeActionColumnStyle}
+            >
+              {!isTrackingMapView && (routeGroupId || isOrdinaryRouteDetail) ? (
+                <div style={routeActionsStyle}>
                   <button
-                    disabled={routeGroupActionBusy}
-                    onClick={handleAddOrderToCurrentRoute}
-                    style={routeAddOrderButtonStyle}
-                    type="button"
-                  >Add order</button>
-                ) : null}
-                {routeGroupId || isOrdinaryRouteDetail ? (
-                <button
-                  disabled={routeGroupActionBusy}
-                  onClick={handleAddEmptyRoute}
-                  style={routeActionButtonStyle}
-                  type="button"
-                >{translate(language, "routes.group.addEmpty")}</button>
-                ) : null}
-                <div
-                  aria-label="Actions"
-                  onBlur={(event) => {
-                    if (!event.currentTarget.contains(event.relatedTarget)) setIsRouteActionsMenuOpen(false);
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Escape") setIsRouteActionsMenuOpen(false);
-                  }}
-                  role="toolbar"
-                  style={routeActionsStyle}
-                >
-                  <button
-                    aria-expanded={isRouteActionsMenuOpen}
-                    onClick={() => setIsRouteActionsMenuOpen((open) => !open)}
+                    aria-expanded={routeActionsMenu === "add"}
+                    aria-haspopup="menu"
+                    onClick={() => setRouteActionsMenu((menu) => menu === "add" ? null : "add")}
                     style={routeActionsButtonStyle}
                     type="button"
-                  >Actions</button>
-                  {isRouteActionsMenuOpen ? (
-                    <div aria-label="Route action menu" role="menu" style={routeActionsMenuStyle}>
+                  >Add ▾</button>
+                  {routeActionsMenu === "add" ? (
+                    <div aria-label="Add route actions" role="menu" style={routeActionsMenuStyle}>
+                      {routeGroupId && !isMaterializedChildRouteDetail ? (
+                        <button
+                          disabled={routeGroupActionBusy || (!isRouteGroupDetail && !canEditRouteStopDetails)}
+                          onClick={handleAddOrderToCurrentRoute}
+                          role="menuitem"
+                          style={routeActionButtonStyle}
+                          type="button"
+                        >Add order</button>
+                      ) : null}
+                      {routeGroupId || isOrdinaryRouteDetail ? (
+                        <button
+                          disabled={routeGroupActionBusy || !canDraftEditChildStopMembership}
+                          onClick={handleAddEmptyRoute}
+                          role="menuitem"
+                          style={routeActionButtonStyle}
+                          type="button"
+                        >{translate(language, "routes.group.addEmpty")}</button>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+              {!isTrackingMapView ? (
+                <div style={routeActionsStyle}>
+                  <button
+                    aria-expanded={routeActionsMenu === "edit"}
+                    aria-haspopup="menu"
+                    onClick={() => setRouteActionsMenu((menu) => menu === "edit" ? null : "edit")}
+                    style={routeActionsButtonStyle}
+                    type="button"
+                  >Edit ▾</button>
+                  {routeActionsMenu === "edit" ? (
+                    <div aria-label="Edit route actions" role="menu" style={routeActionsMenuStyle}>
                       {isMaterializedChildRouteDetail ? (
-                      <button
-                        disabled={routeGroupActionBusy}
-                        onClick={handleReverseCurrentRouteStops}
-                        role="menuitem"
-                        style={routeActionButtonStyle}
-                        type="button"
-                      >Reverse stops</button>
+                        <button
+                          disabled={routeGroupActionBusy || !canReorderRouteStops}
+                          onClick={handleReverseCurrentRouteStops}
+                          role="menuitem"
+                          style={routeActionButtonStyle}
+                          type="button"
+                        >Reverse stops</button>
                       ) : null}
                       <button
-                        disabled={routeGroupActionBusy || !hasEditableRouteRows}
+                        disabled={routeGroupActionBusy || !hasEditableRouteRows || !canReorderRouteStops}
                         onClick={handlePreviewRouteOptimization}
                         role="menuitem"
                         style={{
@@ -7708,9 +7866,40 @@ export default function RouteDetailPage() {
                     </div>
                   ) : null}
                 </div>
+              ) : null}
+              <div style={routeActionsStyle}>
+                <button
+                  aria-label="More route actions"
+                  aria-expanded={routeActionsMenu === "more"}
+                  aria-haspopup="menu"
+                  onClick={() => setRouteActionsMenu((menu) => menu === "more" ? null : "more")}
+                  style={routeActionsButtonStyle}
+                  type="button"
+                >…</button>
+                {routeActionsMenu === "more" ? (
+                  <div aria-label="More route actions" role="menu" style={routeActionsMenuStyle}>
+                    <button
+                      aria-busy={refreshRouteOrdersBusy || undefined}
+                      disabled={!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft}
+                      onClick={handleRefreshRouteOrders}
+                      role="menuitem"
+                      style={{ ...routeActionButtonStyle, ...(!canRefreshRouteOrders || routeGroupActionBusy || hasRouteAllocationDraft ? { cursor: "not-allowed", opacity: 0.55 } : null) }}
+                      title={hasRouteAllocationDraft ? "Save or revert Route changes before updating" : undefined}
+                      type="button"
+                    >{refreshRouteOrdersBusy ? "Updating…" : isRouteGroupDetail ? "Update routes" : "Update route"}</button>
+                    <button
+                      aria-busy={deleteRouteBusy || undefined}
+                      disabled={routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id)}
+                      onClick={handleDeleteRoute}
+                      role="menuitem"
+                      style={{ ...routeActionButtonStyle, color: "#b42318", ...(routeGroupActionBusy || hasRouteAllocationDraft || deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? { cursor: "not-allowed", opacity: 0.55 } : null) }}
+                      type="button"
+                    >{deleteRouteBusy ? "Deleting…" : deletedRoutePlanIds.includes(effectiveRoutePlan?.id) ? "Delete pending" : "Delete route"}</button>
+                  </div>
+                ) : null}
               </div>
-            </section>
-          ) : null}
+            </div>
+          </section>
 
           {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
             <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>
@@ -7775,395 +7964,6 @@ export default function RouteDetailPage() {
               </div>
             </section>
           ) : null}
-
-          {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
-            <div
-              style={{
-                ...routesDetailTableFrameStyle,
-                "--route-marker-color": currentTimelineRouteRow?.color ?? routeLineColor,
-              }}
-            >
-              <table aria-label="Child route order stops" style={childRouteOrderTableStyle}>
-                <colgroup>
-                  {childRouteOrderColumnWidths.map((width, index) => (
-                    <col key={`${width}-${index}`} style={{ width }} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr>
-                    {CHILD_ROUTE_ORDER_COLUMNS.map((column) => (
-                      <th
-                        key={column.key}
-                        style={column.key === "actions" ? childRouteActionsHeaderCellStyle : childRouteOrderHeaderCellStyle}
-                      >
-                        {column.label}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {childRouteOrderRows.map((row) => (
-                    <tr key={row.id} style={childRouteOrderRowStyle}>
-                      <td style={childRouteStopCellStyle}><span style={childRouteTableStopMarkerStyle}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
-                      <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
-                      <td style={childRouteOrderCellStyle}>{row.status}</td>
-                      <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
-                      <td style={childRouteOrderCellStyle}>
-                        <span>{row.address}</span>
-                        {row.locationDiagnostic.severity !== "NONE" ? (
-                          <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
-                            <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
-                          </span>
-                        ) : null}
-                        {row.note ? (
-                          <button
-                            aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "note"}
-                            aria-haspopup="dialog"
-                            aria-label={`Show ${row.order} note`}
-                            data-child-order-disclosure-trigger="true"
-                            onClick={(event) => handleToggleChildOrderDisclosure(event, row.id, "note")}
-                            onBlur={handleChildOrderDisclosureMouseLeave}
-                            onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "note")}
-                            onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "note")}
-                            onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                            style={{ ...childRouteDisclosureButtonStyle, marginLeft: "6px" }}
-                            type="button"
-                          ><s-icon type="note" /></button>
-                        ) : null}
-                      </td>
-                      <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
-                      <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
-                      <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
-                      <td style={childRouteOrderCellStyle}>{row.customer}</td>
-                      <td style={childRouteDisclosureCellStyle}>
-                        <button
-                          aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "items"}
-                          aria-haspopup="dialog"
-                          aria-label={`Show ${row.order} item details`}
-                          data-child-order-disclosure-trigger="true"
-                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.id, "items")}
-                          onBlur={handleChildOrderDisclosureMouseLeave}
-                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
-                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "items")}
-                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                          style={childRouteDisclosureButtonStyle}
-                          type="button"
-                        >
-                          <span>{row.itemsSummary}</span>
-                          {renderChildRouteInfoIcon()}
-                        </button>
-                      </td>
-                      <td style={childRouteOrderCellStyle}>{row.method}</td>
-                      <td style={childRouteOrderCellStyle}>{row.payment}</td>
-                      <td style={childRouteDisclosureCellStyle}>
-                        <button
-                          aria-expanded={activeChildOrderDisclosure?.rowId === row.id && activeChildOrderDisclosure?.type === "attributes"}
-                          aria-haspopup="dialog"
-                          aria-label={`Show ${row.order} attributes`}
-                          data-child-order-disclosure-trigger="true"
-                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.id, "attributes")}
-                          onBlur={handleChildOrderDisclosureMouseLeave}
-                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
-                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.id, "attributes")}
-                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                          style={childRouteDisclosureButtonStyle}
-                          type="button"
-                        >
-                          <span>{row.attributesSummary}</span>
-                          {renderChildRouteInfoIcon()}
-                        </button>
-                      </td>
-                      <td style={childRouteActionsCellStyle}>
-                        <button
-                          aria-expanded={activeChildStopActions?.rowId === row.id}
-                          aria-haspopup="menu"
-                          aria-label={`Open actions for ${row.order}`}
-                          data-child-stop-actions-trigger="true"
-                          disabled={routeGroupActionBusy}
-                          onClick={(event) => handleToggleChildStopActions(event, row.id)}
-                          ref={(node) => setChildStopActionsButtonRef(row.id, node)}
-                          style={{
-                            ...childStopActionsButtonStyle,
-                            ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                          }}
-                          type="button"
-                        >
-                          ⋯
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              <div
-                aria-label="Child route totals"
-                style={{
-                  alignItems: "center",
-                  borderTop: "1px solid #dedede",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  fontSize: "13px",
-                  gap: "8px 18px",
-                  padding: "10px 14px",
-                }}
-              >
-                <span>Total drive time: {routeTotalDriveTime} ({routeTotalDistance})</span>
-                <span>
-                  {translate(language, "routes.detail.originalShipping")}: {getOriginalShippingTotalLabel(childRouteMoney, language)}
-                </span>
-                <span>Total price: {childRouteMoney.totalPriceLabel}</span>
-              </div>
-            </div>
-          ) : isTrackingMapView ? (
-            <section aria-label="Route tracking" style={routeChildTrackingStyle}>
-              <section aria-label="Route tracking summary" style={routeChildTrackingSummaryStyle}>
-                <div style={routeTrackingSummaryHeaderStyle}>
-                  <strong style={routeTrackingSummaryTitleStyle}>Route overview</strong>
-                  <span style={routeTrackingSummaryHintStyle}>Operational status from recorded driver events</span>
-                </div>
-                <div className="route-tracking-primary-grid">
-                  <div style={{ ...routeChildTrackingMetricStyle, borderLeft: 0, paddingLeft: 0 }}>
-                    <span style={routeChildTrackingMetricLabelStyle}>Driver</span>
-                    <strong style={routeChildTrackingMetricValueStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</strong>
-                  </div>
-                  <div style={routeChildTrackingMetricStyle}>
-                    <span style={routeChildTrackingMetricLabelStyle}>Delivery progress</span>
-                    <strong style={routeChildTrackingMetricValueStyle}>{trackingDeliveredCount} / {childRouteOrderRows.length} delivered</strong>
-                  </div>
-                  <div style={routeChildTrackingMetricStyle}>
-                    <span style={routeChildTrackingMetricLabelStyle}>Latest position</span>
-                    <strong style={routeChildTrackingMetricValueStyle}>{formatTrackingPosition(latestTrackingPosition)}</strong>
-                  </div>
-                  <div style={routeChildTrackingMetricStyle}>
-                    <span style={routeChildTrackingMetricLabelStyle}>GPS gaps</span>
-                    <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.gapCount}</strong>
-                  </div>
-                </div>
-                <details style={routeTrackingEvidenceStyle}>
-                  <summary style={routeTrackingEvidenceSummaryStyle}>Tracking evidence</summary>
-                  <div style={routeTrackingEvidenceGridStyle}>
-                    <div style={{ ...routeChildTrackingMetricStyle, borderLeft: 0, paddingLeft: 0 }}>
-                      <span style={routeChildTrackingMetricLabelStyle}>{routeTrackingPresentation.mode === "live" ? "Live tracking" : "Tracking"}</span>
-                      <strong
-                        style={routeChildTrackingMetricValueStyle}
-                        title={routeTrackingPresentation.mode === "live" && routeTrackingPolicy
-                          ? `Server policy: live ${routeTrackingPolicy.liveThresholdMs ?? ROUTE_EMPTY_LABEL}ms, delayed ${routeTrackingPolicy.delayedThresholdMs ?? ROUTE_EMPTY_LABEL}ms`
-                          : routeTrackingPresentation.mode === "live"
-                            ? "Waiting for server tracking policy"
-                            : "Live tracking is available only while the route is in progress"}
-                      >{routeTrackingPresentation.trackingLabel}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>Connection</span>
-                      <strong style={{ ...routeChildTrackingMetricValueStyle, textTransform: "capitalize" }}>{routeTrackingConnectionLabel}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>Driver stage</span>
-                      <strong style={routeChildTrackingMetricValueStyle}>{formatTrackingDriverStage(routeTrackingPresentation.driverStage)}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.startEvent")}</span>
-                      <strong style={routeChildTrackingMetricValueStyle}>{getExecutionEvidenceEventLabel(routeExecutionEvidence?.start, ianaTimezone, language)}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.completionEvent")}</span>
-                      <strong style={routeChildTrackingMetricValueStyle}>{getExecutionEvidenceEventLabel(routeExecutionEvidence?.completion, ianaTimezone, language)}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.returnToDepot")}</span>
-                      <strong
-                        style={routeChildTrackingMetricValueStyle}
-                        title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
-                      >{translate(language, `routes.detail.tracking.return.${returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>GPS records</span>
-                      <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.sourcePointCount}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>Displayed points</span>
-                      <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
-                    </div>
-                    <div style={routeChildTrackingMetricStyle}>
-                      <span style={routeChildTrackingMetricLabelStyle}>{showAllRouteTrackingRecords ? "All-record range" : "Service-day range"}</span>
-                      <strong
-                        style={{ ...routeChildTrackingMetricValueStyle, whiteSpace: "nowrap" }}
-                        title={routeTrackingPathSummary.firstOccurredAt
-                          ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt, ianaTimezone)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt, ianaTimezone)}`
-                          : undefined}
-                      >{routeTrackingPathSummary.firstOccurredAt
-                        ? formatTrackingRange(
-                          routeTrackingPathSummary.firstOccurredAt,
-                          routeTrackingPathSummary.lastOccurredAt,
-                          ianaTimezone,
-                        )
-                        : ROUTE_EMPTY_LABEL}</strong>
-                    </div>
-                  </div>
-                </details>
-              </section>
-              <div style={routesDetailTableFrameStyle}>
-                <table aria-label="Child route tracking stops" style={childRouteOrderTableStyle}>
-                  <thead>
-                    <tr>
-                      {[
-                        ["Stop", "64px"],
-                        ["Order / stop", "112px"],
-                        ["Status", "120px"],
-                        ["ETA", "120px"],
-                        ["Drive time", "120px"],
-                        ["Stop time", "100px"],
-                        ["Customer", "160px"],
-                        ["Address", "360px"],
-                      ].map(([label, width]) => (
-                        <th key={label} style={{ ...childRouteOrderHeaderCellStyle, width }}>{label}</th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {childRouteOrderRows.map((row) => (
-                      <tr
-                        key={row.id}
-                        style={{
-                          ...childRouteOrderRowStyle,
-                          ...(focusedTrackingStopId === row.id ? { outline: "2px solid #0b84d8", outlineOffset: "-2px" } : null),
-                        }}
-                      >
-                        <td style={childRouteStopCellStyle}><span style={{
-                          ...childRouteTableStopMarkerStyle,
-                          background: completedTrackingStopIds.has(row.id)
-                            ? ROUTE_DETAIL_COMPLETED_STOP_COLOR
-                            : routeStopColorById.get(row.id) ?? routeLineColor,
-                        }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
-                        <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
-                        <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
-                        <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
-                        <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
-                        <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
-                        <td style={childRouteOrderCellStyle}>{row.customer}</td>
-                        <td style={childRouteOrderCellStyle}>{row.address}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : (
-            <div className="route-group-detail-scroll" style={routesDetailTableFrameStyle}>
-              <table aria-label="Driver route rows" style={routePlanRowsTableStyle}>
-                <colgroup>
-                  {routePlanRowsColumnWidths.map((width, index) => (
-                    <col key={`${width}-${index}`} style={{ width }} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr>
-                    <th style={routeNameHeaderCellStyle}>Name</th>
-                    <th style={routeStatusHeaderCellStyle}>Status</th>
-                    <th style={routesDetailHeaderCellStyle}>Driver</th>
-                    <th style={routesDetailHeaderCellStyle}>Start time</th>
-                    <th style={routesDetailHeaderCellStyle}>Stops</th>
-                    <th style={routesDetailHeaderCellStyle}>Delivered</th>
-                    <th style={routesDetailHeaderCellStyle}>Attempted</th>
-                    <th style={routesDetailHeaderCellStyle}>Total items</th>
-                    <th style={routesDetailHeaderCellStyle}>Total drive time</th>
-                    <th style={routesDetailHeaderCellStyle}>Total distance</th>
-                    <th style={routesDetailHeaderCellStyle}>Total weight</th>
-                    <th style={routesDetailHeaderCellStyle}>Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {timelineRouteRows.filter((routeRow) => !routeRow.isUnassigned).map((routeRow) => (
-                    <tr key={routeRow.id}>
-                      <td style={routeNameCellStyle}>
-                        <span style={routeLineNameStyle}>
-                          <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: routeRow.color }}></span>
-                          <button
-                            aria-label={routeRow.routePlanId ? `Open ${routeRow.title} route detail` : `${routeRow.title} route preview`}
-                            disabled={!routeRow.routePlanId}
-                            onClick={() => routeRow.routePlanId ? requestRouteNavigation(routeGroupId ? routeGroupChildPath(routeGroupId, routeRow.routePlanId) : routePlanPath(routeRow.routePlanId)) : undefined}
-                            style={{
-                              ...routeLineTitleButtonStyle,
-                              ...(routeRow.isPreviewOnly ? { cursor: "default" } : null),
-                            }}
-                            type="button"
-                          >
-                            {routeRow.title}
-                          </button>
-                          <button
-                            aria-label={`Edit ${routeRow.title} name`}
-                            disabled={routeRow.isPreviewOnly || routeRow.isUnassigned}
-                            onClick={() => handleOpenRouteLineEditor(routeRow)}
-                            style={{
-                              ...routeLineEditButtonStyle,
-                              ...(routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "default", opacity: 0.4 } : null),
-                            }}
-                            type="button"
-                          >
-                            {renderRouteLineEditIcon()}
-                          </button>
-                        </span>
-                      </td>
-                      <td style={routeStatusCellStyle}><span style={routeRowStatusStyle}>{formatRouteStatus(routeRow.status)}</span></td>
-                      <td style={routesDetailCellStyle}>
-                        <button
-                          aria-label="Change route driver"
-                          disabled={routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus)}
-                          onClick={() => handleOpenRouteSelector("driver", routeRow)}
-                          style={{
-                            ...routeEditableValueStyle,
-                            ...(routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus) ? { cursor: "default", opacity: 0.65 } : null),
-                          }}
-                          type="button"
-                        >
-                          <span style={routeEditableValueTextStyle}>{routeRow.driverLabel}</span>
-                          {renderRouteEditableChevron()}
-                        </button>
-                      </td>
-                      <td style={routesDetailCellStyle}>
-                        <button
-                          aria-label="Change route start time"
-                          disabled={routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned}
-                          onClick={() => handleOpenRouteSelector("startTime", routeRow)}
-                          style={{
-                            ...routeEditableValueStyle,
-                            ...(routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "not-allowed", opacity: 0.55 } : null),
-                          }}
-                          type="button"
-                        >
-                          <span style={routeEditableValueTextStyle}>{routeRow.startTimeLabel ?? routeStartTimeLabel}</span>
-                          {renderRouteEditableChevron()}
-                        </button>
-                      </td>
-                      <td style={routesDetailCellStyle}>{routeRow.stopsCount}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.deliveredCount}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.attemptedCount}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.totalItems}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.driveTimeLabel}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.totalDistanceLabel}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.totalWeightLabel}</td>
-                      <td style={routesDetailCellStyle}>{routeRow.createdLabel}</td>
-                    </tr>
-                  ))}
-                </tbody>
-                {isRouteGroupDetail ? (
-                  <tfoot style={{ background: "#f6f6f7", fontWeight: 600 }}>
-                    <tr aria-label="All routes totals">
-                      <td colSpan={4} style={routesDetailCellStyle}>Total</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedStops}</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.delivered}</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.attempted}</td>
-                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedItems}</td>
-                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(allRoutesSummary.durationSeconds))}</td>
-                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDistanceMeters(allRoutesSummary.distanceMeters))}</td>
-                      <td style={routesDetailCellStyle}>{ROUTE_EMPTY_LABEL}</td>
-                      <td style={routesDetailCellStyle} />
-                    </tr>
-                  </tfoot>
-                ) : null}
-              </table>
-            </div>
-          )}
 
           {!isMaterializedChildRouteDetail && !isTrackingMapView ? (
             <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
@@ -8238,6 +8038,440 @@ export default function RouteDetailPage() {
               </>
             </section>
           ) : null}
+
+          {!isTrackingMapView ? (
+            <div className="route-group-detail-scroll" style={routesDetailTableFrameStyle}>
+              <table aria-label="Driver route rows" style={routePlanRowsTableStyle}>
+                <colgroup>
+                  {routePlanRowsColumnWidths.map((width, index) => (
+                    <col key={`${width}-${index}`} style={{ width }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr>
+                    <th style={routeNameHeaderCellStyle}>Name</th>
+                    <th style={routeStatusHeaderCellStyle}>Status</th>
+                    <th style={routesDetailHeaderCellStyle}>Driver</th>
+                    <th style={routesDetailHeaderCellStyle}>Start time</th>
+                    <th style={routesDetailHeaderCellStyle}>Stops</th>
+                    <th style={routesDetailHeaderCellStyle}>Delivered</th>
+                    <th style={routesDetailHeaderCellStyle}>Attempted</th>
+                    <th style={routesDetailHeaderCellStyle}>Total items</th>
+                    <th style={routesDetailHeaderCellStyle}>Total drive time</th>
+                    <th style={routesDetailHeaderCellStyle}>Total distance</th>
+                    <th style={routesDetailHeaderCellStyle}>Total weight</th>
+                    <th style={routesDetailHeaderCellStyle}>Created</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {timelineRouteRows.filter((routeRow) => !routeRow.isUnassigned).map((routeRow) => (
+                    <tr key={routeRow.id}>
+                      <td style={routeNameCellStyle}>
+                        <span style={routeLineNameStyle}>
+                          <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: routeRow.color }}></span>
+                          <button
+                            aria-label={routeRow.routePlanId ? `Open ${routeRow.title} route detail` : `${routeRow.title} route preview`}
+                            disabled={!routeRow.routePlanId}
+                            onClick={() => routeRow.routePlanId ? requestRouteNavigation(routeGroupId ? routeGroupChildPath(routeGroupId, routeRow.routePlanId) : routePlanPath(routeRow.routePlanId)) : undefined}
+                            style={{
+                              ...routeLineTitleButtonStyle,
+                              ...(routeRow.isPreviewOnly ? { cursor: "default" } : null),
+                            }}
+                            type="button"
+                          >
+                            {routeRow.title}
+                          </button>
+                          <button
+                            aria-label={`Edit ${routeRow.title} name`}
+                            disabled={routeRow.isPreviewOnly || routeRow.isUnassigned}
+                            onClick={() => handleOpenRouteLineEditor(routeRow)}
+                            style={{
+                              ...routeLineEditButtonStyle,
+                              ...(routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "default", opacity: 0.4 } : null),
+                            }}
+                            type="button"
+                          >
+                            {renderRouteLineEditIcon()}
+                          </button>
+                        </span>
+                      </td>
+                      <td style={routeStatusCellStyle}><span style={{ ...routeRowStatusStyle, ...getRouteStatusBadgeColors(routeRow.status) }}>{localizeRouteStatus(routeRow.status, language)}</span></td>
+                      <td style={routesDetailCellStyle}>
+                        <button
+                          aria-label="Change route driver"
+                          disabled={routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus)}
+                          onClick={() => handleOpenRouteSelector("driver", routeRow)}
+                          style={{
+                            ...routeEditableValueStyle,
+                            ...(routeRow.isPreviewOnly || routeRow.isUnassigned || isRouteExecutionLockedForStopMembership(routeRow.status ?? routeExecutionStatus) ? { cursor: "default", opacity: 0.65 } : null),
+                          }}
+                          type="button"
+                        >
+                          <span style={routeEditableValueTextStyle}>{routeRow.driverLabel}</span>
+                          {renderRouteEditableChevron()}
+                        </button>
+                      </td>
+                      <td style={routesDetailCellStyle}>
+                        <button
+                          aria-label="Change route start time"
+                          disabled={routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned}
+                          onClick={() => handleOpenRouteSelector("startTime", routeRow)}
+                          style={{
+                            ...routeEditableValueStyle,
+                            ...(routeGroupActionBusy || routeRow.isPreviewOnly || routeRow.isUnassigned ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                          }}
+                          type="button"
+                        >
+                          <span style={routeEditableValueTextStyle}>{routeRow.startTimeLabel ?? routeStartTimeLabel}</span>
+                          {renderRouteEditableChevron()}
+                        </button>
+                      </td>
+                      <td style={routesDetailCellStyle}>{routeRow.stopsCount}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.deliveredCount}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.attemptedCount}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.totalItems}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.driveTimeLabel}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.totalDistanceLabel}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.totalWeightLabel}</td>
+                      <td style={routesDetailCellStyle}>{routeRow.createdLabel}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                {isRouteGroupDetail ? (
+                  <tfoot style={{ background: "#f6f6f7", fontWeight: 600 }}>
+                    <tr aria-label="All routes totals">
+                      <td colSpan={4} style={routesDetailCellStyle}>Total</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedStops}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.delivered}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.attempted}</td>
+                      <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedItems}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(allRoutesSummary.durationSeconds))}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDistanceMeters(allRoutesSummary.distanceMeters))}</td>
+                      <td style={routesDetailCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+                      <td style={routesDetailCellStyle} />
+                    </tr>
+                  </tfoot>
+                ) : null}
+              </table>
+            </div>
+          ) : null}
+
+          {childDetailTab === "stops" && (routeOrderRows.length > 0 || !isRouteGroupDetail) ? (
+            <div
+              style={{
+                ...routesDetailTableFrameStyle,
+                "--route-marker-color": currentTimelineRouteRow?.color ?? routeLineColor,
+              }}
+            >
+              <table
+                aria-label="Child route order stops"
+                style={{
+                  ...childRouteOrderTableStyle,
+                  ...(isRouteGroupDetail ? { minWidth: "1620px" } : null),
+                }}
+              >
+                <colgroup>
+                  {(isRouteGroupDetail ? ["120px", ...childRouteOrderColumnWidths] : childRouteOrderColumnWidths).map((width, index) => (
+                    <col key={`${width}-${index}`} style={{ width }} />
+                  ))}
+                </colgroup>
+                <thead>
+                  <tr>
+                    {routeOrderColumns.map((column) => (
+                      <th
+                        key={column.key}
+                        style={column.key === "actions" ? childRouteActionsHeaderCellStyle : childRouteOrderHeaderCellStyle}
+                      >
+                        {column.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
+                    endpoint: routeEndpointPresentation.start,
+                    kind: "start",
+                    referenceValue: routeEndpointPresentation.start.plannedAt,
+                  }) : null}
+                  {routeOrderRows.map((row) => (
+                    <tr key={row.rowKey} style={childRouteOrderRowStyle}>
+                      {isRouteGroupDetail ? (
+                        <td style={childRouteOrderCellStyle}>
+                          <span style={{ alignItems: "center", display: "inline-flex", gap: "6px" }}>
+                            <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: row.sourceRouteColor ?? "#8a8a8a" }} />
+                            {row.sourceRouteTitle}
+                          </span>
+                        </td>
+                      ) : null}
+                      <td style={childRouteStopCellStyle}><span style={{ ...childRouteTableStopMarkerStyle, background: row.sourceRouteColor ?? routeLineColor }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
+                      <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
+                      <td style={childRouteOrderCellStyle}>{row.status}</td>
+                      <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
+                      <td style={childRouteOrderCellStyle}>
+                        <span>{row.address}</span>
+                        {row.locationDiagnostic.severity !== "NONE" ? (
+                          <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
+                            <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
+                          </span>
+                        ) : null}
+                        {row.note ? (
+                          <button
+                            aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "note"}
+                            aria-haspopup="dialog"
+                            aria-label={`Show ${row.order} note`}
+                            data-child-order-disclosure-trigger="true"
+                            onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "note")}
+                            onBlur={handleChildOrderDisclosureMouseLeave}
+                            onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                            onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                            onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                            style={{ ...childRouteDisclosureButtonStyle, marginLeft: "6px" }}
+                            type="button"
+                          ><s-icon type="note" /></button>
+                        ) : null}
+                      </td>
+                      <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
+                      <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
+                      <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
+                      <td style={childRouteOrderCellStyle}>{row.customer}</td>
+                      <td style={childRouteDisclosureCellStyle}>
+                        <button
+                          aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "items"}
+                          aria-haspopup="dialog"
+                          aria-label={`Show ${row.order} item details`}
+                          data-child-order-disclosure-trigger="true"
+                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "items")}
+                          onBlur={handleChildOrderDisclosureMouseLeave}
+                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "items")}
+                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "items")}
+                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                          style={childRouteDisclosureButtonStyle}
+                          type="button"
+                        >
+                          <span>{row.itemsSummary}</span>
+                          {renderChildRouteInfoIcon()}
+                        </button>
+                      </td>
+                      <td style={childRouteOrderCellStyle}>{row.method}</td>
+                      <td style={childRouteOrderCellStyle}>{row.payment}</td>
+                      <td style={childRouteDisclosureCellStyle}>
+                        <button
+                          aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "attributes"}
+                          aria-haspopup="dialog"
+                          aria-label={`Show ${row.order} attributes`}
+                          data-child-order-disclosure-trigger="true"
+                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "attributes")}
+                          onBlur={handleChildOrderDisclosureMouseLeave}
+                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "attributes")}
+                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "attributes")}
+                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                          style={childRouteDisclosureButtonStyle}
+                          type="button"
+                        >
+                          <span>{row.attributesSummary}</span>
+                          {renderChildRouteInfoIcon()}
+                        </button>
+                      </td>
+                      <td style={childRouteActionsCellStyle}>
+                        {isRouteGroupDetail ? (
+                          row.sourceRoutePlanId ? (
+                            <a
+                              aria-label={`Open ${row.sourceRouteTitle} route`}
+                              href={withEmbeddedShopifyContext(routeGroupChildPath(routeGroupId, row.sourceRoutePlanId), searchParams)}
+                              style={childStopActionsExternalLinkStyle}
+                            >Open route</a>
+                          ) : ROUTE_EMPTY_LABEL
+                        ) : (
+                          <button
+                            aria-expanded={activeChildStopActions?.rowId === row.rowKey}
+                            aria-haspopup="menu"
+                            aria-label={`Open actions for ${row.order}`}
+                            data-child-stop-actions-trigger="true"
+                            disabled={routeGroupActionBusy}
+                            onClick={(event) => handleToggleChildStopActions(event, row.rowKey)}
+                            ref={(node) => setChildStopActionsButtonRef(row.rowKey, node)}
+                            style={{
+                              ...childStopActionsButtonStyle,
+                              ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                            }}
+                            type="button"
+                          >
+                            ⋯
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
+                    endpoint: routeEndpointPresentation.end,
+                    kind: "end",
+                    referenceValue: routeEndpointPresentation.start.plannedAt,
+                  }) : null}
+                </tbody>
+              </table>
+              <div
+                aria-label="Child route totals"
+                style={{
+                  alignItems: "center",
+                  borderTop: "1px solid #dedede",
+                  display: "flex",
+                  flexWrap: "wrap",
+                  fontSize: "13px",
+                  gap: "8px 18px",
+                  padding: "10px 14px",
+                }}
+              >
+                <span>Total drive time: {routeTotalDriveTime} ({routeTotalDistance})</span>
+                <span>
+                  {translate(language, "routes.detail.originalShipping")}: {getOriginalShippingTotalLabel(childRouteMoney, language)}
+                </span>
+                <span>Total price: {childRouteMoney.totalPriceLabel}</span>
+              </div>
+            </div>
+          ) : null}
+
+          {isTrackingMapView ? (
+            <section aria-label="Route tracking" style={routeChildTrackingStyle}>
+              <section aria-label="Route tracking summary" style={routeChildTrackingSummaryStyle}>
+                <div className="route-tracking-primary-grid">
+                  <div style={routeTrackingPrimaryMetricStyle}>
+                    <span style={routeChildTrackingMetricLabelStyle}>Driver</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{currentTimelineRouteRow?.driverLabel ?? routeDriverSummary}</strong>
+                  </div>
+                  <div style={routeTrackingPrimaryMetricStyle}>
+                    <span style={routeChildTrackingMetricLabelStyle}>Delivery progress</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{trackingDeliveredCount} / {routeOrderRows.length} delivered</strong>
+                  </div>
+                  <div style={routeTrackingPrimaryMetricStyle}>
+                    <span style={routeChildTrackingMetricLabelStyle}>Latest position</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{formatTrackingPosition(latestTrackingPosition)}</strong>
+                  </div>
+                  <div style={routeTrackingPrimaryMetricStyle}>
+                    <span style={routeChildTrackingMetricLabelStyle}>GPS gaps</span>
+                    <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.gapCount}</strong>
+                  </div>
+                </div>
+                <details style={routeTrackingEvidenceStyle}>
+                  <summary style={routeTrackingEvidenceSummaryStyle}>Tracking evidence</summary>
+                  <div style={routeTrackingEvidenceGridStyle}>
+                    <div style={{ ...routeChildTrackingMetricStyle, borderLeft: 0, paddingLeft: 0 }}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{routeTrackingPresentation.mode === "live" ? "Live tracking" : "Tracking"}</span>
+                      <strong
+                        style={routeChildTrackingMetricValueStyle}
+                        title={routeTrackingPresentation.mode === "live" && routeTrackingPolicy
+                          ? `Server policy: live ${routeTrackingPolicy.liveThresholdMs ?? ROUTE_EMPTY_LABEL}ms, delayed ${routeTrackingPolicy.delayedThresholdMs ?? ROUTE_EMPTY_LABEL}ms`
+                          : routeTrackingPresentation.mode === "live"
+                            ? "Waiting for server tracking policy"
+                            : "Live tracking is available only while the route is in progress"}
+                      >{localizeTrackingLabel(routeTrackingPresentation.trackingLabel, language)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>Connection</span>
+                      <strong style={{ ...routeChildTrackingMetricValueStyle, textTransform: "capitalize" }}>{routeTrackingConnectionLabel}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>Driver stage</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{formatTrackingDriverStage(routeTrackingPresentation.driverStage, language)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.startEvent")}</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{getExecutionEvidenceEventLabel(routeExecutionEvidence?.start, ianaTimezone, language)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.completionEvent")}</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{getExecutionEvidenceEventLabel(routeExecutionEvidence?.completion, ianaTimezone, language)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.returnToDepot")}</span>
+                      <strong
+                        style={routeChildTrackingMetricValueStyle}
+                        title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
+                      >{translate(language, `routes.detail.tracking.return.${returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>GPS records</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.sourcePointCount}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>Displayed points</span>
+                      <strong style={routeChildTrackingMetricValueStyle}>{routeTrackingPathSummary.geometryPointCount}</strong>
+                    </div>
+                    <div style={routeChildTrackingMetricStyle}>
+                      <span style={routeChildTrackingMetricLabelStyle}>Service-day range</span>
+                      <strong
+                        style={{ ...routeChildTrackingMetricValueStyle, whiteSpace: "nowrap" }}
+                        title={routeTrackingPathSummary.firstOccurredAt
+                          ? `${formatTrackingTimestamp(routeTrackingPathSummary.firstOccurredAt, ianaTimezone)} – ${formatTrackingTimestamp(routeTrackingPathSummary.lastOccurredAt, ianaTimezone)}`
+                          : undefined}
+                      >{routeTrackingPathSummary.firstOccurredAt
+                        ? formatTrackingRange(
+                          routeTrackingPathSummary.firstOccurredAt,
+                          routeTrackingPathSummary.lastOccurredAt,
+                          ianaTimezone,
+                        )
+                        : ROUTE_EMPTY_LABEL}</strong>
+                    </div>
+                  </div>
+                </details>
+              </section>
+              <div style={routesDetailTableFrameStyle}>
+                <table aria-label="Child route tracking stops" style={childRouteOrderTableStyle}>
+                  <thead>
+                    <tr>
+                      {[
+                        ["Stop", "64px"],
+                        ["Order / stop", "112px"],
+                        ["Status", "120px"],
+                        ["ETA", "120px"],
+                        ["Drive time", "120px"],
+                        ["Stop time", "100px"],
+                        ["Customer", "160px"],
+                        ["Address", "360px"],
+                      ].map(([label, width]) => (
+                        <th key={label} style={{ ...childRouteOrderHeaderCellStyle, width }}>{label}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {renderRouteEndpointTrackingRow({
+                      endpoint: routeEndpointPresentation.start,
+                      kind: "start",
+                      referenceValue: routeEndpointPresentation.start.plannedAt,
+                    })}
+                    {routeOrderRows.map((row) => (
+                      <tr
+                        key={row.id}
+                        style={{
+                          ...childRouteOrderRowStyle,
+                          ...(focusedTrackingStopId === row.id ? { outline: "2px solid #0b84d8", outlineOffset: "-2px" } : null),
+                        }}
+                      >
+                        <td style={childRouteStopCellStyle}><span style={{
+                          ...childRouteTableStopMarkerStyle,
+                          background: completedTrackingStopIds.has(row.id)
+                            ? ROUTE_DETAIL_COMPLETED_STOP_COLOR
+                            : routeStopColorById.get(row.id) ?? routeLineColor,
+                        }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
+                        <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
+                        <td style={childRouteOrderCellStyle}>{getLiveTrackingStopStatus(row, routeTrackingProgress)}</td>
+                        <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
+                        <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
+                        <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
+                        <td style={childRouteOrderCellStyle}>{row.customer}</td>
+                        <td style={childRouteOrderCellStyle}>{row.address}</td>
+                      </tr>
+                    ))}
+                    {renderRouteEndpointTrackingRow({
+                      endpoint: routeEndpointPresentation.end,
+                      kind: "end",
+                      referenceValue: routeEndpointPresentation.start.plannedAt,
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+          ) : null}
+
             {!routeTimelineDrag && activeRouteTimelineStop && activeRouteTimelineStopPopover ? (
               <>
                 <div
@@ -8409,7 +8643,7 @@ export default function RouteDetailPage() {
               </button>
               <div style={childStopActionsDividerStyle} />
               <button
-                disabled={!activeChildStopActionsRow.deliveryStopId}
+                disabled={!activeChildStopActionsRow.deliveryStopId || !canEditStopRow(activeChildStopActionsRow)}
                 onClick={() => handleOpenChildStopEditor(activeChildStopActionsRow)}
                 role="menuitem"
                 style={childStopActionsMenuItemStyle}
@@ -8573,7 +8807,7 @@ export default function RouteDetailPage() {
                         const missingDiagnosticsLabel = formatCustomerEmailMissingTemplateDiagnostics(recipient);
                         const hasPriorSend = hasCustomerEmailPriorSend(recipient);
                         const hasUncertainOutcome = hasCustomerEmailUncertainOutcome(recipient);
-                        const historyLabel = formatCustomerEmailHistory(getCustomerEmailRecipientHistory(recipient));
+                        const historyLabel = formatCustomerEmailHistory(getCustomerEmailRecipientHistory(recipient), storeTimeZone);
                         return (
                           <label
                             key={recipientKey}
@@ -8645,7 +8879,7 @@ export default function RouteDetailPage() {
                       <>
                         <span>{getCustomerEmailRecipientOrder(activeCustomerEmailRecipient)} {getCustomerEmailRecipientEmail(activeCustomerEmailRecipient) ?? ""}</span>
                         <span style={hasCustomerEmailPriorSend(activeCustomerEmailRecipient) ? customerEmailWarningTextStyle : null}>
-                          {formatCustomerEmailHistory(getCustomerEmailRecipientHistory(activeCustomerEmailRecipient))}
+                          {formatCustomerEmailHistory(getCustomerEmailRecipientHistory(activeCustomerEmailRecipient), storeTimeZone)}
                         </span>
                         {hasCustomerEmailPriorSend(activeCustomerEmailRecipient) ? (
                           <span style={customerEmailWarningTextStyle}>This recipient has prior send history.</span>
@@ -8776,10 +9010,10 @@ export default function RouteDetailPage() {
         >
           <div style={routeGroupCopyDialogContentStyle}>
             <div>
-              <h2 id="copy-route-group-title" style={routeLineEditorTitleStyle}>Copy Group Route</h2>
+              <h2 id="copy-route-group-title" style={routeLineEditorTitleStyle}>Copy Route</h2>
               <p style={routeLineEditorLabelStyle}>복사 방식을 선택해주세요. 선택 전에는 복사가 실행되지 않습니다.</p>
             </div>
-            <div aria-label="Route group copy mode" role="radiogroup" style={{ display: "grid", gap: "8px" }}>
+            <div aria-label="Route copy mode" role="radiogroup" style={{ display: "grid", gap: "8px" }}>
               <div style={routeGroupCopyChoiceStyle}>
                 <input
                   aria-describedby="copy-route-group-reference-description"
@@ -8803,7 +9037,7 @@ export default function RouteDetailPage() {
                     style={routeGroupCopyChoiceLabelStyle}
                   >실제 주문으로 복사</label>
                   <span id="copy-route-group-reference-description" style={routeGroupCopyChoiceDescriptionStyle}>
-                    원본 주문을 공유하며 진행/잠금 상태의 영향을 받음
+                    원본 주문과 완료 상태를 공유하며, 중복 배차·배송 시작은 제한됨
                   </span>
                 </span>
               </div>
@@ -8852,7 +9086,7 @@ export default function RouteDetailPage() {
                   ...(copyRouteGroupRequestBusy || !copyRouteGroupDialogState.mode ? { opacity: 0.55 } : null),
                 }}
                 type="button"
-              >{copyRouteGroupRequestBusy ? "Copying…" : "Copy route group"}</button>
+              >{copyRouteGroupRequestBusy ? "Copying…" : "Copy Route"}</button>
             </div>
           </div>
         </dialog>
@@ -8980,6 +9214,9 @@ export default function RouteDetailPage() {
                           >{translate(language, "routes.addOrder.search.clear")}</button>
                         ) : null}
                       </span>
+                      <span style={{ color: "#6d7175", fontSize: "11px" }}>
+                        Search covers all delivery dates, including Date Pending.
+                      </span>
                     </label>
                     <label style={routeAddOrderFilterFieldStyle}>
                       <span style={routeAddOrderFilterLabelStyle}>Date field</span>
@@ -9004,6 +9241,7 @@ export default function RouteDetailPage() {
                         <option value="all">All</option>
                         <option value="single">Specific date</option>
                         <option value="range">Date range</option>
+                        <option value="missing">{addOrderDateField === "deliveryDate" ? "Date Pending" : "No date"}</option>
                       </select>
                     </label>
                     {addOrderDateMode === "single" ? (
@@ -9064,6 +9302,7 @@ export default function RouteDetailPage() {
                       <col style={{ width: "118px" }} />
                       <col style={{ width: "110px" }} />
                       <col style={{ width: "72px" }} />
+                      <col style={{ width: "190px" }} />
                     </colgroup>
                     <thead>
                       <tr>
@@ -9082,16 +9321,19 @@ export default function RouteDetailPage() {
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Delivery date</th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Day</th>
                         <th scope="col" style={routeAddOrderHeaderCellStyle}>Items</th>
+                        <th scope="col" style={routeAddOrderHeaderCellStyle}>Availability</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredAddOrderCandidates.map((order) => (
-                        <tr key={order.orderId}>
+                        <tr key={order.orderId} style={order.addable ? undefined : { background: "#fafafa", opacity: 0.72 }}>
                           <td style={routeAddOrderCellStyle}>
                             <input
                               aria-label={`Select ${order.name}`}
                               checked={selectedAddOrderIdSet.has(order.orderId)}
+                              disabled={!order.addable}
                               onChange={(event) => handleToggleAddOrder(order.orderId, event.currentTarget.checked)}
+                              title={order.addBlockedReason ?? undefined}
                               type="checkbox"
                             />
                           </td>
@@ -9102,6 +9344,9 @@ export default function RouteDetailPage() {
                           <td style={routeAddOrderCellStyle}>{order.deliveryDate}</td>
                           <td style={routeAddOrderCellStyle}>{order.deliveryDay}</td>
                           <td style={routeAddOrderCellStyle}>{order.itemCount}</td>
+                          <td style={routeAddOrderCellStyle} title={order.addBlockedReason ?? "Available to add"}>
+                            {order.addBlockedReason ?? "Available"}
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -9125,11 +9370,11 @@ export default function RouteDetailPage() {
                   type="button"
                 >Back</button>
                 <button
-                  disabled={addRouteOrdersBusy || selectedAddOrderIds.length === 0 || (addStopTargetRouteRequired && !addStopTargetRoutePlanId)}
+                  disabled={addRouteOrdersBusy || selectedAddOrderIds.length === 0 || !addStopTargetRouteValid}
                   onClick={handleAddSelectedOrders}
                   style={{
                     ...routeLineEditorPrimaryButtonStyle,
-                    ...(addRouteOrdersBusy || selectedAddOrderIds.length === 0 || (addStopTargetRouteRequired && !addStopTargetRoutePlanId) ? { opacity: 0.55 } : null),
+                    ...(addRouteOrdersBusy || selectedAddOrderIds.length === 0 || !addStopTargetRouteValid ? { opacity: 0.55 } : null),
                   }}
                   type="button"
                 >{addRouteOrdersBusy ? "Adding…" : `Add ${selectedAddOrderIds.length || ""}`.trim()}</button>
@@ -9273,6 +9518,7 @@ export default function RouteDetailPage() {
             />
             <div
               aria-label={`${activeRouteSelector.title} selector`}
+              className="route-detail-selector-controls"
               role="dialog"
               style={{
                 ...routeLineEditorDialogStyle,

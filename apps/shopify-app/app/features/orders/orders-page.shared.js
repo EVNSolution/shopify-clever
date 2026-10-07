@@ -1,3 +1,5 @@
+import { V2_FILTER_KEYS } from "./order-filters-v2.js";
+import { getOrderDate, getOrderReceivedAt } from "./order-date.js";
 import { ORDER_FILTER_QUERY_KEYS } from "./order-filters.js";
 
 export const DEFAULT_ROUTE_PLAN_TITLE = "CLEVER route draft";
@@ -5,6 +7,7 @@ export const ORDERS_VIEW_SNAPSHOT_TTL_MS = 30 * 60_000;
 
 const ORDERS_UI_ONLY_QUERY_KEYS = new Set([
   ...Object.values(ORDER_FILTER_QUERY_KEYS),
+  ...V2_FILTER_KEYS,
   "q",
   "view",
 ]);
@@ -18,12 +21,15 @@ export function textOrUndefined(value) {
 }
 
 export function buildOrderTimelineDetails({ deliveryCycle, order, shopTimeZone }) {
-  const orderedAt = getOrderTimestampValue(order, ["orderCreatedAt", "createdAt"]);
+  const sourceReceivedAt = getOrderReceivedAt(order);
+  const orderedAt = sourceReceivedAt === undefined
+    ? getOrderTimestampValue(order, ["orderCreatedAt"]) ?? textOrUndefined(order?.rawPayload?.createdAt ?? order?.shopifyOrderSnapshot?.createdAt)
+    : sourceReceivedAt;
   const processedAt = getOrderTimestampValue(order, ["processedAt"]);
   const updatedAt = getOrderTimestampValue(order, ["updatedAt", "updatedAtShopify"]);
-  const orderedDate =
-    textOrUndefined(order?.orderedDate) ??
-    formatOrderDateTimePart(orderedAt, shopTimeZone, DATE_FORMAT_OPTIONS);
+  const orderedDate = sourceReceivedAt === undefined
+    ? textOrUndefined(order?.orderedDate) ?? formatOrderDateTimePart(orderedAt, shopTimeZone, DATE_FORMAT_OPTIONS)
+    : getOrderDate(order, shopTimeZone);
   const orderedTime = formatOrderDateTimePart(orderedAt, shopTimeZone, TIME_FORMAT_OPTIONS);
   const timeZone = textOrUndefined(deliveryCycle?.timeZone) ?? textOrUndefined(shopTimeZone);
   const routeSequence =
@@ -102,7 +108,7 @@ function formatOrdersTimestamp(value, shopTimeZone) {
     minute: "2-digit",
     month: "2-digit",
     second: "2-digit",
-    ...(shopTimeZone ? { timeZone: shopTimeZone } : {}),
+    timeZone: shopTimeZone || "UTC",
     year: "numeric",
   }).format(new Date(value));
 }
@@ -141,7 +147,7 @@ function formatOrderDateTimePart(value, shopTimeZone, options) {
 
   return new Intl.DateTimeFormat("en-CA", {
     ...options,
-    ...(shopTimeZone ? { timeZone: shopTimeZone } : {}),
+    timeZone: shopTimeZone || "UTC",
   }).format(date);
 }
 

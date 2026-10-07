@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
+import { routeGroupPath, withEmbeddedShopifyContext } from "../app/features/delivery/route-paths.js";
 
 const root = process.cwd();
 const source = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
@@ -44,7 +45,7 @@ function loadRouteDraftPayloadBuilder() {
 function loadAddEmptyHandler(overrides = {}) {
   const handlerSource = sourceBetween("const handleAddEmptyRoute = () => {", "const handleReverseCurrentRouteStops = () => {");
   const dependencyNames = [
-    "routeGroupActionBusy", "ordinaryMutationPendingRef", "setIsRouteActionsMenuOpen", "canDraftEditChildStopMembership",
+    "routeGroupActionBusy", "ordinaryMutationPendingRef", "setRouteActionsMenu", "canDraftEditChildStopMembership",
     "setRouteGroupClientError", "hasIncompatibleAddEmptyDraft", "isOrdinarySplitDraft",
     "contextRouteRows", "getNextChildRouteDraft", "ROUTE_EMPTY_LABEL", "setClientRouteRows",
     "isOrdinaryRouteDetail", "setIsOrdinarySplitDraft", "routeGroupId", "currentRouteRowsSource",
@@ -66,7 +67,7 @@ function loadAddEmptyHandler(overrides = {}) {
     routeGroupId: null,
     setClientRouteRows: () => {},
     setIsOrdinarySplitDraft: () => {},
-    setIsRouteActionsMenuOpen: () => {},
+    setRouteActionsMenu: () => {},
     setRouteGroupClientError: () => {},
     setRouteTimelineOrderByRouteId: () => {},
     submitRouteGroupAction: () => {},
@@ -148,13 +149,18 @@ function loadSubmitRouteAction(overrides = {}) {
   const handlerSource = sourceBetween("const submitRouteAction = async (intent, fields = {}) => {", "const submitCustomerEmailAction = async (intent) => {");
   const dependencyNames = [
     "ordinaryMutationPendingRef", "setRouteGroupClientError", "shopify", "FormData",
-    "routeGroupId", "routeActionFetcher",
+    "routeGroupId", "routeActionFetcher", "routeDraftSavePendingRef",
+    "routeGroupPath", "withEmbeddedShopifyContext", "searchParams",
   ];
   const dependencies = {
     FormData,
     ordinaryMutationPendingRef: { current: false },
+    routeDraftSavePendingRef: { current: false },
     routeActionFetcher: { submit: () => {} },
     routeGroupId: null,
+    routeGroupPath,
+    withEmbeddedShopifyContext,
+    searchParams: new URLSearchParams(),
     setRouteGroupClientError: () => {},
     shopify: { idToken: async () => "session-token" },
     ...overrides,
@@ -392,7 +398,7 @@ test("ordinary READY route exposes direct Copy and keeps Add Empty local", () =>
   assert.match(source, /effectiveRoutePlan\?\.status[\s\S]*READY/);
   assert.match(source, /submitRouteAction\("copyRoutePlan", \{[\s\S]*expectedRoutePlanUpdatedAt: effectiveRoutePlan\.updatedAt/);
   assert.match(source, /onClick=\{handleCopyOrdinaryRoute\}/);
-  assert.match(source, /\{copyRoutePlanBusy \? "Copying…" : "Copy"\}/);
+  assert.match(source, /busy=\{copyRoutePlanBusy\}/);
 });
 
 test("ordinary Copy navigates only after a confirmed standalone READY route response", () => {
@@ -432,6 +438,44 @@ test("copy and split save responses reconcile before route loader revalidation",
   assert.equal(shouldRevalidate({ formData: formDataFor("copyRoutePlan"), defaultShouldRevalidate: true }), false);
   assert.equal(shouldRevalidate({ formData: formDataFor("saveRouteDraft"), defaultShouldRevalidate: true }), false);
   assert.equal(shouldRevalidate({ formData: formDataFor("deleteRoute"), defaultShouldRevalidate: true }), true);
+});
+
+test("Copy from a group child submits to the existing group action with embedded context", async () => {
+  let submission;
+  const submit = loadSubmitRouteAction({
+    routeGroupId: "single-group",
+    searchParams: new URLSearchParams("shop=kfood.myshopify.com&host=fixture&embedded=1&id_token=excluded"),
+    routeActionFetcher: { submit: (form, options) => { submission = { form, options }; } },
+  });
+  assert.equal(await submit("copyRouteGroup", { copyMode: "REFERENCE", expectedUpdatedAt: "revision" }), true);
+  assert.equal(submission.options.action, "/app/routes/groups/single-group?shop=kfood.myshopify.com&host=fixture&embedded=1");
+  assert.equal(submission.options.method, "post");
+  assert.equal(submission.form.get("_intent"), "copyRouteGroup");
+  assert.equal(submission.form.get("routeGroupId"), "single-group");
+  assert.equal(submission.form.get("copyMode"), "REFERENCE");
+  assert.equal(submission.form.get("expectedUpdatedAt"), "revision");
+});
+
+test("global Save submits once while token is pending and a token failure permits retry", async () => {
+  let resolveToken;
+  let count = 0;
+  const token = new Promise((resolve) => { resolveToken = resolve; });
+  const pending = { current: false };
+  const submit = loadSubmitRouteAction({ routeDraftSavePendingRef: pending,
+    shopify: { idToken: () => token }, routeActionFetcher: { submit: () => { count += 1; } } });
+  const first = submit("saveRouteDraft");
+  assert.equal(await submit("saveRouteDraft"), false);
+  resolveToken("fixture-token");
+  assert.equal(await first, true);
+  assert.equal(count, 1);
+  assert.equal(pending.current, true);
+  let attempts = 0;
+  const retryPending = { current: false };
+  const retry = loadSubmitRouteAction({ routeDraftSavePendingRef: retryPending,
+    shopify: { idToken: async () => { if (attempts++ === 0) throw new Error("token failure"); return "token"; } } });
+  assert.equal(await retry("saveRouteDraft"), false);
+  assert.equal(retryPending.current, false);
+  assert.equal(await retry("saveRouteDraft"), true);
 });
 
 test("an ordinary mutation lock acquired while awaiting a token blocks an unrelated submission", async () => {

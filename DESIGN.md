@@ -1,8 +1,12 @@
-# CLEVER Shopify App Design Source of Truth
+# Design
+
+## Source of truth
 
 - Status: Active
-- Last updated: 2026-09-22
-- Applies to: `apps/shopify-app`, with current emphasis on route detail and tracking operations
+- Last updated: 2026-10-01
+- Applies to: `apps/shopify-app`, with current emphasis on Orders filters and route detail/tracking operations
+
+- Evidence: actual Safari interactions on EasyRoutes and CLEVER K-food Orders (2026-10-01), existing Orders filter component and v2 contract. See [interaction evidence](docs/ui/orders-filter-interaction-review.md). No component gallery or Storybook exists in this repo; the Orders component and this document own the pattern.
 
 ## Brand
 
@@ -30,6 +34,14 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Operational summary: driver, delivery progress, latest position, and GPS gap signal.
 - Evidence disclosure: connection state, execution events, return-to-depot evidence, point counts, and recorded range.
 - Stop table: authoritative ordered stop detail.
+- Show the same detailed stop/order table on a standalone route, a saved child route, and the group All routes view. All routes prepends route identity and includes every child-route stop plus the explicit Unassigned row set; keep the route summary and timeline available alongside it.
+- In standalone route, saved child route, and All routes detail, show the map first, then the stop timeline with its route summary table immediately below, then the order list. Keep the timeline and route summary together.
+
+### Orders
+
+- Keep the table toolbar in one horizontal row: active conditions, Add filter, Clear all, order/selection counts and actions. Remove the Orders search input. Incoming search URLs remain visible as a removable chip.
+- Route plan keeps its title and Assign action in a single row; omit explanatory copy. The route title input and Order summary remain separate.
+- Expose only supported dimensions: Stop type, Delivery status, Order date, Delivery date, Payment, Fulfillment, Cancellation, Area.
 
 ## Design principles
 
@@ -55,20 +67,42 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Tracking summary is a single bordered region with a four-column primary grid.
 - Tracking evidence uses a native disclosure so keyboard and assistive technology behavior remain reliable.
 - Tables remain the primary detailed operations surface.
+- Stop-table disclosures use a route-scoped row key. All routes is read-only and links each assigned row to its child route for operational actions; Unassigned has no route action. Actual arrival evidence is shown only when it belongs to that same route; never reuse one child route's tracking evidence for another child or Unassigned.
+- Standalone and saved child route tables place a read-only Start row before the first order and an End row after the last order in both Stops and Tracking. These endpoint rows are outside order selection, counts, actions, and reordering. Do not synthesize one Start/End pair for All routes or Unassigned.
+- Endpoint times use the same presentation as order ETA: show the planned time alone, then strike it through and show the observed time in green when evidence exists. Evidence labels such as actual departure and `Return confirmed` stay available to assistive text and tooltips instead of taking visible table space. Planned End requires a complete route schedule: saved start, every outbound leg, service time, time-window waits, and a consistent return leg when the route returns to depot. Actual departure requires the recorded start occurrence; completion alone is not depot-return evidence.
+
+### Route Add orders
+
+- Search covers all same-store orders regardless of the selected delivery-date filter, including orders labeled `Date Pending`. Date filters still narrow the browse list when search is empty.
+- Visibility and addability are separate. Already assigned, cancelled, terminal delivery, and missing-coordinate orders stay visible with a concise reason and disabled selection. The server action revalidates selected IDs against the addable set.
+- Adding a cross-date or Date Pending order preserves its original delivery date and targets the chosen saved child route. The dialog does not imply that browsing or selection changes the order's date.
+
+### Orders filter controls
+
+- Open the chosen condition beside its trigger. Active chips appear before Add filter and stay on one line. Show compact values (short dates or a first value plus count) in chips no wider than 180px, with the full condition in accessible text/title. Keep the popover adjacent to its visible trigger, preferably below; adjust only for actual viewport space. Above-trigger panels anchor their bottom edge to the trigger rather than reserving their maximum height.
+- Enumeration values use checkboxes; multiple values are OR, different dimensions are AND. Hide zero-count choices when server facets are available; retain applied and draft selections so they can be cleared or restored. Missing facet data is not evidence of zero orders. Checkbox/radio selections are a local draft until the panel Add filter button applies them and closes the popover; Escape, outside click, and close discard the draft.
+- Order date and Delivery date both show a month calendar immediately. Select inclusive ranges directly on the calendar; never replace it with From/To inputs. Selecting a complete calendar range or preset applies it and closes the popover. Date presets are shortcuts to calendar selection. Weekday reveals weekday checkboxes and may further narrow the scheduled range. Existing store-timezone and inclusive-range behavior remains authoritative.
+- A chip remove button and a panel Clear reset only that condition. Clear all resets all filters and the existing selection/page state.
 
 ## Accessibility
 
 - Controls retain native button, checkbox, details, and summary semantics.
 - Selected tabs expose `aria-pressed`; grouped operational regions have specific accessible labels.
 - Status is communicated with text in addition to color.
-- Focus indicators must remain visible and hit targets should be at least 36 px high.
+- Focus indicators must remain visible. Primary action controls should be at least 36px high; compact applied-filter chips use 28px height with a 24px-wide remove target.
+- Filter chips and the Add filter trigger do not shrink inside the horizontally scrolling toolbar. Opening, closing, applying, clearing, and Escape restore keyboard focus without scrolling either the document or toolbar.
+
+- Orders filter dialogs close on Escape or outside interaction and restore trigger focus when explicitly closed.
 
 ## Responsive behavior
 
 - Tabs may horizontally scroll instead of shrinking labels beyond recognition.
-- The primary tracking grid collapses from four columns to two, then one on narrow screens.
+- The primary tracking grid uses four columns above 900px, two through 521–900px, and one at 520px or below. Summary spacing is compact (8px sections, 10px row gap); explicit label/value line heights and start alignment keep the 4px label/value gap stable. Long driver values wrap within their metric. Omit the Overview title/description row and primary-metric vertical dividers; use equal column gaps so wrapped rows share the same left alignment.
 - Evidence metrics wrap into fewer columns while retaining label/value pairs.
 - The map height remains independently resizable and is not changed by shell layout work.
+
+- Orders toolbar uses horizontal scrolling on narrow screens; controls and chip text do not wrap into a second row. Popovers fit within the viewport independently of toolbar overflow.
+- Route endpoint rows follow the same table width and horizontal-scroll behavior as order rows. Endpoint addresses may wrap or truncate through the existing table treatment; observed times use the same two-line planned-versus-actual treatment as order ETA.
 
 ## Interaction states
 
@@ -81,6 +115,10 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 ## Content voice
 
 Use concise operational English consistent with the existing app. Prefer concrete labels such as “Latest position,” “GPS gaps,” and “Tracking evidence.” Avoid celebratory or marketing copy.
+
+- Orders uses short names: Order date (주문일), Delivery date (배송·픽업일), Stop type (배송 유형), Delivery status (배송 상태), Payment (결제 상태), Fulfillment (주문 처리상태).
+- Delivery date means the scheduled delivery/pickup date; Fulfillment remains Shopify fulfillment, separate from CLEVER delivery progress. Stop type retains our evening-delivery and unknown values. Cancellation does not imply Shopify Archived/Open support.
+- Do not copy EasyRoutes shipping-method, task, route, address, tag, or other dimensions unless this app has a matching data contract and a requested need.
 
 ## Implementation constraints
 

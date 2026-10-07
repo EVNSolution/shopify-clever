@@ -1,5 +1,6 @@
 import timeZoneLookup from "@photostructure/tz-lookup";
 
+import { getRouteGroupChildRoutePlanId } from "./route-helpers.js";
 import { geocodeAddress } from "../locations/address-geocoding.server.js";
 import {
   fetchShopifyShopTimeZone,
@@ -128,4 +129,36 @@ export async function resolveRouteTimeZone(
     ...buildResolvedTimeZone(fallbackTimeZone, "fallback", fallbackTimeZoneData),
     errors: fallbackTimeZoneData?.errors ?? [],
   };
+}
+
+// Resolve each depot once, using the same saved location/fallback as route detail.
+export async function resolveRouteListTimeZones(
+  { departureLocation, fallbackTimeZoneData, routePlans = [], routeGroups = [] },
+  options = {},
+) {
+  const plans = new Map();
+  for (const group of routeGroups ?? []) {
+    for (const child of group.children ?? []) {
+      const plan = child.routePlan;
+      const id = getRouteGroupChildRoutePlanId(child);
+      if (id) plans.set(id, plan ?? {});
+    }
+  }
+  for (const plan of routePlans ?? []) {
+    if (plan?.id) plans.set(plan.id, { ...plans.get(plan.id), ...plan });
+  }
+  const resolvedLocations = new Map();
+  return Object.fromEntries(await Promise.all(Array.from(plans, async ([id, routePlan]) => {
+    const savedTimeZone = textOrUndefined(routePlan.scheduledStartTimeZone);
+    if (savedTimeZone) return [id, savedTimeZone];
+    const locationKey = JSON.stringify(getRouteTimeZoneLocation(routePlan, departureLocation));
+    if (!resolvedLocations.has(locationKey)) {
+      resolvedLocations.set(locationKey, resolveRouteTimeZone({
+        departureLocation,
+        fallbackTimeZoneData,
+        routePlan,
+      }, options));
+    }
+    return [id, (await resolvedLocations.get(locationKey)).ianaTimezone];
+  })));
 }

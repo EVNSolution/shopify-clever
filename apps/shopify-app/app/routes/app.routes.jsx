@@ -1,3 +1,5 @@
+import { formatStoreInstant } from "../features/shopify/store-date-time";
+import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -5,6 +7,7 @@ import { Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, us
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import {
   formatRouteStatus,
+  getRouteStatusBadgeColors,
   getVisibleRouteGroupChildren,
   shouldRevalidateRoutesRoute,
 } from "../features/delivery/route-helpers";
@@ -15,6 +18,8 @@ import {
   getRouteDeletePayloadKeys,
   toggleRouteSelection,
 } from "../features/delivery/route-list-rows";
+import { fetchShopifyDepartureLocation } from "../features/locations/shopify-locations.server";
+import { fetchRouteFallbackTimeZone, resolveRouteListTimeZones } from "../features/delivery/route-timezone.server";
 import { deleteDeliveryRoutePlan, fetchDeliveryRoutePlans } from "../features/delivery/route-plans.server";
 import { deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups } from "../features/delivery/route-groups.server";
 import { getServiceErrorNotice } from "../features/service-errors";
@@ -298,6 +303,11 @@ const routeCompletedBadgeStyle = {
   color: "#205c20",
 };
 
+const routeIncompleteBadgeStyle = {
+  ...routeStatusBadgeStyle,
+  ...getRouteStatusBadgeColors("INCOMPLETE"),
+};
+
 const routeCancelledBadgeStyle = {
   ...routeStatusBadgeStyle,
   background: "#fee9e8",
@@ -339,10 +349,10 @@ export const loader = async ({ request }) => {
   }
 
   const authenticationStartedAt = Date.now();
-  const { session } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const authenticationMs = Date.now() - authenticationStartedAt;
   const shopifyShopCacheKey = session?.shop;
-  const [routePlanResult, routeGroupResult] = await Promise.all([
+  const [routePlanResult, routeGroupResult, departureLocationData, fallbackTimeZoneData] = await Promise.all([
     measureRouteLoaderStep(() =>
       fetchDeliveryRoutePlans(request, { cacheKey: shopifyShopCacheKey }),
     ),
@@ -353,11 +363,25 @@ export const loader = async ({ request }) => {
         { cacheKey: shopifyShopCacheKey },
       ),
     ),
+    fetchShopifyDepartureLocation(admin, { cacheKey: shopifyShopCacheKey }),
+    fetchRouteFallbackTimeZone(admin, shopifyShopCacheKey),
   ]);
   const routePlanData = routePlanResult.data;
   const routeGroupData = routeGroupResult.data;
+  const routeTimeZones = await resolveRouteListTimeZones({
+    departureLocation: departureLocationData.departureLocation,
+    fallbackTimeZoneData,
+    routeGroups: routeGroupData.routeGroups,
+    routePlans: routePlanData.routePlans,
+  });
   const loaderData = {
-    errors: [...(routePlanData.errors ?? []), ...(routeGroupData.errors ?? [])],
+    routeTimeZones,
+    errors: [
+      ...(routePlanData.errors ?? []),
+      ...(routeGroupData.errors ?? []),
+      ...(departureLocationData.errors ?? []),
+      ...(fallbackTimeZoneData.errors ?? []),
+    ],
     routeGroups: routeGroupData.routeGroups ?? [],
     routePlans: routePlanData.routePlans ?? [],
   };
@@ -540,11 +564,8 @@ function formatRouteAmount(totalAmount, currencyCode) {
   }
 }
 
-function formatRouteInstant(value) {
-  if (!value) return "-";
-  const instant = new Date(value);
-  if (Number.isNaN(instant.getTime())) return "-";
-  return `${instant.toISOString().slice(0, 16).replace("T", " ")} UTC`;
+function formatRouteInstant(value, timeZone = "UTC") {
+  return formatStoreInstant(value, timeZone, { empty: "-" });
 }
 
 function buildRoutesSummary(routeRows) {
@@ -640,6 +661,8 @@ function getStatusBadgeStyle(status) {
       return routeInProgressBadgeStyle;
     case "Completed":
       return routeCompletedBadgeStyle;
+    case "Incomplete":
+      return routeIncompleteBadgeStyle;
     case "Cancelled":
       return routeCancelledBadgeStyle;
     default:
@@ -648,6 +671,7 @@ function getStatusBadgeStyle(status) {
 }
 
 export default function RoutesPage() {
+  const storeTimeZone = useStoreTimeZone();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
@@ -655,6 +679,7 @@ export default function RoutesPage() {
   const {
     routeGroups = [],
     routePlans = [],
+    routeTimeZones = {},
     errors = [],
     routesPerformance: serverRoutesPerformance,
   } = useLoaderData();
@@ -927,14 +952,14 @@ export default function RoutesPage() {
                       <span style={getStatusBadgeStyle(route.status)}>{route.isClickable ? translate(language, `routes.status.${formatRouteStatus(route.status).toLowerCase().replaceAll(" ", "_")}`) : "-"}</span>
                     </td>
                     <td style={routeTableCellStyle}>{route.driver ?? "-"}</td>
-                    <td style={routeTableCellStyle}>{formatRouteInstant(route.startTime)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.startTime, route.startTimeZone ?? routeTimeZones[route.id])}</td>
                     <td style={routeNumberCellStyle}>{route.orders ?? "-"}</td>
                     <td style={routeNumberCellStyle}>{route.totalItems ?? "-"}</td>
                     <td style={routeTableCellStyle}>{formatRouteDurationSeconds(route.driveTimeSeconds)}</td>
                     <td style={routeTableCellStyle}>{formatRouteDistanceMeters(route.distanceMeters)}</td>
                     <td style={routeTableCellStyle}>{formatRouteAmount(route.totalAmount, route.currencyCode)}</td>
-                    <td style={routeTableCellStyle}>{formatRouteInstant(route.createdAt)}</td>
-                    <td style={routeTableCellStyle}>{formatRouteInstant(route.updatedAt)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.createdAt, storeTimeZone)}</td>
+                    <td style={routeTableCellStyle}>{formatRouteInstant(route.updatedAt, storeTimeZone)}</td>
                   </tr>
                 ))}
               </tbody>

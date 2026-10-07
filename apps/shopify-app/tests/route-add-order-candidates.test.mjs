@@ -1,5 +1,7 @@
 /* eslint-env node */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import test from "node:test";
 
 import { translate } from "../app/i18n/i18n.js";
@@ -27,7 +29,7 @@ function candidate(overrides = {}) {
   };
 }
 
-test("route add-order candidates include every eligible unplanned order regardless of route date", () => {
+test("route add-order candidates include eligible orders from other route groups regardless of route date", () => {
   const candidates = buildRouteAddOrderCandidates([
     candidate(),
     candidate({ id: "gid://shopify/Order/1002", name: "#1002", orderedDate: "2026-08-02T12:00:00Z", orderId: "order-1002", deliveryDate: "2026-08-13" }),
@@ -35,13 +37,77 @@ test("route add-order candidates include every eligible unplanned order regardle
     candidate({ id: "gid://shopify/Order/1004", name: "#1004", orderId: "order-1004", hasCoordinates: false }),
     candidate({ id: "gid://shopify/Order/1005", name: "#1005", orderId: "order-1005", deliveryStopStatus: "DELIVERED" }),
     candidate({ id: "gid://shopify/Order/1006", name: "#1006", orderId: "order-1006", cancelledAt: "2026-08-01T00:00:00Z" }),
+    candidate({ id: "gid://shopify/Order/1007", name: "#1007", orderId: "order-1007", deliveryStopStatus: "FAILED" }),
+    candidate({ id: "gid://shopify/Order/1008", name: "#1008", orderId: "order-1008", deliveryStopStatus: "SKIPPED" }),
+    candidate({ id: "gid://shopify/Order/1009", name: "#1009", orderId: "order-1009", deliveryStopStatus: "CANCELLED" }),
   ], {
     routePlan: { deliveryDate: "2026-08-06" },
   });
 
-  assert.deepEqual(candidates.map((order) => order.orderId), ["order-1001", "order-1002"]);
+  assert.deepEqual(candidates.map((order) => order.orderId), [
+    "order-1001",
+    "order-1002",
+    "order-1003",
+    "order-1004",
+    "order-1005",
+    "order-1006",
+    "order-1007",
+    "order-1008",
+    "order-1009",
+  ]);
   assert.equal(candidates[0].orderDate, "2026-08-01");
   assert.equal(candidates[1].deliveryDate, "2026-08-13");
+  assert.deepEqual(candidates.map((order) => [order.addable, order.addBlockedReason]), [
+    [true, null],
+    [true, null],
+    [true, null],
+    [false, "Missing coordinates"],
+    [false, "Delivery completed"],
+    [false, "Cancelled"],
+    [false, "Delivery failed"],
+    [false, "Delivery skipped"],
+    [false, "Cancelled"],
+  ]);
+});
+
+test("route add-order candidates block only orders assigned within the current route group", () => {
+  const routeGroup = {
+    assignments: [{ orderId: "unassigned-member" }],
+    children: [
+      { orderIds: ["current-child"], routePlanId: "route-current" },
+      { orderIds: ["sibling-child"], routePlanId: "route-sibling" },
+      { orderIds: ["child-without-plan"] },
+    ],
+  };
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ orderId: "foreign-planned", routePlanId: "route-foreign" }),
+    candidate({ orderId: "current-child", routePlanId: "route-current" }),
+    candidate({ orderId: "sibling-child", routePlanId: "route-sibling" }),
+    candidate({ orderId: "unassigned-member", routePlanId: "legacy-primary" }),
+    candidate({ orderId: "child-without-plan", routePlanId: "legacy-primary" }),
+  ], { routeGroup });
+
+  assert.deepEqual(candidates.map(({ addable, addBlockedReason, orderId }) => [orderId, addable, addBlockedReason]), [
+    ["foreign-planned", true, null],
+    ["current-child", false, "Already assigned within this route group"],
+    ["sibling-child", false, "Already assigned within this route group"],
+    ["unassigned-member", true, null],
+    ["child-without-plan", true, null],
+  ]);
+});
+
+test("route add-order candidates keep terminal blockers for orders planned in another group", () => {
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ orderId: "foreign-delivered", routePlanId: "route-foreign", deliveryStopStatus: "DELIVERED" }),
+    candidate({ orderId: "foreign-cancelled", routePlanId: "route-foreign", cancelledAt: "2026-08-01T00:00:00Z" }),
+    candidate({ orderId: "foreign-missing-coordinates", routePlanId: "route-foreign", hasCoordinates: false }),
+  ], { routeGroup: { children: [] } });
+
+  assert.deepEqual(candidates.map(({ addBlockedReason }) => addBlockedReason), [
+    "Delivery completed",
+    "Cancelled",
+    "Missing coordinates",
+  ]);
 });
 
 test("route add-order candidates support all, specific, and inclusive range date filters", () => {
@@ -74,6 +140,39 @@ test("route add-order date filters stay unfiltered until their required date is 
 
   assert.deepEqual(filterRouteAddOrderCandidatesByDate(candidates, { mode: "single" }), candidates);
   assert.deepEqual(filterRouteAddOrderCandidatesByDate(candidates, { mode: "range" }), candidates);
+});
+
+test("route add-order candidates expose and filter orders whose selected date is pending", () => {
+  const candidates = buildRouteAddOrderCandidates([
+    candidate({ name: "#2324", orderId: "delivery-pending", deliveryDate: null, routePlanId: "foreign-plan" }),
+    candidate({ name: "#1002", orderId: "order-date-missing", orderedDate: null, deliveryDate: "2026-08-13" }),
+    candidate({ name: "#1003", orderId: "dated", deliveryDate: "2026-08-20" }),
+  ]);
+
+  assert.equal(candidates[0].deliveryDate, "Date Pending");
+  assert.equal(candidates[1].orderDate, "No date");
+  assert.deepEqual(
+    filterRouteAddOrderCandidatesByDate(candidates, { field: "deliveryDate", mode: "missing" }).map((order) => order.orderId),
+    ["delivery-pending"],
+  );
+  assert.deepEqual(
+    filterAndSortRouteAddOrderCandidates(candidates, { query: "2324" }).map((order) => order.orderId),
+    ["delivery-pending"],
+  );
+  assert.deepEqual(updateRouteAddOrderSelection([], [candidates[0]], true), ["delivery-pending"]);
+  assert.deepEqual(
+    filterRouteAddOrderCandidatesByDate(candidates, { field: "orderDate", mode: "missing" }).map((order) => order.orderId),
+    ["order-date-missing"],
+  );
+});
+
+test("route add-order dialog offers the pending label that matches the selected date field", () => {
+  const routeDetailSource = readFileSync(
+    join(process.cwd(), "app/routes/app.routes.$routeId.jsx"),
+    "utf8",
+  );
+
+  assert.match(routeDetailSource, /<option value="missing">\{addOrderDateField === "deliveryDate" \? "Date Pending" : "No date"\}<\/option>/);
 });
 
 test("route add-order search accepts number variants, whitespace, and partial prefixed names", () => {
@@ -119,7 +218,7 @@ test("route add-order query intersects date filters and empty query restores all
       query: "1496",
       startDate: "2026-08-06",
     }).map((order) => order.orderId),
-    ["matching-date"],
+    ["other-date", "matching-date"],
   );
   assert.deepEqual(filterAndSortRouteAddOrderCandidates(candidates, { query: "   " }).map((order) => order.orderId), [
     "other-date",
@@ -138,11 +237,31 @@ test("visible-only Select all retains selections outside the current filters", (
   );
 });
 
+test("visible-only Select all excludes blocked orders", () => {
+  const visible = [
+    { addable: true, orderId: "available" },
+    { addable: false, orderId: "blocked" },
+  ];
+
+  assert.deepEqual(updateRouteAddOrderSelection([], visible, true), ["available"]);
+});
+
 test("route add-order search labels and empty states are localized", () => {
   assert.equal(translate("en", "routes.addOrder.search.label"), "Order number");
   assert.equal(translate("ko", "routes.addOrder.search.label"), "주문번호");
   assert.match(translate("en", "routes.addOrder.search.placeholder"), /#1496/);
   assert.match(translate("ko", "routes.addOrder.search.placeholder"), /1496/);
-  assert.match(translate("en", "routes.addOrder.search.empty"), /No eligible orders/);
-  assert.match(translate("ko", "routes.addOrder.search.empty"), /추가 가능한 주문/);
+  assert.match(translate("en", "routes.addOrder.search.empty"), /No orders/);
+  assert.match(translate("ko", "routes.addOrder.search.empty"), /일치하는 주문/);
+});
+
+test("route add-order UI exposes blocked orders and the action validates only addable candidates", () => {
+  const routeDetailSource = readFileSync(join(process.cwd(), "app/routes/app.routes.$routeId.jsx"), "utf8");
+  const routeDetailServerSource = readFileSync(join(process.cwd(), "app/features/delivery/route-detail.server.js"), "utf8");
+
+  assert.match(routeDetailSource, /Search covers all delivery dates, including Date Pending/);
+  assert.match(routeDetailSource, /disabled=\{!order\.addable\}/);
+  assert.match(routeDetailSource, /\{order\.addBlockedReason \?\? "Available"\}/);
+  assert.match(routeDetailSource, /selectableFilteredAddOrderCandidates/);
+  assert.match(routeDetailServerSource, /buildRouteAddOrderCandidates\(orderData\.orders, \{ routeGroup: routeGroupData\.routeGroup \}\)[\s\S]*\.filter\(\(order\) => order\.addable\)/);
 });

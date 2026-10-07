@@ -99,7 +99,7 @@ test("inventory history summarizes real inventory orders", () => {
     ],
   });
 
-  assert.equal(history[0].title, "Initial snapshot · 2026-06-30 05:12");
+  assert.equal(history[0].title, "Initial snapshot · 2026-06-30 05:12 UTC");
   assert.equal(history[0].meta, "3 orders · 9 items");
   assert.deepEqual(history[0].orders, [
     {
@@ -164,7 +164,7 @@ test("inventory history groups API-owned change events after the initial snapsho
   });
 
   assert.equal(history.length, 2);
-  assert.equal(history[1].title, "Inventory update · 2026-06-30 14:12");
+  assert.equal(history[1].title, "Inventory update · 2026-06-30 14:12 UTC");
   assert.equal(history[1].meta, "2 orders · 5 items");
   assert.deepEqual(history[1].orders, [
     {

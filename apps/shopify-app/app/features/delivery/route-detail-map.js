@@ -14,12 +14,10 @@ const ROUTE_DETAIL_STOP_POINT_LAYER_ID = "route-detail-snapped-stop-points";
 const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking";
 const ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID = "route-detail-live-tracking-trail";
 const ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID = "route-detail-live-tracking-connector";
-const ROUTE_DETAIL_TRACKING_INFERRED_LAYER_ID = "route-detail-live-tracking-inferred";
 const ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID = "route-detail-live-driver-position";
 const ROUTE_DETAIL_TRACKING_LAYER_IDS = [
   ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID,
   ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
-  ROUTE_DETAIL_TRACKING_INFERRED_LAYER_ID,
   ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
 ];
 const ROUTE_DETAIL_COMPLETED_STOP_COLOR = "#8c9196";
@@ -245,7 +243,6 @@ function syncRouteDetailLineOrder(map) {
   for (const layerId of [
     ROUTE_DETAIL_ROUTE_LAYER_ID,
     ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
-    ROUTE_DETAIL_TRACKING_INFERRED_LAYER_ID,
     ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID,
   ]) {
     if (map.getLayer?.(layerId)) map.moveLayer?.(layerId, firstMarkerLayerId);
@@ -370,25 +367,6 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
         "line-dasharray": [0.8, 1.8],
         "line-opacity": 0.72,
         "line-width": 2.5,
-      },
-    }, beforeMarkerLayerId);
-  }
-  if (!map.getLayer?.(ROUTE_DETAIL_TRACKING_INFERRED_LAYER_ID)) {
-    map.addLayer({
-      id: ROUTE_DETAIL_TRACKING_INFERRED_LAYER_ID,
-      type: "line",
-      source: ROUTE_DETAIL_TRACKING_SOURCE_ID,
-      filter: [
-        "all",
-        ["==", ["get", "trackingType"], "trackingConnector"],
-        ["==", ["get", "trackingSource"], "inferred"],
-      ],
-      layout: { "line-cap": "round", "line-join": "round" },
-      paint: {
-        "line-color": "#a95a00",
-        "line-dasharray": [2.5, 1],
-        "line-opacity": 0.9,
-        "line-width": 3.5,
       },
     }, beforeMarkerLayerId);
   }

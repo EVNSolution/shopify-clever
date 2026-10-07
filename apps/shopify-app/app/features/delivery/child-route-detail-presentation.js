@@ -178,6 +178,146 @@ export function storeLocalDateTimeToIso(value, ianaTimezone) {
   return null;
 }
 
+function getRouteEndMode(routePlan, executionEvidence) {
+  const value = firstText(
+    executionEvidence?.routeEndMode,
+    routePlan?.routeEndMode,
+    routePlan?.constraints?.routeEndMode,
+  );
+  return value === "END_AT_LAST_STOP" ? "END_AT_LAST_STOP" : "RETURN_TO_DEPOT";
+}
+
+function getTimeWindowStartInstant(currentMs, timeWindowStart, ianaTimezone) {
+  const normalizedTimeWindow = firstText(timeWindowStart);
+  const explicitTimestampMs = Date.parse(normalizedTimeWindow ?? "");
+  if (Number.isFinite(explicitTimestampMs)) return explicitTimestampMs;
+
+  const match = normalizedTimeWindow?.match(/^(\d{1,2}):(\d{2})/);
+  const localDateTime = formatStoreLocalDateTimeInput(currentMs, ianaTimezone);
+  if (!match || !localDateTime) return null;
+
+  const hour = String(Number(match[1])).padStart(2, "0");
+  const candidate = storeLocalDateTimeToIso(`${localDateTime.slice(0, 10)}T${hour}:${match[2]}`, ianaTimezone);
+  const candidateMs = Date.parse(candidate ?? "");
+  return Number.isFinite(candidateMs) ? candidateMs : null;
+}
+
+function getPlannedRouteEndAt({ ianaTimezone, routeEndMode, routeMetrics, scheduledStartAt, stops }) {
+  const startMs = Date.parse(scheduledStartAt ?? "");
+  const totalDriveSeconds = numberOrUndefined(routeMetrics?.durationSeconds);
+  const orderedStops = sortChildStopsByActualSequence(Array.isArray(stops) ? stops : []);
+  if (!Number.isFinite(startMs) || totalDriveSeconds === undefined || orderedStops.length === 0) return null;
+
+  const outboundDriveSeconds = orderedStops.reduce((total, stop) => {
+    const duration = numberOrUndefined(stop?.durationFromPreviousSeconds);
+    return duration === undefined ? Number.NaN : total + duration;
+  }, 0);
+  if (!Number.isFinite(outboundDriveSeconds)) return null;
+  const remainingDriveSeconds = totalDriveSeconds - outboundDriveSeconds;
+  if (routeEndMode === "END_AT_LAST_STOP" && Math.abs(remainingDriveSeconds) > 5) return null;
+  if (routeEndMode === "RETURN_TO_DEPOT" && remainingDriveSeconds < -5) return null;
+
+  let currentMs = startMs;
+  for (const [stopIndex, stop] of orderedStops.entries()) {
+    currentMs += Number(stop.durationFromPreviousSeconds) * 1_000;
+    const windowStartMs = getTimeWindowStartInstant(currentMs, stop?.timeWindowStart, ianaTimezone);
+    if (firstText(stop?.timeWindowStart) && windowStartMs == null) return null;
+    if (windowStartMs != null && windowStartMs > currentMs) currentMs = windowStartMs;
+    const isLastStopArrival = routeEndMode === "END_AT_LAST_STOP" && stopIndex === orderedStops.length - 1;
+    if (!isLastStopArrival) {
+      const serviceMinutes = numberOrUndefined(stop?.serviceMinutes);
+      if (serviceMinutes === undefined || serviceMinutes < 0) return null;
+      currentMs += serviceMinutes * 60_000;
+    }
+  }
+
+  if (routeEndMode === "RETURN_TO_DEPOT") {
+    currentMs += Math.max(0, remainingDriveSeconds) * 1_000;
+  }
+  return new Date(currentMs).toISOString();
+}
+
+export function buildRouteEndpointPresentation({
+  actualArrivalByStopId = {},
+  departureLocation,
+  executionEvidence,
+  ianaTimezone,
+  routeMetrics,
+  routePlan,
+  stops,
+} = {}) {
+  const orderedStops = sortChildStopsByActualSequence(Array.isArray(stops) ? stops : []);
+  const lastStop = orderedStops.at(-1) ?? null;
+  const routeEndMode = getRouteEndMode(routePlan, executionEvidence);
+  const scheduledStartAt = firstText(routePlan?.scheduledStartAt);
+  const actualStartAt = firstText(executionEvidence?.start?.occurredAt);
+  const plannedEndAt = getPlannedRouteEndAt({
+    ianaTimezone,
+    routeEndMode,
+    routeMetrics,
+    scheduledStartAt,
+    stops: orderedStops,
+  });
+
+  const returnEvidence = executionEvidence?.returnToDepot;
+  const lastStopId = firstText(lastStop?.deliveryStopId);
+  const lastStopArrival = lastStopId ? firstText(actualArrivalByStopId[lastStopId]) : null;
+  const returnConfirmedAt = returnEvidence?.status === "CONFIRMED"
+    ? firstText(returnEvidence?.observedAt)
+    : null;
+  const actualEndAt = routeEndMode === "RETURN_TO_DEPOT" ? returnConfirmedAt : lastStopArrival;
+  const departureAddress = firstText(
+    departureLocation?.endpointAddress,
+    departureLocation?.address,
+    departureLocation?.name,
+  );
+  const savedCoordinates = departureLocation?.savedCoordinates;
+  const currentCoordinates = departureLocation?.currentCoordinates;
+  const currentAddressMatchesSavedDepot = Array.isArray(savedCoordinates)
+    && Array.isArray(currentCoordinates)
+    && savedCoordinates.length >= 2
+    && currentCoordinates.length >= 2
+    && savedCoordinates.every((coordinate, index) => (
+      Number.isFinite(Number(coordinate))
+      && Number.isFinite(Number(currentCoordinates[index]))
+      && Math.abs(Number(coordinate) - Number(currentCoordinates[index])) <= 0.000001
+    ));
+  const endpointDepartureAddress = departureLocation?.addressSource === "UNAVAILABLE"
+    ? null
+    : departureLocation?.addressSource === "CURRENT_SETTING"
+      ? currentAddressMatchesSavedDepot && departureAddress
+        ? departureAddress
+        : null
+      : departureAddress;
+  const endpointDepartureAddressTitle = departureLocation?.addressSource === "CURRENT_SETTING"
+    && endpointDepartureAddress
+    ? "Current location address matched to the saved depot coordinates"
+    : null;
+
+  return {
+    end: {
+      actualAt: actualEndAt ?? null,
+      actualLabel: actualEndAt
+        ? routeEndMode === "RETURN_TO_DEPOT" ? "Return confirmed" : "Actual arrival"
+        : "Unconfirmed",
+      address: routeEndMode === "RETURN_TO_DEPOT"
+        ? endpointDepartureAddress ?? EMPTY_LABEL
+        : lastStop ? getStopAddress(lastStop) : EMPTY_LABEL,
+      addressTitle: routeEndMode === "RETURN_TO_DEPOT" ? endpointDepartureAddressTitle : null,
+      ianaTimezone,
+      plannedAt: plannedEndAt,
+    },
+    start: {
+      actualAt: actualStartAt ?? null,
+      actualLabel: actualStartAt ? "Actual departure" : "Unconfirmed",
+      address: endpointDepartureAddress ?? EMPTY_LABEL,
+      addressTitle: endpointDepartureAddressTitle,
+      ianaTimezone,
+      plannedAt: scheduledStartAt ?? null,
+    },
+  };
+}
+
 export function formatChildEtaLabel(value, ianaTimezone) {
   const parts = formatDateParts(value, ianaTimezone, {
     hour: "2-digit",
@@ -558,5 +698,32 @@ export function buildChildRouteOrderRows(stops, {
         instructions: getStopInstructions(stop),
       },
     };
+  });
+}
+
+export function buildRouteOrderRows(routeRows, {
+  actualArrivalByStopId = {},
+  actualArrivalRoutePlanId,
+  ianaTimezone,
+} = {}) {
+  return (Array.isArray(routeRows) ? routeRows : []).flatMap((routeRow, routeIndex) => {
+    const sourceRouteId = firstText(routeRow?.id, routeRow?.routeKey) ?? `route-${routeIndex + 1}`;
+    const sourceRoutePlanId = firstText(routeRow?.routePlanId);
+    const routeActualArrivalByStopId = sourceRoutePlanId && sourceRoutePlanId === actualArrivalRoutePlanId
+      ? actualArrivalByStopId
+      : {};
+
+    return buildChildRouteOrderRows(routeRow?.stops, {
+      actualArrivalByStopId: routeActualArrivalByStopId,
+      ianaTimezone,
+    }).map((row) => ({
+      ...row,
+      rowKey: `${sourceRouteId}:${row.id}`,
+      sourceRouteColor: firstText(routeRow?.color),
+      sourceRouteId,
+      sourceRoutePlanId: sourceRoutePlanId ?? null,
+      sourceRouteStatus: firstText(routeRow?.status),
+      sourceRouteTitle: routeRow?.isUnassigned ? "Unassigned" : firstText(routeRow?.title) ?? `Route ${routeIndex + 1}`,
+    }));
   });
 }

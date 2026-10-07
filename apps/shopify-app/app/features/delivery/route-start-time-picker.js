@@ -1,7 +1,11 @@
+import { getStoreDate } from "../shopify/store-date-time.js";
 import { createElement as h, useEffect, useMemo, useRef, useState } from "react";
+
+import { storeLocalDateTimeToIso } from "./child-route-detail-presentation.js";
 
 const MONTH_FORMATTER = new Intl.DateTimeFormat("en-US", {
   month: "long",
+  timeZone: "UTC",
   year: "numeric",
 });
 
@@ -105,6 +109,21 @@ export function getRouteStartPickerSummary(draft) {
   return `${draft.date} · ${String(Number(draft.hour)).padStart(2, "0")}:${String(Number(draft.minute)).padStart(2, "0")} ${draft.period}`;
 }
 
+export function getRouteStartTimezoneAbbreviation(draft, fallbackAbbreviation) {
+  const value = buildRouteStartDateTimeValue(draft);
+  if (!value) return fallbackAbbreviation;
+  const instant = storeLocalDateTimeToIso(value, draft?.timezone);
+  if (!instant) return undefined;
+  try {
+    return new Intl.DateTimeFormat("en-US", {
+      timeZone: draft.timezone,
+      timeZoneName: "short",
+    }).formatToParts(new Date(instant)).find((part) => part.type === "timeZoneName")?.value;
+  } catch {
+    return undefined;
+  }
+}
+
 export function getRouteStartTimezoneOptions(defaultTimezone = "") {
   const supportedTimezones = typeof Intl.supportedValuesOf === "function"
     ? Intl.supportedValuesOf("timeZone")
@@ -156,7 +175,7 @@ export function buildRouteStartCalendarMonth(year, month) {
 }
 
 function getInitialVisibleMonth(draft) {
-  const date = isValidDateText(draft?.date) ? draft.date : new Date().toISOString().slice(0, 10);
+  const date = isValidDateText(draft?.date) ? draft.date : getStoreDate(new Date(), draft?.timezone) ?? getStoreDate(new Date(), "UTC");
   const [year, month] = date.split("-").map(Number);
   return { month, year };
 }
@@ -206,6 +225,7 @@ export function RouteStartTimePicker({
     [visibleMonth.month, visibleMonth.year],
   );
   const summary = getRouteStartPickerSummary(normalizedDraft);
+  const selectedTimezoneAbbreviation = getRouteStartTimezoneAbbreviation(normalizedDraft, timezoneAbbreviation);
   const timezoneOptions = useMemo(
     () => getRouteStartTimezoneOptions(storeTimezone),
     [storeTimezone],
@@ -337,8 +357,8 @@ export function RouteStartTimePicker({
             },
             [
               h("span", { key: "timezone-value" }, normalizedDraft.timezone || "Select timezone"),
-              timezoneAbbreviation && normalizedDraft.timezone === storeTimezone
-                ? h("small", { key: "timezone-abbreviation" }, timezoneAbbreviation)
+              selectedTimezoneAbbreviation && normalizedDraft.timezone === storeTimezone
+                ? h("small", { key: "timezone-abbreviation" }, selectedTimezoneAbbreviation)
                 : null,
               h("span", { "aria-hidden": "true", className: "route-start-time-picker__timezone-chevron", key: "timezone-chevron" }, "⌄"),
             ],
