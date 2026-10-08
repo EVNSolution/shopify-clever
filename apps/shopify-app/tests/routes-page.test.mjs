@@ -5,6 +5,7 @@ import { join } from "node:path";
 import test from "node:test";
 import { createMemoryRouter, redirect } from "react-router";
 import { shouldRevalidateRoutesRoute } from "../app/features/delivery/route-helpers.js";
+import { isRouteListRefreshCleanup, ROUTE_LIST_REFRESH_PARAM } from "../app/features/delivery/route-list-refresh.js";
 
 const root = process.cwd();
 const routesPageSource = readFileSync(
@@ -147,6 +148,49 @@ test("Routes parent loader stays cached throughout nested GET navigation", () =>
   assert.match(routesPageSource, /return shouldRevalidateRoutesRoute\(args\)/);
 });
 
+test("production revalidation skips only pure refresh-query cleanup and preserves explicit refresh and mutations", () => {
+  const start = routesPageSource.indexOf("export function shouldRevalidate");
+  const end = routesPageSource.indexOf("export const action", start);
+  assert.ok(start >= 0 && end > start);
+  const shouldRevalidate = Function("isRouteListRefreshCleanup", "shouldRevalidateRoutesRoute", "ROUTE_LIST_REFRESH_PARAM", `${routesPageSource.slice(start, end).replace("export function", "function")} return shouldRevalidate;`)(isRouteListRefreshCleanup, shouldRevalidateRoutesRoute, ROUTE_LIST_REFRESH_PARAM);
+  const currentUrl = new URL("https://synthetic-app.test/app/routes?shop=synthetic.myshopify.com&embedded=1&status=Ready");
+  currentUrl.searchParams.set(ROUTE_LIST_REFRESH_PARAM, "synthetic-marker");
+  const cleanUrl = new URL(currentUrl);
+  cleanUrl.searchParams.delete(ROUTE_LIST_REFRESH_PARAM);
+  const args = { currentUrl, nextUrl: cleanUrl, defaultShouldRevalidate: true };
+  assert.equal(shouldRevalidate(args), false, "successful metadata cleanup preserves the confirmed loader data");
+  assert.equal(shouldRevalidate({ ...args, formMethod: "GET" }), false);
+  assert.equal(shouldRevalidate({ ...args, formMethod: "POST" }), true);
+  assert.equal(shouldRevalidate({ ...args, nextUrl: currentUrl }), true, "same-URL explicit Retry stays available");
+  assert.equal(shouldRevalidate({ ...args, currentUrl: cleanUrl, nextUrl: currentUrl }), true, "adding refresh metadata runs the loader");
+  const differentFilter = new URL(cleanUrl);
+  differentFilter.searchParams.set("status", "Incomplete");
+  assert.equal(shouldRevalidate({ ...args, nextUrl: differentFilter }), true, "a real filter change still revalidates");
+  assert.equal(shouldRevalidate({ ...args, currentUrl: cleanUrl, nextUrl: cleanUrl }), true, "ordinary explicit revalidation is unchanged");
+  for (const pathname of ["/app/routes", "/app/routes/"]) {
+    const requestedRoot = new URL(currentUrl);
+    requestedRoot.pathname = pathname;
+    for (const currentPath of ["/app/routes/", "/app/routes/synthetic-child"]) {
+      const previous = new URL(cleanUrl);
+      previous.pathname = currentPath;
+      assert.equal(shouldRevalidate({ currentUrl: previous, nextUrl: requestedRoot, defaultShouldRevalidate: false }), true, "a new root refresh query overrides retained nested and trailing-slash navigation");
+      const sameRequest = new URL(previous);
+      sameRequest.searchParams.set(ROUTE_LIST_REFRESH_PARAM, requestedRoot.searchParams.get(ROUTE_LIST_REFRESH_PARAM));
+      if (currentPath !== pathname) {
+        const unchangedRequest = { currentUrl: sameRequest, nextUrl: requestedRoot, defaultShouldRevalidate: false };
+        assert.equal(shouldRevalidate(unchangedRequest), shouldRevalidateRoutesRoute(unchangedRequest), "an unchanged refresh query preserves the base nested and canonical-slash navigation rules");
+      }
+    }
+  }
+  const detail = new URL(cleanUrl);
+  detail.pathname = "/app/routes/synthetic-child";
+  assert.equal(shouldRevalidate({ currentUrl: detail, nextUrl: cleanUrl, defaultShouldRevalidate: false }), false, "ordinary detail return still preserves the list cache");
+  const nextDetail = new URL(detail);
+  nextDetail.pathname = "/app/routes/synthetic-other-child";
+  nextDetail.searchParams.set(ROUTE_LIST_REFRESH_PARAM, "synthetic-new-request");
+  assert.equal(shouldRevalidate({ currentUrl: detail, nextUrl: nextDetail, defaultShouldRevalidate: false }), false, "the root-only refresh override does not affect nested details");
+});
+
 test("Routes Router integration preserves mutations, refresh, entry, and cached Back navigation", async () => {
   let parentLoads = 0;
   const router = createRoutesTestRouter(["/app/routes?status=READY"], () => {
@@ -193,7 +237,7 @@ test("Routes Router integration preserves mutations, refresh, entry, and cached 
 });
 
 test("Routes page loads persisted route plans and route groups from the delivery Admin API", () => {
-  assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans \} from "\.\.\/features\/delivery\/route-plans\.server"/);
+  assert.match(routesPageSource, /import \{ deleteDeliveryRoutePlan, fetchDeliveryRoutePlans, getCleverAppId \} from "\.\.\/features\/delivery\/route-plans\.server"/);
   assert.match(routesPageSource, /import \{ deleteDeliveryRouteGroup, deleteDeliveryRouteGroupChildRoutes, fetchDeliveryRouteGroups \} from "\.\.\/features\/delivery\/route-groups\.server"/);
   assert.match(routesPageSource, /import \{ authenticate \} from "\.\.\/shopify\.server"/);
   assert.match(routesPageSource, /import \{ Outlet, redirect,/);
@@ -203,10 +247,10 @@ test("Routes page loads persisted route plans and route groups from the delivery
   assert.match(routesPageSource, /return redirect\(`\$\{url\.pathname\}\$\{url\.search\}\$\{url\.hash\}`\)/);
   assert.match(routesPageSource, /const \{ admin, session \} = await authenticate\.admin\(request\)/);
   assert.match(routesPageSource, /const shopifyShopCacheKey = session\?\.shop/);
-  assert.match(routesPageSource, /fetchDeliveryRoutePlans\(request,\s*\{\s*cacheKey: shopifyShopCacheKey,?\s*\}\)/);
+  assert.match(routesPageSource, /fetchDeliveryRoutePlans\(request,\s*\{\s*cacheKey: shopifyShopCacheKey, refreshCache\s*\}\)/);
   assert.match(
     routesPageSource,
-    /fetchDeliveryRouteGroups\(\s*request,\s*\{ view: "routes-list" \},\s*\{ cacheKey: shopifyShopCacheKey \},?\s*\)/,
+    /fetchDeliveryRouteGroups\(\s*request,\s*\{ view: "routes-list" \},\s*\{ cacheKey: shopifyShopCacheKey, refreshCache \},?\s*\)/,
   );
   assert.doesNotMatch(routeDetailServerSource, /view:\s*["']routes-list["']/);
   assert.match(routesPageSource, /export const action = async \(\{ request \}\) => \{/);
@@ -436,7 +480,7 @@ test("Routes page removes the previous copied detail and settings rules", () => 
 });
 
 test("Routes table selection column uses checkboxes and a single delete action", () => {
-  assert.match(routesPageSource, /import \{ useEffect, useState \} from "react"/);
+  assert.match(routesPageSource, /import \{ useEffect, useRef, useState \} from "react"/);
   assert.match(routesPageSource, /import \{ useAppBridge \} from "@shopify\/app-bridge-react"/);
   assert.match(routesPageSource, /useFetcher/);
   assert.match(routesPageSource, /const shopify = useAppBridge\(\)/);
@@ -468,7 +512,7 @@ test("Routes table selection column uses checkboxes and a single delete action",
 
 
 test("Routes table rows are clickable links into route detail", () => {
-  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRouteLoaderData, useSearchParams \} from "react-router"/);
+  assert.match(routesPageSource, /import \{ Outlet, redirect, useFetcher, useLoaderData, useNavigate, useParams, useRevalidator, useRouteLoaderData, useSearchParams \} from "react-router"/);
   assert.match(routesPageSource, /const navigate = useNavigate\(\)/);
   assert.match(routesPageSource, /function handleRouteRowClick\(route\) \{/);
   assert.match(routesPageSource, /function handleRouteRowKeyDown\(event, route\) \{/);
@@ -823,7 +867,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /const routeDriverSummary = routeDriverId[\s\S]*: "Unassigned"/);
   assert.match(
     routeDetailSource,
-    /<h1 className="route-detail-title"[\s\S]*<span style=\{routeStatusBadgeStyle\}>[\s\S]*aria-label="Route summary" className="route-overview-summary"/,
+    /<h1 className="route-detail-title"[\s\S]*<span style=\{\{ \.\.\.routeStatusBadgeStyle, \.\.\.getRouteStatusBadgeColors\(routeExecutionStatus\) \}\}>[\s\S]*aria-label="Route summary" className="route-overview-summary"/,
   );
   assert.match(
     routeDetailSource,
@@ -870,7 +914,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*removeTimelineStop\(/);
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
-  assert.match(routeDetailSource, /onDragStart=\{canReorderRouteStops \? \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\) : undefined\}/);
+  assert.match(routeDetailSource, /onDragStart=\{canReorderRouteStops && isRouteStopReorderAllowed\(routeRow.status\) \? \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\) : undefined\}/);
   assert.match(routeDetailSource, /function getLineItemList\(lineItems\) \{/);
   assert.match(routeDetailSource, /function getRouteStopLineItems\(stop\) \{/);
   assert.match(routeDetailSource, /stop\?\.rawPayload\?\.lineItems/);
@@ -1523,7 +1567,7 @@ test("Route detail can move between child routes in the same route group", () =>
 
 test("child detail supports adding and reversing stops without refreshing over a draft", () => {
   assert.match(routeDetailSource, /hasRouteAllocationDraftRef\.current = hasRouteAllocationDraft/);
-  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
+  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current, previousSnapshot, routeExecutionStatusRef\.current\)/);
   assert.match(routeDetailSource, />Add order<\/button>/);
   assert.match(routeDetailSource, /aria-label="Add route actions"[\s\S]*>\{translate\(language, "routes\.group\.addEmpty"\)\}<\/button>/);
   assert.match(routeDetailSource, /aria-expanded=\{routeActionsMenu === "edit"\}[\s\S]*>Edit ▾<\/button>/);

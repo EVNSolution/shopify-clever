@@ -100,7 +100,7 @@ test("live tracking keeps the server past-path snapshot while the stream connect
 test("server ETA lifecycle events render Rolling ETA and actual arrival in one column", () => {
   const routeDetailSource = readIfPresent(routeDetailPath);
 
-  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current\)/);
+  assert.match(routeDetailSource, /shouldRevalidateTrackingEta\(progressEvent, hasRouteAllocationDraftRef\.current, previousSnapshot, routeExecutionStatusRef\.current\)/);
   assert.match(routeDetailSource, /revalidatorRef\.current\.revalidate\(\)/);
   assert.match(routeDetailSource, /\["ETA", "120px"\]/);
   assert.doesNotMatch(routeDetailSource, /\["Actual arrival", "120px"\]/);

@@ -1,0 +1,244 @@
+{
+  "verifiedAt": "2026-10-07",
+  "environment": "Codex in-app browser; localhost top site, 127.0.0.1 app iframe; production components/list loader/fetch helpers/15000ms cache; frozen server cache clock; synthetic API/SSE/auth/maps/App Bridge",
+  "scenarios": [
+    {
+      "scenario": "mixed group INCOMPLETE remove",
+      "terminalRemoveEnabled": false,
+      "markCompletedEnabled": true,
+      "readyRemoveEnabled": true,
+      "afterReadyRemoval": "Ready child stops 3 -> 2; Incomplete child remains 11; group stops 17 -> 16",
+      "blockedActions": 0
+    },
+    {
+      "scenario": "iframe COMPLETED native Back including trailing-slash entry",
+      "row": "\t\nReady standalone\n\tCompleted\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:05 EDT",
+      "listResults": [
+        {
+          "cache": {
+            "upstreamReads": 2,
+            "ttlMs": 15000,
+            "sourceStatus": "COMPLETED"
+          },
+          "returnedStatus": "READY",
+          "requested": [],
+          "confirmed": [],
+          "errorCount": 0
+        },
+        {
+          "cache": {
+            "upstreamReads": 4,
+            "ttlMs": 15000,
+            "sourceStatus": "COMPLETED"
+          },
+          "returnedStatus": "COMPLETED",
+          "requested": [
+            {
+              "routeId": "route-ready",
+              "status": "COMPLETED",
+              "version": "fd8ecff4-98a5-4b77-bd38-017516991284"
+            }
+          ],
+          "confirmed": [
+            {
+              "routeId": "route-ready",
+              "status": "COMPLETED",
+              "version": "fd8ecff4-98a5-4b77-bd38-017516991284"
+            }
+          ],
+          "errorCount": 0
+        }
+      ]
+    },
+    {
+      "scenario": "iframe matched Forward/Back",
+      "fixtureStatus": "/app/routes · List reads 3 · Detail reads 2 · Held loaders 0 · Held snapshots 0 · Blocked actions 0",
+      "row": "\t\nReady standalone\n\tCompleted\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:05 EDT"
+    },
+    {
+      "scenario": "iframe CANCELLED detail full reload then Routes button",
+      "row": "\t\nReady standalone\n\tCancelled\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:05 EDT",
+      "listResults": [
+        {
+          "cache": {
+            "upstreamReads": 2,
+            "ttlMs": 15000,
+            "sourceStatus": "CANCELLED"
+          },
+          "returnedStatus": "READY",
+          "requested": [],
+          "confirmed": [],
+          "errorCount": 0
+        },
+        {
+          "cache": {
+            "upstreamReads": 4,
+            "ttlMs": 15000,
+            "sourceStatus": "CANCELLED"
+          },
+          "returnedStatus": "CANCELLED",
+          "requested": [
+            {
+              "routeId": "route-ready",
+              "status": "CANCELLED",
+              "version": "00608d20-4c6a-40d1-b543-d1a3fe9e116d"
+            }
+          ],
+          "confirmed": [
+            {
+              "routeId": "route-ready",
+              "status": "CANCELLED",
+              "version": "00608d20-4c6a-40d1-b543-d1a3fe9e116d"
+            }
+          ],
+          "errorCount": 0
+        }
+      ]
+    },
+    {
+      "scenario": "iframe INCOMPLETE fresh read failure",
+      "fixtureStatus": "/app/routes · List reads 2 · Detail reads 1 · Held loaders 0 · Held snapshots 0 · Blocked actions 0",
+      "retryEnabled": true,
+      "listResults": [
+        {
+          "cache": {
+            "upstreamReads": 4,
+            "ttlMs": 15000,
+            "sourceStatus": "INCOMPLETE"
+          },
+          "requested": [
+            {
+              "routeId": "route-ready",
+              "status": "INCOMPLETE",
+              "version": "70c869df-f237-42f6-937b-944084b42e33"
+            }
+          ],
+          "confirmed": [],
+          "errorCount": 2
+        }
+      ]
+    },
+    {
+      "scenario": "iframe INCOMPLETE explicit retry",
+      "fixtureStatus": "/app/routes · List reads 3 · Detail reads 1 · Held loaders 0 · Held snapshots 0 · Blocked actions 0",
+      "row": "\t\nReady standalone\n\tIncomplete\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:05 EDT",
+      "retryVisible": 0,
+      "listResults": [
+        {
+          "cache": {
+            "upstreamReads": 4,
+            "ttlMs": 15000,
+            "sourceStatus": "INCOMPLETE"
+          },
+          "requested": [
+            {
+              "routeId": "route-ready",
+              "status": "INCOMPLETE",
+              "version": "70c869df-f237-42f6-937b-944084b42e33"
+            }
+          ],
+          "confirmed": [],
+          "errorCount": 2
+        },
+        {
+          "cache": {
+            "upstreamReads": 6,
+            "ttlMs": 15000,
+            "sourceStatus": "INCOMPLETE"
+          },
+          "returnedStatus": "INCOMPLETE",
+          "requested": [
+            {
+              "routeId": "route-ready",
+              "status": "INCOMPLETE",
+              "version": "70c869df-f237-42f6-937b-944084b42e33"
+            }
+          ],
+          "confirmed": [
+            {
+              "routeId": "route-ready",
+              "status": "INCOMPLETE",
+              "version": "70c869df-f237-42f6-937b-944084b42e33"
+            }
+          ],
+          "errorCount": 0
+        }
+      ]
+    },
+    {
+      "scenario": "iframe grouped child READY cache to INCOMPLETE",
+      "row": "\t\nReady child\n\tIncomplete\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:05 EDT",
+      "listResults": [
+        {
+          "cache": {
+            "upstreamReads": 2,
+            "ttlMs": 15000,
+            "sourceStatus": "READY"
+          },
+          "childStatuses": [
+            {
+              "id": "child-incomplete",
+              "status": "INCOMPLETE"
+            },
+            {
+              "id": "child-missing"
+            },
+            {
+              "id": "child-ready",
+              "status": "READY"
+            }
+          ],
+          "requested": [],
+          "confirmed": [],
+          "errorCount": 0
+        },
+        {
+          "cache": {
+            "upstreamReads": 4,
+            "ttlMs": 15000,
+            "sourceStatus": "READY"
+          },
+          "childStatuses": [
+            {
+              "id": "child-incomplete",
+              "status": "INCOMPLETE"
+            },
+            {
+              "id": "child-missing"
+            },
+            {
+              "id": "child-ready",
+              "status": "INCOMPLETE"
+            }
+          ],
+          "requested": [
+            {
+              "routeId": "child-ready",
+              "status": "INCOMPLETE",
+              "version": "1289c661-2330-4bc7-9c99-3b22cda2ceb1"
+            }
+          ],
+          "confirmed": [
+            {
+              "routeId": "child-ready",
+              "status": "INCOMPLETE",
+              "version": "1289c661-2330-4bc7-9c99-3b22cda2ceb1"
+            }
+          ],
+          "errorCount": 0
+        }
+      ]
+    },
+    {
+      "scenario": "iframe grouped child full page reload",
+      "row": "\t\nReady child\n\tIncomplete\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:05 EDT",
+      "fixtureStatus": "/app/routes · List reads 1 · Detail reads 0 · Held loaders 0 · Held snapshots 0 · Blocked actions 0"
+    },
+    {
+      "scenario": "Korean preserved labels",
+      "incompleteRow": "\t\nReady child\n\t미완료\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:05 EDT",
+      "unknownRow": "\t\nMissing state child\n\t확인 필요\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:00 EDT",
+      "returnGraceRow": "\t\nCompleted with return grace\n\t완료\tSynthetic driver\t2026-10-03 09:00 EDT\t3\t3\t1 hr 30 min\t25 km\t$75.00\t2026-10-03 08:00 EDT\t2026-10-03 16:00 EDT"
+    }
+  ]
+}

@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 
+import { normalizeRouteExecutionStatus } from "../app/features/delivery/route-helpers.js";
+
 const routeDetailSource = readFileSync(
   new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url),
   "utf8",
@@ -24,7 +26,7 @@ function loadStatusHelpers() {
     "function isRouteExecutionLockedForStopMembership(",
     "function getRouteTotalItems(",
   );
-  return Function(`${helperSource}\nreturn { isRouteExecutionLockedForStopMembership, isRouteExecutionInProgressForStopMembership, isRouteStopReorderAllowed };`)();
+  return Function("normalizeRouteExecutionStatus", `${helperSource}\nreturn { isRouteExecutionLockedForStopMembership, isRouteExecutionInProgressForStopMembership, isRouteStopReorderAllowed, isRouteTimelineStopMoveAllowed, hasTerminalRouteStopDraft };`)(normalizeRouteExecutionStatus);
 }
 
 function loadReorderPayloadBuilder() {
@@ -72,6 +74,55 @@ test("standalone reorder payload preserves the exact saved stop set", () => {
   ]);
   assert.equal(buildRouteStopReorderPayload([first], [first, second]), null);
   assert.equal(buildRouteStopReorderPayload([first, { ...second, deliveryStopId: "stop-3", id: "stop-3" }], [first, second]), null);
+});
+
+test("incomplete routes keep membership and reorder terminal guards", () => {
+  const helpers = loadStatusHelpers();
+  assert.equal(helpers.isRouteExecutionLockedForStopMembership("INCOMPLETE"), true);
+  assert.equal(helpers.isRouteExecutionInProgressForStopMembership("INCOMPLETE"), false);
+  assert.equal(helpers.isRouteStopReorderAllowed("INCOMPLETE"), false);
+});
+
+test("mixed route groups protect incomplete source and destination while ready routes remain editable", () => {
+  const { isRouteTimelineStopMoveAllowed } = loadStatusHelpers();
+  const ready = { id: "ready", status: "Ready" };
+  const anotherReady = { id: "another-ready", status: "READY" };
+  const incomplete = { id: "incomplete", status: "Incomplete" };
+  assert.equal(isRouteTimelineStopMoveAllowed(ready, ready), true);
+  assert.equal(isRouteTimelineStopMoveAllowed(ready, anotherReady), true);
+  assert.equal(isRouteTimelineStopMoveAllowed(incomplete, incomplete), false);
+  assert.equal(isRouteTimelineStopMoveAllowed(incomplete, ready), false);
+  assert.equal(isRouteTimelineStopMoveAllowed(ready, incomplete), false);
+  assert.equal(isRouteTimelineStopMoveAllowed(undefined, ready), false);
+  const active = { id: "active", status: "IN_PROGRESS" };
+  assert.equal(isRouteTimelineStopMoveAllowed(active, active), true);
+  assert.equal(isRouteTimelineStopMoveAllowed(active, ready), false);
+});
+
+test("mixed-group drag, send, polygon, removal, and save handlers apply row-level guards", () => {
+  assert.match(sourceBetween("const moveDraggedTimelineStop = ", "const handleRouteTimelineDragStart = "), /isRouteTimelineStopMoveAllowed\(sourceRouteRow, targetRouteRow\)/);
+  assert.match(sourceBetween("const handleRouteTimelineDragStart = ", "const handleRouteTimelineStopClick = "), /isRouteStopReorderAllowed\(routeRow.status\)/);
+  assert.match(sourceBetween("const handleSendChildStopToRoute = ", "const handleOpenChildStopSendTargets = "), /isRouteTimelineStopMoveAllowed\(sourceRouteRow, targetRouteRow\)/);
+  assert.match(sourceBetween("const canRemoveChildStopFromGroup = ", "const removeChildStopFromGroup = "), /isRouteExecutionLockedForStopMembership\(sourceRouteRow.status\)/);
+  assert.match(sourceBetween("const removeChildStopFromGroup = ", "const handleSendChildStopToRoute = "), /canRemoveChildStopFromGroup\(row\)/);
+  assert.match(sourceBetween("const handleRouteTimelineRemoveDrop = ", "const submitRouteAction = "), /isRouteExecutionLockedForStopMembership\(sourceRouteRow.status\)/);
+  assert.match(sourceBetween("const handleAssignPolygonToRoute = ", "const handleOpenRouteSelector = "), /isRouteTimelineStopMoveAllowed\(routeRow, targetRouteRow\)/);
+  assert.match(sourceBetween("const canSaveRouteDraft = ", "const routePolygonSourceStops = "), /hasTerminalRouteStopDraft\(contextRouteRows, routeTimelineOrderByRouteId\)/);
+});
+
+test("ready child reorder remains saveable beside an unchanged incomplete sibling", () => {
+  const { hasTerminalRouteStopDraft } = loadStatusHelpers();
+  const source = sourceBetween("function getTimelineRouteStopIds(", "function buildTimelineRows(");
+  const moveTimelineStop = Function(`${source}\nreturn moveTimelineStop;`)();
+  const rows = [
+    { id: "ready", status: "READY", stops: [{ id: "a" }, { id: "b" }] },
+    { id: "history", status: "INCOMPLETE", stops: [{ id: "c" }, { id: "d" }] },
+  ];
+  const draft = moveTimelineStop(rows, {}, { stopId: "a" }, "ready");
+  assert.deepEqual(draft, { ready: ["b", "a"], history: ["c", "d"] });
+  assert.equal(hasTerminalRouteStopDraft(rows, draft), false);
+  assert.equal(hasTerminalRouteStopDraft(rows, { ...draft, history: ["d", "c"] }), true);
+  assert.equal(hasTerminalRouteStopDraft(rows, { ...draft, history: ["c"] }), true);
 });
 
 test("active drag and save paths keep membership and driver assignment protected", () => {

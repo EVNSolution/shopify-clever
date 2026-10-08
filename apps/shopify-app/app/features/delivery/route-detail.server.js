@@ -247,7 +247,7 @@ function getRouteGroupChildRoutePlan(routeGroup, child, routePlanId, index, stop
     ...routePlan,
     id: textOrUndefined(routePlan.id) ?? routePlanId,
     name: getRouteGroupChildRouteName(routeGroup, child, routePlan, index),
-    status: textOrUndefined(routePlan.status ?? child?.status ?? child?.displayStatus) ?? "DRAFT",
+    status: textOrUndefined(routePlan.status ?? child?.displayStatus ?? child?.status) ?? null,
     driverId: textOrUndefined(routePlan.driverId ?? child?.driverId) ?? null,
     driver: routePlan.driver ?? (child?.driverName ? { displayName: child.driverName } : null),
     stopsCount: numberOrUndefined(routePlan.stopsCount ?? child?.stopsCount) ?? stops.length,

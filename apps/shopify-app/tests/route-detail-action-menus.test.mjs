@@ -30,6 +30,9 @@ function renderActions(overrides = {}) {
     routeGroupActionBusy: false,
     routeActionsMenu: null,
     hasEditableRouteRows: true,
+    canDraftEditChildStopMembership: true,
+    canEditRouteStopDetails: true,
+    canReorderRouteStops: true,
     reOptimizeRouteGroupBusy: false,
     refreshRouteOrdersBusy: false,
     canRefreshRouteOrders: true,
@@ -273,4 +276,14 @@ test("rearranged controls share scoped sizing while keeping map tools outside th
   assert.match(actionsJsx, /className="route-detail-control-row"/);
   assert.match(source, /aria-label=\{`\$\{activeRouteSelector.title\} selector`\}\s*className="route-detail-selector-controls"/);
   assert.doesNotMatch(source.slice(source.indexOf("<MapPanel", controlsStart), actionsStart), /route-detail-control-row/);
+});
+
+
+test("terminal route menus disable membership and order changes", () => {
+  const guarded = { isRouteGroupDetail: false, canDraftEditChildStopMembership: false, canEditRouteStopDetails: false, canReorderRouteStops: false };
+  const add = renderActions({ ...guarded, routeActionsMenu: "add", isOrdinaryRouteDetail: true }).tree;
+  assert.equal(button(add, "Add Empty Route").props.disabled, true);
+  const edit = renderActions({ ...guarded, routeActionsMenu: "edit", isMaterializedChildRouteDetail: true }).tree;
+  assert.equal(button(edit, "Reverse stops").props.disabled, true);
+  assert.equal(button(edit, "Re-optimize").props.disabled, true);
 });

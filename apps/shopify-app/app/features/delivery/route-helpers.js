@@ -74,12 +74,48 @@ export function formatRouteDeliveryScope(routePlan, emptyLabel = "-") {
   }) ?? emptyLabel;
 }
 
-export function formatRouteStatus(status) {
+// These legacy values describe a route before execution. Missing and unsupported
+// values have no known execution state and must not enable Ready controls.
+const READY_ROUTE_STATUSES = new Set(["READY", "DRAFT", "PUBLISHED", "OPTIMIZED", "ASSIGNED", "UNSTARTED", "CHANGED"]);
+const TERMINAL_ROUTE_STATUSES = new Set(["COMPLETED", "INCOMPLETE", "CANCELLED"]);
+
+export function normalizeRouteExecutionStatus(status) {
   const value = textOrUndefined(status)?.toUpperCase().replace(/[\s-]+/g, "_");
-  if (value === "IN_PROGRESS") return "In progress";
-  if (value === "COMPLETED") return "Completed";
-  if (value === "CANCELLED") return "Cancelled";
-  return "Ready";
+  if (READY_ROUTE_STATUSES.has(value)) return "READY";
+  if (value === "IN_PROGRESS" || TERMINAL_ROUTE_STATUSES.has(value)) return value;
+  return "UNKNOWN";
+}
+
+export function isTerminalRouteExecutionStatus(status) {
+  return TERMINAL_ROUTE_STATUSES.has(normalizeRouteExecutionStatus(status));
+}
+
+export function mergeRouteExecutionStatus(currentStatus, incomingStatus) {
+  return isTerminalRouteExecutionStatus(currentStatus)
+    ? normalizeRouteExecutionStatus(currentStatus)
+    : normalizeRouteExecutionStatus(incomingStatus);
+}
+
+export function formatRouteStatus(status) {
+  return {
+    READY: "Ready",
+    IN_PROGRESS: "In progress",
+    COMPLETED: "Completed",
+    INCOMPLETE: "Incomplete",
+    CANCELLED: "Cancelled",
+    UNKNOWN: "Unknown",
+  }[normalizeRouteExecutionStatus(status)];
+}
+
+export function getRouteStatusBadgeColors(status) {
+  return {
+    READY: { background: "#f1f1f1", color: "#616161" },
+    IN_PROGRESS: { background: "#e0f0ff", color: "#00527c" },
+    COMPLETED: { background: "#e3f1df", color: "#205c20" },
+    INCOMPLETE: { background: "#fff1c7", color: "#5e4200" },
+    CANCELLED: { background: "#fee9e8", color: "#8e1f0b" },
+    UNKNOWN: { background: "#f1f1f1", color: "#616161" },
+  }[normalizeRouteExecutionStatus(status)];
 }
 
 export function shouldRevalidateRoutesRoute({

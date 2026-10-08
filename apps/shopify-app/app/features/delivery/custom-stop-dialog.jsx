@@ -1,4 +1,5 @@
 /* eslint-disable react/prop-types */
+import { isStopTargetRouteValid } from "./custom-stop-form";
 
 const dialogStyle = {
   background: "#fff",
@@ -108,7 +109,7 @@ export function CustomStopDialog({
 }) {
   const title = isEdit ? "Edit custom stop" : "Add custom stop";
   const submitLabel = isEdit ? "Save changes" : "Add custom stop";
-  const targetRouteRequired = targetRouteOptions.some((option) => option.value);
+  const targetRouteValid = isStopTargetRouteValid(targetRouteOptions, targetRoutePlanId);
   return (
     <div aria-label={title} aria-busy={busy} aria-modal="true" role="dialog" style={dialogStyle}>
       <div>
@@ -159,9 +160,9 @@ export function CustomStopDialog({
       <div style={actionsStyle}>
         <button disabled={busy} onClick={onCancel} style={buttonStyle} type="button">Cancel</button>
         <button
-          disabled={busy || (targetRouteRequired && !targetRoutePlanId)}
+          disabled={busy || !targetRouteValid}
           onClick={onSubmit}
-          style={{ ...primaryButtonStyle, ...(busy || (targetRouteRequired && !targetRoutePlanId) ? { cursor: "wait", opacity: 0.7 } : null) }}
+          style={{ ...primaryButtonStyle, ...(busy || !targetRouteValid ? { cursor: "wait", opacity: 0.7 } : null) }}
           type="button"
         >
           {busy ? (

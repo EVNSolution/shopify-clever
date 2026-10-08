@@ -71,3 +71,8 @@ function cleanText(value) {
   if (value == null) return "";
   return String(value).trim();
 }
+
+// An empty group may use its unassigned option. Materialized groups require an enabled child.
+export function isStopTargetRouteValid(options = [], routePlanId = "") {
+  return options.length === 0 || options.some((option) => !option.disabled && option.value === routePlanId);
+}

@@ -1,3 +1,5 @@
+import { isTerminalRouteExecutionStatus, mergeRouteExecutionStatus, normalizeRouteExecutionStatus } from "./route-helpers.js";
+
 const FALLBACK_RECONNECT_DELAY_MS = 3_000;
 const FALLBACK_STREAM_INACTIVITY_MS = 45_000;
 const EARTH_RADIUS_METERS = 6_371_000;
@@ -19,12 +21,6 @@ function nonNegativeNumberOrNull(value) {
   if (value == null) return null;
   const number = numberOrNull(value);
   return number != null && number >= 0 ? number : null;
-}
-
-function normalizeRouteExecutionStatus(status) {
-  const value = textOrNull(status)?.toUpperCase().replace(/[\s-]+/g, "_");
-  if (value === "IN_PROGRESS" || value === "COMPLETED" || value === "CANCELLED") return value;
-  return "READY";
 }
 
 function normalizeTrackingPosition(position) {
@@ -194,6 +190,12 @@ function normalizeRouteTrackingSnapshot(snapshot) {
 
   return {
     executionEvidence: normalizeRouteExecutionEvidence(snapshot?.executionEvidence),
+    operationalState: snapshot?.operationalState && typeof snapshot.operationalState === "object"
+      ? {
+          routePlanId: textOrNull(snapshot.operationalState.routePlanId),
+          routeStatus: textOrNull(snapshot.operationalState.routeStatus),
+        }
+      : null,
     schemaVersion: textOrNull(snapshot?.schemaVersion) ?? "route_tracking.v1",
     routePlanId: textOrNull(snapshot?.routePlanId),
     policy: snapshot?.policy && typeof snapshot.policy === "object" ? { ...snapshot.policy } : null,
@@ -335,6 +337,9 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
   const mergedBase = normalizeRouteTrackingSnapshot({
     ...historyBase,
     executionEvidence: incomingSnapshot.executionEvidence ?? current.executionEvidence,
+    operationalState: isTerminalRouteExecutionStatus(current.operationalState?.routeStatus)
+      ? current.operationalState
+      : incomingSnapshot.operationalState ?? current.operationalState,
     policy: incomingSnapshot.policy ?? current.policy,
     progress: mergeTrackingProgressSnapshot(current.progress, incomingSnapshot.progress),
     roadMatchedPath: getNewestRoadMatchedPath(current.roadMatchedPath, incomingSnapshot.roadMatchedPath),
@@ -1264,13 +1269,32 @@ function getRouteTrackingFreshness(snapshot, now = Date.now()) {
   return { key: "OFFLINE", label: "Offline", ageMs };
 }
 
-function getRouteExecutionStatusFromTrackingEvent(currentStatus, event) {
+function getRouteExecutionStatusFromTrackingEvent(currentStatus, event, currentSnapshot = null) {
   const status = normalizeRouteExecutionStatus(currentStatus);
+  // Finalization is authoritative and has no synthetic driver event. A buffered
+  // event from the closed stream must not undo the loader's terminal status.
+  if (isTerminalRouteExecutionStatus(status)) return status;
+  const latestEvent = currentSnapshot?.progress?.latestEvent;
+  if (latestEvent && (getPositionTimestamp(event) < getPositionTimestamp(latestEvent)
+    || (textOrNull(event?.eventId) && event.eventId === latestEvent.eventId)
+    || (event?.eventType === latestEvent.eventType && getPositionTimestamp(event) === getPositionTimestamp(latestEvent)))) return status;
   const eventType = textOrNull(event?.eventType);
   if (eventType === "ROUTE_STARTED") return "IN_PROGRESS";
   if (eventType === "ROUTE_PAUSED") return "READY";
   if (eventType === "ROUTE_COMPLETED") return "COMPLETED";
   return status;
+}
+
+function getRouteExecutionStatusFromTrackingSnapshot(currentStatus, snapshot, routePlanId) {
+  const status = normalizeRouteExecutionStatus(currentStatus);
+  const expectedRoutePlanId = textOrNull(routePlanId);
+  if (isTerminalRouteExecutionStatus(status) || !expectedRoutePlanId) return status;
+  if (textOrNull(snapshot?.routePlanId) !== expectedRoutePlanId
+    || textOrNull(snapshot?.operationalState?.routePlanId) !== expectedRoutePlanId) return status;
+  const incomingStatus = normalizeRouteExecutionStatus(snapshot.operationalState.routeStatus);
+  return isTerminalRouteExecutionStatus(incomingStatus)
+    ? mergeRouteExecutionStatus(status, incomingStatus)
+    : status;
 }
 
 function getRouteTrackingCompletionTime(snapshot) {
@@ -1337,7 +1361,14 @@ function doesTrackingEventRefreshEta(event) {
   return eventType === "ROUTE_STARTED" || eventType === "STOP_ARRIVED";
 }
 
-function shouldRevalidateTrackingEta(event, hasRouteAllocationDraft) {
+function shouldRevalidateTrackingEta(event, hasRouteAllocationDraft, currentSnapshot = null, routeStatus = null) {
+  if (isTerminalRouteExecutionStatus(routeStatus)
+    || isTerminalRouteExecutionStatus(currentSnapshot?.operationalState?.routeStatus)
+    || currentSnapshot?.progress?.latestEvent?.eventType === "ROUTE_COMPLETED") return false;
+  const latestEvent = currentSnapshot?.progress?.latestEvent;
+  if (latestEvent && (getPositionTimestamp(event) < getPositionTimestamp(latestEvent)
+    || (textOrNull(event?.eventId) && event.eventId === latestEvent.eventId)
+    || (event?.eventType === latestEvent.eventType && getPositionTimestamp(event) === getPositionTimestamp(latestEvent)))) return false;
   return !hasRouteAllocationDraft && doesTrackingEventRefreshEta(event);
 }
 
@@ -1360,12 +1391,28 @@ function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
       trackingLabel: "Completed",
     };
   }
+  if (executionStatus === "INCOMPLETE") {
+    return {
+      connectionLabel: "closed",
+      driverStage: "INCOMPLETE",
+      mode: "history",
+      trackingLabel: "Incomplete",
+    };
+  }
   if (executionStatus === "CANCELLED") {
     return {
       connectionLabel: "closed",
-      driverStage: "READY",
+      driverStage: "CANCELLED",
       mode: hasHistory ? "history" : "inactive",
       trackingLabel: "Cancelled",
+    };
+  }
+  if (executionStatus === "UNKNOWN") {
+    return {
+      connectionLabel: "closed",
+      driverStage: "UNKNOWN",
+      mode: hasHistory ? "history" : "inactive",
+      trackingLabel: "Unknown",
     };
   }
   return hasHistory
@@ -1388,6 +1435,7 @@ export {
   doesTrackingEventRefreshEta,
   shouldRevalidateTrackingEta,
   getRouteExecutionStatusFromTrackingEvent,
+  getRouteExecutionStatusFromTrackingSnapshot,
   formatRouteTrackingCompletionLabel,
   getRouteTrackingCompletionTime,
   getRouteTrackingLineFeatures,
