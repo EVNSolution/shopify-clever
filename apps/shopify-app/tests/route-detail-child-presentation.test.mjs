@@ -1019,3 +1019,174 @@ test("endpoint rows and column widths stay aligned with the stop table columns",
   assert.equal(widths.match(/"\d+px"/g).length, CHILD_ROUTE_ORDER_COLUMNS.length);
   assert.equal(endpointRow.match(/<td\b/g).length, CHILD_ROUTE_ORDER_COLUMNS.length);
 });
+
+const returnDepot = [-79.4748, 43.7637];
+const returnPath = (points) => ({
+  recordedPath: {
+    firstOccurredAt: points[0][0],
+    geometry: { type: "LineString", coordinates: points.map(([, longitude, latitude]) => [longitude, latitude]) },
+    lastOccurredAt: points.at(-1)[0],
+    lastReceivedAt: points.at(-1)[0],
+    samples: points.map(([time], index) => ({ eventId: `event-${index}`, occurredAt: time, receivedAt: time })),
+    schemaVersion: "route_tracking_geometry.v1",
+    sourcePointCount: points.length,
+  },
+});
+const returnTrackingSnapshot = returnPath([
+  ["2026-10-08T13:00:00.000Z", -79.4748, 43.7637],
+  ["2026-10-08T14:00:00.000Z", -79.4, 43.7],
+  ["2026-10-08T16:30:00.000Z", -79.42, 43.72],
+  ["2026-10-08T16:50:00.000Z", -79.4749, 43.7638],
+  ["2026-10-09T12:06:00.000Z", -79.4748, 43.7637],
+]);
+const returnInput = (overrides = {}) => ({
+  actualArrivalByStopId: { s1: "2026-10-08T14:00:00.000Z", s2: "2026-10-08T16:14:00.000Z" },
+  departureLocation: { address: "4475 Chesswood Dr", savedCoordinates: returnDepot },
+  executionEvidence: { returnToDepot: { status: "UNAVAILABLE", thresholdMeters: 150 }, routeEndMode: "RETURN_TO_DEPOT" },
+  ianaTimezone: "America/Toronto",
+  routeMetrics: { durationSeconds: 5_400 },
+  routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-10-08T13:00:00.000Z" },
+  stops: [
+    { deliveryStopId: "s1", deliveryStopStatus: "DELIVERED", latitude: 43.7, longitude: -79.4, sequence: 1 },
+    { deliveryStopId: "s2", deliveryStopStatus: "DELIVERED", latitude: 43.72, longitude: -79.42, sequence: 2 },
+  ],
+  trackingSnapshot: returnTrackingSnapshot,
+  ...overrides,
+});
+
+test("End shows the first GPS return near the depot when the server has no completion evidence", () => {
+  const end = buildRouteEndpointPresentation(returnInput()).end;
+
+  assert.equal(end.actualAt, "2026-10-08T16:50:00.000Z");
+  assert.equal(end.actualLabel, "Return observed (GPS)");
+  assert.equal(end.observedFromGps, true);
+  assert.ok(end.observedDistanceMeters > 0 && end.observedDistanceMeters < 30);
+  assert.equal(end.observedThresholdMeters, 150);
+});
+
+test("End keeps the server's confirmed return and never guesses without full evidence", () => {
+  const confirmed = buildRouteEndpointPresentation(returnInput({
+    executionEvidence: { returnToDepot: { observedAt: "2026-10-08T16:55:00.000Z", status: "CONFIRMED" }, routeEndMode: "RETURN_TO_DEPOT" },
+  })).end;
+  assert.equal(confirmed.actualAt, "2026-10-08T16:55:00.000Z");
+  assert.equal(confirmed.actualLabel, "Return confirmed");
+  assert.equal(confirmed.observedFromGps, false);
+
+  const unobserved = (overrides) => buildRouteEndpointPresentation(returnInput(overrides)).end;
+  const lastStop = { deliveryStopId: "s2", deliveryStopStatus: "DELIVERED", latitude: 43.72, longitude: -79.42, sequence: 2 };
+  const firstStop = { deliveryStopId: "s1", deliveryStopStatus: "DELIVERED", latitude: 43.7, longitude: -79.4, sequence: 1 };
+  for (const [name, overrides] of Object.entries({
+    "a stop is not finished": { stops: [firstStop, { ...lastStop, deliveryStopStatus: "ARRIVED" }] },
+    "no stop has arrival evidence": { actualArrivalByStopId: {} },
+    "the last stop is within the depot radius": { stops: [firstStop, { ...lastStop, latitude: 43.7638, longitude: -79.4749 }] },
+    "the depot has no coordinates": { departureLocation: { address: "4475 Chesswood Dr" } },
+    "the route ends at the last stop": { executionEvidence: { routeEndMode: "END_AT_LAST_STOP" }, routePlan: { routeEndMode: "END_AT_LAST_STOP", scheduledStartAt: "2026-10-08T13:00:00.000Z" } },
+    "no tracking snapshot is loaded": { trackingSnapshot: null },
+  })) {
+    const end = unobserved(overrides);
+    assert.equal(end.observedFromGps, false, name);
+    if (name !== "the route ends at the last stop") assert.equal(end.actualAt, null, name);
+  }
+});
+
+test("a skipped or cancelled stop does not block the observed return", () => {
+  const input = returnInput();
+  const end = buildRouteEndpointPresentation({
+    ...input,
+    stops: [...input.stops, { deliveryStopId: "s3", deliveryStopStatus: "CANCELLED", latitude: 43.75, longitude: -79.45, sequence: 3 }],
+  }).end;
+  assert.equal(end.actualAt, "2026-10-08T16:50:00.000Z");
+});
+
+test("a finished stop without arrival evidence is flagged only once arrival evidence has loaded", () => {
+  const stops = [
+    { deliveryStopId: "s1", deliveryStopStatus: "DELIVERED", estimatedArrivalAt: "2026-10-08T15:00:00.000Z", sequence: 1 },
+    { deliveryStopId: "s2", deliveryStopStatus: "DELIVERED", estimatedArrivalAt: "2026-10-08T16:23:00.000Z", sequence: 2 },
+    { deliveryStopId: "s3", deliveryStopStatus: "PENDING", estimatedArrivalAt: "2026-10-08T17:00:00.000Z", sequence: 3 },
+    { deliveryStopId: "s4", deliveryStopStatus: "CANCELLED", estimatedArrivalAt: "2026-10-08T17:20:00.000Z", sequence: 4 },
+  ];
+  const options = { actualArrivalByStopId: { s1: "2026-10-08T15:02:00.000Z" }, ianaTimezone: "America/Toronto" };
+  const loaded = buildChildRouteOrderRows(stops, { ...options, arrivalEvidenceLoaded: true });
+  assert.deepEqual(loaded.map((row) => row.arrivalMissing), [false, true, false, false]);
+  assert.deepEqual(buildChildRouteOrderRows(stops, options).map((row) => row.arrivalMissing), [false, false, false, false]);
+
+  const routeRows = [{ id: "route-1", routePlanId: "plan-1", stops }];
+  const forThisRoute = buildRouteOrderRows(routeRows, { ...options, actualArrivalRoutePlanId: "plan-1", arrivalEvidenceLoaded: true });
+  const forAnotherRoute = buildRouteOrderRows(routeRows, { ...options, actualArrivalRoutePlanId: "plan-2", arrivalEvidenceLoaded: true });
+  assert.equal(forThisRoute[1].arrivalMissing, true);
+  assert.equal(forAnotherRoute[1].arrivalMissing, false);
+});
+
+test("tracking times use one fixed store-time format and the table marks missing evidence instead of faking it", async () => {
+  const { formatStoreInstant } = await import("../app/features/shopify/store-date-time.js");
+  const { translate } = await import("../app/i18n/i18n.js");
+  assert.equal(formatStoreInstant("2026-10-08T18:18:22.000Z", "America/Toronto", { empty: "–", seconds: true }), "2026-10-08 14:18:22 EDT");
+
+  const trackingTimestamp = routeDetailSource.slice(
+    routeDetailSource.indexOf("function formatTrackingTimestamp("),
+    routeDetailSource.indexOf("function isRouteDispatched("),
+  );
+  assert.match(trackingTimestamp, /formatStoreInstant\(value, ianaTimezone, \{ empty: ROUTE_EMPTY_LABEL, seconds: true \}\)/);
+  assert.doesNotMatch(trackingTimestamp, /Intl\.DateTimeFormat\(undefined/);
+
+  const etaCell = routeDetailSource.slice(
+    routeDetailSource.indexOf("function renderChildRouteEta("),
+    routeDetailSource.indexOf("// Amount follows the ETA treatment"),
+  );
+  assert.match(etaCell, /row\?\.arrivalMissing/);
+  assert.match(etaCell, /No arrival event was recorded/);
+
+  assert.match(routeDetailSource, /buildRouteEndpointPresentation\(\{[\s\S]*trackingSnapshot: displayedRouteTrackingSnapshot/);
+  assert.match(routeDetailSource, /arrivalEvidenceLoaded: Array\.isArray\(displayedRouteTrackingSnapshot\?\.stopArrivals\)/);
+  assert.match(routeDetailSource, /routeEndpointPresentation\.end\.observedFromGps/);
+  assert.equal(translate("en", "routes.detail.tracking.return.OBSERVED"), "Observed (GPS)");
+  assert.equal(translate("ko", "routes.detail.tracking.return.OBSERVED"), "GPS 관측");
+});
+
+test("End shows the leg back to the depot so the Drive time column adds up to the route total", () => {
+  const stops = [
+    { deliveryStopId: "s1", distanceFromPreviousMeters: 9_100, durationFromPreviousSeconds: 840, sequence: 1, serviceMinutes: 5 },
+    { deliveryStopId: "s2", distanceFromPreviousMeters: 6_000, durationFromPreviousSeconds: 660, sequence: 2, serviceMinutes: 5 },
+    { deliveryStopId: "s3", distanceFromPreviousMeters: 3_100, durationFromPreviousSeconds: 360, sequence: 3, serviceMinutes: 5 },
+  ];
+  const input = (overrides = {}) => ({
+    departureLocation: { address: "4475 Chesswood Dr" },
+    executionEvidence: { routeEndMode: "RETURN_TO_DEPOT" },
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { distanceMeters: 30_600, durationSeconds: 2_880 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-10-08T13:00:00.000Z" },
+    stops,
+    ...overrides,
+  });
+
+  const end = buildRouteEndpointPresentation(input()).end;
+  assert.equal(end.returnLegSeconds, 1_020);
+  assert.equal(end.returnLegMeters, 12_400);
+  assert.equal(end.driveTime, "17 min / 12 km");
+  assert.equal(stops.reduce((total, stop) => total + stop.durationFromPreviousSeconds, 0) + end.returnLegSeconds, 2_880);
+  assert.equal(buildRouteEndpointPresentation(input()).start.driveTime, undefined);
+
+  assert.equal(buildRouteEndpointPresentation(input({ routeMetrics: { durationSeconds: 2_880 } })).end.driveTime, "17 min");
+  assert.equal(buildRouteEndpointPresentation(input({ stops: stops.map((stop, index) => index === 1 ? { ...stop, distanceFromPreviousMeters: undefined } : stop) })).end.driveTime, "17 min");
+
+  const none = (overrides) => buildRouteEndpointPresentation(input(overrides)).end;
+  for (const [name, overrides] of Object.entries({
+    "the route ends at the last stop": { executionEvidence: { routeEndMode: "END_AT_LAST_STOP" }, routePlan: { routeEndMode: "END_AT_LAST_STOP", scheduledStartAt: "2026-10-08T13:00:00.000Z" } },
+    "a stop has no drive duration": { stops: stops.map((stop, index) => index === 0 ? { ...stop, durationFromPreviousSeconds: undefined } : stop) },
+    "the route has no metrics": { routeMetrics: null },
+    "the total is smaller than the stop legs": { routeMetrics: { distanceMeters: 30_600, durationSeconds: 1_000 } },
+    "the total has no return leg": { routeMetrics: { distanceMeters: 18_200, durationSeconds: 1_860 } },
+    "there are no stops": { stops: [] },
+  })) {
+    assert.equal(none(overrides).driveTime, "–", name);
+    assert.equal(none(overrides).returnLegSeconds, null, name);
+  }
+});
+
+test("both End rows print the leg back to the depot in the Drive time column", () => {
+  for (const name of ["renderRouteEndpointOrderRow", "renderRouteEndpointTrackingRow"]) {
+    const start = routeDetailSource.indexOf(`function ${name}(`);
+    const row = routeDetailSource.slice(start, routeDetailSource.indexOf("\n}\n", start));
+    assert.match(row, /endpoint\?\.driveTime \?\? ROUTE_EMPTY_LABEL/, name);
+  }
+});
