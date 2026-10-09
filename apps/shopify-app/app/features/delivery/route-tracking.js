@@ -97,6 +97,34 @@ function normalizeTrackingStopArrival(arrival) {
   };
 }
 
+const STOP_COMPLETION_EVENT_TYPES = new Set(["STOP_DELIVERED", "STOP_FAILED"]);
+
+// The time a driver finished a stop. The single Complete Delivery flow records no arrival, so this is its only stop time.
+function normalizeTrackingStopCompletion(completion) {
+  const deliveryStopId = textOrNull(completion?.deliveryStopId);
+  const driverId = textOrNull(completion?.driverId);
+  const eventId = textOrNull(completion?.eventId);
+  const eventType = textOrNull(completion?.eventType);
+  const occurredAt = textOrNull(completion?.occurredAt);
+  const routePlanId = textOrNull(completion?.routePlanId);
+  if (!deliveryStopId || !driverId || !eventId || !occurredAt || !routePlanId || !STOP_COMPLETION_EVENT_TYPES.has(eventType)) {
+    return null;
+  }
+
+  const rawStopSequence = completion?.stopSequence == null ? null : numberOrNull(completion.stopSequence);
+  return {
+    deliveryStopId,
+    driverId,
+    eventId,
+    eventType,
+    occurredAt,
+    receivedAt: textOrNull(completion?.receivedAt),
+    routePlanId,
+    schemaVersion: textOrNull(completion?.schemaVersion) ?? "route_tracking_completion.v1",
+    stopSequence: Number.isInteger(rawStopSequence) && rawStopSequence > 0 ? rawStopSequence : null,
+  };
+}
+
 function getProgressStage(eventType) {
   if (eventType === "ROUTE_COMPLETED") return "COMPLETED";
   if (eventType === "ROUTE_PAUSED") return "PAUSED";
@@ -187,6 +215,10 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     .map(normalizeTrackingStopArrival)
     .filter(Boolean)
     .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
+  const stopCompletions = (Array.isArray(snapshot?.stopCompletions) ? snapshot.stopCompletions : [])
+    .map(normalizeTrackingStopCompletion)
+    .filter(Boolean)
+    .sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
 
   return {
     executionEvidence: normalizeRouteExecutionEvidence(snapshot?.executionEvidence),
@@ -204,6 +236,7 @@ function normalizeRouteTrackingSnapshot(snapshot) {
     roadMatchedPath: normalizeRoadMatchedPath(snapshot?.roadMatchedPath),
     status: textOrNull(snapshot?.status) ?? (latestPosition ? "LIVE" : "NO_DATA"),
     stopArrivals,
+    stopCompletions,
     serverTime: textOrNull(snapshot?.serverTime),
     latestPosition,
     recentPositions,
@@ -238,6 +271,21 @@ function mergeRouteTrackingProgress(snapshot, event) {
     const provisionalArrival = buildProvisionalStopArrival(normalizedSnapshot, normalizedEvent);
     if (provisionalArrival) stopArrivals.push(provisionalArrival);
   }
+  const stopCompletions = [...normalizedSnapshot.stopCompletions];
+  if (
+    STOP_COMPLETION_EVENT_TYPES.has(normalizedEvent.eventType)
+    && !stopCompletions.some((completion) => completion.eventId === normalizedEvent.eventId)
+  ) {
+    const completion = normalizeTrackingStopCompletion({
+      ...normalizedEvent,
+      schemaVersion: "route_tracking_completion.v1",
+      stopSequence: null,
+    });
+    if (completion) {
+      stopCompletions.push(completion);
+      stopCompletions.sort((left, right) => getPositionTimestamp(left) - getPositionTimestamp(right));
+    }
+  }
   return {
     ...normalizedSnapshot,
     routePlanId: normalizedSnapshot.routePlanId ?? normalizedEvent.routePlanId,
@@ -251,6 +299,7 @@ function mergeRouteTrackingProgress(snapshot, event) {
       latestEvent: isLatestEvent ? normalizedEvent : previousProgress.latestEvent,
     },
     stopArrivals,
+    stopCompletions,
   };
 }
 
@@ -348,6 +397,7 @@ function mergeRouteTrackingSnapshot(currentSnapshot, serverSnapshot) {
     serverTime: incomingSnapshot.serverTime ?? current.serverTime,
     status: incomingSnapshot.status,
     stopArrivals: mergeTrackingStopArrivals(current.stopArrivals, incomingSnapshot.stopArrivals),
+    stopCompletions: mergeTrackingStopCompletions(current.stopCompletions, incomingSnapshot.stopCompletions),
   });
   const baseLatestTimestamp = getRouteTrackingLatestTimestamp(mergedBase);
   const positionsByKey = new Map();
@@ -420,6 +470,16 @@ function mergeTrackingStopArrivals(currentArrivals, incomingArrivals) {
   for (const arrival of currentArrivals) arrivalsByEventId.set(arrival.eventId, arrival);
   for (const arrival of incomingArrivals) arrivalsByEventId.set(arrival.eventId, arrival);
   return [...arrivalsByEventId.values()].sort((left, right) => (
+    getPositionTimestamp(left) - getPositionTimestamp(right)
+    || left.eventId.localeCompare(right.eventId)
+  ));
+}
+
+function mergeTrackingStopCompletions(currentCompletions, incomingCompletions) {
+  const completionsByEventId = new Map();
+  for (const completion of currentCompletions) completionsByEventId.set(completion.eventId, completion);
+  for (const completion of incomingCompletions) completionsByEventId.set(completion.eventId, completion);
+  return [...completionsByEventId.values()].sort((left, right) => (
     getPositionTimestamp(left) - getPositionTimestamp(right)
     || left.eventId.localeCompare(right.eventId)
   ));
@@ -1097,6 +1157,9 @@ function selectRouteTrackingWindow(snapshot, options = {}) {
     ),
     stopArrivals: normalized.stopArrivals.filter((arrival) => (
       allowedDates.has(getDateKeyInTimeZone(getPositionTimestamp(arrival), timeZone))
+    )),
+    stopCompletions: normalized.stopCompletions.filter((completion) => (
+      allowedDates.has(getDateKeyInTimeZone(getPositionTimestamp(completion), timeZone))
     )),
   };
 }

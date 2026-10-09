@@ -1137,7 +1137,7 @@ test("tracking times use one fixed store-time format and the table marks missing
     routeDetailSource.indexOf("// Amount follows the ETA treatment"),
   );
   assert.match(etaCell, /row\?\.arrivalMissing/);
-  assert.match(etaCell, /No arrival event was recorded/);
+  assert.match(etaCell, /No arrival or completion time was recorded/);
 
   assert.match(routeDetailSource, /buildRouteEndpointPresentation\(\{[\s\S]*trackingSnapshot: displayedRouteTrackingSnapshot/);
   assert.match(routeDetailSource, /arrivalEvidenceLoaded: Array\.isArray\(displayedRouteTrackingSnapshot\?\.stopArrivals\)/);

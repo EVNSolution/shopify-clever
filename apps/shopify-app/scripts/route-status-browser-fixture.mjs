@@ -61,6 +61,13 @@ const makePlan = (id, name, status, options = {}) => {
   const delivered = options.delivered ?? 0;
   const stops = Array.from({ length: stopCount }, (_, index) => makeStop(id, index + 1,
     index < delivered ? "DELIVERED" : options.arrived && index === stopCount - 1 ? "ARRIVED" : "PENDING"));
+  if (options.singleTap) {
+    stops.forEach((stop, index) => Object.assign(stop, {
+      durationFromPreviousSeconds: 1200, distanceFromPreviousMeters: 6000,
+      estimatedArrivalAt: new Date(Date.parse("2026-10-03T13:00:00.000Z") + (index + 1) * 25 * 60000).toISOString(),
+    }));
+    Object.assign(stops[2], { deliveryStopStatus: "FAILED", status: "FAILED" });
+  }
   if (options.gpsReturn) stops.forEach((stop, index) => Object.assign(stop, {
     latitude: 43.7 + (index + 1) / 100, longitude: -79.4 + (index + 1) / 100, durationFromPreviousSeconds: 900, distanceFromPreviousMeters: 4000,
     estimatedArrivalAt: new Date(Date.parse("2026-10-03T13:00:00.000Z") + ((index + 1) * 20 - 5) * 60000).toISOString(),
@@ -84,6 +91,7 @@ let plans = [
   makePlan("route-progress", "In progress standalone", "IN_PROGRESS", { delivered: 1 }),
   makePlan("route-completed", "Completed standalone", "COMPLETED", { delivered: 3 }),
   makePlan("route-completed-gps", "Completed, no completion event, GPS return", "COMPLETED", { stopCount: 5, delivered: 5, gpsReturn: true }),
+  makePlan("route-single-tap", "In progress, one-tap completion (no arrivals)", "IN_PROGRESS", { stopCount: 5, delivered: 2, singleTap: true }),
   makePlan("route-cancelled", "Cancelled standalone", "CANCELLED"),
   makePlan("route-unknown", "Unsupported standalone", "AWAITING_DRIVER"),
   makePlan("route-missing", "Missing state standalone", undefined),
@@ -169,6 +177,16 @@ const makeSnapshot = (routeId, status = planById(routeId)?.status) => {
       routePlanId: routeId, deliveryStopId: stop.deliveryStopId, driverId: routeId + "-driver",
       eventId: stop.id + "-arrived", occurredAt: "2026-10-03T19:55:00.000Z",
     })), recentPositions: [],
+    // The one-tap flow records only the completion of a stop. Other plans omit the field, like an older server.
+    ...(plan?.singleTap ? {
+      stopCompletions: plan.stops.filter(stop => ["DELIVERED", "FAILED"].includes(stop.deliveryStopStatus)).map((stop, index) => ({
+        routePlanId: routeId, deliveryStopId: stop.deliveryStopId, driverId: routeId + "-driver", eventId: stop.id + "-completed",
+        eventType: stop.deliveryStopStatus === "DELIVERED" ? "STOP_DELIVERED" : "STOP_FAILED",
+        occurredAt: new Date(Date.parse("2026-10-03T13:41:00.000Z") + index * 27 * 60000).toISOString(),
+        receivedAt: new Date(Date.parse("2026-10-03T13:41:02.000Z") + index * 27 * 60000).toISOString(),
+        schemaVersion: "route_tracking_completion.v1", stopSequence: index + 1,
+      })),
+    } : {}),
   };
 };
 const detailData = (routePlan, routeGroup = null) => ({

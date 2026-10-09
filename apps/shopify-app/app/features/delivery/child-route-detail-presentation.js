@@ -278,6 +278,26 @@ const DEFAULT_DEPOT_RETURN_RADIUS_METERS = 150;
 function getStopStatusKey(stop) {
   return String(getOrderStatusSource(stop) ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
 }
+const COMPLETION_EVENT_TYPES = ["STOP_DELIVERED", "STOP_FAILED"];
+
+/**
+ * The time to show for a finished stop: its arrival, else the time the driver completed it. The single Complete Delivery
+ * flow records no arrival. A completion counts only while the stop status still matches its type, so a stop the office
+ * moved back, or whose other outcome came later, shows nothing.
+ */
+function getStopActualTime(stop, { actualArrivalByStopId = {}, completionByStopId = {} } = {}) {
+  const deliveryStopId = firstText(stop?.deliveryStopId);
+  if (!deliveryStopId) return null;
+  const arrivalAt = firstText(actualArrivalByStopId[deliveryStopId]);
+  if (arrivalAt) return { at: arrivalAt, kind: "arrival", label: "Actual arrival" };
+
+  const completion = completionByStopId[deliveryStopId];
+  const tone = getStopMarkerTone(stop);
+  if (completion?.eventType === "STOP_DELIVERED" && tone === "done") return { at: completion.at, kind: "completion", label: "Delivered" };
+  if (completion?.eventType === "STOP_FAILED" && tone === "failed") return { at: completion.at, kind: "completion", label: "Failed" };
+  return null;
+}
+
 /** Circle colors of a route without its own color: Completed green, Failed red, everything else Ready blue. */
 export const ROUTE_MARKER_TONE_COLORS = { done: "#27805c", failed: "#b42318", pending: "#0b84d8" };
 
@@ -299,9 +319,9 @@ const isTerminalStop = (stop) => TERMINAL_STOP_STATUSES.has(getStopStatusKey(sto
 
 /**
  * The server confirms a return only from a completion event. K-food routes have none, so once every stop is finished
- * the first recorded GPS point near the depot after the last known arrival is shown as an observed return.
+ * the first recorded GPS point near the depot after the last known arrival or stop completion is shown as an observed return.
  */
-function getObservedDepotReturn({ actualArrivalByStopId, departureLocation, orderedStops, returnEvidence, routeEndMode, trackingSnapshot }) {
+function getObservedDepotReturn({ actualArrivalByStopId, completionByStopId, departureLocation, orderedStops, returnEvidence, routeEndMode, trackingSnapshot }) {
   const depot = departureLocation?.savedCoordinates;
   const radiusMeters = numberOrUndefined(returnEvidence?.thresholdMeters) ?? DEFAULT_DEPOT_RETURN_RADIUS_METERS;
   if (
@@ -319,12 +339,12 @@ function getObservedDepotReturn({ actualArrivalByStopId, departureLocation, orde
   if (lastStopCoordinates.every((value) => value !== undefined)
     && distanceBetweenCoordinatesMeters(lastStopCoordinates, depot) <= radiusMeters) return null;
 
-  const lastArrivalMs = Math.max(...orderedStops
-    .map((stop) => Date.parse(actualArrivalByStopId[firstText(stop?.deliveryStopId)] ?? ""))
+  const lastActualMs = Math.max(...orderedStops
+    .map((stop) => Date.parse(getStopActualTime(stop, { actualArrivalByStopId, completionByStopId })?.at ?? ""))
     .filter(Number.isFinite));
-  if (!Number.isFinite(lastArrivalMs)) return null;
+  if (!Number.isFinite(lastActualMs)) return null;
   const found = findRouteTrackingDepotReturn(trackingSnapshot, {
-    afterIso: new Date(lastArrivalMs).toISOString(),
+    afterIso: new Date(lastActualMs).toISOString(),
     depotCoordinates: depot,
     radiusMeters,
   });
@@ -333,6 +353,7 @@ function getObservedDepotReturn({ actualArrivalByStopId, departureLocation, orde
 
 export function buildRouteEndpointPresentation({
   actualArrivalByStopId = {},
+  completionByStopId = {},
   departureLocation,
   executionEvidence,
   ianaTimezone,
@@ -355,20 +376,20 @@ export function buildRouteEndpointPresentation({
   });
 
   const returnEvidence = executionEvidence?.returnToDepot;
-  const lastStopId = firstText(lastStop?.deliveryStopId);
-  const lastStopArrival = lastStopId ? firstText(actualArrivalByStopId[lastStopId]) : null;
+  const lastStopActual = lastStop ? getStopActualTime(lastStop, { actualArrivalByStopId, completionByStopId }) : null;
   const returnConfirmedAt = returnEvidence?.status === "CONFIRMED"
     ? firstText(returnEvidence?.observedAt)
     : null;
   const observedReturn = getObservedDepotReturn({
     actualArrivalByStopId,
+    completionByStopId,
     departureLocation,
     orderedStops,
     returnEvidence,
     routeEndMode,
     trackingSnapshot,
   });
-  const actualEndAt = routeEndMode === "RETURN_TO_DEPOT" ? returnConfirmedAt ?? observedReturn?.occurredAt ?? null : lastStopArrival;
+  const actualEndAt = routeEndMode === "RETURN_TO_DEPOT" ? returnConfirmedAt ?? observedReturn?.occurredAt ?? null : lastStopActual?.at ?? null;
   const returnLeg = getReturnLeg({ orderedStops, routeEndMode, routeMetrics });
   const departureAddress = firstText(
     departureLocation?.endpointAddress,
@@ -402,7 +423,9 @@ export function buildRouteEndpointPresentation({
     end: {
       actualAt: actualEndAt ?? null,
       actualLabel: actualEndAt
-        ? routeEndMode === "RETURN_TO_DEPOT" ? returnConfirmedAt ? "Return confirmed" : "Return observed (GPS)" : "Actual arrival"
+        ? routeEndMode === "RETURN_TO_DEPOT"
+          ? returnConfirmedAt ? "Return confirmed" : "Return observed (GPS)"
+          : lastStopActual?.kind === "completion" ? "Last stop completed" : "Actual arrival"
         : "Unconfirmed",
       address: routeEndMode === "RETURN_TO_DEPOT"
         ? endpointDepartureAddress ?? EMPTY_LABEL
@@ -749,9 +772,30 @@ export function buildChildActualArrivalByStopId(stopArrivals) {
   return actualArrivalByStopId;
 }
 
+/** The latest valid completion of each stop, for stops that carry no arrival. */
+export function buildChildCompletionByStopId(stopCompletions) {
+  const completionByStopId = {};
+
+  for (const completion of Array.isArray(stopCompletions) ? stopCompletions : []) {
+    const deliveryStopId = firstText(completion?.deliveryStopId);
+    const occurredAt = firstText(completion?.occurredAt);
+    const eventType = firstText(completion?.eventType);
+    const occurredAtTimestamp = Date.parse(occurredAt ?? "");
+    if (!deliveryStopId || !COMPLETION_EVENT_TYPES.includes(eventType) || !Number.isFinite(occurredAtTimestamp)) continue;
+
+    const currentTimestamp = Date.parse(completionByStopId[deliveryStopId]?.at ?? "");
+    if (!Number.isFinite(currentTimestamp) || occurredAtTimestamp > currentTimestamp) {
+      completionByStopId[deliveryStopId] = { at: occurredAt, eventType };
+    }
+  }
+
+  return completionByStopId;
+}
+
 export function buildChildRouteOrderRows(stops, {
   actualArrivalByStopId = {},
   arrivalEvidenceLoaded = false,
+  completionByStopId = {},
   ianaTimezone,
 } = {}) {
   return sortChildStopsByActualSequence(Array.isArray(stops) ? stops : []).map((stop, index) => {
@@ -764,7 +808,8 @@ export function buildChildRouteOrderRows(stops, {
     const etaSource = firstText(stop?.etaSource);
     const isRollingEta = ["ROUTE_STARTED", "PICKUP_COMPLETED", "STOP_ARRIVED", "STOP_DELIVERED", "STOP_FAILED"].includes(etaSource);
     const expectedArrival = formatChildEtaLabel(estimatedArrivalAt, ianaTimezone);
-    const actualArrival = formatChildEtaLabel(actualArrivalByStopId[deliveryStopId], ianaTimezone);
+    const actual = getStopActualTime(stop, { actualArrivalByStopId, completionByStopId });
+    const actualArrival = formatChildEtaLabel(actual?.at, ianaTimezone);
 
     return {
       id: firstText(stop?.id, stop?.deliveryStopId, stop?.shopifyOrderGid, stop?.orderId) ?? `child-order-${index + 1}`,
@@ -784,6 +829,8 @@ export function buildChildRouteOrderRows(stops, {
       currencyCode: firstText(stop?.currencyCode),
       expectedArrival,
       actualArrival,
+      actualKind: actual?.kind ?? null,
+      actualLabel: actual?.label,
       arrivalMissing: arrivalEvidenceLoaded && isVisitedStop(stop) && actualArrival === EMPTY_LABEL && expectedArrival !== EMPTY_LABEL,
       hasActualArrival: actualArrival !== EMPTY_LABEL,
       markerTone: getStopMarkerTone(stop),
@@ -835,6 +882,7 @@ export function buildRouteOrderRows(routeRows, {
   actualArrivalByStopId = {},
   actualArrivalRoutePlanId,
   arrivalEvidenceLoaded = false,
+  completionByStopId = {},
   ianaTimezone,
 } = {}) {
   return (Array.isArray(routeRows) ? routeRows : []).flatMap((routeRow, routeIndex) => {
@@ -847,6 +895,7 @@ export function buildRouteOrderRows(routeRows, {
     return buildChildRouteOrderRows(routeRow?.stops, {
       actualArrivalByStopId: routeActualArrivalByStopId,
       arrivalEvidenceLoaded: arrivalEvidenceLoaded && Boolean(sourceRoutePlanId) && sourceRoutePlanId === actualArrivalRoutePlanId,
+      completionByStopId: sourceRoutePlanId && sourceRoutePlanId === actualArrivalRoutePlanId ? completionByStopId : {},
       ianaTimezone,
     }).map((row) => ({
       ...row,
