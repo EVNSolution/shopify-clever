@@ -56,22 +56,6 @@ test("receipts are grouped by delivery stop and every receipt of a stop is kept"
   assert.equal(cashReceiptsByStopId().size, 0);
 });
 
-test("the Payment cell shows received Cash, strikes a different expected amount and states confirmation", async () => {
-  const { CashCell } = await loadComponents();
-  const render = (receipts) => renderToStaticMarkup(createElement(CashCell, { receipts }));
-  assert.equal(render(undefined), "");
-  assert.equal(render([]), "");
-  const unconfirmed = render([receipt("stop-1")]);
-  assert.match(unconfirmed, /<s>CAD\s122\.25<\/s>/);
-  assert.match(unconfirmed, /<strong>CAD\s122\.00<\/strong>/);
-  assert.match(unconfirmed, />Unconfirmed</);
-  const same = render([receipt("stop-2", { completion: { expectedAmount: "20.00", actualAmount: "20.00", differenceAmount: "0.00" } })]);
-  assert.equal(has(same, /<s>/), false);
-  const confirmed = render([receipt("stop-1", { receipt: { revision: 1, settlement: { confirmedAmount: "123.00", currency: "CAD" } } })]);
-  assert.match(confirmed, />Confirmed CAD\s123\.00</);
-  assert.equal(has(confirmed, />Unconfirmed</), false);
-});
-
 test("the office popup needs a title and names it", async () => {
   const { OfficeDialog } = await loadComponents();
   const html = renderToStaticMarkup(createElement(OfficeDialog, { title: "Cash receipt", onClose() {} }, createElement("p", null, "Body")));
@@ -79,17 +63,38 @@ test("the office popup needs a title and names it", async () => {
   assert.match(html, /role="dialog"/);
 });
 
-test("Route Detail has no Cash panel: Cash lives in the Payment cell, the row menu and one popup", () => {
+test("Route Detail has no Cash panel, popup or confirmation: received Cash only shows in the Amount column", () => {
   const components = read("../app/features/delivery/route-office-components.jsx");
   assert.equal(has(components, /RouteCashPanel|Refresh receipts|No Cash receipts recorded|Cash receipts and settlement/), false, "the panel is still in the components");
-  assert.equal(has(components, /export function CashReceiptDialog/), true);
+  assert.equal(has(components, /CashReceiptDialog|CashAmounts|Confirm Cash amount|buildSettlementPayload/), false, "the confirmation UI is still in the components");
   const page = read("../app/routes/app.routes.$routeId.jsx");
-  assert.equal(has(page, /RouteCashPanel/), false, "Route Detail still renders the panel");
-  assert.equal(has(page, /<CashCell receipts=\{cashByStopId\.get\(row\.deliveryStopId\)\} \/>/), true, "Payment cell does not show Cash");
-  assert.equal(has(page, /handleOpenCashReceipt\(activeChildStopActionsRow\)[\s\S]*Cash receipt/), true, "row menu has no Cash receipt item");
-  assert.equal(has(page, /<CashReceiptDialog/), true, "Cash popup is not rendered");
+  assert.equal(has(page, /RouteCashPanel|CashReceiptDialog|handleOpenCashReceipt|cashDialogStopId|Cash receipt|Confirm Cash/), false, "Route Detail still has the receipt popup or confirmation");
+  assert.equal(has(page, /renderChildRouteAmount\(row, cashByStopId\.get\(row\.deliveryStopId\)\)/), true, "Amount cell does not show Cash");
+  assert.equal(has(page, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/), true, "Payment cell is not plain");
   assert.equal(has(page, /\.\.\.cash\.errors/), true, "receipt load errors are not shown");
   assert.equal(has(page, /enabled: kfoodOfficeEnabled && !isRouteGroupDetail && Boolean\(effectiveRoutePlan\?\.id\)/), true, "receipts must load only for a KFood route");
+});
+
+test("the Routes list Cash column shows expected and received amounts only", async () => {
+  const { RouteCashSummary } = await loadComponents();
+  const html = renderToStaticMarkup(createElement(RouteCashSummary, {
+    summary: [{ currency: "CAD", expectedAmount: "122.25", actualAmount: "122.00", confirmedAmount: "122.00", receiptCount: 2, confirmedCount: 1 }],
+  }));
+  assert.match(html, /Expected CAD\s122\.25/);
+  assert.match(html, /Received CAD\s122\.00/);
+  assert.match(html, /Received differs from expected/);
+  assert.equal(has(html, /onfirm/), false, "the summary still talks about confirmation");
+  assert.equal(renderToStaticMarkup(createElement(RouteCashSummary, { summary: [] })), "<span>—</span>");
+  assert.match(read("../app/routes/app.routes.jsx"), />Cash<\/th>/);
+  assert.equal(has(read("../app/routes/app.routes.jsx"), /Cash \/ settlement/), false);
+});
+
+test("nothing in the app confirms a Cash receipt: the BFF route only reads receipts", () => {
+  const bff = read("../app/routes/app.routes.$routeId.cash-settlements.jsx");
+  assert.equal(has(bff, /export async function loader/), true, "the Amount column needs the receipts read");
+  assert.equal(has(bff, /export async function action|confirmRouteCashSettlement|buildSettlementPayload/), false, "the BFF route still confirms receipts");
+  assert.equal(has(read("../app/features/delivery/route-office-options.server.js"), /confirmRouteCashSettlement/), false);
+  assert.equal(has(read("../app/features/delivery/route-office-options.js"), /buildSettlementPayload/), false);
 });
 
 test("Edit stop looks disabled when a stop cannot be edited and says why while a route is in progress", () => {

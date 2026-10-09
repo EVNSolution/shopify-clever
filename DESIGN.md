@@ -3,7 +3,7 @@
 ## Source of truth
 
 - Status: Active
-- Last updated: 2026-10-01
+- Last updated: 2026-10-09
 - Applies to: `apps/shopify-app`, with current emphasis on Orders filters and route detail/tracking operations
 
 - Evidence: actual Safari interactions on EasyRoutes and CLEVER K-food Orders (2026-10-01), existing Orders filter component and v2 contract. See [interaction evidence](docs/ui/orders-filter-interaction-review.md). No component gallery or Storybook exists in this repo; the Orders component and this document own the pattern.
@@ -70,6 +70,7 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Stop-table disclosures use a route-scoped row key. All routes is read-only and links each assigned row to its child route for operational actions; Unassigned has no route action. Actual arrival evidence is shown only when it belongs to that same route; never reuse one child route's tracking evidence for another child or Unassigned.
 - Standalone and saved child route tables place a read-only Start row before the first order and an End row after the last order in both Stops and Tracking. These endpoint rows are outside order selection, counts, actions, and reordering. Do not synthesize one Start/End pair for All routes or Unassigned.
 - Endpoint times use the same presentation as order ETA: show the planned time alone, then strike it through and show the observed time in green when evidence exists. Evidence labels such as actual departure and `Return confirmed` stay available to assistive text and tooltips instead of taking visible table space. Planned End requires a complete route schedule: saved start, every outbound leg, service time, time-window waits, and a consistent return leg when the route returns to depot. Actual departure requires the recorded start occurrence; completion alone is not depot-return evidence.
+- The stop table's Amount column follows Payment and uses the ETA treatment: the order amount alone, then the expected Cash amount struck through with the amount the driver received in green once a Cash receipt exists. It is read-only. Route Detail has no Cash panel, popup or office confirmation.
 
 ### Route Add orders
 

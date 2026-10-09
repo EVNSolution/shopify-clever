@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
+  buildChildRouteAmounts,
   buildChildRouteOrderRows,
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
@@ -553,6 +554,7 @@ test("child order table columns include a sticky Actions column with the confirm
     "Items",
     "Method",
     "Payment",
+    "Amount",
     "Attributes",
     "Actions",
   ]);
@@ -561,7 +563,8 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) =>/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
-  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\s*\{row\.payment\}\s*<CashCell receipts=\{cashByStopId\.get\(row\.deliveryStopId\)\} \/>\s*<\/td>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\s*\{renderChildRouteAmount\(row, cashByStopId\.get\(row\.deliveryStopId\)\)\}\s*<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{/);
   assert.match(routeDetailSource, /minWidth: "1500px"/);
@@ -977,4 +980,42 @@ test("child detail keeps dispatch, original shipping, schedule validation, and e
   assert.doesNotMatch(routeDetailSource, /Linked inventory is not available yet/);
   assert.doesNotMatch(routeDetailSource, /\?\? "Route data could not be fully loaded\."/);
   assert.doesNotMatch(routeDetailSource, /Actual driving time|Total working time|Payroll/);
+});
+
+test("Amount shows the order amount, then the expected and received Cash amounts", () => {
+  const [row] = buildChildRouteOrderRows([{ currencyCode: "CAD", deliveryStopId: "stop-1", totalPriceAmount: "122.25" }], { ianaTimezone: "America/Toronto" });
+  const receipt = (completion = {}) => ({
+    completion: { id: "cash-1", currencyCode: "CAD", expectedAmount: "122.25", actualAmount: "122.00", ...completion },
+  });
+
+  assert.equal(row.amountLabel, "CA$122.25");
+  assert.equal(buildChildRouteOrderRows([{ deliveryStopId: "stop-2" }])[0].amountLabel, "–");
+  assert.deepEqual(buildChildRouteAmounts(row), [{ id: "order", expected: "CA$122.25", received: null }]);
+  assert.deepEqual(buildChildRouteAmounts(row, []), buildChildRouteAmounts(row));
+  assert.deepEqual(buildChildRouteAmounts(row, [receipt()]), [{ id: "cash-1", expected: "CA$122.25", received: "CA$122.00" }]);
+  assert.equal(buildChildRouteAmounts(row, [receipt({ expectedAmount: null })])[0].expected, "CA$122.25");
+  assert.deepEqual(buildChildRouteAmounts(row, [receipt(), receipt({ id: "cash-2" })]).map((line) => line.id), ["cash-1", "cash-2"]);
+});
+
+test("the Amount cell reuses the ETA presentation and has nothing to click or confirm", () => {
+  const start = routeDetailSource.indexOf("function renderChildRouteAmount(");
+  assert.ok(start > 0, "renderChildRouteAmount is missing");
+  const amountSource = routeDetailSource.slice(start, routeDetailSource.indexOf("\n}\n", start));
+
+  assert.match(amountSource, /renderChildRouteEta\(\{/);
+  assert.match(amountSource, /buildChildRouteAmounts\(row, receipts\)/);
+  assert.doesNotMatch(amountSource, /<button|onClick|Confirm|Unconfirmed/);
+  assert.doesNotMatch(routeDetailSource, /CashCell|CashReceiptDialog|handleOpenCashReceipt|Cash receipt|Confirm Cash/);
+});
+
+test("endpoint rows and column widths stay aligned with the stop table columns", () => {
+  const widths = routeDetailSource.slice(
+    routeDetailSource.indexOf("const childRouteOrderColumnWidths = ["),
+    routeDetailSource.indexOf("];", routeDetailSource.indexOf("const childRouteOrderColumnWidths = [")),
+  );
+  const endpointStart = routeDetailSource.indexOf("function renderRouteEndpointOrderRow(");
+  const endpointRow = routeDetailSource.slice(endpointStart, routeDetailSource.indexOf("\n}\n", endpointStart));
+
+  assert.equal(widths.match(/"\d+px"/g).length, CHILD_ROUTE_ORDER_COLUMNS.length);
+  assert.equal(endpointRow.match(/<td\b/g).length, CHILD_ROUTE_ORDER_COLUMNS.length);
 });

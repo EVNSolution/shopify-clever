@@ -4,7 +4,6 @@ import { useFetcher, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { withEmbeddedShopifyContext } from "./route-paths";
 import {
-  buildSettlementPayload,
   canEditRouteOptions,
   formatCashAmount,
   normalizeRouteOptions,
@@ -12,12 +11,6 @@ import {
   getOfficeErrorMessage,
 } from "./route-office-options";
 
-const fieldStyle = {
-  display: "flex",
-  alignItems: "center",
-  flexWrap: "wrap",
-  gap: 8,
-};
 const moneyStyle = {
   display: "grid",
   gap: 4,
@@ -67,32 +60,11 @@ const optionRowStyle = {
   padding: "0 14px",
 };
 const noteStyle = { color: "#616161", fontSize: 13, margin: 0 };
-// Table cells clip to one line; Cash lines wrap inside their column instead.
-const cashCellStyle = {
-  display: "grid",
-  fontSize: 12,
-  fontVariantNumeric: "tabular-nums",
-  gap: 2,
-  justifyItems: "center",
-  lineHeight: 1.25,
-  marginTop: 2,
-  overflowWrap: "anywhere",
-  textAlign: "center",
-  whiteSpace: "normal",
-};
 const actionsStyle = {
   display: "flex",
   flexWrap: "wrap",
   gap: 8,
   justifyContent: "flex-end",
-};
-const inputStyle = {
-  border: "1px solid #c9c9c9",
-  borderRadius: 8,
-  boxSizing: "border-box",
-  font: "inherit",
-  minHeight: 36,
-  padding: "7px 10px",
 };
 const dialogButtonStyle = {
   background: "#fff",
@@ -363,169 +335,6 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
   );
 }
 
-export function CashAmounts({ completion, settlement }) {
-  const currency = completion.currencyCode;
-  const differs =
-    completion.differenceAmount != null &&
-    Number(completion.differenceAmount) !== 0;
-  return (
-    <div style={moneyStyle}>
-      <span>
-        Expected:{" "}
-        {differs ? (
-          <s>{formatCashAmount(completion.expectedAmount, currency)}</s>
-        ) : (
-          formatCashAmount(completion.expectedAmount, currency)
-        )}
-      </span>
-      <strong>
-        Received: {formatCashAmount(completion.actualAmount, currency)}
-      </strong>
-      <span>
-        Difference: {formatCashAmount(completion.differenceAmount, currency)}
-      </span>
-      <span>
-        Office confirmed:{" "}
-        {settlement
-          ? formatCashAmount(settlement.confirmedAmount, settlement.currency)
-          : "Unconfirmed"}
-      </span>
-    </div>
-  );
-}
-
-function CashReceipt({ receipt, stopLabel, action, onSaved }) {
-  const fetcher = useFetcher();
-  const shopify = useAppBridge();
-  const attempt = useRef(null);
-  const seen = useRef(null);
-  const [amount, setAmount] = useState(
-    receipt.settlement?.confirmedAmount ??
-      receipt.completion.actualAmount ??
-      "",
-  );
-  const [reason, setReason] = useState("");
-  const [clientError, setClientError] = useState(null);
-  const preparingRef = useRef(false);
-  const [preparing, setPreparing] = useState(false);
-  const busy = fetcher.state !== "idle" || preparing;
-  useEffect(() => {
-    if (fetcher.data?.saved && seen.current !== fetcher.data) {
-      seen.current = fetcher.data;
-      onSaved();
-    }
-  }, [fetcher.data, onSaved]);
-  async function confirm(event) {
-    event.preventDefault();
-    if (busy || preparingRef.current) return;
-    preparingRef.current = true;
-    setPreparing(true);
-    try {
-      setClientError(null);
-      const input = {
-        receiptId: receipt.completion.id,
-        expectedRevision: receipt.revision,
-        confirmedAmount: amount,
-        currency: receipt.completion.currencyCode,
-        reason,
-      };
-      const key = JSON.stringify(input);
-      if (attempt.current?.key !== key)
-        attempt.current = { key, commandId: crypto.randomUUID() };
-      const payload = buildSettlementPayload({
-        ...input,
-        commandId: attempt.current.commandId,
-      });
-      const form = new FormData();
-      for (const [key, value] of Object.entries(payload))
-        if (value !== null) form.set(key, String(value));
-      form.set("shopifySessionToken", await shopify.idToken());
-      fetcher.submit(form, { method: "post", action });
-    } catch (error) {
-      setClientError(error.message ?? "Could not confirm this receipt.");
-    } finally {
-      preparingRef.current = false;
-      setPreparing(false);
-    }
-  }
-  return (
-    <article style={{ display: "grid", gap: 12 }}>
-      <strong>
-        {stopLabel} · {receipt.completion.payment?.methodTitle ?? "Cash"}
-      </strong>
-      <CashAmounts
-        completion={receipt.completion}
-        settlement={receipt.settlement}
-      />
-      <form onSubmit={confirm} style={{ display: "grid", gap: 10 }}>
-        <label style={fieldStyle}>
-          Office confirmed amount ({receipt.completion.currencyCode})
-          <input
-            aria-label={`Office confirmed amount for ${stopLabel}`}
-            value={amount}
-            inputMode="decimal"
-            onChange={(event) => setAmount(event.target.value)}
-            disabled={busy}
-            required
-            style={{ ...inputStyle, width: 120 }}
-          />
-        </label>
-        <label style={fieldStyle}>
-          Reason{" "}
-          {receipt.revision > 0 ? "(required for a correction)" : "(optional)"}
-          <input
-            aria-label={`Settlement reason for ${stopLabel}`}
-            value={reason}
-            onChange={(event) => setReason(event.target.value)}
-            disabled={busy}
-            required={receipt.revision > 0}
-            maxLength={1000}
-            style={{ ...inputStyle, flex: 1, minWidth: 140 }}
-          />
-        </label>
-        <Errors
-          errors={[
-            ...(fetcher.data?.errors ?? []),
-            ...(clientError ? [{ message: clientError }] : []),
-          ]}
-        />
-        <button
-          style={{
-            ...primaryButtonStyle,
-            justifySelf: "start",
-            ...(busy || !Number.isSafeInteger(receipt.revision) ? disabledStyle : null),
-          }}
-          type="submit"
-          disabled={busy || !Number.isSafeInteger(receipt.revision)}
-        >
-          {busy
-            ? "Saving…"
-            : receipt.revision > 0
-              ? "Record correction"
-              : "Confirm Cash amount"}
-        </button>
-      </form>
-      {receipt.history?.length ? (
-        <details>
-          <summary>Confirmation history ({receipt.history.length})</summary>
-          <ol>
-            {receipt.history.map((entry) => (
-              <li key={entry.id}>
-                {formatCashAmount(entry.confirmedAmount, entry.currency)} ·{" "}
-                {entry.recordedAt} ·{" "}
-                {typeof entry.actor === "string"
-                  ? entry.actor
-                  : (entry.actor?.displayName ?? entry.actor?.id ?? "Office")}
-                {entry.reason ? ` · ${entry.reason}` : ""}
-              </li>
-            ))}
-          </ol>
-        </details>
-      ) : null}
-    </article>
-  );
-}
-
 /** Receipts grouped by delivery stop. */
 export function cashReceiptsByStopId(receipts = []) {
   const byStop = new Map();
@@ -536,7 +345,7 @@ export function cashReceiptsByStopId(receipts = []) {
   return byStop;
 }
 
-/** Receipts of one route. They reload when `reloadKey` changes and after a confirmation. */
+/** Receipts of one route. They reload when `reloadKey` changes. */
 export function useRouteCashReceipts(routePlanId, { enabled = true, reloadKey = "" } = {}) {
   const shopify = useAppBridge();
   const shopifyRef = useRef(shopify);
@@ -591,67 +400,7 @@ export function useRouteCashReceipts(routePlanId, { enabled = true, reloadKey = 
     load();
     return () => controllerRef.current?.abort();
   }, [enabled, load, reloadKey]);
-  return { receipts, errors, action, reload: load };
-}
-
-/** The Cash lines of one stop row: received amount (expected struck through when it differs) and confirmation. */
-export function CashCell({ receipts = [] }) {
-  if (!receipts.length) return null;
-  return (
-    <div style={cashCellStyle}>
-      {receipts.map(({ completion, settlement }) => {
-        const currency = completion.currencyCode;
-        const differs =
-          completion.differenceAmount != null &&
-          Number(completion.differenceAmount) !== 0;
-        return (
-          <div key={completion.id} style={cashCellStyle}>
-            <span>
-              Cash{" "}
-              {differs ? (
-                <s>{formatCashAmount(completion.expectedAmount, currency)}</s>
-              ) : null}{" "}
-              <strong>{formatCashAmount(completion.actualAmount, currency)}</strong>
-            </span>
-            <span style={{ color: settlement ? "#1a6b3c" : "#8a4b08" }}>
-              {settlement
-                ? `Confirmed ${formatCashAmount(settlement.confirmedAmount, settlement.currency)}`
-                : "Unconfirmed"}
-            </span>
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-/** Office confirmation and correction of a stop's Cash receipt. The driver receipt itself never changes. */
-export function CashReceiptDialog({ receipts, stopLabel, action, onSaved, onClose }) {
-  return (
-    <OfficeDialog
-      title="Cash receipt"
-      onClose={onClose}
-      actions={
-        <button type="button" style={dialogButtonStyle} onClick={onClose}>
-          Close
-        </button>
-      }
-    >
-      <p style={noteStyle}>
-        Driver receipts stay unchanged. Office confirmations and corrections are
-        recorded separately.
-      </p>
-      {receipts.map((receipt) => (
-        <CashReceipt
-          key={`${receipt.completion.id}:${receipt.revision}`}
-          receipt={receipt}
-          stopLabel={stopLabel}
-          action={action}
-          onSaved={onSaved}
-        />
-      ))}
-    </OfficeDialog>
-  );
+  return { receipts, errors };
 }
 
 export function RouteCashSummary({ summary = [] }) {
@@ -663,11 +412,6 @@ export function RouteCashSummary({ summary = [] }) {
           row.expectedAmount != null &&
           normalizeCashAmount(row.expectedAmount) !==
             normalizeCashAmount(row.actualAmount);
-        const confirmedDiffers =
-          row.confirmedCount === row.receiptCount &&
-          row.confirmedCount > 0 &&
-          normalizeCashAmount(row.confirmedAmount) !==
-            normalizeCashAmount(row.actualAmount);
         return (
           <div key={row.currency} style={moneyStyle}>
             <span>
@@ -676,25 +420,9 @@ export function RouteCashSummary({ summary = [] }) {
             <span>
               Received {formatCashAmount(row.actualAmount, row.currency)}
             </span>
-            <strong>
-              {row.confirmedCount === 0
-                ? "Unconfirmed"
-                : row.confirmedCount === row.receiptCount
-                  ? "Confirmed"
-                  : "Part confirmed"}{" "}
-              ({row.confirmedCount}/{row.receiptCount})
-              {row.confirmedCount
-                ? `: ${formatCashAmount(row.confirmedAmount, row.currency)}`
-                : ""}
-            </strong>
             {receivedDiffers ? (
               <span style={{ color: "#8a4b08" }}>
                 Received differs from expected
-              </span>
-            ) : null}
-            {confirmedDiffers ? (
-              <span style={{ color: "#8a4b08" }}>
-                Confirmation differs from received
               </span>
             ) : null}
           </div>

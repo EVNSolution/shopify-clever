@@ -40,27 +40,6 @@ export async function fetchRouteCashSettlements(
   };
 }
 
-export async function confirmRouteCashSettlement(
-  request,
-  routePlanId,
-  payload,
-  options = {},
-) {
-  const result = await deliveryApiRequest(
-    request,
-    `/admin/route-plans/${encodeURIComponent(routePlanId)}/cash-settlements`,
-    {
-      ...options,
-      method: "POST",
-      skipCacheInvalidation: true,
-      body: JSON.stringify(payload),
-    },
-  );
-  if (!result.errors.length)
-    invalidateDeliveryRouteResponseCache(request, options);
-  return { settlement: result.data?.settlement ?? null, errors: result.errors };
-}
-
 export async function saveRouteOptions(
   request,
   routePlanId,
