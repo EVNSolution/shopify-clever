@@ -10,6 +10,8 @@ import {
   createLiveCommandRequest,
   isLiveResponseCurrent,
   getLiveLocationIssues,
+  applyLiveDraftToStops,
+  liveOrderKeepsFixedStops,
 } from "../app/features/delivery/live-route-change.js";
 
 const stop = (id, sequence) => ({
@@ -375,4 +377,55 @@ test("delivery receipt retries retain later local edits through an unknown trans
     afterPublication.edits["stop-7"].address1,
     "Later unsaved input",
   );
+});
+
+const loaderStop = (id, sequence) => ({
+  deliveryStopId: id,
+  sequence,
+  addressLabel: `${id} Road, Toronto`,
+  address: { address1: `${id} Road`, address2: null, city: "Toronto", province: "ON", postalCode: "M1A 1A1", countryCode: "CA" },
+  latitude: 43.7,
+  longitude: -79.4,
+  locationDiagnostic: { issues: [], routeable: true, severity: "NONE" },
+});
+const loaderStops = () => [loaderStop("stop-1", 1), loaderStop("stop-2", 2), loaderStop("stop-3", 3), loaderStop("stop-7", 7)];
+
+test("draft overlay shows the saved or unsaved future order without touching fixed stops", () => {
+  const stops = loaderStops();
+  assert.equal(applyLiveDraftToStops(stops, null), stops);
+  const editor = reorderLiveFutureStops(createLiveEditor(response()), ["stop-7", "stop-3"]);
+  const shown = applyLiveDraftToStops(stops, editor);
+  assert.deepEqual(shown.map((row) => row.deliveryStopId), ["stop-1", "stop-2", "stop-7", "stop-3"]);
+  assert.deepEqual(shown.map((row) => row.sequence), [1, 2, 3, 7]);
+  assert.equal(shown[0], stops[0]);
+  assert.equal(shown[1], stops[1]);
+  assert.equal(applyLiveDraftToStops(stops, createLiveEditor(response())).map((row) => row.deliveryStopId).join(), "stop-1,stop-2,stop-3,stop-7");
+});
+
+test("draft overlay replaces only edited addresses and drops stale labels, coordinates and diagnostics", () => {
+  const stops = loaderStops();
+  let editor = updateLiveStop(createLiveEditor(response()), "stop-7", "address1", "700 New Avenue");
+  let shown = applyLiveDraftToStops(stops, editor);
+  const edited = shown.find((row) => row.deliveryStopId === "stop-7");
+  assert.equal(edited.address.address1, "700 New Avenue");
+  assert.equal(edited.address1, "700 New Avenue");
+  assert.equal(edited.address.city, "Toronto");
+  assert.equal(edited.addressLabel, undefined);
+  assert.equal(edited.locationDiagnostic, undefined);
+  assert.equal(edited.latitude, null);
+  assert.equal(edited.longitude, null);
+  assert.equal(shown.find((row) => row.deliveryStopId === "stop-3"), stops[2]);
+  editor = confirmLiveLocation(updateLiveStop(updateLiveStop(editor, "stop-7", "latitude", "43.8"), "stop-7", "longitude", "-79.2"), "stop-7");
+  shown = applyLiveDraftToStops(stops, editor);
+  assert.deepEqual([shown[3].latitude, shown[3].longitude], [43.8, -79.2]);
+});
+
+test("a dragged timeline order may move only future stops", () => {
+  const eligible = ["stop-3", "stop-4", "stop-5"];
+  const current = ["stop-1", "stop-2", "stop-3", "stop-4", "stop-5"];
+  assert.equal(liveOrderKeepsFixedStops(current, ["stop-1", "stop-2", "stop-5", "stop-3", "stop-4"], eligible), true);
+  assert.equal(liveOrderKeepsFixedStops(current, ["stop-2", "stop-1", "stop-3", "stop-4", "stop-5"], eligible), false);
+  assert.equal(liveOrderKeepsFixedStops(current, ["stop-1", "stop-3", "stop-2", "stop-4", "stop-5"], eligible), false);
+  assert.equal(liveOrderKeepsFixedStops(current, ["stop-1", "stop-2", "stop-3", "stop-4"], eligible), false);
+  assert.equal(liveOrderKeepsFixedStops(current, ["stop-1", "stop-2", "stop-3", "stop-4", "stop-9"], eligible), false);
 });

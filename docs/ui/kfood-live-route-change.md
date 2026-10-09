@@ -35,17 +35,26 @@ The authenticated resource route `/app/route-live-change/:routePlanId` returns J
 including conflicts and Shopify authentication retry headers. It resolves the canonical
 route again before each request. The resource has no page component.
 
-1. Edit a stop from the server's `editableFutureStopIds`.
-2. Change its address. The previous coordinates lose their verified state.
-3. Search for coordinates, inspect the map location, and confirm the location.
-4. Move stops within the complete future stop set. Current/completed positions remain fixed.
-5. Select **Save** to store a private draft. The public stop table still shows published content.
-6. Select **Dispatch** to publish the saved draft.
+The office uses the controls that READY routes already have. There is no separate panel.
+
+1. Drag a future stop in the timeline, or open its row **⋯ → Edit stop**. Only future stops
+   (the server's `editableFutureStopIds`) can be dragged or edited. Current and completed stops
+   keep their place and cannot be dragged, edited or used as drop targets.
+2. **Edit stop** shows the address and coordinates only. Changing an address clears the previous
+   coordinates. **Find coordinates** searches, **Check location on map** opens the point, and
+   **Confirm checked coordinates** confirms it. Coordinate confirmation is always required before Dispatch.
+3. The existing floating bar shows **Unsaved route changes** with **Save** and **Revert**.
+4. **Save** stores the changes privately. The table and timeline preview the saved changes. The driver
+   and the published route do not change. The bar then shows **Saved changes are waiting for Dispatch**
+   with **Discard**.
+5. The header **Dispatch** publishes the saved changes. It stays disabled while changes are unsaved,
+   while a changed address has no confirmed coordinates, and when nothing is saved.
 
 An address can be saved without coordinates. Dispatch stays blocked until the location is verified.
 Search failure preserves the address input. A delayed search cannot replace a more recent address.
 Contact, instructions, time windows, service duration, append and removal are outside this editor.
-READY routes retain their existing editing and dispatch flow.
+Reverse stops, Re-optimize and the other Edit menu actions stay disabled while the route is in progress.
+READY routes retain their existing editing and dispatch flow, which this feature does not touch.
 
 A successful Dispatch means publication succeeded. Provider delivery, geometry refresh and
 explicit driver application are separate outcomes. A SENT notification or a successful GET
@@ -60,15 +69,16 @@ After a receipt response, a fresh no-store GET supplies the current state before
 Do not substitute a new revision into a failed command or use a legacy API to bypass a conflict.
 
 If another administrator changes the revision, preserve the office input.
-Read current state and explicitly review/rebase before submitting a new command.
-The review shows the latest server address and future order beside the pending input.
+A banner names the conflict and offers **Review latest**. Save and Dispatch stay disabled until the review is done.
+The review dialog shows the latest saved address and future order beside the pending input.
+**Use latest state and keep my edits** is the explicit rebase.
 Rebase keeps only touched address fields. Untouched fields use the latest server values.
 If the resulting address differs from the confirmed address, confirm coordinates again.
 Reassignment, version drift, authentication failure and access loss also preserve input.
 Responses from an old route, app, shop or session cannot change the current editor.
 
 If an edited stop becomes current, Dispatch can return `STOP_NOT_FUTURE`.
-The private draft remains. Select **Discard**, review the scope warning, and confirm.
+The private draft remains. Select **Discard** in the floating bar, review the scope warning, and confirm.
 Discard removes **all private changes for this route**, including another administrator's saved draft.
 Opening the Discard confirmation fetches the latest guards first.
 It does not undo published addresses/order, delivery history, geometry or notifications.
@@ -88,5 +98,8 @@ PR293's terminal observation/retry behavior remains in place.
 
 Synthetic browser verification and actual local HTTP API verification are reported separately in
 [the verification record](../verification/kfood-live-change-ui-20261007.md).
+The separate panel that record describes was replaced on 2026-10-09 by the existing Route Detail controls;
+see [that verification record](../verification/kfood-live-change-existing-ui-20261009.md).
+The API, receipt and conflict checks in the earlier record still apply.
 Authenticated production Shopify, physical driver devices and live provider delivery require
 separate release acceptance. Target issue: Shopify #327. Related control-plane record: #298.

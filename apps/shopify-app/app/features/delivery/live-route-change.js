@@ -115,6 +115,72 @@ export function reorderLiveFutureStops(editor, ids) {
   return { ...editor, futureStopOrder: [...ids] };
 }
 
+const publishedValue = (stop, field) => String(stop?.[field] ?? stop?.address?.[field] ?? "");
+
+function overrideLiveLocation(stop, values) {
+  if (LOCATION_FIELDS.every((field) => publishedValue(stop, field) === values[field])) return stop;
+  const confirmed = validLiveCoordinates(values);
+  const address = {
+    ...stop.address,
+    ...Object.fromEntries(LIVE_ADDRESS_FIELDS.map((field) => [field, values[field] || null])),
+  };
+  return {
+    ...stop,
+    ...address,
+    address,
+    addressLabel: undefined,
+    formattedAddress: undefined,
+    latitude: confirmed ? Number(values.latitude) : null,
+    longitude: confirmed ? Number(values.longitude) : null,
+    coordinates: undefined,
+    locationDiagnostic: undefined,
+  };
+}
+
+/**
+ * Shows the saved private draft plus unsaved input over the published stops.
+ * Only future stops move or change; any identity mismatch falls back to the published stops.
+ */
+export function applyLiveDraftToStops(stops, editor) {
+  if (!editor || !Array.isArray(stops)) return stops;
+  const eligible = new Set(editor.baseline.editableFutureStopIds);
+  const ordered = stops
+    .map((stop, index) => {
+      const sequence = Number(stop.sequence);
+      return { stop, index, key: Number.isInteger(sequence) && sequence > 0 ? sequence : index + 1 };
+    })
+    .sort((first, second) => first.key - second.key || first.index - second.index)
+    .map(({ stop }) => stop);
+  const future = new Map(
+    ordered
+      .filter((stop) => eligible.has(stop.deliveryStopId))
+      .map((stop) => [stop.deliveryStopId, stop]),
+  );
+  const order = editor.futureStopOrder.filter((id) => future.has(id));
+  if (order.length !== future.size) return stops;
+  let cursor = 0;
+  return ordered.map((slot) => {
+    if (!eligible.has(slot.deliveryStopId)) return slot;
+    const source = future.get(order[cursor++]);
+    const placed =
+      source === slot || source.sequence === slot.sequence
+        ? source
+        : { ...source, sequence: slot.sequence };
+    return overrideLiveLocation(placed, liveStopValues(editor, placed.deliveryStopId));
+  });
+}
+
+/** A dragged timeline order may only permute future stops; every other stop keeps its place. */
+export function liveOrderKeepsFixedStops(currentIds, nextIds, eligibleIds) {
+  const eligible = new Set(eligibleIds);
+  return (
+    currentIds.length === nextIds.length &&
+    new Set(nextIds).size === nextIds.length &&
+    nextIds.every((id) => currentIds.includes(id)) &&
+    currentIds.every((id, index) => eligible.has(id) || nextIds[index] === id)
+  );
+}
+
 export function hasLiveLocalEdits(editor) {
   if (!editor) return false;
   return (

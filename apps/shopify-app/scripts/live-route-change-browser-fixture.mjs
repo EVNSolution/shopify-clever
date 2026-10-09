@@ -209,7 +209,7 @@ ${controlButton("Recover geometry and notification", "delivery-failure", false)}
 ${controlButton("Hold next address search", "hold-search")}${controlButton("Release held searches", "release-search")}
 ${controlButton("Hold next live read", "hold-read")}${controlButton("Release held reads", "release-read")}
 ${controlButton("Fail next list reads", "fail-list")}${controlButton("Finalize route INCOMPLETE", "terminal", "INCOMPLETE")}
-</div><p>Child alias UUID differs from actual routePlan.id and group UUID. Save keeps public rows unchanged. Dispatch alone publishes. Current/completed stop IDs stay fixed.</p>
+</div><p>Child alias UUID differs from actual routePlan.id and group UUID. Save keeps the published route unchanged. Dispatch alone publishes. Current/completed stop IDs stay fixed.</p>
 <p>Use fixture controls to create a conflict while office fields remain open. Exact command retries return immutable receipts. GET always returns current synthetic draft.</p>
 <pre id="fixture-log"></pre></details><div id="fixture-status"></div></aside><div id="app"></div><script type="module" src="/fixture.js"></script></body></html>`;
 

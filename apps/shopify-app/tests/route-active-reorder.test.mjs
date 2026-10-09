@@ -101,7 +101,8 @@ test("mixed route groups protect incomplete source and destination while ready r
 
 test("mixed-group drag, send, polygon, removal, and save handlers apply row-level guards", () => {
   assert.match(sourceBetween("const moveDraggedTimelineStop = ", "const handleRouteTimelineDragStart = "), /isRouteTimelineStopMoveAllowed\(sourceRouteRow, targetRouteRow\)/);
-  assert.match(sourceBetween("const handleRouteTimelineDragStart = ", "const handleRouteTimelineStopClick = "), /isRouteStopReorderAllowed\(routeRow.status\)/);
+  assert.match(sourceBetween("const handleRouteTimelineDragStart = ", "const handleRouteTimelineStopClick = "), /canDragTimelineStop\(routeRow, stop\)/);
+  assert.match(sourceBetween("const canDragTimelineStop = ", "const trackingStreamRoutePlanId = "), /isRouteStopReorderAllowed\(routeRow.status\)/);
   assert.match(sourceBetween("const handleSendChildStopToRoute = ", "const handleOpenChildStopSendTargets = "), /isRouteTimelineStopMoveAllowed\(sourceRouteRow, targetRouteRow\)/);
   assert.match(sourceBetween("const canRemoveChildStopFromGroup = ", "const removeChildStopFromGroup = "), /isRouteExecutionLockedForStopMembership\(sourceRouteRow.status\)/);
   assert.match(sourceBetween("const removeChildStopFromGroup = ", "const handleSendChildStopToRoute = "), /canRemoveChildStopFromGroup\(row\)/);
@@ -148,12 +149,13 @@ test("active drag and save paths keep membership and driver assignment protected
   assert.match(driverHandler, /selectorType === "driver"[\s\S]*isRouteExecutionLockedForStopMembership/);
   assert.match(saveHandler, /const isStandaloneRouteReorder = !routeGroupId && !isOrdinarySplitDraft && routeMembershipChangeIsInProgress/);
   assert.match(saveHandler, /submitRouteAction\("saveRouteStops", \{[\s\S]*stops: JSON\.stringify\(standaloneReorderStops\)/);
-  assert.match(routeDetailSource, /draggable=\{canReorderRouteStops/);
+  assert.match(routeDetailSource, /draggable=\{(?:!routeRow\.isPreviewOnly && )?canDragTimelineStop\(routeRow, stop\)\}/);
+  assert.match(sourceBetween("const canDragTimelineStop = ", "const trackingStreamRoutePlanId = "), /canReorderRouteStops\s+\|\|/);
 });
 
 test("standalone Save reaches the stop endpoint and Dispatch remains a separate explicit action", () => {
   assert.match(routeDetailServerSource, /import \{ saveRouteStopOrder \} from "\.\/route-stop-order\.server"/);
   assert.match(routeDetailServerSource, /intent === "saveRouteStops"/);
   assert.match(routeDetailServerSource, /saveRouteStopOrder\([\s\S]*routeId,[\s\S]*formData\.get\("stops"\)/);
-  assert.match(routeDetailSource, /const handleDispatchRoute = \(\) => submitRouteAction\("dispatchRoute"\)/);
+  assert.match(routeDetailSource, /const handleDispatchRoute = \(\) => \(liveChangeActive \? live\.dispatch\(\) : submitRouteAction\("dispatchRoute"\)\)/);
 });
