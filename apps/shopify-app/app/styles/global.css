@@ -1400,3 +1400,83 @@ s-badge {
 .route-detail-selector-controls .route-start-time-picker__calendar-header {
   grid-template-columns: var(--route-detail-control-height) minmax(0, 1fr) var(--route-detail-control-height);
 }
+
+/* Stop time cell: the pencil sits in the right margin of the cell and shows on hover or keyboard focus. */
+.stop-time-cell {
+  align-items: center;
+  display: inline-flex;
+  gap: 4px;
+  justify-content: center;
+  max-width: 100%;
+}
+
+.stop-time-cell__edit,
+.stop-time-cell__action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  color: #616161;
+  cursor: pointer;
+  display: inline-flex;
+  height: 22px;
+  justify-content: center;
+  padding: 0;
+  width: 22px;
+}
+
+.stop-time-cell__edit {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.stop-time-td .stop-time-cell__edit { opacity: 0; }
+
+.stop-time-td:hover .stop-time-cell__edit,
+.stop-time-cell__edit:focus-visible { opacity: 1; }
+
+/* A screen without a pointer cannot hover, so the pencil stays visible there. */
+@media (hover: none) {
+  .stop-time-td .stop-time-cell__edit { opacity: 1; }
+}
+
+.stop-time-cell__edit:hover,
+.stop-time-cell__action:hover:not(:disabled) {
+  background: #f1f1f1;
+  color: #303030;
+}
+
+.stop-time-cell__action:disabled {
+  color: #a3a3a3;
+  cursor: not-allowed;
+}
+
+.stop-time-cell__input {
+  appearance: textfield;
+  border: 1px solid #8a8a8a;
+  border-radius: 6px;
+  box-sizing: border-box;
+  color: #303030;
+  font: inherit;
+  height: 26px;
+  padding: 0 4px;
+  text-align: center;
+  width: 44px;
+}
+
+.stop-time-cell__input::-webkit-inner-spin-button,
+.stop-time-cell__input::-webkit-outer-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.stop-time-cell__input[aria-invalid="true"] { border-color: #b42318; }
+
+.stop-time-cell__edit:focus-visible,
+.stop-time-cell__action:focus-visible,
+.stop-time-cell__input:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 1px;
+}

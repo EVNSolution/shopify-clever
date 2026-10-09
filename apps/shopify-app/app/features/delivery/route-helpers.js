@@ -13,6 +13,16 @@ export function numberOrUndefined(value) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+// The delivery API takes any whole number of minutes, so the one-day cap lives here.
+export const STOP_TIME_MAX_MINUTES = 1440;
+
+export function readStopTimeMinutes(value) {
+  const text = textOrUndefined(value);
+  if (!text || !/^\d+$/u.test(text)) return null;
+  const minutes = Number(text);
+  return minutes <= STOP_TIME_MAX_MINUTES ? minutes : null;
+}
+
 export function firstArray(...values) {
   return values.find((value) => Array.isArray(value)) ?? [];
 }

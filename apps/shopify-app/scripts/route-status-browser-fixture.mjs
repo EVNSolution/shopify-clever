@@ -217,7 +217,16 @@ const detailLoader = async ({ params, request }) => {
 };
 const fixtureAction = async ({ request }) => {
   const form = await request.formData();
-  record("blocked-action", { intent: String(form.get("_intent")) });
+  // Shows what the page would have sent. The session token is never recorded.
+  const fields = Object.fromEntries([...form.entries()].filter(([name]) => name !== "shopifySessionToken"));
+  if (fields._intent === "updateRouteStopTime") {
+    // The one action the fixture accepts. It changes the synthetic stop only, as the server would.
+    const stop = plans.flatMap(plan => plan.stops).find(candidate => candidate.deliveryStopId === fields.deliveryStopId);
+    if (stop) { stop.serviceMinutes = Number(fields.serviceMinutes); persist(); }
+    record("accepted-action", { intent: fields._intent, fields });
+    return { routePlan: null, stop: null, errors: stop ? [] : [{ message: "Synthetic stop not found" }] };
+  }
+  record("blocked-action", { intent: String(form.get("_intent")), fields });
   return { errors: [{ message: "Synthetic fixture blocks all action submissions" }] };
 };
 window.fetch = async (input, init) => {
@@ -394,7 +403,7 @@ renderFixtureStatus();
 `;
 
 const serverStubs = `
-const appBridge = { idToken: async () => "synthetic-fixture-token", toast: { show() {} } };
+const appBridge = { idToken: async () => "synthetic-fixture-token", toast: { show(message) { (window.fixtureToasts ??= []).push(message); } } };
 export const useAppBridge = () => appBridge;
 export const authenticate = { admin: async () => ({}) };
 export const boundary = { headers: () => ({}), error: () => null };

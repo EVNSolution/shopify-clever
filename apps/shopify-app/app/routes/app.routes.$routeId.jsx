@@ -79,6 +79,7 @@ import {
   getVisibleRouteGroupChildren,
   numberOrUndefined,
   readRouteOptimizedSnapshot,
+  readStopTimeMinutes,
   textOrUndefined,
 } from "../features/delivery/route-helpers";
 import { buildRouteRows } from "../features/delivery/route-list-rows";
@@ -88,6 +89,7 @@ import {
   normalizeRouteStopLocationDiagnostic,
   summarizeRouteStopLocationDiagnostics,
 } from "../features/delivery/route-stop-location-diagnostic";
+import { StopTimeCell } from "../features/delivery/route-stop-time-cell";
 import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath, withEmbeddedShopifyContext } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
@@ -868,7 +870,7 @@ const childRouteOrderColumnWidths = [
   "190px",
   "104px",
   "104px",
-  "82px",
+  "104px",
   "142px",
   "96px",
   "132px",
@@ -2177,6 +2179,11 @@ const childRouteOrderCellStyle = {
   ...routesDetailCellStyle,
   padding: "8px 4px",
   textAlign: "center",
+};
+
+const childRouteStopTimeCellStyle = {
+  ...childRouteOrderCellStyle,
+  position: "relative",
 };
 
 const childRouteExpectedArrivalCellStyle = {
@@ -3909,6 +3916,7 @@ export default function RouteDetailPage() {
   const liveDraftStops = useMemo(() => applyLiveDraftToStops(stops, live.editor), [stops, live.editor]);
   const orderedRouteStops = useMemo(() => buildRouteStops(liveDraftStops), [liveDraftStops]);
   const [liveEditStopId, setLiveEditStopId] = useState(null);
+  const [stopTimeDraft, setStopTimeDraft] = useState(null);
   const [liveReviewOpen, setLiveReviewOpen] = useState(false);
   const liveNotice = live.noticeText;
   const lastLiveNoticeRef = useRef("");
@@ -5409,11 +5417,24 @@ export default function RouteDetailPage() {
     setActiveChildStopActions(null);
   };
 
+  const getStopRowRouteStatus = (row) => (
+    timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === row?.id))?.status ?? routeExecutionStatus
+  );
+
   const canEditStopRow = (row) => {
     if (liveChangeActive) return live.futureStopIds.includes(row?.deliveryStopId);
-    const sourceRoute = timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === row?.id));
-    const status = sourceRoute?.status ?? routeExecutionStatus;
+    const status = getStopRowRouteStatus(row);
     return !isTerminalRouteExecutionStatus(status) && normalizeRouteExecutionStatus(status) !== "UNKNOWN";
+  };
+
+  // The server recalculates ETAs after a Stop time change only for a Ready route.
+  const canEditStopTime = (row) => !liveChangeActive && !isRouteGroupDetail && Boolean(row?.deliveryStopId)
+    && normalizeRouteExecutionStatus(getStopRowRouteStatus(row)) === "READY";
+
+  const handleSaveStopTime = (row) => {
+    const serviceMinutes = readStopTimeMinutes(stopTimeDraft?.value);
+    if (serviceMinutes === null || routeGroupActionBusy || !canEditStopTime(row)) return;
+    submitRouteAction("updateRouteStopTime", { deliveryStopId: row.deliveryStopId, serviceMinutes });
   };
 
   const handleOpenChildStopEditor = (row) => {
@@ -6663,13 +6684,17 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (!["transitionRouteStop", "updateRouteStop"].includes(lastRouteActionIntentRef.current)) return;
+    if (!["transitionRouteStop", "updateRouteStop", "updateRouteStopTime"].includes(lastRouteActionIntentRef.current)) return;
     const intent = lastRouteActionIntentRef.current;
     lastRouteActionIntentRef.current = null;
     if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
 
+    if (intent === "updateRouteStopTime") setStopTimeDraft(null);
     revalidator.revalidate();
-    shopify.toast.show(intent === "transitionRouteStop" ? "Stop status updated" : "Stop fields updated");
+    shopify.toast.show({
+      transitionRouteStop: "Stop status updated",
+      updateRouteStopTime: "Stop time updated",
+    }[intent] ?? "Stop fields updated");
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
 
   useEffect(() => {
@@ -8416,7 +8441,18 @@ export default function RouteDetailPage() {
                       </td>
                       <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
                       <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
-                      <td style={childRouteOrderCellStyle}>{row.stopTime}</td>
+                      <td className="stop-time-td" style={childRouteStopTimeCellStyle}>
+                        <StopTimeCell
+                          busy={routeGroupActionBusy}
+                          canEdit={canEditStopTime(row)}
+                          draft={stopTimeDraft?.deliveryStopId === row.deliveryStopId ? stopTimeDraft.value : null}
+                          label={row.stopTime}
+                          onCancel={() => setStopTimeDraft(null)}
+                          onChange={(value) => setStopTimeDraft({ deliveryStopId: row.deliveryStopId, value })}
+                          onEdit={() => setStopTimeDraft({ deliveryStopId: row.deliveryStopId, value: String(row.editFields?.serviceMinutes ?? "") })}
+                          onSave={() => handleSaveStopTime(row)}
+                        />
+                      </td>
                       <td style={childRouteOrderCellStyle}>{row.customer}</td>
                       <td style={childRouteDisclosureCellStyle}>
                         <button

@@ -37,6 +37,8 @@ import {
   getVisibleRouteGroupChildren,
   numberOrUndefined,
   readRouteOptimizedSnapshot,
+  readStopTimeMinutes,
+  STOP_TIME_MAX_MINUTES,
   textOrUndefined,
 } from "./route-helpers";
 import {
@@ -845,6 +847,24 @@ export const routeDetailAction = async ({ params, request }) => {
       routeId,
       deliveryStopId,
       readRouteStopOverridePayload(formData),
+      { sessionToken: shopifySessionToken },
+    );
+  }
+
+  if (intent === "updateRouteStopTime") {
+    const serviceMinutes = readStopTimeMinutes(formData.get("serviceMinutes"));
+    if (serviceMinutes === null) {
+      return {
+        routePlan: null,
+        stop: null,
+        errors: [{ message: `Stop time must be whole minutes from 0 to ${STOP_TIME_MAX_MINUTES}.` }],
+      };
+    }
+    return updateDeliveryRoutePlanStop(
+      request,
+      routeId,
+      textOrUndefined(formData.get("deliveryStopId")),
+      { serviceMinutes },
       { sessionToken: shopifySessionToken },
     );
   }
