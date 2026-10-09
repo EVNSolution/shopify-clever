@@ -976,7 +976,7 @@ export default function RoutesPage() {
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDriveTime")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDistance")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalPrice")}</th>
-                  {kfoodOfficeEnabled ? <th style={routeTableHeaderCellStyle}>Cash / settlement</th> : null}
+                  {kfoodOfficeEnabled ? <th style={routeTableHeaderCellStyle}>Cash</th> : null}
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.created")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.lastModified")}</th>
                 </tr>

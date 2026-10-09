@@ -1,4 +1,4 @@
-import { CashCell, CashReceiptDialog, RouteOptionsEditor, cashReceiptsByStopId, useRouteCashReceipts } from "../features/delivery/route-office-components";
+import { RouteOptionsEditor, cashReceiptsByStopId, useRouteCashReceipts } from "../features/delivery/route-office-components";
 import { formatStoreInstant } from "../features/shopify/store-date-time";
 import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,6 +25,7 @@ import { CustomerEmailSendResultPanel } from "../features/customer-notifications
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   buildChildActualArrivalByStopId,
+  buildChildRouteAmounts,
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
   summarizeChildRouteMoney,
@@ -868,7 +869,8 @@ const childRouteOrderColumnWidths = [
   "142px",
   "96px",
   "132px",
-  "148px",
+  "104px",
+  "124px",
   "94px",
   "76px",
 ];
@@ -3490,6 +3492,27 @@ function renderChildRouteEta(row) {
   );
 }
 
+// Amount follows the ETA treatment: the expected amount alone, then struck through with the received amount in green.
+function renderChildRouteAmount(row, receipts) {
+  const amounts = buildChildRouteAmounts(row, receipts);
+  if (!receipts?.length && amounts[0].expected === ROUTE_EMPTY_LABEL) return ROUTE_EMPTY_LABEL;
+  return (
+    <span style={{ alignItems: "center", display: "inline-flex", flexDirection: "column", gap: "6px" }}>
+      {amounts.map((amount) => (
+        <span key={amount.id}>
+          {renderChildRouteEta({
+            actualArrival: amount.received,
+            actualLabel: "Received amount",
+            etaLabel: receipts?.length ? "Expected amount" : "Order amount",
+            expectedArrival: amount.expected,
+            hasActualArrival: amount.received !== null && amount.received !== ROUTE_EMPTY_LABEL,
+          })}
+        </span>
+      ))}
+    </span>
+  );
+}
+
 function formatRouteEndpointTimestamp(value, referenceValue, ianaTimezone) {
   const localValue = formatStoreLocalDateTimeInput(value, ianaTimezone);
   if (!localValue) return ROUTE_EMPTY_LABEL;
@@ -3529,6 +3552,7 @@ function renderRouteEndpointOrderRow({ endpoint, kind, referenceValue }) {
       <td style={childRouteExpectedArrivalCellStyle}>
         {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
       </td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
@@ -3888,7 +3912,6 @@ export default function RouteDetailPage() {
     reloadKey: `${effectiveRoutePlan?.updatedAt ?? ""}:${routeDeliveredCount}`,
   });
   const cashByStopId = useMemo(() => cashReceiptsByStopId(cash.receipts), [cash.receipts]);
-  const [cashDialogStopId, setCashDialogStopId] = useState(null);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
   const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds));
   const routeTotalDistance = getRouteMetricLabel(formatRouteDistanceMeters(routeMetrics?.distanceMeters));
@@ -4445,9 +4468,6 @@ export default function RouteDetailPage() {
   const activeChildStopActionsRow = activeChildStopActions
     ? findRouteOrderRow(routeOrderRows, activeChildStopActions.rowId)
     : null;
-  const activeChildStopCashReceipts = activeChildStopActionsRow
-    ? cashByStopId.get(activeChildStopActionsRow.deliveryStopId)
-    : undefined;
   const activeChildStopShopifyHref = getShopifyOrderAdminHref(activeChildStopActionsRow);
   const activeChildStopSourceRouteId = activeChildStopActionsRow
     ? timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === activeChildStopActionsRow.id))?.id
@@ -5377,12 +5397,6 @@ export default function RouteDetailPage() {
     setChildStopEditDraft(row.editFields ?? {});
     setActiveChildStopEditRow(row);
     setActiveChildStopActions(null);
-  };
-
-  const handleOpenCashReceipt = (row) => {
-    setActiveChildStopActions(null);
-    setCashDialogStopId(row.deliveryStopId);
-    cash.reload();
   };
 
   const handleSaveChildStopEdit = () => {
@@ -8374,9 +8388,9 @@ export default function RouteDetailPage() {
                         </button>
                       </td>
                       <td style={childRouteOrderCellStyle}>{row.method}</td>
+                      <td style={childRouteOrderCellStyle}>{row.payment}</td>
                       <td style={childRouteOrderCellStyle}>
-                        {row.payment}
-                        <CashCell receipts={cashByStopId.get(row.deliveryStopId)} />
+                        {renderChildRouteAmount(row, cashByStopId.get(row.deliveryStopId))}
                       </td>
                       <td style={childRouteDisclosureCellStyle}>
                         <button
@@ -8779,17 +8793,6 @@ export default function RouteDetailPage() {
               >
                 {activeChildStopActionsRow.isCustomStop ? "Edit custom stop" : "Edit stop"}
               </button>
-              {activeChildStopCashReceipts ? (
-                <button
-                  disabled={routeGroupActionBusy}
-                  onClick={() => handleOpenCashReceipt(activeChildStopActionsRow)}
-                  role="menuitem"
-                  style={childStopActionsMenuItemStyle}
-                  type="button"
-                >
-                  Cash receipt
-                </button>
-              ) : null}
               <button
                 disabled={!canRemoveChildStopFromGroup(activeChildStopActionsRow)}
                 onClick={() => handleRemoveChildStopFromGroup(activeChildStopActionsRow)}
@@ -9601,15 +9604,6 @@ export default function RouteDetailPage() {
             live={live}
             onClose={() => setLiveEditStopId(null)}
             stop={orderedRouteStops.find((stop) => stop.deliveryStopId === liveEditStopId)}
-          />
-        ) : null}
-        {cashDialogStopId && cashByStopId.get(cashDialogStopId) ? (
-          <CashReceiptDialog
-            action={cash.action}
-            onClose={() => setCashDialogStopId(null)}
-            onSaved={cash.reload}
-            receipts={cashByStopId.get(cashDialogStopId)}
-            stopLabel={routeOrderRows.find((row) => row.deliveryStopId === cashDialogStopId)?.order ?? "Stop"}
           />
         ) : null}
         {liveReviewOpen && live.state.fresh ? (

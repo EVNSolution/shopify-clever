@@ -19,6 +19,7 @@ export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "items", label: "Items" },
   { key: "method", label: "Method" },
   { key: "payment", label: "Payment" },
+  { key: "amount", label: "Amount" },
   { key: "attributes", label: "Attributes" },
   { key: "actions", label: "Actions" },
 ];
@@ -605,6 +606,22 @@ function formatPaymentStatus(stop) {
   return status;
 }
 
+/**
+ * Lines of a stop's Amount cell. Without a Cash receipt it is the order amount alone.
+ * Each Cash receipt adds the expected amount and what the driver received.
+ */
+export function buildChildRouteAmounts(row, receipts = []) {
+  if (!receipts.length) return [{ id: "order", expected: row.amountLabel, received: null }];
+  return receipts.map(({ completion }) => {
+    const expected = formatCurrencyAmount(numberOrUndefined(completion.expectedAmount), completion.currencyCode);
+    return {
+      id: completion.id,
+      expected: expected === EMPTY_LABEL ? row.amountLabel : expected,
+      received: formatCurrencyAmount(numberOrUndefined(completion.actualAmount), completion.currencyCode),
+    };
+  });
+}
+
 export function buildChildActualArrivalByStopId(stopArrivals) {
   const actualArrivalByStopId = {};
 
@@ -677,6 +694,7 @@ export function buildChildRouteOrderRows(stops, {
       totalShippingPriceAmount: numberOrUndefined(stop?.totalShippingPriceAmount),
       totalShippingPriceCurrencyCode: firstText(stop?.totalShippingPriceCurrencyCode),
       totalPriceAmount: numberOrUndefined(stop?.totalPriceAmount),
+      amountLabel: formatCurrencyAmount(numberOrUndefined(stop?.totalPriceAmount), firstText(stop?.currencyCode)),
       attributes,
       attributesSummary: formatAttributesSummary(attributes),
       attributesDetail: attributes.length > 0 ? attributes.map((attribute) => attribute.label).join("\n") : EMPTY_LABEL,

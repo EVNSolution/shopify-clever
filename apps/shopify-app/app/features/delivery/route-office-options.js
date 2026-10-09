@@ -44,36 +44,6 @@ export function normalizeCashAmount(value) {
   return `${whole.replace(/^0+(?=\d)/, "")}.${fraction.padEnd(2, "0")}`;
 }
 
-export function buildSettlementPayload(input) {
-  const confirmedAmount = normalizeCashAmount(input.confirmedAmount);
-  const reason = String(input.reason ?? "").trim() || null;
-  if (!input.commandId || !input.receiptId)
-    throw new Error("Reload the Cash receipts before confirming.");
-  if (
-    !Number.isSafeInteger(input.expectedRevision) ||
-    input.expectedRevision < 0
-  )
-    throw new Error("Reload the receipt revision before confirming.");
-  if (confirmedAmount === null)
-    throw new Error(
-      "Enter a non-negative amount with up to two decimal places.",
-    );
-  if (!/^[A-Z]{3}$/.test(input.currency ?? ""))
-    throw new Error(
-      "The receipt currency is missing. Reload the Cash receipts.",
-    );
-  if (input.expectedRevision > 0 && !reason)
-    throw new Error("Enter a reason for the correction.");
-  return {
-    commandId: input.commandId,
-    receiptId: input.receiptId,
-    expectedRevision: input.expectedRevision,
-    confirmedAmount,
-    currency: input.currency,
-    reason,
-  };
-}
-
 export function formatCashAmount(amount, currency) {
   if (
     amount === null ||

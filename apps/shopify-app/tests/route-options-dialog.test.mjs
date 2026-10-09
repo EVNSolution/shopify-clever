@@ -104,7 +104,7 @@ test("Route Detail opens route options from the Edit menu as a popup, not an inl
   const components = read("../app/features/delivery/route-office-components.jsx");
   const editor = components.slice(
     components.indexOf("export function RouteOptionsEditor"),
-    components.indexOf("export function CashAmounts"),
+    components.indexOf("/** Receipts grouped by delivery stop. */"),
   );
   assert.equal(has(editor, /<OfficeDialog/), true, "editor is not shown in the popup");
   assert.equal(has(editor, /scrollIntoView/), false, "editor still scrolls like an inline panel");

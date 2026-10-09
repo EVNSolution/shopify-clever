@@ -4,12 +4,10 @@ import {
   normalizeRouteOptions,
   readRouteOptionsForm,
   normalizeCashAmount,
-  buildSettlementPayload,
   canEditRouteOptions,
 } from "../app/features/delivery/route-office-options.js";
 import {
   fetchRouteCashSettlements,
-  confirmRouteCashSettlement,
   saveRouteOptions,
 } from "../app/features/delivery/route-office-options.server.js";
 process.env.CLEVER_DELIVERY_API_URL = "https://delivery.test";
@@ -63,36 +61,7 @@ test("Cash preserves zero and exact decimals, rejecting blank, negative and exce
   for (const input of ["", "-1", "1.001", "1e2", "NaN"])
     assert.equal(normalizeCashAmount(input), null);
 });
-test("confirmation requires explicit receipt revision and correction reason", () => {
-  const input = {
-    commandId: "command",
-    receiptId: "receipt",
-    expectedRevision: 0,
-    confirmedAmount: "0",
-    currency: "CAD",
-    reason: "",
-  };
-  assert.deepEqual(buildSettlementPayload(input), {
-    ...input,
-    confirmedAmount: "0.00",
-    reason: null,
-  });
-  assert.throws(() =>
-    buildSettlementPayload({ ...input, expectedRevision: undefined }),
-  );
-  assert.throws(() =>
-    buildSettlementPayload({ ...input, expectedRevision: 1 }),
-  );
-  assert.equal(
-    buildSettlementPayload({
-      ...input,
-      expectedRevision: 1,
-      reason: "Office counted again",
-    }).reason,
-    "Office counted again",
-  );
-});
-test("office wrappers preserve scope, command identity and revision without Shopify writes", async () => {
+test("office wrappers preserve scope and revision without Shopify writes", async () => {
   const read = makeFetch({ routePlanId: "r/1", receipts: [] });
   assert.deepEqual(
     (await fetchRouteCashSettlements(request(), "r/1", { fetch: read.fetch }))
@@ -103,20 +72,6 @@ test("office wrappers preserve scope, command identity and revision without Shop
     read.calls[0].url,
     "https://delivery.test/admin/route-plans/r%2F1/cash-settlements",
   );
-  const write = makeFetch({ settlement: { revision: 1 } });
-  const payload = {
-    commandId: "same",
-    receiptId: "receipt",
-    expectedRevision: 0,
-    confirmedAmount: "122.00",
-    currency: "CAD",
-    reason: null,
-  };
-  await confirmRouteCashSettlement(request(), "r/1", payload, {
-    fetch: write.fetch,
-  });
-  assert.equal(write.calls[0].init.method, "POST");
-  assert.deepEqual(JSON.parse(write.calls[0].init.body), payload);
   const options = makeFetch({ routePlan: { id: "r/1" } });
   await saveRouteOptions(
     request(),
@@ -158,7 +113,7 @@ test("Cash and options are restricted to the KFood app and exact authenticated s
   );
 });
 
-test("Cash confirmation invalidates the authenticated shop list and preserves another shop cache", async () => {
+test("saving route options invalidates the authenticated shop list and preserves another shop cache", async () => {
   const { fetchDeliveryRoutePlans, clearDeliveryApiResponseCache } =
     await import("../app/features/delivery/route-plans.server.js");
   const previous = process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS;
@@ -167,18 +122,12 @@ test("Cash confirmation invalidates the authenticated shop list and preserves an
   let revision = 0;
   let reads = 0;
   const transport = async (_url, init) => {
-    if (init.method === "POST") {
+    if (init.method === "PATCH") {
       revision = 1;
-      return Response.json({ data: { settlement: { revision: 1 } } });
+      return Response.json({ data: { routePlan: { id: "r" } } });
     }
     reads++;
-    return Response.json({
-      data: {
-        routePlans: [
-          { id: "r", cashSettlementSummary: [{ confirmedCount: revision }] },
-        ],
-      },
-    });
+    return Response.json({ data: { routePlans: [{ id: "r", revision }] } });
   };
   try {
     const read = (shop) =>
@@ -186,22 +135,14 @@ test("Cash confirmation invalidates the authenticated shop list and preserves an
     await read("shop-a");
     await read("shop-b");
     assert.equal(reads, 2);
-    await confirmRouteCashSettlement(
+    await saveRouteOptions(
       request(),
       "r",
-      { commandId: "one" },
+      { expectedUpdatedAt: "revision" },
       { fetch: transport, cacheKey: "shop-a" },
     );
-    assert.equal(
-      (await read("shop-a")).routePlans[0].cashSettlementSummary[0]
-        .confirmedCount,
-      1,
-    );
-    assert.equal(
-      (await read("shop-b")).routePlans[0].cashSettlementSummary[0]
-        .confirmedCount,
-      0,
-    );
+    assert.equal((await read("shop-a")).routePlans[0].revision, 1);
+    assert.equal((await read("shop-b")).routePlans[0].revision, 0);
     assert.equal(reads, 3);
   } finally {
     process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = previous;
