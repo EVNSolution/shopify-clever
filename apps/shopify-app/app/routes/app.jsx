@@ -1,3 +1,4 @@
+import { isKfoodOfficeEnabled } from "../features/delivery/route-office-options.server";
 import { useEffect, useRef, useState } from "react";
 import {
   Outlet,
@@ -197,6 +198,7 @@ export const loader = async ({ request }) => {
     language,
     ianaTimezone,
     tokenSyncHealth: getShopifyTokenSyncHealth(authenticatedShop),
+    kfoodOfficeEnabled: isKfoodOfficeEnabled(authenticatedShop),
   };
 };
 

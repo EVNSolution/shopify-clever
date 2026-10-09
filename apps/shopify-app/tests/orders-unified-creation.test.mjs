@@ -1,3 +1,4 @@
+import { readRouteOptionsForm } from "../app/features/delivery/route-office-options.js";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
@@ -37,6 +38,8 @@ async function runCreation(intent, preflightErrors, creationResponse) {
     authenticate: { admin: async () => ({ admin: {}, session: { shop: "test-shop" } }) },
     buildCreateRoutePlanPayload,
     buildCreateRouteGroupPayload,
+    readRouteOptionsForm,
+    isKfoodOfficeEnabled: () => true,
     hasNamedInitialRoute,
     randomUUID: () => "11111111-1111-4111-8111-111111111111",
     createDeliveryRouteGroup: async (_request, payload, options) => {
@@ -78,7 +81,7 @@ test("explicit and default route creation use the same group endpoint and exact 
       payload: {
         dateRangeStart: "2026-09-10", dateRangeEnd: "2026-09-10", planDate: "2026-09-10",
         depot: { address: "Depot", latitude: 43.7, longitude: -79.4 },
-        initialRoute: { requestId: "11111111-1111-4111-8111-111111111111" },
+        initialRoute: { requestId: "11111111-1111-4111-8111-111111111111", deliveryProof: {photoRequired:false,signatureRequired:false}, tollPolicy:"ALLOW_TOLLS" },
         name: "Thursday route", orderIds: ["order-1", "order-2"],
       },
       options: { sessionToken: "test-token" },
