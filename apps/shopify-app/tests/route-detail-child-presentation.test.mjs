@@ -780,7 +780,7 @@ test("child timeline drag previews midpoint placement and preserves the returned
   );
 });
 
-test("child timeline reorders whole stop units with a cancellable FLIP animation", () => {
+test("child timeline slides the stop markers, not their lines, with a cancellable FLIP animation", () => {
   assert.match(routeDetailSource, /const routeTimelineStopMotionRefs = useRef\(new Map\(\)\)/);
   assert.match(routeDetailSource, /const setRouteTimelineStopMotionRef = useCallback/);
   assert.match(routeDetailSource, /routeTimelineStopMotionRefs\.current\.entries\(\)/);
