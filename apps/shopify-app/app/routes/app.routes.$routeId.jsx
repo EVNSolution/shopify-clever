@@ -1,4 +1,4 @@
-import { RouteOptionsEditor, RouteCashPanel } from "../features/delivery/route-office-components";
+import { CashCell, CashReceiptDialog, RouteOptionsEditor, cashReceiptsByStopId, useRouteCashReceipts } from "../features/delivery/route-office-components";
 import { formatStoreInstant } from "../features/shopify/store-date-time";
 import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -868,7 +868,7 @@ const childRouteOrderColumnWidths = [
   "142px",
   "96px",
   "132px",
-  "104px",
+  "148px",
   "94px",
   "76px",
 ];
@@ -3883,6 +3883,12 @@ export default function RouteDetailPage() {
   const routeStartTimeLabel = getRouteStartTimeLabel(routeStartDateTimeValue);
   const routeDeliveredCount = countRouteStopsByStatus(orderedRouteStops, ["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]);
   const routeAttemptedCount = countRouteStopsByStatus(orderedRouteStops, ["ATTEMPTED", "FAILED"]);
+  const cash = useRouteCashReceipts(effectiveRoutePlan?.id, {
+    enabled: kfoodOfficeEnabled && !isRouteGroupDetail && Boolean(effectiveRoutePlan?.id),
+    reloadKey: `${effectiveRoutePlan?.updatedAt ?? ""}:${routeDeliveredCount}`,
+  });
+  const cashByStopId = useMemo(() => cashReceiptsByStopId(cash.receipts), [cash.receipts]);
+  const [cashDialogStopId, setCashDialogStopId] = useState(null);
   const routeTotalItems = getRouteTotalItems(effectiveRoutePlan, orderedRouteStops);
   const routeTotalDriveTime = getRouteMetricLabel(formatRouteDurationSeconds(routeMetrics?.durationSeconds));
   const routeTotalDistance = getRouteMetricLabel(formatRouteDistanceMeters(routeMetrics?.distanceMeters));
@@ -4439,6 +4445,9 @@ export default function RouteDetailPage() {
   const activeChildStopActionsRow = activeChildStopActions
     ? findRouteOrderRow(routeOrderRows, activeChildStopActions.rowId)
     : null;
+  const activeChildStopCashReceipts = activeChildStopActionsRow
+    ? cashByStopId.get(activeChildStopActionsRow.deliveryStopId)
+    : undefined;
   const activeChildStopShopifyHref = getShopifyOrderAdminHref(activeChildStopActionsRow);
   const activeChildStopSourceRouteId = activeChildStopActionsRow
     ? timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === activeChildStopActionsRow.id))?.id
@@ -4582,6 +4591,7 @@ export default function RouteDetailPage() {
     ...(ordinaryMutationUncertain ? [{ message: "The previous Copy or Save result is unconfirmed. Check saved routes before creating more routes." }] : []),
     ...(routeGroupClientError ? [{ message: routeGroupClientError }] : []),
     ...(routeActionFetcher.data?.errors ?? []),
+    ...cash.errors,
     ...(errors ?? []),
   ];
   const visibleErrorMessage = visibleErrors[0]
@@ -5367,6 +5377,12 @@ export default function RouteDetailPage() {
     setChildStopEditDraft(row.editFields ?? {});
     setActiveChildStopEditRow(row);
     setActiveChildStopActions(null);
+  };
+
+  const handleOpenCashReceipt = (row) => {
+    setActiveChildStopActions(null);
+    setCashDialogStopId(row.deliveryStopId);
+    cash.reload();
   };
 
   const handleSaveChildStopEdit = () => {
@@ -8006,8 +8022,6 @@ export default function RouteDetailPage() {
             </div>
           </section>
 
-          {kfoodOfficeEnabled && !isTrackingMapView && !isRouteGroupDetail && effectiveRoutePlan?.id ? <RouteCashPanel key={effectiveRoutePlan.id} routePlanId={effectiveRoutePlan.id} stops={routeOrderRows} /> : null}
-
           {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
             <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>
               <div style={{ ...childRouteTimelineRowsStyle, minHeight: "48px" }}>
@@ -8360,7 +8374,10 @@ export default function RouteDetailPage() {
                         </button>
                       </td>
                       <td style={childRouteOrderCellStyle}>{row.method}</td>
-                      <td style={childRouteOrderCellStyle}>{row.payment}</td>
+                      <td style={childRouteOrderCellStyle}>
+                        {row.payment}
+                        <CashCell receipts={cashByStopId.get(row.deliveryStopId)} />
+                      </td>
                       <td style={childRouteDisclosureCellStyle}>
                         <button
                           aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "attributes"}
@@ -8753,11 +8770,26 @@ export default function RouteDetailPage() {
                 disabled={!activeChildStopActionsRow.deliveryStopId || !canEditStopRow(activeChildStopActionsRow)}
                 onClick={() => handleOpenChildStopEditor(activeChildStopActionsRow)}
                 role="menuitem"
-                style={childStopActionsMenuItemStyle}
+                style={{
+                  ...childStopActionsMenuItemStyle,
+                  ...(!activeChildStopActionsRow.deliveryStopId || !canEditStopRow(activeChildStopActionsRow) ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                }}
+                title={liveChangeActive && !canEditStopRow(activeChildStopActionsRow) ? "Only future stops can be edited while the route is in progress." : undefined}
                 type="button"
               >
                 {activeChildStopActionsRow.isCustomStop ? "Edit custom stop" : "Edit stop"}
               </button>
+              {activeChildStopCashReceipts ? (
+                <button
+                  disabled={routeGroupActionBusy}
+                  onClick={() => handleOpenCashReceipt(activeChildStopActionsRow)}
+                  role="menuitem"
+                  style={childStopActionsMenuItemStyle}
+                  type="button"
+                >
+                  Cash receipt
+                </button>
+              ) : null}
               <button
                 disabled={!canRemoveChildStopFromGroup(activeChildStopActionsRow)}
                 onClick={() => handleRemoveChildStopFromGroup(activeChildStopActionsRow)}
@@ -9569,6 +9601,15 @@ export default function RouteDetailPage() {
             live={live}
             onClose={() => setLiveEditStopId(null)}
             stop={orderedRouteStops.find((stop) => stop.deliveryStopId === liveEditStopId)}
+          />
+        ) : null}
+        {cashDialogStopId && cashByStopId.get(cashDialogStopId) ? (
+          <CashReceiptDialog
+            action={cash.action}
+            onClose={() => setCashDialogStopId(null)}
+            onSaved={cash.reload}
+            receipts={cashByStopId.get(cashDialogStopId)}
+            stopLabel={routeOrderRows.find((row) => row.deliveryStopId === cashDialogStopId)?.order ?? "Stop"}
           />
         ) : null}
         {liveReviewOpen && live.state.fresh ? (
