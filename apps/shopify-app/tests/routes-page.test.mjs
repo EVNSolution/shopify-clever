@@ -914,7 +914,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*removeTimelineStop\(/);
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
-  assert.match(routeDetailSource, /onDragStart=\{canReorderRouteStops && isRouteStopReorderAllowed\(routeRow.status\) \? \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\) : undefined\}/);
+  assert.match(routeDetailSource, /onDragStart=\{canDragTimelineStop\(routeRow, stop\) \? \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\) : undefined\}/);
   assert.match(routeDetailSource, /function getLineItemList\(lineItems\) \{/);
   assert.match(routeDetailSource, /function getRouteStopLineItems\(stop\) \{/);
   assert.match(routeDetailSource, /stop\?\.rawPayload\?\.lineItems/);
@@ -1013,9 +1013,11 @@ test("Route detail uses OpenFreeMap MapLibre without copying every reference con
   assert.match(routeDetailSource, /syncRouteDetailRouteLine\(map, savedRouteGeometryRows, routePathColor, \{\s+isTrackingReference: isTrackingMapView,\s+\}\)/);
   assert.match(routeDetailSource, /syncRouteDetailMapMarkerLayers\(\s+map,\s+departureLocation,\s+routeMapStops,\s+savedRouteStopPoints,\s+routeLineColor,\s+routeStopColorById,\s+\(metric\) => emitMarkerDiagnostics\(\{ \.\.\.metric, trigger: "initial-sync" \}\),\s+\)/);
   assert.doesNotMatch(routeDetailSource, /Mark all as ready|Start free trial/);
-  assert.match(routeDetailSource, />\{routeGroupActionIntent === "dispatchRoute" \? "Dispatching…" : "Dispatch"\}<\/button>/);
-  assert.match(routeDetailSource, /This does not start the route or send customer email/);
-  assert.match(routeDetailSource, /Assign a driver before dispatching this route/);
+  assert.match(routeDetailSource, />\{dispatchControl\.label\}<\/button>/);
+  assert.match(routeDetailSource, /dispatching: liveChangeActive \? live\.busy === "dispatch" : routeGroupActionIntent === "dispatchRoute"/);
+  const routeDispatchSource = readFileSync(join(root, "app/features/delivery/route-dispatch.js"), "utf8");
+  assert.match(routeDispatchSource, /This does not start the route or send customer email/);
+  assert.match(routeDispatchSource, /Assign a driver before dispatching this route/);
   assert.ok(
     routeDetailSource.indexOf("const [routeExecutionStatus")
       < routeDetailSource.indexOf("const canDispatchRoute"),
@@ -1351,7 +1353,8 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailServerSource, /optimizedExistingRoutePlanCount: draft\.routes\.filter\(\(route\) => route\.routePlanId && route\.optimized !== undefined\)\.length/);
   assert.match(routeDetailServerSource, /orderCounts: draft\.routes\.map\(\(route\) => route\.orderIds\.length\)/);
   assert.match(routeDetailSource, /function buildRouteStops\(stops\) \{/);
-  assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(stops\), \[stops\]\)/);
+  assert.match(routeDetailSource, /const liveDraftStops = useMemo\(\(\) => applyLiveDraftToStops\(stops, live\.editor\), \[stops, live\.editor\]\)/);
+  assert.match(routeDetailSource, /const orderedRouteStops = useMemo\(\(\) => buildRouteStops\(liveDraftStops\), \[liveDraftStops\]\)/);
   assert.match(routeDetailSource, /function buildRouteGroupStops\(routeGroup, childRouteDetails, currentRouteStops\) \{/);
   assert.match(routeDetailSource, /const assignmentStops = buildRouteStops\(routeGroup\?\.assignments \?\? \[\]\)/);
   assert.match(routeDetailSource, /const allRouteGroupStops = useMemo/);

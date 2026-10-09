@@ -11,7 +11,9 @@ import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import { translate } from "../i18n/i18n";
 import { summarizeAllRoutes } from "../features/delivery/all-routes-summary";
 import { rememberRouteListRefresh } from "../features/delivery/route-list-refresh";
-import { LiveRouteChangeEditor } from "../features/delivery/live-route-change-editor";
+import { useLiveRouteChange } from "../features/delivery/use-live-route-change";
+import { LiveChangeNotices, LiveDiscardDialog, LiveReviewDialog, LiveStopEditDialog } from "../features/delivery/live-route-change-ui";
+import { applyLiveDraftToStops, liveOrderKeepsFixedStops } from "../features/delivery/live-route-change";
 import {
   getCustomerEmailDefaultSignal,
   getCustomerEmailPreviewEmptyState,
@@ -43,7 +45,7 @@ import {
   validateCustomStopDraft,
 } from "../features/delivery/custom-stop-form";
 import { reverseRouteStopIds } from "../features/delivery/route-draft";
-import { getRouteDispatchNotice } from "../features/delivery/route-dispatch";
+import { getRouteDispatchControl, getRouteDispatchNotice } from "../features/delivery/route-dispatch";
 import {
   beginRouteGroupCopySubmit,
   cancelRouteGroupCopyDialog,
@@ -3824,7 +3826,42 @@ export default function RouteDetailPage() {
   const routeDriverSummary = routeDriverId
     ? routeDriverOptions.find((driverOption) => driverOption.id === routeDriverId)?.label ?? "Assigned"
     : "Unassigned";
-  const orderedRouteStops = useMemo(() => buildRouteStops(stops), [stops]);
+  const [routeExecutionState, setRouteExecutionState] = useState({ routeId: routeExecutionScopeId, status: loaderRouteExecutionStatus });
+  const routeExecutionStatus = routeExecutionState.routeId === routeExecutionScopeId
+    ? isTerminalRouteExecutionStatus(loaderRouteExecutionStatus)
+      ? mergeRouteExecutionStatus(routeExecutionState.status, loaderRouteExecutionStatus)
+      : routeExecutionState.status
+    : loaderRouteExecutionStatus;
+  const routeExecutionStatusRef = useRef(routeExecutionStatus);
+  routeExecutionStatusRef.current = routeExecutionStatus;
+  const liveChangeActive = Boolean(liveChangeEnabled && liveChangeScopeKey
+    && effectiveRoutePlan?.id && routeExecutionStatus === "IN_PROGRESS");
+  const openedLiveChangeScopeRef = useRef(null);
+  const liveChangeScope = `${liveChangeScopeKey}:${effectiveRoutePlan?.id}`;
+  if (liveChangeActive) openedLiveChangeScopeRef.current = liveChangeScope;
+  const showLiveChangeEditor = Boolean(liveChangeEnabled && liveChangeScopeKey
+    && effectiveRoutePlan?.id && openedLiveChangeScopeRef.current === liveChangeScope);
+  const live = useLiveRouteChange({
+    enabled: showLiveChangeEditor,
+    routePlanId: effectiveRoutePlan?.id,
+    scopeKey: liveChangeScopeKey,
+    language,
+    routeInProgress: routeExecutionStatus === "IN_PROGRESS",
+    onMutation: () => revalidator.revalidate(),
+  });
+  const liveDraftStops = useMemo(() => applyLiveDraftToStops(stops, live.editor), [stops, live.editor]);
+  const orderedRouteStops = useMemo(() => buildRouteStops(liveDraftStops), [liveDraftStops]);
+  const [liveEditStopId, setLiveEditStopId] = useState(null);
+  const [liveReviewOpen, setLiveReviewOpen] = useState(false);
+  const liveNotice = live.noticeText;
+  const lastLiveNoticeRef = useRef("");
+  useEffect(() => {
+    if (liveNotice && liveNotice !== lastLiveNoticeRef.current) shopify.toast.show(liveNotice);
+    lastLiveNoticeRef.current = liveNotice;
+  }, [liveNotice, shopify]);
+  useEffect(() => {
+    if (!live.state.fresh) setLiveReviewOpen(false);
+  }, [live.state.fresh]);
   const routeChildDetailsByRoutePlanId = useMemo(() => mapRouteChildDetailsByRoutePlanId(childRouteDetails), [childRouteDetails]);
   const allRouteGroupStops = useMemo(
     () => buildRouteGroupStops(routeGroup, childRouteDetails, orderedRouteStops),
@@ -4043,22 +4080,6 @@ export default function RouteDetailPage() {
   const [routeTrackingSnapshot, setRouteTrackingSnapshot] = useState(null);
   const [trackingConnectionState, setTrackingConnectionState] = useState("idle");
   const [routeTrackingClock, setRouteTrackingClock] = useState(() => Date.now());
-  const [routeExecutionState, setRouteExecutionState] = useState({ routeId: routeExecutionScopeId, status: loaderRouteExecutionStatus });
-  const routeExecutionStatus = routeExecutionState.routeId === routeExecutionScopeId
-    ? isTerminalRouteExecutionStatus(loaderRouteExecutionStatus)
-      ? mergeRouteExecutionStatus(routeExecutionState.status, loaderRouteExecutionStatus)
-      : routeExecutionState.status
-    : loaderRouteExecutionStatus;
-  const routeExecutionStatusRef = useRef(routeExecutionStatus);
-  routeExecutionStatusRef.current = routeExecutionStatus;
-  const liveChangeActive = Boolean(liveChangeEnabled && liveChangeScopeKey
-    && effectiveRoutePlan?.id && routeExecutionStatus === "IN_PROGRESS");
-  const liveChangeEditorRef = useRef(null);
-  const openedLiveChangeScopeRef = useRef(null);
-  const liveChangeScope = `${liveChangeScopeKey}:${effectiveRoutePlan?.id}`;
-  if (liveChangeActive) openedLiveChangeScopeRef.current = liveChangeScope;
-  const showLiveChangeEditor = Boolean(liveChangeEnabled && liveChangeScopeKey
-    && effectiveRoutePlan?.id && openedLiveChangeScopeRef.current === liveChangeScope);
   const setRouteExecutionStatus = useCallback((update) => {
     if (activeTrackingRoutePlanIdRef.current !== routeExecutionScopeId) return;
     const nextStatus = update(routeExecutionStatusRef.current);
@@ -4380,6 +4401,13 @@ export default function RouteDetailPage() {
   const canReorderRouteStops = isRouteGroupDetail
     ? contextRouteRows.some((row) => isRouteStopReorderAllowed(row.status))
     : !liveChangeActive && isRouteStopReorderAllowed(routeExecutionStatus);
+  // While a KFood route is in progress, only future stops can be dragged. Current and completed stops stay put.
+  const canDragTimelineStop = (routeRow, stop) => isRouteStopReorderAllowed(routeRow.status) && (
+    canReorderRouteStops
+    || (liveChangeActive && live.ready && !live.locked
+      && routeRow.routePlanId === effectiveRoutePlan?.id
+      && live.futureStopIds.includes(stop.deliveryStopId))
+  );
   const trackingStreamRoutePlanId = ["READY", "IN_PROGRESS"].includes(routeExecutionStatus)
     ? trackingRoutePlanId
     : null;
@@ -4451,6 +4479,25 @@ export default function RouteDetailPage() {
     && !ordinaryMutationPending
     && !ordinaryMutationUncertain
     && !isRouteLineEditorOpen;
+  const liveBarVisible = liveChangeActive && live.ready && (live.localDirty || live.privateDirty);
+  const showDraftSaveRevert = hasRouteAllocationDraft || live.localDirty;
+  const barCanSave = liveChangeActive && live.localDirty
+    ? live.canSave && !routeGroupActionBusy
+    : canSaveRouteDraft;
+  const barRevertDisabled = routeGroupActionBusy || (live.localDirty && live.locked);
+  const routeDraftBarText = showDraftSaveRevert
+    ? (saveRouteDraftBusy || live.busy === "save" ? "Saving route changes…" : "Unsaved route changes")
+    : live.busy === "dispatch" ? "Dispatching…"
+      : live.busy === "discard" ? "Discarding…"
+        : "Saved changes are waiting for Dispatch";
+  const dispatchControl = getRouteDispatchControl({
+    busy: routeGroupActionBusy,
+    canDispatch: canDispatchRoute,
+    dispatching: liveChangeActive ? live.busy === "dispatch" : routeGroupActionIntent === "dispatchRoute",
+    hasDriver: Boolean(routeDriverId),
+    hasUnsavedDraft: hasRouteAllocationDraft,
+    live: liveChangeActive ? live : null,
+  });
   const routePolygonSourceStops = useMemo(
     () => (timelineRouteRows.length > 0
       ? timelineRouteRows.flatMap((routeRow) => routeRow.stops)
@@ -5109,6 +5156,11 @@ export default function RouteDetailPage() {
       targetRouteId,
       afterStopId,
     );
+    if (liveChangeActive && !liveOrderKeepsFixedStops(
+      sourceRouteRow.stops.map((stop) => stop.id),
+      nextOrderByRouteId[drag.routeId] ?? sourceRouteRow.stops.map((stop) => stop.id),
+      live.futureStopIds,
+    )) return;
     const returnedToSnapshot = snapshot && areTimelineOrdersEqual(
       routeRows,
       nextOrderByRouteId,
@@ -5128,10 +5180,10 @@ export default function RouteDetailPage() {
           : {},
       );
     });
-  }, [animateRouteTimelineChange, routeMembershipChangeIsInProgress, routeRows]);
+  }, [animateRouteTimelineChange, liveChangeActive, live.futureStopIds, routeMembershipChangeIsInProgress, routeRows]);
 
   const handleRouteTimelineDragStart = (event, routeRow, stop) => {
-    if (!canReorderRouteStops || routeRow.isPreviewOnly || !isRouteStopReorderAllowed(routeRow.status)) return;
+    if (routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop)) return;
     const drag = { routeId: routeRow.id, stopId: stop.id };
     routeTimelineDragRef.current = drag;
     routeTimelineDragPointerXRef.current = event.clientX;
@@ -5292,6 +5344,7 @@ export default function RouteDetailPage() {
   };
 
   const canEditStopRow = (row) => {
+    if (liveChangeActive) return live.futureStopIds.includes(row?.deliveryStopId);
     const sourceRoute = timelineRouteRows.find((routeRow) => routeRow.stops.some((stop) => stop.id === row?.id));
     const status = sourceRoute?.status ?? routeExecutionStatus;
     return !isTerminalRouteExecutionStatus(status) && normalizeRouteExecutionStatus(status) !== "UNKNOWN";
@@ -5301,8 +5354,7 @@ export default function RouteDetailPage() {
     if (!row?.deliveryStopId || !canEditStopRow(row)) return;
     if (liveChangeActive) {
       setActiveChildStopActions(null);
-      liveChangeEditorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      liveChangeEditorRef.current?.focus();
+      setLiveEditStopId(row.deliveryStopId);
       return;
     }
     if (row.isCustomStop) {
@@ -5536,9 +5588,21 @@ export default function RouteDetailPage() {
     });
   }, []);
 
+  const commitLiveTimelineOrderRef = useRef(null);
+  commitLiveTimelineOrderRef.current = () => {
+    if (!liveChangeActive || !effectiveRoutePlan?.id) return;
+    const order = routeTimelineOrderByRouteIdRef.current[effectiveRoutePlan.id];
+    if (!order) return;
+    live.setFutureOrder(order.filter((stopId) => live.futureStopIds.includes(stopId)));
+    routeTimelineOrderByRouteIdRef.current = {};
+    setRouteTimelineOrderByRouteId({});
+    setRoutePreviewByKey({});
+  };
+
   const handleRouteTimelineDragEnd = useCallback(() => {
     const shouldRestorePreview = routeTimelineDragRef.current && !routeTimelineDropCommittedRef.current;
     if (shouldRestorePreview) restoreRouteTimelineDragPreview();
+    else if (routeTimelineDragRef.current) commitLiveTimelineOrderRef.current();
 
     routeTimelineDragRef.current = null;
     routeTimelineDragPointerXRef.current = null;
@@ -5726,7 +5790,7 @@ export default function RouteDetailPage() {
     }
   };
 
-  const handleDispatchRoute = () => submitRouteAction("dispatchRoute");
+  const handleDispatchRoute = () => (liveChangeActive ? live.dispatch() : submitRouteAction("dispatchRoute"));
 
   const applyCustomerEmailDialogOpenState = (dialogState) => {
     customerEmailRequestRef.current = null;
@@ -5908,6 +5972,11 @@ export default function RouteDetailPage() {
     ordinarySplitRevisionRef.current = null;
     setRouteGroupClientError(null);
   }, []);
+
+  const handleRevertRouteDraft = () => {
+    resetRouteDraftChanges();
+    if (live.localDirty) live.revert();
+  };
 
   const handleAddEmptyRoute = () => {
     if (routeGroupActionBusy || ordinaryMutationPendingRef.current) return;
@@ -6144,6 +6213,10 @@ export default function RouteDetailPage() {
   };
 
   const handleSaveRouteDraft = () => {
+    if (liveChangeActive && live.localDirty) {
+      live.save();
+      return;
+    }
     if (!canSaveRouteDraft) return;
     if (isOrdinarySplitDraft && !canDraftEditChildStopMembership) {
       setRouteGroupClientError("Split routes can only be saved before the route has started. Your draft has been kept.");
@@ -7289,31 +7362,48 @@ export default function RouteDetailPage() {
 
   return (
     <main className="route-detail-controls" style={routesDetailPageStyle}>
-      {hasRouteAllocationDraft ? (
+      {hasRouteAllocationDraft || liveBarVisible ? (
         <div aria-label="Unsaved route draft" role="status" style={routeDraftBarStyle}>
-          <span style={routeDraftBarTextStyle}>{saveRouteDraftBusy ? "Saving route changes…" : "Unsaved route changes"}</span>
-          <button
-            disabled={!canSaveRouteDraft}
-            onClick={handleSaveRouteDraft}
-            style={{
-              ...routeDraftBarButtonStyle,
-              ...(!canSaveRouteDraft ? { opacity: 0.55 } : {}),
-            }}
-            type="button"
-          >
-            Save
-          </button>
-          <button
-            disabled={routeGroupActionBusy}
-            onClick={resetRouteDraftChanges}
-            style={{
-              ...routeDraftBarGhostButtonStyle,
-              ...(routeGroupActionBusy ? { opacity: 0.55 } : {}),
-            }}
-            type="button"
-          >
-            Revert
-          </button>
+          <span style={routeDraftBarTextStyle}>{routeDraftBarText}</span>
+          {showDraftSaveRevert ? (
+            <>
+              <button
+                disabled={!barCanSave}
+                onClick={handleSaveRouteDraft}
+                style={{
+                  ...routeDraftBarButtonStyle,
+                  ...(!barCanSave ? { opacity: 0.55 } : {}),
+                }}
+                type="button"
+              >
+                Save
+              </button>
+              <button
+                disabled={barRevertDisabled}
+                onClick={handleRevertRouteDraft}
+                style={{
+                  ...routeDraftBarGhostButtonStyle,
+                  ...(barRevertDisabled ? { opacity: 0.55 } : {}),
+                }}
+                type="button"
+              >
+                Revert
+              </button>
+            </>
+          ) : null}
+          {liveChangeActive && live.privateDirty ? (
+            <button
+              disabled={!live.canDiscard || routeGroupActionBusy}
+              onClick={live.requestDiscard}
+              style={{
+                ...routeDraftBarGhostButtonStyle,
+                ...(!live.canDiscard || routeGroupActionBusy ? { opacity: 0.55 } : {}),
+              }}
+              type="button"
+            >
+              Discard
+            </button>
+          ) : null}
         </div>
       ) : null}
       <div style={routesDetailContentStyle}>
@@ -7531,17 +7621,13 @@ export default function RouteDetailPage() {
 
         {kfoodOfficeEnabled && routeOptionsOpen && effectiveRoutePlan?.id ? <RouteOptionsEditor key={effectiveRoutePlan.id} routePlan={effectiveRoutePlan} onClose={() => setRouteOptionsOpen(false)} /> : null}
 
-        {showLiveChangeEditor ? (
-          <div ref={liveChangeEditorRef} tabIndex={-1}>
-            <LiveRouteChangeEditor
-              routePlanId={effectiveRoutePlan.id}
-              scopeKey={liveChangeScopeKey}
-              language={language}
-              routeInProgress={routeExecutionStatus === "IN_PROGRESS"}
-              onMutation={() => revalidator.revalidate()}
-            />
-          </div>
-        ) : null}
+        <LiveChangeNotices
+          live={live}
+          onReview={() => {
+            setLiveReviewOpen(true);
+            live.refresh();
+          }}
+        />
 
         <section style={routesDetailCardStyle}>
           {hasRouteTrackingDetail ? (
@@ -7643,19 +7729,17 @@ export default function RouteDetailPage() {
                   {renderRouteHeaderMetric("Driver", routeDriverSummary)}
                 </div>
               )}
-              {!isRouteGroupDetail && effectiveRoutePlan?.id && !liveChangeActive ? (
+              {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
                 <button
-                  disabled={!canDispatchRoute || routeGroupActionBusy || hasRouteAllocationDraft}
+                  disabled={!dispatchControl.enabled}
                   onClick={handleDispatchRoute}
                   style={{
-                    ...(canDispatchRoute && !routeGroupActionBusy && !hasRouteAllocationDraft ? routeActionButtonStyle : routeDisabledActionButtonStyle),
+                    ...(dispatchControl.enabled ? routeActionButtonStyle : routeDisabledActionButtonStyle),
                     minHeight: "36px",
                   }}
-                  title={routeDriverId
-                    ? "Publish this route and notify the assigned driver. This does not start the route or send customer email."
-                    : "Assign a driver before dispatching this route."}
+                  title={dispatchControl.title}
                   type="button"
-                >{routeGroupActionIntent === "dispatchRoute" ? "Dispatching…" : "Dispatch"}</button>
+                >{dispatchControl.label}</button>
               ) : null}
             </section>
           ) : null}
@@ -7959,9 +8043,9 @@ export default function RouteDetailPage() {
                         <button
                           data-route-timeline-stop-button="true"
                           ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                          draggable={canReorderRouteStops && isRouteStopReorderAllowed(routeRow.status)}
+                          draggable={canDragTimelineStop(routeRow, stop)}
                           onDragEnd={handleRouteTimelineDragEnd}
-                          onDragStart={canReorderRouteStops && isRouteStopReorderAllowed(routeRow.status) ? (event) => handleRouteTimelineDragStart(event, routeRow, stop) : undefined}
+                          onDragStart={canDragTimelineStop(routeRow, stop) ? (event) => handleRouteTimelineDragStart(event, routeRow, stop) : undefined}
                           onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                           onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                           onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
@@ -8023,9 +8107,9 @@ export default function RouteDetailPage() {
                           <button
                             data-route-timeline-stop-button="true"
                             ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                            draggable={canReorderRouteStops && !routeRow.isPreviewOnly && isRouteStopReorderAllowed(routeRow.status)}
+                            draggable={!routeRow.isPreviewOnly && canDragTimelineStop(routeRow, stop)}
                             onDragEnd={handleRouteTimelineDragEnd}
-                            onDragStart={!canReorderRouteStops || routeRow.isPreviewOnly || !isRouteStopReorderAllowed(routeRow.status) ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                            onDragStart={routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop) ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
                             onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                             onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                             onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
@@ -9479,6 +9563,18 @@ export default function RouteDetailPage() {
             />
           </div>
         ) : null}
+
+        {live.ready && liveEditStopId && orderedRouteStops.some((stop) => stop.deliveryStopId === liveEditStopId) ? (
+          <LiveStopEditDialog
+            live={live}
+            onClose={() => setLiveEditStopId(null)}
+            stop={orderedRouteStops.find((stop) => stop.deliveryStopId === liveEditStopId)}
+          />
+        ) : null}
+        {liveReviewOpen && live.state.fresh ? (
+          <LiveReviewDialog live={live} onClose={() => setLiveReviewOpen(false)} />
+        ) : null}
+        <LiveDiscardDialog live={live} />
 
         {activeChildStopEditRow ? (
           <div style={routeLineEditorOverlayStyle}>

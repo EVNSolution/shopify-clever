@@ -1,5 +1,8 @@
 # KFood live-change UI verification — 2026-10-07
 
+> The separate panel verified here was replaced on 2026-10-09 by the existing Route Detail controls.
+> See [the replacement record](kfood-live-change-existing-ui-20261009.md). The API, receipt and conflict results below still apply.
+
 The office can edit stop 7 while stop 2 remains current, Save privately, and Dispatch.
 A blocked draft remains until explicit Discard. Future editing resumes after Discard.
 The production feature remains disabled by default. No merge, deployment, runtime

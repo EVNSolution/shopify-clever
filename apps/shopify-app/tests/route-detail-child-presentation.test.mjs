@@ -731,7 +731,7 @@ test("child timeline renders distinct circular Start and End markers", () => {
   assert.match(routeDetailSource, /childRouteTimelineOrderLabelStyle/);
   assert.match(routeDetailSource, /<span style=\{childRouteTimelineOrderLabelStyle\}>\{stop\.order\}<\/span>/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{[\s\S]*position: "sticky"/);
-  assert.match(routeDetailSource, /onDragStart=\{!canReorderRouteStops \|\| routeRow\.isPreviewOnly \|\| !isRouteStopReorderAllowed\(routeRow.status\) \? undefined : \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
+  assert.match(routeDetailSource, /onDragStart=\{routeRow\.isPreviewOnly \|\| !canDragTimelineStop\(routeRow, stop\) \? undefined : \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /onClick=\{handleSaveRouteDraft\}/);
   assert.match(routeDetailSource, /Drop orders here to remove them from the route/);
 });

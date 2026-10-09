@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
+import { getRouteDispatchControl } from "../app/features/delivery/route-dispatch.js";
 
 const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
 const stylesSource = source.slice(source.indexOf("const routeMetaActionsStyle ="), source.indexOf("const routeHeaderActionsStyle ="));
@@ -165,6 +166,11 @@ function renderControls(overrides = {}) {
     isRouteExecutionLockedForStopMembership: (status) => ["COMPLETED", "IN_PROGRESS"].includes(status),
     renderRouteEditableChevron: () => "▾", renderRouteHeaderMetric: (label, value) => `${label}: ${value}`,
     handleDispatchRoute: () => {}, handleOpenRouteSelector: () => {}, ...overrides };
+  context.dispatchControl = getRouteDispatchControl({
+    busy: context.routeGroupActionBusy, canDispatch: context.canDispatchRoute,
+    dispatching: context.routeGroupActionIntent === "dispatchRoute", hasDriver: Boolean(context.routeDriverId),
+    hasUnsavedDraft: context.hasRouteAllocationDraft, live: context.liveChangeActive ? context.live : null,
+  });
   return { tree: new Function(...Object.keys(context), `${controlsCompiled}; return tree;`)(...Object.values(context)), context };
 }
 
@@ -174,7 +180,9 @@ test("schedule and driver sit under tabs before the map, Dispatch retains its ha
   assert.ok(source.indexOf('<h1 className="route-detail-title"') < source.indexOf('aria-label="Route detail actions"'));
   const { tree, context } = renderControls();
   assert.equal(button(tree, "Dispatch").props.onClick, context.handleDispatchRoute);
-  assert.equal(button(renderControls({ liveChangeActive: true }).tree, "Dispatch"), undefined);
+  const live = { canDispatch: true, localDirty: false, locationIssues: [] };
+  assert.equal(button(renderControls({ liveChangeActive: true, live, canDispatchRoute: false }).tree, "Dispatch").props.disabled, false);
+  assert.equal(button(renderControls({ liveChangeActive: true, live: { ...live, canDispatch: false } }).tree, "Dispatch").props.disabled, true);
   assert.match(text(tree), /Delivery date: Test date.*Driver: Test driver/);
   for (const guards of [{ canDispatchRoute: false }, { routeGroupActionBusy: true }, { hasRouteAllocationDraft: true }]) {
     assert.equal(button(renderControls(guards).tree, "Dispatch").props.disabled, true);
@@ -300,4 +308,19 @@ test("route options are available only for a KFood route, with existing busy gua
   assert.ok(button(renderActions(enabled).tree,"Route options"));
   assert.equal(button(renderActions({...enabled,routeGroupActionBusy:true}).tree,"Route options").props.disabled,true);
   assert.equal(button(renderActions({...enabled,isRouteGroupDetail:true}).tree,"Route options"),undefined);
+});
+
+test("a KFood route in progress dispatches only saved, located changes through the same button", () => {
+  const live = { canDispatch: true, localDirty: false, locationIssues: [] };
+  const control = (overrides) => getRouteDispatchControl({ busy: false, canDispatch: true, dispatching: false, hasDriver: true, hasUnsavedDraft: false, ...overrides });
+  assert.equal(control({ live }).enabled, true);
+  assert.equal(control({ live: { ...live, canDispatch: false }, canDispatch: true }).enabled, false);
+  assert.equal(control({ live, busy: true }).enabled, false);
+  assert.equal(control({ live, hasUnsavedDraft: true }).enabled, false);
+  assert.match(control({ live: { ...live, canDispatch: false, localDirty: true } }).title, /Save route changes/);
+  assert.match(control({ live: { ...live, canDispatch: false, locationIssues: ["stop-7"] } }).title, /Confirm the location/);
+  assert.match(control({ live: { ...live, canDispatch: false } }).title, /Change a future stop/);
+  assert.equal(control({ dispatching: true }).label, "Dispatching…");
+  assert.equal(control({ canDispatch: false }).enabled, false);
+  assert.match(control({ hasDriver: false }).title, /Assign a driver/);
 });

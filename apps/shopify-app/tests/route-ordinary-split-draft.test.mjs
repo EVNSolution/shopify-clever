@@ -87,12 +87,14 @@ function loadSaveHandler(overrides = {}) {
     "navigateAfterRouteDraftSaveRef",
     "splitSaveExpectationRef", "contextTimelineRouteRows", "deletedRoutePlanIds",
     "setScheduledNoticeRoutePlanId", "setScheduledNoticeGroupRoutePlanIds", "submitRouteGroupAction", "submitRouteAction",
-    "buildRouteDraftPayload", "routeGroup", "removedOrderIds",
+    "buildRouteDraftPayload", "routeGroup", "removedOrderIds", "liveChangeActive", "live",
   ];
   const dependencies = {
     buildRouteDraftPayload: () => ({}),
     canDraftEditChildStopMembership: true,
     canSaveRouteDraft: true,
+    liveChangeActive: false,
+    live: { localDirty: false, save() {} },
     contextTimelineRouteRows: [],
     deletedRoutePlanIds: [],
     effectiveRoutePlan: { id: "route-copy", status: "READY", updatedAt: "2026-09-09T00:00:00.000Z" },
