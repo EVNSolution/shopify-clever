@@ -26,6 +26,7 @@ import {
   CHILD_ROUTE_ORDER_COLUMNS,
   ROUTE_MARKER_TONE_COLORS,
   buildChildActualArrivalByStopId,
+  buildChildCompletionByStopId,
   buildChildRouteAmounts,
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
@@ -3487,7 +3488,7 @@ function renderChildRouteEta(row) {
   ].filter(Boolean).join("; ") || "ETA unavailable";
 
   if (row?.arrivalMissing === true) {
-    const missingLabel = `${etaLabel}: ${expectedArrival}; No arrival event was recorded`;
+    const missingLabel = `${etaLabel}: ${expectedArrival}; No arrival or completion time was recorded`;
     return (
       <span
         aria-label={missingLabel}
@@ -4401,8 +4402,14 @@ export default function RouteDetailPage() {
     () => buildChildActualArrivalByStopId(displayedRouteTrackingSnapshot?.stopArrivals),
     [displayedRouteTrackingSnapshot?.stopArrivals],
   );
+  // The Complete Delivery flow records no arrival; the completion time stands in for it.
+  const actualCompletionByStopId = useMemo(
+    () => buildChildCompletionByStopId(displayedRouteTrackingSnapshot?.stopCompletions),
+    [displayedRouteTrackingSnapshot?.stopCompletions],
+  );
   const routeEndpointPresentation = useMemo(() => buildRouteEndpointPresentation({
     actualArrivalByStopId,
+    completionByStopId: actualCompletionByStopId,
     departureLocation,
     executionEvidence: routeExecutionEvidence,
     ianaTimezone,
@@ -4412,6 +4419,7 @@ export default function RouteDetailPage() {
     trackingSnapshot: displayedRouteTrackingSnapshot,
   }), [
     actualArrivalByStopId,
+    actualCompletionByStopId,
     departureLocation,
     displayedRouteTrackingSnapshot,
     effectiveRoutePlan,
@@ -4431,9 +4439,10 @@ export default function RouteDetailPage() {
       actualArrivalByStopId,
       actualArrivalRoutePlanId: trackingRoutePlanId,
       arrivalEvidenceLoaded: Array.isArray(displayedRouteTrackingSnapshot?.stopArrivals),
+      completionByStopId: actualCompletionByStopId,
       ianaTimezone,
     }),
-    [actualArrivalByStopId, displayedRouteTrackingSnapshot?.stopArrivals, ianaTimezone, orderTableRouteRows, trackingRoutePlanId],
+    [actualArrivalByStopId, actualCompletionByStopId, displayedRouteTrackingSnapshot?.stopArrivals, ianaTimezone, orderTableRouteRows, trackingRoutePlanId],
   );
   const routeOrderColumns = isRouteGroupDetail
     ? [{ key: "route", label: "Route" }, ...CHILD_ROUTE_ORDER_COLUMNS]
