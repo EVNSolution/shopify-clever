@@ -108,6 +108,11 @@ export function RouteOptionsFields({ value, onChange, disabled = false }) {
 }
 
 export function RouteOptionsEditor({ routePlan, onClose }) {
+  const panelRef = useRef(null);
+  useEffect(() => {
+    panelRef.current?.focus({ preventScroll: true });
+    panelRef.current?.scrollIntoView({ block: "start" });
+  }, []);
   const fetcher = useFetcher();
   const shopify = useAppBridge();
   const [searchParams] = useSearchParams();
@@ -157,7 +162,12 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
     }
   }
   return (
-    <section aria-label="Edit route options" style={panelStyle}>
+    <section
+      ref={panelRef}
+      tabIndex={-1}
+      aria-label="Edit route options"
+      style={panelStyle}
+    >
       <form onSubmit={save} style={{ display: "grid", gap: 12 }}>
         <RouteOptionsFields
           value={draft}
