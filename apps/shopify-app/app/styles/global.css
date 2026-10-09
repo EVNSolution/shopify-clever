@@ -1492,6 +1492,31 @@ s-badge {
 
 .stop-select-checkbox:disabled { cursor: not-allowed; }
 
+/* The first column of the stop table: drag handle, then checkbox. The selection bar pads its own checkbox to the same place. */
+.stop-select-cell {
+  align-items: center;
+  display: flex;
+  gap: 4px;
+  padding-left: 10px;
+}
+
+.stop-drag-handle {
+  align-items: center;
+  color: #8a8a8a;
+  cursor: grab;
+  display: inline-flex;
+  flex: 0 0 16px;
+  height: 20px;
+  justify-content: center;
+  width: 16px;
+}
+
+.stop-drag-handle:hover { color: #303030; }
+
+.stop-drag-handle:active { cursor: grabbing; }
+
+.stop-drag-handle--idle { cursor: default; }
+
 .stop-selection-bar {
   align-items: center;
   background: #ffffff;
@@ -1502,7 +1527,7 @@ s-badge {
   height: 36px;
   justify-content: space-between;
   left: 0;
-  padding: 0 8px 0 13px;
+  padding: 0 8px 0 30px;
   position: absolute;
   right: 0;
   top: 0;

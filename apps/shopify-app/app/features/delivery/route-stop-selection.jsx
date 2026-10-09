@@ -1,7 +1,7 @@
 /* eslint-disable react/prop-types */
 
-// Stateless pieces of the stop selection in the Route Detail table.
-// The page owns which stops are selected and which bar menu is open.
+// Stateless pieces of the stop selection and the row drag handle in the Route Detail table.
+// The page owns which stops are selected, which bar menu is open and the drag itself.
 
 export function getStopSelection(rows, selectedKeys) {
   const keys = new Set(Array.isArray(selectedKeys) ? selectedKeys : []);
@@ -42,6 +42,23 @@ export function StopSelectAllCheckbox({ allSelected, disabled, onChange, someSel
       ref={setIndeterminate(someSelected && !allSelected)}
       type="checkbox"
     />
+  );
+}
+
+const GRIP_DOTS = [3, 8, 13].flatMap((cy) => [3, 7].map((cx) => [cx, cy]));
+
+/**
+ * The grip at the start of a stop row. It is the only part of the row that starts a drag.
+ * A stop that cannot be dragged gets an empty space of the same size, so the checkboxes stay in line.
+ */
+export function StopDragHandle({ draggable, label, onDragEnd, onDragStart }) {
+  if (!draggable) return <span aria-hidden="true" className="stop-drag-handle stop-drag-handle--idle" />;
+  return (
+    <span aria-label={label} className="stop-drag-handle" draggable onDragEnd={onDragEnd} onDragStart={onDragStart} role="img" title="Drag to reorder">
+      <svg aria-hidden="true" focusable="false" height="16" viewBox="0 0 10 16" width="10">
+        {GRIP_DOTS.map(([cx, cy]) => <circle cx={cx} cy={cy} fill="currentColor" key={`${cx}-${cy}`} r="1.4" />)}
+      </svg>
+    </span>
   );
 }
 

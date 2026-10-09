@@ -336,7 +336,7 @@ const css = read("../app/styles/global.css");
 test("Route Detail adds the Select column and the bar to the Stops table of a single route only", () => {
   assert.match(page, /import \{[^}]*StopSelectionBar[^}]*\} from "\.\.\/features\/delivery\/route-stop-selection"/);
   assert.match(page, /const routeOrderColumns = isRouteGroupDetail\s*\? \[\{ key: "route", label: "Route" \}, \.\.\.CHILD_ROUTE_ORDER_COLUMNS\]\s*: \[\{ key: "select", label: "" \}, \.\.\.CHILD_ROUTE_ORDER_COLUMNS\];/);
-  assert.match(page, /\(isRouteGroupDetail \? \["120px", \.\.\.childRouteOrderColumnWidths\] : \["44px", \.\.\.childRouteOrderColumnWidths\]\)/);
+  assert.match(page, /\(isRouteGroupDetail \? \["120px", \.\.\.childRouteOrderColumnWidths\] : \["56px", \.\.\.childRouteOrderColumnWidths\]\)/);
 
   const stopsTable = page.slice(page.indexOf('aria-label="Child route order stops"'), page.indexOf('aria-label="Child route tracking stops"'));
   assert.match(stopsTable, /<thead style=\{selectedStopRows\.length > 0 \? \{ visibility: "hidden" \} : undefined\}>/);

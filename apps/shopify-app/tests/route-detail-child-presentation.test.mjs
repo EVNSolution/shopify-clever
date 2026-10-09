@@ -229,7 +229,7 @@ test("standalone Stops and Tracking tables render endpoint rows outside order it
   assert.match(routeDetailSource, /data-route-endpoint=\{kind\}/);
   assert.match(routeDetailSource, /data-route-tracking-endpoint=\{kind\}/);
   assert.match(routeDetailSource, /!isRouteGroupDetail \? renderRouteEndpointOrderRow\(\{[\s\S]*kind: "start"/);
-  assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) => \([\s\S]*!isRouteGroupDetail \? renderRouteEndpointOrderRow\(\{[\s\S]*kind: "end"/);
+  assert.match(routeDetailSource, /stopsTableRows\.map\(\(row\) => \([\s\S]*!isRouteGroupDetail \? renderRouteEndpointOrderRow\(\{[\s\S]*kind: "end"/);
   assert.match(routeDetailSource, /renderRouteEndpointTrackingRow\(\{[\s\S]*kind: "start"[\s\S]*routeOrderRows\.map\(\(row\) => \([\s\S]*renderRouteEndpointTrackingRow\(\{[\s\S]*kind: "end"/);
   assert.match(routeDetailSource, /routeEndpointPresentation = useMemo\(\(\) => buildRouteEndpointPresentation/);
   assert.match(routeDetailSource, /function renderRouteEndpointTime[\s\S]*return renderChildRouteEta\(\{/);
