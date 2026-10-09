@@ -19,14 +19,16 @@ function StopTimeIcon({ name }) {
 }
 
 // The page owns the draft. `draft` is null while the cell only shows the label.
-export function StopTimeCell({ busy, canEdit, draft, label, onCancel, onChange, onEdit, onSave }) {
+// `orderLabel` names the order in the accessible labels; `stopId` lets the page hand keyboard focus back to the pencil.
+export function StopTimeCell({ busy, canEdit, draft, label, onCancel, onChange, onEdit, onSave, orderLabel, stopId }) {
   if (!canEdit) return <span className="stop-time-cell">{label}</span>;
+  const forOrder = (text) => (orderLabel ? `${text} for ${orderLabel}` : text);
 
   if (draft === null) {
     return (
       <span className="stop-time-cell">
         {label}
-        <button aria-label="Edit stop time" className="stop-time-cell__edit" onClick={onEdit} title="Edit stop time" type="button">
+        <button aria-label={forOrder("Edit stop time")} className="stop-time-cell__edit" data-stop-time-edit={stopId} onClick={onEdit} title="Edit stop time" type="button">
           <StopTimeIcon name="edit" />
         </button>
       </span>
@@ -50,7 +52,7 @@ export function StopTimeCell({ busy, canEdit, draft, label, onCancel, onChange, 
     <span className="stop-time-cell">
       <input
         aria-invalid={!valid}
-        aria-label="Stop time in minutes"
+        aria-label={forOrder("Stop time in minutes")}
         className="stop-time-cell__input"
         inputMode="numeric"
         max={STOP_TIME_MAX_MINUTES}

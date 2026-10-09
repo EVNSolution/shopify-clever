@@ -195,9 +195,9 @@ test("Route Detail wires the pencil to Ready single routes and keeps the Trackin
   assert.match(page, /import \{[^}]*readStopTimeMinutes[^}]*\} from "\.\.\/features\/delivery\/route-helpers"/);
   assert.match(page, /const canEditStopTime = \(row\) => !liveChangeActive && !isRouteGroupDetail && Boolean\(row\?\.deliveryStopId\)\s*&& normalizeRouteExecutionStatus\(getStopRowRouteStatus\(row\)\) === "READY";/);
   assert.match(page, /submitRouteAction\("updateRouteStopTime", \{ deliveryStopId: row\.deliveryStopId, serviceMinutes \}\)/);
-  assert.match(page, /\["transitionRouteStop", "updateRouteStop", "updateRouteStopTime"\]\.includes\(lastRouteActionIntentRef\.current\)/);
+  assert.match(page, /\["transitionRouteStop", "updateRouteStop", "updateRouteStopTime", "transitionRouteStops"\]\.includes\(lastRouteActionIntentRef\.current\)/);
   // The editor closes only after the server accepted the value, so a failed save keeps what was typed.
-  assert.match(page, /if \(intent === "updateRouteStopTime"\) setStopTimeDraft\(null\);\s*revalidator\.revalidate\(\);/);
+  assert.match(page, /if \(intent === "updateRouteStopTime"\) \{[^}]*setStopTimeDraft\(null\);[^}]*\}\s*revalidator\.revalidate\(\);/);
   assert.doesNotMatch(page, /submitRouteAction\("updateRouteStopTime"[^;]*;\s*setStopTimeDraft\(null\)/);
 
   const stopsTable = page.slice(page.indexOf('aria-label="Child route order stops"'), page.indexOf('aria-label="Child route tracking stops"'));

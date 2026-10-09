@@ -13,6 +13,36 @@ export function numberOrUndefined(value) {
   return Number.isFinite(number) ? number : undefined;
 }
 
+export const ROUTE_STOP_TRANSITION_STATUSES = new Set(["READY", "IN_PROGRESS", "COMPLETED"]);
+const MAX_ROUTE_STOP_TRANSITION_BATCH = 200;
+
+// The selection bar marks many stops in one request. One bad entry rejects the whole batch.
+export function readRouteStopTransitionBatch(value) {
+  let entries;
+  try {
+    entries = JSON.parse(String(value ?? ""));
+  } catch {
+    return null;
+  }
+  if (!Array.isArray(entries) || entries.length === 0 || entries.length > MAX_ROUTE_STOP_TRANSITION_BATCH) return null;
+
+  const seen = new Set();
+  const transitions = [];
+  for (const entry of entries) {
+    const deliveryStopId = textOrUndefined(entry?.deliveryStopId);
+    const status = textOrUndefined(entry?.status)?.toUpperCase();
+    if (!deliveryStopId || !ROUTE_STOP_TRANSITION_STATUSES.has(status) || seen.has(deliveryStopId)) return null;
+    seen.add(deliveryStopId);
+    transitions.push({
+      deliveryStopId,
+      idempotencyKey: textOrUndefined(entry?.idempotencyKey),
+      label: textOrUndefined(entry?.label),
+      status,
+    });
+  }
+  return transitions;
+}
+
 // The delivery API takes any whole number of minutes, so the one-day cap lives here.
 export const STOP_TIME_MAX_MINUTES = 1440;
 

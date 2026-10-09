@@ -830,7 +830,7 @@ test("child timeline and order table share explicit centered alignment axes", ()
   assert.match(routeDetailSource, /const childRouteOrderHeaderCellStyle = \{[\s\S]*textAlign: "center"[\s\S]*verticalAlign: "middle"/);
   assert.match(routeDetailSource, /const childRouteOrderCellStyle = \{[\s\S]*textAlign: "center"/);
   assert.match(routeDetailSource, /const childRouteStopCellStyle = \{[\s\S]*padding: "8px 0"[\s\S]*textAlign: "center"/);
-  assert.match(routeDetailSource, /style=\{column\.key === "actions" \? childRouteActionsHeaderCellStyle : childRouteOrderHeaderCellStyle\}/);
+  assert.match(routeDetailSource, /column\.key === "actions"\s*\? childRouteActionsHeaderCellStyle\s*: column\.key === "select" \? childRouteSelectHeaderCellStyle : childRouteOrderHeaderCellStyle/);
 });
 
 test("child action cell styles initialize after the shared styles they extend", () => {
@@ -1020,7 +1020,7 @@ test("endpoint rows and column widths stay aligned with the stop table columns",
   const endpointRow = routeDetailSource.slice(endpointStart, routeDetailSource.indexOf("\n}\n", endpointStart));
 
   assert.equal(widths.match(/"\d+px"/g).length, CHILD_ROUTE_ORDER_COLUMNS.length);
-  assert.equal(endpointRow.match(/<td\b/g).length, CHILD_ROUTE_ORDER_COLUMNS.length);
+  assert.equal(endpointRow.match(/<td\b/g).length, CHILD_ROUTE_ORDER_COLUMNS.length + 1, "one cell per column plus the Select cell of a single route");
 });
 
 const returnDepot = [-79.4748, 43.7637];

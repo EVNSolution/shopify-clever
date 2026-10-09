@@ -1480,3 +1480,116 @@ s-badge {
   outline: 2px solid #005bd3;
   outline-offset: 1px;
 }
+
+/* Stop selection: the bar takes the place of the header row of the Route Detail stop table. */
+.stop-select-checkbox {
+  accent-color: #303030;
+  cursor: pointer;
+  height: 18px;
+  margin: 0;
+  width: 18px;
+}
+
+.stop-select-checkbox:disabled { cursor: not-allowed; }
+
+.stop-selection-bar {
+  align-items: center;
+  background: #ffffff;
+  border-bottom: 1px solid #d6d6d6;
+  box-sizing: border-box;
+  display: flex;
+  gap: 12px;
+  height: 36px;
+  justify-content: space-between;
+  left: 0;
+  padding: 0 8px 0 13px;
+  position: absolute;
+  right: 0;
+  top: 0;
+  z-index: 8;
+}
+
+.stop-selection-bar__lead,
+.stop-selection-bar__actions {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+}
+
+.stop-selection-bar__actions { gap: 6px; }
+
+.stop-selection-bar__count {
+  color: #303030;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.stop-selection-bar__menu-anchor { position: relative; }
+
+.stop-selection-bar__button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #c9c9c9;
+  border-radius: 8px;
+  box-shadow: 0 1px 0 rgba(26, 26, 26, 0.07);
+  color: #303030;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 650;
+  gap: 4px;
+  height: 28px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.stop-selection-bar__button:hover:not(:disabled) { background: #f7f7f7; }
+
+.stop-selection-bar__button:disabled {
+  color: #a3a3a3;
+  cursor: not-allowed;
+}
+
+.stop-selection-bar__menu {
+  background: #ffffff;
+  border: 1px solid #d6d6d6;
+  border-radius: 10px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.16);
+  display: grid;
+  gap: 2px;
+  min-width: 160px;
+  padding: 6px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 30;
+}
+
+.stop-selection-bar__menu button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #303030;
+  cursor: pointer;
+  font: inherit;
+  font-size: 13px;
+  padding: 7px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.stop-selection-bar__menu button:hover:not(:disabled) { background: #f1f1f1; }
+
+.stop-selection-bar__menu button:disabled {
+  color: #a3a3a3;
+  cursor: not-allowed;
+}
+
+.stop-selection-bar__button:focus-visible,
+.stop-selection-bar__menu button:focus-visible,
+.stop-select-checkbox:focus-visible {
+  outline: 2px solid #005bd3;
+  outline-offset: 2px;
+}

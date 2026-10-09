@@ -108,6 +108,8 @@ let plans = [
   }),
   makePlan("child-missing", "Missing state child", undefined, { routeGroupingChild: { groupingId: groupId, routePlanId: "child-missing" } }),
   makePlan("child-ready", "Ready child", "READY", { routeGroupingChild: { groupingId: groupId, routePlanId: "child-ready" } }),
+  makePlan("child-ready-b", "Ready child B", "READY", { routeGroupingChild: { groupingId: groupId, routePlanId: "child-ready-b" } }),
+  makePlan("child-ready-c", "Ready child C", "READY", { routeGroupingChild: { groupingId: groupId, routePlanId: "child-ready-c" } }),
 ];
 if (saved?.plans) plans = saved.plans;
 const persist = () => sessionStorage.setItem(storageKey, JSON.stringify({ language, plans }));
@@ -238,11 +240,27 @@ const fixtureAction = async ({ request }) => {
   // Shows what the page would have sent. The session token is never recorded.
   const fields = Object.fromEntries([...form.entries()].filter(([name]) => name !== "shopifySessionToken"));
   if (fields._intent === "updateRouteStopTime") {
-    // The one action the fixture accepts. It changes the synthetic stop only, as the server would.
+    // One of the two actions the fixture accepts. It changes the synthetic stop only, as the server would.
     const stop = plans.flatMap(plan => plan.stops).find(candidate => candidate.deliveryStopId === fields.deliveryStopId);
     if (stop) { stop.serviceMinutes = Number(fields.serviceMinutes); persist(); }
     record("accepted-action", { intent: fields._intent, fields });
     return { routePlan: null, stop: null, errors: stop ? [] : [{ message: "Synthetic stop not found" }] };
+  }
+  if (fields._intent === "transitionRouteStops") {
+    // The bulk status change of the stop selection. Each synthetic stop changes in turn, as the server would.
+    const statuses = { READY: "PENDING", IN_PROGRESS: "ARRIVED", COMPLETED: "DELIVERED" };
+    const requested = JSON.parse(fields.stops);
+    const known = plans.flatMap(plan => plan.stops);
+    let completed = 0;
+    for (const entry of requested) {
+      const stop = known.find(candidate => candidate.deliveryStopId === entry.deliveryStopId);
+      if (!stop || !statuses[entry.status]) break;
+      Object.assign(stop, { status: statuses[entry.status], deliveryStopStatus: statuses[entry.status] });
+      completed += 1;
+    }
+    persist();
+    record("accepted-action", { intent: fields._intent, fields });
+    return { completed, routePlan: null, errors: completed === requested.length ? [] : [{ message: "Marked " + completed + " of " + requested.length + " stops. Synthetic stop not found" }] };
   }
   record("blocked-action", { intent: String(form.get("_intent")), fields });
   return { errors: [{ message: "Synthetic fixture blocks all action submissions" }] };
