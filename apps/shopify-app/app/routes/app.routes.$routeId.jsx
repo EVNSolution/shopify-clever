@@ -1183,6 +1183,17 @@ const childRouteTimelineStopUnitStyle = {
   width: "100%",
 };
 
+// The part of a stop that slides when stops are reordered: its order label and its circle. The line stays in the unit, so it never moves.
+const childRouteTimelineStopMotionStyle = {
+  alignItems: "center",
+  display: "grid",
+  gap: "2px",
+  gridRow: "1 / span 2",
+  gridTemplateRows: "14px 24px",
+  justifyItems: "center",
+  width: "100%",
+};
+
 const childRouteTimelineStopMarkerStyle = {
   display: "grid",
   fontVariantNumeric: "tabular-nums",
@@ -1471,6 +1482,13 @@ const routeTimelineStartIconStyle = {
 };
 
 const routeTimelineSegmentStyle = {
+  alignItems: "center",
+  display: "inline-flex",
+  flex: "0 0 auto",
+};
+
+// The circle of a stop slides when stops are reordered; the line next to it stays in the segment.
+const routeTimelineStopMotionStyle = {
   alignItems: "center",
   display: "inline-flex",
   flex: "0 0 auto",
@@ -8358,35 +8376,36 @@ export default function RouteDetailPage() {
                     {routeRow.stops.map((stop) => (
                       <span
                         key={stop.id}
-                        ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)}
                         onDragEnter={handleRouteTimelineStopDragEnter}
                         onDragOver={(event) => handleRouteTimelineStopDragOver(event, routeRow, stop)}
                         style={childRouteTimelineStopUnitStyle}
                         title={stop.order}
                       >
-                        <span style={childRouteTimelineOrderLabelStyle}>{stop.order}</span>
                         <span aria-hidden="true" style={childRouteTimelineConnectorStyle} />
-                        <button
-                          data-route-timeline-stop-button="true"
-                          ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                          draggable={!routeRow.isPreviewOnly && canDragTimelineStop(routeRow, stop)}
-                          onDragEnd={handleRouteTimelineDragEnd}
-                          onDragStart={routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop) ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
-                          onClick={(event) => handleRouteTimelineStopClick(event, stop)}
-                          onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
-                          onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
-                          aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
-                          aria-label={`Show ${stop.order} stop details`}
-                          style={{
-                            ...routeTimelineStopStyle,
-                            ...childRouteTimelineStopMarkerStyle,
-                            ...(isOrdinaryRouteDetail ? { background: ROUTE_MARKER_TONE_COLORS[getStopMarkerTone(stop)] } : null),
-                            position: "relative",
-                            zIndex: 1,
-                            ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
-                          }}
-                          type="button"
-                        ><span style={routeNumberMarkerGlyphStyle}>{stop.stop}</span></button>
+                        <span ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)} style={childRouteTimelineStopMotionStyle}>
+                          <span style={childRouteTimelineOrderLabelStyle}>{stop.order}</span>
+                          <button
+                            data-route-timeline-stop-button="true"
+                            ref={(node) => setRouteTimelineStopRef(stop.id, node)}
+                            draggable={!routeRow.isPreviewOnly && canDragTimelineStop(routeRow, stop)}
+                            onDragEnd={handleRouteTimelineDragEnd}
+                            onDragStart={routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop) ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                            onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+                            onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
+                            onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
+                            aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
+                            aria-label={`Show ${stop.order} stop details`}
+                            style={{
+                              ...routeTimelineStopStyle,
+                              ...childRouteTimelineStopMarkerStyle,
+                              ...(isOrdinaryRouteDetail ? { background: ROUTE_MARKER_TONE_COLORS[getStopMarkerTone(stop)] } : null),
+                              position: "relative",
+                              zIndex: 1,
+                              ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
+                            }}
+                            type="button"
+                          ><span style={routeNumberMarkerGlyphStyle}>{stop.stop}</span></button>
+                        </span>
                       </span>
                     ))}
                     <span style={childRouteTimelineEndStyle}>
@@ -8434,31 +8453,32 @@ export default function RouteDetailPage() {
                       {routeRow.stops.map((stop) => (
                         <span
                           key={stop.id}
-                          ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)}
                           onDragEnter={handleRouteTimelineStopDragEnter}
                           onDragOver={(event) => handleRouteTimelineStopDragOver(event, routeRow, stop)}
                           style={{ ...routeTimelineSegmentStyle, ...(isRouteGroupDetail ? { flex: "1 0 74px", position: "relative", justifyContent: "flex-end" } : null) }}
                           title={stop.order}
                         >
                           <span style={{ ...routeTimelineLineStyle, ...(isRouteGroupDetail ? { flex: 1 } : null) }}></span>
-                          <button
-                            data-route-timeline-stop-button="true"
-                            ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                            draggable={!routeRow.isPreviewOnly && canDragTimelineStop(routeRow, stop)}
-                            onDragEnd={handleRouteTimelineDragEnd}
-                            onDragStart={routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop) ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
-                            onClick={(event) => handleRouteTimelineStopClick(event, stop)}
-                            onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
-                            onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
-                            aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
-                            aria-label={`Show ${stop.order} stop details`}
-                            style={{
-                              ...routeTimelineStopStyle,
-                              ...(isRouteGroupDetail ? { position: "relative", width: "24px", height: "24px" } : null),
-                              ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
-                            }}
-                            type="button"
-                          >{isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>{stop.order}</span> : null}{stop.stop}</button>
+                          <span ref={(node) => setRouteTimelineStopMotionRef(stop.id, node)} style={routeTimelineStopMotionStyle}>
+                            <button
+                              data-route-timeline-stop-button="true"
+                              ref={(node) => setRouteTimelineStopRef(stop.id, node)}
+                              draggable={!routeRow.isPreviewOnly && canDragTimelineStop(routeRow, stop)}
+                              onDragEnd={handleRouteTimelineDragEnd}
+                              onDragStart={routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop) ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
+                              onClick={(event) => handleRouteTimelineStopClick(event, stop)}
+                              onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
+                              onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
+                              aria-expanded={!routeTimelineDrag && activeRouteTimelineStopPopover?.stopId === stop.id}
+                              aria-label={`Show ${stop.order} stop details`}
+                              style={{
+                                ...routeTimelineStopStyle,
+                                ...(isRouteGroupDetail ? { position: "relative", width: "24px", height: "24px" } : null),
+                                ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
+                              }}
+                              type="button"
+                            >{isRouteGroupDetail ? <span style={allRoutesTimelineLabelStyle}>{stop.order}</span> : null}{stop.stop}</button>
+                          </span>
                         </span>
                       ))}
                       {isRouteGroupDetail ? (
