@@ -61,6 +61,10 @@ const makePlan = (id, name, status, options = {}) => {
   const delivered = options.delivered ?? 0;
   const stops = Array.from({ length: stopCount }, (_, index) => makeStop(id, index + 1,
     index < delivered ? "DELIVERED" : options.arrived && index === stopCount - 1 ? "ARRIVED" : "PENDING"));
+  if (options.etas) stops.forEach((stop, index) => Object.assign(stop, {
+    durationFromPreviousSeconds: 600 + index * 120, distanceFromPreviousMeters: 4000 + index * 500,
+    estimatedArrivalAt: new Date(Date.parse("2026-10-03T13:00:00.000Z") + (index + 1) * 20 * 60000).toISOString(),
+  }));
   if (options.singleTap) {
     stops.forEach((stop, index) => Object.assign(stop, {
       durationFromPreviousSeconds: 1200, distanceFromPreviousMeters: 6000,
@@ -107,7 +111,7 @@ let plans = [
     stopCount: 11, delivered: 10, arrived: true, routeGroupingChild: { groupingId: groupId, routePlanId: "child-incomplete" },
   }),
   makePlan("child-missing", "Missing state child", undefined, { routeGroupingChild: { groupingId: groupId, routePlanId: "child-missing" } }),
-  makePlan("child-ready", "Ready child", "READY", { routeGroupingChild: { groupingId: groupId, routePlanId: "child-ready" } }),
+  makePlan("child-ready", "Ready child", "READY", { etas: true, stopCount: 5, routeGroupingChild: { groupingId: groupId, routePlanId: "child-ready" } }),
   makePlan("child-ready-b", "Ready child B", "READY", { routeGroupingChild: { groupingId: groupId, routePlanId: "child-ready-b" } }),
   makePlan("child-ready-c", "Ready child C", "READY", { routeGroupingChild: { groupingId: groupId, routePlanId: "child-ready-c" } }),
 ];

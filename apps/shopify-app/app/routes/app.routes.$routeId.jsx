@@ -27,6 +27,7 @@ import {
   ROUTE_MARKER_TONE_COLORS,
   buildChildActualArrivalByStopId,
   buildChildCompletionByStopId,
+  applyDraftOrderToOrderRows,
   buildChildRouteAmounts,
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
@@ -49,7 +50,7 @@ import {
   updateCustomStopDraftField,
   validateCustomStopDraft,
 } from "../features/delivery/custom-stop-form";
-import { reverseRouteStopIds } from "../features/delivery/route-draft";
+import { getRowDropAfterStopId, reverseRouteStopIds } from "../features/delivery/route-draft";
 import { getRouteDispatchControl, getRouteDispatchNotice } from "../features/delivery/route-dispatch";
 import {
   beginRouteGroupCopySubmit,
@@ -91,7 +92,7 @@ import {
   summarizeRouteStopLocationDiagnostics,
 } from "../features/delivery/route-stop-location-diagnostic";
 import { StopTimeCell } from "../features/delivery/route-stop-time-cell";
-import { StopSelectAllCheckbox, StopSelectCheckbox, StopSelectionBar, getStopSelection } from "../features/delivery/route-stop-selection";
+import { StopDragHandle, StopSelectAllCheckbox, StopSelectCheckbox, StopSelectionBar, getStopSelection } from "../features/delivery/route-stop-selection";
 import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath, withEmbeddedShopifyContext } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
@@ -2200,6 +2201,10 @@ const childRouteSelectedRowStyle = {
   background: "#f1f1f1",
 };
 
+const childRouteDraggingRowStyle = {
+  opacity: 0.4,
+};
+
 const childRouteStopTimeCellStyle = {
   ...childRouteOrderCellStyle,
   position: "relative",
@@ -3611,6 +3616,26 @@ function focusStopTimePencil(deliveryStopId) {
   });
 }
 
+// A small tag with the stop number and order follows the pointer, instead of a snapshot of the whole 1600 px row.
+function setStopDragImage(event, row) {
+  const tag = document.createElement("div");
+  tag.textContent = `${row.stop}  ${row.order}`;
+  Object.assign(tag.style, {
+    background: "#ffffff",
+    border: "1px solid #b5b5b5",
+    borderRadius: "8px",
+    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.2)",
+    font: "600 13px system-ui, sans-serif",
+    left: "-1000px",
+    padding: "6px 10px",
+    position: "fixed",
+    top: "-1000px",
+  });
+  document.body.appendChild(tag);
+  event.dataTransfer.setDragImage(tag, 12, 12);
+  window.setTimeout(() => tag.remove(), 0);
+}
+
 function renderRouteEndpointOrderRow({ endpoint, kind, markerColor, referenceValue, selectColumn }) {
   const isStart = kind === "start";
   return (
@@ -4485,9 +4510,17 @@ export default function RouteDetailPage() {
   const routeOrderColumns = isRouteGroupDetail
     ? [{ key: "route", label: "Route" }, ...CHILD_ROUTE_ORDER_COLUMNS]
     : [{ key: "select", label: "" }, ...CHILD_ROUTE_ORDER_COLUMNS];
+  // The Stops table of a single route follows an unsaved order (a dragged stop, a removal), which the saved sequence of routeOrderRows would hide. Tracking keeps the saved order.
+  const stopsTableRows = useMemo(() => {
+    const draftStopIds = currentTimelineRouteRow ? routeTimelineOrderByRouteId[currentTimelineRouteRow.id] : null;
+    if (isRouteGroupDetail || !Array.isArray(draftStopIds)) return routeOrderRows;
+    return applyDraftOrderToOrderRows(routeOrderRows, currentTimelineRouteRow.stops.map((stop) => stop.id));
+  }, [currentTimelineRouteRow, isRouteGroupDetail, routeOrderRows, routeTimelineOrderByRouteId]);
+  // The End row's planned time and drive time follow the same saved order, so they wait too.
+  const stopsTableEstimatesStale = stopsTableRows.some((row) => row.estimateStale === true);
   const stopSelection = useMemo(
-    () => getStopSelection(isRouteGroupDetail ? [] : routeOrderRows, selectedStopKeys),
-    [isRouteGroupDetail, routeOrderRows, selectedStopKeys],
+    () => getStopSelection(isRouteGroupDetail ? [] : stopsTableRows, selectedStopKeys),
+    [isRouteGroupDetail, stopsTableRows, selectedStopKeys],
   );
   const selectedStopRows = stopSelection.rows;
   const addStopTargetRouteOptions = useMemo(
@@ -5308,9 +5341,9 @@ export default function RouteDetailPage() {
     });
   }, [animateRouteTimelineChange, liveChangeActive, live.futureStopIds, routeMembershipChangeIsInProgress, routeRows]);
 
-  const handleRouteTimelineDragStart = (event, routeRow, stop) => {
+  const handleRouteTimelineDragStart = (event, routeRow, stop, source = "timeline") => {
     if (routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop)) return;
-    const drag = { routeId: routeRow.id, stopId: stop.id };
+    const drag = { routeId: routeRow.id, source, stopId: stop.id };
     routeTimelineDragRef.current = drag;
     routeTimelineDragPointerXRef.current = event.clientX;
     routeTimelineDragSnapshotRef.current = {
@@ -5598,7 +5631,7 @@ export default function RouteDetailPage() {
 
   const handleToggleAllStopsSelected = (checked) => {
     setStopBarMenu(null);
-    setSelectedStopKeys(checked ? routeOrderRows.map((row) => row.rowKey) : []);
+    setSelectedStopKeys(checked ? stopsTableRows.map((row) => row.rowKey) : []);
   };
 
   const canEditSelectedStop = selectedStopRows.length === 1 && Boolean(selectedStopRows[0].deliveryStopId) && canEditStopRow(selectedStopRows[0]);
@@ -5954,6 +5987,48 @@ export default function RouteDetailPage() {
       ));
     });
     handleRouteTimelineDragEnd();
+  };
+
+  const canDragStopRow = (row) => Boolean(currentTimelineRouteRow) && !currentTimelineRouteRow.isPreviewOnly
+    && canDragTimelineStop(currentTimelineRouteRow, row);
+
+  // A row handle drags with the same state, guards and save flow as a timeline circle. The table only takes part in a drag that started from one of its handles.
+  const isStopRowDrag = () => routeTimelineDragRef.current?.source === "table";
+
+  const handleStopRowDragStart = (event, row) => {
+    handleRouteTimelineDragStart(event, currentTimelineRouteRow, row, "table");
+    if (isStopRowDrag()) setStopDragImage(event, row);
+  };
+
+  // The rows reorder while the pointer moves over them, as the timeline circles do: the upper half of a row puts the stop before it, the lower half after it.
+  const handleStopRowDragOver = (event, row) => {
+    const drag = routeTimelineDragRef.current;
+    if (!isStopRowDrag()) return;
+    const afterStopId = getRowDropAfterStopId({
+      draggedStopId: drag.stopId,
+      orderedStopIds: getTimelineRouteStopIds(routeRows, routeTimelineOrderByRouteIdRef.current, drag.routeId),
+      pointerY: event.clientY,
+      rowId: row.id,
+      rowRect: event.currentTarget.getBoundingClientRect(),
+    });
+    if (afterStopId !== undefined) moveDraggedTimelineStop(drag.routeId, afterStopId);
+  };
+
+  // A browser takes a drop only where both dragenter and dragover were cancelled.
+  const handleStopTableDragEnter = (event) => {
+    if (isStopRowDrag()) event.preventDefault();
+  };
+
+  const handleStopTableDragOver = (event) => {
+    if (isStopRowDrag()) handleRouteTimelineDragOver(event);
+  };
+
+  const handleStopTableDragLeave = (event) => {
+    if (isStopRowDrag()) handleRouteTimelineDragLeave(event);
+  };
+
+  const handleStopTableDrop = (event) => {
+    if (isStopRowDrag()) handleRouteTimelineRouteDrop(event, currentTimelineRouteRow);
   };
 
   const submitRouteAction = async (intent, fields = {}) => {
@@ -8550,6 +8625,10 @@ export default function RouteDetailPage() {
                 />
               ) : null}
               <div
+                onDragEnter={handleStopTableDragEnter}
+                onDragLeave={handleStopTableDragLeave}
+                onDragOver={handleStopTableDragOver}
+                onDrop={handleStopTableDrop}
                 style={{
                   ...routesDetailTableFrameStyle,
                   "--route-marker-color": currentTimelineRouteRow?.color ?? routeLineColor,
@@ -8563,7 +8642,7 @@ export default function RouteDetailPage() {
                   }}
                 >
                   <colgroup>
-                    {(isRouteGroupDetail ? ["120px", ...childRouteOrderColumnWidths] : ["44px", ...childRouteOrderColumnWidths]).map((width, index) => (
+                    {(isRouteGroupDetail ? ["120px", ...childRouteOrderColumnWidths] : ["56px", ...childRouteOrderColumnWidths]).map((width, index) => (
                       <col key={`${width}-${index}`} style={{ width }} />
                     ))}
                   </colgroup>
@@ -8577,12 +8656,15 @@ export default function RouteDetailPage() {
                             : column.key === "select" ? childRouteSelectHeaderCellStyle : childRouteOrderHeaderCellStyle}
                         >
                           {column.key === "select" ? (
-                            <StopSelectAllCheckbox
-                              allSelected={stopSelection.allSelected}
-                              disabled={routeOrderRows.length === 0}
-                              onChange={handleToggleAllStopsSelected}
-                              someSelected={stopSelection.someSelected}
-                            />
+                            <span className="stop-select-cell">
+                              <StopDragHandle draggable={false} />
+                              <StopSelectAllCheckbox
+                                allSelected={stopSelection.allSelected}
+                                disabled={routeOrderRows.length === 0}
+                                onChange={handleToggleAllStopsSelected}
+                                someSelected={stopSelection.someSelected}
+                              />
+                            </span>
                           ) : column.label}
                         </th>
                       ))}
@@ -8596,15 +8678,31 @@ export default function RouteDetailPage() {
                       referenceValue: routeEndpointPresentation.start.plannedAt,
                       selectColumn: !isRouteGroupDetail,
                     }) : null}
-                    {routeOrderRows.map((row) => (
-                      <tr key={row.rowKey} style={selectedStopKeySet.has(row.rowKey) ? { ...childRouteOrderRowStyle, ...childRouteSelectedRowStyle } : childRouteOrderRowStyle}>
+                    {stopsTableRows.map((row) => (
+                      <tr
+                        key={row.rowKey}
+                        onDragOver={isRouteGroupDetail ? undefined : (event) => handleStopRowDragOver(event, row)}
+                        style={{
+                          ...childRouteOrderRowStyle,
+                          ...(selectedStopKeySet.has(row.rowKey) ? childRouteSelectedRowStyle : null),
+                          ...(routeTimelineDrag?.source === "table" && routeTimelineDrag.stopId === row.id ? childRouteDraggingRowStyle : null),
+                        }}
+                      >
                         {!isRouteGroupDetail ? (
                           <td style={childRouteSelectCellStyle}>
-                            <StopSelectCheckbox
-                              checked={selectedStopKeySet.has(row.rowKey)}
-                              label={`Select ${row.order}`}
-                              onChange={(checked) => handleToggleStopSelected(row.rowKey, checked)}
-                            />
+                            <span className="stop-select-cell">
+                              <StopDragHandle
+                                draggable={canDragStopRow(row)}
+                                label={`Drag to reorder ${row.order}`}
+                                onDragEnd={handleRouteTimelineDragEnd}
+                                onDragStart={(event) => handleStopRowDragStart(event, row)}
+                              />
+                              <StopSelectCheckbox
+                                checked={selectedStopKeySet.has(row.rowKey)}
+                                label={`Select ${row.order}`}
+                                onChange={(checked) => handleToggleStopSelected(row.rowKey, checked)}
+                              />
+                            </span>
                           </td>
                         ) : null}
                         {isRouteGroupDetail ? (
@@ -8734,7 +8832,9 @@ export default function RouteDetailPage() {
                       </tr>
                     ))}
                     {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
-                      endpoint: routeEndpointPresentation.end,
+                      endpoint: stopsTableEstimatesStale
+                        ? { ...routeEndpointPresentation.end, driveTime: null, plannedAt: null }
+                        : routeEndpointPresentation.end,
                       kind: "end",
                       markerColor: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("end", routeExecutionStatus)] : undefined,
                       referenceValue: routeEndpointPresentation.start.plannedAt,

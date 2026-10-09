@@ -878,6 +878,19 @@ export function buildChildRouteOrderRows(stops, {
   });
 }
 
+// The Stops table lists stops by their saved sequence. While a route has an unsaved order it lists them in that order instead.
+// From the first stop that moved on, ETA and Drive time describe the saved order, so they stay empty until the order is saved.
+export function applyDraftOrderToOrderRows(savedOrderRows, draftStopIds) {
+  const place = new Map((Array.isArray(draftStopIds) ? draftStopIds : []).map((stopId, index) => [stopId, index]));
+  const draftOrderRows = savedOrderRows.filter((row) => place.has(row.id)).sort((first, second) => place.get(first.id) - place.get(second.id));
+  const firstMoved = draftOrderRows.findIndex((row, index) => row.id !== savedOrderRows[index]?.id);
+  return draftOrderRows.map((row, index) => ({
+    ...row,
+    stop: index + 1,
+    ...(firstMoved >= 0 && index >= firstMoved ? { driveTime: EMPTY_LABEL, estimateStale: true, expectedArrival: EMPTY_LABEL } : null),
+  }));
+}
+
 export function buildRouteOrderRows(routeRows, {
   actualArrivalByStopId = {},
   actualArrivalRoutePlanId,
