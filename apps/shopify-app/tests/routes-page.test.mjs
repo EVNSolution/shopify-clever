@@ -914,7 +914,7 @@ test("Route detail renders a compact route overview panel with inline summary", 
   assert.match(routeDetailSource, /routeTimelineDropCommittedRef\.current = true;[\s\S]*removeTimelineStop\(/);
   assert.match(routeDetailSource, /afterStopId === "__start__"/);
   assert.match(routeDetailSource, /draggable/);
-  assert.match(routeDetailSource, /onDragStart=\{canDragTimelineStop\(routeRow, stop\) \? \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\) : undefined\}/);
+  assert.match(routeDetailSource, /onDragStart=\{routeRow\.isPreviewOnly \|\| !canDragTimelineStop\(routeRow, stop\) \? undefined : \(event\) => handleRouteTimelineDragStart\(event, routeRow, stop\)\}/);
   assert.match(routeDetailSource, /function getLineItemList\(lineItems\) \{/);
   assert.match(routeDetailSource, /function getRouteStopLineItems\(stop\) \{/);
   assert.match(routeDetailSource, /stop\?\.rawPayload\?\.lineItems/);

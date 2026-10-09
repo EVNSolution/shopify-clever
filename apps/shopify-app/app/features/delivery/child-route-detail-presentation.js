@@ -268,14 +268,32 @@ function getReturnLeg({ orderedStops, routeEndMode, routeMetrics }) {
   };
 }
 
+const DONE_STOP_STATUSES = new Set(["COMPLETE", "COMPLETED", "DELIVERED", "FULFILLED"]);
+const FAILED_STOP_STATUSES = new Set(["ATTEMPTED", "FAILED"]);
 // A visited stop was reached by the driver, so an arrival event is expected. Skipped and cancelled stops are done but never visited.
-const VISITED_STOP_STATUSES = new Set(["ATTEMPTED", "COMPLETE", "COMPLETED", "DELIVERED", "FAILED", "FULFILLED"]);
+const VISITED_STOP_STATUSES = new Set([...DONE_STOP_STATUSES, ...FAILED_STOP_STATUSES]);
 const TERMINAL_STOP_STATUSES = new Set([...VISITED_STOP_STATUSES, "CANCELLED", "SKIPPED"]);
 const DEFAULT_DEPOT_RETURN_RADIUS_METERS = 150;
 
 function getStopStatusKey(stop) {
   return String(getOrderStatusSource(stop) ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
 }
+/** Circle colors of a route without its own color: Completed green, Failed red, everything else Ready blue. */
+export const ROUTE_MARKER_TONE_COLORS = { done: "#27805c", failed: "#b42318", pending: "#0b84d8" };
+
+export function getStopMarkerTone(stop) {
+  const status = getStopStatusKey(stop);
+  return DONE_STOP_STATUSES.has(status) ? "done" : FAILED_STOP_STATUSES.has(status) ? "failed" : "pending";
+}
+
+/** Start turns green once the route has left the depot, End once the route is completed. */
+export function getRouteEndpointMarkerTone(kind, routeStatus) {
+  const status = String(routeStatus ?? "").trim().toUpperCase().replace(/[\s-]+/g, "_");
+  const completed = status === "COMPLETED";
+  const started = completed || status === "IN_PROGRESS" || status === "INCOMPLETE";
+  return (kind === "start" ? started : completed) ? "done" : "pending";
+}
+
 const isVisitedStop = (stop) => VISITED_STOP_STATUSES.has(getStopStatusKey(stop));
 const isTerminalStop = (stop) => TERMINAL_STOP_STATUSES.has(getStopStatusKey(stop));
 
@@ -768,6 +786,7 @@ export function buildChildRouteOrderRows(stops, {
       actualArrival,
       arrivalMissing: arrivalEvidenceLoaded && isVisitedStop(stop) && actualArrival === EMPTY_LABEL && expectedArrival !== EMPTY_LABEL,
       hasActualArrival: actualArrival !== EMPTY_LABEL,
+      markerTone: getStopMarkerTone(stop),
       etaCalculatedAt: firstText(stop?.etaCalculatedAt),
       etaLabel: isRollingEta ? "Rolling ETA" : "Planned ETA",
       etaSource,

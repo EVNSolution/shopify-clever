@@ -24,10 +24,13 @@ import {
 import { CustomerEmailSendResultPanel } from "../features/customer-notifications/customer-email-components";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
+  ROUTE_MARKER_TONE_COLORS,
   buildChildActualArrivalByStopId,
   buildChildRouteAmounts,
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
+  getRouteEndpointMarkerTone,
+  getStopMarkerTone,
   summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
   isMaterializedChildRouteDetail as getIsMaterializedChildRouteDetail,
@@ -890,11 +893,11 @@ const childRouteTableStopMarkerStyle = {
   boxSizing: "border-box",
   color: "#ffffff",
   display: "grid",
-  height: "20px",
+  height: "24px",
   margin: "0 auto",
   padding: 0,
   placeItems: "center",
-  width: "20px",
+  width: "24px",
 };
 
 const childRouteEndpointMarkerStyle = {
@@ -912,7 +915,7 @@ const routeNumberMarkerGlyphStyle = {
 
 const childRouteTableStopMarkerTextStyle = {
   ...routeNumberMarkerGlyphStyle,
-  fontSize: "11px",
+  fontSize: "12px",
   fontWeight: 700,
   fontVariantNumeric: "tabular-nums",
   transform: "none",
@@ -1164,10 +1167,10 @@ const childRouteTimelineStopUnitStyle = {
   boxSizing: "border-box",
   display: "grid",
   gap: "2px",
-  gridTemplateRows: "14px 20px",
+  gridTemplateRows: "14px 24px",
   isolation: "isolate",
   justifyItems: "center",
-  minHeight: "48px",
+  minHeight: "52px",
   minWidth: "73px",
   padding: "3px 4px",
   position: "relative",
@@ -1189,7 +1192,7 @@ const childRouteTimelineConnectorStyle = {
   left: "50%",
   pointerEvents: "none",
   position: "absolute",
-  top: "31px",
+  top: "33px",
   width: "100%",
   zIndex: 0,
 };
@@ -1207,10 +1210,10 @@ const childRouteTimelineEndpointMarkerStyle = {
   boxSizing: "border-box",
   display: "inline-flex",
   flex: "0 0 auto",
-  height: "20px",
+  height: "24px",
   justifyContent: "center",
   position: "relative",
-  width: "20px",
+  width: "24px",
   zIndex: 1,
 };
 
@@ -1448,6 +1451,13 @@ const routeTimelineStartStyle = {
   width: "18px",
 };
 
+const routeEndpointMarkerGlyphStyle = {
+  display: "block",
+  fill: "currentColor",
+  height: "13px",
+  width: "13px",
+};
+
 const routeTimelineStartIconStyle = {
   display: "block",
   fill: "currentColor",
@@ -1477,13 +1487,13 @@ const routeTimelineStopStyle = {
   cursor: "grab",
   display: "inline-flex",
   flex: "0 0 auto",
-  fontSize: "10px",
+  fontSize: "12px",
   fontWeight: 700,
-  height: "18px",
+  height: "24px",
   justifyContent: "center",
   padding: 0,
   transition: "box-shadow 120ms ease, opacity 120ms ease",
-  width: "18px",
+  width: "24px",
 };
 
 const routeTimelineStopDraggingStyle = {
@@ -3375,18 +3385,40 @@ function renderRouteTimelineStartIcon() {
   );
 }
 
-function renderChildRouteTimelineStartMarker() {
+const ROUTE_START_STAR_PATH = "m10 2.8 2.2 4.45 4.9.72-3.55 3.46.84 4.88L10 14l-4.39 2.31.84-4.88L2.9 7.97l4.9-.72L10 2.8Z";
+const ROUTE_END_FLAG_PATH = "M5 2.5v15h1.5v-5.5h8.2l-1.9-3.4 1.9-3.4H6.5V2.5H5Z";
+
+function renderChildRouteTimelineStartMarker(color) {
   return (
-    <span aria-label="Route start" role="img" style={childRouteTimelineStartMarkerStyle}>
-      <svg aria-hidden="true" style={routeTimelineStartIconStyle} viewBox="0 0 20 20">
-        <path d="m10 2.8 2.2 4.45 4.9.72-3.55 3.46.84 4.88L10 14l-4.39 2.31.84-4.88L2.9 7.97l4.9-.72L10 2.8Z" />
+    <span aria-label="Route start" role="img" style={color ? { ...childRouteTimelineStartMarkerStyle, background: color } : childRouteTimelineStartMarkerStyle}>
+      <svg aria-hidden="true" style={routeEndpointMarkerGlyphStyle} viewBox="0 0 20 20">
+        <path d={ROUTE_START_STAR_PATH} />
       </svg>
     </span>
   );
 }
 
-function renderChildRouteTimelineEndMarker() {
-  return <span aria-label="Route end" role="img" style={childRouteTimelineEndMarkerStyle} />;
+// A route with a status color gets a colored flag; a route with its own color keeps the checkered flag.
+function renderChildRouteTimelineEndMarker(color) {
+  if (!color) return <span aria-label="Route end" role="img" style={childRouteTimelineEndMarkerStyle} />;
+  return (
+    <span aria-label="Route end" role="img" style={{ ...childRouteTimelineEndpointMarkerStyle, background: color, color: "#ffffff" }}>
+      <svg aria-hidden="true" style={routeEndpointMarkerGlyphStyle} viewBox="0 0 20 20">
+        <path d={ROUTE_END_FLAG_PATH} />
+      </svg>
+    </span>
+  );
+}
+
+// Start and End circles in the stop tables use the same star and flag as the timeline.
+function renderRouteEndpointRowMarker(kind, color) {
+  return (
+    <span aria-hidden="true" style={color ? { ...childRouteEndpointMarkerStyle, background: color } : childRouteEndpointMarkerStyle}>
+      <svg style={routeEndpointMarkerGlyphStyle} viewBox="0 0 20 20">
+        <path d={kind === "start" ? ROUTE_START_STAR_PATH : ROUTE_END_FLAG_PATH} />
+      </svg>
+    </span>
+  );
 }
 
 function renderChildRouteInfoIcon() {
@@ -3539,12 +3571,12 @@ function renderRouteEndpointTime(endpoint, referenceValue, plannedLabel) {
   });
 }
 
-function renderRouteEndpointOrderRow({ endpoint, kind, referenceValue }) {
+function renderRouteEndpointOrderRow({ endpoint, kind, markerColor, referenceValue }) {
   const isStart = kind === "start";
   return (
     <tr aria-label={`Route ${kind}`} data-route-endpoint={kind} style={childRouteEndpointRowStyle}>
       <td style={childRouteStopCellStyle}>
-        <span style={childRouteEndpointMarkerStyle}>{isStart ? "★" : "◆"}</span>
+        {renderRouteEndpointRowMarker(kind, markerColor)}
       </td>
       <td style={{ ...childRouteOrderCellStyle, fontWeight: 700 }}>{isStart ? "Start" : "End"}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
@@ -3566,12 +3598,12 @@ function renderRouteEndpointOrderRow({ endpoint, kind, referenceValue }) {
   );
 }
 
-function renderRouteEndpointTrackingRow({ endpoint, kind, referenceValue }) {
+function renderRouteEndpointTrackingRow({ endpoint, kind, markerColor, referenceValue }) {
   const isStart = kind === "start";
   return (
     <tr aria-label={`Route tracking ${kind}`} data-route-tracking-endpoint={kind} style={childRouteEndpointRowStyle}>
       <td style={childRouteStopCellStyle}>
-        <span style={childRouteEndpointMarkerStyle}>{isStart ? "★" : "◆"}</span>
+        {renderRouteEndpointRowMarker(kind, markerColor)}
       </td>
       <td style={{ ...childRouteOrderCellStyle, fontWeight: 700 }}>{isStart ? "Start" : "End"}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
@@ -8040,16 +8072,17 @@ export default function RouteDetailPage() {
             </div>
           </section>
 
-          {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
+          {isMaterializedChildRouteDetail && childDetailTab === "stops" || (isOrdinaryRouteDetail && !isTrackingMapView) ? (
+            <>
             <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>
-              <div style={{ ...childRouteTimelineRowsStyle, minHeight: "48px" }}>
+              <div style={{ ...childRouteTimelineRowsStyle, minHeight: "52px" }}>
                 {timelineRouteRows.map((routeRow) => (
                   <div
                     key={routeRow.id}
                     aria-label={routeRow.isUnassigned ? "Unassigned orders" : undefined}
-                    onDragEnter={(event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
-                    onDragOver={(event) => handleRouteTimelineRouteDragOver(event, routeRow)}
-                    onDrop={(event) => handleRouteTimelineRouteDrop(event, routeRow)}
+                    onDragEnter={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineEmptyRouteDragEnter(event, routeRow)}
+                    onDragOver={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDragOver(event, routeRow)}
+                    onDrop={routeRow.isPreviewOnly ? undefined : (event) => handleRouteTimelineRouteDrop(event, routeRow)}
                     style={{
                       ...getChildRouteTimelineTrackStyle(routeRow.stops.length),
                       "--route-line-color": softenRouteColor(routeRow.color),
@@ -8059,7 +8092,7 @@ export default function RouteDetailPage() {
                     <span style={childRouteTimelineEndpointStyle}>
                       <span>{routeRow.isUnassigned ? "Unassigned" : "Start"}</span>
                       <span aria-hidden="true" style={childRouteTimelineConnectorStyle} />
-                      {renderChildRouteTimelineStartMarker()}
+                      {renderChildRouteTimelineStartMarker(isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("start", routeExecutionStatus)] : undefined)}
                     </span>
                     {routeRow.stops.map((stop) => (
                       <span
@@ -8075,9 +8108,9 @@ export default function RouteDetailPage() {
                         <button
                           data-route-timeline-stop-button="true"
                           ref={(node) => setRouteTimelineStopRef(stop.id, node)}
-                          draggable={canDragTimelineStop(routeRow, stop)}
+                          draggable={!routeRow.isPreviewOnly && canDragTimelineStop(routeRow, stop)}
                           onDragEnd={handleRouteTimelineDragEnd}
-                          onDragStart={canDragTimelineStop(routeRow, stop) ? (event) => handleRouteTimelineDragStart(event, routeRow, stop) : undefined}
+                          onDragStart={routeRow.isPreviewOnly || !canDragTimelineStop(routeRow, stop) ? undefined : (event) => handleRouteTimelineDragStart(event, routeRow, stop)}
                           onClick={(event) => handleRouteTimelineStopClick(event, stop)}
                           onMouseEnter={() => handleRouteTimelineStopMouseEnter(stop)}
                           onMouseLeave={() => handleRouteTimelineStopMouseLeave(stop)}
@@ -8086,6 +8119,7 @@ export default function RouteDetailPage() {
                           style={{
                             ...routeTimelineStopStyle,
                             ...childRouteTimelineStopMarkerStyle,
+                            ...(isOrdinaryRouteDetail ? { background: ROUTE_MARKER_TONE_COLORS[getStopMarkerTone(stop)] } : null),
                             position: "relative",
                             zIndex: 1,
                             ...(routeTimelineDrag?.stopId === stop.id ? routeTimelineStopDraggingStyle : null),
@@ -8096,15 +8130,25 @@ export default function RouteDetailPage() {
                     ))}
                     <span style={childRouteTimelineEndStyle}>
                       <span>End</span>
-                      {renderChildRouteTimelineEndMarker()}
+                      {renderChildRouteTimelineEndMarker(isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("end", routeExecutionStatus)] : undefined)}
                     </span>
                   </div>
                 ))}
               </div>
             </section>
+            {isOrdinaryRouteDetail ? (
+              <div
+                onDragOver={handleRouteTimelineDragOver}
+                onDrop={canDraftEditChildStopMembership ? handleRouteTimelineRemoveDrop : undefined}
+                style={routeTimelineBottomSpacerStyle}
+              >
+                <div style={routeTimelineDropHintStyle}>Drop orders here to remove them from the route</div>
+              </div>
+            ) : null}
+            </>
           ) : null}
 
-          {!isMaterializedChildRouteDetail && !isTrackingMapView ? (
+          {!isMaterializedChildRouteDetail && !isOrdinaryRouteDetail && !isTrackingMapView ? (
             <section aria-label="Route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={routeTimelineStyle}>
               <>
                 <div className="route-group-detail-scroll" style={{ ...routeTimelineRowsStyle, minHeight: routeTimelineRowsMinHeight }}>
@@ -8330,6 +8374,7 @@ export default function RouteDetailPage() {
                   {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
                     endpoint: routeEndpointPresentation.start,
                     kind: "start",
+                    markerColor: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("start", routeExecutionStatus)] : undefined,
                     referenceValue: routeEndpointPresentation.start.plannedAt,
                   }) : null}
                   {routeOrderRows.map((row) => (
@@ -8342,7 +8387,7 @@ export default function RouteDetailPage() {
                           </span>
                         </td>
                       ) : null}
-                      <td style={childRouteStopCellStyle}><span style={{ ...childRouteTableStopMarkerStyle, background: row.sourceRouteColor ?? routeLineColor }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
+                      <td style={childRouteStopCellStyle}><span style={{ ...childRouteTableStopMarkerStyle, background: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[row.markerTone] : row.sourceRouteColor ?? routeLineColor }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
                       <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
                       <td style={childRouteOrderCellStyle}>{row.status}</td>
                       <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
@@ -8447,6 +8492,7 @@ export default function RouteDetailPage() {
                   {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
                     endpoint: routeEndpointPresentation.end,
                     kind: "end",
+                    markerColor: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("end", routeExecutionStatus)] : undefined,
                     referenceValue: routeEndpointPresentation.start.plannedAt,
                   }) : null}
                 </tbody>
