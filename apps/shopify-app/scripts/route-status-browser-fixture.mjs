@@ -61,6 +61,10 @@ const makePlan = (id, name, status, options = {}) => {
   const delivered = options.delivered ?? 0;
   const stops = Array.from({ length: stopCount }, (_, index) => makeStop(id, index + 1,
     index < delivered ? "DELIVERED" : options.arrived && index === stopCount - 1 ? "ARRIVED" : "PENDING"));
+  if (options.gpsReturn) stops.forEach((stop, index) => Object.assign(stop, {
+    latitude: 43.7 + (index + 1) / 100, longitude: -79.4 + (index + 1) / 100, durationFromPreviousSeconds: 900, distanceFromPreviousMeters: 4000,
+    estimatedArrivalAt: new Date(Date.parse("2026-10-03T13:00:00.000Z") + ((index + 1) * 20 - 5) * 60000).toISOString(),
+  }));
   return {
     id, name, status, ...options, stops, stopsCount: stops.length,
     createdAt: "2026-10-03T12:00:00.000Z", updatedAt: "2026-10-03T20:00:00.000Z",
@@ -79,6 +83,7 @@ let plans = [
   makePlan("route-ready", "Ready standalone", "READY"),
   makePlan("route-progress", "In progress standalone", "IN_PROGRESS", { delivered: 1 }),
   makePlan("route-completed", "Completed standalone", "COMPLETED", { delivered: 3 }),
+  makePlan("route-completed-gps", "Completed, no completion event, GPS return", "COMPLETED", { stopCount: 5, delivered: 5, gpsReturn: true }),
   makePlan("route-cancelled", "Cancelled standalone", "CANCELLED"),
   makePlan("route-unknown", "Unsupported standalone", "AWAITING_DRIVER"),
   makePlan("route-missing", "Missing state standalone", undefined),
@@ -113,8 +118,38 @@ const makeProgressEvent = (routeId, eventType, eventId = "synthetic-" + eventTyp
   routePlanId: routeId, driverId: routeId + "-driver", eventId, eventType,
   occurredAt: "2026-10-03T13:05:00.000Z", receivedAt: "2026-10-03T13:05:01.000Z",
 });
+const makeGpsReturnSnapshot = plan => {
+  const base = Date.parse("2026-10-03T13:00:00.000Z");
+  const at = minutes => new Date(base + minutes * 60000).toISOString();
+  const depot = [-79.38, 43.65];
+  const stopPoint = index => [-79.4 + index / 100, 43.7 + index / 100];
+  const points = [[5, depot], [20, stopPoint(1)], [40, stopPoint(2)], [60, stopPoint(3)], [80, stopPoint(4)],
+    [100, stopPoint(5)], [120, [-79.39, 43.68]], [140, [-79.3801, 43.6501]], [220, depot]];
+  const samples = points.map(([minutes], index) => ({ eventId: plan.id + "-gps-" + index, driverId: plan.id + "-driver", occurredAt: at(minutes), receivedAt: at(minutes) }));
+  const [lastMinutes, lastCoordinate] = points.at(-1);
+  const lastPosition = { routePlanId: plan.id, driverId: plan.id + "-driver", eventId: plan.id + "-gps-" + (points.length - 1),
+    latitude: lastCoordinate[1], longitude: lastCoordinate[0], occurredAt: at(lastMinutes), receivedAt: at(lastMinutes) };
+  return {
+    routePlanId: plan.id, status: "STALE", serverTime: plan.updatedAt,
+    operationalState: { routePlanId: plan.id, routeStatus: "COMPLETED", displayState: "COMPLETED", updatedAt: plan.updatedAt, executionStatus: "COMPLETED" },
+    executionEvidence: {
+      routeEndMode: "RETURN_TO_DEPOT", schemaVersion: "route_execution_evidence.v1", timeSemantics: "EVENT_TIMESTAMPS_ONLY",
+      start: { eventId: plan.id + "-started", occurredAt: at(5) }, completion: null, firstPosition: null, lastPosition,
+      returnToDepot: { status: "UNAVAILABLE", source: "NONE", observedAt: null, distanceToDepotMeters: null, evidenceEventId: null, thresholdMeters: 150 },
+    },
+    progress: { completedStopIds: plan.stops.map(stop => stop.deliveryStopId), currentStage: "DRIVING",
+      latestEvent: makeProgressEvent(plan.id, "STOP_DELIVERED", plan.id + "-delivered-last") },
+    stopArrivals: plan.stops.slice(0, 4).map((stop, index) => ({ routePlanId: plan.id, deliveryStopId: stop.deliveryStopId,
+      driverId: plan.id + "-driver", eventId: stop.id + "-arrived", occurredAt: at(18 + index * 20) })),
+    latestPosition: lastPosition, recentPositions: [],
+    recordedPath: { schemaVersion: "route_tracking_geometry.v1", sourcePointCount: points.length, firstOccurredAt: at(5),
+      lastOccurredAt: at(lastMinutes), lastReceivedAt: at(lastMinutes),
+      geometry: { type: "LineString", coordinates: points.map(([, coordinate]) => coordinate) }, samples },
+  };
+};
 const makeSnapshot = (routeId, status = planById(routeId)?.status) => {
   const plan = planById(routeId);
+  if (plan?.gpsReturn) return makeGpsReturnSnapshot(plan);
   const deliveredIds = (plan?.stops || []).filter(stop => stop.deliveryStopStatus === "DELIVERED").map(stop => stop.deliveryStopId);
   const started = !["READY", "CANCELLED", undefined].includes(status);
   const completed = status === "COMPLETED";

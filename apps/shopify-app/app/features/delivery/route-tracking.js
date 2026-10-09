@@ -990,6 +990,21 @@ function distanceBetweenCoordinatesMeters(left, right) {
   return 2 * EARTH_RADIUS_METERS * Math.asin(Math.min(1, Math.sqrt(halfChord)));
 }
 
+/**
+ * First recorded GPS point within `radiusMeters` of the depot after `afterIso`.
+ * Used when the server has no completion event to confirm a return. Coordinates are [longitude, latitude].
+ */
+function findRouteTrackingDepotReturn(snapshot, { afterIso, depotCoordinates, radiusMeters } = {}) {
+  const afterMs = Date.parse(afterIso ?? "");
+  if (!snapshot || !Number.isFinite(afterMs) || !Array.isArray(depotCoordinates) || !(radiusMeters > 0)) return null;
+  for (const point of getRouteTrackingPathPoints(snapshot)) {
+    if (!(Date.parse(point.occurredAt ?? "") > afterMs)) continue;
+    const distance = distanceBetweenCoordinatesMeters(point.coordinates, depotCoordinates);
+    if (distance <= radiusMeters) return { distanceMeters: Math.round(distance * 10) / 10, occurredAt: point.occurredAt };
+  }
+  return null;
+}
+
 function getRouteTrackingPathSummary(snapshot) {
   const normalized = normalizeRouteTrackingSnapshot(snapshot);
   const points = getRouteTrackingPathPoints(normalized);
@@ -1432,7 +1447,9 @@ function getRouteTrackingPresentation(routeStatus, snapshot, now = Date.now()) {
 
 export {
   consumeRouteTrackingSseChunk,
+  distanceBetweenCoordinatesMeters,
   doesTrackingEventRefreshEta,
+  findRouteTrackingDepotReturn,
   shouldRevalidateTrackingEta,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteExecutionStatusFromTrackingSnapshot,

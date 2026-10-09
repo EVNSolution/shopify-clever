@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   consumeRouteTrackingSseChunk,
   doesTrackingEventRefreshEta,
+  findRouteTrackingDepotReturn,
   formatRouteTrackingCompletionLabel,
   getRouteExecutionStatusFromTrackingEvent,
   getRouteTrackingLineFeatures,
@@ -1795,4 +1796,37 @@ test("tracking snapshot proxy reads historical positions without opening an SSE 
   assert.equal(upstreamRequest.options.headers.accept, "application/json");
   assert.equal(response.headers.get("cache-control"), "no-store");
   assert.deepEqual(await response.json(), { data: { recentPositions: [] }, error: null });
+});
+
+test("the first recorded GPS point near the depot after the last stop is the observed return", () => {
+  const depot = [-79.4748, 43.7637];
+  const snapshot = (points) => ({
+    recordedPath: {
+      firstOccurredAt: points[0][0],
+      geometry: { type: "LineString", coordinates: points.map(([, longitude, latitude]) => [longitude, latitude]) },
+      lastOccurredAt: points.at(-1)[0],
+      lastReceivedAt: points.at(-1)[0],
+      samples: points.map(([time], index) => ({ eventId: `event-${index}`, occurredAt: time, receivedAt: time })),
+      schemaVersion: "route_tracking_geometry.v1",
+      sourcePointCount: points.length,
+    },
+  });
+  const path = snapshot([
+    ["2026-10-08T13:00:00.000Z", -79.4748, 43.7637],
+    ["2026-10-08T14:00:00.000Z", -79.4, 43.7],
+    ["2026-10-08T16:30:00.000Z", -79.42, 43.72],
+    ["2026-10-08T16:50:00.000Z", -79.4749, 43.7638],
+    ["2026-10-08T18:18:00.000Z", -79.4749, 43.7638],
+  ]);
+  const found = findRouteTrackingDepotReturn(path, { afterIso: "2026-10-08T16:14:00.000Z", depotCoordinates: depot, radiusMeters: 150 });
+
+  assert.equal(found.occurredAt, "2026-10-08T16:50:00.000Z");
+  assert.ok(found.distanceMeters > 0 && found.distanceMeters < 30);
+  assert.equal(findRouteTrackingDepotReturn(path, { afterIso: "2026-10-08T19:00:00.000Z", depotCoordinates: depot, radiusMeters: 150 }), null);
+  assert.equal(findRouteTrackingDepotReturn(path, { afterIso: "2026-10-08T16:14:00.000Z", depotCoordinates: depot, radiusMeters: 5 }), null);
+  assert.equal(findRouteTrackingDepotReturn(path, { afterIso: "2026-10-08T16:14:00.000Z", depotCoordinates: [-79.3, 43.6], radiusMeters: 150 }), null);
+  assert.equal(findRouteTrackingDepotReturn(path, { afterIso: "not a time", depotCoordinates: depot, radiusMeters: 150 }), null);
+  assert.equal(findRouteTrackingDepotReturn(path, { afterIso: "2026-10-08T16:14:00.000Z", depotCoordinates: null, radiusMeters: 150 }), null);
+  assert.equal(findRouteTrackingDepotReturn(null, { afterIso: "2026-10-08T16:14:00.000Z", depotCoordinates: depot, radiusMeters: 150 }), null);
+  assert.equal(findRouteTrackingDepotReturn({}, { afterIso: "2026-10-08T16:14:00.000Z", depotCoordinates: depot, radiusMeters: 150 }), null);
 });

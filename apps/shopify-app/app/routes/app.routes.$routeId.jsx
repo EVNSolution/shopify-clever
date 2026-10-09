@@ -2307,22 +2307,8 @@ function getRouteCreatedLabel(routePlan, storeTimeZone) {
 }
 
 function formatTrackingTimestamp(value, ianaTimezone) {
-  const date = value ? new Date(value) : null;
-  if (!date || Number.isNaN(date.getTime()) || !textOrUndefined(ianaTimezone)) return ROUTE_EMPTY_LABEL;
-  try {
-    return new Intl.DateTimeFormat(undefined, {
-      day: "numeric",
-      hour: "numeric",
-      minute: "2-digit",
-      month: "numeric",
-      second: "2-digit",
-      timeZone: ianaTimezone,
-      timeZoneName: "short",
-      year: "numeric",
-    }).format(date);
-  } catch {
-    return ROUTE_EMPTY_LABEL;
-  }
+  if (!value || !textOrUndefined(ianaTimezone)) return ROUTE_EMPTY_LABEL;
+  return formatStoreInstant(value, ianaTimezone, { empty: ROUTE_EMPTY_LABEL, seconds: true });
 }
 
 function isRouteDispatched(routePlan, dispatchResult) {
@@ -3461,6 +3447,21 @@ function renderChildRouteEta(row) {
     hasActualArrival ? `${row?.actualLabel ?? "Actual arrival"}: ${row.actualArrival}` : null,
   ].filter(Boolean).join("; ") || "ETA unavailable";
 
+  if (row?.arrivalMissing === true) {
+    const missingLabel = `${etaLabel}: ${expectedArrival}; No arrival event was recorded`;
+    return (
+      <span
+        aria-label={missingLabel}
+        role="group"
+        style={{ alignItems: "center", display: "inline-flex", flexDirection: "column", gap: "4px" }}
+        title={missingLabel}
+      >
+        <span aria-hidden="true"><del><s-text color="subdued" fontVariantNumeric="tabular-nums">{expectedArrival}</s-text></del></span>
+        <span aria-hidden="true"><s-text color="subdued">{ROUTE_EMPTY_LABEL}</s-text></span>
+      </span>
+    );
+  }
+
   return (
     <span
       aria-label={accessibleLabel}
@@ -3552,7 +3553,7 @@ function renderRouteEndpointOrderRow({ endpoint, kind, referenceValue }) {
       <td style={childRouteExpectedArrivalCellStyle}>
         {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
       </td>
-      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{endpoint?.driveTime ?? ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
@@ -3577,7 +3578,7 @@ function renderRouteEndpointTrackingRow({ endpoint, kind, referenceValue }) {
       <td style={childRouteExpectedArrivalCellStyle}>
         {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
       </td>
-      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{endpoint?.driveTime ?? ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
@@ -4368,9 +4369,11 @@ export default function RouteDetailPage() {
     routeMetrics,
     routePlan: effectiveRoutePlan,
     stops: orderedRouteStops,
+    trackingSnapshot: displayedRouteTrackingSnapshot,
   }), [
     actualArrivalByStopId,
     departureLocation,
+    displayedRouteTrackingSnapshot,
     effectiveRoutePlan,
     ianaTimezone,
     orderedRouteStops,
@@ -4387,9 +4390,10 @@ export default function RouteDetailPage() {
     () => buildRouteOrderRows(orderTableRouteRows, {
       actualArrivalByStopId,
       actualArrivalRoutePlanId: trackingRoutePlanId,
+      arrivalEvidenceLoaded: Array.isArray(displayedRouteTrackingSnapshot?.stopArrivals),
       ianaTimezone,
     }),
-    [actualArrivalByStopId, ianaTimezone, orderTableRouteRows, trackingRoutePlanId],
+    [actualArrivalByStopId, displayedRouteTrackingSnapshot?.stopArrivals, ianaTimezone, orderTableRouteRows, trackingRoutePlanId],
   );
   const routeOrderColumns = isRouteGroupDetail
     ? [{ key: "route", label: "Route" }, ...CHILD_ROUTE_ORDER_COLUMNS]
@@ -8523,8 +8527,15 @@ export default function RouteDetailPage() {
                       <span style={routeChildTrackingMetricLabelStyle}>{translate(language, "routes.detail.tracking.returnToDepot")}</span>
                       <strong
                         style={routeChildTrackingMetricValueStyle}
-                        title={getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
-                      >{translate(language, `routes.detail.tracking.return.${returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}</strong>
+                        title={routeEndpointPresentation.end.observedFromGps
+                          ? getReturnToDepotEvidenceTitle({
+                            distanceToDepotMeters: routeEndpointPresentation.end.observedDistanceMeters,
+                            observedAt: routeEndpointPresentation.end.actualAt,
+                            source: "GPS",
+                            thresholdMeters: routeEndpointPresentation.end.observedThresholdMeters,
+                          }, ianaTimezone, language)
+                          : getReturnToDepotEvidenceTitle(returnToDepotEvidence, ianaTimezone, language)}
+                      >{translate(language, `routes.detail.tracking.return.${routeEndpointPresentation.end.observedFromGps ? "OBSERVED" : returnToDepotEvidence?.status ?? "UNAVAILABLE"}`)}</strong>
                     </div>
                     <div style={routeChildTrackingMetricStyle}>
                       <span style={routeChildTrackingMetricLabelStyle}>GPS records</span>
