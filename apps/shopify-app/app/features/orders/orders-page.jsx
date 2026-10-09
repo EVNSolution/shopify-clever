@@ -1,4 +1,4 @@
-import { RouteOptionsDisclosure, RouteOptionsFields } from "../delivery/route-office-components";
+import { RouteOptionsDialog, RouteOptionsFields } from "../delivery/route-office-components";
 import { normalizeRouteOptions } from "../delivery/route-office-options.js";
 /* eslint-disable react/prop-types */
 import { formatStoreInstant, getStoreDate } from "../shopify/store-date-time";
@@ -292,6 +292,7 @@ const routePlanScrollAreaStyle = {
 const ordersUpdateActionStyle = {
   alignItems: "center",
   display: "flex",
+  flexWrap: "wrap",
   gap: "10px",
 };
 
@@ -2817,6 +2818,7 @@ function OrdersPageContent({ loaderData }) {
   const [orderDataDraft, setOrderDataDraft] = useState(() => getOrderDataDraft(null));
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
   const [routeOptions, setRouteOptions] = useState(() => normalizeRouteOptions({}));
+  const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
   const routePlanTitleEditedRef = useRef(false);
   const [routeCreatePending, setRouteCreatePending] = useState(false);
   const isCreatingRoute = routeCreatePending || routePlanFetcher.state !== "idle";
@@ -3223,6 +3225,19 @@ function OrdersPageContent({ loaderData }) {
             disabled={isRefreshingAllRoutes}
             onClick={handleRefreshAllRoutes}
           >{ordersRefreshButtonLabel}</button>
+          {kfoodOfficeEnabled && !isMapWide ? (
+            <button
+              type="button"
+              aria-haspopup="dialog"
+              style={{ ...addToPlanButtonStyle, marginLeft: "auto" }}
+              onClick={() => setRouteOptionsOpen(true)}
+            >Route options</button>
+          ) : null}
+          {routeOptionsOpen ? (
+            <RouteOptionsDialog onClose={() => setRouteOptionsOpen(false)}>
+              <RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} />
+            </RouteOptionsDialog>
+          ) : null}
         </div>
       );
 
@@ -5201,13 +5216,6 @@ function OrdersPageContent({ loaderData }) {
               style={routePlanTitleFieldStyle}
             />
           </label>
-          {kfoodOfficeEnabled ? (
-            <div style={{ padding: "8px 12px" }}>
-              <RouteOptionsDisclosure>
-                <RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} />
-              </RouteOptionsDisclosure>
-            </div>
-          ) : null}
           <div style={routePlanDetailStyle}>
             <div style={routePlanHeaderStyle}>
               <s-heading>Route plan</s-heading>

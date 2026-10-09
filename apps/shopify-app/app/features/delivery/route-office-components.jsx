@@ -38,102 +38,205 @@ const moneyStyle = {
   gap: 4,
   fontVariantNumeric: "tabular-nums",
 };
+const overlayStyle = {
+  alignItems: "center",
+  background: "rgba(0, 0, 0, 0.34)",
+  boxSizing: "border-box",
+  display: "flex",
+  inset: 0,
+  justifyContent: "center",
+  padding: 16,
+  position: "fixed",
+  zIndex: 2147483647,
+};
+const dialogStyle = {
+  background: "#fff",
+  borderRadius: 12,
+  boxShadow: "0 18px 48px rgba(0, 0, 0, 0.24)",
+  boxSizing: "border-box",
+  display: "grid",
+  gap: 14,
+  maxHeight: "100%",
+  maxWidth: "100%",
+  outline: "none",
+  overflowY: "auto",
+  padding: 18,
+  width: 480,
+};
+const optionListStyle = {
+  border: "1px solid #e3e3e3",
+  borderRadius: 8,
+  display: "grid",
+  margin: 0,
+  minWidth: 0,
+  overflow: "hidden",
+  padding: 0,
+};
+const optionRowStyle = {
+  alignItems: "center",
+  cursor: "pointer",
+  display: "flex",
+  fontSize: 14,
+  gap: 10,
+  minHeight: 44,
+  padding: "0 14px",
+};
+const noteStyle = { color: "#616161", fontSize: 13, margin: 0 };
+const actionsStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: 8,
+  justifyContent: "flex-end",
+};
+const dialogButtonStyle = {
+  background: "#fff",
+  border: "1px solid #c9c9c9",
+  borderRadius: 8,
+  color: "#303030",
+  cursor: "pointer",
+  font: "inherit",
+  fontWeight: 650,
+  minHeight: 36,
+  padding: "7px 13px",
+};
+const primaryButtonStyle = {
+  ...dialogButtonStyle,
+  background: "#303030",
+  borderColor: "#303030",
+  color: "#fff",
+};
+const disabledStyle = { cursor: "not-allowed", opacity: 0.55 };
 
-function Errors({ errors = [] }) {
+function Errors({ errors = [], compact = false }) {
   return errors.length ? (
     <div role="alert" style={{ color: "#a32216" }}>
       {errors.map((error, index) => (
-        <p key={index}>{getOfficeErrorMessage(error)}</p>
+        <p
+          key={index}
+          style={compact ? { fontSize: 14, margin: 0 } : undefined}
+        >
+          {getOfficeErrorMessage(error)}
+        </p>
       ))}
     </div>
   ) : null;
 }
 
-export function RouteOptionsDisclosure({ children }) {
-  const [expanded, setExpanded] = useState(false);
-  const contentId = useId();
+/** Popup shell for route options. Pass `actions` to replace the default Done button. */
+export function RouteOptionsDialog({ onClose, children, actions }) {
+  const titleId = useId();
+  const dialogRef = useRef(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const opener = document.activeElement;
+    dialog?.focus({ preventScroll: true });
+    // Document-level: a button that disables itself while saving drops focus to <body>.
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape") onCloseRef.current();
+    };
+    const keepFocusInside = (event) => {
+      if (!dialog?.contains(event.target)) dialog?.focus({ preventScroll: true });
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    document.addEventListener("focusin", keepFocusInside);
+    return () => {
+      document.removeEventListener("keydown", closeOnEscape);
+      document.removeEventListener("focusin", keepFocusInside);
+      opener?.focus?.({ preventScroll: true });
+    };
+  }, []);
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      <button
-        type="button"
-        style={{ ...buttonStyle, justifySelf: "start" }}
-        aria-expanded={expanded}
-        aria-controls={contentId}
-        onClick={() => setExpanded((open) => !open)}
+    <div
+      role="presentation"
+      style={overlayStyle}
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        style={dialogStyle}
       >
-        Route options <span aria-hidden="true">{expanded ? "▴" : "▾"}</span>
-      </button>
-      <div id={contentId} hidden={!expanded}>
+        <h2 id={titleId} style={{ fontSize: 20, margin: 0 }}>
+          Route options
+        </h2>
         {children}
+        <div style={actionsStyle}>
+          {actions ?? (
+            <button type="button" style={primaryButtonStyle} onClick={onClose}>
+              Done
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );
 }
 
+// One row per option. A new option is one more entry here.
+const ROUTE_OPTIONS = [
+  {
+    label: "Require a delivery photo",
+    checked: (value) => value.deliveryProof.photoRequired,
+    apply: (value, on) => ({
+      ...value,
+      deliveryProof: { ...value.deliveryProof, photoRequired: on },
+    }),
+  },
+  {
+    label: "Require the customer signature",
+    checked: (value) => value.deliveryProof.signatureRequired,
+    apply: (value, on) => ({
+      ...value,
+      deliveryProof: { ...value.deliveryProof, signatureRequired: on },
+    }),
+  },
+  {
+    label: "Avoid toll roads",
+    checked: (value) => value.tollPolicy === "AVOID_TOLLS",
+    apply: (value, on) => ({
+      ...value,
+      tollPolicy: on ? "AVOID_TOLLS" : "ALLOW_TOLLS",
+    }),
+  },
+];
+
 export function RouteOptionsFields({ value, onChange, disabled = false }) {
   return (
     <fieldset
       disabled={disabled}
-      style={{ border: 0, padding: 0, margin: 0, display: "grid", gap: 10 }}
+      aria-label="Route options"
+      style={optionListStyle}
     >
-      <legend style={{ fontWeight: 600, marginBottom: 10 }}>
-        Route options
-      </legend>
-      <label style={fieldStyle}>
-        <input
-          type="checkbox"
-          checked={value.deliveryProof.photoRequired}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              deliveryProof: {
-                ...value.deliveryProof,
-                photoRequired: event.target.checked,
-              },
-            })
-          }
-        />
-        Require a delivery photo
-      </label>
-      <label style={fieldStyle}>
-        <input
-          type="checkbox"
-          checked={value.deliveryProof.signatureRequired}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              deliveryProof: {
-                ...value.deliveryProof,
-                signatureRequired: event.target.checked,
-              },
-            })
-          }
-        />
-        Require the customer signature
-      </label>
-      <label style={fieldStyle}>
-        <input
-          type="checkbox"
-          checked={value.tollPolicy === "AVOID_TOLLS"}
-          onChange={(event) =>
-            onChange({
-              ...value,
-              tollPolicy: event.target.checked ? "AVOID_TOLLS" : "ALLOW_TOLLS",
-            })
-          }
-        />
-        Avoid toll roads
-      </label>
+      {ROUTE_OPTIONS.map(({ label, checked, apply }, index) => (
+        <label
+          key={label}
+          style={{
+            ...optionRowStyle,
+            ...(index ? { borderTop: "1px solid #e3e3e3" } : null),
+            ...(disabled ? { cursor: "default", opacity: 0.6 } : null),
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={checked(value)}
+            onChange={(event) => onChange(apply(value, event.target.checked))}
+            style={{ height: 16, margin: 0, width: 16 }}
+          />
+          {label}
+        </label>
+      ))}
     </fieldset>
   );
 }
 
 export function RouteOptionsEditor({ routePlan, onClose }) {
-  const panelRef = useRef(null);
-  useEffect(() => {
-    panelRef.current?.focus({ preventScroll: true });
-    panelRef.current?.scrollIntoView({ block: "start" });
-  }, []);
   const fetcher = useFetcher();
   const shopify = useAppBridge();
   const [searchParams] = useSearchParams();
@@ -156,8 +259,7 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
     `/app/routes/${encodeURIComponent(routePlan.id)}/options`,
     searchParams,
   );
-  async function save(event) {
-    event.preventDefault();
+  async function save() {
     if (!editable || busy || preparingRef.current) return;
     preparingRef.current = true;
     setPreparing(true);
@@ -183,49 +285,17 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
     }
   }
   return (
-    <section
-      id="route-options-editor"
-      ref={panelRef}
-      tabIndex={-1}
-      aria-label="Edit route options"
-      style={panelStyle}
-    >
-      <form onSubmit={save} style={{ display: "grid", gap: 12 }}>
-        <RouteOptionsFields
-          value={draft}
-          onChange={setDraft}
-          disabled={busy || !editable}
-        />
-        <p style={{ margin: 0, color: "#59616b" }}>
-          Save these options before assigning or dispatching the route. Saved
-          options reach the driver when the route is dispatched.
-        </p>
-        {!editable ? (
-          <p role="status">Options are locked after assignment or Dispatch.</p>
-        ) : null}
-        <Errors
-          errors={[
-            ...(result?.errors ?? []),
-            ...(clientError ? [{ message: clientError }] : []),
-          ]}
-        />
-        {savedRoute &&
-        JSON.stringify(normalizeRouteOptions(savedRoute)) ===
-          JSON.stringify(draft) &&
-        !result?.errors?.length ? (
-          <p role="status">Route options saved.</p>
-        ) : null}
-        <div style={fieldStyle}>
-          <button
-            type="submit"
-            style={buttonStyle}
-            disabled={busy || !editable}
-          >
-            {busy ? "Saving…" : "Save options"}
-          </button>
+    <RouteOptionsDialog
+      onClose={onClose}
+      actions={
+        <>
           <button
             type="button"
-            style={buttonStyle}
+            style={{
+              ...dialogButtonStyle,
+              marginRight: "auto",
+              ...(busy ? disabledStyle : null),
+            }}
             disabled={busy}
             onClick={() => {
               setBaseRoute(routePlan);
@@ -236,12 +306,53 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
           >
             Reload saved options
           </button>
-          <button type="button" style={buttonStyle} onClick={onClose}>
+          <button type="button" style={dialogButtonStyle} onClick={onClose}>
             Close
           </button>
-        </div>
-      </form>
-    </section>
+          <button
+            type="button"
+            style={{
+              ...primaryButtonStyle,
+              ...(busy || !editable ? disabledStyle : null),
+            }}
+            disabled={busy || !editable}
+            onClick={save}
+          >
+            {busy ? "Saving…" : "Save options"}
+          </button>
+        </>
+      }
+    >
+      <RouteOptionsFields
+        value={draft}
+        onChange={setDraft}
+        disabled={busy || !editable}
+      />
+      <p style={noteStyle}>
+        Save these options before assigning or dispatching the route. Saved
+        options reach the driver when the route is dispatched.
+      </p>
+      {!editable ? (
+        <p role="status" style={noteStyle}>
+          Options are locked after assignment or Dispatch.
+        </p>
+      ) : null}
+      <Errors
+        compact
+        errors={[
+          ...(result?.errors ?? []),
+          ...(clientError ? [{ message: clientError }] : []),
+        ]}
+      />
+      {savedRoute &&
+      JSON.stringify(normalizeRouteOptions(savedRoute)) ===
+        JSON.stringify(draft) &&
+      !result?.errors?.length ? (
+        <p role="status" style={noteStyle}>
+          Route options saved.
+        </p>
+      ) : null}
+    </RouteOptionsDialog>
   );
 }
 
