@@ -37,7 +37,9 @@ import {
   getVisibleRouteGroupChildren,
   numberOrUndefined,
   readRouteOptimizedSnapshot,
+  readRouteStopTransitionBatch,
   readStopTimeMinutes,
+  ROUTE_STOP_TRANSITION_STATUSES,
   STOP_TIME_MAX_MINUTES,
   textOrUndefined,
 } from "./route-helpers";
@@ -70,7 +72,6 @@ import {
 } from "./route-order-refresh";
 
 const ROUTE_REFRESH_CONCURRENCY = 5;
-const ROUTE_STOP_TRANSITION_STATUSES = new Set(["READY", "IN_PROGRESS", "COMPLETED"]);
 
 function roundPerfDuration(duration) {
   return Number(duration.toFixed(2));
@@ -838,6 +839,39 @@ export const routeDetailAction = async ({ params, request }) => {
       },
       { sessionToken: shopifySessionToken },
     );
+  }
+
+  if (intent === "transitionRouteStops") {
+    const transitions = readRouteStopTransitionBatch(formData.get("stops"));
+    if (transitions === null) {
+      return {
+        completed: 0,
+        routePlan: null,
+        errors: [{ message: "The selected stops could not be updated because the request was not valid." }],
+      };
+    }
+    // One after the other, so a failure leaves a known number of stops changed.
+    let routePlan = null;
+    for (const [index, transition] of transitions.entries()) {
+      const result = await transitionDeliveryRoutePlanStop(
+        request,
+        routeId,
+        transition.deliveryStopId,
+        { status: transition.status, idempotencyKey: transition.idempotencyKey },
+        { sessionToken: shopifySessionToken },
+      );
+      if ((result.errors ?? []).length > 0) {
+        return {
+          completed: index,
+          routePlan,
+          errors: [{
+            message: `Marked ${index} of ${transitions.length} stops. Stopped at ${transition.label ?? `stop ${index + 1}`}: ${result.errors[0]?.message ?? "Unknown error"}`,
+          }],
+        };
+      }
+      routePlan = result.routePlan ?? routePlan;
+    }
+    return { completed: transitions.length, routePlan, errors: [] };
   }
 
   if (intent === "updateRouteStop") {

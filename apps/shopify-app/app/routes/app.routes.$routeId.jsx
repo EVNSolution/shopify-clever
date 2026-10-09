@@ -91,6 +91,7 @@ import {
   summarizeRouteStopLocationDiagnostics,
 } from "../features/delivery/route-stop-location-diagnostic";
 import { StopTimeCell } from "../features/delivery/route-stop-time-cell";
+import { StopSelectAllCheckbox, StopSelectCheckbox, StopSelectionBar, getStopSelection } from "../features/delivery/route-stop-selection";
 import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath, withEmbeddedShopifyContext } from "../features/delivery/route-paths";
 import {
   DEFAULT_CENTER,
@@ -2182,6 +2183,23 @@ const childRouteOrderCellStyle = {
   textAlign: "center",
 };
 
+const childRouteSelectCellStyle = {
+  ...childRouteOrderCellStyle,
+  padding: "8px 0",
+  textAlign: "center",
+};
+
+// The selection bar covers this header row, so the row is as tall as the bar: 35px and a 1px border make 36px.
+const childRouteSelectHeaderCellStyle = {
+  ...childRouteOrderHeaderCellStyle,
+  height: "35px",
+  padding: 0,
+};
+
+const childRouteSelectedRowStyle = {
+  background: "#f1f1f1",
+};
+
 const childRouteStopTimeCellStyle = {
   ...childRouteOrderCellStyle,
   position: "relative",
@@ -2209,6 +2227,12 @@ const childRouteActionsCellStyle = {
   position: "sticky",
   right: 0,
   zIndex: 2,
+};
+
+const childRouteSelectedActionsCellStyle = {
+  ...childRouteActionsCellStyle,
+  background: childRouteSelectedRowStyle.background,
+  boxShadow: "-8px 0 12px rgba(241, 241, 241, 0.92)",
 };
 
 const childRouteStopCellStyle = {
@@ -3579,10 +3603,19 @@ function renderRouteEndpointTime(endpoint, referenceValue, plannedLabel) {
   });
 }
 
-function renderRouteEndpointOrderRow({ endpoint, kind, markerColor, referenceValue }) {
+// Keyboard focus goes back to the pencil of the stop whose Stop time editor just closed.
+function focusStopTimePencil(deliveryStopId) {
+  window.requestAnimationFrame(() => {
+    [...document.querySelectorAll("[data-stop-time-edit]")]
+      .find((node) => node.dataset.stopTimeEdit === deliveryStopId)?.focus();
+  });
+}
+
+function renderRouteEndpointOrderRow({ endpoint, kind, markerColor, referenceValue, selectColumn }) {
   const isStart = kind === "start";
   return (
     <tr aria-label={`Route ${kind}`} data-route-endpoint={kind} style={childRouteEndpointRowStyle}>
+      {selectColumn ? <td style={childRouteSelectCellStyle} /> : null}
       <td style={childRouteStopCellStyle}>
         {renderRouteEndpointRowMarker(kind, markerColor)}
       </td>
@@ -3918,6 +3951,9 @@ export default function RouteDetailPage() {
   const orderedRouteStops = useMemo(() => buildRouteStops(liveDraftStops), [liveDraftStops]);
   const [liveEditStopId, setLiveEditStopId] = useState(null);
   const [stopTimeDraft, setStopTimeDraft] = useState(null);
+  const stopTimeEditStopIdRef = useRef(null);
+  const [selectedStopKeys, setSelectedStopKeys] = useState([]);
+  const [stopBarMenu, setStopBarMenu] = useState(null);
   const [liveReviewOpen, setLiveReviewOpen] = useState(false);
   const liveNotice = live.noticeText;
   const lastLiveNoticeRef = useRef("");
@@ -4292,6 +4328,8 @@ export default function RouteDetailPage() {
     routeTrackingSnapshotRef.current = null;
     setRouteTrackingSnapshot(null);
     setTrackingConnectionState("idle");
+    setSelectedStopKeys((keys) => (keys.length > 0 ? [] : keys));
+    setStopBarMenu(null);
   }, [effectiveRoutePlan?.id]);
   useEffect(() => {
     setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
@@ -4446,7 +4484,12 @@ export default function RouteDetailPage() {
   );
   const routeOrderColumns = isRouteGroupDetail
     ? [{ key: "route", label: "Route" }, ...CHILD_ROUTE_ORDER_COLUMNS]
-    : CHILD_ROUTE_ORDER_COLUMNS;
+    : [{ key: "select", label: "" }, ...CHILD_ROUTE_ORDER_COLUMNS];
+  const stopSelection = useMemo(
+    () => getStopSelection(isRouteGroupDetail ? [] : routeOrderRows, selectedStopKeys),
+    [isRouteGroupDetail, routeOrderRows, selectedStopKeys],
+  );
+  const selectedStopRows = stopSelection.rows;
   const addStopTargetRouteOptions = useMemo(
     () => (isRouteGroupDetail ? buildAddStopTargetRouteOptions(routeGroupChildRows) : []),
     [isRouteGroupDetail, routeGroupChildRows],
@@ -5443,6 +5486,7 @@ export default function RouteDetailPage() {
   const handleSaveStopTime = (row) => {
     const serviceMinutes = readStopTimeMinutes(stopTimeDraft?.value);
     if (serviceMinutes === null || routeGroupActionBusy || !canEditStopTime(row)) return;
+    stopTimeEditStopIdRef.current = row.deliveryStopId;
     submitRouteAction("updateRouteStopTime", { deliveryStopId: row.deliveryStopId, serviceMinutes });
   };
 
@@ -5542,6 +5586,92 @@ export default function RouteDetailPage() {
     setActiveChildStopActions((current) => current ? { ...current, sendTargetsOpen: !current.sendTargetsOpen } : current);
   };
 
+  const clearStopSelection = () => {
+    setSelectedStopKeys([]);
+    setStopBarMenu(null);
+  };
+
+  const handleToggleStopSelected = (rowKey, checked) => {
+    setStopBarMenu(null);
+    setSelectedStopKeys((keys) => (checked ? [...new Set([...keys, rowKey])] : keys.filter((key) => key !== rowKey)));
+  };
+
+  const handleToggleAllStopsSelected = (checked) => {
+    setStopBarMenu(null);
+    setSelectedStopKeys(checked ? routeOrderRows.map((row) => row.rowKey) : []);
+  };
+
+  const canEditSelectedStop = selectedStopRows.length === 1 && Boolean(selectedStopRows[0].deliveryStopId) && canEditStopRow(selectedStopRows[0]);
+  // A started route keeps its stop list, and single removal asks for confirmation there, so the bulk button waits too.
+  const canRemoveSelectedStops = selectedStopRows.length > 0 && !routeMembershipChangeIsInProgress && selectedStopRows.every(canRemoveChildStopFromGroup);
+  const canMarkSelectedStops = !routeGroupActionBusy && selectedStopRows.every((row) => Boolean(row.deliveryStopId));
+  const stopSelectionSendTargets = canDraftEditChildStopMembership && selectedStopRows.length > 0
+    ? timelineRouteRows.filter((routeRow) => !routeRow.isPreviewOnly && !routeRow.isUnassigned && routeRow.id !== currentTimelineRouteRow?.id
+      && isRouteTimelineStopMoveAllowed(currentTimelineRouteRow, routeRow))
+    : [];
+  const stopMarkOptions = [["READY", "Ready"], ["IN_PROGRESS", "In progress"], ["COMPLETED", "Completed"]].map(([status, label]) => ({
+    disabled: selectedStopRows.every((row) => row.status === label),
+    label,
+    status,
+  }));
+  const selectedStopKeySet = new Set(selectedStopRows.map((row) => row.rowKey));
+  const stopSelectionEditTitle = liveChangeActive
+    ? "Only future stops can be edited while the route is in progress."
+    : "This stop can no longer be edited.";
+  const stopSelectionMarkTitle = routeGroupActionBusy ? "Wait for the current action to finish." : "These stops cannot change status.";
+
+  const handleEditSelectedStop = () => {
+    if (!canEditSelectedStop) return;
+    setStopBarMenu(null);
+    handleOpenChildStopEditor(selectedStopRows[0]);
+  };
+
+  const removeChildStopsFromGroup = (rows) => {
+    const removable = rows.filter(canRemoveChildStopFromGroup);
+    if (removable.length === 0) return;
+    setRoutePreviewByKey({});
+    const orderIds = removable.map((row) => row.orderId).filter(Boolean);
+    if (orderIds.length > 0) setRemovedOrderIds((current) => [...new Set([...current, ...orderIds])]);
+    animateRouteTimelineChange(() => {
+      setRouteTimelineOrderByRouteId((currentOrderByRouteId) => removable.reduce(
+        (orderByRouteId, row) => removeTimelineStop(routeRows, orderByRouteId, { stopId: row.id }),
+        currentOrderByRouteId,
+      ));
+    });
+  };
+
+  const handleRemoveSelectedStops = () => {
+    if (!canRemoveSelectedStops) return;
+    removeChildStopsFromGroup(selectedStopRows);
+    clearStopSelection();
+  };
+
+  const handleSendSelectedStopsToRoute = (targetRouteRow) => {
+    if (!stopSelectionSendTargets.some((target) => target.id === targetRouteRow?.id)) return;
+    setRoutePreviewByKey({});
+    animateRouteTimelineChange(() => {
+      setRouteTimelineOrderByRouteId((currentOrderByRouteId) => selectedStopRows.reduce(
+        (orderByRouteId, row) => moveTimelineStop(routeRows, orderByRouteId, { stopId: row.id }, targetRouteRow.id),
+        currentOrderByRouteId,
+      ));
+    });
+    clearStopSelection();
+  };
+
+  const handleMarkSelectedStops = (status) => {
+    const label = stopMarkOptions.find((option) => option.status === status)?.label;
+    const rows = selectedStopRows.filter((row) => row.deliveryStopId && row.status !== label);
+    if (!canMarkSelectedStops || rows.length === 0) return;
+    const batchKey = Date.now();
+    submitRouteAction("transitionRouteStops", { stops: JSON.stringify(rows.map((row) => ({
+      deliveryStopId: row.deliveryStopId,
+      idempotencyKey: `${effectiveRoutePlan?.id ?? "route"}:${row.deliveryStopId}:${status}:${batchKey}`,
+      label: row.order,
+      status,
+    }))) });
+    clearStopSelection();
+  };
+
   const handleOpenChildStopTracking = (row) => {
     if (!row) return;
     setFocusedTrackingStopId(row.id);
@@ -5589,6 +5719,18 @@ export default function RouteDetailPage() {
     document.addEventListener("pointerdown", handleDocumentPointerDown);
     return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
   }, [activeRouteTimelineStopPopover?.mode]);
+
+  useEffect(() => {
+    if (!stopBarMenu) return undefined;
+
+    const handleDocumentPointerDown = (event) => {
+      if (event.target?.closest?.(".stop-selection-bar__menu-anchor")) return;
+      setStopBarMenu(null);
+    };
+
+    document.addEventListener("pointerdown", handleDocumentPointerDown);
+    return () => document.removeEventListener("pointerdown", handleDocumentPointerDown);
+  }, [stopBarMenu]);
 
   useEffect(() => {
     if (activeChildOrderDisclosure?.mode !== "pinned") return undefined;
@@ -6693,15 +6835,25 @@ export default function RouteDetailPage() {
 
   useEffect(() => {
     if (routeActionFetcher.state !== "idle" || routeActionFetcher.data === undefined) return;
-    if (!["transitionRouteStop", "updateRouteStop", "updateRouteStopTime"].includes(lastRouteActionIntentRef.current)) return;
+    if (!["transitionRouteStop", "updateRouteStop", "updateRouteStopTime", "transitionRouteStops"].includes(lastRouteActionIntentRef.current)) return;
     const intent = lastRouteActionIntentRef.current;
     lastRouteActionIntentRef.current = null;
-    if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
+    if ((routeActionFetcher.data?.errors ?? []).length > 0) {
+      // A bulk status change that stopped midway still changed some stops, so the table must reload.
+      if (intent === "transitionRouteStops" && routeActionFetcher.data?.completed > 0) revalidator.revalidate();
+      return;
+    }
 
-    if (intent === "updateRouteStopTime") setStopTimeDraft(null);
+    if (intent === "updateRouteStopTime") {
+      const editedStopId = stopTimeEditStopIdRef.current;
+      setStopTimeDraft(null);
+      if (editedStopId) focusStopTimePencil(editedStopId);
+    }
     revalidator.revalidate();
+    const completed = routeActionFetcher.data?.completed;
     shopify.toast.show({
       transitionRouteStop: "Stop status updated",
+      transitionRouteStops: `${completed} ${completed === 1 ? "stop" : "stops"} updated`,
       updateRouteStopTime: "Stop time updated",
     }[intent] ?? "Stop fields updated");
   }, [revalidator, routeActionFetcher.data, routeActionFetcher.state, shopify]);
@@ -8374,191 +8526,240 @@ export default function RouteDetailPage() {
           ) : null}
 
           {childDetailTab === "stops" && (routeOrderRows.length > 0 || !isRouteGroupDetail) ? (
-            <div
-              style={{
-                ...routesDetailTableFrameStyle,
-                "--route-marker-color": currentTimelineRouteRow?.color ?? routeLineColor,
-              }}
-            >
-              <table
-                aria-label="Child route order stops"
+            <div style={{ position: "relative" }}>
+              {selectedStopRows.length > 0 ? (
+                <StopSelectionBar
+                  allSelected={stopSelection.allSelected}
+                  canEdit={canEditSelectedStop}
+                  canMark={canMarkSelectedStops}
+                  canRemove={canRemoveSelectedStops}
+                  count={selectedStopRows.length}
+                  editTitle={stopSelectionEditTitle}
+                  markOptions={stopMarkOptions}
+                  markTitle={stopSelectionMarkTitle}
+                  menu={stopBarMenu}
+                  onClear={clearStopSelection}
+                  onEdit={handleEditSelectedStop}
+                  onMark={handleMarkSelectedStops}
+                  onMenuChange={setStopBarMenu}
+                  onRemove={handleRemoveSelectedStops}
+                  onSend={handleSendSelectedStopsToRoute}
+                  removeTitle="Stops cannot be removed once a route has started."
+                  sendTargets={stopSelectionSendTargets}
+                  sendTitle="No other route can take these stops."
+                />
+              ) : null}
+              <div
                 style={{
-                  ...childRouteOrderTableStyle,
-                  ...(isRouteGroupDetail ? { minWidth: "1620px" } : null),
+                  ...routesDetailTableFrameStyle,
+                  "--route-marker-color": currentTimelineRouteRow?.color ?? routeLineColor,
                 }}
               >
-                <colgroup>
-                  {(isRouteGroupDetail ? ["120px", ...childRouteOrderColumnWidths] : childRouteOrderColumnWidths).map((width, index) => (
-                    <col key={`${width}-${index}`} style={{ width }} />
-                  ))}
-                </colgroup>
-                <thead>
-                  <tr>
-                    {routeOrderColumns.map((column) => (
-                      <th
-                        key={column.key}
-                        style={column.key === "actions" ? childRouteActionsHeaderCellStyle : childRouteOrderHeaderCellStyle}
-                      >
-                        {column.label}
-                      </th>
+                <table
+                  aria-label="Child route order stops"
+                  style={{
+                    ...childRouteOrderTableStyle,
+                    ...(isRouteGroupDetail ? { minWidth: "1620px" } : null),
+                  }}
+                >
+                  <colgroup>
+                    {(isRouteGroupDetail ? ["120px", ...childRouteOrderColumnWidths] : ["44px", ...childRouteOrderColumnWidths]).map((width, index) => (
+                      <col key={`${width}-${index}`} style={{ width }} />
                     ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
-                    endpoint: routeEndpointPresentation.start,
-                    kind: "start",
-                    markerColor: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("start", routeExecutionStatus)] : undefined,
-                    referenceValue: routeEndpointPresentation.start.plannedAt,
-                  }) : null}
-                  {routeOrderRows.map((row) => (
-                    <tr key={row.rowKey} style={childRouteOrderRowStyle}>
-                      {isRouteGroupDetail ? (
-                        <td style={childRouteOrderCellStyle}>
-                          <span style={{ alignItems: "center", display: "inline-flex", gap: "6px" }}>
-                            <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: row.sourceRouteColor ?? "#8a8a8a" }} />
-                            {row.sourceRouteTitle}
-                          </span>
-                        </td>
-                      ) : null}
-                      <td style={childRouteStopCellStyle}><span style={{ ...childRouteTableStopMarkerStyle, background: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[row.markerTone] : row.sourceRouteColor ?? routeLineColor }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
-                      <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
-                      <td style={childRouteOrderCellStyle}>{row.status}</td>
-                      <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
-                      <td style={childRouteOrderCellStyle}>
-                        <span>{row.address}</span>
-                        {row.locationDiagnostic.severity !== "NONE" ? (
-                          <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
-                            <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
-                          </span>
-                        ) : null}
-                        {row.note ? (
-                          <button
-                            aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "note"}
-                            aria-haspopup="dialog"
-                            aria-label={`Show ${row.order} note`}
-                            data-child-order-disclosure-trigger="true"
-                            onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "note")}
-                            onBlur={handleChildOrderDisclosureMouseLeave}
-                            onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
-                            onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
-                            onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                            style={{ ...childRouteDisclosureButtonStyle, marginLeft: "6px" }}
-                            type="button"
-                          ><s-icon type="note" /></button>
-                        ) : null}
-                      </td>
-                      <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
-                      <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
-                      <td className="stop-time-td" style={childRouteStopTimeCellStyle}>
-                        <StopTimeCell
-                          busy={routeGroupActionBusy}
-                          canEdit={canEditStopTime(row)}
-                          draft={stopTimeDraft?.deliveryStopId === row.deliveryStopId ? stopTimeDraft.value : null}
-                          label={row.stopTime}
-                          onCancel={() => setStopTimeDraft(null)}
-                          onChange={(value) => setStopTimeDraft({ deliveryStopId: row.deliveryStopId, value })}
-                          onEdit={() => setStopTimeDraft({ deliveryStopId: row.deliveryStopId, value: String(row.editFields?.serviceMinutes ?? "") })}
-                          onSave={() => handleSaveStopTime(row)}
-                        />
-                      </td>
-                      <td style={childRouteOrderCellStyle}>{row.customer}</td>
-                      <td style={childRouteDisclosureCellStyle}>
-                        <button
-                          aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "items"}
-                          aria-haspopup="dialog"
-                          aria-label={`Show ${row.order} item details`}
-                          data-child-order-disclosure-trigger="true"
-                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "items")}
-                          onBlur={handleChildOrderDisclosureMouseLeave}
-                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "items")}
-                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "items")}
-                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                          style={childRouteDisclosureButtonStyle}
-                          type="button"
+                  </colgroup>
+                  <thead style={selectedStopRows.length > 0 ? { visibility: "hidden" } : undefined}>
+                    <tr>
+                      {routeOrderColumns.map((column) => (
+                        <th
+                          key={column.key}
+                          style={column.key === "actions"
+                            ? childRouteActionsHeaderCellStyle
+                            : column.key === "select" ? childRouteSelectHeaderCellStyle : childRouteOrderHeaderCellStyle}
                         >
-                          <span>{row.itemsSummary}</span>
-                          {renderChildRouteInfoIcon()}
-                        </button>
-                      </td>
-                      <td style={childRouteOrderCellStyle}>{row.method}</td>
-                      <td style={childRouteOrderCellStyle}>{row.payment}</td>
-                      <td style={childRouteOrderCellStyle}>
-                        {renderChildRouteAmount(row, cashByStopId.get(row.deliveryStopId))}
-                      </td>
-                      <td style={childRouteDisclosureCellStyle}>
-                        <button
-                          aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "attributes"}
-                          aria-haspopup="dialog"
-                          aria-label={`Show ${row.order} attributes`}
-                          data-child-order-disclosure-trigger="true"
-                          onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "attributes")}
-                          onBlur={handleChildOrderDisclosureMouseLeave}
-                          onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "attributes")}
-                          onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "attributes")}
-                          onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                          style={childRouteDisclosureButtonStyle}
-                          type="button"
-                        >
-                          <span>{row.attributesSummary}</span>
-                          {renderChildRouteInfoIcon()}
-                        </button>
-                      </td>
-                      <td style={childRouteActionsCellStyle}>
+                          {column.key === "select" ? (
+                            <StopSelectAllCheckbox
+                              allSelected={stopSelection.allSelected}
+                              disabled={routeOrderRows.length === 0}
+                              onChange={handleToggleAllStopsSelected}
+                              someSelected={stopSelection.someSelected}
+                            />
+                          ) : column.label}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
+                      endpoint: routeEndpointPresentation.start,
+                      kind: "start",
+                      markerColor: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("start", routeExecutionStatus)] : undefined,
+                      referenceValue: routeEndpointPresentation.start.plannedAt,
+                      selectColumn: !isRouteGroupDetail,
+                    }) : null}
+                    {routeOrderRows.map((row) => (
+                      <tr key={row.rowKey} style={selectedStopKeySet.has(row.rowKey) ? { ...childRouteOrderRowStyle, ...childRouteSelectedRowStyle } : childRouteOrderRowStyle}>
+                        {!isRouteGroupDetail ? (
+                          <td style={childRouteSelectCellStyle}>
+                            <StopSelectCheckbox
+                              checked={selectedStopKeySet.has(row.rowKey)}
+                              label={`Select ${row.order}`}
+                              onChange={(checked) => handleToggleStopSelected(row.rowKey, checked)}
+                            />
+                          </td>
+                        ) : null}
                         {isRouteGroupDetail ? (
-                          row.sourceRoutePlanId ? (
-                            <a
-                              aria-label={`Open ${row.sourceRouteTitle} route`}
-                              href={withEmbeddedShopifyContext(routeGroupChildPath(routeGroupId, row.sourceRoutePlanId), searchParams)}
-                              style={childStopActionsExternalLinkStyle}
-                            >Open route</a>
-                          ) : ROUTE_EMPTY_LABEL
-                        ) : (
-                          <button
-                            aria-expanded={activeChildStopActions?.rowId === row.rowKey}
-                            aria-haspopup="menu"
-                            aria-label={`Open actions for ${row.order}`}
-                            data-child-stop-actions-trigger="true"
-                            disabled={routeGroupActionBusy}
-                            onClick={(event) => handleToggleChildStopActions(event, row.rowKey)}
-                            ref={(node) => setChildStopActionsButtonRef(row.rowKey, node)}
-                            style={{
-                              ...childStopActionsButtonStyle,
-                              ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                          <td style={childRouteOrderCellStyle}>
+                            <span style={{ alignItems: "center", display: "inline-flex", gap: "6px" }}>
+                              <span aria-hidden="true" style={{ ...routeStatusDotStyle, background: row.sourceRouteColor ?? "#8a8a8a" }} />
+                              {row.sourceRouteTitle}
+                            </span>
+                          </td>
+                        ) : null}
+                        <td style={childRouteStopCellStyle}><span style={{ ...childRouteTableStopMarkerStyle, background: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[row.markerTone] : row.sourceRouteColor ?? routeLineColor }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
+                        <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
+                        <td style={childRouteOrderCellStyle}>{row.status}</td>
+                        <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
+                        <td style={childRouteOrderCellStyle}>
+                          <span>{row.address}</span>
+                          {row.locationDiagnostic.severity !== "NONE" ? (
+                            <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
+                              <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
+                            </span>
+                          ) : null}
+                          {row.note ? (
+                            <button
+                              aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "note"}
+                              aria-haspopup="dialog"
+                              aria-label={`Show ${row.order} note`}
+                              data-child-order-disclosure-trigger="true"
+                              onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "note")}
+                              onBlur={handleChildOrderDisclosureMouseLeave}
+                              onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                              onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                              onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                              style={{ ...childRouteDisclosureButtonStyle, marginLeft: "6px" }}
+                              type="button"
+                            ><s-icon type="note" /></button>
+                          ) : null}
+                        </td>
+                        <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
+                        <td style={childRouteOrderCellStyle}>{row.driveTime}</td>
+                        <td className="stop-time-td" style={childRouteStopTimeCellStyle}>
+                          <StopTimeCell
+                            busy={routeGroupActionBusy}
+                            canEdit={canEditStopTime(row)}
+                            draft={stopTimeDraft?.deliveryStopId === row.deliveryStopId ? stopTimeDraft.value : null}
+                            label={row.stopTime}
+                            onCancel={() => {
+                              setStopTimeDraft(null);
+                              focusStopTimePencil(row.deliveryStopId);
                             }}
+                            onChange={(value) => setStopTimeDraft({ deliveryStopId: row.deliveryStopId, value })}
+                            onEdit={() => setStopTimeDraft({ deliveryStopId: row.deliveryStopId, value: String(row.editFields?.serviceMinutes ?? "") })}
+                            onSave={() => handleSaveStopTime(row)}
+                            orderLabel={row.order}
+                            stopId={row.deliveryStopId}
+                          />
+                        </td>
+                        <td style={childRouteOrderCellStyle}>{row.customer}</td>
+                        <td style={childRouteDisclosureCellStyle}>
+                          <button
+                            aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "items"}
+                            aria-haspopup="dialog"
+                            aria-label={`Show ${row.order} item details`}
+                            data-child-order-disclosure-trigger="true"
+                            onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "items")}
+                            onBlur={handleChildOrderDisclosureMouseLeave}
+                            onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "items")}
+                            onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "items")}
+                            onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                            style={childRouteDisclosureButtonStyle}
                             type="button"
                           >
-                            ⋯
+                            <span>{row.itemsSummary}</span>
+                            {renderChildRouteInfoIcon()}
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                  {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
-                    endpoint: routeEndpointPresentation.end,
-                    kind: "end",
-                    markerColor: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("end", routeExecutionStatus)] : undefined,
-                    referenceValue: routeEndpointPresentation.start.plannedAt,
-                  }) : null}
-                </tbody>
-              </table>
-              <div
-                aria-label="Child route totals"
-                style={{
-                  alignItems: "center",
-                  borderTop: "1px solid #dedede",
-                  display: "flex",
-                  flexWrap: "wrap",
-                  fontSize: "13px",
-                  gap: "8px 18px",
-                  padding: "10px 14px",
-                }}
-              >
-                <span>Total drive time: {routeTotalDriveTime} ({routeTotalDistance})</span>
-                <span>
-                  {translate(language, "routes.detail.originalShipping")}: {getOriginalShippingTotalLabel(childRouteMoney, language)}
-                </span>
-                <span>Total price: {childRouteMoney.totalPriceLabel}</span>
+                        </td>
+                        <td style={childRouteOrderCellStyle}>{row.method}</td>
+                        <td style={childRouteOrderCellStyle}>{row.payment}</td>
+                        <td style={childRouteOrderCellStyle}>
+                          {renderChildRouteAmount(row, cashByStopId.get(row.deliveryStopId))}
+                        </td>
+                        <td style={childRouteDisclosureCellStyle}>
+                          <button
+                            aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "attributes"}
+                            aria-haspopup="dialog"
+                            aria-label={`Show ${row.order} attributes`}
+                            data-child-order-disclosure-trigger="true"
+                            onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "attributes")}
+                            onBlur={handleChildOrderDisclosureMouseLeave}
+                            onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "attributes")}
+                            onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "attributes")}
+                            onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                            style={childRouteDisclosureButtonStyle}
+                            type="button"
+                          >
+                            <span>{row.attributesSummary}</span>
+                            {renderChildRouteInfoIcon()}
+                          </button>
+                        </td>
+                        <td style={selectedStopKeySet.has(row.rowKey) ? childRouteSelectedActionsCellStyle : childRouteActionsCellStyle}>
+                          {isRouteGroupDetail ? (
+                            row.sourceRoutePlanId ? (
+                              <a
+                                aria-label={`Open ${row.sourceRouteTitle} route`}
+                                href={withEmbeddedShopifyContext(routeGroupChildPath(routeGroupId, row.sourceRoutePlanId), searchParams)}
+                                style={childStopActionsExternalLinkStyle}
+                              >Open route</a>
+                            ) : ROUTE_EMPTY_LABEL
+                          ) : (
+                            <button
+                              aria-expanded={activeChildStopActions?.rowId === row.rowKey}
+                              aria-haspopup="menu"
+                              aria-label={`Open actions for ${row.order}`}
+                              data-child-stop-actions-trigger="true"
+                              disabled={routeGroupActionBusy}
+                              onClick={(event) => handleToggleChildStopActions(event, row.rowKey)}
+                              ref={(node) => setChildStopActionsButtonRef(row.rowKey, node)}
+                              style={{
+                                ...childStopActionsButtonStyle,
+                                ...(routeGroupActionBusy ? { cursor: "not-allowed", opacity: 0.55 } : null),
+                              }}
+                              type="button"
+                            >
+                              ⋯
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                    {!isRouteGroupDetail ? renderRouteEndpointOrderRow({
+                      endpoint: routeEndpointPresentation.end,
+                      kind: "end",
+                      markerColor: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[getRouteEndpointMarkerTone("end", routeExecutionStatus)] : undefined,
+                      referenceValue: routeEndpointPresentation.start.plannedAt,
+                      selectColumn: !isRouteGroupDetail,
+                    }) : null}
+                  </tbody>
+                </table>
+                <div
+                  aria-label="Child route totals"
+                  style={{
+                    alignItems: "center",
+                    borderTop: "1px solid #dedede",
+                    display: "flex",
+                    flexWrap: "wrap",
+                    fontSize: "13px",
+                    gap: "8px 18px",
+                    padding: "10px 14px",
+                  }}
+                >
+                  <span>Total drive time: {routeTotalDriveTime} ({routeTotalDistance})</span>
+                  <span>
+                    {translate(language, "routes.detail.originalShipping")}: {getOriginalShippingTotalLabel(childRouteMoney, language)}
+                  </span>
+                  <span>Total price: {childRouteMoney.totalPriceLabel}</span>
+                </div>
               </div>
             </div>
           ) : null}
