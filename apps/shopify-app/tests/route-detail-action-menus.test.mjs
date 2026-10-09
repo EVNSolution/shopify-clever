@@ -23,6 +23,7 @@ function renderActions(overrides = {}) {
     translate: () => "Add Empty Route",
     language: "en",
     kfoodOfficeEnabled: false,
+    routeOptionsOpen: false,
     setRouteOptionsOpen: () => {},
     isTrackingMapView: false,
     isMaterializedChildRouteDetail: false,

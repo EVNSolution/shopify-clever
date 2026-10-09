@@ -6,7 +6,7 @@ Server contract: EVNSolution/clever-route-server#490, `docs/api/kfood-delivery-o
 
 The KFood app and authenticated KFood store expose these controls. Public and dev Shopify apps keep their existing screens and route creation payloads.
 
-- Orders provides optional required photo, required customer signature and avoid-toll-road controls for a new route. The settings are part of the same `initialRoute` request and retry identity.
+- Orders keeps optional photo, customer signature and avoid-toll-road controls behind a **Route options** button. They start collapsed; the same button opens or closes them without resetting chosen values. The settings are part of the same `initialRoute` request and retry identity.
 - Route Detail adds **Edit → Route options**. Changes retain the `updatedAt` revision from the start of editing and are available only before assignment or Dispatch. Another office edit causes a conflict; **Reload saved options** explicitly replaces the draft and revision. Saving options does not dispatch the route. The server rejects unsupported toll policies or proof activation before the compatible driver rollout.
 - Routes adds a Cash/settlement column. Expected, driver received, and office confirmed amounts stay separate. Currencies never combine. Partial confirmations show confirmed receipt counts. Difference labels distinguish received-versus-expected and confirmed-versus-received amounts.
 - Route Detail shows the immutable driver receipt. A different received amount strikes through the original expected amount. The office can confirm an amount or append a correction with a reason. Zero is valid. Negative values, excess decimal places, missing currency and missing revision cannot submit.
@@ -16,6 +16,8 @@ The KFood app and authenticated KFood store expose these controls. Public and de
 ## Boundaries
 
 Photo and signature requirements default OFF. The server rollout guard remains authoritative. Its `DELIVERY_PROOF_ROLLOUT_DISABLED` and `DELIVERY_PROOF_DRIVER_UPDATE_REQUIRED` codes show driver rollout/update instructions instead of an unexplained save error. Assigning or dispatching the route locks these policies. Existing future-stop edit/Save/Dispatch behavior from PR #328 remains separate.
+
+Route Detail starts with the editor closed. **Edit → Route options** opens it directly, without a second disclosure button. Selecting the same menu item again or **Close** closes it. Keyboard access and expanded-state announcements use native buttons. This presentation change does not alter authorization or server policy checks. Follow-up: EVNSolution/shopify-clever#332; EVNSolution/clever-change-control#319.
 
 The current server records office confirmation per Cash receipt. This UI does not add refunds, ledger exports, bulk payment adjustments or general accounting.
 

@@ -7864,7 +7864,7 @@ export default function RouteDetailPage() {
                   >Edit ▾</button>
                   {routeActionsMenu === "edit" ? (
                     <div aria-label="Edit route actions" role="menu" style={routeActionsMenuStyle}>
-                      {kfoodOfficeEnabled && effectiveRoutePlan?.id && !isRouteGroupDetail ? <button type="button" role="menuitem" style={routeActionButtonStyle} disabled={routeGroupActionBusy} onClick={() => { setRouteOptionsOpen(true); setRouteActionsMenu(null); }}>Route options</button> : null}
+                      {kfoodOfficeEnabled && effectiveRoutePlan?.id && !isRouteGroupDetail ? <button type="button" role="menuitem" style={routeActionButtonStyle} disabled={routeGroupActionBusy} aria-expanded={routeOptionsOpen} aria-controls="route-options-editor" onClick={() => { setRouteOptionsOpen((open) => !open); setRouteActionsMenu(null); }}>Route options</button> : null}
                       {isMaterializedChildRouteDetail ? (
                         <button
                           disabled={routeGroupActionBusy || !canReorderRouteStops}
