@@ -70,6 +70,7 @@ test("additional and forbidden object-detail routes are not present", () => {
     [
       "app.route-groups.$routeGroupId.jsx",
       "app.route-live-change.$routeId.jsx",
+      "app.route-original-observations.$routePlanId.jsx",
       "app.route-tracking.$routePlanId.jsx",
       "app.routes.$routeId.cash-settlements.jsx",
       "app.routes.$routeId.jsx",

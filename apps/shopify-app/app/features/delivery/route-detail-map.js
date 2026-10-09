@@ -2,6 +2,8 @@ import { addMapPinImage, createDepartureMarkerImageData, createMapCheckBadgeImag
 import { numberOrUndefined, textOrUndefined } from "./route-helpers.js";
 import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures } from "./route-tracking.js";
 
+import { ORIGINAL_OBSERVATION_SOURCE_ID } from "./route-original-observations.js";
+
 const DEFAULT_CENTER = [-79.3832, 43.6532];
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
 const ROUTE_DETAIL_ROUTE_LAYER_ID = "route-detail-osrm-route-line";
@@ -395,7 +397,7 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
 function syncRouteDetailTrackingVisibility(map, isTrackingView = false) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
-  const visibility = isTrackingView ? "visible" : "none";
+  const visibility = isTrackingView && !map.getSource?.(ORIGINAL_OBSERVATION_SOURCE_ID) ? "visible" : "none";
   for (const layerId of ROUTE_DETAIL_TRACKING_LAYER_IDS) {
     if (map.getLayer?.(layerId)) {
       map.setLayoutProperty?.(layerId, "visibility", visibility);

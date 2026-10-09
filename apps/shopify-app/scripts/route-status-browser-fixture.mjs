@@ -96,6 +96,8 @@ let plans = [
   makePlan("route-completed", "Completed standalone", "COMPLETED", { delivered: 3 }),
   makePlan("route-completed-gps", "Completed, no completion event, GPS return", "COMPLETED", { stopCount: 5, delivered: 5, gpsReturn: true }),
   makePlan("route-single-tap", "In progress, one-tap completion (no arrivals)", "IN_PROGRESS", { stopCount: 5, delivered: 2, singleTap: true }),
+  // The original GPS points of the Tracking map need a UUID route id.
+  makePlan("10000000-0000-4000-8000-0000000000a1", "In progress with original GPS points", "IN_PROGRESS", { delivered: 1 }),
   makePlan("route-cancelled", "Cancelled standalone", "CANCELLED"),
   makePlan("route-unknown", "Unsupported standalone", "AWAITING_DRIVER"),
   makePlan("route-missing", "Missing state standalone", undefined),
@@ -269,9 +271,31 @@ const fixtureAction = async ({ request }) => {
   record("blocked-action", { intent: String(form.get("_intent")), fields });
   return { errors: [{ message: "Synthetic fixture blocks all action submissions" }] };
 };
+// Synthetic original GPS points: 450 points, 200 per page, one point without a coordinate pair. Only for the route with a UUID id.
+const rawObservationsResponse = (routeId, query) => {
+  const from = query.get("from"); const to = query.get("to");
+  const start = Number(query.get("cursor") ?? 0); const total = 450;
+  const count = Math.min(200, total - start);
+  record("raw-observations-request", { routeId, cursor: query.get("cursor") });
+  const observations = Array.from({ length: count }, (_, index) => {
+    const ordinal = start + index;
+    const at = new Date(Date.parse(from) + 60000 + ordinal * 1000);
+    const item = { eventId: "20000000-0000-4000-8000-" + String(ordinal + 1).padStart(12, "0"), observedAt: at.toISOString(),
+      storedAt: new Date(at.getTime() + 500).toISOString(), latitude: 43.65 + ordinal * 0.0002, longitude: -79.38 + Math.sin(ordinal / 20) * 0.003,
+      accuracyMeters: 5 + ordinal % 4, coordinateStatus: "VALID", accuracyStatus: "VALID", clientEventKey: null };
+    if (ordinal === 7) Object.assign(item, { coordinateStatus: "MISSING", latitude: null, longitude: null, accuracyStatus: "MISSING", accuracyMeters: null });
+    return item;
+  });
+  const totalReturned = start + count; const hasMore = totalReturned < total;
+  return Response.json({ data: { schemaVersion: 1, routePlanId: routeId, source: "DRIVER_EVENT_LOCATION_UPDATED", scope: "CURRENT_ASSIGNMENT",
+    window: { from, to }, observations, emptyReason: null,
+    page: { limit: 200, returned: count, hasMore, nextCursor: hasMore ? String(totalReturned) : null, totalReturned, pointCap: 5000, capReached: false, snapshotAt: "2030-01-01T00:00:00.123456Z" } }, error: null });
+};
 window.fetch = async (input, init) => {
   const url = new URL(typeof input === "string" ? input : input.url, location.href);
   const method = (init?.method || input?.method || "GET").toUpperCase();
+  const rawMatch = url.pathname.match(/^\\/app\\/route-original-observations\\/([^/]+)$/);
+  if (url.origin === location.origin && method === "GET" && rawMatch) return rawObservationsResponse(decodeURIComponent(rawMatch[1]), url.searchParams);
   const match = url.pathname.match(/^\\/app\\/route-tracking\\/([^/]+)$/);
   if (url.origin !== location.origin || method !== "GET" || !match) {
     record("blocked-network", { pathname: url.pathname, method });
