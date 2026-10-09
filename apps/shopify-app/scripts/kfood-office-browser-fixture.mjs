@@ -12,7 +12,7 @@ const entry=`
 import React,{useState} from 'react';
 import {createRoot} from 'react-dom/client';
 import {createBrowserRouter,RouterProvider,useLoaderData} from 'react-router';
-import {RouteOptionsDisclosure,RouteOptionsFields,RouteOptionsEditor,RouteCashPanel,RouteCashSummary} from ${JSON.stringify(resolve(app,'app/features/delivery/route-office-components.jsx'))};
+import {RouteOptionsDialog,RouteOptionsFields,RouteOptionsEditor,RouteCashPanel,RouteCashSummary} from ${JSON.stringify(resolve(app,'app/features/delivery/route-office-components.jsx'))};
 const receipts=[{completion:{id:'receipt1',deliveryStopId:'stop1',currencyCode:'CAD',payment:{methodTitle:'Cash'},expectedAmount:'122.25',actualAmount:'122.00',differenceAmount:'-0.25'},revision:0,settlement:null,history:[]}];
 let route={id:'route1',status:'READY',updatedAt:'2026-10-09T00:00:00Z',deliveryProof:{photoRequired:false,signatureRequired:false},tollPolicy:'ALLOW_TOLLS'};
 window.fixture={receipts,route,commands:[],failNext:false};
@@ -33,10 +33,10 @@ async function action({request}){
  if(Number(body.expectedRevision)!==receipt.revision)return {errors:[{message:'Another office user changed this receipt. Refresh receipts.'}]};
  receipt.revision+=1;receipt.settlement={id:'settlement'+receipt.revision,confirmedAmount:body.confirmedAmount,currency:body.currency,reason:body.reason,actor:'Office QA',recordedAt:'2026-10-09T00:01:00Z'};receipt.history.unshift(receipt.settlement);return {saved:true,receipts,errors:[]};
 }
-function Page(){const latestRoute=useLoaderData();const[editorOpen,setEditorOpen]=useState(false);const[value,setValue]=useState({deliveryProof:{photoRequired:false,signatureRequired:false},tollPolicy:'ALLOW_TOLLS'});return <main style={{fontFamily:'Arial',background:'#f4f5f7',padding:24,maxWidth:1000,margin:'auto',display:'grid',gap:20}}>
-<h1>KFood office controls — synthetic preview</h1><section style={{padding:16,background:'white',borderRadius:10}}><h2>Orders · new route</h2><RouteOptionsDisclosure><RouteOptionsFields value={value} onChange={setValue}/></RouteOptionsDisclosure></section>
+function Page(){const latestRoute=useLoaderData();const[editorOpen,setEditorOpen]=useState(false);const[ordersOptionsOpen,setOrdersOptionsOpen]=useState(false);const[value,setValue]=useState({deliveryProof:{photoRequired:false,signatureRequired:false},tollPolicy:'ALLOW_TOLLS'});return <main style={{fontFamily:'Arial',background:'#f4f5f7',padding:24,maxWidth:1000,margin:'auto',display:'grid',gap:20}}>
+<h1>KFood office controls — synthetic preview</h1><section style={{padding:16,background:'white',borderRadius:10}}><h2>Orders · new route</h2><div style={{display:'flex',flexWrap:'wrap',gap:10,alignItems:'center'}}><span style={{color:'#616161',fontSize:12}}>Results as of: 2026-10-09, 07:08:54</span><button>Update Shopify orders</button><button aria-haspopup="dialog" style={{marginLeft:'auto'}} onClick={()=>setOrdersOptionsOpen(true)}>Route options</button>{ordersOptionsOpen?<RouteOptionsDialog onClose={()=>setOrdersOptionsOpen(false)}><RouteOptionsFields value={value} onChange={setValue}/></RouteOptionsDialog>:null}</div><div style={{border:'1px solid #d4d4d4',borderRadius:12,padding:12,marginTop:12,maxWidth:300}}>Route plan card — options live outside it</div></section>
 <button onClick={()=>{route={...route,updatedAt:"2026-10-09T00:02:00Z",deliveryProof:{photoRequired:false,signatureRequired:true}};router.revalidate();}}>Simulate another office edit</button>
-<button aria-expanded={editorOpen} aria-controls="route-options-editor" onClick={()=>setEditorOpen(open=>!open)}>Edit → Route options</button>
+<button aria-haspopup="dialog" onClick={()=>setEditorOpen(true)}>Edit → Route options</button>
 {editorOpen?<RouteOptionsEditor routePlan={latestRoute} onClose={()=>setEditorOpen(false)}/>:null}<section style={{padding:16,background:'white',borderRadius:10}}><h2>Routes · Cash / settlement</h2><RouteCashSummary summary={[{currency:'CAD',expectedAmount:'122.25',actualAmount:'122.00',confirmedAmount:null,receiptCount:1,confirmedCount:0},{currency:'USD',expectedAmount:'20.00',actualAmount:'20.00',confirmedAmount:'20.00',receiptCount:1,confirmedCount:1}]}/></section>
 <RouteCashPanel routePlanId="route1" stops={[{deliveryStopId:'stop1',order:'#1001'}]}/></main>}
 const router=createBrowserRouter([{path:'/',loader:()=>route,element:<Page/>},{path:'/app/routes/:routeId/options',action},{path:'/app/routes/:routeId/cash-settlements',action}]);
