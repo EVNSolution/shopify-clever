@@ -36,7 +36,7 @@ function loadFormatRouteInstant() {
   return Function("formatStoreInstant", `${routesPageSource.slice(start, end)}\nreturn formatRouteInstant;`)(formatStoreInstant);
 }
 
-test("Routes list renders the exact 12-column contract", () => {
+test("Routes list renders the 13-column contract including separate Cash settlement", () => {
   const table = getRouteTableBlock();
   const header = table.slice(table.indexOf("<thead>"), table.indexOf("</thead>"));
   const keys = Array.from(header.matchAll(/translate\(language, "([^"]+)"\)/g), (match) => match[1]);
@@ -54,7 +54,7 @@ test("Routes list renders the exact 12-column contract", () => {
     "routes.table.created",
     "routes.table.lastModified",
   ]);
-  assert.equal((header.match(/<th\b/g) ?? []).length, 12);
+  assert.equal((header.match(/<th\b/g) ?? []).length, 13);
   assert.doesNotMatch(header, /routes\.table\.(route|date|orders|delivered|amount|eta|area)/);
 });
 

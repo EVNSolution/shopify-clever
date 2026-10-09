@@ -61,6 +61,8 @@ test("route creation intent is guarded before the asynchronous Shopify token res
         });
       },
     },
+    kfoodOfficeEnabled: true,
+    routeOptions: {deliveryProof:{photoRequired:false,signatureRequired:false},tollPolicy:"ALLOW_TOLLS"},
     routePlanTitle: "Friday route",
     setCreateRouteClientError() {},
     setRouteCreatePending(value) {
@@ -185,6 +187,8 @@ test("route creation rejects cancelled orders before client submission and at th
     plannedOrders: [{ id: "gid://shopify/Order/1908", cancelledAt: "2026-09-03T00:00:00Z" }],
     routeCreatePendingRef: { current: false },
     routePlanFetcher: { state: "idle", submit() { assert.fail("cancelled order must not be submitted"); } },
+    kfoodOfficeEnabled: true,
+    routeOptions: {deliveryProof:{photoRequired:false,signatureRequired:false},tollPolicy:"ALLOW_TOLLS"},
     routePlanTitle: "Thursday route",
     setCreateRouteClientError: (message) => clientErrors.push(message),
     setRouteCreatePending() {},

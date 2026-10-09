@@ -1,3 +1,4 @@
+import { RouteOptionsEditor, RouteCashPanel } from "../features/delivery/route-office-components";
 import { formatStoreInstant } from "../features/shopify/store-date-time";
 import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -3768,6 +3769,7 @@ export default function RouteDetailPage() {
   const revalidator = useRevalidator();
   const shopify = useAppBridge();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
+  const kfoodOfficeEnabled = useRouteLoaderData("routes/app")?.kfoodOfficeEnabled === true;
   const routesListData = useRouteLoaderData("routes/app.routes");
   const cachedRouteRows = useMemo(
     () => buildRouteRows(routesListData?.routePlans, routesListData?.routeGroups),
@@ -3993,6 +3995,7 @@ export default function RouteDetailPage() {
   const [customStopFieldErrors, setCustomStopFieldErrors] = useState({});
   const [activeCustomStopEditRow, setActiveCustomStopEditRow] = useState(null);
   const [routeActionsMenu, setRouteActionsMenu] = useState(null);
+  const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
   const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [pendingInProgressRouteChange, setPendingInProgressRouteChange] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
@@ -7526,6 +7529,8 @@ export default function RouteDetailPage() {
           </s-banner>
         ) : null}
 
+        {kfoodOfficeEnabled && routeOptionsOpen && effectiveRoutePlan?.id ? <RouteOptionsEditor key={effectiveRoutePlan.id} routePlan={effectiveRoutePlan} onClose={() => setRouteOptionsOpen(false)} /> : null}
+
         {showLiveChangeEditor ? (
           <div ref={liveChangeEditorRef} tabIndex={-1}>
             <LiveRouteChangeEditor
@@ -7859,6 +7864,7 @@ export default function RouteDetailPage() {
                   >Edit ▾</button>
                   {routeActionsMenu === "edit" ? (
                     <div aria-label="Edit route actions" role="menu" style={routeActionsMenuStyle}>
+                      {kfoodOfficeEnabled && effectiveRoutePlan?.id && !isRouteGroupDetail ? <button type="button" role="menuitem" style={routeActionButtonStyle} disabled={routeGroupActionBusy} onClick={() => { setRouteOptionsOpen(true); setRouteActionsMenu(null); }}>Route options</button> : null}
                       {isMaterializedChildRouteDetail ? (
                         <button
                           disabled={routeGroupActionBusy || !canReorderRouteStops}
@@ -7915,6 +7921,8 @@ export default function RouteDetailPage() {
               </div>
             </div>
           </section>
+
+          {kfoodOfficeEnabled && !isTrackingMapView && !isRouteGroupDetail && effectiveRoutePlan?.id ? <RouteCashPanel key={effectiveRoutePlan.id} routePlanId={effectiveRoutePlan.id} stops={routeOrderRows} /> : null}
 
           {isMaterializedChildRouteDetail && childDetailTab === "stops" ? (
             <section aria-label="Child route stop timeline" onDragLeave={handleRouteTimelineDragLeave} style={childRouteTimelineStyle}>

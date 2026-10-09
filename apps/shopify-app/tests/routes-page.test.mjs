@@ -356,8 +356,8 @@ test("Routes page keeps copied controls out while using checkbox route selection
   assert.doesNotMatch(routesPageSource, />Create route<\/a>/);
   assert.doesNotMatch(routesPageSource, /routesTableToolbarStyle|routeChipStyle/);
   assert.match(routesPageSource, /const routesTablePageStyle = \{/);
-  assert.match(routesPageSource, /function getRouteColumnWidths\(routeRows\) \{/);
-  assert.match(routesPageSource, /const routeColumnWidths = getRouteColumnWidths\(routeRows\)/);
+  assert.match(routesPageSource, /function getRouteColumnWidths\(routeRows, kfoodOfficeEnabled = false\) \{/);
+  assert.match(routesPageSource, /const routeColumnWidths = getRouteColumnWidths\(routeRows, kfoodOfficeEnabled\)/);
   assert.match(routesPageSource, /const routesHeaderActionsStyle = \{/);
   assert.match(routesPageSource, /const routeSelectionSummaryStyle = \{/);
   assert.match(routesPageSource, /gap: "8px"/);

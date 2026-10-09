@@ -1,3 +1,4 @@
+import { RouteCashSummary } from "../features/delivery/route-office-components";
 import { formatStoreInstant } from "../features/shopify/store-date-time";
 import { useStoreTimeZone } from "../ui/store-time-zone";
 import { useEffect, useRef, useState } from "react";
@@ -137,7 +138,7 @@ function getRouteNameColumnWidth(routeRows) {
   return `${Math.min(ROUTE_NAME_COLUMN_MAX_WIDTH, Math.max(ROUTE_NAME_COLUMN_MIN_WIDTH, longestRouteName * 7 + 28))}px`;
 }
 
-function getRouteColumnWidths(routeRows) {
+function getRouteColumnWidths(routeRows, kfoodOfficeEnabled = false) {
   return [
     "44px",
     getRouteNameColumnWidth(routeRows),
@@ -149,6 +150,7 @@ function getRouteColumnWidths(routeRows) {
     "128px",
     "128px",
     "112px",
+    ...(kfoodOfficeEnabled ? ["220px"] : []),
     "148px",
     "148px",
   ];
@@ -700,6 +702,7 @@ function getStatusBadgeStyle(status) {
 export default function RoutesPage() {
   const storeTimeZone = useStoreTimeZone();
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
+  const kfoodOfficeEnabled = useRouteLoaderData("routes/app")?.kfoodOfficeEnabled === true;
   const navigate = useNavigate();
   const { routeId, routeGroupId } = useParams();
   const [searchParams] = useSearchParams();
@@ -724,7 +727,7 @@ export default function RoutesPage() {
   const routesSummary = buildRoutesSummary(allRouteRows);
   const routeFilters = getRouteFilters(searchParams);
   const routeRows = filterRouteRows(allRouteRows, routeFilters);
-  const routeColumnWidths = getRouteColumnWidths(routeRows);
+  const routeColumnWidths = getRouteColumnWidths(routeRows, kfoodOfficeEnabled);
   const selectableRouteRows = routeRows.filter((route) => route.isClickable && route.isDeletable !== false);
   const checkedRouteIdSet = new Set(getExpandedRouteDeleteKeys(routeRows, checkedRouteIds));
   const selectedRouteCount = selectableRouteRows.filter((route) => checkedRouteIdSet.has(route.deleteKey)).length;
@@ -973,6 +976,7 @@ export default function RoutesPage() {
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDriveTime")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalDistance")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.totalPrice")}</th>
+                  {kfoodOfficeEnabled ? <th style={routeTableHeaderCellStyle}>Cash / settlement</th> : null}
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.created")}</th>
                   <th style={routeTableHeaderCellStyle}>{translate(language, "routes.table.lastModified")}</th>
                 </tr>
@@ -1022,6 +1026,7 @@ export default function RoutesPage() {
                     <td style={routeTableCellStyle}>{formatRouteDurationSeconds(route.driveTimeSeconds)}</td>
                     <td style={routeTableCellStyle}>{formatRouteDistanceMeters(route.distanceMeters)}</td>
                     <td style={routeTableCellStyle}>{formatRouteAmount(route.totalAmount, route.currencyCode)}</td>
+                    {kfoodOfficeEnabled ? <td style={{ ...routeTableCellStyle, whiteSpace: "nowrap" }}><RouteCashSummary summary={route.cashSettlementSummary} /></td> : null}
                     <td style={routeTableCellStyle}>{formatRouteInstant(route.createdAt, storeTimeZone)}</td>
                     <td style={routeTableCellStyle}>{formatRouteInstant(route.updatedAt, storeTimeZone)}</td>
                   </tr>

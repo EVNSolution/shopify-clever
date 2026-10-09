@@ -22,6 +22,8 @@ function renderActions(overrides = {}) {
     routeDetail: { deliveryDate: "Test date" },
     translate: () => "Add Empty Route",
     language: "en",
+    kfoodOfficeEnabled: false,
+    setRouteOptionsOpen: () => {},
     isTrackingMapView: false,
     isMaterializedChildRouteDetail: false,
     isOrdinaryRouteDetail: false,
@@ -287,4 +289,14 @@ test("terminal route menus disable membership and order changes", () => {
   const edit = renderActions({ ...guarded, routeActionsMenu: "edit", isMaterializedChildRouteDetail: true }).tree;
   assert.equal(button(edit, "Reverse stops").props.disabled, true);
   assert.equal(button(edit, "Re-optimize").props.disabled, true);
+});
+
+
+test("route options are available only for a KFood route, with existing busy guards", () => {
+  const ordinary = {routeActionsMenu:"edit",isRouteGroupDetail:false};
+  assert.equal(button(renderActions(ordinary).tree,"Route options"),undefined);
+  const enabled = {...ordinary,kfoodOfficeEnabled:true};
+  assert.ok(button(renderActions(enabled).tree,"Route options"));
+  assert.equal(button(renderActions({...enabled,routeGroupActionBusy:true}).tree,"Route options").props.disabled,true);
+  assert.equal(button(renderActions({...enabled,isRouteGroupDetail:true}).tree,"Route options"),undefined);
 });

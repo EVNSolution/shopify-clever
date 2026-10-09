@@ -1,3 +1,5 @@
+import { RouteOptionsFields } from "../delivery/route-office-components";
+import { normalizeRouteOptions } from "../delivery/route-office-options.js";
 /* eslint-disable react/prop-types */
 import { formatStoreInstant, getStoreDate } from "../shopify/store-date-time";
 import { useStoreTimeZone } from "../../ui/store-time-zone";
@@ -2122,6 +2124,7 @@ export default function OrdersPage() {
 
 function OrdersPageContent({ loaderData }) {
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
+  const kfoodOfficeEnabled = useRouteLoaderData("routes/app")?.kfoodOfficeEnabled === true;
   const routePlanFetcher = useFetcher();
   const inventoryDeleteFetcher = useFetcher();
   const orderBulkUpdateFetcher = useFetcher();
@@ -2813,6 +2816,7 @@ function OrdersPageContent({ loaderData }) {
   const [activeOrderDataOrderId, setActiveOrderDataOrderId] = useState(null);
   const [orderDataDraft, setOrderDataDraft] = useState(() => getOrderDataDraft(null));
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
+  const [routeOptions, setRouteOptions] = useState(() => normalizeRouteOptions({}));
   const routePlanTitleEditedRef = useRef(false);
   const [routeCreatePending, setRouteCreatePending] = useState(false);
   const isCreatingRoute = routeCreatePending || routePlanFetcher.state !== "idle";
@@ -4279,7 +4283,7 @@ function OrdersPageContent({ loaderData }) {
     routeCreatePendingRef.current = true;
     setRouteCreatePending(true);
     const routeName = routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE;
-    const creationKey = JSON.stringify({ shopifyOrderIds: plannedOrders.map((order) => order.id), routeName });
+    const creationKey = JSON.stringify({ shopifyOrderIds: plannedOrders.map((order) => order.id), routeName, routeOptions });
     try {
       if (routeCreateAttemptRef.current?.key !== creationKey) {
         routeCreateAttemptRef.current = { key: creationKey, requestId: crypto.randomUUID() };
@@ -4296,6 +4300,11 @@ function OrdersPageContent({ loaderData }) {
       formData.set("routeScope", JSON.stringify(routeDraftScope));
       formData.set("routeName", routeName);
       formData.set("initialRouteRequestId", routeCreateAttemptRef.current.requestId);
+      if (kfoodOfficeEnabled) {
+        formData.set("photoRequired", String(routeOptions.deliveryProof.photoRequired));
+        formData.set("signatureRequired", String(routeOptions.deliveryProof.signatureRequired));
+        formData.set("tollPolicy", routeOptions.tollPolicy);
+      }
       formData.set("orderScope", orderFilters.scope);
       formData.set("shopifySessionToken", sessionToken);
       routePlanFetcher.submit(formData, { method: "post" });
@@ -5192,6 +5201,7 @@ function OrdersPageContent({ loaderData }) {
               style={routePlanTitleFieldStyle}
             />
           </label>
+          {kfoodOfficeEnabled ? <div style={{ padding: "8px 12px" }}><RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} /></div> : null}
           <div style={routePlanDetailStyle}>
             <div style={routePlanHeaderStyle}>
               <s-heading>Route plan</s-heading>
