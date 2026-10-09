@@ -11,6 +11,9 @@ import {
   buildChildRouteOrderRows,
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
+  getRouteEndpointMarkerTone,
+  getStopMarkerTone,
+  ROUTE_MARKER_TONE_COLORS,
   summarizeChildRouteMoney,
   formatChildDriveTimeLabel,
   formatChildEtaLabel,
@@ -706,7 +709,7 @@ test("child timeline precedes the table and enforces explicit responsive minimum
   assert.match(routeDetailSource, /minWidth: `\$\{unitCount \* CHILD_ROUTE_TIMELINE_UNIT_MIN_WIDTH\}px`/);
   assert.match(routeDetailSource, /const childRouteTimelineStopUnitStyle = \{/);
   assert.match(routeDetailSource, /minWidth: "73px"/);
-  assert.match(routeDetailSource, /minHeight: "48px"/);
+  assert.match(routeDetailSource, /minHeight: "52px"/);
   assert.match(routeDetailSource, /maxWidth: "100%"/);
   assert.match(routeDetailSource, /minWidth: 0/);
   assert.match(routeDetailSource, /overflowX: "auto"/);
@@ -725,8 +728,8 @@ test("Stops and Tracking route markers share one order popup with the existing s
 });
 
 test("child timeline renders distinct circular Start and End markers", () => {
-  assert.match(routeDetailSource, /function renderChildRouteTimelineStartMarker\(\)/);
-  assert.match(routeDetailSource, /function renderChildRouteTimelineEndMarker\(\)/);
+  assert.match(routeDetailSource, /function renderChildRouteTimelineStartMarker\(color\)/);
+  assert.match(routeDetailSource, /function renderChildRouteTimelineEndMarker\(color\)/);
   assert.match(routeDetailSource, /aria-label="Route start"/);
   assert.match(routeDetailSource, /aria-label="Route end"/);
   assert.match(routeDetailSource, /childRouteTimelineEndStyle/);
@@ -847,9 +850,9 @@ test("child timeline keeps breathing room while table stop digits stay geometric
   assert.match(routeDetailSource, /aria-label="Child route stop timeline"[\s\S]*style=\{childRouteTimelineStyle\}/);
   assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[\s\S]*display: "grid"[\s\S]*placeItems: "center"[\s\S]*margin: "0 auto"/);
   assert.match(routeDetailSource, /const routeNumberMarkerGlyphStyle = \{[\s\S]*lineHeight: 1[\s\S]*transform: "translateY\(0\.1em\)"/);
-  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "11px"[\s\S]*fontWeight: 700[\s\S]*transform: "none"/);
+  assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[\s\S]*\.\.\.routeNumberMarkerGlyphStyle[\s\S]*fontSize: "12px"[\s\S]*fontWeight: 700[\s\S]*transform: "none"/);
   assert.match(routeDetailSource, /<span style=\{routeNumberMarkerGlyphStyle\}>\{stop\.stop\}<\/span>/);
-  assert.match(routeDetailSource, /<span style=\{\{ \.\.\.childRouteTableStopMarkerStyle, background: row\.sourceRouteColor \?\? routeLineColor \}\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
+  assert.match(routeDetailSource, /<span style=\{\{ \.\.\.childRouteTableStopMarkerStyle, background: isOrdinaryRouteDetail \? ROUTE_MARKER_TONE_COLORS\[row\.markerTone\] : row\.sourceRouteColor \?\? routeLineColor \}\}><span style=\{childRouteTableStopMarkerTextStyle\}>\{row\.stop\}<\/span><\/span>/);
   assert.doesNotMatch(routeDetailSource, /textBox:/);
 });
 
@@ -960,7 +963,7 @@ test("route detail tabs keep tracking available for ordinary and grouped child r
   assert.match(routeDetailSource, /if \(mapCanvas\?\.style\.cursor === "pointer"\) mapCanvas\.style\.cursor = "";/);
   assert.match(routeDetailSource, /\{hasRouteTrackingDetail \? \(\s*<div[^>]*aria-label=\{translate\(language, "routes\.detail\.sections\.accessibilityLabel"\)\}/);
   assert.match(routeDetailSource, /\{isTrackingMapView \? \(\s*<section aria-label="Route tracking"/);
-  assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isTrackingMapView \? \(/);
+  assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isOrdinaryRouteDetail && !isTrackingMapView \? \(/);
 });
 
 test("child detail keeps dispatch, original shipping, schedule validation, and execution evidence semantically separate", () => {
@@ -1189,4 +1192,65 @@ test("both End rows print the leg back to the depot in the Drive time column", (
     const row = routeDetailSource.slice(start, routeDetailSource.indexOf("\n}\n", start));
     assert.match(row, /endpoint\?\.driveTime \?\? ROUTE_EMPTY_LABEL/, name);
   }
+});
+
+test("marker tone follows the stop status and the route status", () => {
+  assert.deepEqual(ROUTE_MARKER_TONE_COLORS, { done: "#27805c", failed: "#b42318", pending: "#0b84d8" });
+  for (const status of ["DELIVERED", "Completed", "FULFILLED", "complete"]) assert.equal(getStopMarkerTone({ deliveryStopStatus: status }), "done", status);
+  for (const status of ["FAILED", "attempted"]) assert.equal(getStopMarkerTone({ status }), "failed", status);
+  for (const status of ["PENDING", "READY", "ARRIVED", "EN_ROUTE", "In progress", "CANCELLED", undefined]) assert.equal(getStopMarkerTone({ status }), "pending", String(status));
+  assert.equal(getStopMarkerTone({ deliveryStopStatus: "DELIVERED", status: "PENDING" }), "done");
+
+  assert.equal(getRouteEndpointMarkerTone("start", "READY"), "pending");
+  assert.equal(getRouteEndpointMarkerTone("end", "READY"), "pending");
+  assert.equal(getRouteEndpointMarkerTone("start", "IN_PROGRESS"), "done");
+  assert.equal(getRouteEndpointMarkerTone("end", "IN_PROGRESS"), "pending");
+  assert.equal(getRouteEndpointMarkerTone("start", "COMPLETED"), "done");
+  assert.equal(getRouteEndpointMarkerTone("end", "COMPLETED"), "done");
+  assert.equal(getRouteEndpointMarkerTone("end", "INCOMPLETE"), "pending");
+  assert.equal(getRouteEndpointMarkerTone("start", undefined), "pending");
+
+  const rows = buildChildRouteOrderRows([
+    { deliveryStopId: "s1", deliveryStopStatus: "DELIVERED", sequence: 1 },
+    { deliveryStopId: "s2", deliveryStopStatus: "FAILED", sequence: 2 },
+    { deliveryStopId: "s3", deliveryStopStatus: "PENDING", sequence: 3 },
+  ], { ianaTimezone: "America/Toronto" });
+  assert.deepEqual(rows.map((row) => row.markerTone), ["done", "failed", "pending"]);
+});
+
+test("an ordinary route uses the same timeline as a group route, with circles colored by status", () => {
+  const childTimelineStart = routeDetailSource.indexOf('aria-label="Child route stop timeline"');
+  const gate = '{isMaterializedChildRouteDetail && childDetailTab === "stops" || (isOrdinaryRouteDetail && !isTrackingMapView) ? (';
+  assert.ok(routeDetailSource.includes(gate));
+  assert.ok(childTimelineStart - routeDetailSource.indexOf(gate) < 200 && routeDetailSource.indexOf(gate) < childTimelineStart);
+  assert.match(routeDetailSource, /\{!isMaterializedChildRouteDetail && !isOrdinaryRouteDetail && !isTrackingMapView \? \(\s*<section aria-label="Route stop timeline"/);
+
+  const section = routeDetailSource.slice(childTimelineStart, routeDetailSource.indexOf('aria-label="Route stop timeline"'));
+  assert.match(section, /isOrdinaryRouteDetail \? \{ background: ROUTE_MARKER_TONE_COLORS\[getStopMarkerTone\(stop\)\] \}/);
+  assert.match(section, /renderChildRouteTimelineStartMarker\(isOrdinaryRouteDetail \? ROUTE_MARKER_TONE_COLORS\[getRouteEndpointMarkerTone\("start", routeExecutionStatus\)\] : undefined\)/);
+  assert.match(section, /renderChildRouteTimelineEndMarker\(isOrdinaryRouteDetail \? ROUTE_MARKER_TONE_COLORS\[getRouteEndpointMarkerTone\("end", routeExecutionStatus\)\] : undefined\)/);
+  assert.match(section, /routeRow\.isPreviewOnly/);
+  assert.match(section, /Drop orders here to remove them from the route/);
+});
+
+test("circles are 24px everywhere and the timeline grid follows them", () => {
+  for (const name of ["childRouteTableStopMarkerStyle", "routeTimelineStopStyle", "childRouteTimelineEndpointMarkerStyle"]) {
+    const start = routeDetailSource.indexOf(`const ${name} = {`);
+    const block = routeDetailSource.slice(start, routeDetailSource.indexOf("\n};", start));
+    assert.match(block, /height: "24px"/, name);
+    assert.match(block, /width: "24px"/, name);
+  }
+  assert.match(routeDetailSource, /const childRouteTimelineStopUnitStyle = \{[\s\S]*gridTemplateRows: "14px 24px"/);
+  assert.match(routeDetailSource, /const childRouteTimelineConnectorStyle = \{[\s\S]*top: "33px"/);
+});
+
+test("Start and End rows of the stop tables use the star and flag markers in the route status color", () => {
+  for (const name of ["renderRouteEndpointOrderRow", "renderRouteEndpointTrackingRow"]) {
+    const start = routeDetailSource.indexOf(`function ${name}(`);
+    const row = routeDetailSource.slice(start, routeDetailSource.indexOf("\n}\n", start));
+    assert.match(row, /renderRouteEndpointRowMarker\(kind, markerColor\)/, name);
+    assert.doesNotMatch(row, /\{isStart \? "★" : "◆"\}/, name);
+  }
+  assert.match(routeDetailSource, /markerColor: isOrdinaryRouteDetail \? ROUTE_MARKER_TONE_COLORS\[getRouteEndpointMarkerTone\("start", routeExecutionStatus\)\] : undefined/);
+  assert.match(routeDetailSource, /markerColor: isOrdinaryRouteDetail \? ROUTE_MARKER_TONE_COLORS\[getRouteEndpointMarkerTone\("end", routeExecutionStatus\)\] : undefined/);
 });
