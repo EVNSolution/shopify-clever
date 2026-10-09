@@ -1,4 +1,4 @@
-import { RouteOptionsFields } from "../delivery/route-office-components";
+import { RouteOptionsDisclosure, RouteOptionsFields } from "../delivery/route-office-components";
 import { normalizeRouteOptions } from "../delivery/route-office-options.js";
 /* eslint-disable react/prop-types */
 import { formatStoreInstant, getStoreDate } from "../shopify/store-date-time";
@@ -5201,7 +5201,13 @@ function OrdersPageContent({ loaderData }) {
               style={routePlanTitleFieldStyle}
             />
           </label>
-          {kfoodOfficeEnabled ? <div style={{ padding: "8px 12px" }}><RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} /></div> : null}
+          {kfoodOfficeEnabled ? (
+            <div style={{ padding: "8px 12px" }}>
+              <RouteOptionsDisclosure>
+                <RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} />
+              </RouteOptionsDisclosure>
+            </div>
+          ) : null}
           <div style={routePlanDetailStyle}>
             <div style={routePlanHeaderStyle}>
               <s-heading>Route plan</s-heading>

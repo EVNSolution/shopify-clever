@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useFetcher, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { withEmbeddedShopifyContext } from "./route-paths";
@@ -47,6 +47,27 @@ function Errors({ errors = [] }) {
       ))}
     </div>
   ) : null;
+}
+
+export function RouteOptionsDisclosure({ children }) {
+  const [expanded, setExpanded] = useState(false);
+  const contentId = useId();
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <button
+        type="button"
+        style={{ ...buttonStyle, justifySelf: "start" }}
+        aria-expanded={expanded}
+        aria-controls={contentId}
+        onClick={() => setExpanded((open) => !open)}
+      >
+        Route options <span aria-hidden="true">{expanded ? "▴" : "▾"}</span>
+      </button>
+      <div id={contentId} hidden={!expanded}>
+        {children}
+      </div>
+    </div>
+  );
 }
 
 export function RouteOptionsFields({ value, onChange, disabled = false }) {
@@ -163,6 +184,7 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
   }
   return (
     <section
+      id="route-options-editor"
       ref={panelRef}
       tabIndex={-1}
       aria-label="Edit route options"
