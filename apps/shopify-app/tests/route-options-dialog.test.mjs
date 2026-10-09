@@ -65,9 +65,9 @@ test("each route option row changes only its own option", async () => {
 });
 
 test("route options open as a labelled modal popup with a default Done action", async () => {
-  const { RouteOptionsDialog, RouteOptionsFields } = await loadComponents();
+  const { OfficeDialog, RouteOptionsFields } = await loadComponents();
   const fields = createElement(RouteOptionsFields, { value: defaults, onChange() {} });
-  const html = renderToStaticMarkup(createElement(RouteOptionsDialog, { onClose() {} }, fields));
+  const html = renderToStaticMarkup(createElement(OfficeDialog, { title: "Route options", onClose() {} }, fields));
   assert.match(html, /role="dialog"/);
   assert.match(html, /aria-modal="true"/);
   const labelledBy = html.match(/aria-labelledby="([^"]+)"/)[1];
@@ -79,7 +79,7 @@ test("route options open as a labelled modal popup with a default Done action", 
   assert.doesNotMatch(html, /aria-expanded|aria-controls/);
 
   const custom = renderToStaticMarkup(
-    createElement(RouteOptionsDialog, { onClose() {}, actions: createElement("button", null, "Save options") }, fields),
+    createElement(OfficeDialog, { title: "Route options", onClose() {}, actions: createElement("button", null, "Save options") }, fields),
   );
   assert.match(custom, />Save options<\/button>/);
   assert.doesNotMatch(custom, />Done<\/button>/);
@@ -93,7 +93,7 @@ test("Orders keeps the route options trigger outside the Route plan card", () =>
   assert.equal(has(card, /Route options|RouteOptions/), false, "Route plan card still mentions route options");
   const actions = source.slice(source.indexOf("const ordersViewActions ="), source.indexOf("const ordersLayoutNotice ="));
   assert.equal(has(actions, />Route options<\/button>/), true, "top row has no Route options button");
-  assert.equal(has(actions, /<RouteOptionsDialog/), true, "top row does not render the popup");
+  assert.equal(has(actions, /<OfficeDialog title="Route options"/), true, "top row does not render the popup");
   assert.equal(has(source, /RouteOptionsDisclosure/), false, "inline disclosure is still used");
 });
 
@@ -106,6 +106,6 @@ test("Route Detail opens route options from the Edit menu as a popup, not an inl
     components.indexOf("export function RouteOptionsEditor"),
     components.indexOf("export function CashAmounts"),
   );
-  assert.equal(has(editor, /<RouteOptionsDialog/), true, "editor is not shown in the popup");
+  assert.equal(has(editor, /<OfficeDialog/), true, "editor is not shown in the popup");
   assert.equal(has(editor, /scrollIntoView/), false, "editor still scrolls like an inline panel");
 });

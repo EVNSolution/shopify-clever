@@ -12,26 +12,11 @@ import {
   getOfficeErrorMessage,
 } from "./route-office-options";
 
-const panelStyle = {
-  border: "1px solid #d5d9df",
-  borderRadius: 10,
-  padding: 16,
-  background: "#fff",
-  display: "grid",
-  gap: 12,
-};
 const fieldStyle = {
   display: "flex",
   alignItems: "center",
   flexWrap: "wrap",
   gap: 8,
-};
-const buttonStyle = {
-  border: "1px solid #9ba2aa",
-  borderRadius: 6,
-  padding: "7px 12px",
-  background: "#fff",
-  cursor: "pointer",
 };
 const moneyStyle = {
   display: "grid",
@@ -82,11 +67,32 @@ const optionRowStyle = {
   padding: "0 14px",
 };
 const noteStyle = { color: "#616161", fontSize: 13, margin: 0 };
+// Table cells clip to one line; Cash lines wrap inside their column instead.
+const cashCellStyle = {
+  display: "grid",
+  fontSize: 12,
+  fontVariantNumeric: "tabular-nums",
+  gap: 2,
+  justifyItems: "center",
+  lineHeight: 1.25,
+  marginTop: 2,
+  overflowWrap: "anywhere",
+  textAlign: "center",
+  whiteSpace: "normal",
+};
 const actionsStyle = {
   display: "flex",
   flexWrap: "wrap",
   gap: 8,
   justifyContent: "flex-end",
+};
+const inputStyle = {
+  border: "1px solid #c9c9c9",
+  borderRadius: 8,
+  boxSizing: "border-box",
+  font: "inherit",
+  minHeight: 36,
+  padding: "7px 10px",
 };
 const dialogButtonStyle = {
   background: "#fff",
@@ -122,8 +128,8 @@ function Errors({ errors = [], compact = false }) {
   ) : null;
 }
 
-/** Popup shell for route options. Pass `actions` to replace the default Done button. */
-export function RouteOptionsDialog({ onClose, children, actions }) {
+/** Popup shell for the office controls. Pass `actions` to replace the default Done button. */
+export function OfficeDialog({ title, onClose, children, actions }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -164,7 +170,7 @@ export function RouteOptionsDialog({ onClose, children, actions }) {
         style={dialogStyle}
       >
         <h2 id={titleId} style={{ fontSize: 20, margin: 0 }}>
-          Route options
+          {title}
         </h2>
         {children}
         <div style={actionsStyle}>
@@ -285,7 +291,8 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
     }
   }
   return (
-    <RouteOptionsDialog
+    <OfficeDialog
+      title="Route options"
       onClose={onClose}
       actions={
         <>
@@ -352,7 +359,7 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
           Route options saved.
         </p>
       ) : null}
-    </RouteOptionsDialog>
+    </OfficeDialog>
   );
 }
 
@@ -442,7 +449,7 @@ function CashReceipt({ receipt, stopLabel, action, onSaved }) {
     }
   }
   return (
-    <article style={{ ...panelStyle, background: "#fafbfc" }}>
+    <article style={{ display: "grid", gap: 12 }}>
       <strong>
         {stopLabel} · {receipt.completion.payment?.methodTitle ?? "Cash"}
       </strong>
@@ -460,7 +467,7 @@ function CashReceipt({ receipt, stopLabel, action, onSaved }) {
             onChange={(event) => setAmount(event.target.value)}
             disabled={busy}
             required
-            style={{ width: 110, padding: 6 }}
+            style={{ ...inputStyle, width: 120 }}
           />
         </label>
         <label style={fieldStyle}>
@@ -473,7 +480,7 @@ function CashReceipt({ receipt, stopLabel, action, onSaved }) {
             disabled={busy}
             required={receipt.revision > 0}
             maxLength={1000}
-            style={{ flex: 1, minWidth: 100, padding: 6 }}
+            style={{ ...inputStyle, flex: 1, minWidth: 140 }}
           />
         </label>
         <Errors
@@ -483,7 +490,11 @@ function CashReceipt({ receipt, stopLabel, action, onSaved }) {
           ]}
         />
         <button
-          style={{ ...buttonStyle, justifySelf: "start" }}
+          style={{
+            ...primaryButtonStyle,
+            justifySelf: "start",
+            ...(busy || !Number.isSafeInteger(receipt.revision) ? disabledStyle : null),
+          }}
           type="submit"
           disabled={busy || !Number.isSafeInteger(receipt.revision)}
         >
@@ -515,14 +526,24 @@ function CashReceipt({ receipt, stopLabel, action, onSaved }) {
   );
 }
 
-export function RouteCashPanel({ routePlanId, stops = [] }) {
+/** Receipts grouped by delivery stop. */
+export function cashReceiptsByStopId(receipts = []) {
+  const byStop = new Map();
+  for (const receipt of receipts) {
+    const stopId = receipt.completion.deliveryStopId;
+    byStop.set(stopId, [...(byStop.get(stopId) ?? []), receipt]);
+  }
+  return byStop;
+}
+
+/** Receipts of one route. They reload when `reloadKey` changes and after a confirmation. */
+export function useRouteCashReceipts(routePlanId, { enabled = true, reloadKey = "" } = {}) {
   const shopify = useAppBridge();
   const shopifyRef = useRef(shopify);
   shopifyRef.current = shopify;
   const [searchParams] = useSearchParams();
   const [receipts, setReceipts] = useState([]);
   const [errors, setErrors] = useState([]);
-  const [busy, setBusy] = useState(false);
   const controllerRef = useRef(null);
   const action = withEmbeddedShopifyContext(
     `/app/routes/${encodeURIComponent(routePlanId)}/cash-settlements`,
@@ -532,7 +553,6 @@ export function RouteCashPanel({ routePlanId, stops = [] }) {
     controllerRef.current?.abort();
     const controller = new AbortController();
     controllerRef.current = controller;
-    setBusy(true);
     setErrors([]);
     try {
       const token = await shopifyRef.current.idToken();
@@ -551,67 +571,86 @@ export function RouteCashPanel({ routePlanId, stops = [] }) {
         if (response.status === 401 || response.status === 403) setReceipts([]);
         throw new Error(
           data.errors?.[0]?.message ??
-            "Could not load Cash receipts. Refresh and try again.",
+            "Could not load Cash receipts. Reload the page and try again.",
         );
       }
       if (data.routePlanId !== routePlanId || !Array.isArray(data.receipts))
-        throw new Error("Receipt route did not match. Refresh and try again.");
+        throw new Error(
+          "Receipt route did not match. Reload the page and try again.",
+        );
       setReceipts(data.receipts);
     } catch (error) {
       if (!controller.signal.aborted) setErrors([{ message: error.message }]);
-    } finally {
-      if (!controller.signal.aborted) setBusy(false);
     }
   }, [action, routePlanId]);
   useEffect(() => {
+    if (!enabled) {
+      setReceipts((current) => (current.length ? [] : current));
+      return undefined;
+    }
     load();
     return () => controllerRef.current?.abort();
-  }, [load]);
+  }, [enabled, load, reloadKey]);
+  return { receipts, errors, action, reload: load };
+}
+
+/** The Cash lines of one stop row: received amount (expected struck through when it differs) and confirmation. */
+export function CashCell({ receipts = [] }) {
+  if (!receipts.length) return null;
   return (
-    <section aria-label="Cash receipts and settlement" style={panelStyle}>
-      <div style={{ ...fieldStyle, justifyContent: "space-between" }}>
-        <h2 style={{ fontSize: 17, margin: 0 }}>
-          Cash receipts and settlement
-        </h2>
-        <button
-          style={buttonStyle}
-          type="button"
-          disabled={busy}
-          onClick={load}
-        >
-          {busy ? "Refreshing…" : "Refresh receipts"}
+    <div style={cashCellStyle}>
+      {receipts.map(({ completion, settlement }) => {
+        const currency = completion.currencyCode;
+        const differs =
+          completion.differenceAmount != null &&
+          Number(completion.differenceAmount) !== 0;
+        return (
+          <div key={completion.id} style={cashCellStyle}>
+            <span>
+              Cash{" "}
+              {differs ? (
+                <s>{formatCashAmount(completion.expectedAmount, currency)}</s>
+              ) : null}{" "}
+              <strong>{formatCashAmount(completion.actualAmount, currency)}</strong>
+            </span>
+            <span style={{ color: settlement ? "#1a6b3c" : "#8a4b08" }}>
+              {settlement
+                ? `Confirmed ${formatCashAmount(settlement.confirmedAmount, settlement.currency)}`
+                : "Unconfirmed"}
+            </span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Office confirmation and correction of a stop's Cash receipt. The driver receipt itself never changes. */
+export function CashReceiptDialog({ receipts, stopLabel, action, onSaved, onClose }) {
+  return (
+    <OfficeDialog
+      title="Cash receipt"
+      onClose={onClose}
+      actions={
+        <button type="button" style={dialogButtonStyle} onClick={onClose}>
+          Close
         </button>
-      </div>
-      <p style={{ margin: 0, color: "#59616b" }}>
+      }
+    >
+      <p style={noteStyle}>
         Driver receipts stay unchanged. Office confirmations and corrections are
         recorded separately.
       </p>
-      <Errors errors={errors} />
-      {receipts.length === 0 && !busy && !errors.length ? (
-        <p>No Cash receipts recorded.</p>
-      ) : null}
-      {receipts.map((receipt) => {
-        const stop = stops.find(
-          (stop) =>
-            stop.deliveryStopId === receipt.completion.deliveryStopId ||
-            stop.id === receipt.completion.deliveryStopId,
-        );
-        const label =
-          stop?.orderName ??
-          stop?.order ??
-          stop?.recipientName ??
-          `Stop ${stops.indexOf(stop) + 1 || receipt.completion.deliveryStopId}`;
-        return (
-          <CashReceipt
-            key={`${receipt.completion.id}:${receipt.revision}`}
-            receipt={receipt}
-            stopLabel={label}
-            action={action}
-            onSaved={load}
-          />
-        );
-      })}
-    </section>
+      {receipts.map((receipt) => (
+        <CashReceipt
+          key={`${receipt.completion.id}:${receipt.revision}`}
+          receipt={receipt}
+          stopLabel={stopLabel}
+          action={action}
+          onSaved={onSaved}
+        />
+      ))}
+    </OfficeDialog>
   );
 }
 

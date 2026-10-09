@@ -65,6 +65,7 @@ window.fetch = async (input, init) => {
     return new Response(body, { headers: { "content-type": "text/event-stream" } });
   }
   if (/^\\/app\\/route-live-change\\/[^/]+$/.test(url.pathname) && ["GET", "POST"].includes(method)) return nativeFetch(input, init);
+  if (/^\\/app\\/routes\\/[^/]+\\/cash-settlements$/.test(url.pathname) && method === "GET") return nativeFetch(input, init);
   if (url.pathname === "/perf") return Response.json({ ok: true });
   record("blocked-operational-request", { method, pathname: url.pathname });
   return Response.json({ error: { code: "FIXTURE_OPERATION_BLOCKED", message: "Only synthetic live-change transport is enabled" } }, { status: 503 });
@@ -89,9 +90,10 @@ async function showState() {
   document.getElementById("fixture-log").textContent = JSON.stringify({ counters: result.counters, receipts: result.receipts, log: result.log.slice(-8) }, null, 2);
 }
 const detailRoute = path => ({ path, loader: detailLoader, action: fixtureAction, shouldRevalidate: shouldRevalidateDetail, element: React.createElement(RouteDetail) });
-router = createBrowserRouter([{ id: "routes/app", path: "/", loader: () => ({ language, ianaTimezone: "America/Toronto" }), children: [{
+router = createBrowserRouter([{ id: "routes/app", path: "/", loader: () => ({ language, ianaTimezone: "America/Toronto", kfoodOfficeEnabled: true }), children: [{
   id: "routes/app.routes", path: "app/routes", loader: listLoader, action: fixtureAction, shouldRevalidate: shouldRevalidateList, element: React.createElement(RoutesPage), children: [
     detailRoute("groups/:routeGroupId/routes/:routeId"), detailRoute("groups/:routeGroupId"), detailRoute(":routeId"),
+    { path: ":routeId/cash-settlements", action: fixtureAction },
   ],
 }] }]);
 router.subscribe(() => { void showState(); });
@@ -169,6 +171,14 @@ globalThis.fetch = async (url, init) => {
   if (failedListReads > 0) { failedListReads -= 1; return Response.json({ error: { message: "Synthetic list read failed" } }, { status: 503 }); }
   return Response.json({ data: url.includes("route-groups") ? { routeGroups: [fixture.group()] } : { routePlans: [fixture.plan(), fixture.plan(true)] } });
 };
+const createCashReceipts = () => [
+  { completion: { id: "cash-1", deliveryStopId: FIXTURE_IDS.stop(1), currencyCode: "CAD", payment: { methodTitle: "Cash" }, expectedAmount: "122.25", actualAmount: "122.00", differenceAmount: "-0.25" },
+    revision: 0, settlement: null, history: [] },
+  { completion: { id: "cash-2", deliveryStopId: FIXTURE_IDS.stop(2), currencyCode: "CAD", payment: { methodTitle: "Cash" }, expectedAmount: "20.00", actualAmount: "20.00", differenceAmount: "0.00" },
+    revision: 1, settlement: { id: "settlement-1", confirmedAmount: "20.00", currency: "CAD", reason: "", actor: "Office QA", recordedAt: "2026-10-09T00:01:00Z" },
+    history: [{ id: "settlement-1", confirmedAmount: "20.00", currency: "CAD", reason: "", actor: "Office QA", recordedAt: "2026-10-09T00:01:00Z" }] },
+];
+let cashReceipts = createCashReceipts();
 let holdNextRead = false;
 let holdNextSearch = false;
 let failNextSearch = false;
@@ -223,7 +233,7 @@ const server = createServer(async (request, response) => {
     }
     if (request.method === "POST" && url.pathname === "/fixture/control") {
       const { action, value } = JSON.parse(await parseBody(request));
-      if (action === "reset") { release(heldReads); release(heldSearches); fixture = createLiveRouteFixture(); clockNow += 15001; upstreamReads = 0; failedListReads = 0;
+      if (action === "reset") { cashReceipts = createCashReceipts(); release(heldReads); release(heldSearches); fixture = createLiveRouteFixture(); clockNow += 15001; upstreamReads = 0; failedListReads = 0;
         holdNextRead = false; holdNextSearch = false; failNextSearch = false; loseNextIntent = null; }
       else if (action === "hold-read") holdNextRead = true;
       else if (action === "hold-search") holdNextSearch = true;
@@ -271,6 +281,21 @@ const server = createServer(async (request, response) => {
         result = fixture.loseCommittedResponse(intent, result);
       }
       sendJSON(response, result.body, result.status); return;
+    }
+    const cashEndpoint = url.pathname.match(/^\/app\/routes\/([^/]+)\/cash-settlements$/);
+    if (cashEndpoint) {
+      const routePlanId = decodeURIComponent(cashEndpoint[1]);
+      const receipts = routePlanId === FIXTURE_IDS.route ? cashReceipts : [];
+      if (request.method === "GET") { sendJSON(response, { routePlanId, receipts, errors: [] }); return; }
+      const form = await requestForm(request, await parseBody(request));
+      const receipt = cashReceipts.find((candidate) => candidate.completion.id === String(form.get("receiptId")));
+      fixture.record("cash-command", { receiptId: String(form.get("receiptId")), amount: String(form.get("confirmedAmount")), reason: String(form.get("reason") ?? "") });
+      if (!receipt) { sendJSON(response, { errors: [{ message: "Receipt not found." }] }); return; }
+      if (Number(form.get("expectedRevision")) !== receipt.revision) { sendJSON(response, { errors: [{ message: "Another office user changed this receipt. Reload the page." }] }); return; }
+      receipt.revision += 1;
+      receipt.settlement = { id: `settlement-${receipt.revision}`, confirmedAmount: String(form.get("confirmedAmount")), currency: String(form.get("currency")), reason: String(form.get("reason") ?? ""), actor: "Office QA", recordedAt: "2026-10-09T00:02:00Z" };
+      receipt.history.unshift(receipt.settlement);
+      sendJSON(response, { routePlanId, receipts, saved: true, errors: [] }); return;
     }
     if (url.pathname === "/global.css") { response.setHeader("content-type", "text/css"); response.end(readFileSync(`${appDirectory}/app/styles/global.css`)); return; }
     if (url.pathname === "/fixture.js") { response.setHeader("content-type", "text/javascript"); response.end(readFileSync(bundlePath)); return; }

@@ -1,4 +1,4 @@
-import { RouteOptionsDialog, RouteOptionsFields } from "../delivery/route-office-components";
+import { OfficeDialog, RouteOptionsFields } from "../delivery/route-office-components";
 import { normalizeRouteOptions } from "../delivery/route-office-options.js";
 /* eslint-disable react/prop-types */
 import { formatStoreInstant, getStoreDate } from "../shopify/store-date-time";
@@ -3234,9 +3234,9 @@ function OrdersPageContent({ loaderData }) {
             >Route options</button>
           ) : null}
           {routeOptionsOpen ? (
-            <RouteOptionsDialog onClose={() => setRouteOptionsOpen(false)}>
+            <OfficeDialog title="Route options" onClose={() => setRouteOptionsOpen(false)}>
               <RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} />
-            </RouteOptionsDialog>
+            </OfficeDialog>
           ) : null}
         </div>
       );

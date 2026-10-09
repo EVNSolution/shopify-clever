@@ -561,7 +561,7 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) =>/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
-  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\s*\{row\.payment\}\s*<CashCell receipts=\{cashByStopId\.get\(row\.deliveryStopId\)\} \/>\s*<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{/);
   assert.match(routeDetailSource, /minWidth: "1500px"/);
