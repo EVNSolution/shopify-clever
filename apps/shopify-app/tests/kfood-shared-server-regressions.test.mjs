@@ -227,7 +227,12 @@ for (const [label, changes] of [
     const merged = mergeRouteTrackingSnapshot(current, { ...current, roadMatchedPath });
     assert.equal(merged.roadMatchedPath.inferredGeometry, null);
     assert.equal(merged.roadMatchedPath.unmatchedRanges[0].interpolationLevel, 2);
-    assert.deepEqual(getRouteTrackingLineFeatures(merged), []);
+    // Rejected coverage is accepted as authoritative; the path is then drawn as one plain connector.
+    const features = getRouteTrackingLineFeatures(merged);
+    assert.deepEqual(features.map((feature) => [feature.properties.trackingType, feature.properties.trackingSource]), [
+      ["trackingConnector", "raw"],
+    ]);
+    assert.deepEqual(features[0].geometry.coordinates, merged.recordedPath.geometry.coordinates);
     assert.equal(getRouteTrackingPathPoints(merged).length, 2);
   });
 }

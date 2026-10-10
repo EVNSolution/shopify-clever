@@ -790,7 +790,9 @@ function getRouteTrackingLineFeatures(snapshot) {
   const roadMatchedPath = normalized.roadMatchedPath;
   const recordedCoverage = getRecordedTrackingCoverageFeatures(normalized);
   if (!roadMatchedPath) return recordedCoverage;
-  const usesInterpolationLevels = roadMatchedPath.qualityVersion === "gps_quality.v4";
+  if (roadMatchedPath.qualityVersion === "gps_quality.v4") {
+    return getContinuousTrackingLineFeatures(normalized, roadMatchedPath);
+  }
 
   const features = [];
   if (roadMatchedPath.matchedGeometry) {
@@ -798,7 +800,7 @@ function getRouteTrackingLineFeatures(snapshot) {
       features.push(createTrackingLineFeature(coordinates, "trackingTrail", { trackingSource: "matched" }));
     }
   }
-  if (!usesInterpolationLevels && roadMatchedPath.uncertainGeometry) {
+  if (roadMatchedPath.uncertainGeometry) {
     for (const coordinates of roadMatchedPath.uncertainGeometry.coordinates) {
       features.push(createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "uncertain" }));
     }
@@ -808,7 +810,6 @@ function getRouteTrackingLineFeatures(snapshot) {
       features.push(createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "inferred" }));
     }
   }
-  if (usesInterpolationLevels) return features;
   const uncoveredRanges = subtractCoveredRoadMatchRanges(
     roadMatchedPath.unmatchedRanges,
     roadMatchedPath.inferredRanges,
@@ -886,6 +887,102 @@ function getRouteTrackingLineFeatures(snapshot) {
     features.push(createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "raw" }));
   }
   return features;
+}
+
+/**
+ * Continuous policy (change-control #344): the office prefers a plain connector over a gap.
+ * Road lines (matched and inferred) are drawn as the red trail; every span between them, before
+ * the first one and after the last one is drawn as a plain connector through the recorded fixes.
+ */
+function getContinuousTrackingLineFeatures(normalized, roadMatchedPath) {
+  const features = [];
+  const lines = [];
+  const collect = (geometry, ranges, trackingSource) => {
+    const coordinates = geometry?.coordinates ?? [];
+    const aligned = ranges.length === coordinates.length;
+    coordinates.forEach((lineCoordinates, index) => {
+      if (lineCoordinates.length < 2) return;
+      features.push(createTrackingLineFeature(lineCoordinates, "trackingTrail", { trackingSource }));
+      if (aligned) lines.push({ coordinates: lineCoordinates, range: ranges[index] });
+    });
+  };
+  collect(roadMatchedPath.matchedGeometry, roadMatchedPath.matchedRanges, "matched");
+  collect(roadMatchedPath.inferredGeometry, roadMatchedPath.inferredRanges, "inferred");
+  features.push(...getTrackingConnectorFeatures(normalized, lines));
+  return features;
+}
+
+function getTrackingConnectorFeatures(normalized, lines) {
+  const maxAccuracyMeters = nonNegativeNumberOrNull(normalized.policy?.maxMatchAccuracyMeters)
+    ?? RAW_FALLBACK_MAX_ACCURACY_METERS;
+  const points = getRouteTrackingPathPoints(normalized)
+    .map((point) => ({ ...point, timestamp: getPositionTimestamp(point) }));
+  const connector = (start, interior, end) => {
+    const coordinates = buildContinuousConnector(start, interior, end, maxAccuracyMeters);
+    return coordinates
+      ? [createTrackingLineFeature(coordinates, "trackingConnector", { trackingSource: "raw" })]
+      : [];
+  };
+  if (lines.length === 0) return connector(null, points, null);
+  // Live positions without a source index cannot be placed between the road lines.
+  if (points.some((point) => point.sourceIndex == null)) return [];
+  const ordered = [...lines].sort((left, right) => (
+    left.range.startSourceIndex - right.range.startSourceIndex
+    || left.range.endSourceIndex - right.range.endSourceIndex
+  ));
+  const anchorStart = (line) => ({ coordinates: line.coordinates[0], timestamp: Date.parse(line.range.startOccurredAt ?? "") });
+  const anchorEnd = (line) => ({ coordinates: line.coordinates.at(-1), timestamp: Date.parse(line.range.endOccurredAt ?? "") });
+  const features = [];
+  const first = ordered[0];
+  features.push(...connector(
+    null,
+    points.filter((point) => point.sourceIndex < first.range.startSourceIndex),
+    anchorStart(first),
+  ));
+  let reach = first;
+  for (const line of ordered.slice(1)) {
+    if (line.range.startSourceIndex >= reach.range.endSourceIndex) {
+      features.push(...connector(
+        anchorEnd(reach),
+        points.filter((point) => (
+          point.sourceIndex > reach.range.endSourceIndex && point.sourceIndex < line.range.startSourceIndex
+        )),
+        anchorStart(line),
+      ));
+    }
+    if (line.range.endSourceIndex > reach.range.endSourceIndex) reach = line;
+  }
+  features.push(...connector(
+    anchorEnd(reach),
+    points.filter((point) => point.sourceIndex > reach.range.endSourceIndex),
+    null,
+  ));
+  return features;
+}
+
+function buildContinuousConnector(start, interior, end, maxAccuracyMeters) {
+  const coordinates = [];
+  let previous = null;
+  const push = (candidate) => {
+    const last = coordinates.at(-1);
+    if (!last || last[0] !== candidate.coordinates[0] || last[1] !== candidate.coordinates[1]) {
+      coordinates.push(candidate.coordinates);
+    }
+    previous = candidate;
+  };
+  if (start) push(start);
+  for (const point of interior) {
+    if (point.accuracyMeters != null && point.accuracyMeters > maxAccuracyMeters) continue;
+    if (previous && Number.isFinite(previous.timestamp) && Number.isFinite(point.timestamp)) {
+      const elapsedMs = point.timestamp - previous.timestamp;
+      const distanceMeters = distanceBetweenCoordinatesMeters(previous.coordinates, point.coordinates);
+      // A spike is left out; the connector continues from the fix before it.
+      if (elapsedMs > 0 && distanceMeters / (elapsedMs / 1000) > RAW_FALLBACK_MAX_SPEED_METERS_PER_SECOND) continue;
+    }
+    push(point);
+  }
+  if (end) push(end);
+  return coordinates.length >= 2 ? coordinates : null;
 }
 
 function isRenderableUnmatchedRange(range) {

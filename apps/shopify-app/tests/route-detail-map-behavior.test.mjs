@@ -552,7 +552,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   assert.deepEqual(fake.calls.addLayer, TRACKING_LAYER_IDS);
 });
 
-test("a recovered next-day inferred segment stays in the source without a visible inferred layer", () => {
+test("a recovered next-day inferred segment is drawn by the red trail layer without a separate inferred layer", () => {
   const fake = createFakeMap();
   const snapshot = selectRouteTrackingWindow({
     roadMatchedPath: {
@@ -579,13 +579,11 @@ test("a recovered next-day inferred segment stays in the source without a visibl
 
   assert.equal(syncRouteDetailLiveTracking(fake.map, snapshot), true);
   assert.deepEqual(fake.sources.get("route-detail-live-tracking").data.features.map((feature) => (
-    feature.properties.trackingType
-  )), ["trackingConnector"]);
+    [feature.properties.trackingType, feature.properties.trackingSource]
+  )), [["trackingTrail", "inferred"]]);
   assert.equal(fake.layers.has("route-detail-live-tracking-inferred"), false);
   assert.deepEqual(fake.layers.get("route-detail-live-tracking-connector")?.filter, [
-    "all",
-    ["==", ["get", "trackingType"], "trackingConnector"],
-    ["!=", ["get", "trackingSource"], "inferred"],
+    "==", ["get", "trackingType"], "trackingConnector",
   ]);
   assert.deepEqual(fake.layers.get("route-detail-live-tracking-trail")?.filter, [
     "==", ["get", "trackingType"], "trackingTrail",
