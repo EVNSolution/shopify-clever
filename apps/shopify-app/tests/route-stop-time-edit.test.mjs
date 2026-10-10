@@ -135,6 +135,34 @@ test("Enter and the check button save a valid value, Escape and the cross button
   assert.ok(!events.includes("save"), "Enter does nothing while another action is running");
 });
 
+test("the cell can name its subject and save an empty value, and keeps the Routes wording by default", async () => {
+  const { StopTimeCell } = await loadCell();
+  const html = (overrides) => renderToStaticMarkup(createElement(StopTimeCell, cellProps(overrides)));
+
+  const labelled = html({ orderLabel: "Kim", subject: "average stop time" });
+  assert.match(labelled, /aria-label="Edit average stop time for Kim"/);
+  assert.match(labelled, /title="Edit average stop time"/);
+  const editing = html({ allowEmpty: true, draft: "", orderLabel: "Kim", subject: "average stop time" });
+  assert.match(editing, /aria-label="Average stop time in minutes for Kim"/);
+  assert.match(editing, /aria-label="Save average stop time"/);
+  assert.match(editing, /title="Whole minutes, 0 to 1440; leave empty to remove it"/);
+
+  assert.match(html(), /aria-label="Edit stop time"/);
+  assert.match(html({ draft: "7" }), /aria-label="Stop time in minutes"/);
+  assert.match(html({ draft: "7" }), /aria-label="Save stop time"/);
+  assert.doesNotMatch(html({ draft: "7" }), /leave empty/);
+
+  const parts = (overrides) => {
+    const tree = StopTimeCell(cellProps(overrides));
+    return { input: findAll(tree, "input")[0], save: findAll(tree, "button").find((button) => button.props["aria-label"].startsWith("Save")) };
+  };
+  assert.equal(parts({ allowEmpty: true, draft: "" }).save.props.disabled, false, "an empty value can be saved when it removes the time");
+  assert.equal(parts({ allowEmpty: true, draft: "" }).input.props["aria-invalid"], false);
+  assert.equal(parts({ draft: "" }).save.props.disabled, true, "an empty value is still invalid for a stop");
+  assert.equal(parts({ allowEmpty: true, draft: "abc" }).save.props.disabled, true);
+  assert.equal(parts({ allowEmpty: true, draft: "1441" }).save.props.disabled, true);
+});
+
 function loadAction(calls) {
   const source = read("../app/features/delivery/route-detail.server.js");
   const start = source.indexOf("export const routeDetailAction = ");

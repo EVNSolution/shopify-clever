@@ -1,6 +1,6 @@
 import { getStoreDate } from "../features/shopify/store-date-time";
 import { useStoreTimeZone } from "../ui/store-time-zone";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { useFetcher, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -9,8 +9,11 @@ import {
   deleteDeliveryDriver,
   fetchDeliveryDrivers,
   regenerateDeliveryDriverInviteCode,
+  updateDeliveryDriverAverageStopTime,
   updateDeliveryDriverName,
 } from "../features/delivery/drivers.server";
+import { readStopTimeMinutes } from "../features/delivery/route-helpers";
+import { StopTimeCell } from "../features/delivery/route-stop-time-cell";
 import {
   formatInvitePhoneInput,
   formatSavedDriverPhone,
@@ -322,6 +325,11 @@ const driverFeedbackStyle = {
   padding: "10px 12px",
 };
 
+const averageStopTimeCellStyle = {
+  ...tableCellStyle,
+  position: "relative",
+};
+
 const assignedRouteTextStyle = {
   color: "#303030",
   fontWeight: 650,
@@ -572,6 +580,7 @@ function mapDeliveryDriverToRow(driver, storeTimeZone) {
     inviteCode: driver.inviteCode,
     inviteCodeExpiresAt: driver.inviteCodeExpiresAt,
     assignedRoute: { label: "Unassigned" },
+    averageServiceMinutes: Number.isInteger(driver.averageServiceMinutes) ? driver.averageServiceMinutes : null,
     joinedAt: formatDriverTimestamp(driver.createdAt, storeTimeZone) ?? "—",
     lastSeenAt: formatDriverTimestamp(driver.lastSeenAt, storeTimeZone) ?? null,
     recentEvents: formatRecentEvents(driver.recentEventsCount),
@@ -600,6 +609,10 @@ function formatOperationalDriverStatus(value, { invitePending } = {}) {
 
 function formatDriverTimestamp(value, storeTimeZone) {
   return getStoreDate(value, storeTimeZone);
+}
+
+function formatAverageStopTime(minutes) {
+  return Number.isInteger(minutes) ? `${minutes} min` : "—";
 }
 
 function formatRecentEvents(value) {
@@ -698,6 +711,23 @@ export const action = async ({ request }) => {
     return updateDeliveryDriverName(request, driverId, { displayName }, { sessionToken: shopifySessionToken });
   }
 
+  if (intent === "updateDriverAverageStopTime") {
+    const driverId = formText(formData.get("driverId"));
+    const minutesText = formText(formData.get("averageServiceMinutes"));
+    // An empty value removes the average; anything else must be whole minutes.
+    const averageServiceMinutes = minutesText === "" ? null : readStopTimeMinutes(minutesText);
+    if (!driverId || (minutesText !== "" && averageServiceMinutes === null)) {
+      return { driver: null, errors: [{ message: "0~1440 사이의 정수(분)를 입력해주세요. 비워두면 평균 시간을 해제합니다." }] };
+    }
+
+    return updateDeliveryDriverAverageStopTime(
+      request,
+      driverId,
+      { averageServiceMinutes },
+      { sessionToken: formText(formData.get("shopifySessionToken")) },
+    );
+  }
+
   if (intent === "regenerateInviteCode") {
     const driverId = formText(formData.get("driverId"));
     if (!driverId) return { driver: null, errors: [{ message: "배송원 ID가 필요합니다." }] };
@@ -746,6 +776,11 @@ export default function DriversVehiclesPage() {
   const [editingDriverName, setEditingDriverName] = useState("");
   const [driverNameError, setDriverNameError] = useState("");
   const [pendingDriverNameId, setPendingDriverNameId] = useState("");
+  const [averageDraft, setAverageDraft] = useState(null);
+  const [pendingAverageDriverId, setPendingAverageDriverId] = useState("");
+  const [averageSessionError, setAverageSessionError] = useState("");
+  // The update fetcher keeps the answer of its last save, so a save is finished when a different answer arrives.
+  const averageSaveBaseline = useRef(null);
 
   const serverDriverRows = useMemo(
     () => (Array.isArray(drivers) ? drivers : []).map((driver) => mapDeliveryDriverToRow(driver, storeTimeZone)).filter(Boolean),
@@ -785,7 +820,8 @@ export default function DriversVehiclesPage() {
   const driverDeleteDisabled = checkedDriverIds.length === 0 || driverDeleteFetcher.state !== "idle";
   const driverDeleteErrors = Array.isArray(driverDeleteFetcher.data?.errors) ? driverDeleteFetcher.data.errors : [];
   const driverUpdateErrors = Array.isArray(driverUpdateFetcher.data?.errors) ? driverUpdateFetcher.data.errors : [];
-  const visibleErrors = [...errors, ...driverDeleteErrors, ...driverUpdateErrors];
+  const averageSessionErrors = averageSessionError ? [{ message: averageSessionError }] : [];
+  const visibleErrors = [...errors, ...driverDeleteErrors, ...driverUpdateErrors, ...averageSessionErrors];
 
   const selectedCountryCode = countryDialCodeOptions.find((option) => option.id === selectedCountryCodeId) ?? countryDialCodeOptions[0];
   const driverAppDownloadUrl = getDriverDownloadLink(driverDownloadLink);
@@ -858,6 +894,25 @@ export default function DriversVehiclesPage() {
       driverUpdateFetcher.submit(formData, { method: "post" });
     } catch {
       setDriverNameError("Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.");
+    }
+  };
+
+  const saveDriverAverageStopTime = async (driver) => {
+    if (averageDraft?.driverId !== driver.id || driverUpdateFetcher.state !== "idle") return;
+
+    try {
+      const sessionToken = await shopify.idToken();
+      const formData = new FormData();
+      formData.set("_intent", "updateDriverAverageStopTime");
+      formData.set("driverId", driver.id);
+      formData.set("averageServiceMinutes", averageDraft.value.trim());
+      formData.set("shopifySessionToken", sessionToken);
+      setAverageSessionError("");
+      averageSaveBaseline.current = driverUpdateFetcher.data ?? null;
+      setPendingAverageDriverId(driver.id);
+      driverUpdateFetcher.submit(formData, { method: "post" });
+    } catch {
+      setAverageSessionError("Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.");
     }
   };
 
@@ -958,6 +1013,17 @@ export default function DriversVehiclesPage() {
     setDriverNameError("");
     setPendingDriverNameId("");
   }, [driverUpdateFetcher.data, driverUpdateFetcher.state, pendingDriverNameId]);
+
+  useEffect(() => {
+    if (!pendingAverageDriverId || driverUpdateFetcher.state !== "idle") return;
+    if (!driverUpdateFetcher.data || driverUpdateFetcher.data === averageSaveBaseline.current) return;
+
+    setPendingAverageDriverId("");
+    const updateErrors = Array.isArray(driverUpdateFetcher.data.errors) ? driverUpdateFetcher.data.errors : [];
+    // The editor stays open on an error so the value can be fixed; the error shows above the table.
+    if (updateErrors.length > 0 || !driverUpdateFetcher.data.driver) return;
+    setAverageDraft(null);
+  }, [driverUpdateFetcher.data, driverUpdateFetcher.state, pendingAverageDriverId]);
 
   const regenerateInviteCode = async (driverId) => {
     const sessionToken = await shopify.idToken();
@@ -1073,6 +1139,7 @@ export default function DriversVehiclesPage() {
               <col style={{ width: "96px" }} />
               <col style={{ width: "110px" }} />
               <col style={{ width: "110px" }} />
+              <col style={{ width: "130px" }} />
               <col style={{ width: "110px" }} />
             </colgroup>
             <thead>
@@ -1092,6 +1159,7 @@ export default function DriversVehiclesPage() {
                 <th style={tableHeaderCellStyle}>Status</th>
                 <th style={tableHeaderCellStyle}>Joined</th>
                 <th style={tableHeaderCellStyle}>Assigned route</th>
+                <th style={tableHeaderCellStyle}>Average Stop time</th>
                 <th style={tableHeaderCellStyle}>Recent events</th>
               </tr>
             </thead>
@@ -1164,11 +1232,30 @@ export default function DriversVehiclesPage() {
                   <td style={tableCellStyle}>
                     <span style={assignedRouteTextStyle}>{driver.assignedRoute.label}</span>
                   </td>
+                  <td className="stop-time-td" style={averageStopTimeCellStyle}>
+                    <StopTimeCell
+                      allowEmpty
+                      busy={driverUpdateFetcher.state !== "idle"}
+                      canEdit
+                      draft={averageDraft?.driverId === driver.id ? averageDraft.value : null}
+                      label={formatAverageStopTime(driver.averageServiceMinutes)}
+                      onCancel={() => setAverageDraft(null)}
+                      onChange={(value) => setAverageDraft({ driverId: driver.id, value })}
+                      onEdit={() => {
+                        setAverageSessionError("");
+                        setAverageDraft({ driverId: driver.id, value: Number.isInteger(driver.averageServiceMinutes) ? String(driver.averageServiceMinutes) : "" });
+                      }}
+                      onSave={() => saveDriverAverageStopTime(driver)}
+                      orderLabel={driver.displayName}
+                      stopId={driver.id}
+                      subject="average stop time"
+                    />
+                  </td>
                   <td style={tableCellStyle}>{driver.recentEvents}</td>
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={8} style={emptyRowStyle}>No drivers match this search.</td>
+                  <td colSpan={9} style={emptyRowStyle}>No drivers match this search.</td>
                 </tr>
               )}
             </tbody>

@@ -27,7 +27,7 @@ test("Drivers tab has a checkbox selection column wired to bulk delete", () => {
   assert.match(pageActionsBlock, /Invite driver[\s\S]*Download app[\s\S]*Delete selected/);
   assert.match(pageActionsBlock, /onClick=\{openDownloadModal\}/);
   assert.doesNotMatch(pageActionsBlock, /href=|target="_blank"/);
-  assert.match(source, /<td colSpan=\{8\}/);
+  assert.match(source, /<td colSpan=\{9\}/);
 });
 
 test("Drivers download action opens a QR modal without navigating the admin page", () => {
@@ -94,7 +94,7 @@ test("Drivers table exposes a blank-header edit action immediately after the dri
   assert.match(source, /<label[^>]*htmlFor="driver-display-name"/);
   assert.match(source, /id="driver-display-name"/);
   assert.match(source, /maxLength=\{80\}/);
-  assert.match(source, /<td colSpan=\{8\}/);
+  assert.match(source, /<td colSpan=\{9\}/);
 });
 
 test("Drivers assigned route is informational text, not a clickable route link", () => {
@@ -144,4 +144,32 @@ test("Drivers tab keeps app access state internal and places invite actions besi
   assert.match(source, /인증코드 생성/);
   assert.match(source, /재생성/);
   assert.doesNotMatch(source, /marginTop: "4px"/);
+});
+
+test("Drivers table has an Average Stop time column edited in place with the Stop time cell", () => {
+  assert.match(source, /import \{ StopTimeCell \} from "\.\.\/features\/delivery\/route-stop-time-cell"/);
+  assert.match(source, /updateDeliveryDriverAverageStopTime/);
+  assert.match(source, /<th style=\{tableHeaderCellStyle\}>Assigned route<\/th>\s*<th style=\{tableHeaderCellStyle\}>Average Stop time<\/th>\s*<th style=\{tableHeaderCellStyle\}>Recent events<\/th>/);
+  assert.match(source, /<td className="stop-time-td" style=\{averageStopTimeCellStyle\}>/);
+  assert.match(source, /const averageStopTimeCellStyle = \{\s*\.\.\.tableCellStyle,\s*position: "relative",\s*\};/);
+  assert.match(source, /<StopTimeCell\s+allowEmpty/);
+  assert.match(source, /label=\{formatAverageStopTime\(driver\.averageServiceMinutes\)\}/);
+  assert.match(source, /subject="average stop time"/);
+  assert.match(source, /orderLabel=\{driver\.displayName\}/);
+  assert.match(source, /averageServiceMinutes: Number\.isInteger\(driver\.averageServiceMinutes\) \? driver\.averageServiceMinutes : null/);
+  assert.match(source, /return Number\.isInteger\(minutes\) \? `\$\{minutes\} min` : "—"/);
+});
+
+test("Drivers average Stop time save sends one field through the existing update fetcher and keeps the editor open on an error", () => {
+  assert.match(source, /intent === "updateDriverAverageStopTime"/);
+  assert.match(source, /minutesText === "" \? null : readStopTimeMinutes\(minutesText\)/);
+  assert.match(source, /updateDeliveryDriverAverageStopTime\(\s*request,\s*driverId,\s*\{ averageServiceMinutes \},/);
+  assert.match(source, /formData\.set\("_intent", "updateDriverAverageStopTime"\)/);
+  assert.match(source, /formData\.set\("averageServiceMinutes", averageDraft\.value\.trim\(\)\)/);
+  assert.match(source, /driverUpdateFetcher\.submit\(formData, \{ method: "post" \}\)/);
+  assert.match(source, /busy=\{driverUpdateFetcher\.state !== "idle"\}/);
+  assert.match(source, /if \(updateErrors\.length > 0 \|\| !driverUpdateFetcher\.data\.driver\) return;\s*setAverageDraft\(null\);/);
+  // The fetcher still holds the answer of the previous save, so a save is finished when a different answer arrives.
+  assert.match(source, /averageSaveBaseline\.current = driverUpdateFetcher\.data \?\? null;\s*setPendingAverageDriverId\(driver\.id\);/);
+  assert.match(source, /if \(!pendingAverageDriverId \|\| driverUpdateFetcher\.state !== "idle"\) return;\s*if \(!driverUpdateFetcher\.data \|\| driverUpdateFetcher\.data === averageSaveBaseline\.current\) return;/);
 });
