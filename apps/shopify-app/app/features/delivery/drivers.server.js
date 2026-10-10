@@ -1,3 +1,4 @@
+import { STOP_TIME_MAX_MINUTES } from "./route-helpers.js";
 import { deliveryApiRequest } from "./route-plans.server.js";
 
 const DELIVERY_DRIVER_INVITE_SOURCE = "clever-app-driver-invite";
@@ -64,6 +65,33 @@ export async function updateDeliveryDriverName(request, driverId, payload = {}, 
 
   const result = await deliveryApiRequest(request, `/admin/drivers/${encodeURIComponent(normalizedDriverId)}`, {
     body: JSON.stringify({ displayName }),
+    fetch: options.fetch,
+    method: "PATCH",
+    sessionToken: options.sessionToken,
+  });
+
+  return {
+    driver: result.data?.driver ?? null,
+    errors: result.errors,
+  };
+}
+
+// `averageServiceMinutes` is whole minutes, or null to remove the driver's average Stop time.
+export async function updateDeliveryDriverAverageStopTime(request, driverId, payload = {}, options = {}) {
+  const normalizedDriverId = textOrNull(driverId);
+  const { averageServiceMinutes } = payload;
+  const validMinutes = averageServiceMinutes === null
+    || (Number.isInteger(averageServiceMinutes) && averageServiceMinutes >= 0 && averageServiceMinutes <= STOP_TIME_MAX_MINUTES);
+
+  if (!normalizedDriverId || !validMinutes) {
+    return {
+      driver: null,
+      errors: [{ message: "배송원 ID와 0~1440분의 평균 Stop time이 필요합니다." }],
+    };
+  }
+
+  const result = await deliveryApiRequest(request, `/admin/drivers/${encodeURIComponent(normalizedDriverId)}`, {
+    body: JSON.stringify({ averageServiceMinutes }),
     fetch: options.fetch,
     method: "PATCH",
     sessionToken: options.sessionToken,

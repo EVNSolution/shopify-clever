@@ -6,6 +6,7 @@ import {
   createPendingDeliveryDriver,
   deleteDeliveryDriver,
   fetchDeliveryDrivers,
+  updateDeliveryDriverAverageStopTime,
   updateDeliveryDriverName,
 } from "./drivers.server.js";
 
@@ -214,4 +215,71 @@ test("returns a driver-specific error when the delivery drivers API returns a no
       status: 502,
     },
   ]);
+});
+
+test("updates a driver's average Stop time with one field and removes it with null", async () => {
+  const previousBaseUrl = process.env.CLEVER_DELIVERY_API_URL;
+  process.env.CLEVER_DELIVERY_API_URL = "https://delivery.example/";
+  const calls = [];
+  const fetch = async (url, options) => {
+    calls.push({ url, options });
+    return Response.json({ data: { driver: { id: "driver 1", averageServiceMinutes: JSON.parse(options.body).averageServiceMinutes } }, error: null });
+  };
+
+  try {
+    const set = await updateDeliveryDriverAverageStopTime(
+      new Request("https://app.example/app/drivers-vehicles"),
+      "driver 1",
+      { averageServiceMinutes: 7 },
+      { fetch, sessionToken: "client-session-token" },
+    );
+    const cleared = await updateDeliveryDriverAverageStopTime(
+      new Request("https://app.example/app/drivers-vehicles"),
+      "driver 1",
+      { averageServiceMinutes: null },
+      { fetch, sessionToken: "client-session-token" },
+    );
+    const zero = await updateDeliveryDriverAverageStopTime(
+      new Request("https://app.example/app/drivers-vehicles"),
+      "driver 1",
+      { averageServiceMinutes: 0 },
+      { fetch, sessionToken: "client-session-token" },
+    );
+
+    assert.equal(calls.length, 3);
+    for (const call of calls) {
+      assert.equal(call.url, "https://delivery.example/admin/drivers/driver%201");
+      assert.equal(call.options.method, "PATCH");
+      assert.equal(call.options.headers.authorization, "Bearer client-session-token");
+    }
+    assert.deepEqual(calls.map((call) => JSON.parse(call.options.body)), [
+      { averageServiceMinutes: 7 },
+      { averageServiceMinutes: null },
+      { averageServiceMinutes: 0 },
+    ]);
+    assert.equal(set.driver.averageServiceMinutes, 7);
+    assert.equal(cleared.driver.averageServiceMinutes, null);
+    assert.equal(zero.driver.averageServiceMinutes, 0);
+    assert.deepEqual([...set.errors, ...cleared.errors, ...zero.errors], []);
+  } finally {
+    process.env.CLEVER_DELIVERY_API_URL = previousBaseUrl;
+  }
+});
+
+test("does not call the delivery API for a driver average Stop time that is not whole minutes from 0 to 1440", async () => {
+  const calls = [];
+  const fetch = async (url, options) => {
+    calls.push({ url, options });
+    return Response.json({ data: { driver: {} }, error: null });
+  };
+  const request = new Request("https://app.example/app/drivers-vehicles");
+
+  for (const averageServiceMinutes of [undefined, -1, 1441, 2.5, "7", Number.NaN]) {
+    const result = await updateDeliveryDriverAverageStopTime(request, "driver-1", { averageServiceMinutes }, { fetch });
+    assert.equal(result.driver, null);
+    assert.equal(result.errors.length, 1, `${String(averageServiceMinutes)} is rejected`);
+  }
+  const noDriver = await updateDeliveryDriverAverageStopTime(request, " ", { averageServiceMinutes: 5 }, { fetch });
+  assert.equal(noDriver.errors.length, 1);
+  assert.equal(calls.length, 0);
 });

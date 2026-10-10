@@ -19,23 +19,25 @@ function StopTimeIcon({ name }) {
 }
 
 // The page owns the draft. `draft` is null while the cell only shows the label.
-// `orderLabel` names the order in the accessible labels; `stopId` lets the page hand keyboard focus back to the pencil.
-export function StopTimeCell({ busy, canEdit, draft, label, onCancel, onChange, onEdit, onSave, orderLabel, stopId }) {
+// `orderLabel` names the order (or driver) in the accessible labels; `stopId` lets the page hand keyboard focus back to the pencil.
+// `subject` names the time in the accessible labels. `allowEmpty` lets an empty field be saved, for a time that can be removed.
+export function StopTimeCell({ allowEmpty = false, busy, canEdit, draft, label, onCancel, onChange, onEdit, onSave, orderLabel, stopId, subject = "stop time" }) {
   if (!canEdit) return <span className="stop-time-cell">{label}</span>;
   const forOrder = (text) => (orderLabel ? `${text} for ${orderLabel}` : text);
+  const capitalSubject = subject.charAt(0).toUpperCase() + subject.slice(1);
 
   if (draft === null) {
     return (
       <span className="stop-time-cell">
         {label}
-        <button aria-label={forOrder("Edit stop time")} className="stop-time-cell__edit" data-stop-time-edit={stopId} onClick={onEdit} title="Edit stop time" type="button">
+        <button aria-label={forOrder(`Edit ${subject}`)} className="stop-time-cell__edit" data-stop-time-edit={stopId} onClick={onEdit} title={`Edit ${subject}`} type="button">
           <StopTimeIcon name="edit" />
         </button>
       </span>
     );
   }
 
-  const valid = readStopTimeMinutes(draft) !== null;
+  const valid = (allowEmpty && draft === "") || readStopTimeMinutes(draft) !== null;
   const save = () => {
     if (valid && !busy) onSave();
   };
@@ -52,7 +54,7 @@ export function StopTimeCell({ busy, canEdit, draft, label, onCancel, onChange, 
     <span className="stop-time-cell">
       <input
         aria-invalid={!valid}
-        aria-label={forOrder("Stop time in minutes")}
+        aria-label={forOrder(`${capitalSubject} in minutes`)}
         className="stop-time-cell__input"
         inputMode="numeric"
         max={STOP_TIME_MAX_MINUTES}
@@ -62,11 +64,11 @@ export function StopTimeCell({ busy, canEdit, draft, label, onCancel, onChange, 
         readOnly={busy}
         ref={focusField}
         step={1}
-        title={`Whole minutes, 0 to ${STOP_TIME_MAX_MINUTES}`}
+        title={`Whole minutes, 0 to ${STOP_TIME_MAX_MINUTES}${allowEmpty ? "; leave empty to remove it" : ""}`}
         type="number"
         value={draft}
       />
-      <button aria-label="Save stop time" className="stop-time-cell__action" disabled={busy || !valid} onClick={save} title="Save" type="button">
+      <button aria-label={`Save ${subject}`} className="stop-time-cell__action" disabled={busy || !valid} onClick={save} title="Save" type="button">
         <StopTimeIcon name="save" />
       </button>
       <button aria-label="Cancel" className="stop-time-cell__action" onClick={onCancel} title="Cancel" type="button">
