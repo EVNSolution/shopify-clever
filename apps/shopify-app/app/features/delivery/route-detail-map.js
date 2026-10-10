@@ -2,7 +2,7 @@ import { addMapPinImage, createDepartureMarkerImageData, createMapCheckBadgeImag
 import { numberOrUndefined, textOrUndefined } from "./route-helpers.js";
 import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures } from "./route-tracking.js";
 
-import { ORIGINAL_OBSERVATION_SOURCE_ID } from "./route-original-observations.js";
+import { ORIGINAL_OBSERVATION_LAYER_ID, ORIGINAL_OBSERVATION_SOURCE_ID } from "./route-original-observations.js";
 
 const DEFAULT_CENTER = [-79.3832, 43.6532];
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
@@ -234,7 +234,7 @@ function softenRouteColor(routeColor) {
   return `rgb(${mix(color.slice(0, 2))}, ${mix(color.slice(2, 4))}, ${mix(color.slice(4, 6))})`;
 }
 
-function syncRouteDetailLineOrder(map) {
+export function syncRouteDetailLineOrder(map) {
   const firstMarkerLayerId = [
     ROUTE_DETAIL_STOP_POINT_LAYER_ID,
     ROUTE_DETAIL_DEPARTURE_LAYER_ID,
@@ -243,10 +243,12 @@ function syncRouteDetailLineOrder(map) {
     ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
   ].find((layerId) => map.getLayer?.(layerId));
   // Reassert the full stack after either source refreshes, regardless of load order.
+  // The original GPS points go last so a marker refresh never leaves them under the plan.
   for (const layerId of [
     ROUTE_DETAIL_ROUTE_LAYER_ID,
     ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
     ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID,
+    ORIGINAL_OBSERVATION_LAYER_ID,
   ]) {
     if (map.getLayer?.(layerId)) map.moveLayer?.(layerId, firstMarkerLayerId);
   }

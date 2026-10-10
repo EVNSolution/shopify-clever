@@ -36,3 +36,18 @@ Not covered locally: the real page draws on a stubbed map in the fixture, so the
 The authenticated KFood check after the first deployment showed the strip counting `1838 loaded · 1838 plotted` while the map showed no circles. The points were gated on `map.isStyleLoaded()`, which is false while any tile is loading; the page's own layers only need the map to have a style (`isRouteDetailMapStyleReady`). The first sync, at an idle moment, created the source and hid the dotted trail, and the later pages were skipped, so the source stayed empty.
 
 Reproduced on the preview with `?slowTiles=1` (a raster source whose tiles never arrive, `isStyleLoaded()` false): with the old code the strip said `202 loaded · 199 plotted` and the map had no circles; with the points code using the page's readiness check all 199 circles are drawn while `isStyleLoaded()` stays false. Two unit tests cover drawing and removing with `isStyleLoaded()` false and a map without a style.
+
+## Second follow-up: points drawn under the plan line
+
+After the readiness fix was deployed, the authenticated KFood check still showed no red circles along the route while the strip said `1838 loaded · 1838 plotted`. Where the driver followed the planned route, the map showed a blue-gray dotted chain. Only where the driver left the plan (no plan line there) did red circles with a white outline show. The points were drawn, under the semi-transparent plan line.
+
+Cause: every marker sync of the page ends with `syncRouteDetailLineOrder`, which moves the plan line, the tracking connector and the tracking trail to just below the first marker layer. The points layer was inserted once, before the departure pin, and was not part of that stack. The next marker sync put the plan line over it. The synthetic preview draws its own plan and pin layers and never runs a marker sync after the points are added, so it showed the points on top.
+
+Fix: the points layer is now the last layer of the stack that `syncRouteDetailLineOrder` re-asserts (plan, connector, trail, points, then the pins), and it is placed with the same function when it is first added. Test `original GPS points stay above the plan and below the pins through every load order and refresh` runs the real plan, GPS, marker and points syncs in all 24 load orders and then repeated refreshes. It checks that the points are above the plan, the connector and the trail and below the pins and the latest position. It fails on the old code.
+
+Local check (a throwaway fixture that renders the real Routes page with real MapLibre against synthetic transport; not committed): with the old code the points show as a blue-gray dotted chain with red edges, with the new code as a red chain with a white outline above the plan line and below the pin.
+
+![Before: the plan line covers the points](assets/kfood-tracking-raw-gps-under-plan-before-20261010.jpg)
+
+![After: the points are above the plan line](assets/kfood-tracking-raw-gps-above-plan-after-20261010.jpg)
+

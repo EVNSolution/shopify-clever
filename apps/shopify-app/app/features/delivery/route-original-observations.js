@@ -2,6 +2,7 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const QUALITY = new Set(['VALID', 'MISSING', 'INVALID', 'REDACTED']);
 const MAX_WINDOW_MICROS = 86_400_000_000n;
 export const ORIGINAL_OBSERVATION_SOURCE_ID = "route-detail-original-observations";
+export const ORIGINAL_OBSERVATION_LAYER_ID = "route-detail-original-observation-points";
 export const ORIGINAL_OBSERVATIONS_LIMIT = 200;
 export const ORIGINAL_OBSERVATIONS_CAP = 5000;
 
