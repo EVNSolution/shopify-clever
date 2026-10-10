@@ -21,6 +21,12 @@ function Fixture() {
       const map = createMapLibreMap(maplibregl, { container: canvasRef.current, style: { version: 8, sources: {}, layers: [{ id: 'background', type: 'background', paint: { 'background-color': '#edf1ed' } }] }, center: [-79.399,43.7005], zoom: 16, attributionControl: false });
       mapRef.current = map;
       map.on('load', () => {
+        // ?slowTiles=1 adds a raster source whose tiles never arrive (see the contract doc): map.isStyleLoaded() stays false, as on the real map while tiles load.
+        if (new URLSearchParams(location.search).get('slowTiles') === '1') {
+          map.addSource('slow-tiles', { type: 'raster', tiles: ['http://127.0.0.1:4189/{z}/{x}/{y}.png'], tileSize: 256 });
+          map.addLayer({ id: 'slow-tiles', type: 'raster', source: 'slow-tiles' });
+          window.__styleLoaded = () => map.isStyleLoaded();
+        }
         map.addSource('planned', { type: 'geojson', data: { type: 'Feature', geometry: { type: 'LineString', coordinates: [[-79.401,43.6998],[-79.399,43.701],[-79.397,43.7002]] } } });
         map.addLayer({ id: 'route-detail-osrm-route-line', type: 'line', source: 'planned', paint: { 'line-color': '#8a8a8a', 'line-width': 3 } });
         map.addSource('markers', { type: 'geojson', data: { type: 'FeatureCollection', features: [[-79.401,43.6998],[-79.397,43.7002]].map(coordinates => ({ type: 'Feature', geometry: { type: 'Point', coordinates } })) } });

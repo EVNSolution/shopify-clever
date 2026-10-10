@@ -98,6 +98,13 @@ assignment/cursor failure, foreign responses and cap. It is not authenticated
 K-food runtime proof. The production route is not a fixture route and no runtime
 preview bypass is added. Server/mobile/batch/DSV files are not changed.
 
+Slow tiles: `?slowTiles=1` on the preview adds a raster source whose tiles never arrive, so
+`map.isStyleLoaded()` stays false as it does on the real map while tiles load. Start the
+tile server that never answers with
+`node -e "require('node:http').createServer((q,r)=>q.on('close',()=>r.destroy())).listen(4189,'127.0.0.1')"`.
+The points are drawn and removed whenever the map has a style (the check the page's own
+layers use, `isRouteDetailMapStyleReady`), never by waiting for `isStyleLoaded()`.
+
 Release: the original draft (PR #300) was not allowed to deploy. The owner later
 asked for this toggle as part of the 2026-10-09 backlog and for the remaining items
 to be done on 2026-10-10, so it ships to the K-food target through the normal manual

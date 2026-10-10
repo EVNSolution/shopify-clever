@@ -30,3 +30,9 @@ The real Route Detail page against synthetic transport (`scripts/route-status-br
 ![Original points on the same map (synthetic preview): the dotted trail is hidden and the planned route and stops stay](assets/kfood-tracking-raw-gps-points-preview-20261010.jpg)
 
 Not covered locally: the real page draws on a stubbed map in the fixture, so the circle layer was seen only in the preview. Authenticated KFood data is checked after the manual deployment, view only.
+
+## Follow-up: points not drawn on the real map
+
+The authenticated KFood check after the first deployment showed the strip counting `1838 loaded · 1838 plotted` while the map showed no circles. The points were gated on `map.isStyleLoaded()`, which is false while any tile is loading; the page's own layers only need the map to have a style (`isRouteDetailMapStyleReady`). The first sync, at an idle moment, created the source and hid the dotted trail, and the later pages were skipped, so the source stayed empty.
+
+Reproduced on the preview with `?slowTiles=1` (a raster source whose tiles never arrive, `isStyleLoaded()` false): with the old code the strip said `202 loaded · 199 plotted` and the map had no circles; with the points code using the page's readiness check all 199 circles are drawn while `isStyleLoaded()` stays false. Two unit tests cover drawing and removing with `isStyleLoaded()` false and a map without a style.
