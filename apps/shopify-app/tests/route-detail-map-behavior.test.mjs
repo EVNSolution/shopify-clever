@@ -13,7 +13,9 @@ import {
   syncRouteDetailRouteLine,
   syncRouteDetailTrackingVisibility,
 } from "../app/features/delivery/route-detail-map.js";
+import { ORIGINAL_OBSERVATION_LAYER_ID, syncOriginalObservationPoints } from "../app/features/delivery/route-original-observations-map.js";
 import { selectRouteTrackingWindow } from "../app/features/delivery/route-tracking.js";
+import { observation } from "./fixtures/original-observations.mjs";
 
 const TRACKING_LAYER_IDS = [
   "route-detail-live-tracking-trail",
@@ -396,6 +398,39 @@ test("actual GPS lines stay above the plan through every load order and subseque
     for (const name of order) assert.equal(sync[name](), true);
     assertStack();
     for (const name of ["plan", "markers", "gps", "plan"]) {
+      assert.equal(sync[name](), true);
+      assertStack();
+    }
+  }
+});
+
+// The marker sync re-sorts the line stack every time. On the real map that left the plan line over the
+// original GPS points, so the red points showed only as a blue dotted chain where the driver followed the plan.
+test("original GPS points stay above the plan and below the pins through every load order and refresh", () => {
+  const permutations = (items) => items.length < 2 ? [items] : items.flatMap((item, at) => permutations([...items.slice(0, at), ...items.slice(at + 1)]).map((rest) => [item, ...rest]));
+  for (const order of permutations(["plan", "gps", "markers", "points"])) {
+    const fake = createFakeMap();
+    const sync = {
+      plan: () => syncRouteDetailRouteLine(fake.map, {
+        coordinates: [[126.92, 37.51], [126.93, 37.52]], type: "LineString",
+      }, "#006fbb", { isTrackingReference: true }),
+      gps: () => syncRouteDetailLiveTracking(fake.map, null),
+      markers: () => syncRouteDetailMapMarkerLayers(fake.map, null, [], [], "#006fbb"),
+      points: () => syncOriginalObservationPoints(fake.map, [observation(1), observation(2)]),
+    };
+    const assertStack = () => {
+      const index = (id) => fake.layerOrder.indexOf(id);
+      const points = index(ORIGINAL_OBSERVATION_LAYER_ID);
+      assert.notEqual(points, -1, `${order}: points layer exists`);
+      for (const lineId of ["route-detail-osrm-route-line", ...TRACKING_LAYER_IDS.slice(0, 2)]) {
+        assert.ok(index(lineId) < points, `${order}: ${lineId} below the points`);
+      }
+      assert.ok(points < index("route-detail-snapped-stop-points"), `${order}: pins above the points`);
+      assert.ok(points < index(DRIVER_POSITION_LAYER_ID), `${order}: latest position above the points`);
+    };
+    for (const name of order) assert.equal(sync[name](), true);
+    assertStack();
+    for (const name of ["plan", "markers", "gps", "plan", "markers", "points"]) {
       assert.equal(sync[name](), true);
       assertStack();
     }

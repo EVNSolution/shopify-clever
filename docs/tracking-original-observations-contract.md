@@ -105,6 +105,12 @@ tile server that never answers with
 The points are drawn and removed whenever the map has a style (the check the page's own
 layers use, `isRouteDetailMapStyleReady`), never by waiting for `isStyleLoaded()`.
 
+Layer order: the points are above the plan line, the tracking connector and the trail, and
+below the stop pins and the latest position. The page's marker sync re-sorts that stack every
+time (`syncRouteDetailLineOrder`), so the points layer is part of it; before this, the next marker
+sync put the plan line over the points. The preview draws its own plan and pin layers, so the
+order against the real marker sync is pinned by `tests/route-detail-map-behavior.test.mjs`.
+
 Release: the original draft (PR #300) was not allowed to deploy. The owner later
 asked for this toggle as part of the 2026-10-09 backlog and for the remaining items
 to be done on 2026-10-10, so it ships to the K-food target through the normal manual
