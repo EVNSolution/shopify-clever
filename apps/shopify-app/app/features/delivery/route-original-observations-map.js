@@ -1,9 +1,10 @@
 import { ORIGINAL_OBSERVATION_SOURCE_ID, originalObservationFeatures } from './route-original-observations.js';
-import { syncRouteDetailTrackingVisibility } from './route-detail-map.js';
+import { isRouteDetailMapStyleReady, syncRouteDetailTrackingVisibility } from './route-detail-map.js';
 export const ORIGINAL_OBSERVATION_LAYER_ID = 'route-detail-original-observation-points';
 
 export function syncOriginalObservationPoints(map, observations) {
-  if (!map?.isStyleLoaded?.()) return false;
+  // Not isStyleLoaded(): it is false while tiles load, which left the points undrawn on the real map.
+  if (!isRouteDetailMapStyleReady(map)) return false;
   const data = originalObservationFeatures(observations);
   const source = map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID);
   if (source) source.setData(data);
@@ -14,7 +15,7 @@ export function syncOriginalObservationPoints(map, observations) {
 }
 
 export function removeOriginalObservationPoints(map) {
-  if (!map?.isStyleLoaded?.()) return;
+  if (!isRouteDetailMapStyleReady(map)) return;
   if (map.getLayer(ORIGINAL_OBSERVATION_LAYER_ID)) map.removeLayer(ORIGINAL_OBSERVATION_LAYER_ID);
   if (map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID)) map.removeSource(ORIGINAL_OBSERVATION_SOURCE_ID);
   syncRouteDetailTrackingVisibility(map, true);

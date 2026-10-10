@@ -27,3 +27,11 @@ test("the toggle exists on the Tracking tab only and its state lives in the URL"
   assert.match(page, /\{isTrackingMapView && searchParams\.get\("gpsPoints"\) === "raw" \? \(\s*<RouteOriginalGpsPoints/);
   assert.match(page, /onClose=\{\(\) => setSearchParams\(gpsDiagnosticSearchParams\(searchParams, false\), \{ replace: true, preventScrollReset: true \}\)\}/);
 });
+
+test("the points never wait for isStyleLoaded(), which is false while tiles load", () => {
+  const map = readFileSync(new URL("../app/features/delivery/route-original-observations-map.js", import.meta.url), "utf8");
+  assert.doesNotMatch(map, /\.isStyleLoaded\??\.?\(/, "no call of isStyleLoaded");
+  assert.match(map, /if \(!isRouteDetailMapStyleReady\(map\)\) return false;/);
+  assert.doesNotMatch(component, /\.isStyleLoaded\??\.?\(/, "no call of isStyleLoaded");
+  assert.match(component, /leave\(\);\s*removeOriginalObservationPoints\(map\);/);
+});

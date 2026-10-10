@@ -53,7 +53,8 @@ export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, get
       map.off('click', ORIGINAL_OBSERVATION_LAYER_ID, select);
       map.off('mouseenter', ORIGINAL_OBSERVATION_LAYER_ID, enter);
       map.off('mouseleave', ORIGINAL_OBSERVATION_LAYER_ID, leave);
-      if (map.isStyleLoaded()) { leave(); removeOriginalObservationPoints(map); }
+      leave();
+      removeOriginalObservationPoints(map);
     };
   }, [mapReady, mapRef]);
   useEffect(() => { if (mapReady) syncOriginalObservationPoints(mapRef.current, observations); }, [mapReady, mapRef, observations]);

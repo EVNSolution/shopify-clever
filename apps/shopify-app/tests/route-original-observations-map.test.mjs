@@ -32,3 +32,26 @@ test('repeat point toggles remove only owned source/layer and preserve duplicate
   for (let i = 0; i < 3; i++) { syncOriginalObservationPoints(map, [observation(1), observation(2)]); assert.equal(map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID).data.features.length, 2); removeOriginalObservationPoints(map); }
   assert.equal(map.layers.size, 6); assert.equal(map.sources.size, 0);
 });
+
+// On the real map isStyleLoaded() is false while any tile is still loading. The page's own layers only need a style.
+test('points are drawn and removed while tiles are still loading', () => {
+  const map = { ...mapFixture() };
+  map.isStyleLoaded = () => false;
+  map.getStyle = () => ({ layers: [] });
+  syncOriginalObservationPoints(map, [observation(1), observation(2)]);
+  assert.equal(map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID).data.features.length, 2);
+  assert.equal(map.getLayer('route-detail-live-tracking-trail').layout.visibility, 'none');
+  syncOriginalObservationPoints(map, [observation(1), observation(2), observation(3)]);
+  assert.equal(map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID).data.features.length, 3, 'a later page is plotted too');
+  removeOriginalObservationPoints(map);
+  assert.equal(map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID), undefined);
+  assert.equal(map.getLayer('route-detail-live-tracking-trail').layout.visibility, 'visible', 'the dotted trail comes back');
+});
+
+test('a map without a style is left alone', () => {
+  const map = { ...mapFixture() };
+  map.getStyle = () => undefined;
+  assert.equal(syncOriginalObservationPoints(map, [observation(1)]), false);
+  assert.equal(map.sources.size, 0);
+  assert.doesNotThrow(() => removeOriginalObservationPoints(map));
+});

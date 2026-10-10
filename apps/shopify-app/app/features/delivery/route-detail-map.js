@@ -213,7 +213,8 @@ function removeRouteDetailRouteLine(map) {
   }
 }
 
-function isRouteDetailMapStyleReady(map) {
+// The page's own layers are added whenever the map has a style. isStyleLoaded() is also false while any tile is still loading.
+export function isRouteDetailMapStyleReady(map) {
   if (!map) return false;
   if (typeof map.getStyle !== "function") return true;
 
