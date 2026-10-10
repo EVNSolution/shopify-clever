@@ -441,7 +441,7 @@ test("tracking display includes a recovered inferred segment across service-day 
     timeZone: "America/Toronto",
   }));
   assert.deepEqual(features.map((feature) => [feature.properties.trackingType, feature.properties.trackingSource]), [
-    ["trackingConnector", "inferred"],
+    ["trackingTrail", "inferred"],
   ]);
 });
 
@@ -649,7 +649,7 @@ test("a same-watermark snapshot cannot discard a previously received inferred ro
   assert.equal(getRouteTrackingLineFeatures(merged)[0].properties.trackingSource, "inferred");
 });
 
-test("gps quality v4 renders accepted matches and bounded inference while rejecting uncertain raw fallback", () => {
+test("gps quality v4 renders accepted matches and bounded inference as the trail and the rejected tail as a plain connector", () => {
   const coordinates = Array.from({ length: 6 }, (_, index) => [-79.4 + index * 0.001, 43.7 + index * 0.001]);
   const samples = coordinates.map((_, sourceIndex) => ({
     accuracyMeters: 5,
@@ -697,12 +697,104 @@ test("gps quality v4 renders accepted matches and bounded inference while reject
   assert.deepEqual(features.map((feature) => feature.geometry.coordinates), [
     coordinates.slice(0, 3),
     coordinates.slice(2, 5),
+    coordinates.slice(4, 6),
   ]);
-  assert.deepEqual(features.map((feature) => feature.properties.trackingSource), ["matched", "inferred"]);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingType), [
+    "trackingTrail",
+    "trackingTrail",
+    "trackingConnector",
+  ]);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingSource), ["matched", "inferred", "raw"]);
   assert.equal(snapshot.latestPosition.eventId, samples.at(-1).eventId);
 });
 
-test("gps quality v4 rejected ranges stay disconnected while the current position remains available", () => {
+test("gps quality v4 draws plain connectors before the first road line and across spikes, poor fixes and gaps between lines", () => {
+  const coordinates = Array.from({ length: 9 }, (_, index) => [-79.4 + index * 0.001, 43.7]);
+  coordinates[4] = [-79.3, 43.8];
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: sourceIndex === 5 ? 250 : 5,
+    driverId: "driver-1",
+    eventId: `continuous-${sourceIndex}`,
+    gapBefore: sourceIndex === 6,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex, interpolationLevel) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    interpolationLevel,
+  });
+  const matchedStart = [[-79.3991, 43.7001], [-79.3981, 43.7001], [-79.3971, 43.7001]];
+  const inferredEnd = [[-79.3931, 43.7001], [-79.3921, 43.7001]];
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: coordinates.length },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      matchedGeometry: { coordinates: [matchedStart], type: "MultiLineString" },
+      matchedRanges: [range(1, 3, 0)],
+      inferredGeometry: { coordinates: [inferredEnd], type: "MultiLineString" },
+      inferredRanges: [range(7, 8, 1)],
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => [feature.properties.trackingType, feature.properties.trackingSource]), [
+    ["trackingTrail", "matched"],
+    ["trackingTrail", "inferred"],
+    ["trackingConnector", "raw"],
+    ["trackingConnector", "raw"],
+  ]);
+  // Before the first road line: the first fix joined to the line start.
+  assert.deepEqual(features[2].geometry.coordinates, [coordinates[0], matchedStart[0]]);
+  // Between the lines: the spike (4) and the 250 m fix (5) are left out, the gap before 6 is crossed.
+  assert.deepEqual(features[3].geometry.coordinates, [matchedStart.at(-1), coordinates[6], inferredEnd[0]]);
+});
+
+test("gps quality v4 joins two road lines that meet at one fix but not at one point", () => {
+  const coordinates = [[-79.4, 43.7], [-79.399, 43.701], [-79.398, 43.702]];
+  const samples = coordinates.map((_, sourceIndex) => ({
+    accuracyMeters: 5,
+    eventId: `meet-${sourceIndex}`,
+    gapBefore: false,
+    occurredAt: new Date(Date.parse("2026-09-17T13:00:00.000Z") + sourceIndex * 60_000).toISOString(),
+    receivedAt: new Date(Date.parse("2026-09-17T13:00:01.000Z") + sourceIndex * 60_000).toISOString(),
+    sourceIndex,
+  }));
+  const range = (startSourceIndex, endSourceIndex, interpolationLevel) => ({
+    startEventId: samples[startSourceIndex].eventId,
+    endEventId: samples[endSourceIndex].eventId,
+    startOccurredAt: samples[startSourceIndex].occurredAt,
+    endOccurredAt: samples[endSourceIndex].occurredAt,
+    startSourceIndex,
+    endSourceIndex,
+    interpolationLevel,
+  });
+  const matched = [coordinates[0], [-79.3991, 43.7011]];
+  const inferred = [[-79.3989, 43.7009], coordinates[2]];
+  const snapshot = normalizeRouteTrackingSnapshot({
+    policy,
+    recordedPath: { geometry: { coordinates, type: "LineString" }, samples, sourcePointCount: 3 },
+    roadMatchedPath: {
+      qualityVersion: "gps_quality.v4",
+      matchedGeometry: { coordinates: [matched], type: "MultiLineString" },
+      matchedRanges: [range(0, 1, 0)],
+      inferredGeometry: { coordinates: [inferred], type: "MultiLineString" },
+      inferredRanges: [range(1, 2, 1)],
+    },
+  });
+
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingSource), ["matched", "inferred", "raw"]);
+  assert.deepEqual(features[2].geometry.coordinates, [matched[1], inferred[0]]);
+});
+
+test("gps quality v4 rejected ranges are drawn as one plain connector while the current position remains available", () => {
   const coordinates = [[-79.4, 43.7], [-79.399, 43.701], [-79.398, 43.702]];
   const samples = coordinates.map((_, sourceIndex) => ({
     accuracyMeters: 5,
@@ -742,14 +834,18 @@ test("gps quality v4 rejected ranges stay disconnected while the current positio
     },
   });
 
-  assert.deepEqual(getRouteTrackingLineFeatures(snapshot), []);
+  const features = getRouteTrackingLineFeatures(snapshot);
+  assert.deepEqual(features.map((feature) => [feature.properties.trackingType, feature.properties.trackingSource]), [
+    ["trackingConnector", "raw"],
+  ]);
+  assert.deepEqual(features[0].geometry.coordinates, coordinates);
   assert.deepEqual(snapshot.roadMatchedPath.unmatchedRanges.map((range) => (
     Object.hasOwn(range, "interpolationLevel")
   )), [false, false]);
   assert.equal(snapshot.latestPosition.eventId, samples[2].eventId);
 });
 
-test("gps quality v4 date clipping never reconnects a rejected window boundary with raw GPS", () => {
+test("gps quality v4 date clipping draws a clipped window boundary as a plain connector through the fixes of the day", () => {
   const coordinates = [[-79.4, 43.7], [-79.399, 43.701], [-79.398, 43.702]];
   const occurredTimes = [
     "2026-09-18T03:58:00.000Z",
@@ -790,7 +886,9 @@ test("gps quality v4 date clipping never reconnects a rejected window boundary w
   assert.equal(serviceDay.roadMatchedPath.matchedGeometry, null);
   assert.equal(serviceDay.roadMatchedPath.unmatchedRanges[0].reason, "WINDOW_BOUNDARY");
   assert.equal(serviceDay.roadMatchedPath.unmatchedRanges[0].interpolationLevel, 0);
-  assert.deepEqual(getRouteTrackingLineFeatures(serviceDay), []);
+  const features = getRouteTrackingLineFeatures(serviceDay);
+  assert.deepEqual(features.map((feature) => feature.properties.trackingSource), ["raw"]);
+  assert.deepEqual(features[0].geometry.coordinates, coordinates.slice(0, 2));
 });
 
 test("gps quality v2 cached paths remain valid without inference fields", () => {

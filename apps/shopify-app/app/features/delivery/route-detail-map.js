@@ -361,11 +361,7 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       id: ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
       type: "line",
       source: ROUTE_DETAIL_TRACKING_SOURCE_ID,
-      filter: [
-        "all",
-        ["==", ["get", "trackingType"], "trackingConnector"],
-        ["!=", ["get", "trackingSource"], "inferred"],
-      ],
+      filter: ["==", ["get", "trackingType"], "trackingConnector"],
       layout: { "line-cap": "round", "line-join": "round" },
       paint: {
         "line-color": "#68727d",
