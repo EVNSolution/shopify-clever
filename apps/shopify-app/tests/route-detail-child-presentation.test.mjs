@@ -631,7 +631,6 @@ test("child order table columns include a sticky Actions column with the confirm
     "Customer",
     "Items",
     "Method",
-    "Payment method",
     "Payment",
     "Amount",
     "Attributes",
@@ -643,6 +642,7 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) =>/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\} title=\{row\.paymentMethod === ROUTE_EMPTY_LABEL \? undefined : row\.paymentMethod\}>\{row\.paymentMethod\}<\/td>\s*<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
+  assert.doesNotMatch(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.method\}<\/td>/, "the delivery method column is gone");
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\s*\{renderChildRouteAmount\(row, cashByStopId\.get\(row\.deliveryStopId\)\)\}\s*<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{/);
