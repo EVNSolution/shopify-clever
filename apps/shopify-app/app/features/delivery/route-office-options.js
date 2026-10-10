@@ -1,3 +1,5 @@
+import { readStopTimeMinutes } from "./route-helpers.js";
+
 export function normalizeRouteOptions(route = {}) {
   return {
     deliveryProof: {
@@ -24,6 +26,16 @@ export function readRouteOptionsForm(form) {
     },
     tollPolicy,
   };
+}
+
+// The unified Stop time of a new route. It is optional; the options of an existing route never carry it.
+export function readInitialStopTime(form) {
+  const text = String(form.get("serviceMinutes") ?? "").trim();
+  if (text === "") return {};
+  const serviceMinutes = readStopTimeMinutes(text);
+  if (serviceMinutes === null)
+    throw new Error("Enter whole minutes from 0 to 1440 for the Stop time.");
+  return { serviceMinutes };
 }
 
 export function canEditRouteOptions(route) {

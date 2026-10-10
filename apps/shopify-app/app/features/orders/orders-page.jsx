@@ -9,7 +9,7 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { Await, useFetcher, useLoaderData, useNavigate, useNavigation, useRevalidator, useRouteLoaderData, useSearchParams } from "react-router";
 import { buildRouteScopeFromOrders } from "../delivery/route-scope";
 import { routeGroupChildPath, routeGroupPath, withEmbeddedShopifyContext } from "../delivery/route-paths";
-import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
+import { formatRouteDeliveryScope, getRouteGroupChildRouteName, getVisibleRouteGroupChildren, readStopTimeMinutes } from "../delivery/route-helpers";
 import { getAppstleSubscriptionOrderKind } from "../delivery/delivery-labels";
 import { createDepartureMarkerElement } from "../maps/map-markers";
 import { createMapLibreMap } from "../maps/maplibre-map";
@@ -2817,7 +2817,7 @@ function OrdersPageContent({ loaderData }) {
   const [activeOrderDataOrderId, setActiveOrderDataOrderId] = useState(null);
   const [orderDataDraft, setOrderDataDraft] = useState(() => getOrderDataDraft(null));
   const [routePlanTitle, setRoutePlanTitle] = useState(DEFAULT_ROUTE_PLAN_TITLE);
-  const [routeOptions, setRouteOptions] = useState(() => normalizeRouteOptions({}));
+  const [routeOptions, setRouteOptions] = useState(() => ({ ...normalizeRouteOptions({}), serviceMinutes: "" }));
   const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
   const routePlanTitleEditedRef = useRef(false);
   const [routeCreatePending, setRouteCreatePending] = useState(false);
@@ -3235,7 +3235,7 @@ function OrdersPageContent({ loaderData }) {
           ) : null}
           {routeOptionsOpen ? (
             <OfficeDialog title="Route options" onClose={() => setRouteOptionsOpen(false)}>
-              <RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} />
+              <RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} showStopTime />
             </OfficeDialog>
           ) : null}
         </div>
@@ -4295,6 +4295,12 @@ function OrdersPageContent({ loaderData }) {
       return;
     }
 
+    const stopTimeText = String(routeOptions.serviceMinutes ?? "").trim();
+    if (kfoodOfficeEnabled && stopTimeText !== "" && readStopTimeMinutes(stopTimeText) === null) {
+      setCreateRouteClientError("Stop time must be whole minutes from 0 to 1440. Change it in Route options.");
+      return;
+    }
+
     routeCreatePendingRef.current = true;
     setRouteCreatePending(true);
     const routeName = routePlanTitle.trim() || DEFAULT_ROUTE_PLAN_TITLE;
@@ -4319,6 +4325,7 @@ function OrdersPageContent({ loaderData }) {
         formData.set("photoRequired", String(routeOptions.deliveryProof.photoRequired));
         formData.set("signatureRequired", String(routeOptions.deliveryProof.signatureRequired));
         formData.set("tollPolicy", routeOptions.tollPolicy);
+        if (stopTimeText !== "") formData.set("serviceMinutes", stopTimeText);
       }
       formData.set("orderScope", orderFilters.scope);
       formData.set("shopifySessionToken", sessionToken);

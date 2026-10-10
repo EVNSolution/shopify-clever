@@ -64,6 +64,30 @@ test("each route option row changes only its own option", async () => {
   assert.deepEqual(changes.at(-1), defaults);
 });
 
+test("the Stop time field is shown only when asked and changes only its own value", async () => {
+  const { RouteOptionsFields } = await loadComponents();
+  const value = { ...defaults, serviceMinutes: "" };
+  const without = findAll(RouteOptionsFields({ value, onChange() {} }), "input");
+  assert.equal(without.length, 3);
+  const changes = [];
+  const inputs = findAll(RouteOptionsFields({ value, onChange: (next) => changes.push(next), showStopTime: true }), "input");
+  assert.equal(inputs.length, 4);
+  const stopTime = inputs[3];
+  assert.equal(stopTime.props.type, "number");
+  assert.equal(stopTime.props.min, 0);
+  assert.equal(stopTime.props.max, 1440);
+  assert.equal(stopTime.props.step, 1);
+  assert.equal(stopTime.props.value, "");
+  stopTime.props.onChange({ target: { value: "7" } });
+  assert.deepEqual(changes, [{ ...value, serviceMinutes: "7" }]);
+  const html = (serviceMinutes) => renderToStaticMarkup(createElement(RouteOptionsFields, { value: { ...defaults, serviceMinutes }, onChange() {}, showStopTime: true }));
+  assert.match(html(""), /Stop time \(minutes\)/u);
+  assert.match(html(""), /Leave it empty to keep each stop&#x27;s own time/u);
+  for (const valid of ["", "0", "7", "1440"]) assert.doesNotMatch(html(valid), /role="alert"/u, valid);
+  for (const invalid of ["-1", "1441", "7.5", "abc"]) assert.match(html(invalid), /role="alert"[^>]*>Enter whole minutes from 0 to 1440\./u, invalid);
+  assert.doesNotMatch(renderToStaticMarkup(createElement(RouteOptionsFields, { value, onChange() {} })), /Stop time/u);
+});
+
 test("route options open as a labelled modal popup with a default Done action", async () => {
   const { OfficeDialog, RouteOptionsFields } = await loadComponents();
   const fields = createElement(RouteOptionsFields, { value: defaults, onChange() {} });

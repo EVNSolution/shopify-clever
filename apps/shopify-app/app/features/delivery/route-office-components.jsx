@@ -3,6 +3,7 @@ import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useFetcher, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { withEmbeddedShopifyContext } from "./route-paths";
+import { STOP_TIME_MAX_MINUTES, readStopTimeMinutes } from "./route-helpers";
 import {
   canEditRouteOptions,
   formatCashAmount,
@@ -60,6 +61,16 @@ const optionRowStyle = {
   padding: "0 14px",
 };
 const noteStyle = { color: "#616161", fontSize: 13, margin: 0 };
+const stopTimeInputStyle = {
+  border: "1px solid #c9c9c9",
+  borderRadius: 8,
+  boxSizing: "border-box",
+  font: "inherit",
+  height: 32,
+  padding: "0 8px",
+  textAlign: "right",
+  width: 84,
+};
 const actionsStyle = {
   display: "flex",
   flexWrap: "wrap",
@@ -185,8 +196,16 @@ const ROUTE_OPTIONS = [
   },
 ];
 
-export function RouteOptionsFields({ value, onChange, disabled = false }) {
-  return (
+export function RouteOptionsFields({
+  value,
+  onChange,
+  disabled = false,
+  showStopTime = false,
+}) {
+  const stopTime =
+    typeof value.serviceMinutes === "string" ? value.serviceMinutes.trim() : "";
+  const stopTimeInvalid = stopTime !== "" && readStopTimeMinutes(stopTime) === null;
+  const fieldset = (
     <fieldset
       disabled={disabled}
       aria-label="Route options"
@@ -210,7 +229,48 @@ export function RouteOptionsFields({ value, onChange, disabled = false }) {
           {label}
         </label>
       ))}
+      {showStopTime ? (
+        <label
+          style={{
+            ...optionRowStyle,
+            borderTop: "1px solid #e3e3e3",
+            cursor: "default",
+            justifyContent: "space-between",
+            ...(disabled ? { opacity: 0.6 } : null),
+          }}
+        >
+          <span>Stop time (minutes)</span>
+          <input
+            type="number"
+            min={0}
+            max={STOP_TIME_MAX_MINUTES}
+            step={1}
+            inputMode="numeric"
+            value={value.serviceMinutes ?? ""}
+            onChange={(event) =>
+              onChange({ ...value, serviceMinutes: event.target.value })
+            }
+            aria-invalid={stopTimeInvalid}
+            style={stopTimeInputStyle}
+          />
+        </label>
+      ) : null}
     </fieldset>
+  );
+  if (!showStopTime) return fieldset;
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {fieldset}
+      <p style={noteStyle}>
+        Gives every stop of the new route the same Stop time. Leave it empty to
+        keep each stop&apos;s own time.
+      </p>
+      {stopTimeInvalid ? (
+        <p role="alert" style={{ color: "#a32216", fontSize: 13, margin: 0 }}>
+          Enter whole minutes from 0 to 1440.
+        </p>
+      ) : null}
+    </div>
   );
 }
 
