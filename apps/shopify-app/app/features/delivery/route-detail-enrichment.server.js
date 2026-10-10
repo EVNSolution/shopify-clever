@@ -1,3 +1,4 @@
+import { getPaymentGatewayNames } from "../orders/inventory-payment.js";
 import { getRouteGroupChildRoutePlanId, textOrUndefined } from "./route-helpers.js";
 
 export function mergeCurrentChildDirectDetail(childDetails, currentDetail) {
@@ -59,6 +60,7 @@ export function attachDeliveryOrderFieldsToStops(stops, ordersOrLookup) {
     const readiness = firstText(order?.readiness);
     const planningStatus = firstText(order?.planningStatus);
     const serviceType = firstText(order?.serviceType, order?.rawPayload?.serviceType);
+    const paymentGatewayNames = getPaymentGatewayNames(order);
 
     return {
       ...stop,
@@ -70,6 +72,7 @@ export function attachDeliveryOrderFieldsToStops(stops, ordersOrLookup) {
       ...(readiness ? { readiness } : {}),
       ...(planningStatus ? { planningStatus } : {}),
       ...(serviceType ? { serviceType, method: serviceType } : {}),
+      ...(paymentGatewayNames.length > 0 ? { paymentGatewayNames } : {}),
       ...(lineItems && stop?.lineItems == null ? { lineItems } : {}),
       ...(lineItems ? { canonicalLineItems: lineItems } : {}),
     };

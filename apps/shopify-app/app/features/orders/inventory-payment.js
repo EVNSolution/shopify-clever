@@ -8,7 +8,7 @@ function normalizePaymentToken(value) {
   return textOrUndefined(value)?.replace(/\s+/g, "_").toUpperCase() ?? "";
 }
 
-function getPaymentGatewayNames(order) {
+export function getPaymentGatewayNames(order) {
   const values = [
     order?.paymentGatewayNames,
     order?.rawPayload?.paymentGatewayNames,

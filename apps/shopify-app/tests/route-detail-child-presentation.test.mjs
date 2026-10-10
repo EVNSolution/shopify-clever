@@ -591,6 +591,29 @@ test("child order rows preserve flattened address strings from route stop normal
   assert.equal(row.address, "1219 Flat Address Rd, Seoul");
 });
 
+test("child order rows show the payment method of every gateway, not only Cash and e-Transfer", () => {
+  const rows = buildChildRouteOrderRows([
+    { sequence: 1, orderName: "#3001", paymentGatewayNames: ["Cash on Delivery (COD)"], paymentStatus: "PENDING" },
+    { sequence: 2, orderName: "#3002", paymentGatewayNames: ["e-Transfer"], paymentStatus: "PAID" },
+    { sequence: 3, orderName: "#3003", paymentGatewayNames: ["shopify_payments"], paymentStatus: "PAID" },
+    { sequence: 4, orderName: "#3004", paymentGatewayNames: ["PayPal Express Checkout"], paymentStatus: "PAID" },
+    { sequence: 5, orderName: "#3005", paymentGatewayNames: ["Cash", "Interac e-Transfer"], paymentStatus: "PENDING" },
+    { sequence: 6, orderName: "#3006", paymentMethodTitle: "Visa", paymentStatus: "PAID" },
+    { sequence: 7, orderName: "#3007", paymentStatus: "PAID" },
+  ], { ianaTimezone: "America/Toronto" });
+
+  assert.deepEqual(rows.map((row) => row.paymentMethod), [
+    "Cash",
+    "e-Transfer",
+    "Shopify Payments",
+    "PayPal Express Checkout",
+    "Cash / e-Transfer",
+    "Visa",
+    "–",
+  ]);
+  assert.deepEqual(rows.map((row) => row.payment), ["Pending", "Paid", "Paid", "Paid", "Pending", "Paid", "Paid"], "the payment status column is unchanged");
+});
+
 test("child order table columns include a sticky Actions column with the confirmed menu contract", () => {
   const actionsMenuStart = routeDetailSource.indexOf('aria-label={`Actions for ${activeChildStopActionsRow.order}`}');
   const actionsMenuEnd = routeDetailSource.indexOf("</div>,", actionsMenuStart);
@@ -608,6 +631,7 @@ test("child order table columns include a sticky Actions column with the confirm
     "Customer",
     "Items",
     "Method",
+    "Payment method",
     "Payment",
     "Amount",
     "Attributes",
@@ -618,7 +642,7 @@ test("child order table columns include a sticky Actions column with the confirm
   assert.match(routeDetailSource, /routeOrderColumns\.map\(\(column\) =>/);
   assert.match(routeDetailSource, /routeOrderRows\.map\(\(row\) =>/);
   assert.match(routeDetailSource, /<td style=\{childRouteExpectedArrivalCellStyle\}>\{renderChildRouteEta\(row\)\}<\/td>/);
-  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
+  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\} title=\{row\.paymentMethod === ROUTE_EMPTY_LABEL \? undefined : row\.paymentMethod\}>\{row\.paymentMethod\}<\/td>\s*<td style=\{childRouteOrderCellStyle\}>\{row\.payment\}<\/td>/);
   assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\s*\{renderChildRouteAmount\(row, cashByStopId\.get\(row\.deliveryStopId\)\)\}\s*<\/td>/);
   assert.match(routeDetailSource, /const childRouteActionsHeaderCellStyle = \{/);
   assert.match(routeDetailSource, /const childRouteActionsCellStyle = \{/);

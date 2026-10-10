@@ -245,3 +245,26 @@ test("pre-synced route refresh keeps the already partitioned READY route ids", (
   assert.doesNotMatch(preSyncedBranch, /collectRouteRefreshRoutePlanIdsFromOrders/);
   assert.doesNotMatch(preSyncedBranch, /routePlanIds = \[\.\.\.new Set/);
 });
+
+test("carries the payment gateway names of the order to the stop without touching the delivery method", () => {
+  const stops = [
+    { orderName: "#2001", shopifyOrderGid: "gid://shopify/Order/2001" },
+    { orderName: "#2002", shopifyOrderGid: "gid://shopify/Order/2002" },
+    { orderName: "#2003", shopifyOrderGid: "gid://shopify/Order/2003" },
+    { orderName: "#2004", shopifyOrderGid: "gid://shopify/Order/2004" },
+  ];
+  const orders = [
+    { shopifyOrderGid: "gid://shopify/Order/2001", name: "#2001", serviceType: "PICKUP", shopifyOrderSnapshot: { paymentGatewayNames: ["Cash on Delivery (COD)"] } },
+    { shopifyOrderGid: "gid://shopify/Order/2002", name: "#2002", paymentGatewayNames: ["manual", "e-Transfer"] },
+    { shopifyOrderGid: "gid://shopify/Order/2003", name: "#2003", rawPayload: { paymentGatewayNames: ["shopify_payments"] } },
+    { shopifyOrderGid: "gid://shopify/Order/2004", name: "#2004" },
+  ];
+
+  const [cash, transfer, card, none] = attachDeliveryOrderFieldsToStops(stops, orders);
+
+  assert.deepEqual(cash.paymentGatewayNames, ["Cash on Delivery (COD)"]);
+  assert.deepEqual(transfer.paymentGatewayNames, ["manual", "e-Transfer"]);
+  assert.deepEqual(card.paymentGatewayNames, ["shopify_payments"]);
+  assert.equal("paymentGatewayNames" in none, false);
+  assert.equal(cash.method, "PICKUP", "the delivery method is not replaced by the payment method");
+});

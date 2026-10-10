@@ -1,3 +1,4 @@
+import { formatInventoryPaymentMethod } from "../orders/inventory-payment.js";
 import { isCustomRouteStop } from "./custom-stop-form.js";
 import { distanceBetweenCoordinatesMeters, findRouteTrackingDepotReturn } from "./route-tracking.js";
 import {
@@ -19,6 +20,7 @@ export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "customer", label: "Customer" },
   { key: "items", label: "Items" },
   { key: "method", label: "Method" },
+  { key: "paymentMethod", label: "Payment method" },
   { key: "payment", label: "Payment" },
   { key: "amount", label: "Amount" },
   { key: "attributes", label: "Attributes" },
@@ -735,6 +737,12 @@ function getOrderStatusSource(stop) {
   );
 }
 
+// Every gateway of the order, named like the Inventory page: Cash, e-Transfer, Shopify Payments, any other name as it is.
+function formatPaymentMethod(stop) {
+  const method = formatInventoryPaymentMethod(stop);
+  return method === "-" ? EMPTY_LABEL : method;
+}
+
 function formatPaymentStatus(stop) {
   const status = firstText(
     stop?.payment,
@@ -863,6 +871,7 @@ export function buildChildRouteOrderRows(stops, {
       method: serviceType ?? EMPTY_LABEL,
       note: getStopNote(stop),
       payment: formatPaymentStatus(stop),
+      paymentMethod: formatPaymentMethod(stop),
       shippingPriceAmount: numberOrUndefined(stop?.shippingPriceAmount),
       totalShippingPriceAmount: numberOrUndefined(stop?.totalShippingPriceAmount),
       totalShippingPriceCurrencyCode: firstText(stop?.totalShippingPriceCurrencyCode),
