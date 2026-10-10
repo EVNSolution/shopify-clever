@@ -32,6 +32,7 @@ import {
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
   getRouteEndpointMarkerTone,
+  getRoutePlannedTotalSeconds,
   getStopMarkerTone,
   summarizeChildRouteMoney,
   formatStoreLocalDateTimeInput,
@@ -839,7 +840,7 @@ const routeDisabledActionButtonStyle = {
 const routePlanRowsTableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
-  minWidth: "1142px",
+  minWidth: "1238px",
   tableLayout: "fixed",
   width: "100%",
 };
@@ -853,6 +854,7 @@ const routePlanRowsColumnWidths = [
   "74px",
   "76px",
   "82px",
+  "96px",
   "104px",
   "104px",
   "96px",
@@ -2391,16 +2393,6 @@ function isRouteDispatched(routePlan, dispatchResult) {
     || (dispatchMatchesRoute && Boolean(textOrUndefined(dispatchResult?.publishedAt)));
 }
 
-function getOriginalShippingTotalLabel(moneySummary, language) {
-  if (moneySummary.shippingPriceState === "complete") return moneySummary.shippingPriceLabel;
-  if (moneySummary.shippingPriceState === "mixed_currency") {
-    return translate(language, "routes.detail.originalShippingMixed");
-  }
-  return translate(language, "routes.detail.originalShippingMissing", {
-    count: moneySummary.shippingPriceMissingCount,
-  });
-}
-
 function getLocalizedRouteErrorMessage(error, language, context = {}) {
   const message = textOrUndefined(error?.message) ?? translate(language, "routes.detail.errors.unavailable");
   if (error?.code !== "ROUTE_GROUPING_INVALID") return message;
@@ -3077,6 +3069,7 @@ function buildRouteGroupChildRows(routeGroup, childDetailsByRoutePlanId = new Ma
       driverId: textOrUndefined(child?.driverId ?? childRoutePlan?.driverId) ?? null,
       driverLabel: textOrUndefined(child?.driverName ?? childRoutePlan?.driver?.displayName) ?? "Unassigned",
       driveTimeLabel: getRouteMetricLabel(formatRouteDurationSeconds(childRouteMetrics?.durationSeconds)),
+      plannedTotalSeconds: getRoutePlannedTotalSeconds({ ianaTimezone, routeMetrics: childRouteMetrics, routePlan: childRoutePlan, stops }),
       id: routePlanId ?? `group-route-${index}`,
       isCurrent: false,
       optimized,
@@ -4379,6 +4372,15 @@ export default function RouteDetailPage() {
   useEffect(() => {
     setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
   }, [effectiveRoutePlan?.id, routeStartDateTimeValue, routeStartTimeZone]);
+  // Same inputs as the End row of the stop table, so Total time is always End minus Start.
+  const routePlannedTotalSeconds = getRoutePlannedTotalSeconds({
+    executionEvidence: routeExecutionEvidence,
+    ianaTimezone,
+    routeMetrics,
+    routePlan: effectiveRoutePlan,
+    stops: orderedRouteStops,
+  });
+  const routeTotalTime = getRouteMetricLabel(formatRouteDurationSeconds(routePlannedTotalSeconds));
   const currentRouteLineId = effectiveRoutePlan?.id ?? null;
   const currentRouteRowsSource = useMemo(() => (isRouteGroupDetail || !currentRouteLineId
     ? []
@@ -4392,6 +4394,7 @@ export default function RouteDetailPage() {
         driverId: routeDriverId || null,
         driverLabel: routeDriverSummary,
         driveTimeLabel: routeTotalDriveTime,
+        plannedTotalSeconds: routePlannedTotalSeconds,
         id: currentRouteLineId,
         isCurrent: true,
         optimized: routeMetrics ? { metrics: routeMetrics, routeGeometry, routeStopPoints } : null,
@@ -4436,6 +4439,7 @@ export default function RouteDetailPage() {
     routeStartTimeLabel,
     routeStopPoints,
     routeTotalDistance,
+    routePlannedTotalSeconds,
     routeTotalDriveTime,
     routeTotalItems,
     routeTotalWeight,
@@ -8542,6 +8546,7 @@ export default function RouteDetailPage() {
                     <th style={routesDetailHeaderCellStyle}>Delivered</th>
                     <th style={routesDetailHeaderCellStyle}>Attempted</th>
                     <th style={routesDetailHeaderCellStyle}>Total items</th>
+                    <th style={routesDetailHeaderCellStyle}>Total time</th>
                     <th style={routesDetailHeaderCellStyle}>Total drive time</th>
                     <th style={routesDetailHeaderCellStyle}>Total distance</th>
                     <th style={routesDetailHeaderCellStyle}>Total weight</th>
@@ -8615,6 +8620,7 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>{routeRow.deliveredCount}</td>
                       <td style={routesDetailCellStyle}>{routeRow.attemptedCount}</td>
                       <td style={routesDetailCellStyle}>{routeRow.totalItems}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(routeRow.plannedTotalSeconds))}</td>
                       <td style={routesDetailCellStyle}>{routeRow.driveTimeLabel}</td>
                       <td style={routesDetailCellStyle}>{routeRow.totalDistanceLabel}</td>
                       <td style={routesDetailCellStyle}>{routeRow.totalWeightLabel}</td>
@@ -8630,6 +8636,7 @@ export default function RouteDetailPage() {
                       <td style={routesDetailCellStyle}>{allRoutesSummary.delivered}</td>
                       <td style={routesDetailCellStyle}>{allRoutesSummary.attempted}</td>
                       <td style={routesDetailCellStyle}>{allRoutesSummary.allocatedItems}</td>
+                      <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(allRoutesSummary.totalTimeSeconds))}</td>
                       <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDurationSeconds(allRoutesSummary.durationSeconds))}</td>
                       <td style={routesDetailCellStyle}>{getRouteMetricLabel(formatRouteDistanceMeters(allRoutesSummary.distanceMeters))}</td>
                       <td style={routesDetailCellStyle}>{ROUTE_EMPTY_LABEL}</td>
@@ -8895,10 +8902,8 @@ export default function RouteDetailPage() {
                     padding: "10px 14px",
                   }}
                 >
+                  <span>Total time: {routeTotalTime}</span>
                   <span>Total drive time: {routeTotalDriveTime} ({routeTotalDistance})</span>
-                  <span>
-                    {translate(language, "routes.detail.originalShipping")}: {getOriginalShippingTotalLabel(childRouteMoney, language)}
-                  </span>
                   <span>Total price: {childRouteMoney.totalPriceLabel}</span>
                 </div>
               </div>

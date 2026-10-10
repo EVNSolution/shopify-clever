@@ -1,16 +1,17 @@
 export function summarizeAllRoutes(rows) {
   const routes = rows.filter((row) => !row.isUnassigned);
   const sum = (values, field) => values.reduce((total, row) => total + (Number(row[field]) || 0), 0);
-  const metricTotal = (field) => {
-    let total = 0;
+  const total = (read) => {
+    let sumOfRoutes = 0;
     for (const row of routes) {
-      const value = row.optimized?.metrics?.[field];
+      const value = read(row);
       if (value == null && !row.stopsCount) continue;
       if (value == null || !Number.isFinite(Number(value))) return null;
-      total += Number(value);
+      sumOfRoutes += Number(value);
     }
-    return total;
+    return sumOfRoutes;
   };
+  const metricTotal = (field) => total((row) => row.optimized?.metrics?.[field]);
   return {
     routes: routes.length,
     stops: sum(rows, "stopsCount"),
@@ -21,5 +22,6 @@ export function summarizeAllRoutes(rows) {
     attempted: sum(routes, "attemptedCount"),
     durationSeconds: metricTotal("durationSeconds"),
     distanceMeters: metricTotal("distanceMeters"),
+    totalTimeSeconds: total((row) => row.plannedTotalSeconds),
   };
 }

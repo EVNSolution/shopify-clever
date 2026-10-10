@@ -1400,7 +1400,7 @@ test("Route detail renders route lines and a stop timeline below the map", () =>
   assert.match(routeDetailSource, />Delivered<\/th>/);
   assert.match(routeDetailSource, />Attempted<\/th>/);
   assert.match(routeDetailSource, />Total items<\/th>/);
-  assert.match(routeDetailSource, />Total drive time<\/th>/);
+  assert.match(routeDetailSource, />Total time<\/th>\s*<th style=\{routesDetailHeaderCellStyle\}>Total drive time<\/th>/);
   assert.match(routeDetailSource, />Total distance<\/th>/);
   assert.match(routeDetailSource, />Total weight<\/th>/);
   assert.match(routeDetailSource, />Created<\/th>/);
@@ -1607,8 +1607,9 @@ test("child detail supports adding and reversing stops without refreshing over a
 
 test("child detail renders note disclosure and route totals", () => {
   assert.match(routeDetailSource, /type === "note"/);
+  assert.match(routeDetailSource, /Total time: \{routeTotalTime\}/);
   assert.match(routeDetailSource, /Total drive time:/);
-  assert.match(routeDetailSource, /routes\.detail\.originalShipping/);
+  assert.doesNotMatch(routeDetailSource, /originalShipping|Original shipping/);
   assert.match(routeDetailSource, /Total price:/);
 });
 

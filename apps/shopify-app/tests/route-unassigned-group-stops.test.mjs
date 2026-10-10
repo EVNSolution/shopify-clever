@@ -29,6 +29,7 @@ const dependencies = {
   formatRouteStatus: (v) => v,
   getRouteGroupChildRouteName: (_group, child) => `#${child.routeIdx}`,
   getRouteTotalItems: (_plan, stops) => stops.reduce((n, s) => n + s.itemCount, 0),
+  getRoutePlannedTotalSeconds: () => null,
   readRouteOptimizedSnapshot: (v) => v,
   ROUTE_DEFAULT_COLORS: ["#123456"],
   MAP_MARKER_PALETTE: { plannedOrder: { color: "#123456" } },
