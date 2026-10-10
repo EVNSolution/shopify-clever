@@ -12,6 +12,7 @@ import {
   buildRouteEndpointPresentation,
   buildRouteOrderRows,
   getRouteEndpointMarkerTone,
+  getRoutePlannedTotalSeconds,
   getStopMarkerTone,
   ROUTE_MARKER_TONE_COLORS,
   summarizeChildRouteMoney,
@@ -94,6 +95,57 @@ test("route planned return tolerates rounded outbound legs by clamping a tiny ne
   });
 
   assert.equal(endpoints.end.plannedAt, "2026-07-15T13:25:00.000Z");
+});
+
+test("route total time is the planned End minus Start: drive, every Stop time and the return leg", () => {
+  // Start 16:30, five stops of 5 min, 40 min between stops and 5 min back: End 17:40, so 70 min.
+  const input = {
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 2_700 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-10-10T20:30:00.000Z" },
+    stops: [600, 480, 420, 540, 360].map((durationFromPreviousSeconds) => ({ durationFromPreviousSeconds, serviceMinutes: 5 })),
+  };
+  const endpoints = buildRouteEndpointPresentation({ ...input, departureLocation: { address: "4475 Chesswood Dr" }, executionEvidence: {} });
+
+  assert.equal(getRoutePlannedTotalSeconds(input), 4_200);
+  assert.equal(Date.parse(endpoints.end.plannedAt) - Date.parse(endpoints.start.plannedAt), 4_200 * 1_000);
+});
+
+test("route total time includes the wait for a time window", () => {
+  // Arrival 16:40, the window opens 16:50: 10 min wait, 5 min Stop time, 10 min back.
+  assert.equal(getRoutePlannedTotalSeconds({
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_200 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-10-10T20:30:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 600, serviceMinutes: 5, timeWindowStart: "16:50" }],
+  }), 2_100);
+});
+
+test("route total time stops at the last arrival when the route does not return to the depot", () => {
+  assert.equal(getRoutePlannedTotalSeconds({
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_200 },
+    routePlan: { routeEndMode: "END_AT_LAST_STOP", scheduledStartAt: "2026-10-10T20:30:00.000Z" },
+    stops: [
+      { durationFromPreviousSeconds: 600, serviceMinutes: 5 },
+      { durationFromPreviousSeconds: 600, serviceMinutes: 5 },
+    ],
+  }), 1_500);
+});
+
+test("route total time is unknown without a start time, a Stop time or a leg", () => {
+  const base = {
+    ianaTimezone: "America/Toronto",
+    routeMetrics: { durationSeconds: 1_800 },
+    routePlan: { routeEndMode: "RETURN_TO_DEPOT", scheduledStartAt: "2026-10-10T20:30:00.000Z" },
+    stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: 5 }],
+  };
+
+  assert.equal(getRoutePlannedTotalSeconds(base), 2_100);
+  assert.equal(getRoutePlannedTotalSeconds({ ...base, routePlan: { routeEndMode: "RETURN_TO_DEPOT" } }), null);
+  assert.equal(getRoutePlannedTotalSeconds({ ...base, stops: [{ durationFromPreviousSeconds: 1_200, serviceMinutes: null }] }), null);
+  assert.equal(getRoutePlannedTotalSeconds({ ...base, stops: [{ serviceMinutes: 5 }] }), null);
+  assert.equal(getRoutePlannedTotalSeconds({}), null);
 });
 
 test("current departure address is labeled only when it matches the saved depot coordinates", () => {
@@ -972,8 +1024,7 @@ test("child detail keeps dispatch, original shipping, schedule validation, and e
   assert.match(routeDetailSource, /getRouteStartPlanDateError\(routeStartTimeDraft, routePlanDate\)/);
   assert.match(routeDetailSource, /routes\.detail\.schedule\.planDateMismatch/);
   assert.match(routeDetailSource, /totalShippingPriceAmount: numberOrUndefined\(stop\.totalShippingPriceAmount\)/);
-  assert.match(routeDetailSource, /routes\.detail\.originalShippingMissing/);
-  assert.match(routeDetailSource, /routes\.detail\.originalShippingMixed/);
+  assert.doesNotMatch(routeDetailSource, /originalShipping|Original shipping/);
   assert.match(routeDetailSource, /routeExecutionEvidence\?\.start/);
   assert.match(routeDetailSource, /routeExecutionEvidence\?\.completion/);
   assert.match(routeDetailSource, /returnToDepotEvidence\?\.status/);

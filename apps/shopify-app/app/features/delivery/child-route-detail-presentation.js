@@ -239,6 +239,20 @@ function getPlannedRouteEndAt({ ianaTimezone, routeEndMode, routeMetrics, schedu
   return new Date(currentMs).toISOString();
 }
 
+/** Planned time from the scheduled Start to the planned End: drive, waits for time windows and every Stop time. */
+export function getRoutePlannedTotalSeconds({ executionEvidence, ianaTimezone, routeMetrics, routePlan, stops } = {}) {
+  const scheduledStartAt = firstText(routePlan?.scheduledStartAt);
+  const plannedEndAt = getPlannedRouteEndAt({
+    ianaTimezone,
+    routeEndMode: getRouteEndMode(routePlan, executionEvidence),
+    routeMetrics,
+    scheduledStartAt,
+    stops,
+  });
+  const totalMs = Date.parse(plannedEndAt ?? "") - Date.parse(scheduledStartAt ?? "");
+  return Number.isFinite(totalMs) ? totalMs / 1_000 : null;
+}
+
 const MIN_RETURN_LEG_SECONDS = 30;
 
 function sumStopLegs(stops, field) {
