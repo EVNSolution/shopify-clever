@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   normalizeRouteOptions,
+  readInitialStopTime,
   readRouteOptionsForm,
   normalizeCashAmount,
   canEditRouteOptions,
@@ -37,6 +38,22 @@ test("missing options leave proof optional and tolls allowed", () => {
   });
   form.set("tollPolicy", "unsupported");
   assert.throws(() => readRouteOptionsForm(form));
+});
+test("the unified Stop time is optional and limited to whole minutes from 0 to 1440", () => {
+  const read = (value) => {
+    const form = new FormData();
+    if (value !== undefined) form.set("serviceMinutes", value);
+    return readInitialStopTime(form);
+  };
+  for (const empty of [undefined, "", "  "]) assert.deepEqual(read(empty), {});
+  assert.deepEqual(read("0"), { serviceMinutes: 0 });
+  assert.deepEqual(read("7"), { serviceMinutes: 7 });
+  assert.deepEqual(read(" 1440 "), { serviceMinutes: 1440 });
+  for (const bad of ["-1", "1441", "7.5", "abc", "1e2", "٣"]) assert.throws(() => read(bad), /whole minutes/u, bad);
+  // The options of an existing route never carry a Stop time, even if one is posted.
+  const form = new FormData();
+  form.set("serviceMinutes", "7");
+  assert.equal("serviceMinutes" in readRouteOptionsForm(form), false);
 });
 test("policy editing is limited to unpublished unassigned drafts", () => {
   assert.equal(

@@ -42,6 +42,7 @@ CLEVER is an operational routing product. The interface should feel dependable, 
 - Keep the table toolbar in one horizontal row: active conditions, Add filter, Clear all, order/selection counts and actions. Remove the Orders search input. Incoming search URLs remain visible as a removable chip.
 - Route plan keeps its title and Assign action in a single row; omit explanatory copy. The route title input and Order summary remain separate.
 - Expose only supported dimensions: Stop type, Delivery status, Order date, Delivery date, Payment, Fulfillment, Cancellation, Area.
+- The Route options popup of Orders (KFood only) ends with a `Stop time (minutes)` number field. A whole number from 0 to 1440 gives every stop of the new route that Stop time; empty keeps each stop's own time. A value outside the range shows `Enter whole minutes from 0 to 1440.` under the list and blocks `Create route` until it is fixed. The Route options editor of an existing route does not have this field; Stop times of an existing route are edited per stop in Route Detail.
 
 ## Design principles
 

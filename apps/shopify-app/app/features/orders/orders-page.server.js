@@ -1,5 +1,5 @@
 import { isKfoodOfficeEnabled } from "../delivery/route-office-options.server.js";
-import { readRouteOptionsForm } from "../delivery/route-office-options.js";
+import { readInitialStopTime, readRouteOptionsForm } from "../delivery/route-office-options.js";
 import { getOrdersUiFilters as getOrderFiltersFromSearchParams } from "./order-filters-v2.js";
 import { data } from "react-router";
 import { randomUUID } from "node:crypto";
@@ -440,9 +440,9 @@ async function handleOrdersAction(request) {
   const routeScope = JSON.parse(formData.get("routeScope") ?? "null");
   let routeOptions;
   try {
-    const hasOptions = ["photoRequired", "signatureRequired", "tollPolicy"].some(key => formData.has(key));
+    const hasOptions = ["photoRequired", "signatureRequired", "tollPolicy", "serviceMinutes"].some(key => formData.has(key));
     if (hasOptions && !isKfoodOfficeEnabled(session?.shop)) throw new Error("Route options are not available for this store.");
-    if (isKfoodOfficeEnabled(session?.shop)) routeOptions = readRouteOptionsForm(formData);
+    if (isKfoodOfficeEnabled(session?.shop)) routeOptions = { ...readRouteOptionsForm(formData), ...readInitialStopTime(formData) };
   }
   catch (error) { return { errors: [{ message: error.message }] }; }
 
