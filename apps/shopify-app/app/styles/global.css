@@ -1481,6 +1481,32 @@ s-badge {
   outline-offset: 1px;
 }
 
+/* Text variant of the cell above (a driver name), in a td.stop-time-td so the pencil shows on hover too.
+   The text keeps to one line with an ellipsis, and the field fills the cell. */
+.inline-text-cell {
+  display: flex;
+  justify-content: flex-start;
+  min-width: 0;
+}
+
+/* The pencil sits over the right margin of the cell, so the text stops before it. */
+.inline-text-cell__label {
+  margin-right: 18px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inline-text-cell__input {
+  flex: 1 1 0;
+  min-width: 0;
+  text-align: left;
+  width: auto;
+}
+
+.inline-text-cell .stop-time-cell__action { flex: none; }
+
 /* Stop selection: the bar takes the place of the header row of the Route Detail stop table. */
 .stop-select-checkbox {
   accent-color: #303030;
