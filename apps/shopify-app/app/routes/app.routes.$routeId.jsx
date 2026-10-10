@@ -881,6 +881,7 @@ const childRouteOrderColumnWidths = [
   "142px",
   "96px",
   "132px",
+  "132px",
   "104px",
   "124px",
   "94px",
@@ -2845,6 +2846,8 @@ function buildRouteStops(stops) {
       readiness: textOrUndefined(stop.readiness),
       planningStatus: textOrUndefined(stop.planningStatus),
       payment: stop.paymentStatus ?? stop.financialStatus ?? "—",
+      paymentGatewayNames: stop.paymentGatewayNames,
+      paymentMethodTitle: textOrUndefined(stop.paymentMethodTitle),
       attributes: stop.attributes,
       attributesLabel: formatStopAttributes(stop.attributes),
       orderCreatedAt: textOrUndefined(stop.orderCreatedAt ?? stop.createdAt ?? stop.processedAt),
@@ -3665,6 +3668,7 @@ function renderRouteEndpointOrderRow({ endpoint, kind, markerColor, referenceVal
         {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
       </td>
       <td style={childRouteOrderCellStyle}>{endpoint?.driveTime ?? ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
@@ -8827,6 +8831,7 @@ export default function RouteDetailPage() {
                           </button>
                         </td>
                         <td style={childRouteOrderCellStyle}>{row.method}</td>
+                        <td style={childRouteOrderCellStyle} title={row.paymentMethod === ROUTE_EMPTY_LABEL ? undefined : row.paymentMethod}>{row.paymentMethod}</td>
                         <td style={childRouteOrderCellStyle}>{row.payment}</td>
                         <td style={childRouteOrderCellStyle}>
                           {renderChildRouteAmount(row, cashByStopId.get(row.deliveryStopId))}
