@@ -10,7 +10,7 @@ const ICON_PATHS = {
   save: "M9 16.17 4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z",
 };
 
-function StopTimeIcon({ name }) {
+export function StopTimeIcon({ name }) {
   return (
     <svg aria-hidden="true" focusable="false" height="14" viewBox="0 0 24 24" width="14">
       <path d={ICON_PATHS[name]} fill="currentColor" />

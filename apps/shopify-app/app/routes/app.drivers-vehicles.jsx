@@ -12,6 +12,7 @@ import {
   updateDeliveryDriverAverageStopTime,
   updateDeliveryDriverName,
 } from "../features/delivery/drivers.server";
+import { InlineTextCell, focusInlineTextPencil } from "../features/delivery/inline-text-cell";
 import { readStopTimeMinutes } from "../features/delivery/route-helpers";
 import { StopTimeCell } from "../features/delivery/route-stop-time-cell";
 import {
@@ -161,6 +162,9 @@ const toolbarSummaryStyle = {
   whiteSpace: "nowrap",
 };
 
+// The table never gets narrower than minWidth, the width at which every column still reads.
+// An 860 px frame leaves 834 px for the table, so it does not scroll there; a narrower frame scrolls the page, not the table.
+// The surface carries the minimum so that its border still encloses the table.
 const driverTableSurfaceStyle = {
   background: "#ffffff",
   border: "1px solid #d6d6d6",
@@ -169,6 +173,7 @@ const driverTableSurfaceStyle = {
   flex: "1 1 auto",
   flexDirection: "column",
   minHeight: 0,
+  minWidth: "800px",
   overflow: "visible",
 };
 
@@ -180,6 +185,7 @@ const tableWrapStyle = {
   overflow: "visible",
 };
 
+// The Driver column has no width of its own and takes what the percentage columns leave, so a narrow frame cannot squeeze it.
 const tableStyle = {
   borderCollapse: "separate",
   borderSpacing: 0,
@@ -208,12 +214,6 @@ const checkboxHeaderCellStyle = {
   textAlign: "center",
 };
 
-const editHeaderCellStyle = {
-  ...tableHeaderCellStyle,
-  padding: 0,
-  textAlign: "center",
-};
-
 const tableCellStyle = {
   borderBottom: "1px solid #ebebeb",
   color: "#303030",
@@ -229,24 +229,11 @@ const checkboxCellStyle = {
   textAlign: "center",
 };
 
-const editCellStyle = {
+// The pencil of the name cell is placed against this cell, like the one of the Average Stop time cell.
+const driverNameCellStyle = {
   ...tableCellStyle,
-  padding: 0,
-  textAlign: "center",
-};
-
-const editButtonStyle = {
-  alignItems: "center",
-  background: "transparent",
-  border: 0,
-  borderRadius: "6px",
-  color: "#616161",
-  cursor: "pointer",
-  display: "inline-flex",
-  height: "28px",
-  justifyContent: "center",
-  padding: 0,
-  width: "28px",
+  fontWeight: 700,
+  position: "relative",
 };
 
 const appAccessCellStyle = {
@@ -259,6 +246,7 @@ const appAccessCellStyle = {
 const appAccessInlineStyle = {
   alignItems: "center",
   display: "flex",
+  flexWrap: "wrap",
   gap: "5px",
   maxWidth: "100%",
   minWidth: 0,
@@ -497,23 +485,6 @@ const phoneInputStyle = {
   minHeight: "40px",
   minWidth: 0,
   width: "100%",
-};
-
-const driverNameInputStyle = {
-  ...searchInputStyle,
-  boxSizing: "border-box",
-  flex: "0 0 auto",
-  minHeight: "40px",
-  minWidth: 0,
-  width: "100%",
-};
-
-const fieldLabelStyle = {
-  color: "#303030",
-  display: "grid",
-  fontSize: "13px",
-  fontWeight: 700,
-  gap: "6px",
 };
 
 const modalHelpStyle = {
@@ -772,15 +743,15 @@ export default function DriversVehiclesPage() {
   const [pendingDownloadLink, setPendingDownloadLink] = useState("");
   const [checkedDriverIds, setCheckedDriverIds] = useState([]);
   const [deletedDriverIds, setDeletedDriverIds] = useState([]);
-  const [editingDriver, setEditingDriver] = useState(null);
-  const [editingDriverName, setEditingDriverName] = useState("");
-  const [driverNameError, setDriverNameError] = useState("");
-  const [pendingDriverNameId, setPendingDriverNameId] = useState("");
+  const [nameDraft, setNameDraft] = useState(null);
+  const [pendingNameDriverId, setPendingNameDriverId] = useState("");
+  const [nameSessionError, setNameSessionError] = useState("");
   const [averageDraft, setAverageDraft] = useState(null);
   const [pendingAverageDriverId, setPendingAverageDriverId] = useState("");
   const [averageSessionError, setAverageSessionError] = useState("");
   // The update fetcher keeps the answer of its last save, so a save is finished when a different answer arrives.
   const averageSaveBaseline = useRef(null);
+  const nameSaveBaseline = useRef(null);
 
   const serverDriverRows = useMemo(
     () => (Array.isArray(drivers) ? drivers : []).map((driver) => mapDeliveryDriverToRow(driver, storeTimeZone)).filter(Boolean),
@@ -821,7 +792,8 @@ export default function DriversVehiclesPage() {
   const driverDeleteErrors = Array.isArray(driverDeleteFetcher.data?.errors) ? driverDeleteFetcher.data.errors : [];
   const driverUpdateErrors = Array.isArray(driverUpdateFetcher.data?.errors) ? driverUpdateFetcher.data.errors : [];
   const averageSessionErrors = averageSessionError ? [{ message: averageSessionError }] : [];
-  const visibleErrors = [...errors, ...driverDeleteErrors, ...driverUpdateErrors, ...averageSessionErrors];
+  const nameSessionErrors = nameSessionError ? [{ message: nameSessionError }] : [];
+  const visibleErrors = [...errors, ...driverDeleteErrors, ...driverUpdateErrors, ...averageSessionErrors, ...nameSessionErrors];
 
   const selectedCountryCode = countryDialCodeOptions.find((option) => option.id === selectedCountryCodeId) ?? countryDialCodeOptions[0];
   const driverAppDownloadUrl = getDriverDownloadLink(driverDownloadLink);
@@ -861,39 +833,23 @@ export default function DriversVehiclesPage() {
     }
   }
 
-  const openDriverNameEditor = (driver) => {
-    setEditingDriver(driver);
-    setEditingDriverName(driver.displayName);
-    setDriverNameError("");
-  };
-
-  const closeDriverNameEditor = () => {
-    if (driverUpdateFetcher.state !== "idle") return;
-    setEditingDriver(null);
-    setEditingDriverName("");
-    setDriverNameError("");
-  };
-
-  const saveDriverName = async () => {
-    const displayName = editingDriverName.trim();
-    if (!editingDriver?.id || !displayName || displayName.length > 80) {
-      setDriverNameError("1~80자의 배송원 이름을 입력해주세요.");
-      return;
-    }
-    if (driverUpdateFetcher.state !== "idle") return;
+  const saveDriverName = async (driver) => {
+    const displayName = nameDraft?.driverId === driver.id ? nameDraft.value.trim() : "";
+    if (!displayName || displayName.length > 80 || driverUpdateFetcher.state !== "idle") return;
 
     try {
       const sessionToken = await shopify.idToken();
       const formData = new FormData();
       formData.set("_intent", "updateDriverName");
-      formData.set("driverId", editingDriver.id);
+      formData.set("driverId", driver.id);
       formData.set("displayName", displayName);
       formData.set("shopifySessionToken", sessionToken);
-      setPendingDriverNameId(editingDriver.id);
-      setDriverNameError("");
+      setNameSessionError("");
+      nameSaveBaseline.current = driverUpdateFetcher.data ?? null;
+      setPendingNameDriverId(driver.id);
       driverUpdateFetcher.submit(formData, { method: "post" });
     } catch {
-      setDriverNameError("Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.");
+      setNameSessionError("Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.");
     }
   };
 
@@ -998,21 +954,17 @@ export default function DriversVehiclesPage() {
   }, [driverDeleteFetcher.data, driverDeleteFetcher.state]);
 
   useEffect(() => {
-    if (!pendingDriverNameId || driverUpdateFetcher.state !== "idle" || !driverUpdateFetcher.data) return;
+    if (!pendingNameDriverId || driverUpdateFetcher.state !== "idle") return;
+    if (!driverUpdateFetcher.data || driverUpdateFetcher.data === nameSaveBaseline.current) return;
 
+    setPendingNameDriverId("");
     const updateErrors = Array.isArray(driverUpdateFetcher.data.errors) ? driverUpdateFetcher.data.errors : [];
-    if (updateErrors.length > 0) {
-      setDriverNameError(updateErrors[0]?.message ?? "배송원 이름을 수정하지 못했습니다.");
-      setPendingDriverNameId("");
-      return;
-    }
-
-    if (!driverUpdateFetcher.data.driver) return;
-    setEditingDriver(null);
-    setEditingDriverName("");
-    setDriverNameError("");
-    setPendingDriverNameId("");
-  }, [driverUpdateFetcher.data, driverUpdateFetcher.state, pendingDriverNameId]);
+    // The editor stays open on an error so the name can be fixed; the error shows above the table.
+    if (updateErrors.length > 0 || !driverUpdateFetcher.data.driver) return;
+    // The person may have opened another name while this one was saving; that one stays open.
+    setNameDraft((draft) => (draft?.driverId === pendingNameDriverId ? null : draft));
+    focusInlineTextPencil(pendingNameDriverId);
+  }, [driverUpdateFetcher.data, driverUpdateFetcher.state, pendingNameDriverId]);
 
   useEffect(() => {
     if (!pendingAverageDriverId || driverUpdateFetcher.state !== "idle") return;
@@ -1133,14 +1085,13 @@ export default function DriversVehiclesPage() {
           <table aria-label="Driver list" style={tableStyle}>
             <colgroup>
               <col style={{ width: "40px" }} />
-              <col style={{ width: "14.4%" }} />
-              <col style={{ width: "40px" }} />
-              <col style={{ width: "250px" }} />
-              <col style={{ width: "96px" }} />
-              <col style={{ width: "110px" }} />
-              <col style={{ width: "110px" }} />
-              <col style={{ width: "130px" }} />
-              <col style={{ width: "110px" }} />
+              <col />
+              <col style={{ width: "18.5%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "11.5%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "14.5%" }} />
+              <col style={{ width: "12.5%" }} />
             </colgroup>
             <thead>
               <tr>
@@ -1154,7 +1105,6 @@ export default function DriversVehiclesPage() {
                   />
                 </th>
                 <th style={tableHeaderCellStyle}>Driver</th>
-                <th aria-label="Edit driver name" style={editHeaderCellStyle}></th>
                 <th style={tableHeaderCellStyle}>Phone</th>
                 <th style={tableHeaderCellStyle}>Status</th>
                 <th style={tableHeaderCellStyle}>Joined</th>
@@ -1174,18 +1124,27 @@ export default function DriversVehiclesPage() {
                       onChange={() => toggleDriverCheck(driver.id)}
                     />
                   </td>
-                  <td style={tableCellStyle}>
-                    <strong>{driver.displayName}</strong>
-                  </td>
-                  <td style={editCellStyle}>
-                    <button
-                      type="button"
-                      aria-label={`Edit ${driver.displayName} name`}
-                      style={editButtonStyle}
-                      onClick={() => openDriverNameEditor(driver)}
-                    >
-                      <s-icon type="edit" size="base" color="subdued"></s-icon>
-                    </button>
+                  <td className="stop-time-td" style={driverNameCellStyle}>
+                    <InlineTextCell
+                      busy={driverUpdateFetcher.state !== "idle"}
+                      draft={nameDraft?.driverId === driver.id ? nameDraft.value : null}
+                      editLabel={`Edit ${driver.displayName} name`}
+                      inputLabel="Driver name"
+                      itemId={driver.id}
+                      label={driver.displayName}
+                      maxLength={80}
+                      onCancel={() => {
+                        setNameDraft(null);
+                        focusInlineTextPencil(driver.id);
+                      }}
+                      onChange={(value) => setNameDraft({ driverId: driver.id, value })}
+                      onEdit={() => {
+                        setNameSessionError("");
+                        setNameDraft({ driverId: driver.id, value: driver.displayName });
+                      }}
+                      onSave={() => saveDriverName(driver)}
+                      saveLabel="Save driver name"
+                    />
                   </td>
                   <td style={appAccessCellStyle}>
                     <span style={appAccessInlineStyle}>
@@ -1255,55 +1214,13 @@ export default function DriversVehiclesPage() {
                 </tr>
               )) : (
                 <tr>
-                  <td colSpan={9} style={emptyRowStyle}>No drivers match this search.</td>
+                  <td colSpan={8} style={emptyRowStyle}>No drivers match this search.</td>
                 </tr>
               )}
             </tbody>
           </table>
         </div>
       </div>
-
-      {editingDriver ? (
-        <div style={modalBackdropStyle} role="presentation">
-          <div role="dialog" aria-modal="true" aria-label="Edit driver name" style={modalStyle}>
-            <div style={modalHeaderStyle}>
-              <h2 style={modalTitleStyle}>Edit driver</h2>
-              <button type="button" aria-label="Close edit driver" style={closeButtonStyle} onClick={closeDriverNameEditor}>×</button>
-            </div>
-            <div style={modalBodyStyle}>
-              <label style={fieldLabelStyle} htmlFor="driver-display-name">
-                Driver name
-                <input
-                  id="driver-display-name"
-                  maxLength={80}
-                  style={driverNameInputStyle}
-                  type="text"
-                  value={editingDriverName}
-                  onChange={(event) => {
-                    setEditingDriverName(event.currentTarget.value);
-                    setDriverNameError("");
-                  }}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter") saveDriverName();
-                  }}
-                />
-              </label>
-              {driverNameError ? <p style={modalHelpStyle} role="alert">{driverNameError}</p> : null}
-            </div>
-            <div style={modalFooterStyle}>
-              <button type="button" style={secondaryButtonStyle} onClick={closeDriverNameEditor}>Cancel</button>
-              <button
-                type="button"
-                style={editingDriverName.trim() && driverUpdateFetcher.state === "idle" ? primaryButtonStyle : disabledActionButtonStyle}
-                disabled={!editingDriverName.trim() || driverUpdateFetcher.state !== "idle"}
-                onClick={saveDriverName}
-              >
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
 
       {downloadOpen ? (
         <div style={modalBackdropStyle} role="presentation">
