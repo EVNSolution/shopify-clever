@@ -318,6 +318,13 @@ const routeInProgressBadgeStyle = {
   color: "#00527c",
 };
 
+// A Ready route that was sent to its driver; its own colour, since In progress already uses the blue.
+const routeDispatchedBadgeStyle = {
+  ...routeStatusBadgeStyle,
+  background: "#ebe6ff",
+  color: "#4a2fb3",
+};
+
 const routeCompletedBadgeStyle = {
   ...routeStatusBadgeStyle,
   background: "#e3f1df",
@@ -691,8 +698,17 @@ function filterRouteRows(routeRows, routeFilters) {
     ];
 }
 
-function getStatusBadgeStyle(status) {
-  switch (formatRouteStatus(status)) {
+function isDispatchedReadyRoute(route) {
+  return formatRouteStatus(route.status) === "Ready" && Boolean(route.publishedAt);
+}
+
+function getRouteStatusKey(route) {
+  return isDispatchedReadyRoute(route) ? "dispatched" : formatRouteStatus(route.status).toLowerCase().replaceAll(" ", "_");
+}
+
+function getStatusBadgeStyle(route) {
+  if (isDispatchedReadyRoute(route)) return routeDispatchedBadgeStyle;
+  switch (formatRouteStatus(route.status)) {
     case "Ready":
       return routeReadyBadgeStyle;
     case "In progress":
@@ -1026,7 +1042,7 @@ export default function RoutesPage() {
                       </span>
                     </td>
                     <td style={routeTableCellStyle}>
-                      <span style={getStatusBadgeStyle(route.status)}>{route.isClickable ? translate(language, `routes.status.${formatRouteStatus(route.status).toLowerCase().replaceAll(" ", "_")}`) : "-"}</span>
+                      <span style={getStatusBadgeStyle(route)}>{route.isClickable ? translate(language, `routes.status.${getRouteStatusKey(route)}`) : "-"}</span>
                     </td>
                     <td style={routeTableCellStyle}>{route.driver ?? "-"}</td>
                     <td style={routeTableCellStyle}>{formatRouteInstant(route.startTime, route.startTimeZone ?? routeTimeZones[route.id])}</td>

@@ -504,3 +504,21 @@ test("compact Routes-list groups preserve row identity, summaries, colors, total
     "routePlan:ordinary",
   ]);
 });
+
+test("rows carry the published time so the list can show Dispatched for a Ready route", () => {
+  const [published] = buildRouteRows([{ id: "s", name: "S", status: "READY", publishedAt: "2026-10-10T12:46:23.352Z" }]);
+  assert.equal(published.publishedAt, "2026-10-10T12:46:23.352Z");
+  const [unpublished] = buildRouteRows([{ id: "u", name: "U", status: "READY" }]);
+  assert.equal(unpublished.publishedAt, null);
+
+  const routeGroups = [{
+    id: "g",
+    children: [
+      { routeIdx: 1, routePlanId: "c1", routePlan: { id: "c1", name: "C1" } },
+      { routeIdx: 2, routePlanId: "c2", routePlan: { id: "c2", name: "C2" }, publishedAt: "2026-10-10T12:40:16.815Z" },
+    ],
+  }];
+  const rows = buildRouteRows([{ id: "c1", name: "C1", status: "READY", publishedAt: "2026-10-10T12:39:20.292Z" }], routeGroups);
+  assert.equal(rows.find((row) => row.id === "c1").publishedAt, "2026-10-10T12:39:20.292Z");
+  assert.equal(rows.find((row) => row.id === "c2").publishedAt, "2026-10-10T12:40:16.815Z");
+});
