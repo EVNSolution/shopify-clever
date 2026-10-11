@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react";
 import {
   Outlet,
   PrefetchPageLinks,
+  useFetchers,
   useLoaderData,
   useLocation,
   useNavigate,
@@ -87,6 +88,19 @@ function emitAppNavigationMetric(metric) {
       method: "POST",
     }).catch(() => {});
   }
+}
+
+// A page load or a submitted operation (not a background fetcher load) counts as busy, so every
+// action started in CLEVER has a visible loading state without the bar flickering on polling pages.
+function isAppBusy(navigationState, fetcherStates) {
+  return navigationState !== "idle" || fetcherStates.some((state) => state === "submitting");
+}
+
+function AppBusyBar() {
+  const navigation = useNavigation();
+  const fetchers = useFetchers();
+  if (!isAppBusy(navigation.state, fetchers.map((fetcher) => fetcher.state))) return null;
+  return <div aria-busy="true" aria-label="Loading" className="clever-busy-bar" role="progressbar"></div>;
 }
 
 function useAppNavigationPerformance() {
@@ -251,6 +265,7 @@ export default function App() {
 
   return (
     <AppProvider embedded apiKey={apiKey}>
+      <AppBusyBar />
       {intentPrefetchPage ? (
         <PrefetchPageLinks page={intentPrefetchPage} />
       ) : null}

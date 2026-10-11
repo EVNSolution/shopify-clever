@@ -3224,7 +3224,7 @@ function OrdersPageContent({ loaderData }) {
             style={isRefreshingAllRoutes ? disabledPlanButtonStyle : addToPlanButtonStyle}
             disabled={isRefreshingAllRoutes}
             onClick={handleRefreshAllRoutes}
-          >{ordersRefreshButtonLabel}</button>
+          >{isRefreshingAllRoutes ? <span aria-hidden="true" className="clever-busy-spinner"></span> : null}{ordersRefreshButtonLabel}</button>
           {kfoodOfficeEnabled && !isMapWide ? (
             <button
               type="button"
