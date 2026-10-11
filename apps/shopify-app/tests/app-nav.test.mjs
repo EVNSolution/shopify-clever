@@ -110,3 +110,13 @@ test("app additional route is removed from the visible app surface", () => {
   );
   assert.doesNotMatch(appRouteSource, /additional/i);
 });
+
+test("app shell shows a busy bar while a navigation or a submitted operation is in flight", () => {
+  assert.match(appRouteSource, /\n  useFetchers,\n/);
+  assert.match(
+    appRouteSource,
+    /function isAppBusy\(navigationState, fetcherStates\) \{\s*return navigationState !== "idle" \|\| fetcherStates\.some\(\(state\) => state === "submitting"\);/,
+  );
+  assert.match(appRouteSource, /<AppProvider embedded apiKey=\{apiKey\}>\s*<AppBusyBar \/>/);
+  assert.match(appRouteSource, /className="clever-busy-bar" role="progressbar"/);
+});
