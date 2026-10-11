@@ -194,6 +194,7 @@ const routeTableCellStyle = {
 const routeNameCellStyle = {
   ...routeTableCellStyle,
   fontWeight: 650,
+  position: "relative",
 };
 
 const routeNameContentStyle = {
@@ -201,6 +202,12 @@ const routeNameContentStyle = {
   display: "flex",
   gap: "8px",
   minWidth: 0,
+};
+
+// Leaves room for the group band (6 px) plus the usual gap, so the name keeps its place.
+const routeNameContentWithBandStyle = {
+  ...routeNameContentStyle,
+  paddingLeft: "14px",
 };
 
 const routeNumberHeaderCellStyle = {
@@ -227,10 +234,12 @@ const routeCheckboxHeaderCellStyle = {
   textAlign: "center",
 };
 
+// The band fills the whole name cell, so the rows of one group read as one continuous band.
 const routeGroupMarkerStyle = {
-  display: "block",
-  flex: "0 0 6px",
-  height: "24px",
+  bottom: 0,
+  left: 0,
+  position: "absolute",
+  top: 0,
   width: "6px",
 };
 
@@ -1004,7 +1013,7 @@ export default function RoutesPage() {
                       ) : null}
                     </td>
                     <td style={routeNameCellStyle}>
-                      <span style={routeNameContentStyle}>
+                      <span style={route.groupAccentColor ? routeNameContentWithBandStyle : routeNameContentStyle}>
                         {route.groupAccentColor ? (
                           <span
                             aria-hidden="true"

@@ -437,7 +437,12 @@ test("Routes table renders the group marker inside the route name cell", () => {
   assert.match(routesPageSource, /background: route\.groupAccentColor/);
   assert.match(routesPageSource, /onMouseEnter=\{\(event\) => openRouteGroupMarkerTooltip\(event, route\)\}/);
   assert.match(routesPageSource, /onMouseLeave=\{closeRouteGroupMarkerTooltip\}/);
-  assert.match(routesPageSource, /const routeGroupMarkerStyle = \{[\s\S]*height: "24px"[\s\S]*width: "6px"/);
+  // The band covers the whole name cell (no gap above or below it between the rows of one group).
+  assert.match(routesPageSource, /const routeGroupMarkerStyle = \{\s*bottom: 0,\s*left: 0,\s*position: "absolute",\s*top: 0,\s*width: "6px",\s*\}/);
+  assert.doesNotMatch(routesPageSource, /const routeGroupMarkerStyle = \{[\s\S]*?height: "24px"/);
+  assert.match(routesPageSource, /const routeNameCellStyle = \{[\s\S]*?position: "relative",[\s\S]*?\}/);
+  assert.match(routesPageSource, /const routeNameContentWithBandStyle = \{\s*\.\.\.routeNameContentStyle,\s*paddingLeft: "14px",\s*\}/);
+  assert.match(routesPageSource, /<span style=\{route\.groupAccentColor \? routeNameContentWithBandStyle : routeNameContentStyle\}>/);
   assert.doesNotMatch(routesPageSource, /title=\{route\.(?:isRouteGroup|groupAccentColor)/);
   assert.match(routesPageSource, /const \[routeGroupMarkerTooltip, setRouteGroupMarkerTooltip\] = useState\(null\)/);
   assert.match(routesPageSource, /getBoundingClientRect\(\)/);
