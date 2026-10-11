@@ -1635,3 +1635,17 @@ test("Routes table shows Dispatched for a Ready route that has a published time"
   assert.match(i18nSource, /"routes\.status\.dispatched": "Dispatched"/);
   assert.match(i18nSource, /"routes\.status\.dispatched": "배차됨"/);
 });
+
+test("Routes list asks for confirmation that names the selected routes before deleting them", () => {
+  const handler = routesPageSource.slice(
+    routesPageSource.indexOf("async function handleDeleteSelectedRoutes() {"),
+    routesPageSource.indexOf("if (!isRoutesIndex) return <Outlet />;"),
+  );
+  assert.match(handler, /const selectedRoutes = selectableRouteRows\.filter\(\(route\) => checkedRouteIdSet\.has\(route\.deleteKey\)\);/);
+  assert.match(handler, /window\.confirm\(translate\(language, "routes\.list\.deleteConfirm", \{\s*count: selectedRoutes\.length,\s*names: selectedRoutes\.map\(\(route\) => `- \$\{route\.route\}`\)\.join\("\\n"\),\s*\}\)\)/);
+  assert.ok(handler.indexOf("window.confirm(") < handler.indexOf("routeDeleteFetcher.submit("));
+  assert.match(handler, /if \(!confirmed\) return;/);
+  const i18nSource = readFileSync(new URL("../app/i18n/i18n.js", import.meta.url), "utf8");
+  assert.match(i18nSource, /"routes\.list\.deleteConfirm": "Delete \{count\} route\(s\)\? This cannot be undone\.\\n\{names\}"/);
+  assert.match(i18nSource, /"routes\.list\.deleteConfirm": "경로 \{count\}개를 삭제합니다\. 되돌릴 수 없습니다\.\\n\{names\}"/);
+});

@@ -915,6 +915,14 @@ export default function RoutesPage() {
 
   async function handleDeleteSelectedRoutes() {
     if (routeDeleteDisabled) return;
+    // The office once deleted every route of a copied group with one Delete, believing one row was
+    // selected; the dialog names what is about to go, as the Route Detail page already does.
+    const selectedRoutes = selectableRouteRows.filter((route) => checkedRouteIdSet.has(route.deleteKey));
+    const confirmed = window.confirm(translate(language, "routes.list.deleteConfirm", {
+      count: selectedRoutes.length,
+      names: selectedRoutes.map((route) => `- ${route.route}`).join("\n"),
+    }));
+    if (!confirmed) return;
 
     const formData = new FormData();
     formData.set("_intent", "deleteRoutePlan");
