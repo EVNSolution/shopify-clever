@@ -134,8 +134,51 @@ s-badge {
   to { transform: rotate(360deg); }
 }
 
+/* Loading state of a button that runs an office operation (same ring as the order search). */
+.clever-busy-spinner {
+  animation: order-search-spin 750ms linear infinite;
+  border: 2px solid #dce5f4;
+  border-radius: 50%;
+  border-top-color: #005bd3;
+  box-sizing: border-box;
+  display: inline-block;
+  height: 14px;
+  margin-right: 6px;
+  vertical-align: -2px;
+  width: 14px;
+}
+
+/* Thin bar at the top of the embedded app while a navigation or a submitted operation is in flight. */
+.clever-busy-bar {
+  background: rgba(0, 91, 211, 0.15);
+  height: 3px;
+  left: 0;
+  overflow: hidden;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 1000;
+}
+
+.clever-busy-bar::before {
+  animation: clever-busy-slide 1.2s ease-in-out infinite;
+  background: #005bd3;
+  bottom: 0;
+  content: "";
+  left: -40%;
+  position: absolute;
+  top: 0;
+  width: 40%;
+}
+
+@keyframes clever-busy-slide {
+  to { left: 100%; }
+}
+
 @media (prefers-reduced-motion: reduce) {
-  .order-search-field__spinner { animation: none; }
+  .order-search-field__spinner,
+  .clever-busy-spinner,
+  .clever-busy-bar::before { animation: none; }
 }
 
 .order-number-button {

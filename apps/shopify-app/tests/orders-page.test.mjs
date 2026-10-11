@@ -2478,3 +2478,13 @@ test("Orders inventory detail renders payment method and status independently", 
   assert.doesNotMatch(inventoryDetailSource, />Pending</);
   assert.doesNotMatch(inventoryDetailSource, /orderUpdate|customerUpdate|mutation\s+\w+/);
 });
+
+test("Update Shopify orders shows a spinner inside the button while the refresh runs", () => {
+  assert.match(
+    ordersPageSource,
+    /disabled=\{isRefreshingAllRoutes\}[\s\S]*?\{isRefreshingAllRoutes \? <span aria-hidden="true" className="clever-busy-spinner"><\/span> : null\}\{ordersRefreshButtonLabel\}/,
+  );
+  const globalCss = readFileSync(new URL("../app/styles/global.css", import.meta.url), "utf8");
+  assert.match(globalCss, /\.clever-busy-spinner \{[\s\S]*?animation: order-search-spin/);
+  assert.match(globalCss, /\.clever-busy-bar \{[\s\S]*?position: fixed/);
+});
