@@ -400,12 +400,17 @@ test("route group child delete draft merges deleted child orders into the first 
     ],
   }, "route/2");
 
-  assert.equal(afterRoute2Delete.draft, null);
+  // A single remaining route is still saved, with the deleted route's orders merged into it.
   assert.deepEqual(afterRoute2Delete.errors, []);
+  assert.deepEqual(afterRoute2Delete.draft.routes.map((route) => [route.routePlanId, route.orderIds]), [["route/1", ["order-1", "order-3", "order-2"]]]);
 
   const afterRoute2And3Delete = buildRouteGroupChildrenDeleteDraft(group, ["route/2", "route/3"]);
-  assert.equal(afterRoute2And3Delete.draft, null);
   assert.deepEqual(afterRoute2And3Delete.errors, []);
+  assert.deepEqual(afterRoute2And3Delete.draft.routes.map((route) => [route.routePlanId, route.orderIds]), [["route/1", ["order-1", "order-2", "order-3"]]]);
+
+  const afterAllDelete = buildRouteGroupChildrenDeleteDraft(group, ["route/1", "route/2", "route/3"]);
+  assert.equal(afterAllDelete.draft, null);
+  assert.deepEqual(afterAllDelete.errors, []);
 });
 
 test("route group helper deletes a child route plan before saving the merged draft", async () => {
@@ -452,7 +457,7 @@ test("route group helper deletes a child route plan before saving the merged dra
   assert.deepEqual(JSON.parse(fakeFetch.calls[2].init.body).routes.map((route) => route.orderIds), [["order-1", "order-3"], ["order-2"]]);
 });
 
-test("route group helper skips draft save when child delete collapses the split", async () => {
+test("route group helper saves the single remaining route after a child delete so the deleted orders move into it", async () => {
   const fakeFetch = makeFetchSequence([
     {
       payload: {
@@ -470,6 +475,7 @@ test("route group helper skips draft save when child delete collapses the split"
       },
     },
     { payload: { data: { routePlanId: "route/2", deleted: true }, error: null } },
+    { payload: { data: { routeGroup: { id: "group/1", status: "DRAFT" } }, error: null } },
   ]);
 
   const result = await deleteDeliveryRouteGroupChildRoute(makeRequest(), "group/1", "route/2", {
@@ -481,9 +487,12 @@ test("route group helper skips draft save when child delete collapses the split"
   assert.equal(result.routePlanId, "route/2");
   assert.deepEqual(result.routePlanIds, ["route/2"]);
   assert.deepEqual(result.errors, []);
-  assert.equal(fakeFetch.calls.length, 2);
+  assert.equal(fakeFetch.calls.length, 3);
   assert.equal(fakeFetch.calls[1].url, "https://delivery.test/admin/route-plans/route%2F2");
   assert.equal(fakeFetch.calls[1].init.method, "DELETE");
+  assert.equal(fakeFetch.calls[2].url, "https://delivery.test/admin/route-groups/group%2F1/draft");
+  assert.equal(fakeFetch.calls[2].init.method, "PATCH");
+  assert.deepEqual(JSON.parse(fakeFetch.calls[2].init.body).routes.map((route) => [route.routePlanId, route.orderIds]), [["route/1", ["order-1", "order-2"]]]);
 });
 
 test("route group helper previews optimization without saving the draft", async () => {
@@ -560,4 +569,23 @@ test("ordinary split drafts never fall through to a group write or copy without 
   assert.equal(copied.routeGroup, null);
   assert.equal(copied.errors[0].code, DELIVERY_ROUTE_GROUP_ID_MISSING_ERROR_CODE);
   assert.deepEqual(draft, originalDraft);
+});
+
+test("route group child-delete draft keeps a single remaining route and moves the deleted route's orders into it", () => {
+  const routeGroup = {
+    assignments: [{ orderId: "order-1" }, { orderId: "order-2" }, { orderId: "order-3" }],
+    children: [
+      { orderIds: ["order-1", "order-2"], routeIdx: 1, routePlanId: "route-1", routePlan: { id: "route-1", name: "Route 1" } },
+      { orderIds: ["order-3"], routeIdx: 2, routePlanId: "route-2", routePlan: { id: "route-2", name: "Route 2" } },
+    ],
+    id: "group-1",
+  };
+
+  const { draft, errors } = buildRouteGroupChildrenDeleteDraft(routeGroup, ["route-2"]);
+
+  assert.deepEqual(errors, []);
+  assert.equal(draft.mode, "MANUAL_ORDER");
+  assert.deepEqual(draft.routes.map((route) => [route.routePlanId, route.orderIds]), [["route-1", ["order-1", "order-2", "order-3"]]]);
+  // Deleting every route leaves nothing to save; the server archives the slots.
+  assert.deepEqual(buildRouteGroupChildrenDeleteDraft(routeGroup, ["route-1", "route-2"]), { draft: null, errors: [] });
 });

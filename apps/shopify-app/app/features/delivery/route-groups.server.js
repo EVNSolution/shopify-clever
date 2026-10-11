@@ -403,8 +403,10 @@ export function buildRouteGroupChildrenDeleteDraft(routeGroup, routePlanIds) {
   if (mergeTargetIndex < 0) return { draft: null, errors: [] };
 
   const deletedOrderIds = deletedChildren.flatMap(getRouteGroupChildOrderIds);
+  // A single remaining route is still saved, so the deleted route's orders move into it as they do
+  // when more routes remain (the Delivery API keeps that route since clever-route-server#518).
   const remainingChildCount = routeChildren.length - deletedChildren.length;
-  if (remainingChildCount <= 1) return { draft: null, errors: [] };
+  if (remainingChildCount < 1) return { draft: null, errors: [] };
 
   const routes = routeChildren.flatMap((child, index) => {
     const childRoutePlanId = getRouteGroupChildRoutePlanId(child);
