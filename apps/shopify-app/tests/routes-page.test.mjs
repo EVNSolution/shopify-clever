@@ -1622,3 +1622,16 @@ test("child detail centers stop numbers inside table markers", () => {
   assert.match(routeDetailSource, /const childRouteTableStopMarkerStyle = \{[^}]*display: "grid"[^}]*placeItems: "center"/);
   assert.match(routeDetailSource, /const childRouteTableStopMarkerTextStyle = \{[^}]*transform: "none"/);
 });
+
+test("Routes table shows Dispatched for a Ready route that has a published time", () => {
+  assert.match(routesPageSource, /const routeDispatchedBadgeStyle = \{\s*\.\.\.routeStatusBadgeStyle,/);
+  assert.match(
+    routesPageSource,
+    /function isDispatchedReadyRoute\(route\) \{\s*return formatRouteStatus\(route\.status\) === "Ready" && Boolean\(route\.publishedAt\);/,
+  );
+  assert.match(routesPageSource, /function getStatusBadgeStyle\(route\) \{\s*if \(isDispatchedReadyRoute\(route\)\) return routeDispatchedBadgeStyle;/);
+  assert.match(routesPageSource, /<span style=\{getStatusBadgeStyle\(route\)\}>\{route\.isClickable \? translate\(language, `routes\.status\.\$\{getRouteStatusKey\(route\)\}`\) : "-"\}<\/span>/);
+  const i18nSource = readFileSync(new URL("../app/i18n/i18n.js", import.meta.url), "utf8");
+  assert.match(i18nSource, /"routes\.status\.dispatched": "Dispatched"/);
+  assert.match(i18nSource, /"routes\.status\.dispatched": "배차됨"/);
+});
