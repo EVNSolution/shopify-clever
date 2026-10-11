@@ -59,6 +59,7 @@ export const SHOPIFY_ORDERS_QUERY = `#graphql
               name
               variantTitle
               quantity
+              currentQuantity
               sku
             }
             pageInfo {
@@ -136,6 +137,7 @@ export const SHOPIFY_ORDERS_BY_IDS_QUERY = `#graphql
             name
             variantTitle
             quantity
+            currentQuantity
             sku
           }
           pageInfo {
@@ -172,6 +174,7 @@ export const SHOPIFY_ORDER_LINE_ITEMS_QUERY = `#graphql
             name
             variantTitle
             quantity
+            currentQuantity
             sku
           }
           pageInfo {
@@ -474,13 +477,26 @@ async function hydrateShopifyOrderLineItems(admin, orderNodes) {
       ...order,
       lineItems: {
         ...(order?.lineItems ?? {}),
-        nodes: lineItems,
+        nodes: toCurrentLineItems(lineItems),
         pageInfo: pageInfo ?? { endCursor: null, hasNextPage: false },
       },
     });
   }
 
   return { errors, nodes };
+}
+
+// Shopify keeps `quantity` as ordered; `currentQuantity` is what is left after a refund with restock
+// or an order edit. Every reader of the line items counts `quantity`, so it carries the current
+// number here and a line with nothing left is dropped.
+export function toCurrentLineItems(lineItems) {
+  if (!Array.isArray(lineItems)) return [];
+  return lineItems.flatMap((item) => {
+    const current = Number(item?.currentQuantity);
+    if (item?.currentQuantity == null || !Number.isFinite(current)) return [item];
+    if (current <= 0) return [];
+    return [{ ...item, quantity: current }];
+  });
 }
 
 async function runReadOnlyShopifyOrdersGraphql(admin, operation, options = {}) {
