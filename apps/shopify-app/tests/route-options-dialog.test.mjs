@@ -133,3 +133,19 @@ test("Route Detail opens route options from the Edit menu as a popup, not an inl
   assert.equal(has(editor, /<OfficeDialog/), true, "editor is not shown in the popup");
   assert.equal(has(editor, /scrollIntoView/), false, "editor still scrolls like an inline panel");
 });
+
+test("Orders Route options popup shows the shared automatic customer email switch", () => {
+  const page = read("../app/features/orders/orders-page.jsx");
+  const dialog = page.slice(page.indexOf('<OfficeDialog title="Route options"'), page.indexOf("</OfficeDialog>", page.indexOf('<OfficeDialog title="Route options"')));
+  assert.equal(has(dialog, /<CustomerEmailAutomaticSwitch enabled=\{loaderData\.customerEmailAutomaticEnabled \?\? null\} \/>/), true, "popup does not render the shared switch");
+  assert.equal(has(page, /import \{ CustomerEmailAutomaticSwitch \} from "\.\.\/customer-notifications\/customer-email-components"/), true);
+});
+
+test("Orders loader reads the shop automatic switch with the route detail helper, K-food only", () => {
+  const server = read("../app/features/orders/orders-page.server.js");
+  const detail = read("../app/features/delivery/route-detail.server.js");
+  assert.equal(has(detail, /export async function loadCustomerEmailDispatchContext\(/), true);
+  assert.equal(has(server, /import \{ loadCustomerEmailDispatchContext, refreshRouteOrders \} from "\.\.\/delivery\/route-detail\.server"/), true);
+  assert.equal(has(server, /isKfoodOfficeEnabled\(shopifyShopCacheKey\)\s*\? loadCustomerEmailDispatchContext\(request, shopifyShopCacheKey\)\.then\(\(context\) => context\.automaticEnabled\)\s*: Promise\.resolve\(null\)/), true);
+  assert.equal(has(server, /customerEmailAutomaticEnabled: await customerEmailAutomaticPromise/), true);
+});
