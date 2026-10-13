@@ -2,6 +2,7 @@
 import { useEffect, useRef } from "react";
 import { LocationPreviewMap } from "../settings/settings-departure-map";
 import {
+  buildCustomStopAddress,
   isCustomStopAddressCheckReady,
   isStopTargetRouteValid,
   shouldShowStopTargetRoutePicker,
@@ -231,20 +232,29 @@ export function CustomStopDialog({
 
         {addressCheck.status === "ok" && addressCheck.data ? (
           <section aria-label="Address check result" style={checkPanelStyle}>
-            <div style={{ alignContent: "start", display: "grid", gap: "8px", minWidth: 0 }}>
+            <div style={{ alignContent: "start", display: "grid", gap: "10px", minWidth: 0 }}>
+              <p style={{ ...labelStyle, margin: 0 }}>
+                <span style={statusDotStyle(addressCheck.stale ? "#b98900" : "#008060")} />
+                {addressCheck.stale ? "Address changed since this check" : "Location found on the map"}
+              </p>
               <div>
-                <p style={{ ...labelStyle, margin: 0 }}>
-                  <span style={statusDotStyle(addressCheck.stale ? "#b98900" : "#008060")} />
-                  {addressCheck.stale ? "Address changed since this check" : "Matched address"}
-                </p>
-                <p style={{ fontSize: "14px", lineHeight: "20px", margin: "4px 0 0", overflowWrap: "anywhere" }}>
-                  {addressCheck.data.matchedAddress || "Location found"}
+                <p style={hintStyle}>Address you entered</p>
+                <p style={{ fontSize: "14px", lineHeight: "20px", margin: "2px 0 0", overflowWrap: "anywhere" }}>
+                  {buildCustomStopAddress(draft)}
                 </p>
               </div>
+              {addressCheck.data.matchedAddress ? (
+                <div>
+                  <p style={hintStyle}>Matched address</p>
+                  <p style={{ fontSize: "14px", lineHeight: "20px", margin: "2px 0 0", overflowWrap: "anywhere" }}>
+                    {addressCheck.data.matchedAddress}
+                  </p>
+                </div>
+              ) : null}
               <p style={hintStyle}>
                 {addressCheck.stale
                   ? "Check the address again before adding this stop."
-                  : "The stop is placed at the marker when you add it."}
+                  : "The stop is placed at the marker when you add it. Compare the marker with the street and building names on the map."}
               </p>
               <p style={{ ...hintStyle, fontVariantNumeric: "tabular-nums" }}>
                 {addressCheck.data.latitude.toFixed(5)}, {addressCheck.data.longitude.toFixed(5)}
