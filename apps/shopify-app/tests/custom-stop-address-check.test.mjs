@@ -144,3 +144,9 @@ test("the page checks the address through its own fetcher and preselects the tar
   assert.match(pageSource, /isRouteGroupDetail && shouldShowStopTargetRoutePicker\(addStopTargetRouteOptions\)/u);
   assert.match(serverSource, /intent === "checkCustomStopAddress"/u);
 });
+
+test("the check result shows the entered address and only shows a matched address when the server has one", () => {
+  assert.match(dialogSource, /Address you entered/u);
+  assert.match(dialogSource, /\{addressCheck\.data\.matchedAddress \? \(/u);
+  assert.doesNotMatch(dialogSource, /Location found"\}/u);
+});
