@@ -150,7 +150,9 @@ s-badge {
 
 /* Thin bar at the top of the embedded app while a navigation or a submitted operation is in flight. */
 .clever-busy-bar {
-  background: rgba(0, 91, 211, 0.15);
+  /* Fade in after a short delay so sub-second steps of one operation do not flash the bar on and off. */
+  animation: clever-busy-fade-in 240ms ease-out 160ms both;
+  background: rgba(0, 91, 211, 0.12);
   height: 3px;
   left: 0;
   overflow: hidden;
@@ -161,23 +163,33 @@ s-badge {
 }
 
 .clever-busy-bar::before {
-  animation: clever-busy-slide 1.2s ease-in-out infinite;
-  background: #005bd3;
+  animation: clever-busy-slide 2.2s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  background: linear-gradient(90deg, rgba(0, 91, 211, 0), #005bd3 35%, #005bd3 65%, rgba(0, 91, 211, 0));
   bottom: 0;
   content: "";
-  left: -40%;
+  left: 0;
   position: absolute;
   top: 0;
+  transform: translateX(-100%);
   width: 40%;
+  will-change: transform;
 }
 
+@keyframes clever-busy-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+/* translateX is relative to the 40% stripe: -100% starts off the left edge, 250% ends off the right edge. */
 @keyframes clever-busy-slide {
-  to { left: 100%; }
+  from { transform: translateX(-100%); }
+  to { transform: translateX(250%); }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .order-search-field__spinner,
   .clever-busy-spinner,
+  .clever-busy-bar,
   .clever-busy-bar::before { animation: none; }
 }
 
