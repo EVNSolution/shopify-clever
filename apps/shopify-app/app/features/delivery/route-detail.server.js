@@ -3,7 +3,11 @@ import { logStructuredMetric } from "../telemetry/structured-telemetry.server.js
 
 import { fetchDeliveryDrivers } from "./drivers.server";
 import {
+  CUSTOMER_EMAIL_SIGNALS,
+  dispatchRouteWithCustomerEmailSelection,
+  fetchCustomerEmailSettings,
   previewRouteCustomerEmail,
+  readRouteCustomerEmailSelectionField,
   sendRouteCustomerEmail,
 } from "../customer-notifications/customer-email.server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
@@ -410,6 +414,22 @@ function readJsonTextArray(value) {
   }
 }
 
+// What the Dispatch popup needs: the shop automatic switch and which templates are enabled.
+// automaticEnabled is null when the settings could not be loaded.
+async function loadCustomerEmailDispatchContext(request, cacheKey) {
+  try {
+    const { customerEmailSettings, errors } = await fetchCustomerEmailSettings(request, { cacheKey });
+    if (errors.length > 0 || !customerEmailSettings) return { automaticEnabled: null, enabledSignals: [] };
+    const templates = customerEmailSettings.templates ?? {};
+    return {
+      automaticEnabled: customerEmailSettings.automatic?.enabled === true,
+      enabledSignals: CUSTOMER_EMAIL_SIGNALS.filter((signal) => templates[signal]?.enabled !== false),
+    };
+  } catch {
+    return { automaticEnabled: null, enabledSignals: [] };
+  }
+}
+
 export const routeDetailLoader = async ({ params, request }) => {
   const routeId = cleanRoutePathParam(params.routeId);
   const routeGroupIdHint = getRouteGroupIdHint(request);
@@ -425,6 +445,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
   const { admin, session } = await authenticate.admin(request);
   const shopifyShopCacheKey = session?.shop;
   const liveChangeContext = getKfoodLiveChangeContext(session);
+  const customerEmailDispatchPromise = loadCustomerEmailDispatchContext(request, shopifyShopCacheKey);
 
   if (routeGroupIdHint) {
     const primaryDataStartedAt = getRouteDetailPerfNow();
@@ -491,6 +512,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
 
     return {
       ...liveChangeContext,
+      customerEmailDispatch: await customerEmailDispatchPromise,
       addOrderCandidates: buildRouteAddOrderCandidates(orderData.orders, {
         routeGroup: routeGroupData.routeGroup,
         routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
@@ -585,6 +607,7 @@ export async function loadRoutePlanDetail(request, routeId, routeGroupIdHint = n
   return {
     ...liveChangeContext,
     ...routePlanData,
+    customerEmailDispatch: await customerEmailDispatchPromise,
     addOrderCandidates: buildRouteAddOrderCandidates(orderData.orders, {
       routeGroup: routeGroupData.routeGroup,
       routePlan: currentChildDetail?.routePlan ?? routePlanData.routePlan,
@@ -631,7 +654,10 @@ export const routeDetailAction = async ({ params, request }) => {
   }
 
   if (intent === "dispatchRoute") {
-    return publishDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
+    const emailSelection = readRouteCustomerEmailSelectionField(formData.get("customerEmailSelection"));
+    if (!emailSelection) return publishDeliveryRoutePlan(request, routeId, { sessionToken: shopifySessionToken });
+    if (emailSelection.errors.length > 0) return { dispatch: null, errors: emailSelection.errors };
+    return dispatchRouteWithCustomerEmailSelection(request, routeId, emailSelection, { sessionToken: shopifySessionToken });
   }
 
   if (intent === "copyRoutePlan") {

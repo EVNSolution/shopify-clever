@@ -157,5 +157,7 @@ test("standalone Save reaches the stop endpoint and Dispatch remains a separate 
   assert.match(routeDetailServerSource, /import \{ saveRouteStopOrder \} from "\.\/route-stop-order\.server"/);
   assert.match(routeDetailServerSource, /intent === "saveRouteStops"/);
   assert.match(routeDetailServerSource, /saveRouteStopOrder\([\s\S]*routeId,[\s\S]*formData\.get\("stops"\)/);
-  assert.match(routeDetailSource, /const handleDispatchRoute = \(\) => \(liveChangeActive \? live\.dispatch\(\) : submitRouteAction\("dispatchRoute"\)\)/);
+  // Dispatch opens the Dispatch popup; only its confirmation dispatches.
+  assert.match(routeDetailSource, /const handleDispatchRoute = \(\) => \{[\s\S]*?setDispatchDialogOpen\(true\);\s*\};/);
+  assert.match(routeDetailSource, /const confirmDispatchRoute = async \(selection\) => \{[\s\S]*?live\.dispatch\(\);[\s\S]*?submitRouteAction\("dispatchRoute"/);
 });
