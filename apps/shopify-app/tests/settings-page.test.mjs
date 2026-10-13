@@ -471,3 +471,24 @@ test("Settings tab is a plain editable form without explainer cards", () => {
   assert.doesNotMatch(settingsPageSource, /URL query|section=sync|section=api|section=planning/);
   assert.doesNotMatch(settingsPageSource, /These values|Runtime records|Calculated insight|Merchant-owned start point/);
 });
+
+test("the Templates table Status column is a green/red switch that saves only the enabled flag", () => {
+  const table = notificationsPageSource.slice(
+    notificationsPageSource.indexOf('aria-label="Email templates" style={notificationTemplateTableStyle}'),
+    notificationsPageSource.indexOf("</table>"),
+  );
+
+  assert.match(table, /<ToggleSwitch[\s\S]*checked=\{settings\.templates\[signal\]\?\.enabled !== false\}/u);
+  assert.match(table, /onChange=\{\(enabled\) => toggleTemplateEnabled\(signal, enabled\)\}/u);
+  assert.doesNotMatch(table, /"Enabled"|"Disabled"/u);
+
+  const toggle = notificationsPageSource.slice(
+    notificationsPageSource.indexOf("const toggleTemplateEnabled"),
+    notificationsPageSource.indexOf("const handleLogoUpload"),
+  );
+  assert.match(toggle, /formData\.set\("_intent", "saveCustomerEmailTemplate"\)/u);
+  assert.match(toggle, /formData\.set\("enabled", String\(enabled\)\)/u);
+  assert.match(toggle, /formData\.set\("subject", template\.subject \?\? ""\)/u);
+  assert.match(toggle, /formData\.set\("body", template\.body \?\? ""\)/u);
+  assert.match(toggle, /formData\.set\("expectedVersion", template\.version \?\? ""\)/u);
+});
