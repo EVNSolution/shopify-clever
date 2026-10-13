@@ -32,6 +32,7 @@ export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, sta
   const page = read.pages[Math.min(pageIndex, read.pages.length - 1)];
   const lastPage = read.pages.at(-1);
   const validCount = observations.filter(item => item.coordinateStatus === 'VALID').length;
+  const startedAt = Number.isFinite(Date.parse(start?.occurredAt ?? '')) ? formatChildEtaLabel(start.occurredAt, timeZone) : null;
 
   useEffect(() => {
     const session = createOriginalObservationsSession({ routePlanId, getToken: () => tokenRef.current?.(), fetch: fetchObservations, onChange: setRead });
@@ -82,7 +83,7 @@ export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, sta
       {read.status === 'loading' ? <button type="button" onClick={() => { setAutoLoad(false); sessionRef.current?.cancel(); }} style={buttonStyle}>Cancel</button> : ['error', 'restart', 'unavailable', 'idle'].includes(read.status) ? <button type="button" onClick={() => restart()} style={buttonStyle}>Restart</button> : null}
       <button type="button" onClick={onClose} style={{ ...buttonStyle, marginLeft: 'auto' }}>Back to dotted track</button>
     </div>
-    {start?.occurredAt ? <p aria-label="Original GPS legend" style={{ ...smallStyle, margin: '6px 0 0' }}><span aria-hidden="true" style={{ color: '#8c9196' }}>●</span> before Start · <span aria-hidden="true" style={{ color: '#d32f2f' }}>●</span> after Start · <span aria-hidden="true" style={{ color: '#1a7f37' }}>●</span> Start pressed {formatChildEtaLabel(start.occurredAt, timeZone)}</p> : null}
+    <p aria-label="Original GPS legend" style={{ ...smallStyle, margin: '6px 0 0' }}><span aria-hidden="true" style={{ color: '#8c9196' }}>●</span> before Start · <span aria-hidden="true" style={{ color: '#d32f2f' }}>●</span> after Start · {startedAt ? <><span aria-hidden="true" style={{ color: '#1a7f37' }}>●</span> Start pressed {startedAt}</> : 'Start not pressed yet'}</p>
     {read.message ? <p role="status" style={{ margin: '6px 0' }}>{read.message}</p> : null}
     {lastPage?.page.capReached ? <p role="status" style={{ margin: '6px 0' }}>5,000-point cap reached. More observations exist; choose a smaller window.</p> : null}
     <details style={{ marginTop: 6 }}>

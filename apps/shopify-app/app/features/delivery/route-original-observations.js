@@ -94,10 +94,10 @@ export function validateOriginalObservationsPage(payload, { routePlanId, window,
   return data;
 }
 
-// beforeStart: observed before the driver pressed Start; without a Start time no point is before it.
+// beforeStart: observed before the driver pressed Start; without a Start time every point is (Start not pressed yet).
 export function originalObservationFeatures(observations, startedAt) {
   const startMs = Date.parse(startedAt ?? '');
-  return { type: 'FeatureCollection', features: observations.filter(item => item.coordinateStatus === 'VALID').map(item => ({ type: 'Feature', properties: { eventId: item.eventId, beforeStart: Date.parse(item.observedAt) < startMs }, geometry: { type: 'Point', coordinates: [item.longitude, item.latitude] } })) };
+  return { type: 'FeatureCollection', features: observations.filter(item => item.coordinateStatus === 'VALID').map(item => ({ type: 'Feature', properties: { eventId: item.eventId, beforeStart: !(Date.parse(item.observedAt) >= startMs) }, geometry: { type: 'Point', coordinates: [item.longitude, item.latitude] } })) };
 }
 
 function responseFailure(status, code) {

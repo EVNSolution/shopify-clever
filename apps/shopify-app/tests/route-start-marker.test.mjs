@@ -95,12 +95,17 @@ test("raw view: points before Start are grey, after Start red, and the Start poi
   assert.equal(map.getLayer("route-detail-original-observation-start-label"), undefined);
 });
 
-test("raw view: no Start event leaves every point red and draws no Start point", () => {
+test("raw view: without a Start event every point is before Start (grey) and no Start point is drawn", () => {
+  for (const start of [null, undefined, { ...START, occurredAt: null }]) {
+    const map = mapFixture();
+    syncOriginalObservationPoints(map, [observation(1), observation(2)], start, TORONTO);
+    const features = map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID).data.features;
+    assert.equal(features.filter(feature => feature.properties.eventId).length, 2);
+    assert.ok(features.filter(feature => feature.properties.eventId).every(feature => feature.properties.beforeStart === true));
+  }
   const map = mapFixture();
-  syncOriginalObservationPoints(map, [observation(1), observation(2)], null, TORONTO);
-  const features = map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID).data.features;
-  assert.equal(features.length, 2);
-  assert.ok(features.every(feature => feature.properties.beforeStart === false));
+  syncOriginalObservationPoints(map, [observation(1)], null, TORONTO);
+  assert.equal(startFeatures(map.getSource(ORIGINAL_OBSERVATION_SOURCE_ID).data).length, 0);
 });
 
 test("raw panel: gets the Start from the page and shows the one-line legend", () => {
@@ -109,6 +114,6 @@ test("raw panel: gets the Start from the page and shows the one-line legend", ()
   assert.match(page, /<RouteOriginalGpsPoints[\s\S]*?start=\{routeExecutionEvidence\?\.start \?\? null\}/);
   assert.match(page, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot, ianaTimezone\)/);
   assert.match(component, /syncOriginalObservationPoints\(map, observationsRef\.current, startRef\.current, timeZone\)/);
-  assert.match(component, /aria-label="Original GPS legend"/);
-  assert.match(component, /before Start[\s\S]*after Start[\s\S]*Start pressed/);
+  assert.match(component, /<p aria-label="Original GPS legend"/, "the legend is always shown");
+  assert.match(component, /before Start[\s\S]*after Start[\s\S]*\{startedAt \? <>[\s\S]*Start pressed \{startedAt\}<\/> : 'Start not pressed yet'\}/);
 });
