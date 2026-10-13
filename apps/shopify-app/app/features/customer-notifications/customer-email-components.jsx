@@ -1,6 +1,12 @@
 /* eslint-disable react/prop-types */
+import { useState } from "react";
+import { useFetcher, useSearchParams } from "react-router";
+import { useAppBridge } from "@shopify/app-bridge-react";
+import { withEmbeddedShopifyContext } from "../delivery/route-paths";
 import {
   settingsActionRowStyle,
+  settingsButtonStyle,
+  settingsErrorStyle,
   settingsCoordinateGridStyle,
   settingsDisabledButtonStyle,
   settingsInputStyle,
@@ -139,3 +145,128 @@ const actionButtonStyle = {
   padding: "3px 10px",
   whiteSpace: "nowrap",
 };
+
+const SWITCH_ON_COLOR = "#1a7f37";
+const SWITCH_OFF_COLOR = "#c5280c";
+
+/** On/off switch. Green when on, red when off. */
+export function ToggleSwitch({ checked, disabled = false, label, onChange }) {
+  return (
+    <button
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      role="switch"
+      style={{
+        alignItems: "center",
+        background: "transparent",
+        border: 0,
+        color: "#303030",
+        cursor: disabled ? "not-allowed" : "pointer",
+        display: "inline-flex",
+        font: "inherit",
+        gap: "8px",
+        opacity: disabled ? 0.58 : 1,
+        padding: 0,
+      }}
+      type="button"
+    >
+      <span
+        aria-hidden="true"
+        style={{
+          background: checked ? SWITCH_ON_COLOR : SWITCH_OFF_COLOR,
+          borderRadius: "999px",
+          boxSizing: "border-box",
+          display: "inline-block",
+          height: "22px",
+          position: "relative",
+          transition: "background 120ms ease",
+          width: "40px",
+        }}
+      >
+        <span
+          style={{
+            background: "#ffffff",
+            borderRadius: "50%",
+            boxShadow: "0 1px 2px rgba(0, 0, 0, 0.3)",
+            height: "18px",
+            left: checked ? "20px" : "2px",
+            position: "absolute",
+            top: "2px",
+            transition: "left 120ms ease",
+            width: "18px",
+          }}
+        />
+      </span>
+      <span style={{ color: checked ? SWITCH_ON_COLOR : SWITCH_OFF_COLOR, fontWeight: 650 }}>
+        {checked ? "On" : "Off"}
+      </span>
+    </button>
+  );
+}
+
+export const CUSTOMER_EMAIL_AUTOMATIC_CONFIRM_TEXT =
+  "This enables automatic customer emails for all routes of this store. Only customers selected at Dispatch receive them.";
+
+/**
+ * The shop-wide automatic customer email switch. The same value appears in Customer notifications
+ * settings and in Route options. Turning it on asks for confirmation; turning it off is immediate.
+ */
+export function CustomerEmailAutomaticSwitch({ enabled }) {
+  const fetcher = useFetcher();
+  const shopify = useAppBridge();
+  const [searchParams] = useSearchParams();
+  const [confirming, setConfirming] = useState(false);
+  const [clientError, setClientError] = useState(null);
+  const busy = fetcher.state !== "idle";
+  const pendingIntent = busy ? fetcher.formData?.get("_intent") : null;
+  const shownEnabled = pendingIntent
+    ? pendingIntent === "activateCustomerEmailAutomatic"
+    : enabled === true;
+  const errors = [...(fetcher.data?.errors ?? []), ...(clientError ? [{ message: clientError }] : [])];
+
+  const submit = async (intent) => {
+    setConfirming(false);
+    setClientError(null);
+    try {
+      const formData = new FormData();
+      formData.set("_intent", intent);
+      formData.set("shopifySessionToken", await shopify.idToken());
+      fetcher.submit(formData, {
+        action: withEmbeddedShopifyContext("/app/settings/notifications", searchParams),
+        method: "post",
+      });
+    } catch {
+      setClientError("Could not get the Shopify session. Reload and try again.");
+    }
+  };
+
+  return (
+    <div style={{ display: "grid", gap: "8px" }}>
+      <div style={{ alignItems: "center", display: "flex", gap: "12px", justifyContent: "space-between" }}>
+        <div>
+          <strong>Automatic customer emails</strong>
+          <p style={settingsMessageStyle}>Store-wide. Applies to every route of this store.</p>
+        </div>
+        <ToggleSwitch
+          checked={shownEnabled}
+          disabled={busy || enabled === null || enabled === undefined}
+          label="Automatic customer emails"
+          onChange={(next) => (next ? setConfirming(true) : submit("deactivateCustomerEmailAutomatic"))}
+        />
+      </div>
+      {confirming ? (
+        <div role="alertdialog" aria-label="Turn on automatic customer emails" style={{ border: "1px solid #e3e3e3", borderRadius: "8px", display: "grid", gap: "8px", padding: "12px" }}>
+          <p style={{ ...settingsMessageStyle, color: "#303030" }}>{CUSTOMER_EMAIL_AUTOMATIC_CONFIRM_TEXT}</p>
+          <div style={{ display: "flex", gap: "8px", justifyContent: "flex-end" }}>
+            <button onClick={() => setConfirming(false)} style={settingsResetButtonStyle} type="button">Cancel</button>
+            <button onClick={() => submit("activateCustomerEmailAutomatic")} style={settingsButtonStyle} type="button">Turn on</button>
+          </div>
+        </div>
+      ) : null}
+      {enabled === null || enabled === undefined ? <p style={settingsErrorStyle}>The automatic email setting could not be loaded.</p> : null}
+      {errors.length > 0 ? <p role="alert" style={settingsErrorStyle}>{errors[0]?.message ?? "Could not change automatic customer emails."}</p> : null}
+    </div>
+  );
+}

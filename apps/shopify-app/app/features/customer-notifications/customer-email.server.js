@@ -1,6 +1,7 @@
 import {
   deliveryApiRequest,
   getShopifySessionBearer,
+  publishDeliveryRoutePlan,
 } from "../delivery/route-plans.server.js";
 
 export const CUSTOMER_NOTIFICATION_PAYLOAD_TOO_LARGE_ERROR_CODE =
@@ -416,6 +417,135 @@ export async function deactivateCustomerNotifications(request, payload, options 
     activation: result.data?.activation ?? result.data?.result ?? null,
     errors: result.errors,
   };
+}
+
+export const CUSTOMER_EMAIL_SIGNALS = [
+  "DELIVERY_SCHEDULED",
+  "OUT_FOR_DELIVERY",
+  "DRIVER_NEARBY",
+  "DELIVERED",
+  "MISSED_DELIVERY",
+];
+// The one template Dispatch sends right away. The others go out later on driver events.
+export const CUSTOMER_EMAIL_DISPATCH_SIGNAL = "DELIVERY_SCHEDULED";
+
+export async function fetchRouteCustomerEmailSelection(request, routePlanId, options = {}) {
+  const safeRoutePlanId = encodeRoutePlanId(routePlanId);
+  if (!safeRoutePlanId) return { selection: null, ...missingRoutePlanIdResult("selection") };
+
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/customer-email/selection`,
+    { cache: "no-store", fetch: options.fetch, method: "GET", sessionToken: options.sessionToken },
+  );
+  return normalizeResult(result, "selection");
+}
+
+export async function saveRouteCustomerEmailSelection(request, routePlanId, selection, options = {}) {
+  const safeRoutePlanId = encodeRoutePlanId(routePlanId);
+  if (!safeRoutePlanId) return { selection: null, ...missingRoutePlanIdResult("selection") };
+
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/customer-email/selection`,
+    {
+      body: JSON.stringify({ signals: selection.signals, deliveryStopIds: selection.deliveryStopIds }),
+      fetch: options.fetch,
+      method: "PUT",
+      sessionToken: options.sessionToken,
+    },
+  );
+  return normalizeResult(result, "selection");
+}
+
+/** Reads the Dispatch form field. Returns null when the field is absent (automatic email is off). */
+export function readRouteCustomerEmailSelectionField(value) {
+  if (typeof value !== "string" || !value.trim()) return null;
+  let parsed;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    parsed = null;
+  }
+  const valid = isPlainObject(parsed)
+    && Array.isArray(parsed.signals)
+    && parsed.signals.every((signal) => CUSTOMER_EMAIL_SIGNALS.includes(signal))
+    && Array.isArray(parsed.deliveryStopIds)
+    && parsed.deliveryStopIds.every((id) => typeof id === "string" && id.trim() !== "");
+  if (!valid) {
+    return { errors: [{ code: CUSTOMER_NOTIFICATION_SETTINGS_PAYLOAD_INVALID_ERROR_CODE, message: "The customer email selection is not valid. Reload the route and try again.", status: 400 }] };
+  }
+  return {
+    deliveryStopIds: [...new Set(parsed.deliveryStopIds.map((id) => id.trim()))],
+    errors: [],
+    signals: [...new Set(parsed.signals)],
+  };
+}
+
+/**
+ * Dispatch with a customer email selection, in this order:
+ * 1. Save the selection. If this fails, the route is not dispatched.
+ * 2. Dispatch the route.
+ * 3. Send Delivery scheduled now to the selected stops, when it is selected.
+ * A failure in step 3 never hides a successful Dispatch: it is reported in `customerEmail.sendErrors`.
+ */
+export async function dispatchRouteWithCustomerEmailSelection(request, routePlanId, selection, options = {}) {
+  const saved = await saveRouteCustomerEmailSelection(request, routePlanId, selection, options);
+  if (saved.errors.length > 0) {
+    return {
+      customerEmail: { selection: null, selectionErrors: saved.errors, send: null, sendErrors: [] },
+      dispatch: null,
+      errors: saved.errors,
+      routePlan: null,
+    };
+  }
+
+  const dispatched = await publishDeliveryRoutePlan(request, routePlanId, options);
+  const customerEmail = { selection: saved.selection, selectionErrors: [], send: null, sendErrors: [] };
+  const sendNow = selection.signals.includes(CUSTOMER_EMAIL_DISPATCH_SIGNAL) && selection.deliveryStopIds.length > 0;
+  if (dispatched.errors.length > 0 || !sendNow) return { ...dispatched, customerEmail };
+
+  return {
+    ...dispatched,
+    customerEmail: {
+      ...customerEmail,
+      ...(await sendDispatchCustomerEmail(request, routePlanId, selection.deliveryStopIds, options)),
+    },
+  };
+}
+
+// The same preview-then-send flow as the manual send on Route Detail.
+async function sendDispatchCustomerEmail(request, routePlanId, deliveryStopIds, options) {
+  const signal = CUSTOMER_EMAIL_DISPATCH_SIGNAL;
+  const preview = await previewRouteCustomerNotification(request, routePlanId, { deliveryStopIds, signal }, options);
+  if (preview.errors.length > 0) return { send: null, sendErrors: preview.errors };
+
+  const selected = new Set(deliveryStopIds);
+  const recipients = Array.isArray(preview.preview?.recipients) ? preview.preview.recipients : [];
+  const sendable = recipients.filter((recipient) => selected.has(recipient?.deliveryStopId) && recipient?.email);
+  // A stop that already got this email, or has an unresolved outcome, is not sent again from Dispatch.
+  const fresh = sendable.filter((recipient) => !hasPriorOrUncertainSend(recipient));
+  const sendStopIds = fresh.map((recipient) => recipient.deliveryStopId);
+  if (sendStopIds.length === 0) {
+    return { send: null, sendErrors: [], sendSkippedCount: sendable.length };
+  }
+
+  const sent = await sendRouteCustomerNotification(request, routePlanId, {
+    commandId: options.commandId ?? globalThis.crypto.randomUUID(),
+    confirmed: true,
+    deliveryStopIds: sendStopIds,
+    // The office reviewed the preview in the Dispatch popup and confirmed it there.
+    missingValuesConfirmed: true,
+    ...(preview.preview?.previewToken ? { previewToken: preview.preview.previewToken } : {}),
+    resendConfirmed: false,
+    signal,
+  }, options);
+  return { send: sent.dispatch, sendErrors: sent.errors, sendSkippedCount: sendable.length - fresh.length };
+}
+
+function hasPriorOrUncertainSend(recipient) {
+  const history = recipient?.history ?? {};
+  return history.lastStatus === "SENT" || (history.sendCount ?? 0) > 0 || (history.uncertainCount ?? 0) > 0;
 }
 
 async function customerNotificationMutation(request, path, payload, options = {}) {

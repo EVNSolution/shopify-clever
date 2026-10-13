@@ -4,6 +4,7 @@ import { useFetcher, useSearchParams } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
 import { withEmbeddedShopifyContext } from "./route-paths";
 import { STOP_TIME_MAX_MINUTES, readStopTimeMinutes } from "./route-helpers";
+import { CustomerEmailAutomaticSwitch } from "../customer-notifications/customer-email-components";
 import {
   canEditRouteOptions,
   formatCashAmount,
@@ -112,7 +113,7 @@ function Errors({ errors = [], compact = false }) {
 }
 
 /** Popup shell for the office controls. Pass `actions` to replace the default Done button. */
-export function OfficeDialog({ title, onClose, children, actions }) {
+export function OfficeDialog({ title, onClose, children, actions, width }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -150,7 +151,7 @@ export function OfficeDialog({ title, onClose, children, actions }) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        style={dialogStyle}
+        style={width ? { ...dialogStyle, width } : dialogStyle}
       >
         <h2 id={titleId} style={{ fontSize: 20, margin: 0 }}>
           {title}
@@ -274,7 +275,7 @@ export function RouteOptionsFields({
   );
 }
 
-export function RouteOptionsEditor({ routePlan, onClose }) {
+export function RouteOptionsEditor({ routePlan, onClose, customerEmailAutomaticEnabled = null }) {
   const fetcher = useFetcher();
   const shopify = useAppBridge();
   const [searchParams] = useSearchParams();
@@ -383,6 +384,9 @@ export function RouteOptionsEditor({ routePlan, onClose }) {
           ...(clientError ? [{ message: clientError }] : []),
         ]}
       />
+      <div style={{ borderTop: "1px solid #e3e3e3", paddingTop: 12 }}>
+        <CustomerEmailAutomaticSwitch enabled={customerEmailAutomaticEnabled} />
+      </div>
       {savedRoute &&
       JSON.stringify(normalizeRouteOptions(savedRoute)) ===
         JSON.stringify(draft) &&

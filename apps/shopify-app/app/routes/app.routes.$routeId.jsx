@@ -55,6 +55,7 @@ import {
 } from "../features/delivery/custom-stop-form";
 import { getRowDropAfterStopId, reverseRouteStopIds } from "../features/delivery/route-draft";
 import { getRouteDispatchControl, getRouteDispatchNotice } from "../features/delivery/route-dispatch";
+import { RouteDispatchDialog } from "../features/delivery/route-dispatch-dialog";
 import {
   beginRouteGroupCopySubmit,
   cancelRouteGroupCopyDialog,
@@ -2310,6 +2311,8 @@ export function shouldRevalidate({ formData, defaultShouldRevalidate }) {
   const intent = formData?.get("_intent");
   // Reconcile mutation responses before a loader can replace the editable draft.
   if (intent === "copyRoutePlan" || intent === "saveRouteDraft") return false;
+  // A preview reads only; reloading the whole route for it is waste.
+  if (intent === "previewCustomerEmail") return false;
   return defaultShouldRevalidate;
 }
 
@@ -3874,6 +3877,8 @@ function isValidOrdinaryRouteCopy(routePlan, sourceRoutePlanId) {
     && !routePlan.routeGroupingChild?.groupingId);
 }
 
+const EMPTY_CUSTOMER_EMAIL_DISPATCH = { automaticEnabled: null, enabledSignals: [] };
+
 function createCustomerEmailDialogOpenState(signal) {
   return {
     actionResult: null,
@@ -3935,6 +3940,7 @@ export default function RouteDetailPage() {
     timezoneSource,
     liveChangeEnabled = false,
     liveChangeScopeKey = null,
+    customerEmailDispatch = EMPTY_CUSTOMER_EMAIL_DISPATCH,
   } = useLoaderData();
   const effectiveRoutePlan = routePlan;
   const routesListHref = ROUTES_ROOT_PATH;
@@ -4180,6 +4186,8 @@ export default function RouteDetailPage() {
   const [activeCustomStopEditRow, setActiveCustomStopEditRow] = useState(null);
   const [routeActionsMenu, setRouteActionsMenu] = useState(null);
   const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
+  const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
+  const [dispatchEmailResult, setDispatchEmailResult] = useState(null);
   const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [pendingInProgressRouteChange, setPendingInProgressRouteChange] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
@@ -6129,7 +6137,21 @@ export default function RouteDetailPage() {
     }
   };
 
-  const handleDispatchRoute = () => (liveChangeActive ? live.dispatch() : submitRouteAction("dispatchRoute"));
+  const handleDispatchRoute = () => {
+    setDispatchEmailResult(null);
+    setDispatchDialogOpen(true);
+  };
+  // selection is null when the popup had no email step: then no selection is saved and nothing is sent.
+  const confirmDispatchRoute = async (selection) => {
+    if (liveChangeActive) {
+      setDispatchDialogOpen(false);
+      live.dispatch();
+      return;
+    }
+    if (!selection) setDispatchDialogOpen(false);
+    const submitted = await submitRouteAction("dispatchRoute", selection ? { customerEmailSelection: JSON.stringify(selection) } : {});
+    if (!submitted) setDispatchDialogOpen(false);
+  };
 
   const applyCustomerEmailDialogOpenState = (dialogState) => {
     customerEmailRequestRef.current = null;
@@ -6896,6 +6918,11 @@ export default function RouteDetailPage() {
     if (lastRouteActionIntentRef.current !== "dispatchRoute") return;
     lastRouteActionIntentRef.current = null;
     revalidator.revalidate();
+    // With an email selection, the Dispatch popup shows one notice per step.
+    if (routeActionFetcher.data?.customerEmail) {
+      setDispatchEmailResult(routeActionFetcher.data);
+      return;
+    }
     if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
     const notice = getRouteDispatchNotice(routeActionFetcher.data, effectiveRoutePlan?.id);
     shopify.toast.show(notice.message, { isError: notice.isError });
@@ -7972,7 +7999,20 @@ export default function RouteDetailPage() {
           </s-banner>
         ) : null}
 
-        {kfoodOfficeEnabled && routeOptionsOpen && effectiveRoutePlan?.id ? <RouteOptionsEditor key={effectiveRoutePlan.id} routePlan={effectiveRoutePlan} onClose={() => setRouteOptionsOpen(false)} /> : null}
+        {dispatchDialogOpen && effectiveRoutePlan?.id ? (
+          <RouteDispatchDialog
+            automaticEnabled={liveChangeActive ? false : customerEmailDispatch.automaticEnabled}
+            busy={routeGroupActionBusy}
+            driverName={routeDriverSummary}
+            enabledSignals={customerEmailDispatch.enabledSignals}
+            onClose={() => setDispatchDialogOpen(false)}
+            onDispatch={confirmDispatchRoute}
+            result={dispatchEmailResult}
+            routePlanId={effectiveRoutePlan.id}
+            stops={orderedRouteStops}
+          />
+        ) : null}
+        {kfoodOfficeEnabled && routeOptionsOpen && effectiveRoutePlan?.id ? <RouteOptionsEditor key={effectiveRoutePlan.id} routePlan={effectiveRoutePlan} customerEmailAutomaticEnabled={customerEmailDispatch.automaticEnabled} onClose={() => setRouteOptionsOpen(false)} /> : null}
 
         <LiveChangeNotices
           live={live}

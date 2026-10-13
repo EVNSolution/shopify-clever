@@ -8,6 +8,9 @@ import {
   CUSTOMER_NOTIFICATION_SETTINGS_PAYLOAD_INVALID_ERROR_CODE,
   activateCustomerNotifications,
   fetchCustomerNotificationSettings,
+  fetchRouteCustomerEmailSelection,
+  readRouteCustomerEmailSelectionField,
+  saveRouteCustomerEmailSelection,
   previewRouteCustomerNotification,
   saveCustomerNotificationSettings,
   saveCustomerNotificationSettingsFromForm,
@@ -286,6 +289,61 @@ test("customer notification route wrappers reject missing route IDs before forwa
   assert.equal(called, false);
   assert.equal(result.errors[0].code, CUSTOMER_NOTIFICATION_ROUTE_ID_MISSING_ERROR_CODE);
 }));
+
+test("route email selection PUT sends only signals and delivery stop IDs", withDeliveryApiEnv(async () => {
+  const calls = [];
+  const selection = { signals: ["DELIVERY_SCHEDULED", "DELIVERED"], deliveryStopIds: ["stop-1", "stop-2"] };
+  const result = await saveRouteCustomerEmailSelection(
+    new Request("https://app.example/app/routes/route-1"),
+    "route/1",
+    { ...selection, extra: "ignored" },
+    {
+      sessionToken: "app-bridge-token",
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({ data: { selection: { ...selection, updatedAt: "2026-10-13T00:00:00.000Z", updatedBy: "office" } } });
+      },
+    },
+  );
+
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route%2F1/customer-email/selection");
+  assert.equal(calls[0].options.method, "PUT");
+  assert.equal(calls[0].options.headers.authorization, "Bearer app-bridge-token");
+  assert.deepEqual(JSON.parse(calls[0].options.body), selection);
+  assert.deepEqual(result.selection.signals, selection.signals);
+  assert.deepEqual(result.errors, []);
+}));
+
+test("route email selection GET returns the saved selection or null", withDeliveryApiEnv(async () => {
+  const calls = [];
+  const result = await fetchRouteCustomerEmailSelection(
+    new Request("https://app.example/app/routes/route-1", { headers: { authorization: "Bearer shopify-session" } }),
+    "route-1",
+    {
+      fetch: async (url, options) => {
+        calls.push({ url, options });
+        return Response.json({ data: { selection: null } });
+      },
+    },
+  );
+  assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route-1/customer-email/selection");
+  assert.equal(calls[0].options.method, "GET");
+  assert.equal(result.selection, null);
+  assert.deepEqual(result.errors, []);
+}));
+
+test("route email selection form field is optional and validated", () => {
+  assert.equal(readRouteCustomerEmailSelectionField(null), null);
+  assert.equal(readRouteCustomerEmailSelectionField(""), null);
+  assert.deepEqual(
+    readRouteCustomerEmailSelectionField(JSON.stringify({ signals: ["DELIVERED", "DELIVERED"], deliveryStopIds: ["a", "a"] })),
+    { deliveryStopIds: ["a"], errors: [], signals: ["DELIVERED"] },
+  );
+  for (const invalid of ["not-json", "[]", JSON.stringify({ signals: ["UNKNOWN"], deliveryStopIds: [] }), JSON.stringify({ signals: [], deliveryStopIds: [""] })]) {
+    assert.equal(readRouteCustomerEmailSelectionField(invalid).errors.length, 1, invalid);
+  }
+});
 
 function restoreEnv(name, previousValue) {
   if (previousValue === undefined) {

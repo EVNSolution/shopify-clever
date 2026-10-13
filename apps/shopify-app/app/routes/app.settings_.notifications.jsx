@@ -6,6 +6,8 @@ import { useAppBridge } from "@shopify/app-bridge-react";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AdminRouteErrorBoundary } from "../ui/admin-route-error-boundary";
 import {
+  activateCustomerNotifications,
+  deactivateCustomerNotifications,
   fetchCustomerEmailSettings,
   getCustomerEmailTestConfirmationError,
   saveCustomerEmailGlobal,
@@ -13,8 +15,10 @@ import {
   sendCustomerEmailTest,
 } from "../features/customer-notifications/customer-email.server";
 import {
+  CustomerEmailAutomaticSwitch,
   CustomerEmailSenderSettings,
   CustomerEmailTestSendPanel,
+  ToggleSwitch,
 } from "../features/customer-notifications/customer-email-components";
 import {
   TemplateTokenEditor,
@@ -86,6 +90,19 @@ export const loader = async ({ request }) => {
 export const action = async ({ request }) => {
   await authenticate.admin(request);
   const formData = await request.formData();
+
+  // The shop-wide automatic switch. Route options posts here too.
+  if (formData.get("_intent") === "activateCustomerEmailAutomatic") {
+    return activateCustomerNotifications(request, { confirmed: true }, {
+      sessionToken: formText(formData.get("shopifySessionToken")),
+    });
+  }
+
+  if (formData.get("_intent") === "deactivateCustomerEmailAutomatic") {
+    return deactivateCustomerNotifications(request, { confirmed: true }, {
+      sessionToken: formText(formData.get("shopifySessionToken")),
+    });
+  }
 
   if (formData.get("_intent") === "saveCustomerEmailGlobal") {
     return saveCustomerEmailGlobal(request, readCustomerEmailGlobalSettings(formData), {
@@ -241,13 +258,16 @@ export default function CustomerNotificationsSettingsPage() {
         {loaderErrors?.length > 0 ? (
           <p role="alert" style={settingsErrorStyle}>{loaderErrors[0]?.message ?? "Unable to load notification settings."}</p>
         ) : null}
-        <CustomerEmailSettings initialSettings={customerEmailSettings} />
+        <CustomerEmailSettings
+          automaticEnabled={customerEmailSettings ? customerEmailSettings.automatic?.enabled === true : null}
+          initialSettings={customerEmailSettings}
+        />
       </SettingsLayout>
     </PageShell>
   );
 }
 
-function CustomerEmailSettings({ initialSettings }) {
+function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
   const language = useRouteLoaderData("routes/app")?.language ?? "en";
   const shopify = useAppBridge();
   const fetcher = useFetcher();
@@ -464,8 +484,12 @@ function CustomerEmailSettings({ initialSettings }) {
       <style>{CUSTOMER_NOTIFICATION_RESPONSIVE_CSS}</style>
       <fieldset style={settingsFieldsetStyle}>
         <legend style={settingsLegendStyle}>Customer Notifications</legend>
-        <p style={settingsMessageStyle}>Messages are sent manually from a child route. Saving a template never queues or sends email.</p>
+        <p style={settingsMessageStyle}>Saving a template never queues or sends email. With automatic emails on, the customers selected at Dispatch get the selected templates.</p>
       </fieldset>
+
+      <section aria-label="Automatic customer emails" style={settingsSectionCardStyle}>
+        <CustomerEmailAutomaticSwitch enabled={automaticEnabled} />
+      </section>
 
       <CustomerEmailSenderSettings
         onReplyToChange={(replyTo) => setSettings({ ...settings, replyTo })}
@@ -597,10 +621,14 @@ function CustomerEmailSettings({ initialSettings }) {
                   <strong>Message</strong>
                   <p style={settingsMessageStyle}>Type normally. Insert customer and delivery details from the variable menu.</p>
                 </div>
-                <label style={notificationTemplateEnabledToggleStyle}>
-                  <input checked={templateDraft.enabled} onChange={(event) => setTemplateDraft((current) => ({ ...current, enabled: event.target.checked }))} type="checkbox" />
+                <span style={notificationTemplateEnabledToggleStyle}>
                   Enabled
-                </label>
+                  <ToggleSwitch
+                    checked={templateDraft.enabled}
+                    label={`${templateEditorLabel} template enabled`}
+                    onChange={(enabled) => setTemplateDraft((current) => ({ ...current, enabled }))}
+                  />
+                </span>
               </div>
               <TemplateTokenEditor
                 language={language}
