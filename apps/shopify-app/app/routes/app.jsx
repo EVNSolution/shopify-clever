@@ -96,10 +96,23 @@ function isAppBusy(navigationState, fetcherStates) {
   return navigationState !== "idle" || fetcherStates.some((state) => state === "submitting");
 }
 
+// Keep the bar mounted across short gaps between chained requests so its slide does not restart.
+const BUSY_BAR_HOLD_MS = 400;
+
 function AppBusyBar() {
   const navigation = useNavigation();
   const fetchers = useFetchers();
-  if (!isAppBusy(navigation.state, fetchers.map((fetcher) => fetcher.state))) return null;
+  const busy = isAppBusy(navigation.state, fetchers.map((fetcher) => fetcher.state));
+  const [shown, setShown] = useState(busy);
+  useEffect(() => {
+    if (busy) {
+      setShown(true);
+      return undefined;
+    }
+    const timer = setTimeout(() => setShown(false), BUSY_BAR_HOLD_MS);
+    return () => clearTimeout(timer);
+  }, [busy]);
+  if (!shown) return null;
   return <div aria-busy="true" aria-label="Loading" className="clever-busy-bar" role="progressbar"></div>;
 }
 

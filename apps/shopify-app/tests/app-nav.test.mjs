@@ -120,3 +120,9 @@ test("app shell shows a busy bar while a navigation or a submitted operation is 
   assert.match(appRouteSource, /<AppProvider embedded apiKey=\{apiKey\}>\s*<AppBusyBar \/>/);
   assert.match(appRouteSource, /className="clever-busy-bar" role="progressbar"/);
 });
+
+test("busy bar stays mounted briefly after work ends so back-to-back requests do not restart its slide", () => {
+  assert.match(appRouteSource, /const BUSY_BAR_HOLD_MS = \d+;/);
+  assert.match(appRouteSource, /setTimeout\(\(\) => setShown\(false\), BUSY_BAR_HOLD_MS\)/);
+  assert.match(appRouteSource, /if \(!shown\) return null;/);
+});
