@@ -101,7 +101,7 @@ const TEXT_FIELDS = [
 
 /**
  * @param {{
- *   addressCheck?: {status: "idle"|"busy"|"ok"|"error", message?: string, data?: {addressLabel: string, latitude: number, longitude: number}, stale?: boolean},
+ *   addressCheck?: {status: "idle"|"busy"|"ok"|"error", message?: string, data?: {matchedAddress: string, latitude: number, longitude: number}, stale?: boolean},
  *   busy: boolean,
  *   draft: Record<string, string>,
  *   fieldErrors?: Record<string, string>,
@@ -238,7 +238,7 @@ export function CustomStopDialog({
                   {addressCheck.stale ? "Address changed since this check" : "Matched address"}
                 </p>
                 <p style={{ fontSize: "14px", lineHeight: "20px", margin: "4px 0 0", overflowWrap: "anywhere" }}>
-                  {addressCheck.data.addressLabel || "Location found"}
+                  {addressCheck.data.matchedAddress || "Location found"}
                 </p>
               </div>
               <p style={hintStyle}>
