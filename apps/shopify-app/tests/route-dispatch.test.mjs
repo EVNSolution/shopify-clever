@@ -1,9 +1,11 @@
 /* eslint-env node */
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { publishDeliveryRoutePlan } from "../app/features/delivery/route-plans.server.js";
 import {
   getDispatchDialogSteps,
+  getDispatchPreviewKey,
   getDispatchEmailResultNotices,
   getDispatchEmailRows,
   getInitialDispatchEmailSelection,
@@ -224,4 +226,21 @@ test("a failed Delivery scheduled send keeps the Dispatch success visible", asyn
   assert.match(notices[1].message, /Route dispatched/);
   assert.equal(notices[2].isError, true);
   assert.match(notices[2].message, /dispatched, but the Delivery scheduled email failed/);
+});
+
+test("email preview cache key depends only on the focused stop and the template", () => {
+  assert.equal(getDispatchPreviewKey("stop-1", "DELIVERED"), getDispatchPreviewKey("stop-1", "DELIVERED"));
+  assert.notEqual(getDispatchPreviewKey("stop-1", "DELIVERED"), getDispatchPreviewKey("stop-2", "DELIVERED"));
+  assert.notEqual(getDispatchPreviewKey("stop-1", "DELIVERED"), getDispatchPreviewKey("stop-1", "DRIVER_NEARBY"));
+  assert.equal(getDispatchPreviewKey(null, "DELIVERED"), null);
+});
+
+test("dispatch email step lays out templates and customers left and a full-height preview right", () => {
+  const dialog = readFileSync(new URL("../app/features/delivery/route-dispatch-dialog.jsx", import.meta.url), "utf8");
+  assert.match(dialog, /width=\{1180\}/);
+  assert.match(dialog, /height="min\(760px, 100%\)"/);
+  assert.ok(dialog.indexOf("<legend") < dialog.indexOf("<DispatchEmailRecipients\n"), "templates are not above the customer list");
+  assert.ok(dialog.indexOf("<DispatchEmailRecipients\n") < dialog.indexOf("<DispatchEmailPreview rows"), "preview is not to the right");
+  assert.match(dialog, /if \(!key \|\| cacheRef\.current\[key\]\) return undefined;/);
+  assert.match(dialog, /opacity: loading \? 0\.5 : 1/);
 });

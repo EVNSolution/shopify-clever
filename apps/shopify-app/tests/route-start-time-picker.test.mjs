@@ -7,6 +7,7 @@ import {
   buildRouteStartCalendarMonth,
   buildRouteStartDateTimeValue,
   buildRouteStartDraft,
+  getRouteStartApplyBlocker,
   getRouteStartPlanDateError,
   getRouteStartPickerSummary,
   getRouteStartTimezoneOptions,
@@ -116,4 +117,26 @@ test("picker timezone abbreviation and calendar month follow the selected date a
     if (previousTZ === undefined) delete process.env.TZ;
     else process.env.TZ = previousTZ;
   }
+});
+
+test("a route without a start time opens on its delivery date with empty time fields", () => {
+  const draft = buildRouteStartDraft("", "Asia/Seoul", "2026-10-15T00:00:00.000Z");
+  assert.equal(draft.date, "2026-10-15");
+  assert.equal(draft.hour, "");
+  assert.equal(draft.minute, "");
+  assert.equal(draft.value, "");
+  // An existing start time keeps its own date.
+  assert.equal(buildRouteStartDraft("2026-10-16T09:00", "Asia/Seoul", "2026-10-15").date, "2026-10-16");
+  assert.equal(buildRouteStartDraft("", "Asia/Seoul", "not a date").date, "");
+});
+
+test("Apply explains why a draft cannot be saved instead of staying inert", () => {
+  const withDate = buildRouteStartDraft("", "Asia/Seoul", "2026-10-15");
+  assert.equal(getRouteStartApplyBlocker(withDate, "", "Asia/Seoul").message, "Enter the hour and minute.");
+  assert.equal(getRouteStartApplyBlocker(buildRouteStartDraft("", "Asia/Seoul"), "", "Asia/Seoul").kind, "unchanged");
+  const bad = { ...withDate, hour: "13", minute: "00" };
+  assert.equal(getRouteStartApplyBlocker(bad, "", "Asia/Seoul").kind, "invalid");
+  const ok = { ...withDate, hour: "9", minute: "30", period: "AM" };
+  assert.equal(getRouteStartApplyBlocker(ok, "", "Asia/Seoul"), null);
+  assert.equal(getRouteStartApplyBlocker(ok, "2026-10-15T09:30", "Asia/Seoul").kind, "unchanged");
 });

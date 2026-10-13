@@ -67,10 +67,10 @@ import {
 } from "../features/delivery/route-group-copy-dialog-state";
 import {
   RouteStartTimePicker,
+  getRouteStartApplyBlocker,
   buildRouteStartDateTimeValue,
   buildRouteStartDraft,
   getRouteStartPlanDateError,
-  isRouteStartDraftSavable,
 } from "../features/delivery/route-start-time-picker";
 import {
   countRouteStopsByStatus,
@@ -4227,7 +4227,8 @@ export default function RouteDetailPage() {
   const [focusedTrackingStopId, setFocusedTrackingStopId] = useState(null);
   const [activeRouteSelector, setActiveRouteSelector] = useState(null);
   const [routeSelectorQuery, setRouteSelectorQuery] = useState("");
-  const [routeStartTimeDraft, setRouteStartTimeDraft] = useState(() => buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
+  const [routeStartTimeDraft, setRouteStartTimeDraft] = useState(() => buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone, routePlanDate));
+  const [routeStartApplyNotice, setRouteStartApplyNotice] = useState("");
   const [routePolygonPoints, setRoutePolygonPoints] = useState([]);
   const [isRoutePolygonClosed, setIsRoutePolygonClosed] = useState(false);
   const [isPolygonTargetPickerOpen, setIsPolygonTargetPickerOpen] = useState(false);
@@ -4380,8 +4381,8 @@ export default function RouteDetailPage() {
     setStopBarMenu(null);
   }, [effectiveRoutePlan?.id]);
   useEffect(() => {
-    setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone));
-  }, [effectiveRoutePlan?.id, routeStartDateTimeValue, routeStartTimeZone]);
+    setRouteStartTimeDraft(buildRouteStartDraft(routeStartDateTimeValue, routeStartTimeZone, routePlanDate));
+  }, [effectiveRoutePlan?.id, routeStartDateTimeValue, routeStartTimeZone, routePlanDate]);
   // Same inputs as the End row of the stop table, so Total time is always End minus Start.
   const routePlannedTotalSeconds = getRoutePlannedTotalSeconds({
     executionEvidence: routeExecutionEvidence,
@@ -5171,7 +5172,9 @@ export default function RouteDetailPage() {
       setRouteStartTimeDraft(buildRouteStartDraft(
         routeRow.startDateTime ?? "",
         routeRow.scheduledStartTimeZone ?? ianaTimezone,
+        routePlanDate,
       ));
+      setRouteStartApplyNotice("");
     }
     setRouteSelectorQuery("");
   };
@@ -5196,22 +5199,37 @@ export default function RouteDetailPage() {
       ? activeRouteSelector.routeRowId
       : currentRouteLineId;
     if (!targetRouteRowId) return;
+    // Apply stays clickable; a draft that cannot be saved explains why inside the dialog.
+    const applyBlocker = getRouteStartApplyBlocker(
+      routeStartTimeDraft,
+      activeRouteSelector?.startDateTime,
+      ianaTimezone,
+    );
+    if (applyBlocker?.kind === "unchanged") {
+      setActiveRouteSelector(null);
+      return;
+    }
+    if (applyBlocker) {
+      setRouteStartApplyNotice(applyBlocker.message);
+      return;
+    }
     const routeStartDateTimeDraftValue = buildRouteStartDateTimeValue(routeStartTimeDraft);
     const scheduledStartAt = routeStartDateTimeDraftValue === ""
       ? null
       : storeLocalDateTimeToIso(routeStartDateTimeDraftValue, routeStartTimeDraft.timezone || ianaTimezone);
     if (routeStartDateTimeDraftValue !== "" && scheduledStartAt === null) {
-      setRouteGroupClientError(translate(language, "routes.detail.schedule.incomplete"));
+      setRouteStartApplyNotice(translate(language, "routes.detail.schedule.incomplete"));
       return;
     }
     if (getRouteStartPlanDateError(routeStartTimeDraft, routePlanDate)) {
-      setRouteGroupClientError(translate(language, "routes.detail.schedule.planDateMismatch", {
+      setRouteStartApplyNotice(translate(language, "routes.detail.schedule.planDateMismatch", {
         planDate: routePlanDate,
         timeZone: routeStartTimeDraft.timezone || ianaTimezone,
       }));
       return;
     }
 
+    setRouteStartApplyNotice("");
     setRouteGroupClientError(null);
     setRouteLineEdits((currentEdits) => ({
       ...currentEdits,
@@ -7889,6 +7907,15 @@ export default function RouteDetailPage() {
                   ) : null}
                 </div>
               ) : null}
+              {kfoodOfficeEnabled && effectiveRoutePlan?.id && !isRouteGroupDetail && !isTrackingMapView ? (
+                <button
+                  aria-haspopup="dialog"
+                  disabled={routeGroupActionBusy}
+                  onClick={() => setRouteOptionsOpen(true)}
+                  style={routeActionButtonStyle}
+                  type="button"
+                >Route options</button>
+              ) : null}
             </div>
           </div>
 
@@ -8360,7 +8387,6 @@ export default function RouteDetailPage() {
                   >Edit ▾</button>
                   {routeActionsMenu === "edit" ? (
                     <div aria-label="Edit route actions" role="menu" style={routeActionsMenuStyle}>
-                      {kfoodOfficeEnabled && effectiveRoutePlan?.id && !isRouteGroupDetail ? <button type="button" role="menuitem" style={routeActionButtonStyle} disabled={routeGroupActionBusy} aria-haspopup="dialog" onClick={() => { setRouteOptionsOpen(true); setRouteActionsMenu(null); }}>Route options</button> : null}
                       {isMaterializedChildRouteDetail ? (
                         <button
                           disabled={routeGroupActionBusy || !canReorderRouteStops}
@@ -10178,7 +10204,10 @@ export default function RouteDetailPage() {
                 <RouteStartTimePicker
                   disabled={routeGroupActionBusy}
                   draft={routeStartTimeDraft}
-                  onDraftChange={setRouteStartTimeDraft}
+                  onDraftChange={(nextDraft) => {
+                    setRouteStartApplyNotice("");
+                    setRouteStartTimeDraft(nextDraft);
+                  }}
                   routeTitle={activeRouteSelector.routeTitle}
                   storeTimezone={ianaTimezone}
                   timezoneAbbreviation={timezoneAbbreviation}
@@ -10220,14 +10249,14 @@ export default function RouteDetailPage() {
                   </div>
                 </>
               )}
+              {activeRouteSelector.type === "startTime" && routeStartApplyNotice ? (
+                <div role="alert" style={{ color: "#b42318", fontSize: 13, fontWeight: 600 }}>{routeStartApplyNotice}</div>
+              ) : null}
               <div style={routeLineEditorActionsStyle}>
                 <button onClick={() => setActiveRouteSelector(null)} style={routeActionButtonStyle} type="button">Close</button>
                 {activeRouteSelector.type === "startTime" ? (
                   <button
-                    disabled={
-                      routeGroupActionBusy ||
-                      !isRouteStartDraftSavable(routeStartTimeDraft, activeRouteSelector.startDateTime, ianaTimezone)
-                    }
+                    disabled={routeGroupActionBusy}
                     onClick={handleSaveRouteStartTime}
                     style={routeLineEditorPrimaryButtonStyle}
                     type="button"

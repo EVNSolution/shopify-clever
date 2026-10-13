@@ -118,3 +118,8 @@ export function getDispatchEmailResultNotices(result, routePlanId, selection) {
   }
   return notices;
 }
+
+/** Cache key of one email preview: it depends only on the focused stop and the template. */
+export function getDispatchPreviewKey(deliveryStopId, signal) {
+  return deliveryStopId && signal ? `${deliveryStopId}\u0000${signal}` : null;
+}

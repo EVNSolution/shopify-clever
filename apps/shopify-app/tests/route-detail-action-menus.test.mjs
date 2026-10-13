@@ -301,13 +301,15 @@ test("terminal route menus disable membership and order changes", () => {
 });
 
 
-test("route options are available only for a KFood route, with existing busy guards", () => {
-  const ordinary = {routeActionsMenu:"edit",isRouteGroupDetail:false};
-  assert.equal(button(renderActions(ordinary).tree,"Route options"),undefined);
-  const enabled = {...ordinary,kfoodOfficeEnabled:true};
-  assert.ok(button(renderActions(enabled).tree,"Route options"));
-  assert.equal(button(renderActions({...enabled,routeGroupActionBusy:true}).tree,"Route options").props.disabled,true);
-  assert.equal(button(renderActions({...enabled,isRouteGroupDetail:true}).tree,"Route options"),undefined);
+test("route options live in the header, not the Edit menu, with the old KFood and busy guards", () => {
+  for (const overrides of [{ isRouteGroupDetail: false }, { isRouteGroupDetail: false, kfoodOfficeEnabled: true }]) {
+    const { tree } = renderActions({ ...overrides, routeActionsMenu: "edit" });
+    assert.equal(button(tree, "Route options"), undefined);
+    assert.ok(button(tree, "Re-optimize"));
+  }
+  const trigger = source.slice(source.indexOf("kfoodOfficeEnabled && effectiveRoutePlan?.id && !isRouteGroupDetail && !isTrackingMapView"));
+  assert.ok(source.indexOf("Route options</button>") < source.indexOf("</header>"), "button is not in the route header");
+  assert.match(trigger.slice(0, 400), /disabled=\{routeGroupActionBusy\}[\s\S]*onClick=\{\(\) => setRouteOptionsOpen\(true\)\}[\s\S]*>Route options<\/button>/);
 });
 
 test("a KFood route in progress dispatches only saved, located changes through the same button", () => {

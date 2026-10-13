@@ -68,7 +68,8 @@ export function buildRouteStartDateTimeValue(draft) {
   return `${date}T${String(hour24).padStart(2, "0")}:${String(numericMinute).padStart(2, "0")}`;
 }
 
-export function buildRouteStartDraft(value, defaultTimezone = "") {
+// defaultDate (the route's delivery date) only pre-selects the calendar day when no start time exists yet.
+export function buildRouteStartDraft(value, defaultTimezone = "", defaultDate = "") {
   if (value && typeof value === "object") {
     return normalizeDraft(
       value.date,
@@ -80,7 +81,7 @@ export function buildRouteStartDraft(value, defaultTimezone = "") {
   }
 
   const match = String(value ?? "").match(DATE_TIME_PATTERN);
-  if (!match) return normalizeDraft("", "", "", "AM", defaultTimezone);
+  if (!match) return normalizeDraft(String(defaultDate ?? "").slice(0, 10), "", "", "AM", defaultTimezone);
 
   const hour24 = Number(match[2]);
   const period = hour24 >= 12 ? "PM" : "AM";
@@ -93,6 +94,20 @@ export function isRouteStartDraftSavable(draft, currentValue, currentTimezone = 
   if (value === null) return false;
   if (value === "" && !currentValue) return false;
   return value !== currentValue || (value !== "" && draft?.timezone !== currentTimezone);
+}
+
+// Why Apply cannot save the draft, shown inside the dialog instead of a silently inert button.
+// "unchanged" means there is nothing to save, so the caller may just close the dialog.
+export function getRouteStartApplyBlocker(draft, currentValue, currentTimezone = "") {
+  if (isRouteStartDraftSavable(draft, currentValue, currentTimezone)) return null;
+  const value = buildRouteStartDateTimeValue(draft);
+  if (value !== null) return { kind: "unchanged", message: "" };
+  const date = String(draft?.date ?? "");
+  const hour = String(draft?.hour ?? "");
+  const minute = String(draft?.minute ?? "");
+  if (!isValidDateText(date)) return { kind: "incomplete", message: "Select a date." };
+  if (hour === "" || minute === "") return { kind: "incomplete", message: "Enter the hour and minute." };
+  return { kind: "invalid", message: "Hour must be 1-12 and minute 0-59." };
 }
 
 export function getRouteStartPlanDateError(draft, planDate) {
