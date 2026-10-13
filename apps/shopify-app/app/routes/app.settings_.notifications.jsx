@@ -438,6 +438,22 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
     fetcher.submit(formData, { method: "post" });
   };
 
+  // The Status switch in the templates table saves only the enabled flag; subject and body are resent unchanged.
+  const toggleTemplateEnabled = async (signal, enabled) => {
+    const template = settings.templates[signal];
+    if (!template) return;
+    const formData = new FormData();
+    formData.set("_intent", "saveCustomerEmailTemplate");
+    formData.set("shopifySessionToken", await shopify.idToken());
+    formData.set("body", template.body ?? "");
+    formData.set("enabled", String(enabled));
+    formData.set("expectedVersion", template.version ?? "");
+    formData.set("subject", template.subject ?? "");
+    formData.set("templateSignal", signal);
+    setSavingTemplateSignal(signal);
+    fetcher.submit(formData, { method: "post" });
+  };
+
   const handleLogoUpload = async (event) => {
     const logo = event.target.files?.[0] ?? null;
     if (!logo) return;
@@ -531,10 +547,12 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
                   <th scope="row" style={notificationTemplateNameCellStyle}>{label}</th>
                   <td style={notificationTemplateSubjectCellStyle}>{settings.templates[signal]?.subject || <span style={notificationTemplateEmptyTextStyle}>No subject</span>}</td>
                   <td style={notificationTemplateStatusCellStyle}>
-                    <span style={settings.templates[signal]?.enabled === false ? notificationTemplateDisabledStatusStyle : notificationTemplateEnabledStatusStyle}>
-                      <span aria-hidden="true" style={notificationTemplateStatusDotStyle} />
-                      {settings.templates[signal]?.enabled === false ? "Disabled" : "Enabled"}
-                    </span>
+                    <ToggleSwitch
+                      checked={settings.templates[signal]?.enabled !== false}
+                      disabled={busy}
+                      label={`${label} template enabled`}
+                      onChange={(enabled) => toggleTemplateEnabled(signal, enabled)}
+                    />
                   </td>
                   <td style={notificationTemplateActionCellStyle}>
                     <button aria-label={`Edit ${label} template`} onClick={() => openTemplateEditor(signal)} style={notificationTemplateEditButtonStyle} type="button">Edit</button>
@@ -997,31 +1015,6 @@ const notificationTemplateEditButtonStyle = {
   fontSize: "13px",
   fontWeight: 650,
   padding: "7px 8px",
-};
-
-const notificationTemplateEnabledStatusStyle = {
-  alignItems: "center",
-  background: "#eaf4ee",
-  borderRadius: "999px",
-  color: "#17663a",
-  display: "inline-flex",
-  fontSize: "12px",
-  fontWeight: 650,
-  gap: "6px",
-  padding: "3px 8px",
-};
-
-const notificationTemplateDisabledStatusStyle = {
-  ...notificationTemplateEnabledStatusStyle,
-  background: "#f1f1f1",
-  color: "#616161",
-};
-
-const notificationTemplateStatusDotStyle = {
-  background: "currentColor",
-  borderRadius: "50%",
-  height: "6px",
-  width: "6px",
 };
 
 const notificationTemplateEditorLayoutStyle = {
