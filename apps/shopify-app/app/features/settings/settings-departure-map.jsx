@@ -19,7 +19,7 @@ function coordinateToLngLat(coordinate) {
   return [coordinate.longitude, coordinate.latitude];
 }
 
-export function LocationPreviewMap({ ariaLabel = "Location map", coordinate, onCoordinateChange, readOnly = false }) {
+export function LocationPreviewMap({ ariaLabel = "Location map", coordinate, height, onCoordinateChange, readOnly = false }) {
   const initialCoordinateRef = useRef(coordinate);
   const mapContainerRef = useRef(null);
   const mapLibraryRef = useRef(null);
@@ -146,7 +146,7 @@ export function LocationPreviewMap({ ariaLabel = "Location map", coordinate, onC
     <MapPanel
       ariaLabel={ariaLabel}
       canvasRef={mapContainerRef}
-      frameStyle={settingsMapFrameStyle}
+      frameStyle={height ? { ...settingsMapFrameStyle, height } : settingsMapFrameStyle}
       toolbar={
         <MapToolbar
           actions={[
