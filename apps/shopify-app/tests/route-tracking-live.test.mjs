@@ -150,7 +150,7 @@ test("live tracking updates MapLibre sources instead of rebuilding the child map
   assert.doesNotMatch(routeDetailSource, /preserveRouteColor/);
   assert.match(routeDetailSource, /background: completedTrackingStopIds\.has\(row\.id\)[\s\S]*ROUTE_DETAIL_COMPLETED_STOP_COLOR[\s\S]*routeStopColorById\.get\(row\.id\) \?\? routeLineColor/);
   assert.match(routeDetailSource, /if \(!isMapReady \|\| !routeMapRef\.current\) return undefined/);
-  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot\)/);
+  assert.match(routeDetailSource, /syncRouteDetailLiveTracking\(routeMapRef\.current, displayedRouteTrackingSnapshot, ianaTimezone\)/);
   assert.doesNotMatch(routeDetailSource, /handleArrivalMarkerClick|route-tracking-arrival-popup|Arrived stop/);
   assert.match(routeDetailSource, /new maplibregl\.Popup\(/);
   assert.match(routeDetailSource, /\.setDOMContent\(content\)/);

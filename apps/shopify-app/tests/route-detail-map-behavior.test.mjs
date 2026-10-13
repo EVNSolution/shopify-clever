@@ -21,6 +21,8 @@ const TRACKING_LAYER_IDS = [
   "route-detail-live-tracking-trail",
   "route-detail-live-tracking-connector",
   "route-detail-live-driver-position",
+  "route-detail-live-tracking-start",
+  "route-detail-live-tracking-start-label",
 ];
 const DRIVER_POSITION_LAYER_ID = "route-detail-live-driver-position";
 
@@ -532,7 +534,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   );
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["visible", "visible", "visible"],
+    TRACKING_LAYER_IDS.map(() => "visible"),
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.paint?.["circle-color"], "#d82c0d");
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "visible");
@@ -543,7 +545,7 @@ test("tracking layers reuse their sources while current driver position stays ex
   assert.equal(syncRouteDetailTrackingVisibility(fake.map, false), true);
   assert.deepEqual(
     TRACKING_LAYER_IDS.map((id) => fake.layers.get(id)?.layout?.visibility),
-    ["none", "none", "none"],
+    TRACKING_LAYER_IDS.map(() => "none"),
   );
   assert.equal(fake.layers.get(DRIVER_POSITION_LAYER_ID)?.layout?.visibility, "none");
 
