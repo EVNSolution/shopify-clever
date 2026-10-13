@@ -202,6 +202,21 @@ export async function createDeliveryRouteGroupCustomStop(request, routeGroupId, 
   });
 }
 
+// Read-only: asks the server where a custom stop address would be placed. Nothing is saved.
+export async function checkDeliveryRouteGroupCustomStopAddress(request, routeGroupId, payload, options = {}) {
+  const safeRouteGroupId = encodeURIComponent(routeGroupId ?? "");
+  if (!safeRouteGroupId) {
+    return { check: null, errors: missingRouteGroupResult("확인할 custom stop의 route group ID가 없습니다.").errors };
+  }
+  const result = await deliveryApiRequest(request, `/admin/route-groups/${safeRouteGroupId}/stops/custom/check`, {
+    body: JSON.stringify(payload ?? {}),
+    fetch: options.fetch,
+    method: "POST",
+    sessionToken: options.sessionToken,
+  });
+  return { check: result.data?.check ?? null, errors: result.errors };
+}
+
 export async function updateDeliveryRouteGroupCustomStop(
   request,
   routeGroupId,

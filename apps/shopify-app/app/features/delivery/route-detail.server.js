@@ -12,6 +12,7 @@ import {
 } from "../customer-notifications/customer-email.server";
 import { fetchDeliveryOrders, syncDeliveryOrders } from "./orders.server";
 import {
+  checkDeliveryRouteGroupCustomStopAddress,
   copyDeliveryRouteGroup,
   createDeliveryRouteGroupCustomStop,
   deleteDeliveryRouteGroup,
@@ -63,8 +64,12 @@ import { readRouteDraftPayload } from "./route-draft";
 import { buildRouteAddOrderCandidates } from "./route-add-order-candidates";
 import { getKfoodLiveChangeContext } from "./live-change.server.js";
 import {
+  buildCustomStopAddressCheckPayload,
   buildCustomStopPayload,
   createCustomStopDraft,
+  customStopAddressKey,
+  isCustomStopAddressCheckReady,
+  readCustomStopAddressCheck,
   validateCustomStopDraft,
 } from "./custom-stop-form";
 import {
@@ -764,6 +769,28 @@ export const routeDetailAction = async ({ params, request }) => {
       addedOrders: addOrderIds.length,
       routeGroup: addResult.routeGroup,
       errors: addResult.errors ?? [],
+    };
+  }
+
+  if (intent === "checkCustomStopAddress") {
+    const targetRouteGroupId = routeGroupIdFromParams ?? routeGroupId;
+    if (!targetRouteGroupId) {
+      return { addressCheck: null, errors: [{ message: "Custom stop의 route group을 찾지 못했습니다." }] };
+    }
+    const draft = readCustomStopDraft(formData);
+    if (!isCustomStopAddressCheckReady(draft)) {
+      return { addressCheck: null, errors: [{ message: "Enter an address and a two-letter country code first." }] };
+    }
+    const result = await checkDeliveryRouteGroupCustomStopAddress(
+      request,
+      targetRouteGroupId,
+      buildCustomStopAddressCheckPayload(draft),
+      { sessionToken: shopifySessionToken },
+    );
+    return {
+      addressCheck: result.errors.length > 0 ? null : readCustomStopAddressCheck(result.check),
+      addressCheckKey: customStopAddressKey(draft),
+      errors: result.errors,
     };
   }
 

@@ -47,9 +47,14 @@ import { RouteOriginalGpsPoints, renderGpsPointsIcon } from "../features/deliver
 import { gpsDiagnosticSearchParams } from "../features/delivery/route-gps-diagnostics";
 import { CustomStopDialog } from "../features/delivery/custom-stop-dialog";
 import {
+  applyAddressCheckToDraft,
   createCustomStopDraft,
+  customStopAddressKey,
+  defaultStopTargetRoutePlanId,
   isCustomRouteStop,
+  isCustomStopAddressCheckReady,
   isStopTargetRouteValid,
+  shouldShowStopTargetRoutePicker,
   updateCustomStopDraftField,
   validateCustomStopDraft,
 } from "../features/delivery/custom-stop-form";
@@ -3922,6 +3927,7 @@ export default function RouteDetailPage() {
   );
   const routeActionFetcher = useFetcher();
   const customerEmailFetcher = useFetcher();
+  const addressCheckFetcher = useFetcher();
   const {
     addOrderCandidates = EMPTY_ROUTE_ADD_ORDER_CANDIDATES,
     childRouteDetails = [],
@@ -4183,6 +4189,7 @@ export default function RouteDetailPage() {
   const [addStopTargetRoutePlanId, setAddStopTargetRoutePlanId] = useState(() => effectiveRoutePlan?.id ?? "");
   const [customStopDraft, setCustomStopDraft] = useState(() => createCustomStopDraft());
   const [customStopFieldErrors, setCustomStopFieldErrors] = useState({});
+  const [customStopAddressCheck, setCustomStopAddressCheck] = useState({ status: "idle" });
   const [activeCustomStopEditRow, setActiveCustomStopEditRow] = useState(null);
   const [routeActionsMenu, setRouteActionsMenu] = useState(null);
   const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
@@ -6314,6 +6321,23 @@ export default function RouteDetailPage() {
     );
   }, [customerEmailPreview, customerEmailRecipients]);
 
+  useEffect(() => {
+    const data = addressCheckFetcher.data;
+    if (addressCheckFetcher.state !== "idle" || !data || !("addressCheckKey" in data)) return;
+    if (data.addressCheck) {
+      setCustomStopAddressCheck({ data: data.addressCheck, key: data.addressCheckKey, status: "ok" });
+      setCustomStopDraft((draft) => (
+        customStopAddressKey(draft) === data.addressCheckKey ? applyAddressCheckToDraft(draft, data.addressCheck) : draft
+      ));
+      return;
+    }
+    setCustomStopAddressCheck({
+      key: data.addressCheckKey,
+      message: data.errors?.[0]?.message,
+      status: "error",
+    });
+  }, [addressCheckFetcher.data, addressCheckFetcher.state]);
+
   const submitRouteGroupAction = async (intent, fields = {}) => {
     if (!routeGroupId) {
       setRouteGroupClientError("Route group id가 없어 작업을 실행할 수 없습니다.");
@@ -6472,9 +6496,13 @@ export default function RouteDetailPage() {
     setAddOrderDateEnd("");
     setAddOrderSearchQuery("");
     setAddStopMode(null);
-    setAddStopTargetRoutePlanId(isRouteGroupDetail ? "" : effectiveRoutePlan?.id ?? "");
+    // A group with one enabled child route needs no choice: preselect it instead of asking the office.
+    setAddStopTargetRoutePlanId(isRouteGroupDetail
+      ? defaultStopTargetRoutePlanId(addStopTargetRouteOptions)
+      : effectiveRoutePlan?.id ?? "");
     setCustomStopDraft(createCustomStopDraft());
     setCustomStopFieldErrors({});
+    setCustomStopAddressCheck({ status: "idle" });
     setIsAddOrderDialogOpen(true);
   };
 
@@ -6568,11 +6596,35 @@ export default function RouteDetailPage() {
     });
   };
 
+  // Read-only: asks the server where this address would be placed, with the same geocoder a save uses.
+  const handleCheckCustomStopAddress = async () => {
+    if (!isCustomStopAddressCheckReady(customStopDraft) || addressCheckFetcher.state !== "idle") return;
+    const key = customStopAddressKey(customStopDraft);
+    setCustomStopAddressCheck({ key, status: "busy" });
+    try {
+      const formData = new FormData();
+      formData.set("_intent", "checkCustomStopAddress");
+      if (routeGroupId) formData.set("routeGroupId", routeGroupId);
+      formData.set("shopifySessionToken", await shopify.idToken());
+      for (const field of ["address1", "address2", "city", "province", "postalCode", "countryCode"]) {
+        formData.set(field, customStopDraft[field] ?? "");
+      }
+      addressCheckFetcher.submit(formData, { method: "post" });
+    } catch {
+      setCustomStopAddressCheck({
+        key,
+        message: "Shopify session token을 가져오지 못했습니다. 페이지를 새로고침한 뒤 다시 시도해주세요.",
+        status: "error",
+      });
+    }
+  };
+
   const handleOpenCustomStopEditor = (row) => {
     if (!canEditStopRow(row)) return;
     if (!row?.deliveryStopId || !row.isCustomStop) return;
     setCustomStopDraft(buildCustomStopDraftFromRow(row));
     setCustomStopFieldErrors({});
+    setCustomStopAddressCheck({ status: "idle" });
     setActiveCustomStopEditRow(row);
     setActiveRouteTimelineStopPopover(null);
   };
@@ -9792,11 +9844,17 @@ export default function RouteDetailPage() {
             />
             {addStopMode === "custom" ? (
               <CustomStopDialog
+                addressCheck={{
+                  ...customStopAddressCheck,
+                  stale: customStopAddressCheck.status === "ok"
+                    && customStopAddressCheck.key !== customStopAddressKey(customStopDraft),
+                }}
                 busy={createCustomStopBusy}
                 draft={customStopDraft}
                 fieldErrors={customStopFieldErrors}
                 onCancel={() => setIsAddOrderDialogOpen(false)}
                 onChange={handleCustomStopDraftChange}
+                onCheckAddress={handleCheckCustomStopAddress}
                 onSubmit={() => submitCustomStop("createCustomStop")}
                 onTargetRouteChange={setAddStopTargetRoutePlanId}
                 targetRouteOptions={addStopTargetRouteOptions}
@@ -9836,7 +9894,7 @@ export default function RouteDetailPage() {
               <div style={routeAddOrderHeaderStyle}>
                 <div>
                   <h2 style={routeLineEditorTitleStyle}>Add existing orders</h2>
-                  {isRouteGroupDetail ? (
+                  {isRouteGroupDetail && shouldShowStopTargetRoutePicker(addStopTargetRouteOptions) ? (
                     <label style={{ ...routeAddOrderFilterFieldStyle, marginTop: "8px", maxWidth: "240px" }}>
                       <span style={routeAddOrderFilterLabelStyle}>Add to</span>
                       <select
@@ -10104,12 +10162,18 @@ export default function RouteDetailPage() {
               type="button"
             />
             <CustomStopDialog
+              addressCheck={{
+                ...customStopAddressCheck,
+                stale: customStopAddressCheck.status === "ok"
+                  && customStopAddressCheck.key !== customStopAddressKey(customStopDraft),
+              }}
               busy={updateCustomStopBusy}
               draft={customStopDraft}
               fieldErrors={customStopFieldErrors}
               isEdit
               onCancel={() => setActiveCustomStopEditRow(null)}
               onChange={handleCustomStopDraftChange}
+              onCheckAddress={handleCheckCustomStopAddress}
               onSubmit={() => submitCustomStop("updateCustomStop", activeCustomStopEditRow)}
               onTargetRouteChange={() => {}}
             />

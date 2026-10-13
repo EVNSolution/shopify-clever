@@ -183,7 +183,10 @@ test("route detail branches the first add dialog and keeps custom stops DB-only"
   assert.doesNotMatch(routeDetailSource, /customStopAddressFetcher|searchCustomStopAddress|selectCustomStopAddress/);
   assert.match(routeDetailSource, /updateCustomStopDraftField\(draft, field, value\)/);
   assert.doesNotMatch(routeDetailSource, /handleCustomStopPinChange/);
-  assert.doesNotMatch(customStopDialogSource, /LocationPreviewMap|navigation pin|Latitude|Longitude|onCoordinateChange/);
+  // The office may see where the server will place the stop (read-only map), but never edit coordinates:
+  // the server geocoder owns them and ignores caller-supplied values.
+  assert.doesNotMatch(customStopDialogSource, /navigation pin|Latitude|Longitude|onCoordinateChange/);
+  assert.match(customStopDialogSource, /<LocationPreviewMap[\s\S]*?readOnly[\s\S]*?\/>/);
   assert.doesNotMatch(customStopDialogSource, /Search address|Select this address|OpenStreetMap contributors/);
   assert.doesNotMatch(customStopDialogSource, /Stop name|Stop time|Priority|Time window|Driver instructions/);
   assert.doesNotMatch(customStopDraftReaderSource, /formData\.get\("(latitude|longitude|stopName|serviceMinutes|priority|timeWindowStart|timeWindowEnd|instructions)"\)/);
