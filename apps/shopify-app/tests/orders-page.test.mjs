@@ -1302,7 +1302,7 @@ test("Orders page syncs loaded Shopify snapshots without adding sync cards", () 
 });
 
 test("Orders owns global Shopify order update and safe route refresh", () => {
-  assert.match(ordersPageSource, /import \{ refreshRouteOrders \} from "\.\.\/delivery\/route-detail\.server"/);
+  assert.match(ordersPageSource, /import \{ loadCustomerEmailDispatchContext, refreshRouteOrders \} from "\.\.\/delivery\/route-detail\.server"/);
   assert.match(ordersPageSource, /import \{ getBulkRefreshRoutePlanIds \} from "\.\.\/delivery\/route-order-refresh"/);
   assert.match(ordersPageSource, /const ordersRefreshFetcher = useFetcher\(\)/);
   assert.match(ordersPageSource, /const ordersReconciliationStatusFetcher = useFetcher\(\)/);

@@ -1,4 +1,5 @@
 import { OfficeDialog, RouteOptionsFields } from "../delivery/route-office-components";
+import { CustomerEmailAutomaticSwitch } from "../customer-notifications/customer-email-components";
 import { normalizeRouteOptions } from "../delivery/route-office-options.js";
 /* eslint-disable react/prop-types */
 import { formatStoreInstant, getStoreDate } from "../shopify/store-date-time";
@@ -3236,6 +3237,9 @@ function OrdersPageContent({ loaderData }) {
           {routeOptionsOpen ? (
             <OfficeDialog title="Route options" onClose={() => setRouteOptionsOpen(false)}>
               <RouteOptionsFields value={routeOptions} onChange={setRouteOptions} disabled={isCreatingRoute} showStopTime />
+              <div style={{ borderTop: "1px solid #e3e3e3", paddingTop: 12 }}>
+                <CustomerEmailAutomaticSwitch enabled={loaderData.customerEmailAutomaticEnabled ?? null} />
+              </div>
             </OfficeDialog>
           ) : null}
         </div>

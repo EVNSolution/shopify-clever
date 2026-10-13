@@ -416,7 +416,7 @@ function readJsonTextArray(value) {
 
 // What the Dispatch popup needs: the shop automatic switch and which templates are enabled.
 // automaticEnabled is null when the settings could not be loaded.
-async function loadCustomerEmailDispatchContext(request, cacheKey) {
+export async function loadCustomerEmailDispatchContext(request, cacheKey) {
   try {
     const { customerEmailSettings, errors } = await fetchCustomerEmailSettings(request, { cacheKey });
     if (errors.length > 0 || !customerEmailSettings) return { automaticEnabled: null, enabledSignals: [] };

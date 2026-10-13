@@ -31,7 +31,7 @@ import {
   updateDeliveryRouteGroupOrders,
 } from "../delivery/route-groups.server";
 import { getRouteGroupChildRoutePlanId, getVisibleRouteGroupChildren } from "../delivery/route-helpers";
-import { refreshRouteOrders } from "../delivery/route-detail.server";
+import { loadCustomerEmailDispatchContext, refreshRouteOrders } from "../delivery/route-detail.server";
 import { getBulkRefreshRoutePlanIds } from "../delivery/route-order-refresh";
 import { fetchShopifyDepartureLocation } from "../locations/shopify-locations.server";
 import { fetchShopifyAppPreferences } from "../settings/app-preferences.server";
@@ -759,6 +759,12 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
   const shouldLoadShopifyOrders =
     shouldLoadShopifyMetadata && !canonicalFirst;
 
+  // Shop-wide automatic customer email switch for the Route options dialog (K-food office only).
+  // null = not loaded; the shared switch shows its "unavailable" state.
+  const customerEmailAutomaticPromise = isKfoodOfficeEnabled(shopifyShopCacheKey)
+    ? loadCustomerEmailDispatchContext(request, shopifyShopCacheKey).then((context) => context.automaticEnabled)
+    : Promise.resolve(null);
+
   const preferencesStartedAt = getSafePerformanceNow();
   const preferencesDataPromise = shouldLoadOrders
     ? fetchShopifyAppPreferences(admin).then((preferencesData) => ({
@@ -937,6 +943,7 @@ async function loadOrdersPageData({ admin, loaderStartedAt, path, request, reque
   });
 
   return {
+    customerEmailAutomaticEnabled: await customerEmailAutomaticPromise,
     orders: mergedOrders,
     resolvedOrderSearch: queryFilters.search ?? "",
     ordersCacheKey: shopifyShopCacheKey ?? null,
