@@ -10,6 +10,7 @@ process.env.CLEVER_DELIVERY_API_GET_CACHE_TTL_MS = "0";
 
 import {
   applyAddressCheckToDraft,
+  customStopAddressKeyAfterCheck,
   buildCustomStopAddressCheckPayload,
   createCustomStopDraft,
   customStopAddressKey,
@@ -42,6 +43,13 @@ test("the check payload carries only address fields with an upper-case country",
   });
 });
 
+test("filling the postal code from a check keeps that check current", () => {
+  const draft = createCustomStopDraft({ address1: "100 Queen St W", countryCode: "CA" });
+  const filled = applyAddressCheckToDraft(draft, { postalCode: "M5H 2N2" });
+  assert.notEqual(customStopAddressKey(filled), customStopAddressKey(draft));
+  assert.equal(customStopAddressKey(filled), customStopAddressKeyAfterCheck(draft, { postalCode: "M5H 2N2" }));
+});
+
 test("a check fills only an empty postal code", () => {
   const draft = createCustomStopDraft({ address1: "100 Queen St W", countryCode: "CA" });
   assert.equal(applyAddressCheckToDraft(draft, { postalCode: "M5H 2N2" }).postalCode, "M5H 2N2");
@@ -52,9 +60,11 @@ test("a check fills only an empty postal code", () => {
 
 test("a check result needs a valid coordinate pair", () => {
   assert.deepEqual(
-    readCustomStopAddressCheck({ addressLabel: " 100 Queen St W ", latitude: "43.65", longitude: -79.38, postalCode: "" }),
-    { addressLabel: "100 Queen St W", latitude: 43.65, longitude: -79.38, postalCode: null },
+    readCustomStopAddressCheck({ matchedAddress: " 100 Queen St W ", latitude: "43.65", longitude: -79.38, postalCode: "" }),
+    { latitude: 43.65, longitude: -79.38, matchedAddress: "100 Queen St W", postalCode: null },
   );
+  // The legacy addressLabel is only a query shape such as "freeform"; it must never be shown as the matched address.
+  assert.equal(readCustomStopAddressCheck({ addressLabel: "freeform", latitude: 1, longitude: 2 }).matchedAddress, "");
   assert.equal(readCustomStopAddressCheck({ latitude: 91, longitude: 0 }), null);
   assert.equal(readCustomStopAddressCheck({ latitude: 10 }), null);
   assert.equal(readCustomStopAddressCheck(null), null);

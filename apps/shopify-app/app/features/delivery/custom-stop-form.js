@@ -104,15 +104,21 @@ export function applyAddressCheckToDraft(draft, check) {
   return { ...draft, postalCode };
 }
 
+// The key of the draft after a check fills the postal code, so that fill does not make the result look stale.
+export function customStopAddressKeyAfterCheck(draft, check) {
+  return customStopAddressKey(applyAddressCheckToDraft(draft, check));
+}
+
 export function readCustomStopAddressCheck(data) {
   const latitude = Number(data?.latitude);
   const longitude = Number(data?.longitude);
   if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
   if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) return null;
   return {
-    addressLabel: cleanText(data?.addressLabel),
     latitude,
     longitude,
+    // Only the server's matchedAddress is the matched place text; addressLabel is a query shape such as "freeform".
+    matchedAddress: cleanText(data?.matchedAddress),
     postalCode: cleanText(data?.postalCode) || null,
   };
 }

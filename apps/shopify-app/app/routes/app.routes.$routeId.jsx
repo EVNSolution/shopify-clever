@@ -50,6 +50,7 @@ import {
   applyAddressCheckToDraft,
   createCustomStopDraft,
   customStopAddressKey,
+  customStopAddressKeyAfterCheck,
   defaultStopTargetRoutePlanId,
   isCustomRouteStop,
   isCustomStopAddressCheckReady,
@@ -6321,14 +6322,26 @@ export default function RouteDetailPage() {
     );
   }, [customerEmailPreview, customerEmailRecipients]);
 
+  const customStopDraftRef = useRef(customStopDraft);
+  useEffect(() => {
+    customStopDraftRef.current = customStopDraft;
+  }, [customStopDraft]);
+
   useEffect(() => {
     const data = addressCheckFetcher.data;
     if (addressCheckFetcher.state !== "idle" || !data || !("addressCheckKey" in data)) return;
     if (data.addressCheck) {
-      setCustomStopAddressCheck({ data: data.addressCheck, key: data.addressCheckKey, status: "ok" });
-      setCustomStopDraft((draft) => (
-        customStopAddressKey(draft) === data.addressCheckKey ? applyAddressCheckToDraft(draft, data.addressCheck) : draft
-      ));
+      // Filling the postal code changes the address key; the result stays current only when that is the sole change.
+      const currentDraft = customStopDraftRef.current;
+      const stillCurrent = customStopAddressKey(currentDraft) === data.addressCheckKey;
+      setCustomStopAddressCheck({
+        data: data.addressCheck,
+        key: stillCurrent
+          ? customStopAddressKeyAfterCheck(currentDraft, data.addressCheck)
+          : data.addressCheckKey,
+        status: "ok",
+      });
+      if (stillCurrent) setCustomStopDraft((draft) => applyAddressCheckToDraft(draft, data.addressCheck));
       return;
     }
     setCustomStopAddressCheck({
