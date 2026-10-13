@@ -261,8 +261,8 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /contactEmail/);
   assert.match(notificationsPageSource, /websiteUrl/);
   assert.match(notificationsPageSource, /note/);
-  assert.match(notificationsPageSource, /formData\.set\("subject", renderTemplatePreviewValue\(templateDraft\.subject\)\)/);
-  assert.match(notificationsPageSource, /formData\.set\("body", renderTemplatePreviewValue\(templateDraft\.body\)\)/);
+  assert.match(notificationsPageSource, /formData\.set\("subject", renderTemplatePreviewValue\(templateDraft\.subject, settings\.etaWindow\)\)/);
+  assert.match(notificationsPageSource, /formData\.set\("body", renderTemplatePreviewValue\(templateDraft\.body, settings\.etaWindow\)\)/);
   assert.match(notificationsPageSource, /subject: formText\(formData\.get\("subject"\)\)/);
   assert.match(notificationsPageSource, /body: formText\(formData\.get\("body"\)\)/);
   assert.doesNotMatch(notificationsPageSource, /id="test-customer-email-subject"|label="Test subject"/);
