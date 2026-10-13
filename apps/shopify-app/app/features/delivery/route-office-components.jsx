@@ -113,7 +113,7 @@ function Errors({ errors = [], compact = false }) {
 }
 
 /** Popup shell for the office controls. Pass `actions` to replace the default Done button. */
-export function OfficeDialog({ title, onClose, children, actions, width }) {
+export function OfficeDialog({ title, onClose, children, actions, width, height }) {
   const titleId = useId();
   const dialogRef = useRef(null);
   const onCloseRef = useRef(onClose);
@@ -151,7 +151,12 @@ export function OfficeDialog({ title, onClose, children, actions, width }) {
         aria-modal="true"
         aria-labelledby={titleId}
         tabIndex={-1}
-        style={width ? { ...dialogStyle, width } : dialogStyle}
+        style={{
+          ...dialogStyle,
+          ...(width ? { width } : null),
+          // A fixed height gives the one child below the title the whole middle row.
+          ...(height ? { gridTemplateRows: "auto minmax(0, 1fr) auto", height } : null),
+        }}
       >
         <h2 id={titleId} style={{ fontSize: 20, margin: 0 }}>
           {title}

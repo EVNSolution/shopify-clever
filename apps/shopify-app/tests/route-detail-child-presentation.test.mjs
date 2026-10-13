@@ -967,7 +967,10 @@ test("materialized child headers stage a complete per-route start date and time 
   assert.match(routeDetailSource, /aria-label="Change route start time"/);
   assert.match(routeDetailSource, /handleOpenRouteSelector\("startTime"/);
   assert.match(routeDetailSource, /currentTimelineRouteRow\?\.startTimeLabel \?\? routeStartTimeLabel/);
-  assert.match(routeDetailSource, /<RouteStartTimePicker[\s\S]*draft=\{routeStartTimeDraft\}[\s\S]*onDraftChange=\{setRouteStartTimeDraft\}/);
+  assert.match(routeDetailSource, /<RouteStartTimePicker[\s\S]*draft=\{routeStartTimeDraft\}[\s\S]*onDraftChange=\{\(nextDraft\) => \{[\s\S]*setRouteStartTimeDraft\(nextDraft\)/);
+  assert.match(routeDetailSource, /buildRouteStartDraft\(routeStartDateTimeValue, routeStartTimeZone, routePlanDate\)/);
+  assert.match(routeDetailSource, /\{routeStartApplyNotice\}/);
+  assert.doesNotMatch(routeDetailSource, /!isRouteStartDraftSavable\(routeStartTimeDraft/);
   assert.match(routeDetailSource, /routeTitle=\{activeRouteSelector\.routeTitle\}/);
   assert.match(routeDetailSource, /activeRouteSelector\.type === "startTime" \? routeStartTimeDialogStyle : null/);
   assert.doesNotMatch(routeDetailSource, /type="datetime-local"/);
