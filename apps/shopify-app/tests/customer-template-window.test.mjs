@@ -16,3 +16,11 @@ test("scheduled window can be inserted without replacing custom copy or changing
   assert.equal(translate("ko", "notifications.variables.etaWindow"), "예상 도착 시간대");
   assert.equal(translate("en", "notifications.variables.etaWindow"), "Estimated arrival window");
 });
+
+test("tracking link is a supported variable that saves as {{trackingLink}} with en/ko labels", () => {
+  const document = insertTemplateToken(parseTemplateDocument("Track your delivery: "), "trackingLink");
+  assert.equal(serializeTemplateDocument(document), "Track your delivery: {{trackingLink}}");
+  assert.equal(hasUnsupportedTemplateSegments(parseTemplateDocument("{{trackingLink}}")), false);
+  assert.equal(translate("en", "notifications.variables.trackingLink"), "Tracking link");
+  assert.equal(translate("ko", "notifications.variables.trackingLink"), "배송 추적 링크");
+});

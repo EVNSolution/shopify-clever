@@ -908,6 +908,7 @@ const TEMPLATE_PREVIEW_VALUES = {
   routeName: "Melbourne CBD",
   sequence: "Stop 7",
   shopName: "CLEVER Market",
+  trackingLink: "https://clever-route.cleversystem.ai/t/example",
 };
 
 function renderTemplatePreviewValue(value, etaWindow) {

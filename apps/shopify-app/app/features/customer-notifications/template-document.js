@@ -10,6 +10,7 @@ export const CUSTOMER_NOTIFICATION_VARIABLES = [
   "sequence",
   "shopName",
   "inventoryList",
+  "trackingLink",
 ];
 
 const VARIABLE_SET = new Set(CUSTOMER_NOTIFICATION_VARIABLES);
