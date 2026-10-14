@@ -501,3 +501,11 @@ test("Customer Notifications ETA window range is an in-page pill toggle, not a n
   assert.doesNotMatch(card, /<select/);
   assert.match(card, /aria-pressed=\{settings\.etaWindow\.direction === direction\}/);
 });
+
+test("Customer Notifications post-save effects keep the submitted intent after the request ends", () => {
+  assert.match(notificationsPageSource, /const intent = fetcher\.formData\?\.get\("_intent"\) \?\? lastIntent;/);
+  const submits = notificationsPageSource.match(/fetcher\.submit\(formData, \{ method: "post" \}\);/g) ?? [];
+  const remembered = notificationsPageSource.match(/setLastIntent\(formData\.get\("_intent"\)\);\n\s*fetcher\.submit\(formData, \{ method: "post" \}\);/g) ?? [];
+  assert.ok(submits.length > 0);
+  assert.equal(remembered.length, submits.length);
+});
