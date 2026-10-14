@@ -850,6 +850,13 @@ function NotificationPreview({ activeTemplate, branding, etaWindow, senderName }
       <article className="customer-email-preview__surface" style={notificationPreviewSurfaceStyle}>
         <h2 style={notificationPreviewTitleStyle}>{subject}</h2>
         <p style={notificationPreviewBodyStyle}>{body}</p>
+        <div aria-label="Example customer tracking" style={notificationPreviewTrackingStyle}>
+          <span className="customer-email-preview__tracking-button" style={notificationPreviewTrackingButtonStyle}>Track your order</span>
+          <p className="customer-email-preview__tracking-number" style={notificationPreviewTrackingNumberStyle}>
+            Tracking number (example)<br />
+            <span>8a3f6c20-1d45-4b78-9e02-6f7135c8a904</span>
+          </p>
+        </div>
         {hasCommonFooter ? (
           <>
             <hr aria-hidden="true" style={notificationPreviewDividerStyle} />
@@ -1265,13 +1272,23 @@ const CUSTOMER_NOTIFICATION_RESPONSIVE_CSS = `
 const NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS = `
 @media (prefers-color-scheme: dark) {
   .customer-email-preview {
-    background: #161b22;
-    border-color: #30363d;
+    background: #161b22 !important;
+    border-color: #30363d !important;
   }
 
   .customer-email-preview__surface {
-    background: #0d1117;
-    color: #e6edf3;
+    background: #0d1117 !important;
+    color: #e6edf3 !important;
+  }
+
+  .customer-email-preview__tracking-button {
+    background: #8dbbff !important;
+    border-color: #bedbff !important;
+    color: #102440 !important;
+  }
+
+  .customer-email-preview__tracking-number {
+    color: #c9d1d9 !important;
   }
 
   .customer-email-preview__footer {
@@ -1315,6 +1332,30 @@ const notificationPreviewBodyStyle = {
   lineHeight: "22px",
   margin: 0,
   whiteSpace: "pre-wrap",
+};
+
+const notificationPreviewTrackingStyle = {
+  display: "grid",
+  gap: "10px",
+  justifyItems: "start",
+};
+
+const notificationPreviewTrackingButtonStyle = {
+  background: "#005bd3",
+  border: "1px solid #91baff",
+  borderRadius: "6px",
+  color: "#ffffff",
+  fontSize: "14px",
+  fontWeight: 600,
+  padding: "12px 20px",
+};
+
+const notificationPreviewTrackingNumberStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  lineHeight: "20px",
+  margin: 0,
+  overflowWrap: "anywhere",
 };
 
 const notificationPreviewDividerStyle = {
