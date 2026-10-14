@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
-import { getRouteDispatchControl } from "../app/features/delivery/route-dispatch.js";
+import { getRouteDispatchControl, getSendNotificationControl } from "../app/features/delivery/route-dispatch.js";
 
 const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
 const stylesSource = source.slice(source.indexOf("const routeMetaActionsStyle ="), source.indexOf("const routeHeaderActionsStyle ="));
@@ -165,11 +165,14 @@ function renderControls(overrides = {}) {
     routeStartDateTimeValue: "2026-10-01T09:00", routeStartTimeLabel: "09:00", routeDetailTitle: "Test route", ROUTE_EMPTY_LABEL: "—",
     isRouteExecutionLockedForStopMembership: (status) => ["COMPLETED", "IN_PROGRESS"].includes(status),
     renderRouteEditableChevron: () => "▾", renderRouteHeaderMetric: (label, value) => `${label}: ${value}`,
-    handleDispatchRoute: () => {}, handleOpenRouteSelector: () => {}, ...overrides };
+    handleDispatchRoute: () => {}, handleOpenRouteSelector: () => {}, openSendNotificationDialog: () => {}, ...overrides };
   context.dispatchControl = getRouteDispatchControl({
     busy: context.routeGroupActionBusy, canDispatch: context.canDispatchRoute,
     dispatching: context.routeGroupActionIntent === "dispatchRoute", hasDriver: Boolean(context.routeDriverId),
     hasUnsavedDraft: context.hasRouteAllocationDraft, live: context.liveChangeActive ? context.live : null,
+  });
+  context.sendNotificationControl = getSendNotificationControl({
+    busy: context.routeGroupActionBusy, dispatched: context.routeDispatched ?? true, hasRoute: true,
   });
   return { tree: new Function(...Object.keys(context), `${controlsCompiled}; return tree;`)(...Object.values(context)), context };
 }

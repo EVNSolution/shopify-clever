@@ -4,12 +4,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { publishDeliveryRoutePlan } from "../app/features/delivery/route-plans.server.js";
 import {
-  getDispatchDialogSteps,
-  getDispatchPreviewKey,
-  getDispatchEmailResultNotices,
+  getAutomaticEmailSelection,
   getDispatchEmailRows,
-  getInitialDispatchEmailSelection,
   getRouteDispatchNotice,
+  getSendNotificationControl,
 } from "../app/features/delivery/route-dispatch.js";
 import { dispatchRouteWithCustomerEmailSelection } from "../app/features/customer-notifications/customer-email.server.js";
 
@@ -113,13 +111,7 @@ test("only a confirmed publication and accepted push show the success notice", (
 
 // --- Dispatch popup with customer email selection ---
 
-test("the email step shows only when the shop automatic switch is on", () => {
-  assert.deepEqual(getDispatchDialogSteps(true), ["confirm", "email"]);
-  assert.deepEqual(getDispatchDialogSteps(false), ["confirm"]);
-  assert.deepEqual(getDispatchDialogSteps(null), ["confirm"]);
-});
-
-test("email rows skip custom stops and disable rows without a valid email; defaults select enabled templates and eligible rows", () => {
+test("email rows skip custom stops and disable rows without a valid email", () => {
   const rows = getDispatchEmailRows([
     { deliveryStopId: "s1", stop: 1, recipientName: "Kim", order: "#1001", email: "kim@example.test" },
     { deliveryStopId: "s2", stop: 2, recipientName: "Lee", order: "#1002", email: "not-an-email" },
@@ -127,10 +119,30 @@ test("email rows skip custom stops and disable rows without a valid email; defau
     { deliveryStopId: "s4", stop: 4, recipientName: "Park", order: "#1004", email: null },
   ]);
   assert.deepEqual(rows.map((row) => [row.deliveryStopId, row.eligible]), [["s1", true], ["s2", false], ["s4", false]]);
-  assert.deepEqual(getInitialDispatchEmailSelection(rows, ["DELIVERED", "DELIVERY_SCHEDULED"]), {
-    signals: ["DELIVERY_SCHEDULED", "DELIVERED"],
-    deliveryStopIds: ["s1"],
+});
+
+test("the automatic selection holds every turned-on template except Delivery scheduled and every customer with a valid email", () => {
+  const stops = [
+    { deliveryStopId: "s1", email: "kim@example.test" },
+    { deliveryStopId: "s2", email: "not-an-email" },
+    { deliveryStopId: "s3", isCustomStop: true, email: "ops@example.test" },
+    { deliveryStopId: "s5", email: "park@example.test" },
+  ];
+  assert.deepEqual(getAutomaticEmailSelection(stops, ["DELIVERY_SCHEDULED", "DELIVERED", "DRIVER_NEARBY"]), {
+    signals: ["DELIVERED", "DRIVER_NEARBY"],
+    deliveryStopIds: ["s1", "s5"],
   });
+  assert.deepEqual(getAutomaticEmailSelection(stops, []).signals, []);
+});
+
+test("Send Notification works only after Dispatch and not while another action runs", () => {
+  const control = (overrides) => getSendNotificationControl({ busy: false, dispatched: true, hasRoute: true, ...overrides });
+  assert.equal(control({}).enabled, true);
+  assert.equal(control({ dispatched: false }).enabled, false);
+  assert.match(control({ dispatched: false }).title, /Dispatch this route first/);
+  assert.equal(control({ busy: true }).enabled, false);
+  assert.equal(control({ hasRoute: false }).enabled, false);
+  assert.equal(control({}).label, "Send Notification");
 });
 
 async function dispatchWithEmail(t, selection, responses = {}) {
@@ -192,9 +204,15 @@ test("Dispatch saves the selection, then dispatches, then sends Delivery schedul
   });
   assert.deepEqual(result.errors, []);
   assert.equal(result.customerEmail.sendSkippedCount, 1);
-  const notices = getDispatchEmailResultNotices(result, "route-1", selection);
-  assert.equal(notices.length, 3);
-  assert.ok(notices.every((notice) => !notice.isError));
+});
+
+test("the automatic selection saved at Dispatch sends no Delivery scheduled email", async (t) => {
+  const selection = getAutomaticEmailSelection([{ deliveryStopId: "s1", email: "kim@example.test" }], ["DELIVERY_SCHEDULED", "DELIVERED"]);
+  const { calls, result } = await dispatchWithEmail(t, selection);
+  assert.deepEqual(calls.map((call) => `${call.method} ${call.path.split("/").pop()}`), ["PUT selection", "POST publish"]);
+  assert.deepEqual(calls[0].body, { signals: ["DELIVERED"], deliveryStopIds: ["s1"] });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.customerEmail.send, null);
 });
 
 test("Dispatch does not send now when Delivery scheduled is not selected", async (t) => {
@@ -209,9 +227,6 @@ test("a failed selection save stops before Dispatch", async (t) => {
   assert.deepEqual(calls.map((call) => call.path.split("/").pop()), ["selection"]);
   assert.equal(result.dispatch, null);
   assert.equal(result.errors.length, 1);
-  const notices = getDispatchEmailResultNotices(result, "route-1", selection);
-  assert.equal(notices.length, 1);
-  assert.equal(notices[0].isError, true);
 });
 
 test("a failed Delivery scheduled send keeps the Dispatch success visible", async (t) => {
@@ -221,26 +236,14 @@ test("a failed Delivery scheduled send keeps the Dispatch success visible", asyn
   assert.deepEqual(result.errors, []);
   assert.deepEqual(result.dispatch, receipt.dispatch);
   assert.equal(result.customerEmail.sendErrors.length, 1);
-  const notices = getDispatchEmailResultNotices(result, "route-1", selection);
-  assert.equal(notices[1].isError, false);
-  assert.match(notices[1].message, /Route dispatched/);
-  assert.equal(notices[2].isError, true);
-  assert.match(notices[2].message, /dispatched, but the Delivery scheduled email failed/);
 });
 
-test("email preview cache key depends only on the focused stop and the template", () => {
-  assert.equal(getDispatchPreviewKey("stop-1", "DELIVERED"), getDispatchPreviewKey("stop-1", "DELIVERED"));
-  assert.notEqual(getDispatchPreviewKey("stop-1", "DELIVERED"), getDispatchPreviewKey("stop-2", "DELIVERED"));
-  assert.notEqual(getDispatchPreviewKey("stop-1", "DELIVERED"), getDispatchPreviewKey("stop-1", "DRIVER_NEARBY"));
-  assert.equal(getDispatchPreviewKey(null, "DELIVERED"), null);
-});
-
-test("dispatch email step lays out templates and customers left and a full-height preview right", () => {
+test("the Dispatch popup has no email step and Send Notification opens the dialog locked to Delivery scheduled", () => {
   const dialog = readFileSync(new URL("../app/features/delivery/route-dispatch-dialog.jsx", import.meta.url), "utf8");
-  assert.match(dialog, /width=\{1180\}/);
-  assert.match(dialog, /height="min\(760px, 100%\)"/);
-  assert.ok(dialog.indexOf("<legend") < dialog.indexOf("<DispatchEmailRecipients\n"), "templates are not above the customer list");
-  assert.ok(dialog.indexOf("<DispatchEmailRecipients\n") < dialog.indexOf("<DispatchEmailPreview rows"), "preview is not to the right");
-  assert.match(dialog, /if \(!key \|\| cacheRef\.current\[key\]\) return undefined;/);
-  assert.match(dialog, /opacity: loading \? 0\.5 : 1/);
+  assert.doesNotMatch(dialog, /Customer emails for this route|<legend|DispatchEmail/);
+  const page = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
+  assert.match(page, /const openSendNotificationDialog = \(\) => \{/);
+  assert.match(page, /createCustomerEmailDialogOpenState\("DELIVERY_SCHEDULED"\)/);
+  assert.match(page, /disabled=\{customerEmailFetcher\.state !== "idle" \|\| sendNotificationFlow\.locked\}/);
+  assert.ok(page.indexOf("onClick={openSendNotificationDialog}") < page.indexOf("onClick={handleDispatchRoute}"), "Send Notification is not next to Dispatch");
 });

@@ -82,6 +82,7 @@ test("explicit Send email click resets consent and opens without submitting", ()
   const applied = [];
   const opened = [];
   const signals = [];
+  const flows = [];
   let submissions = 0;
   const handler = evaluateArrow("openCustomerEmailDialog", {
     getCustomerEmailDefaultSignal: () => "DELIVERY_SCHEDULED",
@@ -91,6 +92,7 @@ test("explicit Send email click resets consent and opens without submitting", ()
     customerEmailFetcher: { submit: () => { submissions += 1; } },
     setCustomerEmailSignal: (signal) => signals.push(signal),
     setIsCustomerEmailDialogOpen: (value) => opened.push(value),
+    setSendNotificationFlow: (flow) => flows.push(flow),
   });
   handler();
   assert.deepEqual(applied, [{
@@ -107,6 +109,8 @@ test("explicit Send email click resets consent and opens without submitting", ()
   }]);
   assert.deepEqual(opened, [true]);
   assert.deepEqual(signals, ["DELIVERY_SCHEDULED"]);
+  // The plain Send email icon keeps every message selectable and never previews on its own.
+  assert.deepEqual(flows, [{ locked: false, previewPending: false }]);
   assert.equal(submissions, 0);
   assert.match(source, /onClick=\{openCustomerEmailDialog\}/);
 });
@@ -128,6 +132,7 @@ test("closing and preparing failed-only retry never submit email", () => {
     setCustomerEmailResendConfirmed: noop,
     setIsCustomerEmailDialogOpen: noop,
     setSelectedCustomerEmailDeliveryStopIds: noop,
+    setSendNotificationFlow: noop,
   });
   close();
 

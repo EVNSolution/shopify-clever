@@ -22,7 +22,8 @@ test("route detail customer email actions forward selected delivery stops and mi
 test("route detail customer email modal defaults to manual zero-recipient selection after preview", () => {
   assert.match(routeDetailSource, /const \[selectedCustomerEmailDeliveryStopIds, setSelectedCustomerEmailDeliveryStopIds\] = useState\(\[\]\)/);
   assert.match(routeDetailSource, /setSelectedCustomerEmailDeliveryStopIds\(\[\]\);[\s\S]*setCustomerEmailPreviewSignal\(null\)/);
-  assert.match(routeDetailSource, /if \(!customerEmailPreview\) return;[\s\S]*setSelectedCustomerEmailDeliveryStopIds\(\[\]\)/);
+  // Only Send Notification (message locked to Delivery scheduled) starts with customers who have not got the email yet.
+  assert.match(routeDetailSource, /if \(!customerEmailPreview\) return;[\s\S]*sendNotificationFlow\.locked[\s\S]*: \[\]\);/);
   assert.match(routeDetailSource, /\{customerEmailSelectionCount\} selected \/ \{customerEmailSendableCount\} sendable \/ \{customerEmailExcludedCount\} excluded/);
 });
 
@@ -157,7 +158,7 @@ test("route detail customer email does not show a stale preview while another si
   assert.match(routeDetailSource, /setCustomerEmailPreviewSnapshot\(null\);[\s\S]*setCustomerEmailPreviewSignal\(null\)/);
   assert.match(routeDetailSource, /customerEmailFetcher\.data === requestSnapshot\.previousData/);
   assert.match(routeDetailSource, /setCustomerEmailPreviewSignal\(requestSnapshot\.signal\)/);
-  assert.match(routeDetailSource, /disabled=\{customerEmailFetcher\.state !== "idle"\}[\s\S]*id="customer-email-signal"/);
+  assert.match(routeDetailSource, /disabled=\{customerEmailFetcher\.state !== "idle" \|\| sendNotificationFlow\.locked\}[\s\S]*id="customer-email-signal"/);
   assert.doesNotMatch(routeDetailSource, /customerEmailFetcher\.data\?\.preview \?\? customerEmailPreviewSnapshot/);
 });
 
