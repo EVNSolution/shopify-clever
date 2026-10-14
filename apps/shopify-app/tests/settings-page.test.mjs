@@ -509,3 +509,7 @@ test("Customer Notifications post-save effects keep the submitted intent after t
   assert.ok(submits.length > 0);
   assert.equal(remembered.length, submits.length);
 });
+
+test("Customer Notifications preview shows an example tracking page link", () => {
+  assert.match(notificationsPageSource, /trackingLink: "https:\/\/clever-route\.cleversystem\.ai\/t\/example"/);
+});

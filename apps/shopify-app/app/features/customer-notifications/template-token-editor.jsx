@@ -20,6 +20,7 @@ export const CUSTOMER_NOTIFICATION_TOKEN_LABELS = {
   routeName: "Route name",
   sequence: "Stop sequence",
   shopName: "Shop name",
+  trackingLink: "Tracking link",
 };
 
 export const CUSTOMER_NOTIFICATION_TOKEN_OPTIONS = Object.entries(CUSTOMER_NOTIFICATION_TOKEN_LABELS);
@@ -41,7 +42,11 @@ export function TemplateTokenEditor({
   const [variableQuery, setVariableQuery] = useState("");
   const parsedDocument = useMemo(() => parseTemplateDocument(value), [value]);
   const hasUnsupported = hasUnsupportedTemplateSegments(parsedDocument);
-  const tokenLabels = useMemo(() => ({ ...CUSTOMER_NOTIFICATION_TOKEN_LABELS, etaWindow: translate(language, "notifications.variables.etaWindow") }), [language]);
+  const tokenLabels = useMemo(() => ({
+    ...CUSTOMER_NOTIFICATION_TOKEN_LABELS,
+    etaWindow: translate(language, "notifications.variables.etaWindow"),
+    trackingLink: translate(language, "notifications.variables.trackingLink"),
+  }), [language]);
   const filteredVariables = Object.entries(tokenLabels).filter(([, tokenLabel]) => (
     tokenLabel.toLowerCase().includes(variableQuery.trim().toLowerCase())
   ));
