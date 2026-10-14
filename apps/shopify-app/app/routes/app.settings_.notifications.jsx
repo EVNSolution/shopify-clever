@@ -21,6 +21,13 @@ import {
   ToggleSwitch,
 } from "../features/customer-notifications/customer-email-components";
 import {
+  ETA_WINDOW_DIRECTIONS,
+  formatPreviewEtaWindow,
+  normalizeEtaWindow,
+  readEtaWindowFormValues,
+} from "../features/customer-notifications/eta-window";
+import { translate } from "../i18n/i18n";
+import {
   TemplateTokenEditor,
 } from "../features/customer-notifications/template-token-editor";
 import {
@@ -145,6 +152,7 @@ export const action = async ({ request }) => {
 function readCustomerEmailGlobalSettings(formData) {
   return {
     expectedVersion: numberFromFormValue(formData.get("expectedVersion")),
+    etaWindow: readEtaWindowFormValues(formData.get("etaWindow.direction"), formData.get("etaWindow.minutes")),
     branding: {
       address: formText(formData.get("branding.address")),
       businessName: formText(formData.get("branding.businessName")),
@@ -218,6 +226,7 @@ function normalizeCustomerEmailSettings(settings) {
       phone: branding.phone ?? "",
       websiteUrl: branding.websiteUrl ?? "",
     },
+    etaWindow: normalizeEtaWindow(settings?.etaWindow),
     replyTo: settings?.replyTo ?? "",
     senderEmail: settings?.senderEmail ?? sender.email ?? "",
     senderName: settings?.senderName ?? sender.name ?? "",
@@ -368,16 +377,18 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
     if (nextIntent === "testCustomerEmail") {
       const attemptId = crypto.randomUUID();
       formData.set("attemptId", attemptId);
-      formData.set("body", renderTemplatePreviewValue(templateDraft.body));
+      formData.set("body", renderTemplatePreviewValue(templateDraft.body, settings.etaWindow));
       formData.set("confirmed", String(testConfirmed));
       formData.set("recipientEmail", testRecipient);
       formData.set("signal", templateEditorSignal ?? "");
-      formData.set("subject", renderTemplatePreviewValue(templateDraft.subject));
+      formData.set("subject", renderTemplatePreviewValue(templateDraft.subject, settings.etaWindow));
     } else if (nextIntent === "saveCustomerEmailGlobal") {
       formData.set("expectedVersion", settings.globalVersion ?? "");
       formData.set("senderName", settings.senderName);
       formData.set("senderEmail", settings.senderEmail);
       formData.set("replyTo", settings.replyTo);
+      formData.set("etaWindow.direction", settings.etaWindow.direction);
+      formData.set("etaWindow.minutes", String(settings.etaWindow.minutes ?? ""));
       for (const field of ["logoUrl", "logoMode", "logoWidth", "logoLinkUrl"]) {
         formData.set(`branding.${field}`, String(branding[field] ?? ""));
       }
@@ -514,6 +525,40 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
         senderName={settings.senderName}
       />
 
+      <section aria-label={translate(language, "notifications.etaWindow.title")} style={settingsSectionCardStyle}>
+        <div>
+          <strong>{translate(language, "notifications.etaWindow.title")}</strong>
+          <p style={settingsMessageStyle}>{translate(language, "notifications.etaWindow.help")}</p>
+        </div>
+        <div style={settingsCoordinateGridStyle}>
+          <label style={settingsLabelStyle}>
+            {translate(language, "notifications.etaWindow.direction")}
+            <select
+              onChange={(event) => setSettings({ ...settings, etaWindow: { ...settings.etaWindow, direction: event.target.value } })}
+              style={settingsSelectStyle}
+              value={settings.etaWindow.direction}
+            >
+              {ETA_WINDOW_DIRECTIONS.map((direction) => (
+                <option key={direction} value={direction}>{translate(language, `notifications.etaWindow.direction.${direction}`)}</option>
+              ))}
+            </select>
+          </label>
+          <label style={settingsLabelStyle}>
+            {translate(language, "notifications.etaWindow.minutes")}
+            <input
+              max={240}
+              min={5}
+              onChange={(event) => setSettings({ ...settings, etaWindow: { ...settings.etaWindow, minutes: event.target.value === "" ? "" : Number(event.target.value) } })}
+              step={1}
+              style={settingsInputStyle}
+              type="number"
+              value={settings.etaWindow.minutes}
+            />
+          </label>
+        </div>
+        <p style={settingsMessageStyle}>{translate(language, "notifications.etaWindow.example", { window: formatPreviewEtaWindow(settings.etaWindow) })}</p>
+      </section>
+
       <section aria-label="Notification branding" style={settingsSectionCardStyle}>
         <div style={notificationCardHeaderStyle}>
           <div>
@@ -624,7 +669,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
                 <strong>Preview</strong>
                 <p style={settingsMessageStyle}>This is the branding that Apply changes will move into the saved settings form.</p>
               </div>
-              <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} senderName={settings.senderName} />
+              <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} etaWindow={settings.etaWindow} senderName={settings.senderName} />
             </aside>
           </div>
         </SettingsEditorModal>
@@ -680,7 +725,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
                 </div>
                 <span style={notificationTemplatePreviewBadgeStyle}>Live</span>
               </div>
-              <NotificationPreview activeTemplate={templateDraft} branding={branding} senderName={settings.senderName} />
+              <NotificationPreview activeTemplate={templateDraft} branding={branding} etaWindow={settings.etaWindow} senderName={settings.senderName} />
               <CustomerEmailTestSendPanel
                 attemptId={intent === "testCustomerEmail" && fetcher.data ? fetcher.data.attemptId : null}
                 busy={busy}
@@ -775,11 +820,11 @@ function uploadLogoWithProgress(formData, onProgress) {
   });
 }
 
-function NotificationPreview({ activeTemplate, branding, senderName }) {
+function NotificationPreview({ activeTemplate, branding, etaWindow, senderName }) {
   const logo = branding.logoMode === "image" && branding.logoUrl.startsWith("https://");
   const logoWidth = Math.max(48, Math.min(320, Number(branding.logoWidth) || DEFAULT_BRANDING.logoWidth));
-  const subject = renderTemplatePreviewValue(activeTemplate.subject) || "Delivery scheduled";
-  const body = renderTemplatePreviewValue(activeTemplate.body) || "Hi Mina, your delivery is scheduled.";
+  const subject = renderTemplatePreviewValue(activeTemplate.subject, etaWindow) || "Delivery scheduled";
+  const body = renderTemplatePreviewValue(activeTemplate.body, etaWindow) || "Hi Mina, your delivery is scheduled.";
   const footerItems = buildCommonFooterItems(branding);
   const hasCommonFooter = logo || footerItems.length > 0;
   const footerLogo = logo ? (
@@ -822,7 +867,6 @@ const TEMPLATE_PREVIEW_VALUES = {
   deliveryDate: "Wed, 5 Aug 2026",
   deliveryWeekday: "Wednesday",
   eta: "Aug 5, 2026, 2:30 PM AEST",
-  etaWindow: "Aug 5, 2026, 2:00 PM AEST - Aug 5, 2026, 3:00 PM AEST",
   inventoryList: "Fresh kimchi × 2\nKorean pear × 1",
   orderNumber: "#1048",
   routeName: "Melbourne CBD",
@@ -830,8 +874,9 @@ const TEMPLATE_PREVIEW_VALUES = {
   shopName: "CLEVER Market",
 };
 
-function renderTemplatePreviewValue(value) {
+function renderTemplatePreviewValue(value, etaWindow) {
   return parseTemplateDocument(value).segments.map((segment) => {
+    if (segment.type === "token" && segment.key === "etaWindow") return formatPreviewEtaWindow(etaWindow);
     if (segment.type === "token") return TEMPLATE_PREVIEW_VALUES[segment.key] ?? "";
     if (segment.type === "unsupported") return "[Unsupported variable]";
     return segment.value;
