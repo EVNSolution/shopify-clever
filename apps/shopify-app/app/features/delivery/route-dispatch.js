@@ -42,25 +42,14 @@ export function getRouteDispatchControl({ busy, canDispatch, dispatching, hasDri
   return { enabled, label: dispatching ? "Dispatching…" : "Dispatch", title };
 }
 
-// The five customer email templates. Delivery scheduled is sent at Dispatch; the others later, on driver events.
-export const DISPATCH_EMAIL_TEMPLATES = [
-  { signal: "DELIVERY_SCHEDULED", label: "Delivery scheduled", timing: "Sent now, at Dispatch" },
-  { signal: "OUT_FOR_DELIVERY", label: "Out for delivery", timing: "Sent later, when the driver starts" },
-  { signal: "DRIVER_NEARBY", label: "Driver is nearby", timing: "Sent later, when the driver is near" },
-  { signal: "DELIVERED", label: "Delivered", timing: "Sent later, when the stop is delivered" },
-  { signal: "MISSED_DELIVERY", label: "Missed delivery", timing: "Sent later, when the stop is missed" },
-];
+// Delivery scheduled is sent by hand with Send Notification, so Dispatch never sends it.
+export const DISPATCH_MANUAL_EMAIL_SIGNAL = "DELIVERY_SCHEDULED";
 
 export function isValidCustomerEmail(email) {
   return typeof email === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
 }
 
-/** Popup steps. The email step shows only when the shop automatic switch is on. */
-export function getDispatchDialogSteps(automaticEnabled) {
-  return automaticEnabled === true ? ["confirm", "email"] : ["confirm"];
-}
-
-/** One row per order stop of the route. Rows without a valid email cannot be selected. */
+/** One row per order stop of the route. Rows without a valid email cannot get email. */
 export function getDispatchEmailRows(stops = []) {
   return stops
     .filter((stop) => stop?.deliveryStopId && !stop.isCustomStop)
@@ -74,52 +63,22 @@ export function getDispatchEmailRows(stops = []) {
     }));
 }
 
-/** Default selection: every enabled template and every stop with a valid email. */
-export function getInitialDispatchEmailSelection(rows, enabledSignals = []) {
+/**
+ * The selection saved at Dispatch. The other templates go out on their own, so it holds every template
+ * that is turned on in Customer notifications and every stop with a valid email. Delivery scheduled is left out.
+ */
+export function getAutomaticEmailSelection(stops, enabledSignals = []) {
   return {
-    signals: DISPATCH_EMAIL_TEMPLATES.map((template) => template.signal).filter((signal) => enabledSignals.includes(signal)),
-    deliveryStopIds: rows.filter((row) => row.eligible).map((row) => row.deliveryStopId),
+    signals: enabledSignals.filter((signal) => signal !== DISPATCH_MANUAL_EMAIL_SIGNAL),
+    deliveryStopIds: getDispatchEmailRows(stops).filter((row) => row.eligible).map((row) => row.deliveryStopId),
   };
 }
 
-/** One notice per step of a Dispatch with an email selection: selection, Dispatch, Delivery scheduled email. */
-export function getDispatchEmailResultNotices(result, routePlanId, selection) {
-  const email = result?.customerEmail ?? {};
-  if ((email.selectionErrors ?? []).length > 0) {
-    return [{
-      isError: true,
-      message: `Email selection was not saved, so the route was not dispatched: ${email.selectionErrors[0]?.message ?? "Unknown error"}`,
-    }];
-  }
-  const notices = [{ isError: false, message: "Email selection saved." }];
-  if ((result?.errors ?? []).length > 0) {
-    notices.push({ isError: true, message: `Dispatch failed: ${result.errors[0]?.message ?? "Unknown error"}` });
-    return notices;
-  }
-  notices.push(getRouteDispatchNotice(result, routePlanId));
-  const sendNow = selection?.signals?.includes("DELIVERY_SCHEDULED") && selection?.deliveryStopIds?.length > 0;
-  if (!sendNow) {
-    notices.push({ isError: false, message: "Delivery scheduled email was not selected, so nothing was sent now." });
-  } else if ((email.sendErrors ?? []).length > 0) {
-    notices.push({
-      isError: true,
-      message: `The route was dispatched, but the Delivery scheduled email failed: ${email.sendErrors[0]?.message ?? "Unknown error"}. Use Customer email on this route to retry.`,
-    });
-  } else {
-    const sent = email.send?.counts?.sent;
-    const skipped = email.sendSkippedCount ?? 0;
-    notices.push({
-      isError: false,
-      message: [
-        email.send ? `Delivery scheduled email sent${Number.isInteger(sent) ? ` to ${sent} customer${sent === 1 ? "" : "s"}` : ""}.` : "No Delivery scheduled email was sent.",
-        skipped > 0 ? `${skipped} customer${skipped === 1 ? " was" : "s were"} skipped because they already got it.` : null,
-      ].filter(Boolean).join(" "),
-    });
-  }
-  return notices;
-}
-
-/** Cache key of one email preview: it depends only on the focused stop and the template. */
-export function getDispatchPreviewKey(deliveryStopId, signal) {
-  return deliveryStopId && signal ? `${deliveryStopId}\u0000${signal}` : null;
+/** Send Notification works once the route was dispatched, and not while another action runs. */
+export function getSendNotificationControl({ busy, dispatched, hasRoute }) {
+  const enabled = Boolean(hasRoute) && Boolean(dispatched) && !busy;
+  const title = !dispatched
+    ? "Dispatch this route first. Then you can send the Delivery scheduled email."
+    : "Choose customers and send the Delivery scheduled email. You can send it again, for example on the delivery day.";
+  return { enabled, label: "Send Notification", title };
 }

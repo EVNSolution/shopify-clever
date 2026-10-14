@@ -60,7 +60,12 @@ import {
   validateCustomStopDraft,
 } from "../features/delivery/custom-stop-form";
 import { getRowDropAfterStopId, reverseRouteStopIds } from "../features/delivery/route-draft";
-import { getRouteDispatchControl, getRouteDispatchNotice } from "../features/delivery/route-dispatch";
+import {
+  getAutomaticEmailSelection,
+  getRouteDispatchControl,
+  getRouteDispatchNotice,
+  getSendNotificationControl,
+} from "../features/delivery/route-dispatch";
 import { RouteDispatchDialog } from "../features/delivery/route-dispatch-dialog";
 import {
   beginRouteGroupCopySubmit,
@@ -4195,7 +4200,8 @@ export default function RouteDetailPage() {
   const [routeActionsMenu, setRouteActionsMenu] = useState(null);
   const [routeOptionsOpen, setRouteOptionsOpen] = useState(false);
   const [dispatchDialogOpen, setDispatchDialogOpen] = useState(false);
-  const [dispatchEmailResult, setDispatchEmailResult] = useState(null);
+  // Send Notification opens the customer email dialog locked to Delivery scheduled and previews it at once.
+  const [sendNotificationFlow, setSendNotificationFlow] = useState({ locked: false, previewPending: false });
   const [routeActionNotice, setRouteActionNotice] = useState(null);
   const [pendingInProgressRouteChange, setPendingInProgressRouteChange] = useState(null);
   const [selectedAddOrderIds, setSelectedAddOrderIds] = useState([]);
@@ -4698,6 +4704,11 @@ export default function RouteDetailPage() {
     hasDriver: Boolean(routeDriverId),
     hasUnsavedDraft: hasRouteAllocationDraft,
     live: liveChangeActive ? live : null,
+  });
+  const sendNotificationControl = getSendNotificationControl({
+    busy: routeGroupActionBusy,
+    dispatched: routeDispatched,
+    hasRoute: Boolean(effectiveRoutePlan?.id),
   });
   const routePolygonSourceStops = useMemo(
     () => (timelineRouteRows.length > 0
@@ -6164,19 +6175,20 @@ export default function RouteDetailPage() {
   };
 
   const handleDispatchRoute = () => {
-    setDispatchEmailResult(null);
     setDispatchDialogOpen(true);
   };
-  // selection is null when the popup had no email step: then no selection is saved and nothing is sent.
-  const confirmDispatchRoute = async (selection) => {
+  // With automatic email on, Dispatch saves the automatic selection (every turned-on template except
+  // Delivery scheduled, every customer with a valid email). Delivery scheduled goes out with Send Notification.
+  const confirmDispatchRoute = async () => {
+    setDispatchDialogOpen(false);
     if (liveChangeActive) {
-      setDispatchDialogOpen(false);
       live.dispatch();
       return;
     }
-    if (!selection) setDispatchDialogOpen(false);
-    const submitted = await submitRouteAction("dispatchRoute", selection ? { customerEmailSelection: JSON.stringify(selection) } : {});
-    if (!submitted) setDispatchDialogOpen(false);
+    const selection = customerEmailDispatch.automaticEnabled === true
+      ? getAutomaticEmailSelection(orderedRouteStops, customerEmailDispatch.enabledSignals)
+      : null;
+    await submitRouteAction("dispatchRoute", selection ? { customerEmailSelection: JSON.stringify(selection) } : {});
   };
 
   const applyCustomerEmailDialogOpenState = (dialogState) => {
@@ -6197,8 +6209,25 @@ export default function RouteDetailPage() {
       getCustomerEmailDefaultSignal(routeExecutionStatus),
     ));
     setCustomerEmailSignal(getCustomerEmailDefaultSignal(routeExecutionStatus));
+    setSendNotificationFlow({ locked: false, previewPending: false });
     setIsCustomerEmailDialogOpen(true);
   };
+
+  const openSendNotificationDialog = () => {
+    applyCustomerEmailDialogOpenState(createCustomerEmailDialogOpenState("DELIVERY_SCHEDULED"));
+    setCustomerEmailSignal("DELIVERY_SCHEDULED");
+    setSendNotificationFlow({ locked: true, previewPending: true });
+    setIsCustomerEmailDialogOpen(true);
+  };
+
+  // Runs once after the dialog state is committed, so the preview uses the locked signal.
+  const submitCustomerEmailActionRef = useRef(submitCustomerEmailAction);
+  submitCustomerEmailActionRef.current = submitCustomerEmailAction;
+  useEffect(() => {
+    if (!sendNotificationFlow.previewPending || !isCustomerEmailDialogOpen || customerEmailSignal !== "DELIVERY_SCHEDULED") return;
+    setSendNotificationFlow((flow) => ({ ...flow, previewPending: false }));
+    submitCustomerEmailActionRef.current("previewCustomerEmail");
+  }, [customerEmailSignal, isCustomerEmailDialogOpen, sendNotificationFlow.previewPending]);
 
   const closeCustomerEmailDialog = () => {
     customerEmailRequestRef.current = null;
@@ -6211,6 +6240,7 @@ export default function RouteDetailPage() {
     setCustomerEmailCommandId(null);
     setSelectedCustomerEmailDeliveryStopIds([]);
     setActiveCustomerEmailRecipientKey(null);
+    setSendNotificationFlow({ locked: false, previewPending: false });
     setIsCustomerEmailDialogOpen(false);
   };
 
@@ -6316,11 +6346,19 @@ export default function RouteDetailPage() {
     setCustomerEmailConfirmed(false);
     setCustomerEmailMissingValuesConfirmed(false);
     setCustomerEmailResendConfirmed(false);
-    setSelectedCustomerEmailDeliveryStopIds([]);
+    // Send Notification starts with every customer who has not got this email; others can be ticked to resend.
+    setSelectedCustomerEmailDeliveryStopIds(sendNotificationFlow.locked
+      ? customerEmailRecipients
+        .filter((recipient) => isCustomerEmailRecipientSelectable(recipient)
+          && !hasCustomerEmailPriorSend(recipient)
+          && !hasCustomerEmailUncertainOutcome(recipient))
+        .map(getCustomerEmailRecipientDeliveryStopId)
+        .filter(Boolean)
+      : []);
     setActiveCustomerEmailRecipientKey(
       customerEmailRecipients[0] ? getCustomerEmailRecipientKey(customerEmailRecipients[0], 0) : null,
     );
-  }, [customerEmailPreview, customerEmailRecipients]);
+  }, [customerEmailPreview, customerEmailRecipients, sendNotificationFlow.locked]);
 
   const customStopDraftRef = useRef(customStopDraft);
   useEffect(() => {
@@ -7001,11 +7039,6 @@ export default function RouteDetailPage() {
     if (lastRouteActionIntentRef.current !== "dispatchRoute") return;
     lastRouteActionIntentRef.current = null;
     revalidator.revalidate();
-    // With an email selection, the Dispatch popup shows one notice per step.
-    if (routeActionFetcher.data?.customerEmail) {
-      setDispatchEmailResult(routeActionFetcher.data);
-      return;
-    }
     if ((routeActionFetcher.data?.errors ?? []).length > 0) return;
     const notice = getRouteDispatchNotice(routeActionFetcher.data, effectiveRoutePlan?.id);
     shopify.toast.show(notice.message, { isError: notice.isError });
@@ -8093,15 +8126,10 @@ export default function RouteDetailPage() {
 
         {dispatchDialogOpen && effectiveRoutePlan?.id ? (
           <RouteDispatchDialog
-            automaticEnabled={liveChangeActive ? false : customerEmailDispatch.automaticEnabled}
             busy={routeGroupActionBusy}
             driverName={routeDriverSummary}
-            enabledSignals={customerEmailDispatch.enabledSignals}
             onClose={() => setDispatchDialogOpen(false)}
             onDispatch={confirmDispatchRoute}
-            result={dispatchEmailResult}
-            routePlanId={effectiveRoutePlan.id}
-            stops={orderedRouteStops}
           />
         ) : null}
         {kfoodOfficeEnabled && routeOptionsOpen && effectiveRoutePlan?.id ? <RouteOptionsEditor key={effectiveRoutePlan.id} routePlan={effectiveRoutePlan} customerEmailAutomaticEnabled={customerEmailDispatch.automaticEnabled} onClose={() => setRouteOptionsOpen(false)} /> : null}
@@ -8215,16 +8243,28 @@ export default function RouteDetailPage() {
                 </div>
               )}
               {!isRouteGroupDetail && effectiveRoutePlan?.id ? (
-                <button
-                  disabled={!dispatchControl.enabled}
-                  onClick={handleDispatchRoute}
-                  style={{
-                    ...(dispatchControl.enabled ? routeActionButtonStyle : routeDisabledActionButtonStyle),
-                    minHeight: "36px",
-                  }}
-                  title={dispatchControl.title}
-                  type="button"
-                >{dispatchControl.label}</button>
+                <div style={{ alignItems: "center", display: "flex", gap: "var(--route-detail-control-gap, 8px)" }}>
+                  <button
+                    disabled={!sendNotificationControl.enabled}
+                    onClick={openSendNotificationDialog}
+                    style={{
+                      ...(sendNotificationControl.enabled ? routeActionButtonStyle : routeDisabledActionButtonStyle),
+                      minHeight: "36px",
+                    }}
+                    title={sendNotificationControl.title}
+                    type="button"
+                  >{sendNotificationControl.label}</button>
+                  <button
+                    disabled={!dispatchControl.enabled}
+                    onClick={handleDispatchRoute}
+                    style={{
+                      ...(dispatchControl.enabled ? routeActionButtonStyle : routeDisabledActionButtonStyle),
+                      minHeight: "36px",
+                    }}
+                    title={dispatchControl.title}
+                    type="button"
+                  >{dispatchControl.label}</button>
+                </div>
               ) : null}
             </section>
           ) : null}
@@ -9460,8 +9500,10 @@ export default function RouteDetailPage() {
             <div aria-label="Send customer email" aria-modal="true" role="dialog" style={customerEmailDialogStyle}>
               <header style={customerEmailDialogHeaderStyle}>
                 <div style={customerEmailDialogHeadingStyle}>
-                  <h2 style={routeLineEditorTitleStyle}>Send customer email</h2>
-                  <p style={routeLineEditorLabelStyle}>Preview the exact recipients and message before sending.</p>
+                  <h2 style={routeLineEditorTitleStyle}>{sendNotificationFlow.locked ? "Send Delivery scheduled notification" : "Send customer email"}</h2>
+                  <p style={routeLineEditorLabelStyle}>{sendNotificationFlow.locked
+                    ? "Choose the customers and check the email. Customers who already got it can be ticked to send it again."
+                    : "Preview the exact recipients and message before sending."}</p>
                 </div>
                 <button
                   aria-label="Close customer email dialog"
@@ -9474,7 +9516,7 @@ export default function RouteDetailPage() {
               <div style={routeLineEditorFieldStyle}>
                 <label htmlFor="customer-email-signal" style={routeLineEditorLabelStyle}>Message</label>
                 <select
-                  disabled={customerEmailFetcher.state !== "idle"}
+                  disabled={customerEmailFetcher.state !== "idle" || sendNotificationFlow.locked}
                   id="customer-email-signal"
                   onChange={handleCustomerEmailSignalChange}
                   style={routeLineEditorInputStyle}
