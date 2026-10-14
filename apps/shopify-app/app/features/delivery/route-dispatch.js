@@ -64,11 +64,12 @@ export function getDispatchEmailRows(stops = []) {
 }
 
 /**
- * The selection saved at Dispatch. The other templates go out on their own, so it holds every template
- * that is turned on in Customer notifications and every stop with a valid email. Delivery scheduled is left out.
+ * The selection saved at Dispatch. ALL_ELIGIBLE keeps future event emails active for eligible stops added later.
+ * The initial stop IDs preserve the Dispatch snapshot. Delivery scheduled is always left out for manual sending.
  */
 export function getAutomaticEmailSelection(stops, enabledSignals = []) {
   return {
+    mode: "ALL_ELIGIBLE",
     signals: enabledSignals.filter((signal) => signal !== DISPATCH_MANUAL_EMAIL_SIGNAL),
     deliveryStopIds: getDispatchEmailRows(stops).filter((row) => row.eligible).map((row) => row.deliveryStopId),
   };

@@ -9,6 +9,7 @@ import {
   activateCustomerNotifications,
   fetchCustomerNotificationSettings,
   fetchRouteCustomerEmailSelection,
+  previewSampleCustomerNotification,
   readRouteCustomerEmailSelectionField,
   saveRouteCustomerEmailSelection,
   previewRouteCustomerNotification,
@@ -239,6 +240,33 @@ test("customer notification route wrappers encode route IDs and keep recipient D
   assert.equal(result.recipients[0].email, "customer@example.test");
 }));
 
+test("sample preview forwards the complete draft rendering contract", withDeliveryApiEnv(async () => {
+  const calls = [];
+  const payload = {
+    branding: { businessName: "Draft Market" },
+    etaWindow: { direction: "AROUND", minutes: 30 },
+    senderName: "Draft sender",
+    signal: "DRIVER_NEARBY",
+    template: { body: "Items: {{inventoryList}}", subject: "Driver nearby" },
+  };
+
+  const result = await previewSampleCustomerNotification(
+    new Request("https://app.example/app/settings/notifications"),
+    payload,
+    {
+      fetch: async (url, options) => {
+        calls.push({ options, url });
+        return Response.json({ data: { preview: { body: "Items: Kimchi x 2", html: "<html>preview</html>", subject: "Driver nearby" } } });
+      },
+      sessionToken: "shopify-session",
+    },
+  );
+
+  assert.equal(calls[0].url, "https://delivery.example/admin/customer-email/sample-preview");
+  assert.deepEqual(JSON.parse(calls[0].options.body), payload);
+  assert.equal(result.preview.html, "<html>preview</html>");
+}));
+
 test("customer notification wrapper rejects oversized recipient sets before forwarding", withDeliveryApiEnv(async () => {
   const oversizedPayloads = [
     { deliveryStopIds: ["stop-one", "stop-two"] },
@@ -290,13 +318,13 @@ test("customer notification route wrappers reject missing route IDs before forwa
   assert.equal(result.errors[0].code, CUSTOMER_NOTIFICATION_ROUTE_ID_MISSING_ERROR_CODE);
 }));
 
-test("route email selection PUT sends only signals and delivery stop IDs", withDeliveryApiEnv(async () => {
+test("route email selection PUT preserves the automatic eligibility mode", withDeliveryApiEnv(async () => {
   const calls = [];
   const selection = { signals: ["DELIVERY_SCHEDULED", "DELIVERED"], deliveryStopIds: ["stop-1", "stop-2"] };
   const result = await saveRouteCustomerEmailSelection(
     new Request("https://app.example/app/routes/route-1"),
     "route/1",
-    { ...selection, extra: "ignored" },
+    { ...selection, mode: "ALL_ELIGIBLE", extra: "ignored" },
     {
       sessionToken: "app-bridge-token",
       fetch: async (url, options) => {
@@ -310,7 +338,7 @@ test("route email selection PUT sends only signals and delivery stop IDs", withD
   assert.equal(calls[0].url, "https://delivery.example/admin/route-plans/route%2F1/customer-email/selection");
   assert.equal(calls[0].options.method, "PUT");
   assert.equal(calls[0].options.headers.authorization, "Bearer app-bridge-token");
-  assert.deepEqual(JSON.parse(calls[0].options.body), selection);
+  assert.deepEqual(JSON.parse(calls[0].options.body), { ...selection, mode: "ALL_ELIGIBLE" });
   assert.deepEqual(result.selection.signals, selection.signals);
   assert.deepEqual(result.errors, []);
 }));
@@ -338,7 +366,11 @@ test("route email selection form field is optional and validated", () => {
   assert.equal(readRouteCustomerEmailSelectionField(""), null);
   assert.deepEqual(
     readRouteCustomerEmailSelectionField(JSON.stringify({ signals: ["DELIVERED", "DELIVERED"], deliveryStopIds: ["a", "a"] })),
-    { deliveryStopIds: ["a"], errors: [], signals: ["DELIVERED"] },
+    { deliveryStopIds: ["a"], errors: [], mode: "EXPLICIT", signals: ["DELIVERED"] },
+  );
+  assert.deepEqual(
+    readRouteCustomerEmailSelectionField(JSON.stringify({ mode: "ALL_ELIGIBLE", signals: ["DELIVERED"], deliveryStopIds: ["a"] })),
+    { deliveryStopIds: ["a"], errors: [], mode: "ALL_ELIGIBLE", signals: ["DELIVERED"] },
   );
   for (const invalid of ["not-json", "[]", JSON.stringify({ signals: ["UNKNOWN"], deliveryStopIds: [] }), JSON.stringify({ signals: [], deliveryStopIds: [""] })]) {
     assert.equal(readRouteCustomerEmailSelectionField(invalid).errors.length, 1, invalid);

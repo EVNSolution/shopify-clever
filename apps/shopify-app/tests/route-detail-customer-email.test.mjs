@@ -66,6 +66,8 @@ test("route detail customer email modal selects only eligible rows and previews 
   assert.match(routeDetailSource, /onFocus=\{\(\) => setActiveCustomerEmailRecipientKey\(recipientKey\)\}/);
   assert.match(routeDetailSource, /getCustomerEmailRenderedSubject\(activeCustomerEmailRecipient\)/);
   assert.match(routeDetailSource, /getCustomerEmailRenderedBody\(activeCustomerEmailRecipient\)/);
+  assert.match(routeDetailSource, /getCustomerEmailRenderedHtml\(activeCustomerEmailRecipient\)/);
+  assert.match(routeDetailSource, /<CustomerEmailPreviewFrame/);
 });
 
 test("route detail customer email send requires current preview, selection, confirmation, and missing-value acknowledgement", () => {
