@@ -531,18 +531,20 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
           <p style={settingsMessageStyle}>{translate(language, "notifications.etaWindow.help")}</p>
         </div>
         <div style={settingsCoordinateGridStyle}>
-          <label style={settingsLabelStyle}>
+          <div style={settingsLabelStyle}>
             {translate(language, "notifications.etaWindow.direction")}
-            <select
-              onChange={(event) => setSettings({ ...settings, etaWindow: { ...settings.etaWindow, direction: event.target.value } })}
-              style={settingsSelectStyle}
-              value={settings.etaWindow.direction}
-            >
+            <div aria-label={translate(language, "notifications.etaWindow.direction")} role="group" style={etaWindowToggleStyle}>
               {ETA_WINDOW_DIRECTIONS.map((direction) => (
-                <option key={direction} value={direction}>{translate(language, `notifications.etaWindow.direction.${direction}`)}</option>
+                <button
+                  aria-pressed={settings.etaWindow.direction === direction}
+                  key={direction}
+                  onClick={() => setSettings({ ...settings, etaWindow: { ...settings.etaWindow, direction } })}
+                  style={settings.etaWindow.direction === direction ? activeEtaWindowToggleButtonStyle : etaWindowToggleButtonStyle}
+                  type="button"
+                >{translate(language, `notifications.etaWindow.direction.${direction}`)}</button>
               ))}
-            </select>
-          </label>
+            </div>
+          </div>
           <label style={settingsLabelStyle}>
             {translate(language, "notifications.etaWindow.minutes")}
             <input
@@ -860,6 +862,35 @@ function NotificationPreview({ activeTemplate, branding, etaWindow, senderName }
     </div>
   );
 }
+
+// Same pill toggle as the inventory detail view switch; a native select popup cannot be driven inside the admin iframe.
+const etaWindowToggleStyle = {
+  background: "#f6f6f7",
+  border: "1px solid #d6d6d6",
+  borderRadius: "999px",
+  display: "inline-flex",
+  gap: "2px",
+  justifySelf: "start",
+  padding: "2px",
+};
+
+const etaWindowToggleButtonStyle = {
+  background: "transparent",
+  border: 0,
+  borderRadius: "999px",
+  color: "#616161",
+  cursor: "pointer",
+  fontSize: "12px",
+  fontWeight: 650,
+  lineHeight: "16px",
+  padding: "6px 12px",
+};
+
+const activeEtaWindowToggleButtonStyle = {
+  ...etaWindowToggleButtonStyle,
+  background: "#202223",
+  color: "#ffffff",
+};
 
 const TEMPLATE_PREVIEW_VALUES = {
   customerName: "Mina Park",
