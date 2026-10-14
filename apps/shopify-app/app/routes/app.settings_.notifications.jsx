@@ -1,5 +1,5 @@
 /* eslint-disable react/prop-types */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useFetcher, useLoaderData, useRouteLoaderData } from "react-router";
 import { useAppBridge } from "@shopify/app-bridge-react";
@@ -20,6 +20,7 @@ import {
   CustomerEmailTestSendPanel,
   ToggleSwitch,
 } from "../features/customer-notifications/customer-email-components";
+import { CustomerEmailPreviewFrame } from "../features/customer-notifications/customer-email-preview-frame";
 import {
   ETA_WINDOW_DIRECTIONS,
   formatPreviewEtaWindow,
@@ -67,6 +68,7 @@ const CUSTOMER_EMAIL_SIGNALS = [
 const CUSTOMER_EMAIL_LOGO_ACCEPTED_TYPES = new Set(["image/png", "image/jpeg", "image/webp"]);
 const CUSTOMER_EMAIL_LOGO_MAX_BYTES = 3 * 1024 * 1024;
 const CUSTOMER_EMAIL_LOGO_UPLOAD_PATH = "/app/settings/notifications/logo";
+const CUSTOMER_EMAIL_PREVIEW_PATH = "/app/settings/notifications/preview";
 
 const DEFAULT_BRANDING = {
   address: "",
@@ -133,10 +135,14 @@ export const action = async ({ request }) => {
     const input = {
       attemptId,
       body: formText(formData.get("body")),
+      branding: parseOptionalJsonObject(formData.get("branding")),
       confirmed: formData.get("confirmed") === "true",
+      etaWindow: parseOptionalJsonObject(formData.get("etaWindow")),
       recipientEmail,
+      senderName: formText(formData.get("senderName")),
       signal,
       subject: formText(formData.get("subject")),
+      template: parseOptionalJsonObject(formData.get("template")),
     };
     const confirmationError = getCustomerEmailTestConfirmationError(input);
     if (confirmationError) return { attemptId, errors: [confirmationError], test: null };
@@ -244,6 +250,16 @@ function formText(value) {
   if (value == null) return "";
 
   return String(value).trim();
+}
+
+function parseOptionalJsonObject(value) {
+  if (typeof value !== "string" || !value) return undefined;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function formHttpsUrl(value) {
@@ -379,11 +395,15 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
     if (nextIntent === "testCustomerEmail") {
       const attemptId = crypto.randomUUID();
       formData.set("attemptId", attemptId);
-      formData.set("body", renderTemplatePreviewValue(templateDraft.body, settings.etaWindow));
+      formData.set("body", templateDraft.body);
+      formData.set("branding", JSON.stringify(branding));
       formData.set("confirmed", String(testConfirmed));
+      formData.set("etaWindow", JSON.stringify(settings.etaWindow));
       formData.set("recipientEmail", testRecipient);
+      formData.set("senderName", settings.senderName);
       formData.set("signal", templateEditorSignal ?? "");
-      formData.set("subject", renderTemplatePreviewValue(templateDraft.subject, settings.etaWindow));
+      formData.set("subject", templateDraft.subject);
+      formData.set("template", JSON.stringify({ body: templateDraft.body, subject: templateDraft.subject }));
     } else if (nextIntent === "saveCustomerEmailGlobal") {
       formData.set("expectedVersion", settings.globalVersion ?? "");
       formData.set("senderName", settings.senderName);
@@ -516,7 +536,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
       <style>{CUSTOMER_NOTIFICATION_RESPONSIVE_CSS}</style>
       <fieldset style={settingsFieldsetStyle}>
         <legend style={settingsLegendStyle}>Customer Notifications</legend>
-        <p style={settingsMessageStyle}>Saving a template never queues or sends email. With automatic emails on, the customers selected at Dispatch get the selected templates.</p>
+        <p style={settingsMessageStyle}>Automatic emails include eligible stops added after Dispatch. Delivery scheduled is sent only from Send Notification.</p>
       </fieldset>
 
       <section aria-label="Automatic customer emails" style={settingsSectionCardStyle}>
@@ -676,7 +696,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
                 <strong>Preview</strong>
                 <p style={settingsMessageStyle}>This is the branding that Apply changes will move into the saved settings form.</p>
               </div>
-              <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} etaWindow={settings.etaWindow} senderName={settings.senderName} />
+              <NotificationPreview activeTemplate={activeTemplate} branding={brandingDraft} etaWindow={settings.etaWindow} senderName={settings.senderName} signal={activeSignal} />
             </aside>
           </div>
         </SettingsEditorModal>
@@ -732,7 +752,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
                 </div>
                 <span style={notificationTemplatePreviewBadgeStyle}>Live</span>
               </div>
-              <NotificationPreview activeTemplate={templateDraft} branding={branding} etaWindow={settings.etaWindow} senderName={settings.senderName} />
+              <NotificationPreview activeTemplate={templateDraft} branding={branding} etaWindow={settings.etaWindow} senderName={settings.senderName} signal={templateEditorSignal} />
               <CustomerEmailTestSendPanel
                 attemptId={intent === "testCustomerEmail" && fetcher.data ? fetcher.data.attemptId : null}
                 busy={busy}
@@ -827,50 +847,73 @@ function uploadLogoWithProgress(formData, onProgress) {
   });
 }
 
-function NotificationPreview({ activeTemplate, branding, etaWindow, senderName }) {
-  const logo = branding.logoMode === "image" && branding.logoUrl.startsWith("https://");
-  const logoWidth = Math.max(48, Math.min(320, Number(branding.logoWidth) || DEFAULT_BRANDING.logoWidth));
-  const subject = renderTemplatePreviewValue(activeTemplate.subject, etaWindow) || "Delivery scheduled";
-  const body = renderTemplatePreviewValue(activeTemplate.body, etaWindow) || "Hi Mina, your delivery is scheduled.";
-  const footerItems = buildCommonFooterItems(branding);
-  const hasCommonFooter = logo || footerItems.length > 0;
-  const footerLogo = logo ? (
-    branding.logoLinkUrl.startsWith("https://") ? (
-      <a href={branding.logoLinkUrl} rel="noreferrer" style={{ justifySelf: "start" }} target="_blank">
-        <img alt={deriveLogoAltText(senderName)} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
-      </a>
-    ) : (
-      <img alt={deriveLogoAltText(senderName)} src={branding.logoUrl} style={notificationPreviewLogoStyle(logoWidth)} />
-    )
-  ) : null;
+function NotificationPreview({ activeTemplate, branding, etaWindow, senderName, signal }) {
+  const shopify = useAppBridge();
+  const { data: previewData, state: previewState, submit: submitPreview } = useFetcher();
+  const activeRequestIdRef = useRef(null);
+  const requestSequenceRef = useRef(0);
+  const [preview, setPreview] = useState(null);
+  const [previewStatus, setPreviewStatus] = useState({ kind: "loading", message: "Preparing preview…" });
+  const previewPayload = JSON.stringify({
+    branding,
+    etaWindow,
+    senderName,
+    signal,
+    template: { body: activeTemplate.body ?? "", subject: activeTemplate.subject ?? "" },
+  });
+
+  useEffect(() => {
+    const requestId = `${Date.now()}-${requestSequenceRef.current += 1}`;
+    activeRequestIdRef.current = requestId;
+    setPreviewStatus({ kind: "loading", message: "Updating preview…" });
+    let cancelled = false;
+    const timeoutId = window.setTimeout(() => {
+      void shopify.idToken().then((shopifySessionToken) => {
+        if (cancelled || requestId !== activeRequestIdRef.current) return;
+        const formData = new FormData();
+        formData.set("payload", previewPayload);
+        formData.set("requestId", requestId);
+        formData.set("shopifySessionToken", shopifySessionToken);
+        submitPreview(formData, { action: CUSTOMER_EMAIL_PREVIEW_PATH, method: "post" });
+      }).catch(() => {
+        if (cancelled || requestId !== activeRequestIdRef.current) return;
+        setPreviewStatus({ kind: "error", message: "Unable to authenticate the preview request." });
+      });
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, [previewPayload, shopify, submitPreview]);
+
+  useEffect(() => {
+    if (previewState !== "idle" || !previewData) return;
+    if (previewData.requestId !== activeRequestIdRef.current) {
+      setPreviewStatus({ kind: "stale", message: "A newer edit is loading. The older preview was ignored." });
+      return;
+    }
+    if (previewData.errors?.length > 0 || !previewData.preview?.html) {
+      setPreviewStatus({
+        kind: "error",
+        message: previewData.errors?.[0]?.message ?? "The server did not return an email preview.",
+      });
+      return;
+    }
+    setPreview(previewData.preview);
+    setPreviewStatus({ kind: "idle", message: "Preview is current." });
+  }, [previewData, previewState]);
 
   return (
-    <div aria-label="Live notification preview" className="customer-email-preview" style={notificationPreviewFrameStyle}>
-      <style>{NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS}</style>
-      <article className="customer-email-preview__surface" style={notificationPreviewSurfaceStyle}>
-        <h2 style={notificationPreviewTitleStyle}>{subject}</h2>
-        <p style={notificationPreviewBodyStyle}>{body}</p>
-        <div aria-label="Example customer tracking" style={notificationPreviewTrackingStyle}>
-          <span className="customer-email-preview__tracking-button" style={notificationPreviewTrackingButtonStyle}>Track your order</span>
-          <p className="customer-email-preview__tracking-number" style={notificationPreviewTrackingNumberStyle}>
-            Tracking number (example)<br />
-            <span>8a3f6c20-1d45-4b78-9e02-6f7135c8a904</span>
-          </p>
-        </div>
-        {hasCommonFooter ? (
-          <>
-            <hr aria-hidden="true" style={notificationPreviewDividerStyle} />
-            <div className="customer-email-preview__footer" style={notificationPreviewFooterBoxStyle}>
-              {footerLogo}
-              {footerItems.map((item) => (
-                <p className="customer-email-preview__muted" key={item.key} style={item.kind === "note" ? notificationPreviewFooterNoteStyle : notificationPreviewFooterTextStyle}>
-                  {item.value}
-                </p>
-              ))}
-            </div>
-          </>
-        ) : null}
-      </article>
+    <div aria-busy={previewStatus.kind === "loading"} aria-label="Live notification preview">
+      <p aria-live="polite" style={notificationPreviewStatusStyle}>
+        {previewStatus.message}{previewStatus.kind === "error" && preview ? " Showing the last successful preview." : ""}
+      </p>
+      <CustomerEmailPreviewFrame
+        fallbackText={preview?.body}
+        html={preview?.html}
+        title={`${preview?.subject ?? "Customer email"} preview`}
+      />
     </div>
   );
 }
@@ -903,43 +946,6 @@ const activeEtaWindowToggleButtonStyle = {
   background: "#202223",
   color: "#ffffff",
 };
-
-const TEMPLATE_PREVIEW_VALUES = {
-  customerName: "Mina Park",
-  deliveryAddress: "15 Market Street, Melbourne VIC 3000",
-  deliveryDate: "Wed, 5 Aug 2026",
-  deliveryWeekday: "Wednesday",
-  eta: "Aug 5, 2026, 2:30 PM AEST",
-  inventoryList: "Fresh kimchi × 2\nKorean pear × 1",
-  orderNumber: "#1048",
-  routeName: "Melbourne CBD",
-  sequence: "Stop 7",
-  shopName: "CLEVER Market",
-  trackingLink: "https://clever-route.cleversystem.ai/t/example",
-};
-
-function renderTemplatePreviewValue(value, etaWindow) {
-  return parseTemplateDocument(value).segments.map((segment) => {
-    if (segment.type === "token" && segment.key === "etaWindow") return formatPreviewEtaWindow(etaWindow);
-    if (segment.type === "token") return TEMPLATE_PREVIEW_VALUES[segment.key] ?? "";
-    if (segment.type === "unsupported") return "[Unsupported variable]";
-    return segment.value;
-  }).join("");
-}
-
-function buildCommonFooterItems(branding) {
-  return [
-    ["businessName", branding.businessName],
-    ["address", branding.address],
-    ["phone", branding.phone],
-    ["contactEmail", branding.contactEmail],
-    ["websiteUrl", branding.websiteUrl],
-    ["note", branding.note],
-  ].flatMap(([key, value]) => {
-    const text = String(value ?? "").trim();
-    return text ? [{ key, kind: key === "note" ? "note" : "detail", value: text }] : [];
-  });
-}
 
 function notificationPreviewLogoStyle(logoWidth) {
   return {
@@ -1269,123 +1275,11 @@ const CUSTOMER_NOTIFICATION_RESPONSIVE_CSS = `
 }
 `;
 
-const NOTIFICATION_PREVIEW_COLOR_SCHEME_CSS = `
-@media (prefers-color-scheme: dark) {
-  .customer-email-preview {
-    background: #161b22 !important;
-    border-color: #30363d !important;
-  }
-
-  .customer-email-preview__surface {
-    background: #0d1117 !important;
-    color: #e6edf3 !important;
-  }
-
-  .customer-email-preview__tracking-button {
-    background: #8dbbff !important;
-    border-color: #bedbff !important;
-    color: #102440 !important;
-  }
-
-  .customer-email-preview__tracking-number {
-    color: #c9d1d9 !important;
-  }
-
-  .customer-email-preview__footer {
-    background: #161b22 !important;
-    border-color: #30363d !important;
-  }
-
-  .customer-email-preview__muted {
-    color: #c9d1d9 !important;
-  }
-}
-`;
-
-const notificationPreviewFrameStyle = {
-  background: "#f3f4f6",
-  border: "1px solid #d0d7de",
-  borderRadius: "8px",
-  display: "grid",
-  padding: "16px",
-};
-
-const notificationPreviewSurfaceStyle = {
-  background: "#ffffff",
-  borderRadius: "8px",
-  color: "#1f2328",
-  display: "grid",
-  gap: "16px",
-  margin: 0,
-  padding: "24px",
-};
-
-const notificationPreviewTitleStyle = {
-  fontSize: "24px",
-  fontWeight: 700,
-  lineHeight: "32px",
-  margin: 0,
-};
-
-const notificationPreviewBodyStyle = {
-  fontSize: "14px",
-  lineHeight: "22px",
-  margin: 0,
-  whiteSpace: "pre-wrap",
-};
-
-const notificationPreviewTrackingStyle = {
-  display: "grid",
-  gap: "10px",
-  justifyItems: "start",
-};
-
-const notificationPreviewTrackingButtonStyle = {
-  background: "#005bd3",
-  border: "1px solid #91baff",
-  borderRadius: "6px",
-  color: "#ffffff",
-  fontSize: "14px",
-  fontWeight: 600,
-  padding: "12px 20px",
-};
-
-const notificationPreviewTrackingNumberStyle = {
-  color: "#616161",
-  fontSize: "12px",
-  lineHeight: "20px",
-  margin: 0,
-  overflowWrap: "anywhere",
-};
-
-const notificationPreviewDividerStyle = {
-  border: 0,
-  borderTop: "1px solid #d0d7de",
-  margin: 0,
-};
-
-const notificationPreviewFooterBoxStyle = {
-  background: "#f6f8fa",
-  border: "1px solid #d0d7de",
-  borderRadius: "8px",
-  display: "grid",
-  gap: "8px",
-  justifyItems: "start",
-  padding: "12px",
-};
-
-const notificationPreviewFooterTextStyle = {
+const notificationPreviewStatusStyle = {
   color: "#57606a",
   fontSize: "12px",
   lineHeight: "18px",
-  margin: 0,
-  whiteSpace: "pre-wrap",
-};
-
-const notificationPreviewFooterNoteStyle = {
-  ...notificationPreviewFooterTextStyle,
-  borderTop: "1px solid #d0d7de",
-  paddingTop: "8px",
+  margin: "0 0 8px",
 };
 
 export const ErrorBoundary = AdminRouteErrorBoundary;

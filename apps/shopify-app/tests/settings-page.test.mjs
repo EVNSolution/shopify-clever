@@ -261,8 +261,8 @@ test("Customer Notifications keeps sender, templates, explicit tests, and compac
   assert.match(notificationsPageSource, /contactEmail/);
   assert.match(notificationsPageSource, /websiteUrl/);
   assert.match(notificationsPageSource, /note/);
-  assert.match(notificationsPageSource, /formData\.set\("subject", renderTemplatePreviewValue\(templateDraft\.subject, settings\.etaWindow\)\)/);
-  assert.match(notificationsPageSource, /formData\.set\("body", renderTemplatePreviewValue\(templateDraft\.body, settings\.etaWindow\)\)/);
+  assert.match(notificationsPageSource, /formData\.set\("subject", templateDraft\.subject\)/);
+  assert.match(notificationsPageSource, /formData\.set\("body", templateDraft\.body\)/);
   assert.match(notificationsPageSource, /subject: formText\(formData\.get\("subject"\)\)/);
   assert.match(notificationsPageSource, /body: formText\(formData\.get\("body"\)\)/);
   assert.doesNotMatch(notificationsPageSource, /id="test-customer-email-subject"|label="Test subject"/);
@@ -431,33 +431,20 @@ test("Customer Notifications normalizes structured common footer fields with leg
   assert.doesNotMatch(normalizeCustomerEmailSettingsSource, /footerText:/);
 });
 
-test("Customer Notifications preview renders an optional boxed structured common footer", () => {
-  assert.match(notificationsPageSource, /const footerLogo = logo \? \(/);
-  assert.match(notificationsPageSource, /justifySelf: "start"/);
-  assert.match(notificationsPageSource, /objectFit: "contain"/);
-  assert.match(notificationsPageSource, /maxWidth: "100%"/);
-  assert.match(notificationsPageSource, /width: `\$\{logoWidth\}px`/);
-  assert.doesNotMatch(notificationsPageSource, /Math\.min\(logoWidth, 160\)|maxHeight: "64px"/);
-  assert.match(notificationsPageSource, /fontSize: "24px"/);
-  assert.match(notificationPreviewSource, /const footerItems = buildCommonFooterItems\(branding\)/);
-  assert.match(notificationPreviewSource, /const hasCommonFooter = logo \|\| footerItems\.length > 0/);
-  assert.match(notificationPreviewSource, /\{hasCommonFooter \? \(/);
-  assert.match(notificationPreviewSource, /<hr aria-hidden="true" style=\{notificationPreviewDividerStyle\} \/>/);
-  assert.match(notificationPreviewSource, /<div className="customer-email-preview__footer" style=\{notificationPreviewFooterBoxStyle\}>[\s\S]*\{footerLogo\}/);
-  assert.match(notificationPreviewSource, /footerItems\.map/);
-  assert.match(notificationsPageSource, /\["businessName", branding\.businessName\]/);
-  assert.match(notificationsPageSource, /\["address", branding\.address\]/);
-  assert.match(notificationsPageSource, /\["phone", branding\.phone\]/);
-  assert.match(notificationsPageSource, /\["contactEmail", branding\.contactEmail\]/);
-  assert.match(notificationsPageSource, /\["websiteUrl", branding\.websiteUrl\]/);
-  assert.match(notificationsPageSource, /\["note", branding\.note\]/);
-  assert.match(notificationsPageSource, /background: "#f3f4f6"/);
-  assert.match(notificationsPageSource, /@media \(prefers-color-scheme: dark\)/);
-  assert.doesNotMatch(notificationPreviewSource, /branding\.previewText/);
-  assert.doesNotMatch(notificationPreviewSource, /branding\.accentColor/);
-  assert.doesNotMatch(notificationPreviewSource, /branding\.logoAltText/);
-  assert.doesNotMatch(notificationPreviewSource, /branding\.footerText/);
-  assert.doesNotMatch(notificationsPageSource, /<strong[\s\S]*\{subject\}<\/strong>[\s\S]*<p[\s\S]*\{body\}<\/p>[\s\S]*<div[\s\S]*<img/);
+test("Customer Notifications preview uses the delivery server renderer in a sandbox", () => {
+  assert.match(notificationPreviewSource, /CUSTOMER_EMAIL_PREVIEW_PATH/);
+  assert.match(notificationPreviewSource, /submitPreview/);
+  assert.match(notificationPreviewSource, /requestId !== activeRequestIdRef\.current|previewData\.requestId !== activeRequestIdRef\.current/);
+  assert.match(notificationPreviewSource, /<CustomerEmailPreviewFrame/);
+  assert.doesNotMatch(notificationPreviewSource, /renderTemplatePreviewValue/);
+  assert.doesNotMatch(notificationPreviewSource, /Track your order/);
+});
+
+test("Customer Notifications test send forwards the same raw draft used by server preview", () => {
+  assert.match(notificationsPageSource, /formData\.set\("body", templateDraft\.body\)/);
+  assert.match(notificationsPageSource, /formData\.set\("subject", templateDraft\.subject\)/);
+  assert.match(notificationsPageSource, /formData\.set\("template", JSON\.stringify\(\{ body: templateDraft\.body, subject: templateDraft\.subject \}\)\)/);
+  assert.doesNotMatch(notificationsPageSource, /formData\.set\("body", renderTemplatePreviewValue/);
 });
 
 test("Settings tab is a plain editable form without explainer cards", () => {
@@ -510,6 +497,13 @@ test("Customer Notifications post-save effects keep the submitted intent after t
   assert.equal(remembered.length, submits.length);
 });
 
-test("Customer Notifications preview shows an example tracking page link", () => {
-  assert.match(notificationsPageSource, /trackingLink: "https:\/\/clever-route\.cleversystem\.ai\/t\/example"/);
+test("Customer Notifications preview leaves sample tracking data to the delivery server", () => {
+  assert.match(notificationsPageSource, /CUSTOMER_EMAIL_PREVIEW_PATH = "\/app\/settings\/notifications\/preview"/);
+  assert.doesNotMatch(notificationsPageSource, /trackingLink:|Tracking number \(example\)/);
+});
+
+test("automatic email guidance includes eligible stops added after Dispatch", () => {
+  assert.match(customerEmailComponentsSource, /including stops added after Dispatch/);
+  assert.match(customerEmailComponentsSource, /Use Send Notification for Delivery scheduled/);
+  assert.doesNotMatch(customerEmailComponentsSource, /Only customers selected at Dispatch receive them/);
 });

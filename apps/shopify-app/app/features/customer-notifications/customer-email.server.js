@@ -449,7 +449,11 @@ export async function saveRouteCustomerEmailSelection(request, routePlanId, sele
     request,
     `/admin/route-plans/${safeRoutePlanId}/customer-email/selection`,
     {
-      body: JSON.stringify({ signals: selection.signals, deliveryStopIds: selection.deliveryStopIds }),
+      body: JSON.stringify({
+        signals: selection.signals,
+        deliveryStopIds: selection.deliveryStopIds,
+        ...(selection.mode ? { mode: selection.mode } : {}),
+      }),
       fetch: options.fetch,
       method: "PUT",
       sessionToken: options.sessionToken,
@@ -468,6 +472,7 @@ export function readRouteCustomerEmailSelectionField(value) {
     parsed = null;
   }
   const valid = isPlainObject(parsed)
+    && (parsed.mode == null || ["EXPLICIT", "ALL_ELIGIBLE"].includes(parsed.mode))
     && Array.isArray(parsed.signals)
     && parsed.signals.every((signal) => CUSTOMER_EMAIL_SIGNALS.includes(signal))
     && Array.isArray(parsed.deliveryStopIds)
@@ -478,6 +483,7 @@ export function readRouteCustomerEmailSelectionField(value) {
   return {
     deliveryStopIds: [...new Set(parsed.deliveryStopIds.map((id) => id.trim()))],
     errors: [],
+    mode: parsed.mode ?? "EXPLICIT",
     signals: [...new Set(parsed.signals)],
   };
 }

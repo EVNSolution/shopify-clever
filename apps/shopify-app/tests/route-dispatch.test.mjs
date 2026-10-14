@@ -129,6 +129,7 @@ test("the automatic selection holds every turned-on template except Delivery sch
     { deliveryStopId: "s5", email: "park@example.test" },
   ];
   assert.deepEqual(getAutomaticEmailSelection(stops, ["DELIVERY_SCHEDULED", "DELIVERED", "DRIVER_NEARBY"]), {
+    mode: "ALL_ELIGIBLE",
     signals: ["DELIVERED", "DRIVER_NEARBY"],
     deliveryStopIds: ["s1", "s5"],
   });
@@ -210,7 +211,7 @@ test("the automatic selection saved at Dispatch sends no Delivery scheduled emai
   const selection = getAutomaticEmailSelection([{ deliveryStopId: "s1", email: "kim@example.test" }], ["DELIVERY_SCHEDULED", "DELIVERED"]);
   const { calls, result } = await dispatchWithEmail(t, selection);
   assert.deepEqual(calls.map((call) => `${call.method} ${call.path.split("/").pop()}`), ["PUT selection", "POST publish"]);
-  assert.deepEqual(calls[0].body, { signals: ["DELIVERED"], deliveryStopIds: ["s1"] });
+  assert.deepEqual(calls[0].body, { signals: ["DELIVERED"], deliveryStopIds: ["s1"], mode: "ALL_ELIGIBLE" });
   assert.deepEqual(result.errors, []);
   assert.equal(result.customerEmail.send, null);
 });

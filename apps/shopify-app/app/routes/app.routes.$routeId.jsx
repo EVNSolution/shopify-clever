@@ -22,6 +22,7 @@ import {
   summarizeCustomerEmailSendResult,
 } from "../features/customer-notifications/customer-email-send-state";
 import { CustomerEmailSendResultPanel } from "../features/customer-notifications/customer-email-components";
+import { CustomerEmailPreviewFrame } from "../features/customer-notifications/customer-email-preview-frame";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   ROUTE_MARKER_TONE_COLORS,
@@ -1913,19 +1914,6 @@ const customerEmailPreviewEmptyStyle = {
   padding: "14px",
 };
 
-const customerEmailPreviewBodyStyle = {
-  background: "#ffffff",
-  border: "1px solid #e3e3e3",
-  borderRadius: "6px",
-  color: "#303030",
-  fontSize: "12px",
-  lineHeight: 1.45,
-  margin: 0,
-  minHeight: "160px",
-  padding: "8px",
-  whiteSpace: "pre-wrap",
-};
-
 const routeLineEditorTitleStyle = {
   color: "#303030",
   fontSize: "15px",
@@ -3758,6 +3746,10 @@ function getCustomerEmailRenderedSubject(recipient) {
 
 function getCustomerEmailRenderedBody(recipient) {
   return textOrUndefined(recipient?.rendered?.body ?? recipient?.body ?? recipient?.preview?.body);
+}
+
+function getCustomerEmailRenderedHtml(recipient) {
+  return textOrUndefined(recipient?.rendered?.html ?? recipient?.preview?.html);
 }
 
 function getCustomerEmailRecipientDiagnostics(recipient) {
@@ -6177,8 +6169,8 @@ export default function RouteDetailPage() {
   const handleDispatchRoute = () => {
     setDispatchDialogOpen(true);
   };
-  // With automatic email on, Dispatch saves the automatic selection (every turned-on template except
-  // Delivery scheduled, every customer with a valid email). Delivery scheduled goes out with Send Notification.
+  // With automatic email on, Dispatch saves ALL_ELIGIBLE for every turned-on template except Delivery scheduled.
+  // Stops added later receive future event emails. Delivery scheduled goes out only with Send Notification.
   const confirmDispatchRoute = async () => {
     setDispatchDialogOpen(false);
     if (liveChangeActive) {
@@ -9661,7 +9653,11 @@ export default function RouteDetailPage() {
                         {getCustomerEmailRenderedSubject(activeCustomerEmailRecipient) ? (
                           <span><strong>Subject:</strong> {getCustomerEmailRenderedSubject(activeCustomerEmailRecipient)}</span>
                         ) : null}
-                        <pre style={customerEmailPreviewBodyStyle}>{getCustomerEmailRenderedBody(activeCustomerEmailRecipient) ?? "No body returned for this recipient."}</pre>
+                        <CustomerEmailPreviewFrame
+                          fallbackText={getCustomerEmailRenderedBody(activeCustomerEmailRecipient) ?? "No body returned for this recipient."}
+                          html={getCustomerEmailRenderedHtml(activeCustomerEmailRecipient)}
+                          title={`Email preview for ${getCustomerEmailRecipientOrder(activeCustomerEmailRecipient)}`}
+                        />
                       </>
                     ) : customerEmailExample ? (
                       <>
@@ -9669,7 +9665,11 @@ export default function RouteDetailPage() {
                         {getCustomerEmailRenderedSubject(customerEmailExample) ? (
                           <span><strong>Subject:</strong> {getCustomerEmailRenderedSubject(customerEmailExample)}</span>
                         ) : null}
-                        <pre style={customerEmailPreviewBodyStyle}>{getCustomerEmailRenderedBody(customerEmailExample) ?? "No example body returned."}</pre>
+                        <CustomerEmailPreviewFrame
+                          fallbackText={getCustomerEmailRenderedBody(customerEmailExample) ?? "No example body returned."}
+                          html={getCustomerEmailRenderedHtml(customerEmailExample)}
+                          title="Example customer email preview"
+                        />
                       </>
                     ) : (
                       <span>{customerEmailPreviewEmptyState?.detail ?? "Preview recipients to inspect the exact subject and body."}</span>
