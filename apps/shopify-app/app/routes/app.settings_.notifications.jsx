@@ -291,7 +291,9 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
   const [templateDraft, setTemplateDraft] = useState({ body: "", enabled: true, subject: "" });
   const [templateDraftUnsupported, setTemplateDraftUnsupported] = useState({ body: false, subject: false });
   const [savingTemplateSignal, setSavingTemplateSignal] = useState(null);
-  const intent = fetcher.formData?.get("_intent");
+  // fetcher.formData is gone once the request ends, so the post-save effects read the last submitted intent.
+  const [lastIntent, setLastIntent] = useState(null);
+  const intent = fetcher.formData?.get("_intent") ?? lastIntent;
   const busy = fetcher.state !== "idle";
   const activeTemplate = settings.templates[activeSignal] ?? { body: "", subject: "" };
   const templateEditorLabel = CUSTOMER_EMAIL_SIGNALS.find(([signal]) => signal === templateEditorSignal)?.[1] ?? "Template";
@@ -396,6 +398,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
         formData.set(`branding.${field}`, String(branding[field] ?? ""));
       }
     }
+    setLastIntent(formData.get("_intent"));
     fetcher.submit(formData, { method: "post" });
   };
 
@@ -446,6 +449,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
     formData.set("subject", templateDraft.subject);
     formData.set("templateSignal", templateEditorSignal);
     setSavingTemplateSignal(templateEditorSignal);
+    setLastIntent(formData.get("_intent"));
     fetcher.submit(formData, { method: "post" });
   };
 
@@ -462,6 +466,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
     formData.set("subject", template.subject ?? "");
     formData.set("templateSignal", signal);
     setSavingTemplateSignal(signal);
+    setLastIntent(formData.get("_intent"));
     fetcher.submit(formData, { method: "post" });
   };
 
