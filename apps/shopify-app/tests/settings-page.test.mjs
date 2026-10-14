@@ -492,3 +492,12 @@ test("the Templates table Status column is a green/red switch that saves only th
   assert.match(toggle, /formData\.set\("body", template\.body \?\? ""\)/u);
   assert.match(toggle, /formData\.set\("expectedVersion", template\.version \?\? ""\)/u);
 });
+
+test("Customer Notifications ETA window range is an in-page pill toggle, not a native select", () => {
+  const card = notificationsPageSource.slice(
+    notificationsPageSource.indexOf('"notifications.etaWindow.title")} style'),
+    notificationsPageSource.indexOf('<section aria-label="Notification branding"'),
+  );
+  assert.doesNotMatch(card, /<select/);
+  assert.match(card, /aria-pressed=\{settings\.etaWindow\.direction === direction\}/);
+});
