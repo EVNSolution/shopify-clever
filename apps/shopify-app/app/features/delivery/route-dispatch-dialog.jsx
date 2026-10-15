@@ -40,7 +40,7 @@ export function RouteDispatchDialog({ busy, driverName, onClose, onDispatch }) {
       )}
     >
       <p style={noteStyle}>The driver gets the route in the driver app. This does not start the route.</p>
-      <p style={noteStyle}>Use Send Notification after Dispatch to send the Delivery scheduled email.</p>
+      <p style={noteStyle}>Use the Send notifications menu after Dispatch to send the Delivery scheduled email.</p>
     </OfficeDialog>
   );
 }

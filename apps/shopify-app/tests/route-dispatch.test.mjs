@@ -7,7 +7,7 @@ import {
   getAutomaticEmailSelection,
   getDispatchEmailRows,
   getRouteDispatchNotice,
-  getSendNotificationControl,
+  getSendNotificationMenu,
 } from "../app/features/delivery/route-dispatch.js";
 import { dispatchRouteWithCustomerEmailSelection } from "../app/features/customer-notifications/customer-email.server.js";
 
@@ -136,14 +136,19 @@ test("the automatic selection holds every turned-on template except Delivery sch
   assert.deepEqual(getAutomaticEmailSelection(stops, []).signals, []);
 });
 
-test("Send Notification works only after Dispatch and not while another action runs", () => {
-  const control = (overrides) => getSendNotificationControl({ busy: false, dispatched: true, hasRoute: true, ...overrides });
-  assert.equal(control({}).enabled, true);
-  assert.equal(control({ dispatched: false }).enabled, false);
-  assert.match(control({ dispatched: false }).title, /Dispatch this route first/);
-  assert.equal(control({ busy: true }).enabled, false);
-  assert.equal(control({ hasRoute: false }).enabled, false);
-  assert.equal(control({}).label, "Send Notification");
+test("Send notifications menu opens for a saved route and says why each email cannot be sent", () => {
+  const menu = (overrides) => getSendNotificationMenu({ busy: false, dispatched: true, enabledSignals: null, hasRoute: true, ...overrides });
+  const reasons = (overrides) => Object.fromEntries(menu(overrides).items.map((item) => [item.signal, item.disabledReason]));
+  assert.deepEqual(menu({}).items.map((item) => item.label), ["Scheduled"]);
+  assert.equal(menu({}).enabled, true);
+  assert.equal(menu({ dispatched: false }).enabled, true);
+  assert.equal(menu({ busy: true }).enabled, false);
+  assert.equal(menu({ hasRoute: false }).enabled, false);
+  assert.deepEqual(reasons({}), { DELIVERY_SCHEDULED: null });
+  assert.deepEqual(reasons({ dispatched: false }), { DELIVERY_SCHEDULED: "Dispatch this route first." });
+  assert.deepEqual(reasons({ enabledSignals: ["OUT_FOR_DELIVERY"] }), {
+    DELIVERY_SCHEDULED: "This email is turned off in your templates.",
+  });
 });
 
 async function dispatchWithEmail(t, selection, responses = {}) {
@@ -239,12 +244,12 @@ test("a failed Delivery scheduled send keeps the Dispatch success visible", asyn
   assert.equal(result.customerEmail.sendErrors.length, 1);
 });
 
-test("the Dispatch popup has no email step and Send Notification opens the dialog locked to Delivery scheduled", () => {
+test("the Dispatch popup has no email step and each Send notifications item opens the dialog locked to its email", () => {
   const dialog = readFileSync(new URL("../app/features/delivery/route-dispatch-dialog.jsx", import.meta.url), "utf8");
   assert.doesNotMatch(dialog, /Customer emails for this route|<legend|DispatchEmail/);
   const page = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
-  assert.match(page, /const openSendNotificationDialog = \(\) => \{/);
-  assert.match(page, /createCustomerEmailDialogOpenState\("DELIVERY_SCHEDULED"\)/);
+  assert.match(page, /const openSendNotificationDialog = \(item\) => \{/);
+  assert.match(page, /createCustomerEmailDialogOpenState\(item\.signal\)/);
   assert.match(page, /disabled=\{customerEmailFetcher\.state !== "idle" \|\| sendNotificationFlow\.locked\}/);
-  assert.ok(page.indexOf("onClick={openSendNotificationDialog}") < page.indexOf("onClick={handleDispatchRoute}"), "Send Notification is not next to Dispatch");
+  assert.ok(page.indexOf('aria-label="Send notifications"') < page.indexOf("onClick={handleDispatchRoute}"), "Send notifications is not next to Dispatch");
 });

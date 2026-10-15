@@ -6,6 +6,7 @@ import {
   CUSTOMER_EMAIL_SIGNALS,
   dispatchRouteWithCustomerEmailSelection,
   fetchCustomerEmailSettings,
+  fetchStopCustomerEmailHistory,
   previewRouteCustomerEmail,
   readRouteCustomerEmailSelectionField,
   sendRouteCustomerEmail,
@@ -858,6 +859,15 @@ export const routeDetailAction = async ({ params, request }) => {
       deliveryStopIds: readDeliveryStopIds(formData),
       signal: textOrUndefined(formData.get("signal")),
     }, { sessionToken: shopifySessionToken });
+  }
+
+  if (intent === "loadStopEmailHistory") {
+    return fetchStopCustomerEmailHistory(
+      request,
+      textOrUndefined(formData.get("routePlanId")) ?? routeId,
+      textOrUndefined(formData.get("deliveryStopId")),
+      { sessionToken: shopifySessionToken },
+    );
   }
 
   if (intent === "sendCustomerEmail") {

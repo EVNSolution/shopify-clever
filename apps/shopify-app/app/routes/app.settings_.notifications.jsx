@@ -536,7 +536,7 @@ function CustomerEmailSettings({ automaticEnabled, initialSettings }) {
       <style>{CUSTOMER_NOTIFICATION_RESPONSIVE_CSS}</style>
       <fieldset style={settingsFieldsetStyle}>
         <legend style={settingsLegendStyle}>Customer Notifications</legend>
-        <p style={settingsMessageStyle}>Automatic emails include eligible stops added after Dispatch. Delivery scheduled is sent only from Send Notification.</p>
+        <p style={settingsMessageStyle}>Automatic emails include eligible stops added after Dispatch. Delivery scheduled is sent only from the Send notifications menu.</p>
       </fieldset>
 
       <section aria-label="Automatic customer emails" style={settingsSectionCardStyle}>

@@ -75,11 +75,24 @@ export function getAutomaticEmailSelection(stops, enabledSignals = []) {
   };
 }
 
-/** Send Notification works once the route was dispatched, and not while another action runs. */
-export function getSendNotificationControl({ busy, dispatched, hasRoute }) {
-  const enabled = Boolean(hasRoute) && Boolean(dispatched) && !busy;
-  const title = !dispatched
-    ? "Dispatch this route first. Then you can send the Delivery scheduled email."
-    : "Choose customers and send the Delivery scheduled email. You can send it again, for example on the delivery day.";
-  return { enabled, label: "Send Notification", title };
+const SEND_NOTIFICATION_ITEMS = [
+  { emailName: "Delivery scheduled", label: "Scheduled", signal: "DELIVERY_SCHEDULED" },
+];
+
+/**
+ * The Send notifications menu opens for any saved route, so each item can say why it cannot be sent yet.
+ * enabledSignals is null when the template settings could not be loaded; then no item is blocked on templates.
+ */
+export function getSendNotificationMenu({ busy, dispatched, enabledSignals = null, hasRoute }) {
+  return {
+    enabled: Boolean(hasRoute) && !busy,
+    items: SEND_NOTIFICATION_ITEMS.map((item) => ({
+      ...item,
+      disabledReason: !dispatched
+        ? "Dispatch this route first."
+        : enabledSignals && !enabledSignals.includes(item.signal)
+          ? "This email is turned off in your templates."
+          : null,
+    })),
+  };
 }

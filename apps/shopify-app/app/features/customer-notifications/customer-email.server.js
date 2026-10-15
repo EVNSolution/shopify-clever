@@ -441,6 +441,20 @@ export async function fetchRouteCustomerEmailSelection(request, routePlanId, opt
   return normalizeResult(result, "selection");
 }
 
+// Manual and automatic customer emails for one stop, read for the stop's notification history.
+export async function fetchStopCustomerEmailHistory(request, routePlanId, deliveryStopId, options = {}) {
+  const safeRoutePlanId = encodeRoutePlanId(routePlanId);
+  const safeDeliveryStopId = encodeRoutePlanId(deliveryStopId);
+  if (!safeRoutePlanId || !safeDeliveryStopId) return { history: null, ...missingRoutePlanIdResult("history") };
+
+  const result = await deliveryApiRequest(
+    request,
+    `/admin/route-plans/${safeRoutePlanId}/stops/${safeDeliveryStopId}/customer-email/history`,
+    { cache: "no-store", fetch: options.fetch, method: "GET", sessionToken: options.sessionToken },
+  );
+  return { history: result?.data ?? null, errors: result?.errors ?? [] };
+}
+
 export async function saveRouteCustomerEmailSelection(request, routePlanId, selection, options = {}) {
   const safeRoutePlanId = encodeRoutePlanId(routePlanId);
   if (!safeRoutePlanId) return { selection: null, ...missingRoutePlanIdResult("selection") };
