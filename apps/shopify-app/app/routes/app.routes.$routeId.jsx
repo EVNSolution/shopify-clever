@@ -8295,14 +8295,12 @@ export default function RouteDetailPage() {
                         ...(sendNotificationMenu.enabled ? routeActionButtonStyle : routeDisabledActionButtonStyle),
                         alignItems: "center",
                         display: "inline-flex",
-                        gap: "6px",
                         minHeight: "36px",
                       }}
                       title="Send notifications"
                       type="button"
                     >
                       <s-icon aria-hidden="true" type="email" />
-                      <span aria-hidden="true">▾</span>
                     </button>
                     {sendNotificationMenuOpen ? (
                       <div
