@@ -504,6 +504,6 @@ test("Customer Notifications preview leaves sample tracking data to the delivery
 
 test("automatic email guidance includes eligible stops added after Dispatch", () => {
   assert.match(customerEmailComponentsSource, /including stops added after Dispatch/);
-  assert.match(customerEmailComponentsSource, /Use Send Notification for Delivery scheduled/);
+  assert.match(customerEmailComponentsSource, /Use the Send notifications menu for Delivery scheduled/);
   assert.doesNotMatch(customerEmailComponentsSource, /Only customers selected at Dispatch receive them/);
 });

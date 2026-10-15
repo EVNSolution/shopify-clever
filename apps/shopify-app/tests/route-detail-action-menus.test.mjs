@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import ts from "typescript";
-import { getRouteDispatchControl, getSendNotificationControl } from "../app/features/delivery/route-dispatch.js";
+import { getRouteDispatchControl, getSendNotificationMenu } from "../app/features/delivery/route-dispatch.js";
 
 const source = readFileSync(new URL("../app/routes/app.routes.$routeId.jsx", import.meta.url), "utf8");
 const stylesSource = source.slice(source.indexOf("const routeMetaActionsStyle ="), source.indexOf("const routeHeaderActionsStyle ="));
@@ -165,14 +165,16 @@ function renderControls(overrides = {}) {
     routeStartDateTimeValue: "2026-10-01T09:00", routeStartTimeLabel: "09:00", routeDetailTitle: "Test route", ROUTE_EMPTY_LABEL: "—",
     isRouteExecutionLockedForStopMembership: (status) => ["COMPLETED", "IN_PROGRESS"].includes(status),
     renderRouteEditableChevron: () => "▾", renderRouteHeaderMetric: (label, value) => `${label}: ${value}`,
-    handleDispatchRoute: () => {}, handleOpenRouteSelector: () => {}, openSendNotificationDialog: () => {}, ...overrides };
+    handleDispatchRoute: () => {}, handleOpenRouteSelector: () => {}, openSendNotificationDialog: () => {},
+    closeSendNotificationMenuOnBlur: () => {}, navigateWithEmbeddedContext: () => {}, sendNotificationMenuOpen: false, setSendNotificationMenuOpen: () => {}, ...overrides };
   context.dispatchControl = getRouteDispatchControl({
     busy: context.routeGroupActionBusy, canDispatch: context.canDispatchRoute,
     dispatching: context.routeGroupActionIntent === "dispatchRoute", hasDriver: Boolean(context.routeDriverId),
     hasUnsavedDraft: context.hasRouteAllocationDraft, live: context.liveChangeActive ? context.live : null,
   });
-  context.sendNotificationControl = getSendNotificationControl({
-    busy: context.routeGroupActionBusy, dispatched: context.routeDispatched ?? true, hasRoute: true,
+  context.sendNotificationMenu = getSendNotificationMenu({
+    busy: context.routeGroupActionBusy, dispatched: context.routeDispatched ?? true,
+    enabledSignals: context.enabledSignals ?? null, hasRoute: true,
   });
   return { tree: new Function(...Object.keys(context), `${controlsCompiled}; return tree;`)(...Object.values(context)), context };
 }
@@ -328,4 +330,47 @@ test("a KFood route in progress dispatches only saved, located changes through t
   assert.equal(control({ dispatching: true }).label, "Dispatching…");
   assert.equal(control({ canDispatch: false }).enabled, false);
   assert.match(control({ hasDriver: false }).title, /Assign a driver/);
+});
+
+test("Send notifications is an icon menu with Scheduled, its reason, and View templates", () => {
+  let open = false;
+  const closed = renderControls({ setSendNotificationMenuOpen: (next) => { open = next(open); } }).tree;
+  const trigger = nodes(closed).find((node) => node.type === "button" && node.props["aria-label"] === "Send notifications");
+  assert.equal(trigger.props["aria-haspopup"], "menu");
+  assert.ok(nodes(trigger).some((node) => node.type === "s-icon" && node.props.type === "email"));
+  assert.equal(nodes(closed).some((node) => node.props.role === "menu"), false);
+  trigger.props.onClick();
+  assert.equal(open, true);
+
+  const opened = [];
+  const destinations = [];
+  const menuItems = (overrides) => {
+    const { tree } = renderControls({
+      navigateWithEmbeddedContext: (to) => destinations.push(to),
+      openSendNotificationDialog: (item) => opened.push(item.signal),
+      sendNotificationMenuOpen: true,
+      ...overrides,
+    });
+    const menu = nodes(tree).find((node) => node.props.role === "menu");
+    return { menu, items: nodes(menu).filter((node) => node.props.role === "menuitem") };
+  };
+  const { menu, items: [scheduled, templates] } = menuItems({});
+  assert.equal(text(menu), "Send notifications:ScheduledView templates");
+  assert.equal(scheduled.props["aria-disabled"], undefined);
+  scheduled.props.onClick();
+  assert.deepEqual(opened, ["DELIVERY_SCHEDULED"]);
+  templates.props.onClick();
+  assert.deepEqual(destinations, ["/app/settings/notifications"]);
+
+  for (const [overrides, reason] of [
+    [{ routeDispatched: false }, "Dispatch this route first."],
+    [{ enabledSignals: [] }, "This email is turned off in your templates."],
+  ]) {
+    const { items: [blocked] } = menuItems(overrides);
+    assert.equal(blocked.props["aria-disabled"], "true");
+    assert.equal(blocked.props.title, reason);
+    assert.ok(nodes(blocked).some((node) => node.type === "s-icon" && node.props.type === "question-circle"));
+    blocked.props.onClick();
+  }
+  assert.deepEqual(opened, ["DELIVERY_SCHEDULED"]);
 });

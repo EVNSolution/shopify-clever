@@ -207,7 +207,7 @@ export function ToggleSwitch({ checked, disabled = false, label, onChange }) {
 }
 
 export const CUSTOMER_EMAIL_AUTOMATIC_CONFIRM_TEXT =
-  "Automatic emails cover eligible route stops, including stops added after Dispatch. Use Send Notification for Delivery scheduled.";
+  "Automatic emails cover eligible route stops, including stops added after Dispatch. Use the Send notifications menu for Delivery scheduled.";
 
 /**
  * The shop-wide automatic customer email switch. The same value appears in Customer notifications
