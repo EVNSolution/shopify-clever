@@ -23,6 +23,7 @@ import {
 } from "../features/customer-notifications/customer-email-send-state";
 import { CustomerEmailSendResultPanel } from "../features/customer-notifications/customer-email-components";
 import { CustomerEmailPreviewFrame } from "../features/customer-notifications/customer-email-preview-frame";
+import { CustomerEmailRecipientRow } from "../features/customer-notifications/customer-email-recipient-row";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   ROUTE_MARKER_TONE_COLORS,
@@ -1846,74 +1847,11 @@ const customerEmailRecipientListStyle = {
   overflowY: "auto",
 };
 
-const customerEmailRecipientRowStyle = {
-  alignItems: "start",
-  background: "#ffffff",
-  border: 0,
-  borderBottom: "1px solid #eeeeee",
-  color: "#303030",
-  display: "grid",
-  fontFamily: "inherit",
-  fontSize: "12px",
-  gap: "8px",
-  gridTemplateColumns: "24px minmax(0, 1fr)",
-  minHeight: "52px",
-  padding: "8px",
-  textAlign: "left",
-};
-
-const customerEmailRecipientRowActiveStyle = {
-  background: "#f5f8ff",
-  boxShadow: "inset 3px 0 0 #0b84d8",
-};
-
-const customerEmailRecipientRowDisabledStyle = {
-  color: "#8a8a8a",
-};
-
-const customerEmailRecipientMainStyle = {
-  display: "grid",
-  gap: "2px",
-  minWidth: 0,
-};
-
-const customerEmailRecipientMetaStyle = {
-  color: "#616161",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const customerEmailWarningTextStyle = {
   color: "#b42318",
   fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1.35,
-};
-
-const customerEmailPillRowStyle = {
-  display: "flex",
-  flexWrap: "wrap",
-  gap: "4px",
-  marginTop: "2px",
-};
-
-const customerEmailPillBaseStyle = {
-  borderRadius: "999px",
-  fontSize: "11px",
-  fontWeight: 650,
-  lineHeight: 1.5,
-  padding: "1px 8px",
-  whiteSpace: "nowrap",
-};
-
-const customerEmailPillAmberStyle = { ...customerEmailPillBaseStyle, background: "#fff4d6", color: "#7a4b00" };
-const customerEmailPillRedStyle = { ...customerEmailPillBaseStyle, background: "#fde8e7", color: "#a21c12" };
-
-const customerEmailRecipientNameStyle = {
-  color: "#303030",
-  fontSize: "13px",
-  fontWeight: 650,
 };
 
 const customerEmailRecipientSummaryStyle = {
@@ -9599,45 +9537,20 @@ export default function RouteDetailPage() {
                         const hasUncertainOutcome = hasCustomerEmailUncertainOutcome(recipient);
                         const historyLabel = formatCustomerEmailHistory(getCustomerEmailRecipientHistory(recipient), storeTimeZone);
                         return (
-                          <label
+                          <CustomerEmailRecipientRow
+                            active={active}
+                            diagnosticsLabel={hasDiagnostics ? missingDiagnosticsLabel : null}
+                            historyLabel={historyLabel}
                             key={recipientKey}
-                            onFocus={() => setActiveCustomerEmailRecipientKey(recipientKey)}
-                            onMouseEnter={() => setActiveCustomerEmailRecipientKey(recipientKey)}
-                            style={{
-                              ...customerEmailRecipientRowStyle,
-                              ...(active ? customerEmailRecipientRowActiveStyle : null),
-                              ...(!selectable ? customerEmailRecipientRowDisabledStyle : null),
-                            }}
-                          >
-                            <input
-                              checked={selected}
-                              disabled={!selectable}
-                              onChange={(event) => toggleCustomerEmailRecipient(recipient, event.target.checked)}
-                              type="checkbox"
-                            />
-                            <span style={customerEmailRecipientMainStyle}>
-                              <strong style={customerEmailRecipientNameStyle}>{getCustomerEmailRecipientOrder(recipient)}</strong>
-                              <span style={customerEmailRecipientMetaStyle}>
-                                {[getCustomerEmailRecipientName(recipient), email ?? "Missing email"].filter(Boolean).join(" · ")}
-                              </span>
-                              {hasDiagnostics || hasPriorSend || hasUncertainOutcome || !selectable ? (
-                                <span style={customerEmailPillRowStyle}>
-                                  {hasDiagnostics ? (
-                                    <span style={customerEmailPillAmberStyle}>{missingDiagnosticsLabel.replace("Missing: ", "Missing ")}</span>
-                                  ) : null}
-                                  {hasUncertainOutcome ? (
-                                    <span style={customerEmailPillRedStyle}>Pending or unknown delivery outcome; cannot resend</span>
-                                  ) : hasPriorSend ? (
-                                    <span style={customerEmailPillAmberStyle}>Already sent · resend needs confirmation</span>
-                                  ) : null}
-                                  {!selectable && !hasUncertainOutcome ? (
-                                    <span style={customerEmailPillRedStyle}>Cannot select this recipient</span>
-                                  ) : null}
-                                </span>
-                              ) : null}
-                              {hasPriorSend ? <span style={customerEmailRecipientMetaStyle}>{historyLabel}</span> : null}
-                            </span>
-                          </label>
+                            onActivate={() => setActiveCustomerEmailRecipientKey(recipientKey)}
+                            onToggle={(checked) => toggleCustomerEmailRecipient(recipient, checked)}
+                            orderLabel={getCustomerEmailRecipientOrder(recipient)}
+                            priorSend={hasPriorSend}
+                            recipientLabel={[getCustomerEmailRecipientName(recipient), email ?? "Missing email"].filter(Boolean).join(" · ")}
+                            selectable={selectable}
+                            selected={selected}
+                            uncertainOutcome={hasUncertainOutcome}
+                          />
                         );
                       }) : (
                         <span style={routeSelectorEmptyStyle}>No sendable recipients</span>
