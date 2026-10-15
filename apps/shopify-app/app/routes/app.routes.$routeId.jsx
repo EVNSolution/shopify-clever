@@ -23,6 +23,7 @@ import {
 } from "../features/customer-notifications/customer-email-send-state";
 import { CustomerEmailSendResultPanel } from "../features/customer-notifications/customer-email-components";
 import { CustomerEmailPreviewFrame } from "../features/customer-notifications/customer-email-preview-frame";
+import { CustomerEmailRecipientRow } from "../features/customer-notifications/customer-email-recipient-row";
 import {
   CHILD_ROUTE_ORDER_COLUMNS,
   ROUTE_MARKER_TONE_COLORS,
@@ -1846,49 +1847,17 @@ const customerEmailRecipientListStyle = {
   overflowY: "auto",
 };
 
-const customerEmailRecipientRowStyle = {
-  alignItems: "start",
-  background: "#ffffff",
-  border: 0,
-  borderBottom: "1px solid #eeeeee",
-  color: "#303030",
-  display: "grid",
-  fontFamily: "inherit",
-  fontSize: "12px",
-  gap: "8px",
-  gridTemplateColumns: "24px minmax(0, 1fr)",
-  minHeight: "52px",
-  padding: "8px",
-  textAlign: "left",
-};
-
-const customerEmailRecipientRowActiveStyle = {
-  background: "#f5f8ff",
-  boxShadow: "inset 3px 0 0 #0b84d8",
-};
-
-const customerEmailRecipientRowDisabledStyle = {
-  color: "#8a8a8a",
-};
-
-const customerEmailRecipientMainStyle = {
-  display: "grid",
-  gap: "2px",
-  minWidth: 0,
-};
-
-const customerEmailRecipientMetaStyle = {
-  color: "#616161",
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
-};
-
 const customerEmailWarningTextStyle = {
   color: "#b42318",
   fontSize: "12px",
   fontWeight: 650,
   lineHeight: 1.35,
+};
+
+const customerEmailRecipientSummaryStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 500,
 };
 
 const customerEmailGateStatusStyle = {
@@ -3806,14 +3775,14 @@ function formatCustomerEmailHistory(history, storeTimeZone) {
   const lastProviderStatus = textOrUndefined(history.lastProviderStatus)?.replaceAll("_", " ");
   const lastProviderEventAt = formatStoreInstant(history.lastProviderEventAt, storeTimeZone, { empty: null });
   const lastSentAt = formatStoreInstant(history.lastSentAt, storeTimeZone, { empty: null });
-  return [
+  return [...new Set([
     `${sendCount} previous send${sendCount === 1 ? "" : "s"}`,
     uncertainCount > 0 ? `${uncertainCount} unresolved outcome${uncertainCount === 1 ? "" : "s"}` : null,
     lastStatus ? `last ${lastStatus}` : null,
     lastProviderStatus ? `provider ${lastProviderStatus}` : null,
     lastProviderEventAt,
     lastSentAt,
-  ].filter(Boolean).join(" - ");
+  ].filter(Boolean))].join(" - ");
 }
 
 function hasCustomerEmailMissingTemplateValues(recipient) {
@@ -9535,7 +9504,8 @@ export default function RouteDetailPage() {
                   : customerEmailDialogEmptyGridStyle}>
                   <div style={routeLineEditorFieldStyle}>
                     <strong>
-                      {customerEmailSelectionCount} selected / {customerEmailSendableCount} sendable / {customerEmailExcludedCount} excluded
+                      {customerEmailSelectionCount} selected
+                      <span style={customerEmailRecipientSummaryStyle}> · {customerEmailSendableCount} sendable · {customerEmailExcludedCount} excluded</span>
                     </strong>
                     {customerEmailPreviewEmptyState ? (
                       <div style={childStopEditReadonlyStyle}>
@@ -9567,44 +9537,20 @@ export default function RouteDetailPage() {
                         const hasUncertainOutcome = hasCustomerEmailUncertainOutcome(recipient);
                         const historyLabel = formatCustomerEmailHistory(getCustomerEmailRecipientHistory(recipient), storeTimeZone);
                         return (
-                          <label
+                          <CustomerEmailRecipientRow
+                            active={active}
+                            diagnosticsLabel={hasDiagnostics ? missingDiagnosticsLabel : null}
+                            historyLabel={historyLabel}
                             key={recipientKey}
-                            onFocus={() => setActiveCustomerEmailRecipientKey(recipientKey)}
-                            onMouseEnter={() => setActiveCustomerEmailRecipientKey(recipientKey)}
-                            style={{
-                              ...customerEmailRecipientRowStyle,
-                              ...(active ? customerEmailRecipientRowActiveStyle : null),
-                              ...(!selectable ? customerEmailRecipientRowDisabledStyle : null),
-                            }}
-                          >
-                            <input
-                              checked={selected}
-                              disabled={!selectable}
-                              onChange={(event) => toggleCustomerEmailRecipient(recipient, event.target.checked)}
-                              type="checkbox"
-                            />
-                            <span style={customerEmailRecipientMainStyle}>
-                              <strong>{getCustomerEmailRecipientOrder(recipient)}</strong>
-                              <span style={customerEmailRecipientMetaStyle}>
-                                {[getCustomerEmailRecipientName(recipient), email ?? "Missing email"].filter(Boolean).join(" - ")}
-                              </span>
-                              {hasDiagnostics ? (
-                                <span style={customerEmailWarningTextStyle}>{missingDiagnosticsLabel}</span>
-                              ) : null}
-                              <span style={hasPriorSend ? customerEmailWarningTextStyle : customerEmailRecipientMetaStyle}>
-                                {historyLabel}
-                              </span>
-                              {hasPriorSend ? (
-                                <span style={customerEmailWarningTextStyle}>Resend requires explicit confirmation</span>
-                              ) : null}
-                              {hasUncertainOutcome ? (
-                                <span style={customerEmailWarningTextStyle}>Pending or unknown delivery outcome; cannot resend</span>
-                              ) : null}
-                              {!selectable ? (
-                                <span style={customerEmailWarningTextStyle}>Cannot select this recipient</span>
-                              ) : null}
-                            </span>
-                          </label>
+                            onActivate={() => setActiveCustomerEmailRecipientKey(recipientKey)}
+                            onToggle={(checked) => toggleCustomerEmailRecipient(recipient, checked)}
+                            orderLabel={getCustomerEmailRecipientOrder(recipient)}
+                            priorSend={hasPriorSend}
+                            recipientLabel={[getCustomerEmailRecipientName(recipient), email ?? "Missing email"].filter(Boolean).join(" · ")}
+                            selectable={selectable}
+                            selected={selected}
+                            uncertainOutcome={hasUncertainOutcome}
+                          />
                         );
                       }) : (
                         <span style={routeSelectorEmptyStyle}>No sendable recipients</span>

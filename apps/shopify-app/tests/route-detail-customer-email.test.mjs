@@ -8,7 +8,8 @@ const root = process.cwd();
 const routeDetailSource = readFileSync(join(root, "app/routes/app.routes.$routeId.jsx"), "utf8");
 const routeDetailServerSource = readFileSync(join(root, "app/features/delivery/route-detail.server.js"), "utf8");
 const customerEmailComponentsSource = readFileSync(join(root, "app/features/customer-notifications/customer-email-components.jsx"), "utf8");
-const routeDetailUiSource = `${routeDetailSource}\n${customerEmailComponentsSource}`;
+const recipientRowSource = readFileSync(join(root, "app/features/customer-notifications/customer-email-recipient-row.jsx"), "utf8");
+const routeDetailUiSource = `${routeDetailSource}\n${customerEmailComponentsSource}\n${recipientRowSource}`;
 
 test("route detail customer email actions forward selected delivery stops and missing-value confirmation", () => {
   assert.match(routeDetailServerSource, /function readDeliveryStopIds\(formData\) \{/);
@@ -24,7 +25,7 @@ test("route detail customer email modal defaults to manual zero-recipient select
   assert.match(routeDetailSource, /setSelectedCustomerEmailDeliveryStopIds\(\[\]\);[\s\S]*setCustomerEmailPreviewSignal\(null\)/);
   // Only Send Notification (message locked to Delivery scheduled) starts with customers who have not got the email yet.
   assert.match(routeDetailSource, /if \(!customerEmailPreview\) return;[\s\S]*sendNotificationFlow\.locked[\s\S]*: \[\]\);/);
-  assert.match(routeDetailSource, /\{customerEmailSelectionCount\} selected \/ \{customerEmailSendableCount\} sendable \/ \{customerEmailExcludedCount\} excluded/);
+  assert.match(routeDetailSource, /\{customerEmailSelectionCount\} selected[\s\S]*\{customerEmailSendableCount\} sendable · \{customerEmailExcludedCount\} excluded/);
 });
 
 test("route detail customer email modal uses route-aware defaults and a compact empty layout", () => {
@@ -63,7 +64,8 @@ test("route detail customer email modal selects only eligible rows and previews 
   assert.match(routeDetailSource, /const customerEmailSelectableRecipients = useMemo\([\s\S]*customerEmailRecipients\.filter\(isCustomerEmailRecipientSelectable\)/);
   assert.match(routeDetailSource, /toggleAllCustomerEmailRecipients\(event\.target\.checked\)/);
   assert.match(routeDetailSource, /customerEmailSelectableRecipients\.map\(getCustomerEmailRecipientDeliveryStopId\)\.filter\(Boolean\)/);
-  assert.match(routeDetailSource, /onFocus=\{\(\) => setActiveCustomerEmailRecipientKey\(recipientKey\)\}/);
+  assert.match(routeDetailSource, /onActivate=\{\(\) => setActiveCustomerEmailRecipientKey\(recipientKey\)\}/);
+  assert.match(recipientRowSource, /onFocus=\{onActivate\}/);
   assert.match(routeDetailSource, /getCustomerEmailRenderedSubject\(activeCustomerEmailRecipient\)/);
   assert.match(routeDetailSource, /getCustomerEmailRenderedBody\(activeCustomerEmailRecipient\)/);
   assert.match(routeDetailSource, /getCustomerEmailRenderedHtml\(activeCustomerEmailRecipient\)/);
@@ -112,7 +114,7 @@ test("route detail customer email blocks recipients with unresolved provider out
   assert.match(routeDetailSource, /function hasCustomerEmailUncertainOutcome\(recipient\) \{/);
   assert.match(routeDetailSource, /history\(recipient\)\?\.uncertainCount|RecipientHistory\(recipient\)\?\.uncertainCount/);
   assert.match(routeDetailSource, /&& !hasCustomerEmailUncertainOutcome\(recipient\)/);
-  assert.match(routeDetailSource, /Pending or unknown delivery outcome; cannot resend/);
+  assert.match(recipientRowSource, /Pending or unknown delivery outcome; cannot resend/);
   assert.match(routeDetailSource, /pending or unknown delivery outcome and cannot be resent/);
 });
 
