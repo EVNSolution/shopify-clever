@@ -1891,6 +1891,37 @@ const customerEmailWarningTextStyle = {
   lineHeight: 1.35,
 };
 
+const customerEmailPillRowStyle = {
+  display: "flex",
+  flexWrap: "wrap",
+  gap: "4px",
+  marginTop: "2px",
+};
+
+const customerEmailPillBaseStyle = {
+  borderRadius: "999px",
+  fontSize: "11px",
+  fontWeight: 650,
+  lineHeight: 1.5,
+  padding: "1px 8px",
+  whiteSpace: "nowrap",
+};
+
+const customerEmailPillAmberStyle = { ...customerEmailPillBaseStyle, background: "#fff4d6", color: "#7a4b00" };
+const customerEmailPillRedStyle = { ...customerEmailPillBaseStyle, background: "#fde8e7", color: "#a21c12" };
+
+const customerEmailRecipientNameStyle = {
+  color: "#303030",
+  fontSize: "13px",
+  fontWeight: 650,
+};
+
+const customerEmailRecipientSummaryStyle = {
+  color: "#616161",
+  fontSize: "12px",
+  fontWeight: 500,
+};
+
 const customerEmailGateStatusStyle = {
   background: "#f6f6f7",
   borderRadius: "8px",
@@ -3806,14 +3837,14 @@ function formatCustomerEmailHistory(history, storeTimeZone) {
   const lastProviderStatus = textOrUndefined(history.lastProviderStatus)?.replaceAll("_", " ");
   const lastProviderEventAt = formatStoreInstant(history.lastProviderEventAt, storeTimeZone, { empty: null });
   const lastSentAt = formatStoreInstant(history.lastSentAt, storeTimeZone, { empty: null });
-  return [
+  return [...new Set([
     `${sendCount} previous send${sendCount === 1 ? "" : "s"}`,
     uncertainCount > 0 ? `${uncertainCount} unresolved outcome${uncertainCount === 1 ? "" : "s"}` : null,
     lastStatus ? `last ${lastStatus}` : null,
     lastProviderStatus ? `provider ${lastProviderStatus}` : null,
     lastProviderEventAt,
     lastSentAt,
-  ].filter(Boolean).join(" - ");
+  ].filter(Boolean))].join(" - ");
 }
 
 function hasCustomerEmailMissingTemplateValues(recipient) {
@@ -9535,7 +9566,8 @@ export default function RouteDetailPage() {
                   : customerEmailDialogEmptyGridStyle}>
                   <div style={routeLineEditorFieldStyle}>
                     <strong>
-                      {customerEmailSelectionCount} selected / {customerEmailSendableCount} sendable / {customerEmailExcludedCount} excluded
+                      {customerEmailSelectionCount} selected
+                      <span style={customerEmailRecipientSummaryStyle}> · {customerEmailSendableCount} sendable · {customerEmailExcludedCount} excluded</span>
                     </strong>
                     {customerEmailPreviewEmptyState ? (
                       <div style={childStopEditReadonlyStyle}>
@@ -9584,25 +9616,26 @@ export default function RouteDetailPage() {
                               type="checkbox"
                             />
                             <span style={customerEmailRecipientMainStyle}>
-                              <strong>{getCustomerEmailRecipientOrder(recipient)}</strong>
+                              <strong style={customerEmailRecipientNameStyle}>{getCustomerEmailRecipientOrder(recipient)}</strong>
                               <span style={customerEmailRecipientMetaStyle}>
-                                {[getCustomerEmailRecipientName(recipient), email ?? "Missing email"].filter(Boolean).join(" - ")}
+                                {[getCustomerEmailRecipientName(recipient), email ?? "Missing email"].filter(Boolean).join(" · ")}
                               </span>
-                              {hasDiagnostics ? (
-                                <span style={customerEmailWarningTextStyle}>{missingDiagnosticsLabel}</span>
+                              {hasDiagnostics || hasPriorSend || hasUncertainOutcome || !selectable ? (
+                                <span style={customerEmailPillRowStyle}>
+                                  {hasDiagnostics ? (
+                                    <span style={customerEmailPillAmberStyle}>{missingDiagnosticsLabel.replace("Missing: ", "Missing ")}</span>
+                                  ) : null}
+                                  {hasUncertainOutcome ? (
+                                    <span style={customerEmailPillRedStyle}>Pending or unknown delivery outcome; cannot resend</span>
+                                  ) : hasPriorSend ? (
+                                    <span style={customerEmailPillAmberStyle}>Already sent · resend needs confirmation</span>
+                                  ) : null}
+                                  {!selectable && !hasUncertainOutcome ? (
+                                    <span style={customerEmailPillRedStyle}>Cannot select this recipient</span>
+                                  ) : null}
+                                </span>
                               ) : null}
-                              <span style={hasPriorSend ? customerEmailWarningTextStyle : customerEmailRecipientMetaStyle}>
-                                {historyLabel}
-                              </span>
-                              {hasPriorSend ? (
-                                <span style={customerEmailWarningTextStyle}>Resend requires explicit confirmation</span>
-                              ) : null}
-                              {hasUncertainOutcome ? (
-                                <span style={customerEmailWarningTextStyle}>Pending or unknown delivery outcome; cannot resend</span>
-                              ) : null}
-                              {!selectable ? (
-                                <span style={customerEmailWarningTextStyle}>Cannot select this recipient</span>
-                              ) : null}
+                              {hasPriorSend ? <span style={customerEmailRecipientMetaStyle}>{historyLabel}</span> : null}
                             </span>
                           </label>
                         );

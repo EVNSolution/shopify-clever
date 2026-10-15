@@ -24,7 +24,7 @@ test("route detail customer email modal defaults to manual zero-recipient select
   assert.match(routeDetailSource, /setSelectedCustomerEmailDeliveryStopIds\(\[\]\);[\s\S]*setCustomerEmailPreviewSignal\(null\)/);
   // Only Send Notification (message locked to Delivery scheduled) starts with customers who have not got the email yet.
   assert.match(routeDetailSource, /if \(!customerEmailPreview\) return;[\s\S]*sendNotificationFlow\.locked[\s\S]*: \[\]\);/);
-  assert.match(routeDetailSource, /\{customerEmailSelectionCount\} selected \/ \{customerEmailSendableCount\} sendable \/ \{customerEmailExcludedCount\} excluded/);
+  assert.match(routeDetailSource, /\{customerEmailSelectionCount\} selected[\s\S]*\{customerEmailSendableCount\} sendable · \{customerEmailExcludedCount\} excluded/);
 });
 
 test("route detail customer email modal uses route-aware defaults and a compact empty layout", () => {
