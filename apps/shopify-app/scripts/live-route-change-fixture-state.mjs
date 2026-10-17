@@ -16,7 +16,7 @@ const snapshot = () => ({ schemaVersion: 1, initialRouteVersionId: FIXTURE_IDS.c
   return {
     routePlanStopId: `71000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
     deliveryStopId: FIXTURE_IDS.stop(index), orderId: `72000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
-    sourceOrderId: `synthetic-order-${index}`, sequence: index, recipientName: `Synthetic recipient ${index}`, phone: null,
+    sourceOrderId: `synthetic-order-${index}`, sequence: index, recipientName: `Synthetic recipient ${index}`, phone: index === 3 ? "+14165550103" : null, email: index === 3 ? "recipient3@example.com" : null,
     address1: `${index} Synthetic Road`, address2: null, city: "Toronto", province: "ON", postalCode: "M5V 1A1", countryCode: "CA",
     instructions: null, latitude: String(43.65 + index / 10000), longitude: String(-79.38 - index / 10000),
     serviceMinutes: 5, timeWindowStart: null, timeWindowEnd: null,

@@ -1373,3 +1373,11 @@ test("the stop table shows the status as a badge, wraps the address and keeps th
   assert.match(routeDetailSource, /!isRouteGroupDetail && row\.deliveryStopId && canEditStopRow\(row\)[\s\S]{0,260}onClick=\{\(\) => handleOpenChildStopEditor\(row\)\}/);
   assert.match(routeDetailSource, /title="Multiple stops at this location"/);
 });
+
+test("the Customer cell opens a popover with the ship-to phone and the email only when the stop has them", () => {
+  assert.match(routeDetailSource, /\{row\.editFields\?\.phone \|\| row\.email \? \([\s\S]{0,900}handleToggleChildOrderDisclosure\(event, row\.rowKey, "customer"\)/);
+  assert.match(routeDetailSource, /<td style=\{childRouteOrderCellStyle\}>\{row\.customer\}<\/td>\}/);
+  assert.match(routeDetailSource, /href=\{`tel:\$\{activeChildOrderDisclosureRow\.editFields\.phone\}`\}>Call</);
+  assert.match(routeDetailSource, /href=\{`sms:\$\{activeChildOrderDisclosureRow\.editFields\.phone\}`\}>Text</);
+  assert.match(routeDetailSource, /href=\{`mailto:\$\{activeChildOrderDisclosureRow\.email\}`\}/);
+});
