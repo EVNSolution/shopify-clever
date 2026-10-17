@@ -1381,3 +1381,8 @@ test("the Customer cell opens a popover with the ship-to phone and the email onl
   assert.match(routeDetailSource, /href=\{`sms:\$\{activeChildOrderDisclosureRow\.editFields\.phone\}`\}>Text</);
   assert.match(routeDetailSource, /href=\{`mailto:\$\{activeChildOrderDisclosureRow\.email\}`\}/);
 });
+
+test("the Start and End rows wrap their address like the stops and Drive time has room for the longest label", () => {
+  assert.match(routeDetailSource, /<td style=\{childRouteAddressCellStyle\} title=\{endpoint\?\.addressTitle \?\? undefined\}>/);
+  assert.match(routeDetailSource, /"240px",\s*"104px",\s*"150px",\s*"104px",\s*"142px"/);
+});
