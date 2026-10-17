@@ -1487,14 +1487,17 @@ s-badge {
   transform: translateY(-50%);
 }
 
-.stop-time-td .stop-time-cell__edit { opacity: 0; }
+.stop-time-td .stop-time-cell__edit,
+.stop-address-td .stop-time-cell__edit { opacity: 0; }
 
 .stop-time-td:hover .stop-time-cell__edit,
+.stop-address-td:hover .stop-time-cell__edit,
 .stop-time-cell__edit:focus-visible { opacity: 1; }
 
 /* A screen without a pointer cannot hover, so the pencil stays visible there. */
 @media (hover: none) {
-  .stop-time-td .stop-time-cell__edit { opacity: 1; }
+  .stop-time-td .stop-time-cell__edit,
+  .stop-address-td .stop-time-cell__edit { opacity: 1; }
 }
 
 .stop-time-cell__edit:hover,

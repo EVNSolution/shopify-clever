@@ -219,7 +219,7 @@ test("Route Detail wires the pencil to Ready single routes and keeps the Trackin
   const page = read("../app/routes/app.routes.$routeId.jsx");
   const cssSource = read("../app/styles/global.css");
 
-  assert.match(page, /import \{ StopTimeCell \} from "\.\.\/features\/delivery\/route-stop-time-cell"/);
+  assert.match(page, /import \{ StopTimeCell, StopTimeIcon \} from "\.\.\/features\/delivery\/route-stop-time-cell"/);
   assert.match(page, /import \{[^}]*readStopTimeMinutes[^}]*\} from "\.\.\/features\/delivery\/route-helpers"/);
   assert.match(page, /const canEditStopTime = \(row\) => !liveChangeActive && !isRouteGroupDetail && Boolean\(row\?\.deliveryStopId\)\s*&& normalizeRouteExecutionStatus\(getStopRowRouteStatus\(row\)\) === "READY";/);
   assert.match(page, /submitRouteAction\("updateRouteStopTime", \{ deliveryStopId: row\.deliveryStopId, serviceMinutes \}\)/);
@@ -237,8 +237,8 @@ test("Route Detail wires the pencil to Ready single routes and keeps the Trackin
   assert.match(trackingTable, /<td style=\{childRouteOrderCellStyle\}>\{row\.stopTime\}<\/td>/);
   assert.doesNotMatch(trackingTable.slice(0, trackingTable.indexOf("</table>")), /StopTimeCell/);
 
-  assert.match(page, /const childRouteOrderColumnWidths = \[\s*"56px",\s*"104px",\s*"104px",\s*"112px",\s*"40px",\s*"190px",\s*"104px",\s*"104px",\s*"104px",\s*"142px"/);
+  assert.match(page, /const childRouteOrderColumnWidths = \[\s*"56px",\s*"104px",\s*"104px",\s*"112px",\s*"40px",\s*"240px",\s*"104px",\s*"104px",\s*"104px",\s*"142px"/);
 
-  assert.match(cssSource, /\.stop-time-td \.stop-time-cell__edit \{[^}]*opacity: 0;/);
-  assert.match(cssSource, /\.stop-time-td:hover \.stop-time-cell__edit,\s*\.stop-time-cell__edit:focus-visible \{[^}]*opacity: 1;/);
+  assert.match(cssSource, /\.stop-time-td \.stop-time-cell__edit,\s*\.stop-address-td \.stop-time-cell__edit \{[^}]*opacity: 0;/);
+  assert.match(cssSource, /\.stop-time-td:hover \.stop-time-cell__edit,\s*\.stop-address-td:hover \.stop-time-cell__edit,\s*\.stop-time-cell__edit:focus-visible \{[^}]*opacity: 1;/);
 });

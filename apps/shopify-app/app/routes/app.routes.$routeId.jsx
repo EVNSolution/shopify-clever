@@ -109,7 +109,7 @@ import {
   normalizeRouteStopLocationDiagnostic,
   summarizeRouteStopLocationDiagnostics,
 } from "../features/delivery/route-stop-location-diagnostic";
-import { StopTimeCell } from "../features/delivery/route-stop-time-cell";
+import { StopTimeCell, StopTimeIcon } from "../features/delivery/route-stop-time-cell";
 import { StopDragHandle, StopSelectAllCheckbox, StopSelectCheckbox, StopSelectionBar, getStopSelection } from "../features/delivery/route-stop-selection";
 import { ROUTES_ROOT_PATH, routeGroupChildPath, routeGroupPath, routePlanPath, withEmbeddedShopifyContext } from "../features/delivery/route-paths";
 import {
@@ -937,7 +937,7 @@ const childRouteOrderColumnWidths = [
   "104px",
   "112px",
   "40px",
-  "190px",
+  "240px",
   "104px",
   "104px",
   "104px",
@@ -2249,6 +2249,28 @@ const childRouteStopTimeCellStyle = {
   ...childRouteOrderCellStyle,
   position: "relative",
 };
+
+// The address wraps onto a second line instead of being cut; the right padding keeps the hover pencil clear of the text.
+const childRouteAddressCellStyle = {
+  ...childRouteOrderCellStyle,
+  overflow: "visible",
+  padding: "8px 28px 8px 4px",
+  position: "relative",
+  textOverflow: "clip",
+  whiteSpace: "normal",
+};
+
+const childRouteSharedAddressDotStyle = {
+  background: "#0b84d8",
+  borderRadius: "999px",
+  display: "inline-block",
+  height: "7px",
+  marginRight: "6px",
+  verticalAlign: "middle",
+  width: "7px",
+};
+
+const STOP_STATUS_BADGE_TONES = { Completed: "success", Failed: "critical", "In progress": "warning" };
 
 const childRouteExpectedArrivalCellStyle = {
   ...childRouteOrderCellStyle,
@@ -9029,7 +9051,11 @@ export default function RouteDetailPage() {
                         ) : null}
                         <td style={childRouteStopCellStyle}><span style={{ ...childRouteTableStopMarkerStyle, background: isOrdinaryRouteDetail ? ROUTE_MARKER_TONE_COLORS[row.markerTone] : row.sourceRouteColor ?? routeLineColor }}><span style={childRouteTableStopMarkerTextStyle}>{row.stop}</span></span></td>
                         <td style={childRouteOrderCellStyle}>{renderStopOrderLabel(row)}</td>
-                        <td style={childRouteOrderCellStyle}>{row.status}</td>
+                        <td style={childRouteOrderCellStyle}>
+                          <span title={row.statusAt ? `${row.status} at ${formatStoreInstant(row.statusAt, ianaTimezone, { seconds: true })}` : undefined}>
+                            <s-badge tone={STOP_STATUS_BADGE_TONES[row.status] ?? "neutral"}>{row.status}</s-badge>
+                          </span>
+                        </td>
                         <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
                         <td style={childRouteOrderCellStyle}>
                           {row.note || row.customerNote ? (
@@ -9048,8 +9074,14 @@ export default function RouteDetailPage() {
                             ><s-icon type="note" /></button>
                           ) : null}
                         </td>
-                        <td style={childRouteOrderCellStyle}>
+                        <td className="stop-address-td" style={childRouteAddressCellStyle}>
+                          {row.sharedAddress ? <span aria-label="Multiple stops at this location" role="img" style={childRouteSharedAddressDotStyle} title="Multiple stops at this location" /> : null}
                           <span>{row.address}</span>
+                          {!isRouteGroupDetail && row.deliveryStopId && canEditStopRow(row) ? (
+                            <button aria-label={`Edit address for ${row.order}`} className="stop-time-cell__edit" onClick={() => handleOpenChildStopEditor(row)} title="Edit stop" type="button">
+                              <StopTimeIcon name="edit" />
+                            </button>
+                          ) : null}
                           {row.locationDiagnostic.severity !== "NONE" ? (
                             <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
                               <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
