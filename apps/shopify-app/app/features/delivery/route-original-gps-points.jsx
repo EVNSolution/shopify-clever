@@ -2,13 +2,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { createOriginalObservationsSession, parseOriginalObservationsQuery } from './route-original-observations.js';
 import { formatGpsDiagnosticTimestamp, initialOriginalObservationsWindow } from './route-gps-diagnostics.js';
+import { formatChildEtaLabel } from './child-route-detail-presentation.js';
 import { ORIGINAL_OBSERVATION_LAYER_ID, removeOriginalObservationPoints, syncOriginalObservationPoints } from './route-original-observations-map.js';
 
 const buttonStyle = { minHeight: 36, padding: '4px 10px', border: '1px solid #b5b5b5', background: '#fff', borderRadius: 6, cursor: 'pointer' };
 const smallStyle = { fontSize: 12, color: '#616161', overflowWrap: 'anywhere' };
 const quality = { VALID: 'Valid', MISSING: 'Missing', INVALID: 'Invalid', REDACTED: 'Redacted' };
 
-export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, getToken, mapRef, mapReady, onClose, fetchObservations }) {
+// start: executionEvidence.start of the tracking snapshot (the driver's Start press) or null.
+export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, start, getToken, mapRef, mapReady, onClose, fetchObservations }) {
   const initialWindow = useMemo(() => initialOriginalObservationsWindow(serviceDate, timeZone), [serviceDate, timeZone]);
   const [draft, setDraft] = useState(initialWindow);
   const [window, setWindow] = useState(initialWindow);
@@ -24,10 +26,13 @@ export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, get
   const observations = useMemo(() => read.pages.flatMap(page => page.observations), [read.pages]);
   const observationsRef = useRef(observations);
   observationsRef.current = observations;
+  const startRef = useRef(start);
+  startRef.current = start;
   const selected = observations.find(item => item.eventId === selectedId);
   const page = read.pages[Math.min(pageIndex, read.pages.length - 1)];
   const lastPage = read.pages.at(-1);
   const validCount = observations.filter(item => item.coordinateStatus === 'VALID').length;
+  const startedAt = Number.isFinite(Date.parse(start?.occurredAt ?? '')) ? formatChildEtaLabel(start.occurredAt, timeZone) : null;
 
   useEffect(() => {
     const session = createOriginalObservationsSession({ routePlanId, getToken: () => tokenRef.current?.(), fetch: fetchObservations, onChange: setRead });
@@ -39,7 +44,7 @@ export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, get
   useEffect(() => {
     if (!mapReady || !mapRef.current) return undefined;
     const map = mapRef.current;
-    const sync = () => syncOriginalObservationPoints(map, observationsRef.current);
+    const sync = () => syncOriginalObservationPoints(map, observationsRef.current, startRef.current, timeZone);
     sync();
     const select = event => setSelectedId(event.features?.[0]?.properties?.eventId ?? '');
     const enter = () => { map.getCanvas().style.cursor = 'pointer'; };
@@ -56,8 +61,8 @@ export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, get
       leave();
       removeOriginalObservationPoints(map);
     };
-  }, [mapReady, mapRef]);
-  useEffect(() => { if (mapReady) syncOriginalObservationPoints(mapRef.current, observations); }, [mapReady, mapRef, observations]);
+  }, [mapReady, mapRef, timeZone]);
+  useEffect(() => { if (mapReady) syncOriginalObservationPoints(mapRef.current, observations, start, timeZone); }, [mapReady, mapRef, observations, start, timeZone]);
 
   useEffect(() => {
     if (autoLoad && read.status === 'ready' && lastPage?.page.hasMore) sessionRef.current?.next();
@@ -78,6 +83,7 @@ export function RouteOriginalGpsPoints({ routePlanId, serviceDate, timeZone, get
       {read.status === 'loading' ? <button type="button" onClick={() => { setAutoLoad(false); sessionRef.current?.cancel(); }} style={buttonStyle}>Cancel</button> : ['error', 'restart', 'unavailable', 'idle'].includes(read.status) ? <button type="button" onClick={() => restart()} style={buttonStyle}>Restart</button> : null}
       <button type="button" onClick={onClose} style={{ ...buttonStyle, marginLeft: 'auto' }}>Back to dotted track</button>
     </div>
+    <p aria-label="Original GPS legend" style={{ ...smallStyle, margin: '6px 0 0' }}><span aria-hidden="true" style={{ color: '#8c9196' }}>●</span> before Start · <span aria-hidden="true" style={{ color: '#d32f2f' }}>●</span> after Start · {startedAt ? <><span aria-hidden="true" style={{ color: '#1a7f37' }}>●</span> Start pressed {startedAt}</> : 'Start not pressed yet'}</p>
     {read.message ? <p role="status" style={{ margin: '6px 0' }}>{read.message}</p> : null}
     {lastPage?.page.capReached ? <p role="status" style={{ margin: '6px 0' }}>5,000-point cap reached. More observations exist; choose a smaller window.</p> : null}
     <details style={{ marginTop: 6 }}>

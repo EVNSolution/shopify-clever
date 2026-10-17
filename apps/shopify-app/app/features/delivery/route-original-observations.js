@@ -3,6 +3,8 @@ const QUALITY = new Set(['VALID', 'MISSING', 'INVALID', 'REDACTED']);
 const MAX_WINDOW_MICROS = 86_400_000_000n;
 export const ORIGINAL_OBSERVATION_SOURCE_ID = "route-detail-original-observations";
 export const ORIGINAL_OBSERVATION_LAYER_ID = "route-detail-original-observation-points";
+export const ORIGINAL_OBSERVATION_START_LAYER_ID = "route-detail-original-observation-start";
+export const ORIGINAL_OBSERVATION_START_LABEL_LAYER_ID = "route-detail-original-observation-start-label";
 export const ORIGINAL_OBSERVATIONS_LIMIT = 200;
 export const ORIGINAL_OBSERVATIONS_CAP = 5000;
 
@@ -92,8 +94,10 @@ export function validateOriginalObservationsPage(payload, { routePlanId, window,
   return data;
 }
 
-export function originalObservationFeatures(observations) {
-  return { type: 'FeatureCollection', features: observations.filter(item => item.coordinateStatus === 'VALID').map(item => ({ type: 'Feature', properties: { eventId: item.eventId }, geometry: { type: 'Point', coordinates: [item.longitude, item.latitude] } })) };
+// beforeStart: observed before the driver pressed Start; without a Start time every point is (Start not pressed yet).
+export function originalObservationFeatures(observations, startedAt) {
+  const startMs = Date.parse(startedAt ?? '');
+  return { type: 'FeatureCollection', features: observations.filter(item => item.coordinateStatus === 'VALID').map(item => ({ type: 'Feature', properties: { eventId: item.eventId, beforeStart: !(Date.parse(item.observedAt) >= startMs) }, geometry: { type: 'Point', coordinates: [item.longitude, item.latitude] } })) };
 }
 
 function responseFailure(status, code) {

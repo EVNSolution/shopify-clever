@@ -7642,7 +7642,7 @@ export default function RouteDetailPage() {
       didBindTrackingPositionHandlers = true;
     };
     const syncTracking = () => {
-      syncRouteDetailLiveTracking(routeMapRef.current, displayedRouteTrackingSnapshot);
+      syncRouteDetailLiveTracking(routeMapRef.current, displayedRouteTrackingSnapshot, ianaTimezone);
       syncRouteDetailTrackingVisibility(map, isTrackingMapView);
       bindTrackingPositionHandlers();
     };
@@ -7657,7 +7657,7 @@ export default function RouteDetailPage() {
         map.off("mouseleave", ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID, handleTrackingPositionMouseLeave);
       }
     };
-  }, [displayedRouteTrackingSnapshot, isMapReady, isTrackingMapView, routeMapRef]);
+  }, [displayedRouteTrackingSnapshot, ianaTimezone, isMapReady, isTrackingMapView, routeMapRef]);
 
   useEffect(() => {
     if (!isMapReady || !mapRef.current) return undefined;
@@ -8525,6 +8525,7 @@ export default function RouteDetailPage() {
               mapRef={mapRef}
               mapReady={isMapReady}
               timeZone={ianaTimezone}
+              start={routeExecutionEvidence?.start ?? null}
               onClose={() => setSearchParams(gpsDiagnosticSearchParams(searchParams, false), { replace: true, preventScrollReset: true })}
             />
           ) : null}

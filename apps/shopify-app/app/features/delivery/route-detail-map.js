@@ -1,8 +1,14 @@
 import { addMapPinImage, createDepartureMarkerImageData, createMapCheckBadgeImageData, createMapPinImageData, createMapPinSymbolLayer } from "../maps/map-markers.js";
+import { formatChildEtaLabel } from "./child-route-detail-presentation.js";
 import { numberOrUndefined, textOrUndefined } from "./route-helpers.js";
-import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures } from "./route-tracking.js";
+import { getRouteTrackingFitCoordinates, getRouteTrackingLineFeatures, getRouteTrackingPathPoints } from "./route-tracking.js";
 
-import { ORIGINAL_OBSERVATION_LAYER_ID, ORIGINAL_OBSERVATION_SOURCE_ID } from "./route-original-observations.js";
+import {
+  ORIGINAL_OBSERVATION_LAYER_ID,
+  ORIGINAL_OBSERVATION_SOURCE_ID,
+  ORIGINAL_OBSERVATION_START_LABEL_LAYER_ID,
+  ORIGINAL_OBSERVATION_START_LAYER_ID,
+} from "./route-original-observations.js";
 
 const DEFAULT_CENTER = [-79.3832, 43.6532];
 const ROUTE_DETAIL_ROUTE_SOURCE_ID = "route-detail-osrm-route";
@@ -17,10 +23,20 @@ const ROUTE_DETAIL_TRACKING_SOURCE_ID = "route-detail-live-tracking";
 const ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID = "route-detail-live-tracking-trail";
 const ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID = "route-detail-live-tracking-connector";
 const ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID = "route-detail-live-driver-position";
+const ROUTE_DETAIL_TRACKING_START_LAYER_ID = "route-detail-live-tracking-start";
+const ROUTE_DETAIL_TRACKING_START_LABEL_LAYER_ID = "route-detail-live-tracking-start-label";
 const ROUTE_DETAIL_TRACKING_LAYER_IDS = [
   ROUTE_DETAIL_TRACKING_TRAIL_LAYER_ID,
   ROUTE_DETAIL_TRACKING_CONNECTOR_LAYER_ID,
   ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_START_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_START_LABEL_LAYER_ID,
+];
+const ROUTE_START_LAYER_IDS = [
+  ROUTE_DETAIL_TRACKING_START_LAYER_ID,
+  ROUTE_DETAIL_TRACKING_START_LABEL_LAYER_ID,
+  ORIGINAL_OBSERVATION_START_LAYER_ID,
+  ORIGINAL_OBSERVATION_START_LABEL_LAYER_ID,
 ];
 const ROUTE_DETAIL_COMPLETED_STOP_COLOR = "#8c9196";
 const ROUTE_DETAIL_DEPARTURE_IMAGE_ID = "route-detail-departure-pin";
@@ -255,6 +271,59 @@ export function syncRouteDetailLineOrder(map) {
   if (map.getLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID)) {
     map.moveLayer?.(ROUTE_DETAIL_TRACKING_POSITION_LAYER_ID);
   }
+  // The Start press stays above everything, the driver position included.
+  for (const layerId of ROUTE_START_LAYER_IDS) {
+    if (map.getLayer?.(layerId)) map.moveLayer?.(layerId);
+  }
+}
+
+// Where the driver pressed Start. Without start coordinates, the first point at or after the press; otherwise none.
+// Points are { coordinates: [longitude, latitude], occurredAt } in time order.
+function buildRouteStartFeature(start, points, timeZone) {
+  const startMs = Date.parse(start?.occurredAt ?? "");
+  const coordinates = normalizeLngLat(start?.latitude, start?.longitude) ?? normalizeLngLatPair(points.find((point) => (
+    Date.parse(point.occurredAt ?? "") >= startMs && normalizeLngLatPair(point.coordinates)
+  ))?.coordinates);
+  if (!coordinates) return null;
+  return {
+    type: "Feature",
+    geometry: { type: "Point", coordinates },
+    properties: {
+      label: Number.isFinite(startMs) ? `Start ${formatChildEtaLabel(start.occurredAt, timeZone)}` : "Start",
+      trackingType: "routeStart",
+    },
+  };
+}
+
+function addRouteStartLayers(map, source, layerId, labelLayerId) {
+  const filter = ["==", ["get", "trackingType"], "routeStart"];
+  if (!map.getLayer?.(layerId)) {
+    map.addLayer({
+      id: layerId,
+      type: "circle",
+      source,
+      filter,
+      paint: { "circle-color": "#1a7f37", "circle-radius": 9, "circle-stroke-color": "#ffffff", "circle-stroke-width": 3 },
+    });
+  }
+  if (!map.getLayer?.(labelLayerId)) {
+    map.addLayer({
+      id: labelLayerId,
+      type: "symbol",
+      source,
+      filter,
+      layout: {
+        "text-allow-overlap": true,
+        "text-anchor": "bottom",
+        "text-field": ["get", "label"],
+        "text-font": ["Noto Sans Bold"],
+        "text-ignore-placement": true,
+        "text-offset": [0, -1],
+        "text-size": 13,
+      },
+      paint: { "text-color": "#1a7f37", "text-halo-color": "#ffffff", "text-halo-width": 2 },
+    });
+  }
 }
 
 function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", options = {}) {
@@ -302,8 +371,11 @@ function syncRouteDetailRouteLine(map, routeLines, routeColor = "#e11900", optio
   return true;
 }
 
-function buildRouteDetailLiveTrackingData(trackingSnapshot) {
+function buildRouteDetailLiveTrackingData(trackingSnapshot, timeZone) {
   const features = getRouteTrackingLineFeatures(trackingSnapshot);
+  const start = trackingSnapshot?.executionEvidence?.start;
+  const startFeature = start ? buildRouteStartFeature(start, getRouteTrackingPathPoints(trackingSnapshot), timeZone) : null;
+  if (startFeature) features.push(startFeature);
   const currentPositionCoordinates = normalizeLngLat(
     trackingSnapshot?.latestPosition?.latitude,
     trackingSnapshot?.latestPosition?.longitude,
@@ -327,10 +399,10 @@ function buildRouteDetailLiveTrackingData(trackingSnapshot) {
   };
 }
 
-function syncRouteDetailLiveTracking(map, trackingSnapshot) {
+function syncRouteDetailLiveTracking(map, trackingSnapshot, timeZone) {
   if (!isRouteDetailMapStyleReady(map)) return false;
 
-  const data = buildRouteDetailLiveTrackingData(trackingSnapshot);
+  const data = buildRouteDetailLiveTrackingData(trackingSnapshot, timeZone);
   const existingSource = map.getSource?.(ROUTE_DETAIL_TRACKING_SOURCE_ID);
   if (existingSource?.setData) {
     existingSource?.setData(data);
@@ -387,6 +459,7 @@ function syncRouteDetailLiveTracking(map, trackingSnapshot) {
       },
     });
   }
+  addRouteStartLayers(map, ROUTE_DETAIL_TRACKING_SOURCE_ID, ROUTE_DETAIL_TRACKING_START_LAYER_ID, ROUTE_DETAIL_TRACKING_START_LABEL_LAYER_ID);
 
   syncRouteDetailLineOrder(map);
   syncRouteDetailTrackingVisibility(map, true);
@@ -993,8 +1066,10 @@ function getRouteStopFromMapFeature(feature, routeStops) {
 }
 
 export {
+  addRouteStartLayers,
   buildRouteDetailMarkerFeatureCollection,
   buildRouteDetailLiveTrackingData,
+  buildRouteStartFeature,
   buildRouteStopPointLookup,
   DEFAULT_CENTER,
   ROUTE_DETAIL_COMPLETED_STOP_COLOR,
