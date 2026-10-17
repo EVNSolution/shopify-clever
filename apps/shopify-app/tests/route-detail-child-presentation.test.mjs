@@ -16,6 +16,7 @@ import {
   getStopMarkerTone,
   ROUTE_MARKER_TONE_COLORS,
   summarizeChildRouteMoney,
+  flagSharedAddresses,
   formatChildDriveTimeLabel,
   formatChildEtaLabel,
   formatChildOrderStatus,
@@ -1336,4 +1337,39 @@ test("Start and End rows of the stop tables use the star and flag markers in the
   }
   assert.match(routeDetailSource, /markerColor: isOrdinaryRouteDetail \? ROUTE_MARKER_TONE_COLORS\[getRouteEndpointMarkerTone\("start", routeExecutionStatus\)\] : undefined/);
   assert.match(routeDetailSource, /markerColor: isOrdinaryRouteDetail \? ROUTE_MARKER_TONE_COLORS\[getRouteEndpointMarkerTone\("end", routeExecutionStatus\)\] : undefined/);
+});
+
+test("a stop status carries the time it last changed for the status tooltip", () => {
+  const stops = [
+    { deliveryStopId: "done", status: "DELIVERED" },
+    { deliveryStopId: "open", status: "ARRIVED" },
+    { deliveryStopId: "ready", status: "READY" },
+  ];
+  const rows = buildChildRouteOrderRows(stops, {
+    actualArrivalByStopId: { done: "2026-10-17T14:50:00.000Z", open: "2026-10-17T15:10:00.000Z" },
+    completionByStopId: { done: { at: "2026-10-17T14:55:44.000Z", eventType: "STOP_DELIVERED" } },
+    ianaTimezone: "America/Toronto",
+  });
+
+  assert.deepEqual(rows.map((row) => row.statusAt), ["2026-10-17T14:55:44.000Z", "2026-10-17T15:10:00.000Z", null]);
+});
+
+test("rows that share an address are flagged, ignoring case and spacing", () => {
+  const flagged = flagSharedAddresses([
+    { address: "7 Fox Run, Waterdown" },
+    { address: "7  fox run, waterdown " },
+    { address: "111 Hyde Park Ave." },
+    { address: "–" },
+    { address: "–" },
+  ]);
+
+  assert.deepEqual(flagged.map((row) => row.sharedAddress), [true, true, false, false, false]);
+});
+
+test("the stop table shows the status as a badge, wraps the address and keeps the address pencil on editable stops", () => {
+  assert.match(routeDetailSource, /<s-badge tone=\{STOP_STATUS_BADGE_TONES\[row\.status\] \?\? "neutral"\}>\{row\.status\}<\/s-badge>/);
+  assert.match(routeDetailSource, /`\$\{row\.status\} at \$\{formatStoreInstant\(row\.statusAt, ianaTimezone, \{ seconds: true \}\)\}`/);
+  assert.match(routeDetailSource, /<td className="stop-address-td" style=\{childRouteAddressCellStyle\}>/);
+  assert.match(routeDetailSource, /!isRouteGroupDetail && row\.deliveryStopId && canEditStopRow\(row\)[\s\S]{0,260}onClick=\{\(\) => handleOpenChildStopEditor\(row\)\}/);
+  assert.match(routeDetailSource, /title="Multiple stops at this location"/);
 });

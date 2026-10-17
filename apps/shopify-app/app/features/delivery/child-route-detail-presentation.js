@@ -314,6 +314,14 @@ function getStopActualTime(stop, { actualArrivalByStopId = {}, completionByStopI
   return null;
 }
 
+/** When the status last changed, for the status tooltip: the completion of a finished stop, else the arrival at an open one. */
+function getStopStatusAt(stop, { actualArrivalByStopId = {}, completionByStopId = {} } = {}) {
+  const completion = completionByStopId[firstText(stop?.deliveryStopId)];
+  const tone = getStopMarkerTone(stop);
+  const finished = (completion?.eventType === "STOP_DELIVERED" && tone === "done") || (completion?.eventType === "STOP_FAILED" && tone === "failed");
+  return (finished ? completion.at : null) ?? getStopActualTime(stop, { actualArrivalByStopId, completionByStopId })?.at ?? null;
+}
+
 /** Circle colors of a route without its own color: Completed green, Failed red, everything else Ready blue. */
 export const ROUTE_MARKER_TONE_COLORS = { done: "#27805c", failed: "#b42318", pending: "#0b84d8" };
 
@@ -842,6 +850,7 @@ export function buildChildRouteOrderRows(stops, {
       stop: index + 1,
       order: firstText(stop?.order, stop?.orderName, stop?.sourceOrderId, stop?.shopifyOrderGid) ?? EMPTY_LABEL,
       status: formatChildOrderStatus(getOrderStatusSource(stop)),
+      statusAt: getStopStatusAt(stop, { actualArrivalByStopId, completionByStopId }),
       orderDate: formatStoreLocalOrderDate(getOrderDateSource(stop), ianaTimezone),
       address: getStopAddress(stop),
       locationDiagnostic,
@@ -914,6 +923,18 @@ export function applyDraftOrderToOrderRows(savedOrderRows, draftStopIds) {
   }));
 }
 
+const addressKey = (row) => (row.address === EMPTY_LABEL ? "" : String(row.address ?? "").toLowerCase().replace(/\s+/g, " ").trim());
+
+/** Marks every row whose address another row of the table shares, so the table can say "Multiple stops at this location". */
+export function flagSharedAddresses(rows) {
+  const counts = new Map();
+  for (const row of rows) {
+    const key = addressKey(row);
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return rows.map((row) => ({ ...row, sharedAddress: counts.get(addressKey(row)) > 1 }));
+}
+
 export function buildRouteOrderRows(routeRows, {
   actualArrivalByStopId = {},
   actualArrivalRoutePlanId,
@@ -921,7 +942,7 @@ export function buildRouteOrderRows(routeRows, {
   completionByStopId = {},
   ianaTimezone,
 } = {}) {
-  return (Array.isArray(routeRows) ? routeRows : []).flatMap((routeRow, routeIndex) => {
+  return flagSharedAddresses((Array.isArray(routeRows) ? routeRows : []).flatMap((routeRow, routeIndex) => {
     const sourceRouteId = firstText(routeRow?.id, routeRow?.routeKey) ?? `route-${routeIndex + 1}`;
     const sourceRoutePlanId = firstText(routeRow?.routePlanId);
     const routeActualArrivalByStopId = sourceRoutePlanId && sourceRoutePlanId === actualArrivalRoutePlanId
@@ -942,5 +963,5 @@ export function buildRouteOrderRows(routeRows, {
       sourceRouteStatus: firstText(routeRow?.status),
       sourceRouteTitle: routeRow?.isUnassigned ? "Unassigned" : firstText(routeRow?.title) ?? `Route ${routeIndex + 1}`,
     }));
-  });
+  }));
 }
