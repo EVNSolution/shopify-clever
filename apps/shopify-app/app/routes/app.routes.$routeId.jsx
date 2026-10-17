@@ -939,7 +939,7 @@ const childRouteOrderColumnWidths = [
   "40px",
   "240px",
   "104px",
-  "104px",
+  "150px",
   "104px",
   "142px",
   "96px",
@@ -3707,7 +3707,7 @@ function renderRouteEndpointOrderRow({ endpoint, kind, markerColor, referenceVal
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle} />
-      <td style={childRouteOrderCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteAddressCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteExpectedArrivalCellStyle}>
         {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
       </td>

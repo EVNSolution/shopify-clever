@@ -237,7 +237,7 @@ test("Route Detail wires the pencil to Ready single routes and keeps the Trackin
   assert.match(trackingTable, /<td style=\{childRouteOrderCellStyle\}>\{row\.stopTime\}<\/td>/);
   assert.doesNotMatch(trackingTable.slice(0, trackingTable.indexOf("</table>")), /StopTimeCell/);
 
-  assert.match(page, /const childRouteOrderColumnWidths = \[\s*"56px",\s*"104px",\s*"104px",\s*"112px",\s*"40px",\s*"240px",\s*"104px",\s*"104px",\s*"104px",\s*"142px"/);
+  assert.match(page, /const childRouteOrderColumnWidths = \[\s*"56px",\s*"104px",\s*"104px",\s*"112px",\s*"40px",\s*"240px",\s*"104px",\s*"150px",\s*"104px",\s*"142px"/);
 
   assert.match(cssSource, /\.stop-time-td \.stop-time-cell__edit,\s*\.stop-address-td \.stop-time-cell__edit \{[^}]*opacity: 0;/);
   assert.match(cssSource, /\.stop-time-td:hover \.stop-time-cell__edit,\s*\.stop-address-td:hover \.stop-time-cell__edit,\s*\.stop-time-cell__edit:focus-visible \{[^}]*opacity: 1;/);
