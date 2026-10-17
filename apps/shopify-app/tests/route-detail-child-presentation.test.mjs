@@ -460,8 +460,10 @@ test("Toronto midnight keeps the same date and 00-hour across server and browser
 });
 
 test("child route compact metrics use read-only drive and stop labels", () => {
-  assert.equal(formatChildDriveTimeLabel(960, 7400), "16 min / 7.4 km");
-  assert.equal(formatChildDriveTimeLabel(60, 80), "1 min / 80 m");
+  assert.equal(formatChildDriveTimeLabel(960, 7400), "16 min (7.4 km)");
+  assert.equal(formatChildDriveTimeLabel(0, 0), "0 min (0.0 km)");
+  assert.equal(formatChildDriveTimeLabel(3_960, 54_200), "66 min (54.2 km)");
+  assert.equal(formatChildDriveTimeLabel(60, undefined), "1 min");
   assert.equal(formatChildStopTimeLabel(5), "5 min");
 });
 
@@ -565,7 +567,7 @@ test("child order rows follow actual child sequence and use delivery serviceType
   assert.equal(rows[1].orderDate, "06.30 14:20");
   assert.equal(rows[1].expectedArrival, "12:00");
   assert.equal(rows[1].actualArrival, "11:58");
-  assert.equal(rows[1].driveTime, "16 min / 7.4 km");
+  assert.equal(rows[1].driveTime, "16 min (7.4 km)");
   assert.equal(rows[1].stopTime, "5 min");
   assert.equal(rows[1].customer, "Second Customer");
   assert.equal(rows[1].itemsSummary, "2 items");
@@ -626,6 +628,7 @@ test("child order table columns include a sticky Actions column with the confirm
     "Order / stop",
     "Status",
     "Order date",
+    "",
     "Address",
     "ETA",
     "Drive time",
@@ -1245,7 +1248,7 @@ test("End shows the leg back to the depot so the Drive time column adds up to th
   const end = buildRouteEndpointPresentation(input()).end;
   assert.equal(end.returnLegSeconds, 1_020);
   assert.equal(end.returnLegMeters, 12_400);
-  assert.equal(end.driveTime, "17 min / 12 km");
+  assert.equal(end.driveTime, "17 min (12.4 km)");
   assert.equal(stops.reduce((total, stop) => total + stop.durationFromPreviousSeconds, 0) + end.returnLegSeconds, 2_880);
   assert.equal(buildRouteEndpointPresentation(input()).start.driveTime, undefined);
 

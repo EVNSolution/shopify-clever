@@ -13,6 +13,7 @@ export const CHILD_ROUTE_ORDER_COLUMNS = [
   { key: "order", label: "Order / stop" },
   { key: "status", label: "Status" },
   { key: "orderDate", label: "Order date" },
+  { key: "note", label: "" },
   { key: "address", label: "Address" },
   { key: "expectedArrival", label: "ETA" },
   { key: "driveTime", label: "Drive time" },
@@ -480,18 +481,10 @@ export function formatChildDriveTimeLabel(durationSeconds, distanceMeters) {
   const seconds = numberOrUndefined(durationSeconds);
   const meters = numberOrUndefined(distanceMeters);
   const duration = seconds === undefined ? null : `${Math.round(seconds / 60)} min`;
-  let distance = null;
+  const distance = meters === undefined ? null : `${(meters / 1000).toFixed(1)} km`;
 
-  if (meters !== undefined) {
-    if (meters < 1000) {
-      distance = `${Math.round(meters)} m`;
-    } else {
-      const kilometers = meters / 1000;
-      distance = `${kilometers >= 10 ? Math.round(kilometers) : kilometers.toFixed(1)} km`;
-    }
-  }
-
-  return [duration, distance].filter(Boolean).join(" / ") || EMPTY_LABEL;
+  if (duration && distance) return `${duration} (${distance})`;
+  return duration ?? distance ?? EMPTY_LABEL;
 }
 
 export function formatChildStopTimeLabel(serviceMinutes) {
@@ -546,10 +539,14 @@ function normalizeItems(stop) {
   }));
 }
 
-function formatItemsSummary(items, fallbackCount) {
-  const quantity = items.reduce((total, item) => total + (numberOrUndefined(item.quantity) ?? 0), 0)
+function getItemQuantity(items, fallbackCount) {
+  return items.reduce((total, item) => total + (numberOrUndefined(item.quantity) ?? 0), 0)
     || numberOrUndefined(fallbackCount)
     || 0;
+}
+
+function formatItemsSummary(items, fallbackCount) {
+  const quantity = getItemQuantity(items, fallbackCount);
   if (quantity <= 0) return "No items";
   return quantity === 1 ? "1 item" : `${quantity} items`;
 }
@@ -868,6 +865,7 @@ export function buildChildRouteOrderRows(stops, {
       customer: getCustomerName(stop),
       items,
       itemsSummary: formatItemsSummary(items, stop?.itemCount ?? stop?.itemsCount),
+      itemQuantity: getItemQuantity(items, stop?.itemCount ?? stop?.itemsCount),
       itemsDetail: formatItemsDetail(items, stop?.itemCount ?? stop?.itemsCount),
       method: serviceType ?? EMPTY_LABEL,
       note: getStopNote(stop),
