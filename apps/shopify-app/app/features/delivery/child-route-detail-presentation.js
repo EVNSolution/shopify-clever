@@ -645,13 +645,15 @@ function getStopInstructions(stop) {
 
 function getStopNote(stop) {
   return firstText(
-    stop?.customerNoteContext?.customerNote,
-    stop?.customerNote,
     stop?.note,
     stop?.order?.note,
     stop?.shopifyOrderSnapshot?.note,
     stop?.rawPayload?.note,
   );
+}
+
+function getStopCustomerNote(stop) {
+  return firstText(stop?.customerNoteContext?.customerNote, stop?.customerNote);
 }
 
 function formatCurrencyAmount(amount, currencyCode) {
@@ -869,6 +871,7 @@ export function buildChildRouteOrderRows(stops, {
       itemsDetail: formatItemsDetail(items, stop?.itemCount ?? stop?.itemsCount),
       method: serviceType ?? EMPTY_LABEL,
       note: getStopNote(stop),
+      customerNote: getStopCustomerNote(stop),
       payment: formatPaymentStatus(stop),
       paymentMethod: formatPaymentMethod(stop),
       shippingPriceAmount: numberOrUndefined(stop?.shippingPriceAmount),

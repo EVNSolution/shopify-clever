@@ -61,6 +61,8 @@ export function attachDeliveryOrderFieldsToStops(stops, ordersOrLookup) {
     const planningStatus = firstText(order?.planningStatus);
     const serviceType = firstText(order?.serviceType, order?.rawPayload?.serviceType);
     const paymentGatewayNames = getPaymentGatewayNames(order);
+    const note = firstText(order?.note, order?.shopifyOrderSnapshot?.note, order?.rawPayload?.note);
+    const customerNote = firstText(order?.customerNote, order?.rawPayload?.customer?.note, order?.shopifyOrderSnapshot?.customer?.note);
 
     return {
       ...stop,
@@ -73,6 +75,8 @@ export function attachDeliveryOrderFieldsToStops(stops, ordersOrLookup) {
       ...(planningStatus ? { planningStatus } : {}),
       ...(serviceType ? { serviceType, method: serviceType } : {}),
       ...(paymentGatewayNames.length > 0 ? { paymentGatewayNames } : {}),
+      ...(note ? { note } : {}),
+      ...(customerNote ? { customerNote } : {}),
       ...(lineItems && stop?.lineItems == null ? { lineItems } : {}),
       ...(lineItems ? { canonicalLineItems: lineItems } : {}),
     };

@@ -249,6 +249,7 @@ test("child route rows expose notes and summarize shipping and order totals", ()
   const rows = buildChildRouteOrderRows([{
     currencyCode: "CAD",
     customerNoteContext: { customerNote: "Leave at side door" },
+    note: "Ring twice",
     orderId: "order-1",
     shippingPriceAmount: "10.00",
     totalShippingPriceAmount: "5.00",
@@ -256,7 +257,8 @@ test("child route rows expose notes and summarize shipping and order totals", ()
     totalPriceAmount: "1539.57",
   }], { ianaTimezone: "America/Toronto" });
 
-  assert.equal(rows[0].note, "Leave at side door");
+  assert.equal(rows[0].note, "Ring twice");
+  assert.equal(rows[0].customerNote, "Leave at side door");
   assert.equal(rows[0].shippingPriceAmount, 10);
   assert.equal(rows[0].totalShippingPriceAmount, 5);
   assert.equal(rows[0].totalShippingPriceCurrencyCode, "CAD");
