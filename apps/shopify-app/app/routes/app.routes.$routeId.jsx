@@ -936,6 +936,7 @@ const childRouteOrderColumnWidths = [
   "104px",
   "104px",
   "112px",
+  "40px",
   "190px",
   "104px",
   "104px",
@@ -990,21 +991,6 @@ const childRouteTableStopMarkerTextStyle = {
   fontWeight: 700,
   fontVariantNumeric: "tabular-nums",
   transform: "none",
-};
-
-// The note icon sits beside the address and keeps its width, so a long address shortens instead of pushing the icon out of the cell.
-const childRouteAddressLineStyle = {
-  alignItems: "center",
-  display: "flex",
-  gap: "6px",
-  justifyContent: "center",
-};
-
-const childRouteAddressTextStyle = {
-  minWidth: 0,
-  overflow: "hidden",
-  textOverflow: "ellipsis",
-  whiteSpace: "nowrap",
 };
 
 const childRouteDisclosureCellStyle = {
@@ -3698,6 +3684,7 @@ function renderRouteEndpointOrderRow({ endpoint, kind, markerColor, referenceVal
       <td style={{ ...childRouteOrderCellStyle, fontWeight: 700 }}>{isStart ? "Start" : "End"}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteOrderCellStyle}>{ROUTE_EMPTY_LABEL}</td>
+      <td style={childRouteOrderCellStyle} />
       <td style={childRouteOrderCellStyle} title={endpoint?.addressTitle ?? undefined}>{endpoint?.address ?? ROUTE_EMPTY_LABEL}</td>
       <td style={childRouteExpectedArrivalCellStyle}>
         {renderRouteEndpointTime(endpoint, referenceValue, isStart ? "Planned departure" : "Planned arrival")}
@@ -9045,24 +9032,24 @@ export default function RouteDetailPage() {
                         <td style={childRouteOrderCellStyle}>{row.status}</td>
                         <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
                         <td style={childRouteOrderCellStyle}>
-                          <span style={childRouteAddressLineStyle}>
-                            <span style={childRouteAddressTextStyle}>{row.address}</span>
-                            {row.note || row.customerNote ? (
-                              <button
-                                aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "note"}
-                                aria-haspopup="dialog"
-                                aria-label={`Show ${row.order} note`}
-                                data-child-order-disclosure-trigger="true"
-                                onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "note")}
-                                onBlur={handleChildOrderDisclosureMouseLeave}
-                                onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
-                                onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
-                                onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                                style={{ ...childRouteDisclosureButtonStyle, flex: "0 0 auto", margin: 0 }}
-                                type="button"
-                              ><s-icon type="note" /></button>
-                            ) : null}
-                          </span>
+                          {row.note || row.customerNote ? (
+                            <button
+                              aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "note"}
+                              aria-haspopup="dialog"
+                              aria-label={`Show ${row.order} note`}
+                              data-child-order-disclosure-trigger="true"
+                              onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "note")}
+                              onBlur={handleChildOrderDisclosureMouseLeave}
+                              onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                              onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                              onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                              style={childRouteDisclosureButtonStyle}
+                              type="button"
+                            ><s-icon type="note" /></button>
+                          ) : null}
+                        </td>
+                        <td style={childRouteOrderCellStyle}>
+                          <span>{row.address}</span>
                           {row.locationDiagnostic.severity !== "NONE" ? (
                             <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
                               <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
@@ -9423,7 +9410,7 @@ export default function RouteDetailPage() {
               }}
             >
               <div style={childRouteDisclosurePopoverHeaderStyle}>
-                <span>{activeChildOrderDisclosure.type === "items" ? "Items" : activeChildOrderDisclosure.type === "note" ? "Note" : "Attributes"} · {activeChildOrderDisclosureRow.order}</span>
+                <span>{activeChildOrderDisclosure.type === "items" ? `Items used in this stop: ${activeChildOrderDisclosureRow.itemQuantity}` : activeChildOrderDisclosure.type === "note" ? "Notes" : "Attributes"} · {activeChildOrderDisclosureRow.order}</span>
                 {activeChildOrderDisclosure.mode === "pinned" ? (
                   <button
                     aria-label="Close order detail"
