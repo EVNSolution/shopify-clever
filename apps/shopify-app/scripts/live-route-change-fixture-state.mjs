@@ -58,7 +58,7 @@ export function createLiveRouteFixture() {
         address: Object.fromEntries(addressFields.map((field) => [field, stop[field]])), status, deliveryStopStatus: status,
         orderName: `#SYN-${stop.sourceOrderId.split("-").at(-1).padStart(3, "0")}`, paymentStatus: "PAID", currencyCode: "CAD", itemCount: 1,
         lineItems: [{ quantity: 1, sku: `SYN-${stop.sequence}`, title: "Synthetic item" }], totalPriceAmount: "25.00",
-        totalShippingPriceAmount: "5.00", totalShippingPriceCurrencyCode: "CAD", geocodeStatus: "RESOLVED" };
+        totalShippingPriceAmount: "5.00", totalShippingPriceCurrencyCode: "CAD", geocodeStatus: "RESOLVED", note: stop.sequence === 3 ? "Leave at the side door." : null, customerNote: stop.sequence === 3 ? "Call on arrival." : null };
     });
     return {
       id: ready ? FIXTURE_IDS.ready : FIXTURE_IDS.route, name: ready ? "Synthetic READY regression" : "Synthetic KFood delivery",

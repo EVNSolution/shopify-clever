@@ -268,3 +268,13 @@ test("carries the payment gateway names of the order to the stop without touchin
   assert.equal("paymentGatewayNames" in none, false);
   assert.equal(cash.method, "PICKUP", "the delivery method is not replaced by the payment method");
 });
+
+test("carries the order note and the customer note onto the route stop", () => {
+  const [stop] = attachDeliveryOrderFieldsToStops(
+    [{ orderName: "#1001" }],
+    [{ name: "#1001", note: "Leave at the side door", customerNote: "Call on arrival" }],
+  );
+
+  assert.equal(stop.note, "Leave at the side door");
+  assert.equal(stop.customerNote, "Call on arrival");
+});

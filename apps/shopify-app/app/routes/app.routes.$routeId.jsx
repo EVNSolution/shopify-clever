@@ -992,6 +992,21 @@ const childRouteTableStopMarkerTextStyle = {
   transform: "none",
 };
 
+// The note icon sits beside the address and keeps its width, so a long address shortens instead of pushing the icon out of the cell.
+const childRouteAddressLineStyle = {
+  alignItems: "center",
+  display: "flex",
+  gap: "6px",
+  justifyContent: "center",
+};
+
+const childRouteAddressTextStyle = {
+  minWidth: 0,
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+};
+
 const childRouteDisclosureCellStyle = {
   borderBottomColor: "#ececec",
   borderBottomStyle: "solid",
@@ -2855,6 +2870,8 @@ function buildRouteStops(stops) {
       countryCode: getRouteStopAddressValue(stop, "countryCode"),
       currencyCode: textOrUndefined(stop.currencyCode),
       customerNoteContext: stop.customerNoteContext,
+      note: textOrUndefined(stop.note ?? stop.order?.note ?? stop.shopifyOrderSnapshot?.note ?? stop.rawPayload?.note),
+      customerNote: textOrUndefined(stop.customerNote),
       latitude: coordinates?.[1] ?? null,
       longitude: coordinates?.[0] ?? null,
       status: stop.status ?? stop.assignmentStatus ?? "PENDING",
@@ -9028,26 +9045,28 @@ export default function RouteDetailPage() {
                         <td style={childRouteOrderCellStyle}>{row.status}</td>
                         <td style={childRouteOrderCellStyle}>{row.orderDate}</td>
                         <td style={childRouteOrderCellStyle}>
-                          <span>{row.address}</span>
+                          <span style={childRouteAddressLineStyle}>
+                            <span style={childRouteAddressTextStyle}>{row.address}</span>
+                            {row.note || row.customerNote ? (
+                              <button
+                                aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "note"}
+                                aria-haspopup="dialog"
+                                aria-label={`Show ${row.order} note`}
+                                data-child-order-disclosure-trigger="true"
+                                onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "note")}
+                                onBlur={handleChildOrderDisclosureMouseLeave}
+                                onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                                onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
+                                onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                                style={{ ...childRouteDisclosureButtonStyle, flex: "0 0 auto", margin: 0 }}
+                                type="button"
+                              ><s-icon type="note" /></button>
+                            ) : null}
+                          </span>
                           {row.locationDiagnostic.severity !== "NONE" ? (
                             <span style={{ display: "block", marginTop: "4px" }} title={row.locationDiagnosticMessage}>
                               <s-badge tone={row.locationDiagnostic.severity === "CRITICAL" ? "critical" : "warning"}>Location {row.locationDiagnostic.severity === "CRITICAL" ? "error" : "warning"}</s-badge>
                             </span>
-                          ) : null}
-                          {row.note ? (
-                            <button
-                              aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "note"}
-                              aria-haspopup="dialog"
-                              aria-label={`Show ${row.order} note`}
-                              data-child-order-disclosure-trigger="true"
-                              onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "note")}
-                              onBlur={handleChildOrderDisclosureMouseLeave}
-                              onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
-                              onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "note")}
-                              onMouseLeave={handleChildOrderDisclosureMouseLeave}
-                              style={{ ...childRouteDisclosureButtonStyle, marginLeft: "6px" }}
-                              type="button"
-                            ><s-icon type="note" /></button>
                           ) : null}
                         </td>
                         <td style={childRouteExpectedArrivalCellStyle}>{renderChildRouteEta(row)}</td>
@@ -9434,7 +9453,20 @@ export default function RouteDetailPage() {
                   </ul>
                 ) : <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.itemsDetail}</span>
               ) : activeChildOrderDisclosure.type === "note" ? (
-                <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.note}</span>
+                <div style={childRouteDisclosureListStyle}>
+                  {activeChildOrderDisclosureRow.note ? (
+                    <div style={childRouteDisclosureAttributeStyle}>
+                      <span style={childRouteDisclosureAttributeKeyStyle}>Order note</span>
+                      <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.note}</span>
+                    </div>
+                  ) : null}
+                  {activeChildOrderDisclosureRow.customerNote ? (
+                    <div style={childRouteDisclosureAttributeStyle}>
+                      <span style={childRouteDisclosureAttributeKeyStyle}>Customer note</span>
+                      <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.customerNote}</span>
+                    </div>
+                  ) : null}
+                </div>
               ) : (
                 activeChildOrderDisclosureRow.attributes.length > 0 ? (
                   <div style={childRouteDisclosureListStyle}>
