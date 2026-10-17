@@ -9107,7 +9107,26 @@ export default function RouteDetailPage() {
                             stopId={row.deliveryStopId}
                           />
                         </td>
-                        <td style={childRouteOrderCellStyle}>{row.customer}</td>
+                        {row.editFields?.phone || row.email ? (
+                          <td style={childRouteDisclosureCellStyle}>
+                            <button
+                              aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "customer"}
+                              aria-haspopup="dialog"
+                              aria-label={`Show ${row.order} customer details`}
+                              data-child-order-disclosure-trigger="true"
+                              onClick={(event) => handleToggleChildOrderDisclosure(event, row.rowKey, "customer")}
+                              onBlur={handleChildOrderDisclosureMouseLeave}
+                              onFocus={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "customer")}
+                              onMouseEnter={(event) => handleChildOrderDisclosureMouseEnter(event, row.rowKey, "customer")}
+                              onMouseLeave={handleChildOrderDisclosureMouseLeave}
+                              style={childRouteDisclosureButtonStyle}
+                              type="button"
+                            >
+                              <span>{row.customer}</span>
+                              {renderChildRouteInfoIcon()}
+                            </button>
+                          </td>
+                        ) : <td style={childRouteOrderCellStyle}>{row.customer}</td>}
                         <td style={childRouteDisclosureCellStyle}>
                           <button
                             aria-expanded={activeChildOrderDisclosure?.rowId === row.rowKey && activeChildOrderDisclosure?.type === "items"}
@@ -9434,7 +9453,7 @@ export default function RouteDetailPage() {
               onMouseLeave={handleChildOrderDisclosureMouseLeave}
               ref={childOrderDisclosurePopoverRef}
               role={activeChildOrderDisclosure.mode === "pinned" ? "dialog" : "tooltip"}
-              aria-label={`${activeChildOrderDisclosure.type === "items" ? "Items" : activeChildOrderDisclosure.type === "note" ? "Note" : "Attributes"} for ${activeChildOrderDisclosureRow.order}`}
+              aria-label={`${activeChildOrderDisclosure.type === "items" ? "Items" : activeChildOrderDisclosure.type === "note" ? "Note" : activeChildOrderDisclosure.type === "customer" ? "Customer" : "Attributes"} for ${activeChildOrderDisclosureRow.order}`}
               style={{
                 ...childRouteDisclosurePopoverStyle,
                 transform: `translate3d(${Math.round(activeChildOrderDisclosure.left)}px, ${Math.round(activeChildOrderDisclosure.top)}px, 0)`,
@@ -9442,7 +9461,7 @@ export default function RouteDetailPage() {
               }}
             >
               <div style={childRouteDisclosurePopoverHeaderStyle}>
-                <span>{activeChildOrderDisclosure.type === "items" ? `Items used in this stop: ${activeChildOrderDisclosureRow.itemQuantity}` : activeChildOrderDisclosure.type === "note" ? "Notes" : "Attributes"} · {activeChildOrderDisclosureRow.order}</span>
+                <span>{activeChildOrderDisclosure.type === "items" ? `Items used in this stop: ${activeChildOrderDisclosureRow.itemQuantity}` : activeChildOrderDisclosure.type === "note" ? "Notes" : activeChildOrderDisclosure.type === "customer" ? "Customer" : "Attributes"} · {activeChildOrderDisclosureRow.order}</span>
                 {activeChildOrderDisclosure.mode === "pinned" ? (
                   <button
                     aria-label="Close order detail"
@@ -9483,6 +9502,30 @@ export default function RouteDetailPage() {
                     <div style={childRouteDisclosureAttributeStyle}>
                       <span style={childRouteDisclosureAttributeKeyStyle}>Customer note</span>
                       <span style={childRouteDisclosureEmptyStyle}>{activeChildOrderDisclosureRow.customerNote}</span>
+                    </div>
+                  ) : null}
+                </div>
+              ) : activeChildOrderDisclosure.type === "customer" ? (
+                <div style={childRouteDisclosureListStyle}>
+                  <div style={childRouteDisclosureAttributeStyle}>
+                    <span style={childRouteDisclosureAttributeKeyStyle}>Ship to</span>
+                    <span>
+                      {activeChildOrderDisclosureRow.customer}
+                      {activeChildOrderDisclosureRow.editFields?.phone ? (
+                        <small style={{ display: "block" }}>
+                          {activeChildOrderDisclosureRow.editFields.phone}
+                          {" · "}
+                          <a href={`tel:${activeChildOrderDisclosureRow.editFields.phone}`}>Call</a>
+                          {" · "}
+                          <a href={`sms:${activeChildOrderDisclosureRow.editFields.phone}`}>Text</a>
+                        </small>
+                      ) : null}
+                    </span>
+                  </div>
+                  {activeChildOrderDisclosureRow.email ? (
+                    <div style={childRouteDisclosureAttributeStyle}>
+                      <span style={childRouteDisclosureAttributeKeyStyle}>Email</span>
+                      <a href={`mailto:${activeChildOrderDisclosureRow.email}`}>{activeChildOrderDisclosureRow.email}</a>
                     </div>
                   ) : null}
                 </div>
